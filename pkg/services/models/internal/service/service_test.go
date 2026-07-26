@@ -3,14 +3,14 @@ package service
 import (
 	"context"
 	"errors"
+	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	"go.uber.org/zap"
 	"strings"
 	"testing"
 	"time"
-	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
-	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
-	models "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
 func TestNewRootRejectsMissingHostPlatform(t *testing.T) {
@@ -231,4 +231,102 @@ func TestService_ReleaseLease_ReturnsLeaseNotFoundWhenHostMissing(t *testing.T) 
 	if !errors.Is(err, models.ErrHostLeaseNotFound) {
 		t.Fatalf("ReleaseLease nil host = %v, want ErrHostLeaseNotFound", err)
 	}
+}
+
+func assertContractOnlyUnsupported(t *testing.T, operation string, err error) {
+	t.Helper()
+	if !errors.Is(err, models.ErrUnsupportedOperation) {
+		t.Fatalf("%s error = %v, want ErrUnsupportedOperation", operation, err)
+	}
+}
+
+func TestRootContractOnlyOperationsFailExplicitly(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	root := &Root{}
+	_, err := root.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{})
+	assertContractOnlyUnsupported(t, "OpenRuntimeScope", err)
+	_, err = root.CloseRuntimeScope(ctx, models.CloseRuntimeScopeRequest{})
+	assertContractOnlyUnsupported(t, "CloseRuntimeScope", err)
+	_, err = root.ListCatalog(ctx, models.ListModelsRequest{})
+	assertContractOnlyUnsupported(t, "ListCatalog", err)
+	_, err = root.GetCatalogModel(ctx, models.GetModelRequest{})
+	assertContractOnlyUnsupported(t, "GetCatalogModel", err)
+	_, err = root.GetModelReadiness(ctx, models.GetModelReadinessRequest{})
+	assertContractOnlyUnsupported(t, "GetModelReadiness", err)
+	_, err = root.PrepareModelAssets(ctx, models.PrepareModelAssetsRequest{})
+	assertContractOnlyUnsupported(t, "PrepareModelAssets", err)
+	_, err = root.InspectModelAssets(ctx, models.InspectModelAssetsRequest{})
+	assertContractOnlyUnsupported(t, "InspectModelAssets", err)
+	_, err = root.RemoveModelAssets(ctx, models.RemoveModelAssetsRequest{})
+	assertContractOnlyUnsupported(t, "RemoveModelAssets", err)
+	_, err = root.EnsureModelHost(ctx, models.EnsureModelHostRequest{})
+	assertContractOnlyUnsupported(t, "EnsureModelHost", err)
+	_, err = root.InspectModelHost(ctx, models.InspectModelHostRequest{})
+	assertContractOnlyUnsupported(t, "InspectModelHost", err)
+	_, err = root.StopModelHost(ctx, models.StopModelHostRequest{})
+	assertContractOnlyUnsupported(t, "StopModelHost", err)
+	_, err = root.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{})
+	assertContractOnlyUnsupported(t, "AcquireModelLease", err)
+	_, err = root.GetModelLease(ctx, models.GetModelLeaseRequest{})
+	assertContractOnlyUnsupported(t, "GetModelLease", err)
+	_, err = root.ReleaseModelLease(ctx, models.ReleaseModelLeaseRequest{})
+	assertContractOnlyUnsupported(t, "ReleaseModelLease", err)
+	_, err = root.InvokeModelWithLease(ctx, models.InvokeModelRequest{})
+	assertContractOnlyUnsupported(t, "InvokeModelWithLease", err)
+	_, err = root.CancelInvocation(ctx, models.CancelInvocationRequest{})
+	assertContractOnlyUnsupported(t, "CancelInvocation", err)
+}
+
+func TestBoundServiceContractOnlyOperationsFailExplicitly(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := &Service{}
+	_, err := svc.ListCatalog(ctx, models.ListModelsRequest{})
+	assertContractOnlyUnsupported(t, "ListCatalog", err)
+	_, err = svc.GetCatalogModel(ctx, models.GetModelRequest{})
+	assertContractOnlyUnsupported(t, "GetCatalogModel", err)
+	_, err = svc.GetModelReadiness(ctx, models.GetModelReadinessRequest{})
+	assertContractOnlyUnsupported(t, "GetModelReadiness", err)
+	_, err = svc.PrepareModelAssets(ctx, models.PrepareModelAssetsRequest{})
+	assertContractOnlyUnsupported(t, "PrepareModelAssets", err)
+	_, err = svc.InspectModelAssets(ctx, models.InspectModelAssetsRequest{})
+	assertContractOnlyUnsupported(t, "InspectModelAssets", err)
+	_, err = svc.RemoveModelAssets(ctx, models.RemoveModelAssetsRequest{})
+	assertContractOnlyUnsupported(t, "RemoveModelAssets", err)
+	_, err = svc.EnsureModelHost(ctx, models.EnsureModelHostRequest{})
+	assertContractOnlyUnsupported(t, "EnsureModelHost", err)
+	_, err = svc.InspectModelHost(ctx, models.InspectModelHostRequest{})
+	assertContractOnlyUnsupported(t, "InspectModelHost", err)
+	_, err = svc.StopModelHost(ctx, models.StopModelHostRequest{})
+	assertContractOnlyUnsupported(t, "StopModelHost", err)
+	_, err = svc.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{})
+	assertContractOnlyUnsupported(t, "AcquireModelLease", err)
+	_, err = svc.GetModelLease(ctx, models.GetModelLeaseRequest{})
+	assertContractOnlyUnsupported(t, "GetModelLease", err)
+	_, err = svc.ReleaseModelLease(ctx, models.ReleaseModelLeaseRequest{})
+	assertContractOnlyUnsupported(t, "ReleaseModelLease", err)
+	_, err = svc.InvokeModelWithLease(ctx, models.InvokeModelRequest{})
+	assertContractOnlyUnsupported(t, "InvokeModelWithLease", err)
+	_, err = svc.CancelInvocation(ctx, models.CancelInvocationRequest{})
+	assertContractOnlyUnsupported(t, "CancelInvocation", err)
+}
+
+func TestRuntimeServiceContractOnlyOperationsFailExplicitly(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := &runtimeService{}
+	_, err := svc.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{})
+	assertContractOnlyUnsupported(t, "OpenRuntimeScope", err)
+	_, err = svc.CloseRuntimeScope(ctx, models.CloseRuntimeScopeRequest{})
+	assertContractOnlyUnsupported(t, "CloseRuntimeScope", err)
+	_, err = svc.PrepareModelAssets(ctx, models.PrepareModelAssetsRequest{})
+	assertContractOnlyUnsupported(t, "PrepareModelAssets", err)
+	_, err = svc.InspectModelAssets(ctx, models.InspectModelAssetsRequest{})
+	assertContractOnlyUnsupported(t, "InspectModelAssets", err)
+	_, err = svc.RemoveModelAssets(ctx, models.RemoveModelAssetsRequest{})
+	assertContractOnlyUnsupported(t, "RemoveModelAssets", err)
 }

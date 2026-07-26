@@ -8,6 +8,66 @@ import (
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
 )
 
+// Scoped host and lease lifecycle is contract-only until the Models
+// implementation packet owns runtime-scope registration and lease expiry.
+func (s *Service) EnsureModelHost(
+	context.Context,
+	models.EnsureModelHostRequest,
+) (models.EnsureModelHostResult, error) {
+	return models.EnsureModelHostResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *Service) InspectModelHost(
+	context.Context,
+	models.InspectModelHostRequest,
+) (models.InspectModelHostResult, error) {
+	return models.InspectModelHostResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *Service) StopModelHost(
+	context.Context,
+	models.StopModelHostRequest,
+) (models.StopModelHostResult, error) {
+	return models.StopModelHostResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *Service) AcquireModelLease(
+	context.Context,
+	models.AcquireModelLeaseRequest,
+) (models.AcquireModelLeaseResult, error) {
+	return models.AcquireModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *Service) GetModelLease(
+	context.Context,
+	models.GetModelLeaseRequest,
+) (models.GetModelLeaseResult, error) {
+	return models.GetModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *Service) ReleaseModelLease(
+	context.Context,
+	models.ReleaseModelLeaseRequest,
+) (models.ReleaseModelLeaseResult, error) {
+	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
+// Scoped inference is contract-only until the Models implementation packet
+// owns runtime-scope registration and invocation cancellation state.
+func (s *Service) InvokeModelWithLease(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *Service) CancelInvocation(
+	context.Context,
+	models.CancelInvocationRequest,
+) (models.CancelInvocationResult, error) {
+	return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
+}
+
 // AcquireLease acquires Models-owned local capacity through the singular root
 // Service host/lease surface.
 func (s *Service) AcquireLease(ctx context.Context, request models.AcquireLeaseRequest) (models.HostLease, error) {
