@@ -257,6 +257,26 @@ func TestUICoverageCommandSmoke_RunsPackageCoverageThenReplayCheck(t *testing.T)
 	)
 }
 
+func TestUIPackageUnitCommandSmoke_InvokesPackageOwnedUnitScript(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	scriptPath := writeMakeEchoScript(t, "ui-script")
+	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, nil)
+
+	output, err := runMakefileTargetWithArgs(
+		repoRoot,
+		makefilePath,
+		"ui-test",
+		fmt.Sprintf("UI_SCRIPT=%s", scriptPath),
+	)
+	if err != nil {
+		t.Fatalf("run ui-test wrapper: %v\n%s", err, output)
+	}
+
+	if !strings.Contains(output, "ui-script:test:unit") {
+		t.Fatalf("ui-test did not invoke package-owned test:unit script:\n%s", output)
+	}
+}
+
 func TestUIPackageCoverageCommandSmoke_InvokesPackageOwnedCoverageScript(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	scriptPath := writeMakeEchoScript(t, "ui-script")

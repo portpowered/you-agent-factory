@@ -60,7 +60,7 @@
     "test:hosted-topology-replay": "vitest run src/features/dashboard/hooks/topology-replay/use-hosted-topology-replay-adapter.test.tsx src/features/dashboard/components/topology-replay/hosted-topology-replay.test.tsx",
     "test:hosted-exact-session-replay-browser": "vitest run integration/hosted-exact-session-replay.integration.test.mjs --no-file-parallelism --maxWorkers 1",
     "test:model-provider-reference-input": "vitest run scripts/model-provider-reference-input.test.ts",
-    "test:unit": "vitest run --exclude 'integration/*.integration.test.mjs' --pool=threads --maxWorkers=2 --retry=2",
+    "test:unit": "vitest run --exclude 'integration/*.integration.test.mjs' --pool=threads --maxWorkers=50% --retry=2",
     "test": "vitest run --exclude 'integration/*.integration.test.mjs' && vitest run integration --no-file-parallelism --maxWorkers 1",
     "test-storybook": "bun scripts/run-storybook-ci.mjs",
     "test-storybook:browser-checks": "bun scripts/run-storybook-ci.mjs --browser-checks-only",
