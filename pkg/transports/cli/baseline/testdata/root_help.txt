@@ -32,6 +32,7 @@ Available Commands:
   mcp         Model Context Protocol servers for Factory Session tools
   models      Inspect discovered models from a running service
   run         Load workflow and run the factory engine
+  server      Serve the Current Factory API and dashboard
   session     List, open, and close factory sessions on a running host
   submit      Submit work to a running factory
   work        Inspect work from a running factory

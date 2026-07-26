@@ -21,6 +21,7 @@ you models invoke	invoke <model-name>	you models
 you models list	list	you models
 you models pull	pull <model-name>	you models
 you run	run	you
+you server	server	you
 you session	session	you
 you session create	create [arg0...]	you session
 you session delete	delete <session-id>	you session

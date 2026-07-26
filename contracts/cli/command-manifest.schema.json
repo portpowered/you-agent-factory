@@ -168,6 +168,16 @@
             "$ref": "#/$defs/output"
           }
         },
+        "errors": {
+          "description": "Manifest-declared symbolic ErrorResponse codes keyed by stable error identity.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/symbolicError"
+          }
+        },
         "exits": {
           "description": "Declared exit-code records keyed by stable exit identifiers. Object keys make duplicate exit IDs structurally unrepresentable.",
           "type": "object",
@@ -1217,6 +1227,24 @@
             "usage",
             "cancel"
           ]
+        }
+      }
+    },
+    "symbolicError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "code"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "code": {
+          "description": "Stable ErrorResponse code emitted for this failure.",
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
         }
       }
     },

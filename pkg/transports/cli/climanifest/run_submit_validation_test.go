@@ -30,6 +30,31 @@ func TestValidateRunSubmitFamily_RejectsIncompleteAndContradictoryContracts(t *t
 			wantError: "flags, want",
 		},
 		{
+			name: "missing server command",
+			mutate: func(manifest climanifest.Manifest) {
+				delete(manifest.Commands, "you.server")
+			},
+			wantError: `missing command "you.server"`,
+		},
+		{
+			name: "missing run manifest help",
+			mutate: func(manifest climanifest.Manifest) {
+				flag := manifest.Commands["you.run"].Flags["you.run.flag.with-server"]
+				flag.Usage = ""
+				manifest.Commands["you.run"].Flags[flag.ID] = flag
+			},
+			wantError: "missing manifest-owned help",
+		},
+		{
+			name: "missing run symbolic errors",
+			mutate: func(manifest climanifest.Manifest) {
+				record := manifest.Commands["you.run"]
+				record.Errors = nil
+				manifest.Commands[record.ID] = record
+			},
+			wantError: "incomplete symbolic error metadata",
+		},
+		{
 			name: "missing run selector relationship",
 			mutate: func(manifest climanifest.Manifest) {
 				delete(manifest.Commands["you.run"].Relationships, "you.run.rel.selectors")

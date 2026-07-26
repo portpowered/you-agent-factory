@@ -822,8 +822,8 @@ func updatePresentationFlag(
 
 func TestNewRunSubmitFamilyComponentsBuildsDetachedContractedTree(t *testing.T) {
 	components := mustRunSubmitFamilyComponents(t)
-	if components.Run.Parent() != nil || components.Submit.Parent() != nil {
-		t.Fatal("run and submit components must remain detached from the shared root")
+	if components.Run.Parent() != nil || components.Server.Parent() != nil || components.Submit.Parent() != nil {
+		t.Fatal("run, server, and submit components must remain detached from the shared root")
 	}
 	if components.SubmitBatch.Parent() != components.Submit {
 		t.Fatal("submit batch must be attached only beneath submit")
@@ -834,7 +834,7 @@ func TestNewRunSubmitFamilyComponentsBuildsDetachedContractedTree(t *testing.T) 
 	if !strings.Contains(components.Run.Example, "you run --work") || strings.Contains(components.Run.Example, "session pause") {
 		t.Fatalf("generated run examples do not describe run behavior:\n%s", components.Run.Example)
 	}
-	for _, cmd := range []*cobra.Command{components.Run, components.Submit, components.SubmitBatch} {
+	for _, cmd := range []*cobra.Command{components.Run, components.Server, components.Submit, components.SubmitBatch} {
 		if cmd.PreRunE == nil || cmd.RunE == nil {
 			t.Fatalf("%s missing handwritten lifecycle", cmd.CommandPath())
 		}
@@ -849,7 +849,7 @@ func TestNewRunSubmitFamilyComponentsRegistersLocalFlagsWithoutChangingHandlerVa
 		"runtime-log-max-age-days", "runtime-log-compress", "runtime-metrics-dir",
 		"runtime-metrics-max-size-mb", "runtime-metrics-max-backups",
 		"runtime-metrics-max-age-days", "runtime-metrics-compress", "with-mock-workers",
-		"quiet", "output", "skip-permissions", "port",
+		"with-server", "with-site", "quiet", "output", "skip-permissions", "port",
 	} {
 		if components.Run.Flags().Lookup(flagName) == nil {
 			t.Fatalf("generated run missing local flag %q", flagName)
@@ -919,6 +919,7 @@ func mustRunSubmitRegistry(t *testing.T) *commandregistry.Registry {
 	preRun := func(*cobra.Command, []string) error { return nil }
 	registry, err := commandregistry.NewRunSubmitRegistry(commandregistry.RunSubmitHandlers{
 		Run:         commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
+		Server:      commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
 		Submit:      commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
 		SubmitBatch: commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
 	})
@@ -931,11 +932,32 @@ func mustRunSubmitRegistry(t *testing.T) *commandregistry.Registry {
 func testRunSubmitBindings() climanifestcobra.RunSubmitFlagBindings {
 	runConfig := &runcli.RunConfig{}
 	output := ""
+	skipPermissions := false
 	return climanifestcobra.RunSubmitFlagBindings{
 		Run:                 runConfig,
 		RunInvocationOutput: &output,
-		Submit:              &submitcli.SubmitConfig{Context: context.Background()},
-		SubmitBatch:         &submitcli.BatchConfig{Context: context.Background()},
+		RunLocalTargets: map[string]any{
+			"continuously": &runConfig.Continuously, "work": &runConfig.WorkFile,
+			"dir": &runConfig.Dir, "named": &runConfig.NamedFactoryName,
+			"factory": &runConfig.FactoryConfigPath, "record": &runConfig.RecordPath,
+			"no-record": &runConfig.DisableDefaultRecording, "replay": &runConfig.ReplayPath,
+			"runtime-log-dir":              &runConfig.RuntimeLogDir,
+			"runtime-log-max-size-mb":      &runConfig.RuntimeLogConfig.MaxSize,
+			"runtime-log-max-backups":      &runConfig.RuntimeLogConfig.MaxBackups,
+			"runtime-log-max-age-days":     &runConfig.RuntimeLogConfig.MaxAge,
+			"runtime-log-compress":         &runConfig.RuntimeLogConfig.Compress,
+			"runtime-metrics-dir":          &runConfig.RuntimeMetricsDir,
+			"runtime-metrics-max-size-mb":  &runConfig.RuntimeMetricsConfig.MaxSize,
+			"runtime-metrics-max-backups":  &runConfig.RuntimeMetricsConfig.MaxBackups,
+			"runtime-metrics-max-age-days": &runConfig.RuntimeMetricsConfig.MaxAge,
+			"runtime-metrics-compress":     &runConfig.RuntimeMetricsConfig.Compress,
+			"with-mock-workers":            &runConfig.MockWorkersConfigPath,
+			"with-server":                  &runConfig.WithServer, "with-site": &runConfig.WithSite,
+			"quiet": &runConfig.SuppressDashboardRendering, "output": &output,
+			"skip-permissions": &skipPermissions,
+		},
+		Submit:      &submitcli.SubmitConfig{Context: context.Background()},
+		SubmitBatch: &submitcli.BatchConfig{Context: context.Background()},
 	}
 }
 

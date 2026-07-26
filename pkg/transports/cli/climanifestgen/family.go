@@ -72,6 +72,7 @@ var WorkFamilyCommandIDs = []string{
 // emit for the run and submit invocation family.
 var RunSubmitFamilyCommandIDs = []string{
 	"you.run",
+	"you.server",
 	"you.submit",
 	"you.submit.batch",
 }

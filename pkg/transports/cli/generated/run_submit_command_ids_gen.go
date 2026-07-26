@@ -6,6 +6,7 @@ package generated
 // contracts/cli/commands.json for the run/submit CLI family.
 var RunSubmitFamilyCommandIDs = []string{
 	"you.run",
+	"you.server",
 	"you.submit",
 	"you.submit.batch",
 }

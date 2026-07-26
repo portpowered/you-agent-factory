@@ -1700,6 +1700,12 @@ response-stream output.
   relationships against the authored manifest. Generated commands with no
   declared arguments must install `cobra.NoArgs`; leaving `Args` unset makes
   grouped commands appear variadic to the observable input inventory.
+- For manifest-authoritative `you run` / `you server` construction, keep local
+  flag help in `contracts/cli/commands.json` and bind stable flag names through
+  an explicit target map assembled beside the handler config. Do not recreate a
+  hidden Cobra command to harvest help strings or add flag-name switches in the
+  family constructor; the source guard and executable/manifest parity tests
+  under `pkg/transports/cli/baseline` and `climanifestcobra` protect that seam.
 - When a migrated command starts projecting authored Examples into Cobra help,
   refresh the matching intentional help fixture under
   `pkg/transports/cli/baseline/testdata/` (for docs:

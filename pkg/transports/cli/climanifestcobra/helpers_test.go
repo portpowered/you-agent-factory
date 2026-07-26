@@ -8,9 +8,74 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
+
+func TestRunServerExecutableSurfaceMatchesGeneratedManifest(t *testing.T) {
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		t.Fatalf("RunSubmitFamilyManifest() error = %v", err)
+	}
+	components := mustRunSubmitFamilyComponents(t)
+	runRecord := manifest.Commands["you.run"]
+	serverRecord := manifest.Commands["you.server"]
+
+	assertRunServerCommandMetadata(t, components, runRecord, serverRecord)
+	assertRunFlagParity(t, components, runRecord)
+	assertRunServerFailureMetadata(t, runRecord, serverRecord)
+}
+
+func assertRunServerCommandMetadata(
+	t *testing.T,
+	components climanifestcobra.RunSubmitFamilyComponents,
+	runRecord, serverRecord climanifest.Command,
+) {
+	t.Helper()
+	if components.Run.Use != runRecord.Usage.Line ||
+		components.Run.Short != runRecord.Documentation.Documentation.Title.CanonicalEnglish {
+		t.Fatal("generated run command metadata drifted from the manifest")
+	}
+	if components.Server.Use != serverRecord.Usage.Line ||
+		components.Server.Short != serverRecord.Documentation.Documentation.Title.CanonicalEnglish {
+		t.Fatal("generated server command metadata drifted from the manifest")
+	}
+}
+
+func assertRunFlagParity(
+	t *testing.T,
+	components climanifestcobra.RunSubmitFamilyComponents,
+	runRecord climanifest.Command,
+) {
+	t.Helper()
+	for _, flag := range runRecord.Flags {
+		if flag.Scope != "local" {
+			continue
+		}
+		registered := components.Run.Flags().Lookup(flag.Long)
+		if registered == nil || registered.Shorthand != flag.Shorthand ||
+			registered.DefValue != flag.Default || registered.Usage != flag.Usage {
+			t.Fatalf("run flag %q = %#v, want manifest parity", flag.ID, registered)
+		}
+	}
+	named := components.Run.Flags().Lookup("named")
+	if named == nil || named.Shorthand != "a" || components.Run.Flags().Lookup("a") != nil {
+		t.Fatalf("canonical named selector = %#v, want --named with -a and no --a", named)
+	}
+}
+
+func assertRunServerFailureMetadata(
+	t *testing.T,
+	runRecord, serverRecord climanifest.Command,
+) {
+	t.Helper()
+	if len(runRecord.Errors) == 0 || len(serverRecord.Errors) == 0 ||
+		runRecord.Exits["you.run.exit.cancel"].Code != 130 ||
+		serverRecord.Exits["you.server.exit.cancel"].Code != 130 {
+		t.Fatal("run/server symbolic errors and cancellation exits are incomplete")
+	}
+}
 
 func TestNewCommandTreeRejectsInvalidCanonicalFlagValuesBeforeDispatch(t *testing.T) {
 	tests := []struct {

@@ -28,11 +28,18 @@ type Command struct {
 	Precedence      Precedence                `json:"precedence,omitempty"`
 	Channels        Channels                  `json:"channels,omitempty"`
 	Outputs         map[string]Output         `json:"outputs,omitempty"`
+	Errors          map[string]SymbolicError  `json:"errors,omitempty"`
 	Exits           map[string]Exit           `json:"exits,omitempty"`
 	SideEffects     map[string]SideEffect     `json:"sideEffects,omitempty"`
 	Constraints     Constraints               `json:"constraints,omitempty"`
 	Handler         *Handler                  `json:"handler,omitempty"`
 	RootLifecycle   *RootLifecycle            `json:"rootLifecycle,omitempty"`
+}
+
+// SymbolicError is one stable ErrorResponse code declared by a command.
+type SymbolicError struct {
+	ID   string `json:"id"`
+	Code string `json:"code"`
 }
 
 // RootLifecycle declares discovery behavior and lifecycle ownership without
