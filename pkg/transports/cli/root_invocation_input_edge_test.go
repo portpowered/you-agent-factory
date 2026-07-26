@@ -48,6 +48,123 @@ type failingInvocationReader struct{ err error }
 
 func (reader failingInvocationReader) Read([]byte) (int, error) { return 0, reader.err }
 
+func TestResolveRunFactoryPromptNoSignatureSelectionsPreserveCompatibilityInput(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, factoryDir)
+	stdinText := "from stdin\n"
+	tests := []struct {
+		name       string
+		arguments  []string
+		stdin      *string
+		wantSource work.InputSourceLabel
+		wantText   string
+	}{
+		{
+			name: "positional text", arguments: []string{"--mode", "fast"},
+			wantSource: work.InputSourcePositionalText, wantText: "--mode fast",
+		},
+		{
+			name: "stdin text", arguments: []string{"-"}, stdin: &stdinText,
+			wantSource: work.InputSourceStdinText, wantText: "from stdin\n",
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			named := resolveNoSignaturePromptForTest(
+				t, factoryDir, factoryPath, "named", "legacy",
+				test.arguments, test.stdin, test.wantSource, test.wantText,
+			)
+			file := resolveNoSignaturePromptForTest(
+				t, factoryDir, factoryPath, "factory", factoryPath,
+				test.arguments, test.stdin, test.wantSource, test.wantText,
+			)
+			if named.request.Signature != nil || file.request.Signature != nil {
+				t.Fatalf("no-signature selections activated signature policy: named=%#v file=%#v", named.request.Signature, file.request.Signature)
+			}
+			if !reflect.DeepEqual(named.request, file.request) {
+				t.Fatalf("compatibility preparation requests differ: named=%#v file=%#v", named.request, file.request)
+			}
+			for selection, cfg := range map[string]runcli.RunConfig{"named": named.config, "file": file.config} {
+				if cfg.PreparedInvocationInput == nil ||
+					cfg.PreparedInvocationInput.ResolvedInput == nil ||
+					cfg.PreparedInvocationInput.ResolvedInput.Text != test.wantText {
+					t.Fatalf("%s prepared input = %#v, want compatibility text %q", selection, cfg.PreparedInvocationInput, test.wantText)
+				}
+				if cfg.InvocationNormalizedArguments != nil {
+					t.Fatalf("%s normalized arguments = %#v, want nil", selection, cfg.InvocationNormalizedArguments)
+				}
+			}
+		})
+	}
+}
+
+type noSignaturePromptObservation struct {
+	request work.InvocationInputPreparationRequest
+	config  runcli.RunConfig
+}
+
+func resolveNoSignaturePromptForTest(
+	t *testing.T,
+	factoryDir string,
+	factoryPath string,
+	flag string,
+	value string,
+	arguments []string,
+	stdin *string,
+	wantSource work.InputSourceLabel,
+	wantText string,
+) noSignaturePromptObservation {
+	t.Helper()
+	cmd := &cobra.Command{Use: "run"}
+	cmd.SetContext(context.Background())
+	cmd.Flags().String("named", "", "")
+	cmd.Flags().String("factory", "", "")
+	cmd.Flags().String("work", "", "")
+	if err := cmd.Flags().Set(flag, value); err != nil {
+		t.Fatalf("set %s: %v", flag, err)
+	}
+	if stdin != nil {
+		cmd.SetIn(strings.NewReader(*stdin))
+	} else {
+		cmd.SetIn(strings.NewReader(""))
+	}
+
+	calls := 0
+	var request work.InvocationInputPreparationRequest
+	preparation := rootInvocationInputScript{prepare: func(
+		_ context.Context,
+		got work.InvocationInputPreparationRequest,
+	) (work.PreparedInvocationInput, error) {
+		calls++
+		request = got
+		resolved := work.ResolvedInput{
+			Source: wantSource,
+			Text:   wantText,
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: wantText,
+			}},
+		}
+		return work.PreparedInvocationInput{Source: wantSource, ResolvedInput: &resolved}, nil
+	}}
+	cfg := runcli.RunConfig{Dir: factoryDir, LoadFactoryConfigFile: loadTestFactoryConfigFile}
+	if flag == "factory" {
+		cfg.FactoryConfigPath = factoryPath
+	}
+	if err := resolveRunFactoryPrompt(cmd, &cfg, arguments, preparation); err != nil {
+		t.Fatalf("resolve %s Factory prompt: %v", flag, err)
+	}
+	if calls != 1 {
+		t.Fatalf("%s preparation calls = %d, want exactly 1", flag, calls)
+	}
+	return noSignaturePromptObservation{request: request, config: cfg}
+}
+
 func TestResolveRunFactoryPromptPreservesCompleteEffectiveSignatureBehavior(t *testing.T) {
 	t.Parallel()
 

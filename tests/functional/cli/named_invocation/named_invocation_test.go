@@ -103,6 +103,70 @@ func TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer(t *te
 	}
 }
 
+func TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test for no-signature Factory invocation compatibility")
+	}
+
+	homeDir := t.TempDir()
+	workingDirectory := t.TempDir()
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	initStdout, initStderr := executeCustomerCommand(
+		t, process, environment, workingDirectory,
+		[]string{"you", "--json", "config", "init"},
+	)
+	if initStderr != "" {
+		t.Fatalf("config init stderr = %q, want empty; stdout=%s", initStderr, initStdout)
+	}
+	factoryDir := packagedFactoryDir(t, initStdout, packagedGoalFactoryName)
+	factoryPath := filepath.Join(factoryDir, "factory.json")
+	mockWorkersPath := writeMockWorkersConfig(t, workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName:      "goal-executor",
+			WorkstationName: packagedGoalExecuteWorkstationName,
+			RunType:         workers.MockWorkerRunTypeAccept,
+		}},
+	})
+	base := []string{
+		"--with-mock-workers", "--no-record", "--quiet", mockWorkersPath,
+	}
+	tests := []struct {
+		name  string
+		input []string
+		stdin string
+	}{
+		{name: "positional compatibility", input: []string{"legacy positional input"}},
+		{name: "stdin compatibility", input: []string{"-"}, stdin: "legacy stdin input\n"},
+		{name: "signature-only syntax remains literal text", input: []string{"--mode", "fast"}},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			namedStdout, namedStderr := executeCustomerCommandWithStdin(
+				t, process, environment, workingDirectory,
+				append(append([]string{"you", "run", "--named", packagedGoalFactoryName}, base...), test.input...),
+				test.stdin,
+			)
+			fileStdout, fileStderr := executeCustomerCommandWithStdin(
+				t, process, environment, workingDirectory,
+				append(append([]string{"you", "run", "--factory", factoryPath}, base...), test.input...),
+				test.stdin,
+			)
+			if namedStderr != "" || fileStderr != "" {
+				t.Fatalf("invocation stderr: named=%q file=%q", namedStderr, fileStderr)
+			}
+			if namedStdout != wantHermeticInvocationPrimaryResult || fileStdout != namedStdout {
+				t.Fatalf("selection outputs differ: named=%q file=%q", namedStdout, fileStdout)
+			}
+		})
+	}
+}
+
 func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatureInput(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test for named and explicit Factory invocation parity")
