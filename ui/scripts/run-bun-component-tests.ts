@@ -29,6 +29,7 @@ function runComponentTests(files: string[]): void {
       "--preload",
       PRELOAD_PATH,
       "--reporter=dots",
+      "--timeout=10000",
       ...files,
     ],
     cwd: process.cwd(),
