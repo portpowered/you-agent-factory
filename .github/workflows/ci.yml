@@ -24,7 +24,7 @@ env:
   # Keep this aligned with go.mod's toolchain directive. Using only the lower
   # go directive can make setup-go download the newer toolchain into GOMODCACHE
   # before cache restore, which causes cache extraction collisions on CI.
-  GO_VERSION: 1.24.2
+  GO_VERSION: 1.25.0
 
 # Contract staging lanes require full git history so manifest sourceCommit
 # resolution can find the last change to package source identity paths.
