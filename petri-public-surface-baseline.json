@@ -312,7 +312,7 @@
       "symbol": "EngineStateSnapshot",
       "shape": "engine snapshot",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 7,
+      "count": 8,
       "stage": "imp-run-01-petri-boundary-retirement",
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
@@ -959,6 +959,15 @@
       "filePath": "pkg/services/factory_runtime/testkit/runtime.go",
       "symbol": "PetriMarking",
       "shape": "raw marking",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 1,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/services/factory_sessions/registry_test.go",
+      "symbol": "StateSnapshot",
+      "shape": "engine snapshot",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
       "count": 1,
       "stage": "imp-run-01-petri-boundary-retirement",
@@ -1653,7 +1662,7 @@
       "symbol": "RuntimeToken",
       "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 19,
+      "count": 20,
       "stage": "imp-run-01-petri-boundary-retirement",
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
@@ -1662,7 +1671,7 @@
       "symbol": "RuntimeTokenColor",
       "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 15,
+      "count": 16,
       "stage": "imp-run-01-petri-boundary-retirement",
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
