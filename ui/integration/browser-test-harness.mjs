@@ -1047,6 +1047,17 @@ async function createBrowserPreview(ports = null) {
 }
 
 export async function startIsolatedBrowserPreview() {
+  const preview = await startBrowserPreview();
+  const apiPort = await findAvailablePort();
+  return {
+    ...preview,
+    apiOrigin: `http://${previewHost}:${apiPort}`,
+    apiPort,
+    stop: async () => {},
+  };
+}
+
+export async function startDedicatedBrowserPreview() {
   return createBrowserPreview(await isolatedBrowserPreviewPorts());
 }
 
@@ -1312,6 +1323,11 @@ export async function openBrowserPage(options = {}) {
   const context = await browser.newContext({
     acceptDownloads: options.acceptDownloads ?? false,
   });
+  if (options.apiOrigin) {
+    await context.addInitScript((apiOrigin) => {
+      globalThis.__agentFactoryBrowserTestAPIOrigin = apiOrigin;
+    }, options.apiOrigin);
+  }
   let page;
   try {
     if (artifactDirectory && !boundedArtifacts) {

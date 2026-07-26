@@ -21,7 +21,7 @@ const focusedBrowserIntegrationWorkerArgs = [
 ];
 
 export function browserIntegrationMaxWorkers(env = process.env) {
-  const configured = Number(env.UI_BROWSER_INTEGRATION_MAX_WORKERS ?? "2");
+  const configured = Number(env.UI_BROWSER_INTEGRATION_MAX_WORKERS ?? "3");
   if (!Number.isInteger(configured) || configured < 1) {
     throw new Error(
       `UI_BROWSER_INTEGRATION_MAX_WORKERS must be a positive integer, got "${env.UI_BROWSER_INTEGRATION_MAX_WORKERS}".`,

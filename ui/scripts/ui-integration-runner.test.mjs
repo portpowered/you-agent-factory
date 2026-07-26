@@ -21,7 +21,7 @@ test("builds stable browser integration vitest args", () => {
     ...mockedBackendBrowserIntegrationFiles,
     "--fileParallelism",
     "--maxWorkers",
-    "2",
+    "3",
     "--reporter=verbose",
   ]);
 });

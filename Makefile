@@ -120,7 +120,7 @@ endef
 
 .PHONY: test test-full test-unit test-unit-fresh test-lane-audit test-maintenance test-integration test-contract test-stress test-release
 .PHONY: test-functional test-functional-long test-backend-functional functional-boundary-check functional-test-viz
-.PHONY: test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend
+.PHONY: test-ui-coverage-merge test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend
 .PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
 .PHONY: test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
 
@@ -149,7 +149,7 @@ endef
 
 .PHONY: ci ci-typecheck ci-verify-build-contracts ci-verify-tests
 
-.PHONY: ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright
+.PHONY: ui-deps ui-lint ui-build ui-test ui-integration-test ui-storybook-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright
 .PHONY: ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install
 .PHONY: ui-public-package-release ui-public-package-publish-prepare
 .PHONY: ui-storybook  ui-deadcode
@@ -432,6 +432,9 @@ test-ui-coverage-merge:
 test-ui-browser-integration:
 	$(MAKE) ui-integration-test
 
+test-ui-storybook-integration:
+	$(MAKE) ui-storybook-integration-test
+
 test-ui-durable-session-real-backend:
 	$(MAKE) ui-durable-session-real-backend-integration-test
 
@@ -607,13 +610,15 @@ run-concurrent-ui-verification-lanes:
 	./scripts/ci/run-concurrent-ui-verification-lanes.sh
 
 verify-tests:
-	$(info Running required CI-equivalent test lanes: maintenance + integration + contract + release surface + built-CLI S24 acceptance + concurrent UI coverage/browser integration + independent backend unit and functional coverage)
+	$(info Running required CI-equivalent test lanes: maintenance + integration + contract + release surface + built-CLI S24 acceptance + concurrent UI coverage/browser integration + Storybook + UI backend integration + independent backend unit and functional coverage)
 	$(call run_verification_step,test-maintenance,Backend Maintenance lane)
 	$(call run_verification_step,test-integration,Backend Integration lane)
 	$(call run_verification_step,test-contract,Backend Contract lane)
 	$(call run_verification_step,release-surface-smoke,Release surface smoke lane)
 	$(call run_verification_step,test-built-cli-acceptance,Built-CLI S24 acceptance lane)
 	$(call run_verification_step,run-concurrent-ui-verification-lanes,Concurrent UI Coverage + UI Browser Integration lanes)
+	$(call run_verification_step,test-ui-storybook-integration,UI Storybook Integration lane)
+	$(call run_verification_step,test-ui-durable-session-real-backend,UI Backend Integration lane)
 	$(call run_verification_step,test-unit-coverage,Backend Unit Coverage lane)
 	$(call run_verification_step,test-functional-coverage,Backend Functional Coverage lane)
 
@@ -713,6 +718,8 @@ ifeq ($(BUN_BIN),)
 else
 	cd ui && $(UI_SCRIPT) test:integration
 endif
+
+ui-storybook-integration-test:
 	$(MAKE) ui-storybook
 	$(MAKE) ui-test-storybook-browser-checks
 

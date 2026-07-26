@@ -1,22 +1,19 @@
 // @vitest-environment node
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe } from "vitest";
 
 import {
   browserScenarioTimeoutMs,
-  buildTimeoutMs,
   expectNoBrowserErrors,
   gotoDashboardAndWaitForWidgetPicker,
-  openBrowserPage,
   readyTimeoutMs,
   selectComboboxOption,
-  startBrowserPreview,
   startRealBackendBrowserHarness,
-  stopBrowserPreview,
   uiInteractionTimeoutMs,
   waitForDashboardSyncPreflight,
   waitForDashboardWidgetPicker,
 } from "./browser-test-harness.mjs";
+import { isolatedBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
 // Keep this suite bounded to one real-backend proof of the existing durable
 // session-detail experience. Fast fixture-backed panel tests and Storybook
@@ -45,7 +42,11 @@ async function openFactorySessionWidget(
     .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 }
 
-async function assertRunningSummaryScenario(preview) {
+async function assertRunningSummaryScenario({
+  expect,
+  openBrowserPage,
+  preview,
+}) {
   const backend = await startRealBackendBrowserHarness({
     apiPort: preview.apiPort,
     startMode: "async",
@@ -119,7 +120,11 @@ async function assertRunningSummaryScenario(preview) {
 // Story 004 disclosure: artifact detail for `child-artifact-1` from the sync
 // `agent-run-fake-child` durable session. Broader replay-resume, provider
 // transcript, host-matrix, and lifecycle-control proofs stay deferred.
-async function assertArtifactDisclosureScenario(preview) {
+async function assertArtifactDisclosureScenario({
+  expect,
+  openBrowserPage,
+  preview,
+}) {
   const backend = await startRealBackendBrowserHarness({
     apiPort: preview.apiPort,
     startMode: "sync",
@@ -196,7 +201,11 @@ async function assertArtifactDisclosureScenario(preview) {
   }
 }
 
-async function assertDispatchDetailScenario(preview) {
+async function assertDispatchDetailScenario({
+  expect,
+  openBrowserPage,
+  preview,
+}) {
   const backend = await startRealBackendBrowserHarness({
     apiPort: preview.apiPort,
     startMode: "sync",
@@ -277,33 +286,25 @@ async function assertDispatchDetailScenario(preview) {
   }
 }
 
-describe.sequential("durable session real backend browser integration", () => {
-  let preview = null;
-
-  beforeEach(async () => {
-    preview = await startBrowserPreview();
-  }, buildTimeoutMs);
-
-  afterEach(async () => {
-    await stopBrowserPreview();
-    preview = null;
-  });
-
+describe.concurrent("durable session real backend browser integration", () => {
   it(
     "shows loading and real durable summary state for a running backend session through the dashboard factory-session detail path",
-    async () => assertRunningSummaryScenario(preview),
+    async ({ expect, openBrowserPage, preview }) =>
+      assertRunningSummaryScenario({ expect, openBrowserPage, preview }),
     browserScenarioTimeoutMs,
   );
 
   it(
     "shows real durable dispatch detail with loading and terminal backend data through the dashboard factory-session detail path",
-    async () => assertDispatchDetailScenario(preview),
+    async ({ expect, openBrowserPage, preview }) =>
+      assertDispatchDetailScenario({ expect, openBrowserPage, preview }),
     browserScenarioTimeoutMs,
   );
 
   it(
     "shows real durable artifact detail disclosure from dispatch inspection through the dashboard factory-session detail path",
-    async () => assertArtifactDisclosureScenario(preview),
+    async ({ expect, openBrowserPage, preview }) =>
+      assertArtifactDisclosureScenario({ expect, openBrowserPage, preview }),
     browserScenarioTimeoutMs,
   );
 });

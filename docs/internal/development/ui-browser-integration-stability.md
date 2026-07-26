@@ -13,50 +13,37 @@ Canonical rerun command: `make ui-integration-test` (`cd ui && bun run test:inte
 browser files and invokes Vitest with bounded file parallelism:
 
 ```text
-vitest run <mocked-browser-files...> --fileParallelism --maxWorkers 2
+vitest run <mocked-browser-files...> --fileParallelism --maxWorkers 3
 ```
 
 `UI_BROWSER_INTEGRATION_MAX_WORKERS` overrides the default for measured
-comparison runs. The production dashboard is built once before Vitest starts;
-each worker then owns a dynamically allocated preview/API port pair, Vite proxy,
-mock HTTP/SSE backend, Chromium process, and artifact subdirectory. Files can
-therefore execute concurrently without sharing mutable backend or browser
-state. Cases inside one file remain sequential until they adopt the test-scoped
-scenario fixture described in
-`plans/ui-browser-test-isolation.md`.
+comparison runs. The production dashboard is built once before Vitest starts.
+Each worker owns an immutable Vite preview and Chromium process; each scenario
+owns a dynamically allocated mock API port, HTTP/SSE backend, browser context,
+storage, and artifact identity. A test-only runtime API origin routes each
+browser context to its scenario server without rebuilding or restarting the
+preview.
 
 The two real Go backend files are not members of this runner. They remain owned
 by `make ui-durable-session-real-backend-integration-test`. Node-only port and
 wait-helper checks are owned by `test:unit` and are not repeated here.
 
-## Suites that must stay sequential
+## Test-scoped scenario contract
 
-Each mocked browser file currently uses `describe.sequential` and shares a
-**worker-isolated, file-scoped preview harness** started in `beforeAll`:
+Every mocked multi-scenario file uses `isolatedMockBrowserTest` and
+`describe.concurrent`. The fixture passes the Vitest test-scoped `expect`, a
+scenario-bound `openBrowserPage`, and the shared immutable preview descriptor.
+Concurrent cases must use the supplied `expect` for polling matchers and the
+supplied page opener so API traffic receives the scenario's runtime origin.
 
-| Suite file | Shared resource | Why sequential |
-| --- | --- | --- |
-| `event-stream-replay.integration.test.mjs` | One `vite preview` + global production build cache | Replay scenarios reuse the same preview URL and API origin wiring |
-| `dashboard-session-tabs.integration.test.mjs` | Shared preview + per-file API servers on `preview.apiPort` | Multi-tab chrome depends on one preview build per describe block |
-| `factory-name-preservation.integration.test.mjs` | Shared preview + captured download hook per test | Export/import roundtrips share preview startup cost |
-| `factory-import-second-session.integration.test.mjs` | Shared preview + temp download directories | Second-session import uses real filesystem drops |
-| `factory-graph-editor.integration.test.mjs` | Shared preview + download capture | Graph edit + PNG roundtrip |
-| `factory-graph-editor-session-switch.integration.test.mjs` | Shared preview | Session switch retains graph selection |
-| `factory-graph-editor-node-placement.integration.test.mjs` | Shared preview | Real viewport measurement |
-| `factory-graph-editor-selection-no-panel-delete.integration.test.mjs` | Shared preview | Chromium hit targets |
-| `maintainer-phantom-worker-graph.integration.test.mjs` | Shared preview | Graph editor tools in real layout |
-| `browser-test-harness.artifacts.integration.test.mjs` | Env-only (no preview) | Artifact path resolution |
-| `durable-session-real-backend.integration.test.mjs` | Shared preview + Wire-backed `browser_api_harness` per scenario | One bounded durable JavaScript session-detail proof against a real backend |
-| `browser-test-harness.real-backend-setup.integration.test.mjs` | API port only (no preview) | Setup regression for `dur-sess-*` seeding without Playwright preview |
+Single-scenario mocked files remain written as sequential describes where that
+makes the scenario easier to read; they are still independently scheduled by
+file parallelism and do not serialize any sibling case.
 
-Within each file, `it` blocks run in order. Individual tests start their own
-`startFactoryApiServer` on `preview.apiPort` and their own Playwright browser
-context, but they **reuse** the shared preview process and the module-level
-production build cache (`globalThis.__agentFactoryBrowserIntegrationBuildComplete`).
-
-Do not parallelize cases inside these files until each case owns an isolated
-preview/API port pair, scenario state, browser context, artifact path, and
-download directory. The build itself is immutable and may remain shared.
+The real Go-backed durable-session cases use `isolatedBrowserTest`. Each owns a
+dedicated preview/API pair because the real backend intentionally uses the
+same-origin Vite proxy rather than the mock server's permissive CORS contract.
+Those cases execute concurrently in the dedicated UI Backend Integration lane.
 
 ## Isolation for concurrent lanes
 
@@ -65,7 +52,7 @@ download directory. The build itself is immutable and may remain shared.
 
 | Resource | Isolation mechanism |
 | --- | --- |
-| Preview/API ports | `findAvailablePort()` in `browser-test-harness.mjs`; optional overrides `AGENT_FACTORY_BROWSER_API_PORT` and `AGENT_FACTORY_BROWSER_PREVIEW_PORT` |
+| Preview/API ports | One immutable preview per mocked worker; `findAvailablePort()` gives every scenario its own API port |
 | Production build | Lane-scoped `VITE_AGENT_FACTORY_API_ORIGIN` during `bun run build` |
 | Playwright traces/screenshots | `AGENT_FACTORY_BROWSER_ARTIFACT_DIR` (CI sets `.artifacts/ui-browser-integration/browser`) |
 | Parallel worker artifacts | `worker-<VITEST_POOL_ID>/` below the configured browser artifact root |
@@ -104,7 +91,7 @@ Avoid browser-only waits for:
 Lane failures should rerun with `make ui-integration-test`. For a single file:
 
 ```bash
-cd ui && vitest run integration/factory-name-preservation.integration.test.mjs --no-file-parallelism --maxWorkers 1
+cd ui && vitest run integration/factory-graph-editor.integration.test.mjs --no-file-parallelism --maxWorkers 1
 ```
 
 For the bounded durable JavaScript Factory Session real-backend proof only:
