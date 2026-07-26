@@ -20,6 +20,8 @@ import { fileURLToPath } from "node:url";
 
 import { chromium } from "playwright";
 
+import { runSharedBrowserBuild } from "./browser-build-lock.mjs";
+
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(dirname, "..");
 const replayFixtureDirectory = path.join(dirname, "fixtures");
@@ -1024,21 +1026,22 @@ async function createBrowserPreview(ports = null) {
     ? `${browserBuildCacheKey}:sourcemaps`
     : browserBuildCacheKey;
 
-  const globalBuildState = globalThis;
-  if (!globalBuildState[buildCacheKey] && !(await browserDistReady())) {
-    await runRuntime(
-      ["run", "build"],
-      {
-        AGENT_FACTORY_PROFILE_SOURCEMAPS: sourceMapBuild ? "true" : "false",
-      },
-      buildTimeoutMs,
-      {
-        nodeEnv: "production",
-        stripVitestEnv: true,
-      },
-    );
-  }
-  globalBuildState[buildCacheKey] = true;
+  await runSharedBrowserBuild({
+    build: () =>
+      runRuntime(
+        ["run", "build"],
+        {
+          AGENT_FACTORY_PROFILE_SOURCEMAPS: sourceMapBuild ? "true" : "false",
+        },
+        buildTimeoutMs,
+        {
+          nodeEnv: "production",
+          stripVitestEnv: true,
+        },
+      ),
+    buildCacheKey,
+    ready: browserDistReady,
+  });
 
   const previewProcess = spawnRuntime(
     [
