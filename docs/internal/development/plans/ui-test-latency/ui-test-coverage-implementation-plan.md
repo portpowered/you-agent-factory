@@ -655,6 +655,83 @@ coverage until each case is moved or deleted with equivalent focused evidence.
    the strongest justification for cross-owner composition and should move to
    the extracted minimal shell rather than remain complete app mounts.
 
+## Component runtime experiment — 2026-07-26
+
+The runtime experiment used fresh processes and representative Monaco and React
+Flow component files. `bun vitest` was not treated as a Bun migration: Vitest
+continued to launch Node workers. Native-Bun results below came from `bun test`
+with no Vitest process.
+
+| Case | Current Vitest/jsdom | Vitest/Happy DOM | Native `bun test` |
+| --- | ---: | ---: | ---: |
+| Monaco prompt editor, before focused package import | 2.67s, 2.17s import | not retained | not retained |
+| Monaco prompt editor, after focused package import | 0.59–0.60s, 84–85ms import | 0.39s | 0.169–0.172s |
+| React Flow visual-group layer, 16 tests | 2.96–2.97s, 2.34s import | not required | 0.520–0.527s |
+| Broad React Flow edit integration, 17 tests | 9.08–10.59s, 4.71–4.73s import | 13.31s | not compatible without decomposition |
+
+The broad integration under genuine Happy DOM also leaked Factory-validation
+requests to `localhost:3000` and emitted socket errors. It passed, but the
+environment changed request behavior and increased assertion time to 8.42s.
+Happy DOM therefore is not a safe component-lane default.
+
+Fresh dependency-only imports show that the libraries themselves are not the
+multi-second bottleneck:
+
+- `@xyflow/react`: 28–30ms in Node and 16–20ms in Bun.
+- `@monaco-editor/react`: 5–7ms in both runtimes.
+
+The Monaco trace instead found `components/ui/index.ts` loading the complete UI
+catalog, including Radix controls, calendar, `react-day-picker`, charts, and
+Recharts. Replacing that barrel with
+`@you-agent-factory/components/primitives` reduced the file by about 77% before
+any runtime change. The broad graph trace transformed roughly 1,000 modules,
+including unrelated current-selection, submit-work, terminal-work,
+provider-session, replay, and visualization surfaces. Its cost is the app
+import graph plus broad interaction assertions, not React Flow initialization.
+
+### Native-Bun component migration boundary
+
+Native Bun is worth adopting for focused component tests that use Testing
+Library, ordinary mock functions, and DOM APIs supported by Happy DOM. Do not
+move app-style files that depend on Vitest-hoisted `vi.mock`, jsdom-specific
+request behavior, or full dashboard composition until they are decomposed.
+
+Keep the taxonomy as unit, component, and browser tests. Native Bun is an
+execution sublane of component tests, not a fourth test type:
+
+- Keep migrated files beside their component owners, named
+  `*.bun.component.test.tsx`.
+- Put shared Bun DOM registration and Testing Library cleanup in
+  `ui/src/testing/bun/component.setup.ts`.
+- Put Monaco-only module doubles in
+  `ui/src/testing/bun/monaco.setup.ts`; graph tests must not pay that setup cost.
+- Configure preloads in `ui/bunfig.toml` and add a targeted
+  `test:component:bun` package script.
+- Exclude `*.bun.component.test.tsx` from the Vitest component project and teach
+  `check-ui-test-lanes.mjs` that these files still belong to the component lane.
+- Keep the Node-only unit coverage manifest unchanged. Native-Bun component
+  tests do not become coverage members merely because their runner is faster.
+
+### Migration tasks
+
+1. Add the shared Bun/Happy DOM component setup using Bun's supported preload
+   mechanism and Testing Library cleanup.
+2. Establish lazy source-package aliases so a Monaco test does not import graph
+   or chart setup. Avoid the experimental `--tsconfig-override` path on Bun
+   1.3.13; it emitted an internal directory-mismatch error in this repository.
+3. Migrate `monaco-prompt-editor.test.tsx` first and preserve its two behavioral
+   assertions under native Bun.
+4. Migrate `factory-graph-visual-group-layer.test.tsx` next; its unchanged 16
+   cases already passed under native Bun in the experiment.
+5. Run both old and new commands during one transition change, then remove each
+   migrated file from Vitest discovery to prevent duplicate execution.
+6. Continue import-graph cleanup for the broad workflow graph integration.
+   Split feature-owned projection, save, dialog, and interaction contracts
+   before considering it for Bun.
+7. Record full component-lane latency after the first two migrations. Expand
+   the Bun sublane only when a representative file is at least 30% faster and
+   shows no environment-specific request or DOM behavior.
+
 ## Quality gates
 
 - `cd ui && bun run test:performance`
