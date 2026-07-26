@@ -74,6 +74,19 @@ var ErrMissingRunnerSelection = errors.New("Workers runtime-build missing runner
 // identity Workers does not recognize.
 var ErrUnknownRunnerSelection = errors.New("Workers runtime-build unknown runner selection")
 
+// ErrInvalidRunnerRegistration reports that a private Workers runner
+// registration contains malformed identity, metadata, capabilities, or a nil
+// implementation.
+var ErrInvalidRunnerRegistration = errors.New("invalid Workers runner registration")
+
+// ErrConflictingRunnerRegistration reports that a registration's explicit
+// identity disagrees with its metadata identity.
+var ErrConflictingRunnerRegistration = errors.New("conflicting Workers runner registration")
+
+// ErrDuplicateRunnerRegistration reports that registry construction received
+// more than one registration for the same canonical runner identity.
+var ErrDuplicateRunnerRegistration = errors.New("duplicate Workers runner registration")
+
 // ErrRuntimeAssemblyRejected reports that Workers rejected the supplied
 // assembly-shaped input.
 var ErrRuntimeAssemblyRejected = errors.New("Workers runtime assembly rejected")
