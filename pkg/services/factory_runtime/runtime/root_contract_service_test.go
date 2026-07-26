@@ -157,6 +157,8 @@ func TestFactoryImpl_CheckpointContracts_DoNotReportFalseSuccess(t *testing.T) {
 	impl.state = interfaces.FactoryStateCompleted
 	_, err = impl.CaptureCheckpoint(ctx, factory.CaptureCheckpointRequest{CheckpointID: "cp-2"})
 	requireRootErrIs(t, err, factory.ErrNotRunning, "CaptureCheckpoint(completed)")
+	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-2"})
+	requireRootErrIs(t, err, factory.ErrCapabilityUnavailable, "LoadCheckpoint(completed)")
 	_, err = impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{
 		Checkpoint: factory.Checkpoint{CheckpointID: "cp-2", SchemaVersion: 1, Payload: []byte(`{}`)},
 	})
