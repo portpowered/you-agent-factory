@@ -243,16 +243,28 @@ func isProviderEffectMethodSignature(signature *ast.FuncType, imports map[string
 	if fieldCount(signature.Params) != 2 || fieldCount(signature.Results) != 2 {
 		return false
 	}
-	contextSelector, ok := signature.Params.List[0].Type.(*ast.SelectorExpr)
-	if !ok || contextSelector.Sel == nil || contextSelector.Sel.Name != "Context" {
-		return false
-	}
-	contextPackage, ok := contextSelector.X.(*ast.Ident)
-	if !ok || imports[contextPackage.Name] != "context" {
+	if !isStandardContextType(signature.Params.List[0].Type, imports) {
 		return false
 	}
 	errorResult, ok := signature.Results.List[len(signature.Results.List)-1].Type.(*ast.Ident)
 	return ok && errorResult.Name == "error"
+}
+
+func isStandardContextType(expression ast.Expr, imports map[string]string) bool {
+	switch typed := expression.(type) {
+	case *ast.ParenExpr:
+		return isStandardContextType(typed.X, imports)
+	case *ast.Ident:
+		return typed.Name == "Context" && imports["."] == "context"
+	case *ast.SelectorExpr:
+		if typed.Sel == nil || typed.Sel.Name != "Context" {
+			return false
+		}
+		packageName, ok := typed.X.(*ast.Ident)
+		return ok && imports[packageName.Name] == "context"
+	default:
+		return false
+	}
 }
 
 func fieldCount(fields *ast.FieldList) int {

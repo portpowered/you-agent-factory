@@ -335,6 +335,81 @@ type InferenceProvider interface {
 	}
 }
 
+func TestRunRejectsImportResolvedContextProviderEffectRedeclarations(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name                string
+		packagePath         string
+		contextImport       string
+		contextType         string
+		wantDiagnostic      string
+		wantOwnershipPhrase string
+	}{
+		{
+			name:                "edges redefinition",
+			packagePath:         edgesPackagePath,
+			contextImport:       `. "context"`,
+			contextType:         "Context",
+			wantDiagnostic:      "prohibited provider-effect contract redefinition",
+			wantOwnershipPhrase: "aggregate the exact Providers leaf effect contract unchanged",
+		},
+		{
+			name:                "non-Providers durable owner",
+			packagePath:         "pkg/services/factory_runtime/providereffect",
+			contextImport:       `. "context"`,
+			contextType:         "Context",
+			wantDiagnostic:      "prohibited durable provider-effect ownership",
+			wantOwnershipPhrase: "Providers Execution leaf",
+		},
+		{
+			name:                "renamed context import",
+			packagePath:         "pkg/services/factory_runtime/renamedprovidereffect",
+			contextImport:       `stdctx "context"`,
+			contextType:         "stdctx.Context",
+			wantDiagnostic:      "prohibited durable provider-effect ownership",
+			wantOwnershipPhrase: "Providers Execution leaf",
+		},
+	}
+
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			repoRoot := t.TempDir()
+			writeGoSourceFile(t, repoRoot, testCase.packagePath+"/contract.go", `package providereffect
+
+import `+testCase.contextImport+`
+
+// Deliberate fixture: an alternate context import form must not hide a locally
+// owned provider inference effect contract from the checker.
+type InferenceProvider interface {
+	Infer(`+testCase.contextType+`, string) (string, error)
+}
+`)
+
+			stderr := &bytes.Buffer{}
+			err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+			if err == nil {
+				t.Fatal("run() error = nil, want import-resolved Context provider-effect redeclaration rejected")
+			}
+			got := stderr.String()
+			for _, want := range []string{
+				testCase.wantDiagnostic,
+				testCase.packagePath,
+				"InferenceProvider",
+				testCase.wantOwnershipPhrase,
+				"canonical owner: " + providersLeafEffectContractPackage,
+			} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("run() stderr = %q, want substring %q", got, want)
+				}
+			}
+		})
+	}
+}
+
 func TestRunAllowsWorkersProviderEffectMigrationDebtDeclaration(t *testing.T) {
 	t.Parallel()
 
