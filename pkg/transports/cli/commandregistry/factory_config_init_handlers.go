@@ -3,8 +3,11 @@ package commandregistry
 import (
 	"fmt"
 	"io"
+	"path/filepath"
+	"strings"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
@@ -67,6 +70,7 @@ type FactoryConfigInitServices struct {
 	ExpandFactoryConfig   func(configcli.FactoryConfigExpandConfig) error
 	ConfigureInit         func(initsetup.Config) error
 	HomeDir               func() (string, error)
+	ResolveFactoryRoots   func(string, string) (factorydefinitions.NamedFactoryRoots, error)
 	DiagnosticsWriter     func(*cobra.Command) io.Writer
 }
 
@@ -160,8 +164,34 @@ func (h *FactoryConfigInitCommandHandler) FactoryList(
 	if err != nil {
 		return fmt.Errorf("resolve factory list inputs: %w", err)
 	}
+	if h.services.HomeDir == nil {
+		return fmt.Errorf("resolve factory list home: home-directory resolver is required")
+	}
+	home, err := h.services.HomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve factory list home: %w", err)
+	}
+	workingDirectory := startupcli.WorkingDirectory(cmd.Context())
+	if strings.TrimSpace(workingDirectory) == "" {
+		return fmt.Errorf("resolve factory list roots: process working directory is required")
+	}
+	if h.services.ResolveFactoryRoots == nil {
+		return fmt.Errorf("resolve factory list roots: Factory Definitions root resolver is required")
+	}
+	roots, err := h.services.ResolveFactoryRoots(home, workingDirectory)
+	if err != nil {
+		return fmt.Errorf("resolve factory list roots: %w", err)
+	}
+	if state, ok := inputs.State(factoryListDirInputID); ok && state.Changed {
+		if filepath.IsAbs(dir) {
+			roots.Project = dir
+		} else {
+			roots.Project = filepath.Join(workingDirectory, dir)
+		}
+	}
 	return h.services.ListFactories(factorycli.ListConfig{
-		Dir: dir, JSON: globals.json, Output: cmd.OutOrStdout(),
+		Context: cmd.Context(), ProjectRoot: roots.Project, GlobalRoot: roots.Global,
+		JSON: globals.json, Output: cmd.OutOrStdout(), Diagnostics: cmd.ErrOrStderr(),
 	})
 }
 

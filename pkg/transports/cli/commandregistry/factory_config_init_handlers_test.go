@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
@@ -15,6 +17,52 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
+
+func TestFactoryConfigInitCommandHandlerMapsEffectiveListRootsAndOutputs(t *testing.T) {
+	workingDirectory := t.TempDir()
+	home := t.TempDir()
+	var got factorycli.ListConfig
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			ListFactories: func(cfg factorycli.ListConfig) error {
+				got = cfg
+				return nil
+			},
+			HomeDir: func() (string, error) { return home, nil },
+			ResolveFactoryRoots: func(gotHome, gotWorking string) (factorydefinitions.NamedFactoryRoots, error) {
+				if gotHome != home || gotWorking != workingDirectory {
+					t.Fatalf("root inputs = (%q, %q)", gotHome, gotWorking)
+				}
+				return factorydefinitions.NamedFactoryRoots{
+					Project: filepath.Join(workingDirectory, "factory"),
+					Global:  filepath.Join(home, "factories"),
+				}, nil
+			},
+		},
+	)
+	inputs := resolvedTestInputs(t,
+		resolvedTestValue{
+			id: "you.factory.list.flag.dir", source: resolvedinput.SourceCLIFlag,
+			value: resolvedinput.StringValue("alternate"),
+		},
+	)
+	var output strings.Builder
+	var diagnostics strings.Builder
+	cmd := &cobra.Command{}
+	cmd.SetOut(&output)
+	cmd.SetErr(&diagnostics)
+	cmd.SetContext(startupcli.WithWorkingDirectory(context.Background(), workingDirectory))
+
+	if err := handler.FactoryList(cmd, inputs, resolvedFactoryGlobals(t, true, false, false)); err != nil {
+		t.Fatalf("FactoryList() error = %v", err)
+	}
+	if got.Context != cmd.Context() ||
+		got.ProjectRoot != filepath.Join(workingDirectory, "alternate") ||
+		got.GlobalRoot != filepath.Join(home, "factories") ||
+		!got.JSON || got.Output != &output || got.Diagnostics != &diagnostics {
+		t.Fatalf("list config = %#v", got)
+	}
+}
 
 type resolvedTestValue struct {
 	id     string

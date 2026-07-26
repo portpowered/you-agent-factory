@@ -14,6 +14,12 @@ primary-result behavior.
   Explicit config-root resolution must use the same injected authored-reader
   filesystem edge as config loading so `root.BuildProcess` tests can cancel or
   fail the metadata lookup itself without replacing service construction.
+- Effective Factory catalog CLI projections resolve project and global roots
+  from invocation-local home and working-directory edges, then pass both roots
+  to the Factory Definitions operation. They must not enter system
+  initialization: packaged-only entries are read from the published manifest
+  and stay unmaterialized, while current markers remain a read-only
+  canonical-name comparison over project-first pointer lookup.
 - Selected-Factory request preparation must recheck cancellation after pure
   schema composition and after Work normalization before publishing any
   prepared result. Compose the selected Factory schema before deciding that an

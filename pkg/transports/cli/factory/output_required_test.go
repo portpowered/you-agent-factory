@@ -10,7 +10,7 @@ func TestFactoryCommands_RequireCallerOwnedOutput(t *testing.T) {
 
 	tests := map[string]func() error{
 		"delete": func() error { return Delete(nil, DeleteConfig{}) },
-		"list":   func() error { return List(nil, ListConfig{}) },
+		"list":   func() error { return List(nil, nil, ListConfig{}) },
 		"query":  func() error { return NewQuery(testHTTPProtocol(t))(QueryConfig{Context: context.Background()}) },
 		"replace current": func() error {
 			return NewReplaceCurrent(testHTTPProtocol(t))(ReplaceCurrentConfig{Context: context.Background()})

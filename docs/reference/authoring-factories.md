@@ -374,15 +374,20 @@ built-in editable: if you modify the installed
 `workers/*/AGENTS.md`, `workstations/*/AGENTS.md`, or other split-layout files,
 the next `you run --named @you/goal` invocation uses your edited version.
 
-Use `you factory list` to inspect one named-factory root at a time. The default
-command lists only the project-local `./factory` root; point `--dir` at the
-global root when you want to inspect shared built-ins and customer-wide named
-factories:
+Use `you factory list` to inspect the effective catalog. It merges the
+project-local `./factory` root, the global
+`~/.you-agent-factory/factories` root, and packaged built-ins. Project-local
+definitions override same-name global definitions, and global definitions
+override same-name built-ins. Use `--dir` to substitute another project-local
+root while retaining the global and packaged tiers:
 
 ```bash
 you factory list
-you factory list --dir ~/.you-agent-factory/factories
+you factory list --dir ./alternate-factories
 ```
+
+Packaged-only Factories remain visible without being installed and show `-`
+for their Factory directory.
 
 On upgrade, normal initializer startup moves valid factories from the retired
 `~/.you-agent-factory/you-agent-factories` root into the canonical root. If a

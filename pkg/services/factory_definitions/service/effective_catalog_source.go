@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -55,6 +57,9 @@ func (s effectiveCatalogSource) listRootCandidates(
 		return nil, contextErr
 	}
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return []factorydefinitions.EffectiveFactoryCatalogCandidate{}, nil
+		}
 		return nil, err
 	}
 	candidates := make([]factorydefinitions.EffectiveFactoryCatalogCandidate, 0, len(listed))
