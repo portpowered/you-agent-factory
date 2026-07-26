@@ -49,31 +49,12 @@ jobs:
         if: github.event_name == 'pull_request'
         run: go run ./cmd/ciclassify -base "${{ github.event.pull_request.base.sha }}" -head "${{ github.event.pull_request.head.sha }}"
 
-  validate:
-    name: Validate Development Package Prerequisites (${{ matrix.name }})
+  api-package:
+    name: Validate API Contract And Package
     needs: classify
-    if: >-
-      (matrix.lane == 'api' && needs.classify.outputs.run_api_package == 'true') ||
-      (matrix.lane == 'packaged-factories' && needs.classify.outputs.run_packaged_factories_package == 'true') ||
-      (matrix.lane == 'model-providers' && needs.classify.outputs.run_model_providers_package == 'true')
+    if: always() && needs.classify.outputs.run_api_package == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: API contract and package validation
-            lane: api
-            command: make contracts-smoke api-smoke api-package-verify
-            needs_playwright: false
-          - name: Packaged Factories consumption
-            lane: packaged-factories
-            command: make packaged-factory-package-verify
-            needs_playwright: false
-          - name: Model Providers consumption
-            lane: model-providers
-            command: make model-provider-package-verify
-            needs_playwright: false
     steps:
       - name: Check out the candidate commit
         uses: actions/checkout@v4
@@ -94,7 +75,31 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Run validation lane
-        run: ${{ matrix.command }}
+        run: make contracts-smoke api-smoke api-package-verify
+
+  packaged-factories-package:
+    name: Validate Packaged Factories Package
+    needs: classify
+    if: always() && needs.classify.outputs.run_packaged_factories_package == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: make packaged-factory-package-verify
+
+  model-providers-package:
+    name: Validate Model Providers Package
+    needs: classify
+    if: always() && needs.classify.outputs.run_model_providers_package == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: make model-provider-package-verify
 
   dry-run-candidate:
     name: Build and Smoke Exact Candidate (No Publish)
@@ -236,7 +241,9 @@ jobs:
       github.ref == 'refs/heads/main' &&
       github.repository == 'portpowered/you-agent-factory'
     needs:
-      - validate
+      - api-package
+      - packaged-factories-package
+      - model-providers-package
       - prepare-main-candidate
     environment: development-publishing
     runs-on: ubuntu-latest
