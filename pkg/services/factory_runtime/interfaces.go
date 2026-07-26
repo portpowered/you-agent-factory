@@ -102,32 +102,37 @@ type Service interface {
 	// PlanDispatch publishes a stable dispatch intent into Runtime-owned
 	// planning/outbox vocabulary. Workers remains the execution owner. Returns
 	// ErrDuplicateDispatchIntent, ErrNotRunning, or ErrNotFound for typed
-	// dispatch-plan failures. Nested IMP-RUN packets own durable outbox wiring.
+	// dispatch-plan failures, or ErrCapabilityUnavailable until the canonical
+	// outbox implementation lands. Nested IMP-RUN packets own durable wiring.
 	PlanDispatch(ctx context.Context, req PlanDispatchRequest) (PlanDispatchResult, error)
 
 	// AcceptDispatchResult accepts or retires a correlated worker result against
 	// a previously planned dispatch intent, including idempotent duplicate
 	// handling vocabulary on success. Returns ErrUnknownDispatchCorrelation,
 	// ErrInvalidDispatchResultBoundary, ErrNotRunning, or ErrNotFound for typed
-	// dispatch-plan failures.
+	// dispatch-plan failures, or ErrCapabilityUnavailable until the canonical
+	// result-ingress implementation lands.
 	AcceptDispatchResult(ctx context.Context, req AcceptDispatchResultRequest) (AcceptDispatchResultResult, error)
 
 	// CaptureCheckpoint captures a versioned Runtime execution checkpoint with
 	// opaque strategy payload bytes. Returns ErrNotRunning or ErrNotFound for
 	// typed availability failures. Does not claim Recordings immutable history
-	// ownership. Nested IMP-RUN packets own durable codec wiring.
+	// ownership. Returns ErrCapabilityUnavailable until nested IMP-RUN packets
+	// provide canonical execution-state codec wiring.
 	CaptureCheckpoint(ctx context.Context, req CaptureCheckpointRequest) (CaptureCheckpointResult, error)
 
 	// LoadCheckpoint loads or inspects compatibility of a previously captured
 	// checkpoint without restoring it. Returns ErrCheckpointNotFound,
 	// ErrCorruptCheckpoint, ErrIncompatibleCheckpoint, ErrNotRunning, or
-	// ErrNotFound for typed failures.
+	// ErrNotFound for typed failures, or ErrCapabilityUnavailable until the
+	// canonical checkpoint store implementation lands.
 	LoadCheckpoint(ctx context.Context, req LoadCheckpointRequest) (LoadCheckpointResult, error)
 
 	// RestoreCheckpoint restores a compatible opaque checkpoint into mutable
 	// Runtime execution state. Returns ErrCheckpointNotFound,
 	// ErrCorruptCheckpoint, ErrIncompatibleCheckpoint, ErrNotRunning, or
-	// ErrNotFound for typed failures.
+	// ErrNotFound for typed failures, or ErrCapabilityUnavailable until the
+	// canonical mutable-state restore implementation lands.
 	RestoreCheckpoint(ctx context.Context, req RestoreCheckpointRequest) (RestoreCheckpointResult, error)
 }
 

@@ -62,19 +62,12 @@ type factoryImpl struct {
 	runCancel            context.CancelFunc
 	usePool              bool
 	operatorMoveRequests map[string]appliedOperatorMove
-	dispatchIntents      map[string]plannedDispatch
-	retiredDispatches    map[string]factory.AcceptDispatchResultRequest
-	checkpoints          map[string]factory.Checkpoint
 	resumeDrainPending   bool
 }
 
 type appliedOperatorMove struct {
 	workID string
 	result work.OperatorMoveResult
-}
-
-type plannedDispatch struct {
-	request factory.PlanDispatchRequest
 }
 
 type runtimeConfig struct {
@@ -457,9 +450,6 @@ func newFactoryImpl(cfg *runtimeConfig, eng *engine.FactoryEngine, pool dispatch
 		completeCh:           make(chan struct{}),
 		usePool:              usePool,
 		operatorMoveRequests: make(map[string]appliedOperatorMove),
-		dispatchIntents:      make(map[string]plannedDispatch),
-		retiredDispatches:    make(map[string]factory.AcceptDispatchResultRequest),
-		checkpoints:          make(map[string]factory.Checkpoint),
 	}
 }
 

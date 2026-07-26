@@ -49,4 +49,9 @@ var (
 	// ErrIncompatibleCheckpoint indicates the checkpoint schema or opaque payload
 	// is incompatible with the Runtime restore surface.
 	ErrIncompatibleCheckpoint = errors.New("factory runtime checkpoint is incompatible")
+
+	// ErrCapabilityUnavailable indicates the root contract is published but its
+	// canonical runtime implementation belongs to a later implementation cut.
+	// Callers must not interpret this error as a successful no-op.
+	ErrCapabilityUnavailable = errors.New("factory runtime capability is unavailable")
 )

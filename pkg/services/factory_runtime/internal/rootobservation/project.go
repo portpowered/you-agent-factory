@@ -28,6 +28,7 @@ func Project(
 		},
 		InFlightDispatches: projectInFlightDispatches(snap.Dispatches),
 		Results:            projectResultViews(snap.DispatchHistory),
+		Resources:          projectResourceViews(snap),
 		Health: factory.ObservationHealth{
 			FactoryState:           snap.FactoryState,
 			LifecycleControlStatus: snap.LifecycleControlStatus,
@@ -36,6 +37,32 @@ func Project(
 		},
 	}
 	return filterObservationScope(full, scope)
+}
+
+func projectResourceViews(
+	snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+) []factory.ObservationResourceView {
+	status := factory.NewFactoryStatusProjector().ProjectFactoryStatus(snap)
+	if len(status.Resources) == 0 {
+		return nil
+	}
+	out := make([]factory.ObservationResourceView, 0, len(status.Resources))
+	for _, resource := range status.Resources {
+		name := resource.Name
+		if snap.Topology != nil {
+			if definition := snap.Topology.Resources[resource.Name]; definition != nil && definition.Name != "" {
+				name = definition.Name
+			}
+		}
+		out = append(out, factory.ObservationResourceView{
+			ResourceID:     resource.Name,
+			ResourceName:   name,
+			ResourceType:   "RUNTIME",
+			InUseCount:     resource.Total - resource.Available,
+			AvailableCount: resource.Available,
+		})
+	}
+	return out
 }
 
 func observationStatusFromRuntime(status interfaces.RuntimeStatus) factory.ObservationStatus {

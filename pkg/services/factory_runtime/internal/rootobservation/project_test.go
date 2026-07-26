@@ -7,6 +7,7 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -38,6 +39,17 @@ func sampleRootObservationSnapshot() *interfaces.EngineStateSnapshot[petri.Marki
 				},
 			},
 		},
+		Topology: &state.Net{Resources: map[string]*state.ResourceDef{
+			"gpu": {ID: "gpu", Name: "GPU slot", Capacity: 2},
+		}},
+		Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+			"gpu-1": {
+				PlaceID: "gpu:available",
+				Color: factorytoken.Color{
+					DataType: factorytoken.DataTypeResource,
+				},
+			},
+		}},
 	}
 }
 
@@ -68,6 +80,11 @@ func TestProject_FullProjectionOmitsNilDispatch(t *testing.T) {
 	if full.Health.StreamGenerationID != "gen-1" {
 		t.Fatalf("health = %#v, want gen-1", full.Health)
 	}
+	if len(full.Resources) != 1 || full.Resources[0] != (factory.ObservationResourceView{
+		ResourceID: "gpu", ResourceName: "GPU slot", ResourceType: "RUNTIME", InUseCount: 1, AvailableCount: 1,
+	}) {
+		t.Fatalf("resources = %#v, want detached gpu usage", full.Resources)
+	}
 }
 
 func TestProject_ScopeFilters(t *testing.T) {
@@ -94,8 +111,8 @@ func TestProject_ScopeFilters(t *testing.T) {
 	}
 
 	resourcesOnly := Project(snap, factory.ObservationScopeResources)
-	if resourcesOnly.Status != "" || len(resourcesOnly.Resources) != 0 {
-		t.Fatalf("RESOURCES scope = %#v, want resources-only empty", resourcesOnly)
+	if resourcesOnly.Status != "" || len(resourcesOnly.Resources) != 1 || resourcesOnly.Resources[0].ResourceID != "gpu" {
+		t.Fatalf("RESOURCES scope = %#v, want resources-only gpu view", resourcesOnly)
 	}
 
 	healthOnly := Project(snap, factory.ObservationScopeHealth)
