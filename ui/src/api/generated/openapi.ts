@@ -4994,6 +4994,7 @@ export interface components {
       /** @description Stable identifier for the local provider-backed runtime boundary. */
       backendScopeID?: string;
       defaults?: components["schemas"]["GlobalConfigDefaults"];
+      runtime?: components["schemas"]["GlobalConfigRuntime"];
       /** @description Named worker model presets loaded from the shared configuration file. */
       workerPresets?: components["schemas"]["GlobalConfigWorkerPreset"][];
     };
@@ -5003,6 +5004,38 @@ export interface components {
       workerModelProvider?: string;
       /** @description Default worker model name. */
       workerModel?: string;
+    };
+    /** @description Runtime observability settings loaded from operator configuration before command-line overrides. */
+    GlobalConfigRuntime: {
+      /** @description Structured runtime log storage settings. Omitted values use the documented production defaults. */
+      logging?: components["schemas"]["GlobalConfigRuntimeArtifactSettings"];
+      /** @description Runtime metrics storage settings. Omitted values use the documented production defaults. */
+      metrics?: components["schemas"]["GlobalConfigRuntimeArtifactSettings"];
+    };
+    /** @description Rolling-file storage settings for one runtime observability artifact. */
+    GlobalConfigRuntimeArtifactSettings: {
+      /** @description Optional artifact root. Omission uses the runtime-owned directory below the operator home. */
+      directory?: string;
+      /**
+       * @description Maximum artifact file size in megabytes before rotation.
+       * @default 100
+       */
+      maxSizeMB: number;
+      /**
+       * @description Maximum number of rotated artifact files to retain.
+       * @default 20
+       */
+      maxBackups: number;
+      /**
+       * @description Maximum age in days for rotated artifact files.
+       * @default 30
+       */
+      maxAgeDays: number;
+      /**
+       * @description Whether rotated artifact files are gzip-compressed.
+       * @default false
+       */
+      compress: boolean;
     };
     /** @description Named worker model selection available to Factory Session runtime opening. */
     GlobalConfigWorkerPreset: {

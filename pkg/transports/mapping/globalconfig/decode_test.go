@@ -18,6 +18,22 @@ func TestLoadFileConfig_DecodesGeneratedContractAndNormalizesDomainValues(t *tes
 			"workerModelProvider": " codex ",
 			"workerModel": " gpt-5.4 "
 		},
+		"runtime": {
+			"logging": {
+				"directory": " logs/runtime ",
+				"maxSizeMB": 11,
+				"maxBackups": 12,
+				"maxAgeDays": 13,
+				"compress": true
+			},
+			"metrics": {
+				"directory": " metrics/runtime ",
+				"maxSizeMB": 21,
+				"maxBackups": 22,
+				"maxAgeDays": 23,
+				"compress": true
+			}
+		},
 		"workerPresets": [{
 			"id": " research ",
 			"modelProvider": "openai",
@@ -38,6 +54,16 @@ func TestLoadFileConfig_DecodesGeneratedContractAndNormalizesDomainValues(t *tes
 		WorkerModel:         "gpt-5.4",
 	}); got != want {
 		t.Fatalf("defaults = %#v, want %#v", got, want)
+	}
+	if got, want := config.Runtime.Logging, (operatorsettings.RuntimeArtifactSettings{
+		Directory: "logs/runtime", MaxSizeMB: 11, MaxBackups: 12, MaxAgeDays: 13, Compress: true,
+	}); got != want {
+		t.Fatalf("runtime logging = %#v, want %#v", got, want)
+	}
+	if got, want := config.Runtime.Metrics, (operatorsettings.RuntimeArtifactSettings{
+		Directory: "metrics/runtime", MaxSizeMB: 21, MaxBackups: 22, MaxAgeDays: 23, Compress: true,
+	}); got != want {
+		t.Fatalf("runtime metrics = %#v, want %#v", got, want)
 	}
 	wantPreset := operatorsettings.WorkerPreset{
 		ID: "research", ModelProvider: "CODEX", Model: "gpt-5.4-mini", ReasoningEffort: "high",
@@ -103,7 +129,55 @@ func TestDecode_EmptyObjectReturnsEmptyConfig(t *testing.T) {
 		t.Fatalf("Decode() error = %v", err)
 	}
 	if config.BackendScopeID != "" || config.Defaults != (operatorsettings.Defaults{}) || len(config.WorkerPresets) != 0 {
-		t.Fatalf("config = %#v, want empty", config)
+		t.Fatalf("config = %#v, want empty identity, defaults, and presets", config)
+	}
+	if config.Runtime != defaultRuntimeSettings() {
+		t.Fatalf("runtime = %#v, want defaults %#v", config.Runtime, defaultRuntimeSettings())
+	}
+}
+
+func TestDecode_PartialRuntimeSettingsApplyDefaultsIndependently(t *testing.T) {
+	config, err := globalconfig.Decode([]byte(`{
+		"runtime": {
+			"logging": {"compress": true},
+			"metrics": {"maxSizeMB": 7}
+		}
+	}`))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+
+	wantLogging := defaultRuntimeArtifactSettings()
+	wantLogging.Compress = true
+	if config.Runtime.Logging != wantLogging {
+		t.Fatalf("runtime logging = %#v, want %#v", config.Runtime.Logging, wantLogging)
+	}
+	wantMetrics := defaultRuntimeArtifactSettings()
+	wantMetrics.MaxSizeMB = 7
+	if config.Runtime.Metrics != wantMetrics {
+		t.Fatalf("runtime metrics = %#v, want %#v", config.Runtime.Metrics, wantMetrics)
+	}
+}
+
+func TestLoadFileConfig_PartialDocumentParticipatesInDocumentedPrecedence(t *testing.T) {
+	path := writeConfig(t, `{"defaults":{"workerModelProvider":"codex","workerModel":"file-model"}}`)
+	fileConfig, err := operatorsettings.LoadFileConfig(platformfilesystem.Local{}, globalconfig.Decode, path)
+	if err != nil {
+		t.Fatalf("LoadFileConfig() error = %v", err)
+	}
+	resolved, err := operatorsettings.Resolve(operatorsettings.ResolveInput{
+		File: fileConfig.Defaults,
+		Env:  operatorsettings.Defaults{WorkerModel: "env-model"},
+		Flag: operatorsettings.Defaults{WorkerModelProvider: "claude"},
+	}, path)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if resolved.WorkerModelProvider != "CLAUDE" || resolved.WorkerModelProviderSource != operatorsettings.SourceFlag {
+		t.Fatalf("provider = %q from %q, want CLAUDE from flag", resolved.WorkerModelProvider, resolved.WorkerModelProviderSource)
+	}
+	if resolved.WorkerModel != "env-model" || resolved.WorkerModelSource != operatorsettings.SourceEnv {
+		t.Fatalf("model = %q from %q, want env-model from env", resolved.WorkerModel, resolved.WorkerModelSource)
 	}
 }
 
@@ -136,6 +210,9 @@ func TestLoadFileConfig_MissingFileReturnsEmptyConfig(t *testing.T) {
 	if config.Defaults != (operatorsettings.Defaults{}) || len(config.WorkerPresets) != 0 {
 		t.Fatalf("config = %#v, want empty", config)
 	}
+	if config.Runtime != defaultRuntimeSettings() {
+		t.Fatalf("runtime = %#v, want defaults %#v", config.Runtime, defaultRuntimeSettings())
+	}
 }
 
 func TestLoadFileConfig_InvalidDocumentsNamePathAndCause(t *testing.T) {
@@ -148,6 +225,9 @@ func TestLoadFileConfig_InvalidDocumentsNamePathAndCause(t *testing.T) {
 		{name: "null root", json: `null`, want: "expected a JSON object"},
 		{name: "unknown top-level", json: `{"unsupported":true}`, want: `unknown field "unsupported"`},
 		{name: "unknown defaults field", json: `{"defaults":{"unsupported":true}}`, want: `unknown field "unsupported"`},
+		{name: "unknown runtime field", json: `{"runtime":{"unsupported":true}}`, want: `unknown field "unsupported"`},
+		{name: "empty runtime directory", json: `{"runtime":{"logging":{"directory":" "}}}`, want: "runtime.logging.directory must be non-empty"},
+		{name: "invalid runtime size", json: `{"runtime":{"metrics":{"maxSizeMB":0}}}`, want: "runtime.metrics.maxSizeMB must be at least 1"},
 		{name: "trailing JSON", json: `{}` + "\n{}", want: "unexpected trailing JSON"},
 		{name: "invalid trailing token", json: `{}` + "\nx", want: "invalid character"},
 		{name: "missing preset provider", json: `{"workerPresets":[{"id":"build"}]}`, want: "modelProvider"},
@@ -179,4 +259,17 @@ func writeConfig(t *testing.T, contents string) string {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	return path
+}
+
+func defaultRuntimeArtifactSettings() operatorsettings.RuntimeArtifactSettings {
+	return operatorsettings.RuntimeArtifactSettings{
+		MaxSizeMB:  operatorsettings.DefaultRuntimeArtifactMaxSizeMB,
+		MaxBackups: operatorsettings.DefaultRuntimeArtifactBackups,
+		MaxAgeDays: operatorsettings.DefaultRuntimeArtifactMaxAge,
+	}
+}
+
+func defaultRuntimeSettings() operatorsettings.RuntimeSettings {
+	defaults := defaultRuntimeArtifactSettings()
+	return operatorsettings.RuntimeSettings{Logging: defaults, Metrics: defaults}
 }

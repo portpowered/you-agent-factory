@@ -2302,6 +2302,10 @@ components:
       $ref: './components/schemas/api/GlobalConfig.yaml'
     GlobalConfigDefaults:
       $ref: './components/schemas/api/GlobalConfigDefaults.yaml'
+    GlobalConfigRuntime:
+      $ref: './components/schemas/api/GlobalConfigRuntime.yaml'
+    GlobalConfigRuntimeArtifactSettings:
+      $ref: './components/schemas/api/GlobalConfigRuntimeArtifactSettings.yaml'
     GlobalConfigWorkerPreset:
       $ref: './components/schemas/api/GlobalConfigWorkerPreset.yaml'
     GlobalConfigWorkerPresetModelProvider:

@@ -310,5 +310,5 @@ func (service ConfigDocumentService) commitTemporaryFile(
 }
 
 func emptyConfigDocument() ConfigDocument {
-	return ConfigDocument{}
+	return ConfigDocument{config: Config{Runtime: defaultRuntimeSettings()}}
 }

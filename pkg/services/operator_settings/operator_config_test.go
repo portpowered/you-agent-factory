@@ -11,8 +11,35 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func TestDefaultRuntimeSettingsMatchProductionArtifactPolicies(t *testing.T) {
+	got := defaultRuntimeSettings()
+	logDefaults := logging.DefaultRuntimeLogConfig()
+	wantLogging := RuntimeArtifactSettings{
+		MaxSizeMB:  logDefaults.MaxSize,
+		MaxBackups: logDefaults.MaxBackups,
+		MaxAgeDays: logDefaults.MaxAge,
+		Compress:   logDefaults.Compress,
+	}
+	if got.Logging != wantLogging {
+		t.Fatalf("runtime logging defaults = %#v, want production defaults %#v", got.Logging, wantLogging)
+	}
+
+	metricsDefaults := platformmetrics.DefaultRuntimeMetricsConfig()
+	wantMetrics := RuntimeArtifactSettings{
+		MaxSizeMB:  metricsDefaults.MaxSize,
+		MaxBackups: metricsDefaults.MaxBackups,
+		MaxAgeDays: metricsDefaults.MaxAge,
+		Compress:   metricsDefaults.Compress,
+	}
+	if got.Metrics != wantMetrics {
+		t.Fatalf("runtime metrics defaults = %#v, want production defaults %#v", got.Metrics, wantMetrics)
+	}
+}
 
 func decodeTestConfig(data []byte) (Config, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))

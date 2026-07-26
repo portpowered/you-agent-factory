@@ -181,7 +181,7 @@
       "path": "generated/mcp/tools.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "08a3f0e1fb5aa073d53355557976d52ed54f9f7c38856c13ef4590f4d1b5c7cb",
+      "artifactHash": "e4634b3b9f8837e4cfbe672e9ef28414720ce8b47aa0c8b2ee87d14c64e311ae",
       "documentation": {
         "documentation": {
           "description": {
@@ -198,7 +198,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "08a3f0e1fb5aa073d53355557976d52ed54f9f7c38856c13ef4590f4d1b5c7cb",
+        "sourceHash": "e4634b3b9f8837e4cfbe672e9ef28414720ce8b47aa0c8b2ee87d14c64e311ae",
         "visibility": "public"
       },
       "family": "openapi",
@@ -331,7 +331,7 @@
       "path": "generated/schemas/mock-workers.schema.json"
     },
     "generated.schemas.you-config": {
-      "artifactHash": "97f199e5132d5ba82e1a92354c99171ede9dbbebd690eb55bd59039345d51a0b",
+      "artifactHash": "b3ca3685bb0276d9930f85aadcc601026378f65feab1c20b1accdb228ce40287",
       "documentation": {
         "documentation": {
           "description": {
@@ -348,7 +348,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.you-config",
-        "sourceHash": "97f199e5132d5ba82e1a92354c99171ede9dbbebd690eb55bd59039345d51a0b",
+        "sourceHash": "b3ca3685bb0276d9930f85aadcc601026378f65feab1c20b1accdb228ce40287",
         "visibility": "public"
       },
       "family": "config",

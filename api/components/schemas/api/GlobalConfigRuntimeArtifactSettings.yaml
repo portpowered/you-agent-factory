@@ -1,0 +1,27 @@
+type: object
+additionalProperties: false
+description: Rolling-file storage settings for one runtime observability artifact.
+properties:
+  directory:
+    type: string
+    minLength: 1
+    description: Optional artifact root. Omission uses the runtime-owned directory below the operator home.
+  maxSizeMB:
+    type: integer
+    minimum: 1
+    default: 100
+    description: Maximum artifact file size in megabytes before rotation.
+  maxBackups:
+    type: integer
+    minimum: 1
+    default: 20
+    description: Maximum number of rotated artifact files to retain.
+  maxAgeDays:
+    type: integer
+    minimum: 1
+    default: 30
+    description: Maximum age in days for rotated artifact files.
+  compress:
+    type: boolean
+    default: false
+    description: Whether rotated artifact files are gzip-compressed.

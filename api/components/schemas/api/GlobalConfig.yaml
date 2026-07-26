@@ -7,6 +7,8 @@ properties:
     description: Stable identifier for the local provider-backed runtime boundary.
   defaults:
     $ref: './GlobalConfigDefaults.yaml'
+  runtime:
+    $ref: './GlobalConfigRuntime.yaml'
   workerPresets:
     type: array
     description: Named worker model presets loaded from the shared configuration file.

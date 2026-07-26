@@ -19,6 +19,13 @@ const (
 	// EnvDefaultWorkerModel is the environment variable for the default worker
 	// model override.
 	EnvDefaultWorkerModel = "YOU_DEFAULT_WORKER_MODEL"
+
+	// DefaultRuntimeArtifactMaxSizeMB is the default rolling-file size.
+	DefaultRuntimeArtifactMaxSizeMB = 100
+	// DefaultRuntimeArtifactBackups is the default rotated-file count.
+	DefaultRuntimeArtifactBackups = 20
+	// DefaultRuntimeArtifactMaxAge is the default rotated-file age in days.
+	DefaultRuntimeArtifactMaxAge = 30
 )
 
 // Source identifies which precedence layer supplied an effective default value.
@@ -49,7 +56,73 @@ type WorkerPreset struct {
 type Config struct {
 	BackendScopeID string
 	Defaults       Defaults
+	Runtime        RuntimeSettings
 	WorkerPresets  []WorkerPreset
+}
+
+// RuntimeArtifactSettings controls one rolling runtime observability artifact.
+// Directory is empty when the runtime-owned root below the operator home is
+// selected.
+type RuntimeArtifactSettings struct {
+	Directory  string
+	MaxSizeMB  int
+	MaxBackups int
+	MaxAgeDays int
+	Compress   bool
+}
+
+// RuntimeSettings holds the operator-config runtime observability settings.
+type RuntimeSettings struct {
+	Logging RuntimeArtifactSettings
+	Metrics RuntimeArtifactSettings
+}
+
+func defaultRuntimeArtifactSettings() RuntimeArtifactSettings {
+	return RuntimeArtifactSettings{
+		MaxSizeMB:  DefaultRuntimeArtifactMaxSizeMB,
+		MaxBackups: DefaultRuntimeArtifactBackups,
+		MaxAgeDays: DefaultRuntimeArtifactMaxAge,
+	}
+}
+
+func defaultRuntimeSettings() RuntimeSettings {
+	return RuntimeSettings{
+		Logging: defaultRuntimeArtifactSettings(),
+		Metrics: defaultRuntimeArtifactSettings(),
+	}
+}
+
+func (settings RuntimeArtifactSettings) normalize(fieldPath string) (RuntimeArtifactSettings, error) {
+	settings.Directory = strings.TrimSpace(settings.Directory)
+	defaults := defaultRuntimeArtifactSettings()
+	if settings.MaxSizeMB == 0 {
+		settings.MaxSizeMB = defaults.MaxSizeMB
+	} else if settings.MaxSizeMB < 0 {
+		return RuntimeArtifactSettings{}, fmt.Errorf("%s.maxSizeMB must be at least 1", fieldPath)
+	}
+	if settings.MaxBackups == 0 {
+		settings.MaxBackups = defaults.MaxBackups
+	} else if settings.MaxBackups < 0 {
+		return RuntimeArtifactSettings{}, fmt.Errorf("%s.maxBackups must be at least 1", fieldPath)
+	}
+	if settings.MaxAgeDays == 0 {
+		settings.MaxAgeDays = defaults.MaxAgeDays
+	} else if settings.MaxAgeDays < 0 {
+		return RuntimeArtifactSettings{}, fmt.Errorf("%s.maxAgeDays must be at least 1", fieldPath)
+	}
+	return settings, nil
+}
+
+func (settings RuntimeSettings) normalize() (RuntimeSettings, error) {
+	logging, err := settings.Logging.normalize("runtime.logging")
+	if err != nil {
+		return RuntimeSettings{}, err
+	}
+	metrics, err := settings.Metrics.normalize("runtime.metrics")
+	if err != nil {
+		return RuntimeSettings{}, err
+	}
+	return RuntimeSettings{Logging: logging, Metrics: metrics}, nil
 }
 
 // ResolvedDefaults holds effective operator defaults after precedence and
@@ -94,7 +167,7 @@ func LoadFileConfig(files FileSystem, decode ConfigDecoder, path string) (Config
 	data, err := files.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return Config{}, nil
+			return Config{Runtime: defaultRuntimeSettings()}, nil
 		}
 		return Config{}, fmt.Errorf("read operator config %s: %w", path, err)
 	}
@@ -114,10 +187,14 @@ func (cfg Config) Normalize() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	runtime, err := cfg.Runtime.normalize()
+	if err != nil {
+		return Config{}, err
+	}
 	return Config{BackendScopeID: strings.TrimSpace(cfg.BackendScopeID), Defaults: Defaults{
 		WorkerModelProvider: strings.TrimSpace(cfg.Defaults.WorkerModelProvider),
 		WorkerModel:         strings.TrimSpace(cfg.Defaults.WorkerModel),
-	}, WorkerPresets: presets}, nil
+	}, Runtime: runtime, WorkerPresets: presets}, nil
 }
 
 func validateWorkerPresets(presets []WorkerPreset) ([]WorkerPreset, error) {

@@ -39,6 +39,33 @@ Authored worker values still win over operator defaults. Use `you docs workers`
 for worker fields and `you docs javascript-workflows` for reusable child-agent
 presets.
 
+The same document can set the rolling-file policy for runtime logs and metrics:
+
+```json
+{
+  "runtime": {
+    "logging": {
+      "directory": "/var/log/you/runtime",
+      "maxSizeMB": 100,
+      "maxBackups": 20,
+      "maxAgeDays": 30,
+      "compress": false
+    },
+    "metrics": {
+      "directory": "/var/log/you/metrics",
+      "maxSizeMB": 100,
+      "maxBackups": 20,
+      "maxAgeDays": 30,
+      "compress": false
+    }
+  }
+}
+```
+
+Both sections independently default to 100 MB files, 20 backups, 30 days of
+retention, and no compression. Omitting `directory` uses the runtime-owned
+location below `~/.you-agent-factory`.
+
 ## Validate Or Transform A Factory
 
 Factory configuration commands live under `you factory config`, not the
