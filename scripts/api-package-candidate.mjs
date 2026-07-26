@@ -25,6 +25,7 @@ export async function prepareCandidate({
 	runId,
 	sourceCommit,
 	version,
+	distTag,
 }) {
 	return prepareReleaseCandidate({
 		packageDirectory,
@@ -33,6 +34,7 @@ export async function prepareCandidate({
 		sourceCommit,
 		packageName: API_PACKAGE_NAME,
 		version,
+		distTag,
 		pack: packAndVerify,
 	});
 }

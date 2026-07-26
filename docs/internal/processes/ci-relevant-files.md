@@ -286,9 +286,13 @@ Wave 0 functional-tests-expansion planning authority lives under
   `factories/goal/factory.json` compatibility artifact as a separate Packaged
   Factories required-file check, outside the general export-map contract, and
   keep lifecycle scripts disabled for every candidate pack.
-  tagged Release workflow uploads that complete set as one artifact and
-  publishes only its downloaded package directories after rechecking their
-  source commit. Local
+  tagged Release workflow uploads that complete set as one artifact. Its
+  `scripts/public-release-package-publish.mjs` boundary rejects unknown scopes,
+  duplicates, missing or extra packages, source-commit drift, and child
+  evidence or tarball paths that do not match the reviewed top-level evidence
+  before publishing any package. The frontend publisher accepts only the
+  `frontend-only` development scope, while the protected tagged publisher
+  requires the complete `tagged-release` scope. Local
   maintainers can isolate generation, drift, script tests, exact packing,
   pull-request dry-run, and clean-consumer behavior through the focused
   `packaged-factory-*` Make targets documented in

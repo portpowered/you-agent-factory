@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { access, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 import {
-	TAGGED_RELEASE_CANDIDATE_SCOPE,
 	prepareTaggedReleaseCandidate,
+	TAGGED_RELEASE_CANDIDATE_SCOPE,
 } from "./public-release-package-candidate.mjs";
 
 const sourceCommit = "0123456789abcdef0123456789abcdef01234567";
@@ -57,7 +57,10 @@ test("tagged release preparation stages each public package once at the requeste
 	);
 	for (const candidate of result.evidence.packages) {
 		assert.equal(candidate.version, "1.2.3");
-		assert.match(candidate.tarball, /^(api|packaged-factories|frontend)\/.+\.tgz$/);
+		assert.match(
+			candidate.tarball,
+			/^(api|packaged-factories|frontend)\/.+\.tgz$/,
+		);
 	}
 	assert.deepEqual(
 		await Promise.all(manifests.map((path) => readFile(path))),
@@ -69,5 +72,17 @@ test("tagged release preparation stages each public package once at the requeste
 		),
 		buildOutputsBefore,
 	);
-	assert.ok((await readdir(outputDirectory)).includes("release-candidate-evidence.json"));
+	assert.ok(
+		(await readdir(outputDirectory)).includes(
+			"release-candidate-evidence.json",
+		),
+	);
+	for (const directory of ["api", "packaged-factories"]) {
+		const childEvidence = JSON.parse(
+			await readFile(
+				join(outputDirectory, directory, "candidate-evidence.json"),
+			),
+		);
+		assert.equal(childEvidence.distTag, "latest");
+	}
 });

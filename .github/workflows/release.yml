@@ -163,26 +163,12 @@ jobs:
           name: public-release-candidate-${{ github.run_id }}
           path: .artifacts/public-release-candidate
 
-      - name: Reconcile, publish, and verify the exact API candidate
+      - name: Reconcile, publish, and verify the complete reviewed public package set
         run: >-
-          node scripts/api-package-publish.mjs
-          --candidate-directory .artifacts/public-release-candidate/api
+          node scripts/public-release-package-publish.mjs
+          --candidate-directory .artifacts/public-release-candidate
           --expected-source-commit "${{ github.event.workflow_run.head_sha }}"
           --workspace-directory .
-
-      - name: Reconcile, publish, and verify the exact Packaged Factories candidate
-        run: >-
-          node scripts/packaged-factories-package-publish.mjs
-          --candidate-directory .artifacts/public-release-candidate/packaged-factories
-          --expected-source-commit "${{ github.event.workflow_run.head_sha }}"
-          --workspace-directory .
-
-      - name: Publish and verify the canonical frontend package family
-        working-directory: ui
-        run: >-
-          npm run publish:public-packages --
-          --candidate-directory ../.artifacts/public-release-candidate/frontend
-          --tag latest --provenance
 
       - name: Publish GitHub release assets from the tagged commit
         env:

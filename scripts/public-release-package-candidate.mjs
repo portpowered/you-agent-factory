@@ -2,24 +2,15 @@ import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-
+import { preparePublicPackageCandidates } from "../ui/scripts/public-package-publish.mjs";
+import { prepareCandidate as prepareApiCandidate } from "./api-package-candidate.mjs";
+import { prepareCandidate as preparePackagedFactoriesCandidate } from "./packaged-factories-package-candidate.mjs";
 import {
-	API_PACKAGE_NAME,
-	prepareCandidate as prepareApiCandidate,
-} from "./api-package-candidate.mjs";
-import {
-	PACKAGED_FACTORIES_PACKAGE_NAME,
-	prepareCandidate as preparePackagedFactoriesCandidate,
-} from "./packaged-factories-package-candidate.mjs";
-import { PUBLIC_PACKAGES, preparePublicPackageCandidates } from "../ui/scripts/public-package-publish.mjs";
+	assertCandidateSetEvidence,
+	TAGGED_RELEASE_CANDIDATE_SCOPE,
+} from "./public-package-set.mjs";
 
-export const TAGGED_RELEASE_CANDIDATE_SCOPE = "tagged-release";
-
-const EXPECTED_PACKAGE_NAMES = Object.freeze([
-	API_PACKAGE_NAME,
-	PACKAGED_FACTORIES_PACKAGE_NAME,
-	...PUBLIC_PACKAGES.map(({ name }) => name),
-]);
+export { TAGGED_RELEASE_CANDIDATE_SCOPE };
 
 async function requireEmptyOutputDirectory(outputDirectory) {
 	await mkdir(outputDirectory, { recursive: true });
@@ -37,24 +28,6 @@ function candidateRecord({ name, version, tarballPath, outputDirectory }) {
 		version,
 		tarball: join(outputDirectory, filename).replaceAll("\\", "/"),
 	};
-}
-
-function assertCompleteCandidateSet(packages, version) {
-	if (packages.length !== EXPECTED_PACKAGE_NAMES.length) {
-		throw new Error("[public-release-package-candidate] candidate set is incomplete");
-	}
-	const names = packages.map(({ name }) => name);
-	if (new Set(names).size !== names.length) {
-		throw new Error("[public-release-package-candidate] candidate set has duplicate package names");
-	}
-	for (const expectedName of EXPECTED_PACKAGE_NAMES) {
-		const candidate = packages.find(({ name }) => name === expectedName);
-		if (!candidate || candidate.version !== version) {
-			throw new Error(
-				`[public-release-package-candidate] missing ${expectedName}@${version}`,
-			);
-		}
-	}
 }
 
 export async function prepareTaggedReleaseCandidate({
@@ -77,6 +50,7 @@ export async function prepareTaggedReleaseCandidate({
 			runId,
 			sourceCommit,
 			version,
+			distTag: "latest",
 		}),
 		preparePackagedFactoriesCandidate({
 			packageDirectory: packagedFactoriesPackageDirectory,
@@ -84,8 +58,12 @@ export async function prepareTaggedReleaseCandidate({
 			runId,
 			sourceCommit,
 			version,
+			distTag: "latest",
 		}),
-		preparePublicPackageCandidates({ version, outputDirectory: frontendOutput }),
+		preparePublicPackageCandidates({
+			version,
+			outputDirectory: frontendOutput,
+		}),
 	]);
 	const packages = [
 		candidateRecord({
@@ -109,13 +87,13 @@ export async function prepareTaggedReleaseCandidate({
 			}),
 		),
 	];
-	assertCompleteCandidateSet(packages, version);
 	const evidence = {
 		scope: TAGGED_RELEASE_CANDIDATE_SCOPE,
 		version,
 		sourceCommit,
 		packages,
 	};
+	assertCandidateSetEvidence(evidence, TAGGED_RELEASE_CANDIDATE_SCOPE);
 	const evidencePath = join(root, "release-candidate-evidence.json");
 	await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
 	return { evidence, evidencePath };
@@ -140,7 +118,10 @@ async function main() {
 	process.stdout.write(`${JSON.stringify(result.evidence)}\n`);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (
+	process.argv[1] &&
+	import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
 	main().catch((error) => {
 		process.stderr.write(`${error.message}\n`);
 		process.exitCode = 1;

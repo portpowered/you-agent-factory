@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
-
 import {
+  FRONTEND_ONLY_CANDIDATE_SCOPE,
+  TAGGED_RELEASE_CANDIDATE_SCOPE,
+} from "../../scripts/public-package-set.mjs";
+import {
+  assertFrontendCandidateEvidence,
   assertPublishVersion,
   npmPackArguments,
   PUBLIC_PACKAGES,
@@ -66,5 +70,23 @@ describe("public package publishing", () => {
     expect(npmPackArguments("/staged/package", "/candidate")).toContain(
       "--ignore-scripts",
     );
+  });
+
+  test("accepts only a complete frontend-only development candidate", () => {
+    const evidence = {
+      scope: FRONTEND_ONLY_CANDIDATE_SCOPE,
+      version: "0.0.0-dev.123.abcdef123456",
+      packages: PUBLIC_PACKAGES.map(({ name }) => ({
+        name,
+        version: "0.0.0-dev.123.abcdef123456",
+      })),
+    };
+    expect(assertFrontendCandidateEvidence(evidence)).toBe(evidence);
+    expect(() =>
+      assertFrontendCandidateEvidence({
+        ...evidence,
+        scope: TAGGED_RELEASE_CANDIDATE_SCOPE,
+      }),
+    ).toThrow("expected frontend-only candidate scope");
   });
 });

@@ -15,6 +15,10 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { assertPackedExportTargets } from "../../scripts/package-export-validation.mjs";
+import {
+  assertCandidateSetEvidence,
+  FRONTEND_ONLY_CANDIDATE_SCOPE,
+} from "../../scripts/public-package-set.mjs";
 
 const uiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const semverPattern =
@@ -55,6 +59,12 @@ export function patchPublicPackageManifest(manifest, version) {
     }
   }
   return next;
+}
+
+export function assertFrontendCandidateEvidence(evidence) {
+  assertPublishVersion(evidence?.version);
+  assertCandidateSetEvidence(evidence, FRONTEND_ONLY_CANDIDATE_SCOPE);
+  return evidence;
 }
 
 export const npmPackArguments = (stagedDirectory, outputDirectory) => [
@@ -199,7 +209,11 @@ export async function preparePublicPackageCandidates({
         shasum: report.shasum,
       });
     }
-    const evidence = { version, packages: candidates };
+    const evidence = {
+      scope: FRONTEND_ONLY_CANDIDATE_SCOPE,
+      version,
+      packages: candidates,
+    };
     await writeFile(
       path.join(resolvedOutput, "public-package-candidates.json"),
       `${JSON.stringify(evidence, null, 2)}\n`,
@@ -262,18 +276,7 @@ export async function publishPublicPackageCandidates({
       "utf8",
     ),
   );
-  assertPublishVersion(evidence.version);
-  if (evidence.packages.length !== PUBLIC_PACKAGES.length) {
-    throw new Error("Public package candidate set is incomplete");
-  }
-  if (
-    new Set(evidence.packages.map(({ name }) => name)).size !==
-    evidence.packages.length
-  ) {
-    throw new Error(
-      "Public package candidate set contains duplicate package names",
-    );
-  }
+  assertFrontendCandidateEvidence(evidence);
   for (const packageSpec of PUBLIC_PACKAGES) {
     const candidate = evidence.packages.find(
       ({ name }) => name === packageSpec.name,

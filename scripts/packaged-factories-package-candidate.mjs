@@ -24,6 +24,7 @@ export async function prepareCandidate({
 	runId,
 	sourceCommit,
 	version,
+	distTag,
 	verifyGeneratedCatalog = runCatalogDriftCheck,
 }) {
 	const repositoryRoot = resolve(packageDirectory, "..", "..");
@@ -35,6 +36,7 @@ export async function prepareCandidate({
 		sourceCommit,
 		packageName: PACKAGED_FACTORIES_PACKAGE_NAME,
 		version,
+		distTag,
 		pack: packAndVerify,
 	});
 }
