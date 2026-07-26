@@ -485,6 +485,8 @@ tests/functional/
     definitions/
     packaged/
     current/
+  providers/
+    <provider>/
   provider_sessions/
     details/
     association/

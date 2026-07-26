@@ -94,6 +94,34 @@ Test workstation.
 	}
 }
 
+func TestGeminiConductorPreservesConfiguredSkipPermissions(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	workerConfig := strings.Replace(
+		support.BuildModelWorkerConfig(modelprovider.ProviderGemini, "gemini-2.5-flash"),
+		"stopToken: COMPLETE",
+		"skipPermissions: true\nstopToken: COMPLETE",
+		1,
+	)
+	support.WriteAgentConfig(t, dir, "worker", workerConfig)
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"gemini skip permissions"}`))
+
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("gemini policy answer COMPLETE"),
+	})
+	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 20*time.Second)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
+		t.Fatalf("terminal place tokens = %d, want 1 completed work item; listed=%#v", got, listed)
+	}
+	args := runner.LastRequest().Args
+	if !containsArgPair(args, "--approval-mode", "yolo") ||
+		!containsArgPair(args, "--sandbox", "false") {
+		t.Fatalf("args = %#v, want configured Gemini skip-permissions flags", args)
+	}
+}
+
 func TestGeminiNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(

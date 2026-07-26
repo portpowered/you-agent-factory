@@ -913,12 +913,20 @@ response-stream output.
   a concrete-provider switch in shared orchestration. Process composition
   passes the shared `ProviderCommandRunner` edge into
   `BuiltInRegistrations(BuiltInDependencies{CommandRunner})` so migrated
-  Integrations and native executors share one command boundary; functional
-  provider packages under `tests/functional/workers/<name>` prove success and
-  safe native-failure postures through `root.BuildProcess` /
+  Integrations and native executors share one command boundary. Worker
+  construction resolves persisted plus invocation-override permission policy
+  once, then an outer invocation-policy runner records the effective value on
+  `ProviderInferenceRequest`; this outer boundary must wrap the conductor
+  decorator because a migrated Integration does not call the retained native
+  runner. Provider Integrations consume that request-local value when building
+  commands and must not store worker permission policy in registry-global
+  Integration instances. Functional provider packages under
+  `tests/functional/providers/<name>` prove success, command policy, and safe
+  native-failure postures through `root.BuildProcess` /
   `support.RunFactoryToCompletionWithEdges` without importing provider package
-  internals (leave legacy `tests/functional/providers/<name>/doc.go` placeholders
-  until that domain is an approved `pkg-structure` noun). Prove each migrated
+  internals. `providers` is an approved deep functional domain; aggregate files
+  directly under `tests/functional/providers` remain shallow deletion-only
+  debt. Prove each migrated
   Integration against the shared inference contract through
   `inferencecontract.ExecuteInvocation` for the success and failure postures
   that apply to that provider's authored support/capability set (for Gemini:

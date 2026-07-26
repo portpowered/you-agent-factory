@@ -16,16 +16,14 @@ import (
 // IntegrationDependencies are the optional execution collaborators used by the
 // registry-backed Gemini Integration on the neutral conductor path.
 type IntegrationDependencies struct {
-	CommandRunner   workerprocess.CommandRunner
-	SkipPermissions bool
+	CommandRunner workerprocess.CommandRunner
 }
 
 // Integration is Gemini's registry-backed inferencecontract implementation.
 // Factory Sessions and worker executors select it by manifest identity and
 // invoke it through the provider-neutral conductor.
 type Integration struct {
-	runner          workerprocess.CommandRunner
-	skipPermissions bool
+	runner workerprocess.CommandRunner
 }
 
 // NewIntegration constructs the Gemini Integration. A nil command runner is
@@ -34,7 +32,6 @@ func NewIntegration(deps ...IntegrationDependencies) *Integration {
 	integration := &Integration{}
 	if len(deps) > 0 {
 		integration.runner = deps[0].CommandRunner
-		integration.skipPermissions = deps[0].SkipPermissions
 	}
 	return integration
 }
@@ -73,7 +70,7 @@ func (i *Integration) Invoke(
 	providerRequest := providerRequestFromInvocation(request)
 	built, err := NewAdapter().BuildCommand(ctx, adapter.CommandContext{
 		Request:         providerRequest,
-		SkipPermissions: i.skipPermissionsEnabled(),
+		SkipPermissions: providerRequest.SkipPermissions,
 	})
 	if err != nil {
 		return writer.Close(ctx, inference.FailedCompletion(inference.NewFailure(inference.FailureInput{
@@ -109,10 +106,6 @@ func (i *Integration) commandRunner() workerprocess.CommandRunner {
 		return i.runner
 	}
 	return workerprocess.CommandRunnerWithLogging(nil, nil, nil)
-}
-
-func (i *Integration) skipPermissionsEnabled() bool {
-	return i != nil && i.skipPermissions
 }
 
 func providerRequestFromInvocation(request inference.InvocationRequest) workerexecution.ProviderInferenceRequest {
