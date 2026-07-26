@@ -3962,6 +3962,12 @@
       "destinationKind": "family"
     },
     {
+      "packagePath": "pkg/transports/cli/completionprojection",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
       "packagePath": "pkg/transports/cli/config",
       "disposition": "retain",
       "destination": "transports",
