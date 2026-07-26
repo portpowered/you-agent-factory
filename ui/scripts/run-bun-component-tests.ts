@@ -24,7 +24,7 @@ function runComponentTests(files: string[]): void {
 
   const result = Bun.spawnSync({
     cmd: [
-      "bun",
+      process.execPath,
       "test",
       "--preload",
       PRELOAD_PATH,

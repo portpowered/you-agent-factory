@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@you-agent-factory/client": ["../../client/src/index.ts"],
+      "@you-agent-factory/components": ["../../components/src/index.ts"],
+      "@you-agent-factory/components/*": [
+        "../../components/src/*/index.ts"
+      ],
+      "@you-agent-factory/factory-replay": [
+        "../../factory-replay/src/index.ts"
+      ]
+    }
+  }
+}

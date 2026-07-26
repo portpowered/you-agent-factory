@@ -9,11 +9,11 @@ import {
   mock,
   test,
 } from "bun:test";
-import * as domMatchers from "@testing-library/jest-dom/matchers";
-import { Window } from "happy-dom";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import * as domMatchers from "@testing-library/jest-dom/matchers";
+import { Window } from "happy-dom";
 import * as applicationReact from "react";
 import * as monacoEditorAll from "../mocks/monaco-editor-all";
 import * as monacoEditorApi from "../mocks/monaco-editor-api";
@@ -23,7 +23,6 @@ import { bunVi } from "./vi-compat";
 mock.module("@monaco-editor/react", () => monacoReact);
 mock.module("monaco-editor/esm/vs/editor/editor.all.js", () => monacoEditorAll);
 mock.module("monaco-editor/esm/vs/editor/editor.api.js", () => monacoEditorApi);
-
 const REACT_INTERNALS_KEY =
   "__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE";
 
@@ -39,9 +38,9 @@ async function shareApplicationReactDispatcher(packageReactPath: string) {
   const packageReact = (await import(
     pathToFileURL(packageReactPath).href
   )) as ReactModuleWithInternals;
-  const applicationInternals = (
-    applicationReact as ReactModuleWithInternals
-  )[REACT_INTERNALS_KEY];
+  const applicationInternals = (applicationReact as ReactModuleWithInternals)[
+    REACT_INTERNALS_KEY
+  ];
   const packageInternals = packageReact[REACT_INTERNALS_KEY];
 
   for (const key of Reflect.ownKeys(applicationInternals)) {
