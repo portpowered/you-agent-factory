@@ -3156,6 +3156,11 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/worktree",
       "target": "pkg/services/workers"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/providers/gemini/process_harness_test.go",
+      "target": "providers"
     }
   ]
 }
