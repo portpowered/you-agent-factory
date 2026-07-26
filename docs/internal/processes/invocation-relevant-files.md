@@ -1035,8 +1035,9 @@ response-stream output.
   that error before closing the provider response writer so
   `inferencecontract.ExecuteInvocation` remains the single owner of canonical,
   non-retryable cancellation. Bind the
-  migrated provider as a registry catalog Integration
-  (`gemini.NewIntegration`) from `BuiltInRegistrations`, and let
+  migrated providers as registry catalog Integrations
+  (`gemini.NewIntegration`, `kiro.NewIntegration`) from
+  `BuiltInRegistrations`, and let
   `UsesNativeRunner` route Integrations that no longer advertise the
   native-runtime compatibility marker through `conductor.Invoke` without adding
   a concrete-provider switch in shared orchestration. Process composition
@@ -1059,11 +1060,13 @@ response-stream output.
   Integration against the shared inference contract through
   `inferencecontract.ExecuteInvocation` for the success and failure postures
   that apply to that provider's authored support/capability set (for Gemini:
-  prompt_submission + message_snapshots success, plus native
-  auth/invalid/throttle/timeout/unknown failures). Do not invent streaming or
-  tool-lifecycle factories just to call `inferencecontract/testkit.Run` when the
-  manifest does not advertise those capabilities; keep selection on the
-  registry Integration boundary rather than Adapter internals. Native
+  prompt_submission + message_snapshots success; for Kiro:
+  prompt_submission + session_resume + message_snapshots success; plus each
+  provider's native auth/invalid/throttle/timeout/unknown failures). Do not
+  invent streaming or tool-lifecycle factories just to call
+  `inferencecontract/testkit.Run` when the manifest does not advertise those
+  capabilities; keep selection on the registry Integration boundary rather
+  than Adapter internals. Native
   JSONL fixture tests should
   fragment reads and flush an unterminated final record so command selection,
   decoder buffering, and final-result parsing are proven independently.

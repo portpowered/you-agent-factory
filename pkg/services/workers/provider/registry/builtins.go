@@ -9,6 +9,7 @@ import (
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro"
 )
 
 const nativeRuntimePrerequisite = "provider-native-runtime"
@@ -100,6 +101,11 @@ func migratedBuiltInIntegration(identity inference.Identity, runner workerproces
 			return gemini.NewIntegration()
 		}
 		return gemini.NewIntegration(gemini.IntegrationDependencies{CommandRunner: runner})
+	case "kiro":
+		if runner == nil {
+			return kiro.NewIntegration()
+		}
+		return kiro.NewIntegration(kiro.IntegrationDependencies{CommandRunner: runner})
 	default:
 		return nil
 	}
