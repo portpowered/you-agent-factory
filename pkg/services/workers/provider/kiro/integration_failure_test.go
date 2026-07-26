@@ -1,0 +1,196 @@
+package kiro
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+)
+
+type integrationFailureCase struct {
+	name        string
+	result      workerprocess.CommandResult
+	err         error
+	wantKind    inference.FailureKind
+	wantMessage string
+	wantRetry   bool
+	rejected    []string
+}
+
+func TestIntegrationNormalizesKnownKiroFailures(t *testing.T) {
+	t.Parallel()
+
+	runIntegrationFailureCases(t, []integrationFailureCase{
+		{
+			name: "structured authentication",
+			result: workerprocess.CommandResult{
+				ExitCode: 1,
+				Stderr:   []byte(`{"error":{"type":"authentication_error","message":"Bearer private-token"}}`),
+			},
+			wantKind:    inference.FailureAuthentication,
+			wantMessage: kiroAuthFailureMessage,
+			rejected:    []string{"Bearer", "private-token"},
+		},
+		{
+			name: "structured invalid request",
+			result: workerprocess.CommandResult{
+				ExitCode: 1,
+				Stderr:   []byte(`{"status":422,"message":"private customer request"}`),
+			},
+			wantKind:    inference.FailureInvalidRequest,
+			wantMessage: kiroBadRequestFailureMessage,
+			rejected:    []string{"private customer request"},
+		},
+		{
+			name: "structured throttle outranks text",
+			result: workerprocess.CommandResult{
+				ExitCode: 1,
+				Stdout:   []byte(`{"error":{"code":"ThrottlingException","message":"capacity secret"}}`),
+				Stderr:   []byte("ERROR: authentication required"),
+			},
+			wantKind:    inference.FailureThrottled,
+			wantMessage: kiroThrottleFailureMessage,
+			wantRetry:   true,
+			rejected:    []string{"authentication required", "capacity secret"},
+		},
+		{
+			name: "temporary service failure",
+			result: workerprocess.CommandResult{
+				ExitCode: 1,
+				Stderr:   []byte(`{"type":"error","errorType":"ServiceUnavailableException","message":"host /tmp/private"}`),
+			},
+			wantKind:    inference.FailureUnknown,
+			wantMessage: kiroServerFailureMessage,
+			wantRetry:   true,
+			rejected:    []string{"/tmp/private"},
+		},
+	})
+}
+
+func TestIntegrationNormalizesMalformedUnknownAndDeadlineFailures(t *testing.T) {
+	t.Parallel()
+
+	runIntegrationFailureCases(t, []integrationFailureCase{
+		{
+			name: "malformed structured record falls back to text",
+			result: workerprocess.CommandResult{
+				ExitCode: 1,
+				Stderr: []byte(
+					"ERROR: {\"type\":\"error\", malformed\nERROR: request timed out while waiting for Kiro",
+				),
+			},
+			wantKind:    inference.FailureTimeout,
+			wantMessage: TimeoutFailureMessage,
+			wantRetry:   true,
+			rejected:    []string{"malformed", "while waiting"},
+		},
+		{
+			name: "unsafe unknown detail falls back to exit code",
+			result: workerprocess.CommandResult{
+				ExitCode: 17,
+				Stderr:   []byte(`Error: failed reading C:\Users\alice\private\project`),
+			},
+			wantKind:    inference.FailureUnknown,
+			wantMessage: "kiro-cli exited with code 17",
+			rejected:    []string{`C:\Users\alice`, "private"},
+		},
+		{
+			name:        "command deadline",
+			err:         context.DeadlineExceeded,
+			wantKind:    inference.FailureTimeout,
+			wantMessage: TimeoutFailureMessage,
+			wantRetry:   true,
+		},
+	})
+}
+
+func runIntegrationFailureCases(t *testing.T, testCases []integrationFailureCase) {
+	t.Helper()
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			runner := &recordingRunner{result: testCase.result, err: testCase.err}
+			writer := &recordingWriter{}
+			err := inference.ExecuteInvocation(
+				context.Background(),
+				NewIntegration(IntegrationDependencies{CommandRunner: runner}),
+				failureInvocationRequest("inv-kiro-"+testCase.name),
+				writer,
+			)
+			if err != nil {
+				t.Fatalf("ExecuteInvocation() error = %v", err)
+			}
+			assertKiroFailureCompletion(t, writer, testCase)
+		})
+	}
+}
+
+func assertKiroFailureCompletion(
+	t *testing.T,
+	writer *recordingWriter,
+	want integrationFailureCase,
+) {
+	t.Helper()
+	if writer.closes != 1 || writer.completion.Response() != nil || len(writer.events) != 0 {
+		t.Fatalf(
+			"completion = %#v, closes = %d, events = %#v; want one failed close",
+			writer.completion, writer.closes, writer.events,
+		)
+	}
+	failure := writer.completion.Failure()
+	if failure == nil ||
+		failure.Kind() != want.wantKind ||
+		failure.Message() != want.wantMessage ||
+		failure.Retryable() != want.wantRetry {
+		t.Fatalf(
+			"failure = %#v, want kind=%q message=%q retryable=%v",
+			failure, want.wantKind, want.wantMessage, want.wantRetry,
+		)
+	}
+	for _, rejected := range want.rejected {
+		if strings.Contains(failure.Message(), rejected) {
+			t.Fatalf("failure message leaked %q: %q", rejected, failure.Message())
+		}
+	}
+}
+
+func TestIntegrationPropagatesCancellationForProtocolNormalization(t *testing.T) {
+	t.Parallel()
+
+	runner := &recordingRunner{err: context.Canceled}
+	writer := &recordingWriter{}
+	err := inference.ExecuteInvocation(
+		context.Background(),
+		NewIntegration(IntegrationDependencies{CommandRunner: runner}),
+		failureInvocationRequest("inv-kiro-canceled"),
+		writer,
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ExecuteInvocation() error = %v, want context.Canceled", err)
+	}
+	if writer.closes != 1 || writer.completion.Response() != nil || len(writer.events) != 0 {
+		t.Fatalf(
+			"completion = %#v, closes = %d, events = %#v; want one failed close",
+			writer.completion, writer.closes, writer.events,
+		)
+	}
+	failure := writer.completion.Failure()
+	if failure == nil ||
+		failure.Kind() != inference.FailureCanceled ||
+		failure.Message() != "provider invocation was canceled" ||
+		failure.Retryable() {
+		t.Fatalf("failure = %#v, want canonical non-retryable cancellation", failure)
+	}
+}
+
+func failureInvocationRequest(id string) inference.InvocationRequest {
+	return inference.NewInvocationRequest(inference.InvocationInput{
+		InvocationID: id,
+		UserMessage:  "private customer request",
+	})
+}

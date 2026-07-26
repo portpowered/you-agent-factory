@@ -78,13 +78,23 @@ func (i *Integration) Invoke(
 	}
 
 	result, runErr := i.commandRunner().Run(ctx, built.Request)
-	if errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return ctx.Err()
+	}
+	if errors.Is(runErr, context.Canceled) {
 		return runErr
 	}
-	if runErr != nil || result.ExitCode != 0 {
+	classified := NewAdapter().ClassifyFailure(ctx, adapter.FailureContext{
+		CommandResult: result,
+		CommandError:  runErr,
+	})
+	if classified.Failure != nil {
+		return writer.Close(ctx, inference.FailedCompletion(failureFromKiroFacts(*classified.Failure)))
+	}
+	if runErr != nil {
 		return writer.Close(ctx, inference.FailedCompletion(inference.NewFailure(inference.FailureInput{
 			Kind:    inference.FailureUnknown,
-			Message: "Kiro command did not complete successfully.",
+			Message: "Kiro invocation failed.",
 		})))
 	}
 
@@ -93,6 +103,31 @@ func (i *Integration) Invoke(
 		return err
 	}
 	return writer.Close(ctx, inference.SuccessfulCompletion(response))
+}
+
+func failureFromKiroFacts(facts adapter.FailureFacts) inference.Failure {
+	return inference.NewFailure(inference.FailureInput{
+		Kind:      kiroFailureKind(facts.Type),
+		Message:   facts.Message,
+		Retryable: facts.Retry.Retryable,
+	})
+}
+
+func kiroFailureKind(failureType workerexecution.WorkFailureType) inference.FailureKind {
+	switch failureType {
+	case workerexecution.WorkFailureTypeTimeout:
+		return inference.FailureTimeout
+	case workerexecution.WorkFailureTypeThrottled:
+		return inference.FailureThrottled
+	case workerexecution.WorkFailureTypeAuthFailure:
+		return inference.FailureAuthentication
+	case workerexecution.WorkFailureTypePermanentBadRequest:
+		return inference.FailureInvalidRequest
+	case workerexecution.WorkFailureTypeMisconfigured:
+		return inference.FailureDependency
+	default:
+		return inference.FailureUnknown
+	}
 }
 
 func (i *Integration) commandRunner() workerprocess.CommandRunner {

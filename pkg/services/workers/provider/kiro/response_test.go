@@ -205,6 +205,7 @@ func containsArgPair(args []string, flag, value string) bool {
 type recordingRunner struct {
 	request workerprocess.CommandRequest
 	result  workerprocess.CommandResult
+	err     error
 	calls   int
 }
 
@@ -214,7 +215,7 @@ func (r *recordingRunner) Run(
 ) (workerprocess.CommandResult, error) {
 	r.calls++
 	r.request = request
-	return r.result, nil
+	return r.result, r.err
 }
 
 type recordingWriter struct {
