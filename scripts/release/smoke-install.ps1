@@ -32,10 +32,11 @@ try {
     }
 
     & $binaryPath --help | Out-Null
+    & $binaryPath --json factory list --dir (Join-Path $tempHome ".you-agent-factory" "factories") | Out-Null
 
     $configPath = Join-Path $tempHome ".you-agent-factory" "config.json"
     if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
-        throw "post-install config init did not create operator config at $configPath"
+        throw "normal initializer did not create operator config at $configPath"
     }
 
     Write-Output "hosted install smoke passed for $binaryPath via $InstallScriptUrl"

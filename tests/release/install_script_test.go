@@ -6,7 +6,6 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -17,7 +16,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
@@ -79,19 +77,32 @@ func TestInstallScript_InstallsLatestReleaseArchiveAndPrintsPathGuidance(t *test
 	if !strings.Contains(output, "Installed you v1.2.3 to "+installedBinary) {
 		t.Fatalf("install output = %q, want installed path message", output)
 	}
-	if !strings.Contains(output, "Initializing operator/system config and default factories.") {
-		t.Fatalf("install output = %q, want post-install config init message", output)
-	}
-	if !strings.Contains(output, "Created system config at") {
-		t.Fatalf("install output = %q, want config init success output", output)
+	if strings.Contains(output, "Initializing operator/system config") {
+		t.Fatalf("install output retained retired eager initialization: %q", output)
 	}
 	if !strings.Contains(output, "Add it to your PATH with:") {
 		t.Fatalf("install output = %q, want PATH guidance", output)
 	}
 
-	configPath := configPathFromBuiltCLI(t, installedBinary, homeDir)
+	configPath := filepath.Join(homeDir, ".you-agent-factory", "config.json")
+	if _, statErr := os.Stat(configPath); !os.IsNotExist(statErr) {
+		t.Fatalf("installer eagerly created operator config: %v", statErr)
+	}
+	command := exec.Command(
+		installedBinary,
+		"--json",
+		"factory",
+		"list",
+		"--dir",
+		filepath.Join(homeDir, ".you-agent-factory", "factories"),
+	)
+	command.Dir = t.TempDir()
+	command.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	if commandOutput, commandErr := command.CombinedOutput(); commandErr != nil {
+		t.Fatalf("normal post-install command: %v\n%s", commandErr, commandOutput)
+	}
 	if _, statErr := os.Stat(configPath); statErr != nil {
-		t.Fatalf("stat post-install config: %v", statErr)
+		t.Fatalf("normal initializer did not create operator config: %v", statErr)
 	}
 }
 
@@ -133,91 +144,6 @@ func TestInstallScript_FailsOnChecksumMismatch(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(installDir, "you")); !os.IsNotExist(statErr) {
 		t.Fatalf("installed binary stat err = %v, want not exists after checksum failure", statErr)
 	}
-}
-
-func TestInstallScript_FailsWhenPostInstallConfigInitFails(t *testing.T) {
-	t.Parallel()
-
-	skipIfInstallScriptUnsupported(t)
-
-	archiveName := "you_1.2.3_linux_amd64.tar.gz"
-	checksumName := "you_1.2.3_checksums.txt"
-	archiveBytes := buildTarGzArchive(t, "you", readInstallTestBinary(t))
-	checksumContents := fmt.Sprintf("%s  %s\n", sha256Hex(archiveBytes), archiveName)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/releases/download/v1.2.3/" + archiveName:
-			w.Write(archiveBytes)
-		case "/releases/download/v1.2.3/" + checksumName:
-			w.Write([]byte(checksumContents))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	homeDir := t.TempDir()
-	configPath := configPathFromBuiltCLI(t, buildReleaseSmokeBinary(t), homeDir)
-	configParent := filepath.Dir(configPath)
-	if err := requirePathWithin(configParent, homeDir); err != nil {
-		t.Fatalf("config init returned unsafe parent path: %v", err)
-	}
-	if err := os.RemoveAll(configParent); err != nil {
-		t.Fatalf("remove initialized config parent: %v", err)
-	}
-	if err := os.WriteFile(configParent, []byte("blocked"), 0o644); err != nil {
-		t.Fatalf("write blocking config parent: %v", err)
-	}
-
-	installDir := filepath.Join(t.TempDir(), "bin")
-	output, err := runInstallScript(t, []string{
-		"INFINITE_YOU_INSTALL_BASE_URL=" + server.URL + "/releases",
-		"INFINITE_YOU_INSTALL_DIR=" + installDir,
-		"INFINITE_YOU_INSTALL_OS=linux",
-		"INFINITE_YOU_INSTALL_ARCH=amd64",
-		"INFINITE_YOU_VERSION=1.2.3",
-		"HOME=" + homeDir,
-	})
-	if err == nil {
-		t.Fatalf("run install.sh: expected post-install config init failure\n%s", output)
-	}
-	if !strings.Contains(output, "failed to initialize operator/system config and default factories") {
-		t.Fatalf("install output = %q, want actionable config init failure message", output)
-	}
-}
-
-func configPathFromBuiltCLI(t *testing.T, binaryPath, homeDir string) string {
-	t.Helper()
-
-	cmd := exec.Command(binaryPath, "config", "init", "--json")
-	cmd.Dir = testutil.MustRepoRoot(t)
-	cmd.Env = builtcliacceptance.ProcessEnvForIsolatedHome(homeDir)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("probe config path through built CLI: %v\n%s", err, string(output))
-	}
-	var outcome struct {
-		ConfigPath string `json:"configPath"`
-	}
-	if err := json.Unmarshal(output, &outcome); err != nil {
-		t.Fatalf("decode built CLI config init JSON: %v\n%s", err, string(output))
-	}
-	if strings.TrimSpace(outcome.ConfigPath) == "" {
-		t.Fatalf("built CLI config init returned empty configPath: %s", string(output))
-	}
-	return outcome.ConfigPath
-}
-
-func requirePathWithin(path, root string) error {
-	relative, err := filepath.Rel(root, path)
-	if err != nil {
-		return err
-	}
-	if relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
-		return fmt.Errorf("path %q is not a child of %q", path, root)
-	}
-	return nil
 }
 
 func TestInstallScript_FailsOnUnsupportedOperatingSystem(t *testing.T) {

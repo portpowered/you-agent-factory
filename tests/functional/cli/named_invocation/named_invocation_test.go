@@ -117,18 +117,6 @@ func runHermeticNamedInvocation(
 	}
 
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	initStdout, initStderr := executeCustomerCommand(
-		t,
-		process,
-		environment,
-		workingDirectory,
-		[]string{"you", "--json", "config", "init"},
-	)
-	if initStderr != "" {
-		t.Fatalf("config init stderr = %q, want empty; stdout=%s", initStderr, initStdout)
-	}
-	assertPackagedFactoryInstalled(t, initStdout, factoryName)
-
 	mockWorkersPath := writeMockWorkersConfig(t, mockWorkers)
 	args := []string{
 		"you", "run", "--named", factoryName,
@@ -188,29 +176,6 @@ func executeCustomerCommand(
 		)
 	}
 	return stdout.String(), stderr.String()
-}
-
-func assertPackagedFactoryInstalled(t *testing.T, payload, name string) {
-	t.Helper()
-	var result struct {
-		PackagedFactories []struct {
-			Name       string `json:"name"`
-			FactoryDir string `json:"factoryDirectory"`
-		} `json:"packagedFactories"`
-	}
-	if err := json.Unmarshal([]byte(payload), &result); err != nil {
-		t.Fatalf("decode config init result: %v\nstdout:\n%s", err, payload)
-	}
-	for _, factory := range result.PackagedFactories {
-		if factory.Name != name {
-			continue
-		}
-		if _, err := os.Stat(filepath.Join(factory.FactoryDir, "factory.json")); err != nil {
-			t.Fatalf("installed packaged Factory %q: %v", name, err)
-		}
-		return
-	}
-	t.Fatalf("config init result omitted packaged Factory %q: %#v", name, result.PackagedFactories)
 }
 
 func writeMockWorkersConfig(t *testing.T, config workers.MockWorkersConfig) string {

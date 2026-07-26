@@ -127,6 +127,83 @@ func TestInitSuppliedInputFailuresDoNotWrite(t *testing.T) {
 	}
 }
 
+func TestRetiredInitializationPathsAreRejectedWithoutWrites(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{
+			name:    "duplicate config init command",
+			args:    []string{"you", "config", "init"},
+			wantErr: `unknown command "init" for "you config"`,
+		},
+		{
+			name:    "replacement basic factory command",
+			args:    []string{"you", "config", "create-basic-factory"},
+			wantErr: `unknown command "create-basic-factory" for "you config"`,
+		},
+		{
+			name:    "legacy scaffold directory",
+			args:    []string{"you", "init", "--dir", "legacy-factory"},
+			wantErr: "unknown flag: --dir",
+		},
+		{
+			name:    "legacy scaffold type",
+			args:    []string{"you", "init", "--type", "ralph"},
+			wantErr: "unknown flag: --type",
+		},
+		{
+			name:    "legacy scaffold executor",
+			args:    []string{"you", "init", "--executor", "claude"},
+			wantErr: "unknown flag: --executor",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newInitFixture(t)
+			err := fixture.execute(serviceedges.Edges{}, io.Discard, test.args...)
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("Process.Execute() error = %v, want %q", err, test.wantErr)
+			}
+			if got := fixture.readConfig(); got != existingOperatorConfig {
+				t.Fatalf("operator config changed after retired input:\n%s", got)
+			}
+			if _, statErr := os.Stat(filepath.Join(fixture.workingDir, "legacy-factory")); !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatalf("retired scaffold path exists or returned unexpected error: %v", statErr)
+			}
+		})
+	}
+}
+
+func TestNormalCommandInitializesPackagedFactoriesWithoutSetupCommand(t *testing.T) {
+	fixture := newInitFixture(t)
+	var stdout bytes.Buffer
+	err := fixture.execute(
+		serviceedges.Edges{},
+		&stdout,
+		"you", "--json", "factory", "list", "--dir",
+		filepath.Join(fixture.homeDir, ".you-agent-factory", "factories"),
+	)
+	if err != nil {
+		t.Fatalf("Process.Execute(factory list) error = %v; stdout=%q", err, stdout.String())
+	}
+	packagedFactory := filepath.Join(
+		fixture.homeDir,
+		".you-agent-factory",
+		"factories",
+		"@you",
+		"goal",
+		"factory.json",
+	)
+	if _, err := os.Stat(packagedFactory); err != nil {
+		t.Fatalf("initializer-owned packaged Factory missing at %s: %v", packagedFactory, err)
+	}
+	if _, statErr := os.Stat(filepath.Join(fixture.workingDir, "factory")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("normal initialization wrote a legacy working-directory scaffold: %v", statErr)
+	}
+}
+
 // TestInitSuppliedInputsPreserveConfigWhenAtomicWriteCannotStart proves a
 // pre-commit temporary-write failure is returned without replacing the file.
 func TestInitSuppliedInputsPreserveConfigWhenAtomicWriteCannotStart(t *testing.T) {

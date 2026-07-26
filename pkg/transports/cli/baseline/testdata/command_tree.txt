@@ -1,6 +1,5 @@
 you	you	
 you config	config	you
-you config init	init	you config
 you docs	docs [topic]	you
 you factory	factory	you
 you factory config	config	you factory

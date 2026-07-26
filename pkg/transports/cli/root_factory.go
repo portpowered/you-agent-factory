@@ -30,8 +30,6 @@ func productionFactoryConfigInitCommands(
 			ValidateFactory:       options.ValidateFactory,
 			FlattenFactoryConfig:  options.FlattenFactoryConfig,
 			ExpandFactoryConfig:   options.ExpandFactoryConfig,
-			InitSystemConfig:      options.InitSystemConfig,
-			InitFactory:           options.InitFactory,
 			ConfigureInit:         options.ConfigureInit,
 			HomeDir:               options.homeDir,
 			DiagnosticsWriter:     diagnostics.writer,

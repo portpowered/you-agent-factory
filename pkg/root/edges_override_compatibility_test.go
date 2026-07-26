@@ -15,13 +15,13 @@ import (
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
 // TestBuildProcessAppliesTypedEdgesExternalEffectOverride proves the approved
 // root.BuildProcess edges.Edges seam still replaces a representative external
-// effect after construction (operator identity generation via config init).
+// effect after construction (operator identity generation during normal
+// initialization).
 func TestBuildProcessAppliesTypedEdgesExternalEffectOverride(t *testing.T) {
 	t.Parallel()
 
@@ -34,7 +34,7 @@ func TestBuildProcessAppliesTypedEdgesExternalEffectOverride(t *testing.T) {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
 
-	configPath := runConfigInit(t, process, home)
+	configPath := runNormalInitialization(t, process, home)
 	persisted := readBackendScopeID(t, configPath)
 	want := operatorsettings.LocalBackendScopePrefix + generated
 	if persisted != want {
@@ -54,7 +54,7 @@ func TestBuildProcessEmptyEdgesSelectProductionExternalEffectDefaults(t *testing
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
 
-	configPath := runConfigInit(t, process, home)
+	configPath := runNormalInitialization(t, process, home)
 	persisted := readBackendScopeID(t, configPath)
 	if !operatorsettings.IsLocalBackendScopeID(persisted) {
 		t.Fatalf("backendScopeID = %q, want production local-<uuid> default", persisted)
@@ -67,17 +67,17 @@ func TestBuildProcessEmptyEdgesSelectProductionExternalEffectDefaults(t *testing
 // TestBuildProcessKeepsFunctionalTypedEdgesReplacementCompatible proves
 // functional-style typed edges.Edges replacements still construct through the
 // same BuildProcess bag without an alternate override seam, and that a
-// filesystem replacement is applied when scaffolding.
+// filesystem replacement is applied during normal initialization.
 func TestBuildProcessKeepsFunctionalTypedEdgesReplacementCompatible(t *testing.T) {
 	t.Parallel()
 
-	var scaffoldCalls atomic.Int32
+	var initializationCalls atomic.Int32
 	apiStarts := 0
-	scaffoldErr := errors.New("scaffold filesystem override selected")
+	initializationErr := errors.New("system initialization override selected")
 	process, err := BuildProcess(context.Background(), serviceedges.Edges{
-		FactoryDefinitionScaffoldFileSystem: countingScaffoldFileSystem{
-			calls: &scaffoldCalls,
-			err:   scaffoldErr,
+		SystemInitializationInspectPath: func(string) (fs.FileInfo, error) {
+			initializationCalls.Add(1)
+			return nil, initializationErr
 		},
 		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
 			apiStarts++
@@ -87,63 +87,59 @@ func TestBuildProcessKeepsFunctionalTypedEdgesReplacementCompatible(t *testing.T
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
-	if apiStarts != 0 || scaffoldCalls.Load() != 0 {
+	if apiStarts != 0 || initializationCalls.Load() != 0 {
 		t.Fatalf(
-			"construction side effects = api:%d scaffold:%d, want zero",
+			"construction side effects = api:%d initialization:%d, want zero",
 			apiStarts,
-			scaffoldCalls.Load(),
+			initializationCalls.Load(),
 		)
 	}
 
 	home := t.TempDir()
-	factoryDir := filepath.Join(t.TempDir(), "override-factory")
 	var stderr bytes.Buffer
 	err = process.Execute(Input{
-		Args:             []string{"you", "init", "--dir", factoryDir},
+		Args: []string{
+			"you", "--json", "factory", "list", "--dir",
+			filepath.Join(home, ".you-agent-factory", "factories"),
+		},
 		Env:              homeEnvironment(home),
 		Stderr:           &stderr,
 		Context:          context.Background(),
-		WorkingDirectory: filepath.Dir(factoryDir),
+		WorkingDirectory: home,
 	})
-	if err == nil || !strings.Contains(err.Error(), scaffoldErr.Error()) {
+	if err == nil || !strings.Contains(err.Error(), initializationErr.Error()) {
 		t.Fatalf(
-			"Process.Execute(init) error = %v stderr=%q, want scaffold override %v",
+			"Process.Execute(factory list) error = %v stderr=%q, want initialization override %v",
 			err,
 			stderr.String(),
-			scaffoldErr,
+			initializationErr,
 		)
 	}
-	if scaffoldCalls.Load() == 0 {
-		t.Fatal("FactoryDefinitionScaffoldFileSystem override was not used after construction")
+	if initializationCalls.Load() == 0 {
+		t.Fatal("SystemInitializationInspectPath override was not used after construction")
 	}
 	if apiStarts != 0 {
-		t.Fatalf("APIServerStarter calls = %d during init, want 0", apiStarts)
+		t.Fatalf("APIServerStarter calls = %d during factory list, want 0", apiStarts)
 	}
 }
 
-func runConfigInit(t *testing.T, process *initializerapplication.Process, home string) string {
+func runNormalInitialization(t *testing.T, process *initializerapplication.Process, home string) string {
 	t.Helper()
 
 	var output bytes.Buffer
 	if err := process.Execute(Input{
-		Args:             []string{"you", "config", "init", "--json"},
+		Args: []string{
+			"you", "--json", "factory", "list", "--dir",
+			filepath.Join(home, ".you-agent-factory", "factories"),
+		},
 		Env:              homeEnvironment(home),
 		Stdout:           &output,
 		Context:          context.Background(),
 		WorkingDirectory: home,
 	}); err != nil {
-		t.Fatalf("Process.Execute(config init) error = %v; stdout=%q", err, output.String())
+		t.Fatalf("Process.Execute(factory list) error = %v; stdout=%q", err, output.String())
 	}
-	var outcome struct {
-		ConfigPath string `json:"configPath"`
-	}
-	if err := json.Unmarshal(output.Bytes(), &outcome); err != nil {
-		t.Fatalf("decode config init output: %v\noutput:\n%s", err, output.String())
-	}
-	if outcome.ConfigPath == "" {
-		t.Fatal("config init omitted configPath")
-	}
-	return outcome.ConfigPath
+	return filepath.Join(home, ".you-agent-factory", "config.json")
 }
 
 func readBackendScopeID(t *testing.T, configPath string) string {
@@ -160,26 +156,4 @@ func readBackendScopeID(t *testing.T, configPath string) string {
 		t.Fatalf("decode operator config: %v\ncontent:\n%s", err, raw)
 	}
 	return document.BackendScopeID
-}
-
-type countingScaffoldFileSystem struct {
-	calls *atomic.Int32
-	err   error
-}
-
-var _ factorydefinitions.ScaffoldFileSystem = countingScaffoldFileSystem{}
-
-func (fileSystem countingScaffoldFileSystem) Stat(string) (fs.FileInfo, error) {
-	fileSystem.calls.Add(1)
-	return nil, fileSystem.err
-}
-
-func (fileSystem countingScaffoldFileSystem) MkdirAll(string, fs.FileMode) error {
-	fileSystem.calls.Add(1)
-	return fileSystem.err
-}
-
-func (fileSystem countingScaffoldFileSystem) WriteFile(string, []byte, fs.FileMode) error {
-	fileSystem.calls.Add(1)
-	return fileSystem.err
 }

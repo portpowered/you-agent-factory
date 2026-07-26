@@ -109,12 +109,6 @@ func productionParserParityStaticFamilyCases() []productionParserParityCase {
 			argumentPosition: -1,
 		},
 		{
-			name:             "config retains init command parsing",
-			commandPath:      "you config init",
-			argv:             []string{"config", "init"},
-			argumentPosition: -1,
-		},
-		{
 			name:             "init retains local provider parsing",
 			commandPath:      "you init",
 			argv:             []string{"init", "--provider", "codex"},

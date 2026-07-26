@@ -1,6 +1,7 @@
 package support
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -79,6 +80,8 @@ func runFactoryToCompletion(
 		"--quiet",
 		"--no-record",
 	})
+	homeDir := t.TempDir()
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	inputs.Input.WorkingDirectory = dir
 	t.Cleanup(func() {
 		if !t.Failed() {

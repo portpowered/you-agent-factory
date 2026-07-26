@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
-	initcmd "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
@@ -77,31 +76,6 @@ func TestFactoryConfigInitCommandHandlerMapsCreateStableInputs(t *testing.T) {
 	}
 }
 
-func TestFactoryConfigInitCommandHandlerMapsInitStableInputs(t *testing.T) {
-	var got initcmd.ScaffoldConfig
-	handler := commandregistry.NewFactoryConfigInitCommandHandler(
-		commandregistry.FactoryConfigInitServices{
-			InitFactory: func(cfg initcmd.ScaffoldConfig) error {
-				got = cfg
-				return nil
-			},
-		},
-	)
-	inputs := resolvedTestInputs(t,
-		resolvedTestValue{id: "you.init.flag.dir", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("custom")},
-		resolvedTestValue{id: "you.init.flag.type", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("ralph")},
-		resolvedTestValue{id: "you.init.flag.executor", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("claude")},
-	)
-	cmd := &cobra.Command{}
-	cmd.SetOut(io.Discard)
-	if err := handler.Init(cmd, inputs, resolvedFactoryGlobals(t, false, true, true)); err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
-	if got.Dir != "custom" || got.Type != "ralph" || got.Executor != "claude" || !got.Verbose || !got.Debug {
-		t.Fatalf("init config = %#v, want stable-ID values", got)
-	}
-}
-
 func TestFactoryConfigInitCommandHandlerMapsSuppliedSetupInputs(t *testing.T) {
 	var got initsetup.Config
 	handler := commandregistry.NewFactoryConfigInitCommandHandler(
@@ -116,9 +90,6 @@ func TestFactoryConfigInitCommandHandlerMapsSuppliedSetupInputs(t *testing.T) {
 	inputs := resolvedTestInputs(t,
 		resolvedTestValue{id: "you.init.flag.provider", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("codex")},
 		resolvedTestValue{id: "you.init.flag.model", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("free-form/model")},
-		resolvedTestValue{id: "you.init.flag.dir", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("factory")},
-		resolvedTestValue{id: "you.init.flag.type", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("default")},
-		resolvedTestValue{id: "you.init.flag.executor", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("codex")},
 	)
 	cmd := &cobra.Command{}
 	cmd.SetOut(io.Discard)

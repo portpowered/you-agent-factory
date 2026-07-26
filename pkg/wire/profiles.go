@@ -344,6 +344,15 @@ func provideSystemInitializationService(
 	)
 }
 
+func provideSystemInitializationOperation(
+	service systeminitialization.Service,
+) initializerapplication.SystemInitializationOperation {
+	return func(ctx context.Context, homeDir string) error {
+		_, err := service.Initialize(ctx, systeminitialization.Request{HomeDir: homeDir})
+		return err
+	}
+}
+
 func providePackagedFactoryDefinitions() ([]factorydefinitions.PackagedDefinition, error) {
 	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {

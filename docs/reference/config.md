@@ -1,27 +1,13 @@
 # Config
 
-`you docs config` is the canonical packaged guide for initializing operator
+`you docs config` is the canonical packaged guide for configuring operator
 settings and validating or transforming an authored Factory. For ways to start
 or invoke a Factory, use `you docs run`.
 
-## Initialize Operator And System Configuration
+## Configure Provider And Model Defaults
 
-Run the initializer once for a new user home:
-
-```bash
-you config init
-```
-
-It creates `~/.you-agent-factory/config.json` and materializes packaged defaults
-under `~/.you-agent-factory/factories`. Re-running it preserves an existing
-configuration and already-materialized packaged factories. During upgrade it
-moves valid factories from the retired `~/.you-agent-factory/you-agent-factories`
-root unless a same-named canonical factory already exists; conflicts preserve
-both copies and report the locations. Add global `--json` when automation needs
-the paths and per-file outcomes.
-
-Configure the default provider and optional free-form model used by
-model-backed workers:
+Use the single setup command to configure the default provider and optional
+free-form model used by model-backed workers:
 
 ```bash
 you init --provider codex
@@ -39,6 +25,11 @@ model prompts show current defaults in brackets; press Enter to retain a
 displayed value. Enter `/cancel`, send EOF, or interrupt the command to abandon
 setup without changing the operator config. Outside a terminal, `--provider` is
 required.
+
+Normal runtime initialization creates the operator-config document when needed
+and materializes packaged/default Factories under
+`~/.you-agent-factory/factories`. This lifecycle is initializer-owned and does
+not require a separate setup or Factory-scaffolding command.
 
 The operator file can supply defaults for model-backed workers that omit their
 own provider or model:

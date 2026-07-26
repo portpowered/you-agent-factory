@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -32,36 +33,30 @@ func BuildProcess(t testing.TB, edges serviceedges.Edges) Process {
 	return process
 }
 
-// InstallPackagedFactory executes the customer-facing system initialization
-// command through the root-built process and returns the installed named
-// Factory directory. Functional tests use this instead of importing packaged
-// definition implementations or persisting their JSON directly.
+// InstallPackagedFactory enters through a normal root-built command so the
+// Initializer materializes packaged Factories, then returns the selected path.
 func InstallPackagedFactory(t testing.TB, homeDir, name string) string {
 	t.Helper()
 
-	inputs := FakeInputs(t.Context(), []string{"you", "--json", "config", "init"})
+	namedFactoriesRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
+	inputs := FakeInputs(t.Context(), []string{
+		"you", "--json", "factory", "list", "--dir", namedFactoriesRoot,
+	})
 	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	inputs.Input.WorkingDirectory = t.TempDir()
 	if err := BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
 		t.Fatalf(
-			"Process.Execute(config init) error = %v\nstdout:\n%s\nstderr:\n%s",
+			"Process.Execute(factory list) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
 			inputs.Stdout(),
 			inputs.Stderr(),
 		)
 	}
-
-	var result configInitResult
-	if err := json.Unmarshal([]byte(inputs.Stdout()), &result); err != nil {
-		t.Fatalf("decode config init result: %v\nstdout:\n%s", err, inputs.Stdout())
+	factoryDir := filepath.Join(namedFactoriesRoot, filepath.FromSlash(name))
+	if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
+		t.Fatalf("initializer omitted packaged Factory %q at %s: %v", name, factoryDir, err)
 	}
-	for _, factory := range result.PackagedFactories {
-		if factory.Name == name {
-			return factory.FactoryDir
-		}
-	}
-	t.Fatalf("config init result omitted packaged Factory %q: %#v", name, result.PackagedFactories)
-	return ""
+	return factoryDir
 }
 
 // CreateNamedFactory executes the customer-facing named Factory create command
@@ -80,8 +75,8 @@ func CreateNamedFactory(
 		"HOME="+homeDir,
 		"USERPROFILE="+homeDir,
 	)
-	initResult := initializeCustomerHome(t, env, workingDirectory)
-	return createNamedFactoryAtRoot(t, env, workingDirectory, initResult.NamedFactoriesRoot, name, factoryConfigPath)
+	namedFactoriesRoot := initializeCustomerHome(t, env, workingDirectory)
+	return createNamedFactoryAtRoot(t, env, workingDirectory, namedFactoriesRoot, name, factoryConfigPath)
 }
 
 // CreateNamedFactoryAtRoot executes the public create command against an
@@ -203,56 +198,35 @@ func createNamedFactoryAtRootWithActivation(
 	return result.FactoryDir
 }
 
-type configInitResult struct {
-	NamedFactoriesRoot string                  `json:"namedFactoriesRoot"`
-	PackagedFactories  []packagedFactoryResult `json:"packagedFactories"`
-}
-
-type packagedFactoryResult struct {
-	Name       string `json:"name"`
-	FactoryDir string `json:"factoryDirectory"`
-}
-
 type createNamedFactoryResult struct {
 	FactoryDir string `json:"factoryDir"`
 }
 
-func initializeCustomerHome(t testing.TB, env []string, workingDirectory string) configInitResult {
+func initializeCustomerHome(t testing.TB, env []string, workingDirectory string) string {
 	t.Helper()
-	inputs := FakeInputs(t.Context(), []string{"you", "--json", "config", "init"})
+	homeDir := environmentHome(env)
+	namedFactoriesRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
+	inputs := FakeInputs(t.Context(), []string{
+		"you", "--json", "factory", "list", "--dir", namedFactoriesRoot,
+	})
 	inputs.Input.Env = env
 	inputs.Input.WorkingDirectory = workingDirectory
 	if err := BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute(config init) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+		t.Fatalf("Process.Execute(factory list) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
-	var result configInitResult
-	if err := json.Unmarshal([]byte(inputs.Stdout()), &result); err != nil {
-		t.Fatalf("decode config init result: %v\nstdout:\n%s", err, inputs.Stdout())
-	}
-	if result.NamedFactoriesRoot == "" {
-		t.Fatalf("config init result omitted named Factories root: %s", inputs.Stdout())
-	}
-	return result
+	return namedFactoriesRoot
 }
 
-// RunInitCommand executes the customer-facing init command through the same
-// root-built process used by the production binary.
-func RunInitCommand(t testing.TB, dir string, extraArgs ...string) {
-	t.Helper()
-
-	args := []string{"you", "init", "--dir", dir}
-	args = append(args, extraArgs...)
-	inputs := FakeInputs(t.Context(), args)
-	inputs.Input.WorkingDirectory = dir
-	if err := BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
-		t.Fatalf(
-			"Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s",
-			args,
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
+func environmentHome(env []string) string {
+	for _, item := range env {
+		if strings.HasPrefix(item, "HOME=") {
+			return strings.TrimPrefix(item, "HOME=")
+		}
+		if strings.HasPrefix(item, "USERPROFILE=") {
+			return strings.TrimPrefix(item, "USERPROFILE=")
+		}
 	}
+	return ""
 }
 
 // ProcessCommand owns one asynchronous Process.Execute invocation.

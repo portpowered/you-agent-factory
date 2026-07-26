@@ -91,7 +91,6 @@ func factoryConfigInitResolvedHandlers(
 		"you.factory.config.validate": handler.FactoryConfigValidate,
 		"you.factory.config.flatten":  handler.FactoryConfigFlatten,
 		"you.factory.config.expand":   handler.FactoryConfigExpand,
-		"you.config.init":             handler.ConfigInit,
 		"you.init":                    handler.Init,
 	}
 	resolved := make(ResolvedCobraHandlerRegistry, len(bindings))

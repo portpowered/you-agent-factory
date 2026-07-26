@@ -148,15 +148,6 @@ verify_checksum() {
   fi
 }
 
-run_config_init() {
-  binary_path="$1"
-
-  say "Initializing operator/system config and default factories."
-  if ! "$binary_path" config init; then
-    fail "failed to initialize operator/system config and default factories with '$binary_path config init'; fix permissions or path issues and re-run that command"
-  fi
-}
-
 install_binary() {
   source_path="$1"
   target_path="$2"
@@ -250,7 +241,6 @@ main() {
 
   install_binary "$extract_dir/$BINARY_NAME" "$binary_path"
   maybe_handle_macos_quarantine "$os_name" "$binary_path"
-  run_config_init "$binary_path"
 
   say "Installed $BINARY_NAME $tag to $binary_path"
   if path_contains_dir "$INSTALL_DIR"; then

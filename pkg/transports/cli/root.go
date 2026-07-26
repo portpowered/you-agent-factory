@@ -26,7 +26,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
-	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
@@ -73,7 +72,6 @@ type OwnedExecutionService interface {
 type ExecutionServiceBuilder func(context.Context, string, string, string, string) (OwnedExecutionService, error)
 type FlattenFactoryConfigOperation func(configcli.FactoryConfigFlattenConfig) error
 type ExpandFactoryConfigOperation func(configcli.FactoryConfigExpandConfig) error
-type InitSystemConfigOperation func(configinitcmd.InitConfig) error
 type ConfigureInitOperation func(initsetup.Config) error
 type QueryFactoryOperation func(factorycli.QueryConfig) error
 type ListFactoriesOperation func(factorycli.ListConfig) error
@@ -121,7 +119,6 @@ type CommandOperations struct {
 	FlattenFactoryConfig              FlattenFactoryConfigOperation
 	ExpandFactoryConfig               ExpandFactoryConfigOperation
 	InitFactory                       interfaces.ScaffoldInitializer
-	InitSystemConfig                  InitSystemConfigOperation
 	ConfigureInit                     ConfigureInitOperation
 	QueryFactory                      QueryFactoryOperation
 	ListFactories                     ListFactoriesOperation
@@ -175,7 +172,6 @@ type CommandFactory struct {
 	FlattenFactoryConfig  func(configcli.FactoryConfigFlattenConfig) error
 	ExpandFactoryConfig   func(configcli.FactoryConfigExpandConfig) error
 	InitFactory           interfaces.ScaffoldInitializer
-	InitSystemConfig      func(configinitcmd.InitConfig) error
 	ConfigureInit         func(initsetup.Config) error
 	QueryFactory          func(factorycli.QueryConfig) error
 	ListFactories         func(factorycli.ListConfig) error
@@ -225,7 +221,6 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		FlattenFactoryConfig:              operations.FlattenFactoryConfig,
 		ExpandFactoryConfig:               operations.ExpandFactoryConfig,
 		InitFactory:                       operations.InitFactory,
-		InitSystemConfig:                  operations.InitSystemConfig,
 		ConfigureInit:                     operations.ConfigureInit,
 		QueryFactory:                      operations.QueryFactory,
 		ListFactories:                     operations.ListFactories,
@@ -301,7 +296,41 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 }
 
 func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
-	return newRootCommandWithGeneratedRepresentativeFamily(options)
+	root := newRootCommandWithGeneratedRepresentativeFamily(options)
+	if root == nil {
+		return nil
+	}
+	previous := root.PersistentPreRunE
+	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if requiresSystemInitialization(cmd.CommandPath(), args) {
+			if options.initializer == nil {
+				return fmt.Errorf("system initializer is required")
+			}
+			homeDir, err := resolveProcessHomeDir(options)
+			if err != nil {
+				return err
+			}
+			if err := options.initializer.InitializeSystem(cmd.Context(), homeDir); err != nil {
+				return fmt.Errorf("initialize system: %w", err)
+			}
+		}
+		if previous != nil {
+			return previous(cmd, args)
+		}
+		return nil
+	}
+	return root
+}
+
+func requiresSystemInitialization(commandPath string, args []string) bool {
+	switch commandPath {
+	case "you":
+		return len(args) > 0
+	case "you factory list", "you mcp serve", "you run":
+		return true
+	default:
+		return false
+	}
 }
 
 func buildWorkflowExecutionService(
@@ -634,7 +663,7 @@ func operatorConfigSourceValue(
 	if err != nil {
 		// A config path below a non-directory ancestor is unavailable in
 		// the same way as a missing optional config. Commands such as
-		// `you config init` still own the later, actionable creation error.
+		// initializer-owned startup still owns the later, actionable creation error.
 		if errors.Is(err, syscall.ENOTDIR) {
 			return resolvedinput.Value{}, false, nil
 		}

@@ -38,9 +38,6 @@ func (factoryConfigInitHandlerStub) FactoryConfigFlatten(*cobra.Command, resolve
 func (factoryConfigInitHandlerStub) FactoryConfigExpand(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
 	return nil
 }
-func (factoryConfigInitHandlerStub) ConfigInit(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
-	return nil
-}
 func (factoryConfigInitHandlerStub) Init(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
 	return nil
 }
@@ -58,7 +55,6 @@ func TestNewFactoryConfigInitFamilyComponentsProjectsContractedTree(t *testing.T
 		{root: components.Factory, path: []string{"list"}},
 		{root: components.Factory, path: []string{"create"}},
 		{root: components.Factory, path: []string{"config", "validate"}},
-		{root: components.Config, path: []string{"init"}},
 		{root: components.Init, path: nil},
 	} {
 		command, _, findErr := test.root.Find(test.path)
@@ -91,26 +87,17 @@ func TestFactoryConfigInitFamilyUsesManifestDefaultsAndRequiredness(t *testing.T
 	}
 }
 
-func TestFactoryConfigInitFamilyProjectsStaticCompletionMetadata(t *testing.T) {
+func TestFactoryConfigInitFamilyOmitsRetiredInitializationPaths(t *testing.T) {
 	components, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(factoryConfigInitHandlerStub{})
 	if err != nil {
 		t.Fatalf("NewFactoryConfigInitFamilyComponents() error = %v", err)
 	}
-	for _, name := range []string{"type", "executor"} {
-		flag := components.Init.Flags().Lookup(name)
-		if flag == nil {
-			t.Fatalf("you init --%s missing", name)
-		}
-		if got := flag.Annotations["infinite-you/completion"]; len(got) != 1 || got[0] != "static" {
-			t.Fatalf("you init --%s completion = %#v, want static", name, got)
-		}
-		complete, exists := components.Init.GetFlagCompletionFunc(name)
-		if !exists {
-			t.Fatalf("you init --%s completion callback missing", name)
-		}
-		values, directive := complete(components.Init, nil, "")
-		if directive != cobra.ShellCompDirectiveNoFileComp || len(values) != 2 {
-			t.Fatalf("you init --%s completion = %#v, %v", name, values, directive)
+	if len(components.Config.Commands()) != 0 {
+		t.Fatalf("you config subcommands = %v, want retired config init absent", components.Config.Commands())
+	}
+	for _, name := range []string{"dir", "type", "executor"} {
+		if flag := components.Init.Flags().Lookup(name); flag != nil {
+			t.Fatalf("you init retained retired --%s flag", name)
 		}
 	}
 }

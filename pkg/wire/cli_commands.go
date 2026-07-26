@@ -19,7 +19,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
-	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
@@ -140,12 +139,6 @@ func provideExpandFactoryConfigOperation(
 	persistence factorydefinitions.Persistence,
 ) cli.ExpandFactoryConfigOperation {
 	return configcli.NewExpandFactoryConfig(persistence)
-}
-
-func provideInitSystemConfigOperation(
-	initialize func(configinitcmd.InitConfig) error,
-) cli.InitSystemConfigOperation {
-	return initialize
 }
 
 func provideConfigureInitOperation(

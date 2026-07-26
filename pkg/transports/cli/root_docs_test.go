@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
@@ -116,7 +115,7 @@ func TestConfigDocumentation_ExamplesReachCurrentCLIPathBoundary(t *testing.T) {
 		t.Fatalf("Markdown(config) error = %v", err)
 	}
 	for _, command := range []string{
-		"you config init",
+		"you init --provider codex",
 		"you factory config validate ./factory/factory.json",
 		"you factory config flatten ./factory > ./dist/factory.json",
 		"you factory config expand ./dist/factory.json",
@@ -732,59 +731,6 @@ func TestDocsCommand_VerboseLogsTopicResolutionWithoutChangingMarkdown(t *testin
 		if !strings.Contains(got, want) {
 			t.Fatalf("stderr missing %q:\n%s", want, got)
 		}
-	}
-}
-
-func TestInitCommand_DefaultDir(t *testing.T) {
-	root := newLegacyTestRootCommand()
-	initCmd, _, err := root.Find([]string{"init"})
-	if err != nil {
-		t.Fatalf("find init: %v", err)
-	}
-
-	dirFlag := initCmd.Flags().Lookup("dir")
-	if dirFlag == nil {
-		t.Fatal("expected --dir flag on init command")
-	}
-	if dirFlag.DefValue != "factory" {
-		t.Errorf("default dir = %q, want %q", dirFlag.DefValue, "factory")
-	}
-
-	executorFlag := initCmd.Flags().Lookup("executor")
-	if executorFlag == nil {
-		t.Fatal("expected --executor flag on init command")
-	}
-	if executorFlag.DefValue != factorydefinitions.DefaultStarterExecutor {
-		t.Errorf("default executor = %q, want %q", executorFlag.DefValue, factorydefinitions.DefaultStarterExecutor)
-	}
-}
-
-func TestInitCommand_ExecutorFlagMapsToInitConfig(t *testing.T) {
-	originalInitFactory := initFactory
-	defer func() {
-		initFactory = originalInitFactory
-	}()
-
-	var got factorydefinitions.ScaffoldConfig
-	initFactory = func(cfg factorydefinitions.ScaffoldConfig) error {
-		got = cfg
-		return nil
-	}
-
-	root := newLegacyTestRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"init", "--dir", "custom-factory", "--executor", "claude"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute init --executor claude: %v", err)
-	}
-
-	if got.Dir != "custom-factory" {
-		t.Fatalf("dir = %q, want %q", got.Dir, "custom-factory")
-	}
-	if got.Executor != "claude" {
-		t.Fatalf("executor = %q, want %q", got.Executor, "claude")
 	}
 }
 

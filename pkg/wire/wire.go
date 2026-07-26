@@ -18,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
-	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	httpapplication "github.com/portpowered/infinite-you/pkg/transports/http/application"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
@@ -256,7 +255,6 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideModelsCLIService,
 	provideFlattenFactoryConfigOperation,
 	provideExpandFactoryConfigOperation,
-	provideInitSystemConfigOperation,
 	provideConfigureInitOperation,
 	provideQueryFactoryOperation,
 	provideListFactoriesOperation,
@@ -286,7 +284,7 @@ var BundleSet = wire.NewSet(
 	cliCommandOperationsSet,
 	providePackagedFactoryDefinitions,
 	provideSystemInitializationService,
-	configinitcmd.NewInitializer,
+	provideSystemInitializationOperation,
 	provideRuntimeOpener,
 	provideApplicationRuntimeAdapter,
 	provideLifecycleRunnerFactory,

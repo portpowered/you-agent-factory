@@ -45,9 +45,10 @@ func TestInitializerRunAppliesPolicyAndRunsSelectedApplication(t *testing.T) {
 }
 
 func TestInitializerStdioOnlyOpensAndRunsLifecycleReadyApplication(t *testing.T) {
-	wantIntent := startupcli.MCPIntent{RuntimeBacked: true, ProjectRoot: "project"}
+	wantIntent := startupcli.MCPIntent{RuntimeBacked: true, ProjectRoot: "project", HomeDir: "stdio-home"}
 	opener := &stdioApplicationOpenerStub{}
-	entrypoint, err := NewInitializer(opener)
+	system := func(context.Context, string) error { return nil }
+	entrypoint, err := NewInitializer(opener, system)
 	if err != nil {
 		t.Fatalf("NewInitializer: %v", err)
 	}
@@ -56,6 +57,20 @@ func TestInitializerStdioOnlyOpensAndRunsLifecycleReadyApplication(t *testing.T)
 	}
 	if opener.intent != wantIntent || !opener.ran {
 		t.Fatalf("stdio opener = intent:%#v ran:%v", opener.intent, opener.ran)
+	}
+}
+
+func TestInitializerOwnsSystemInitializationOperation(t *testing.T) {
+	var initializedHome string
+	entrypoint := &Initializer{systemInitialization: func(_ context.Context, homeDir string) error {
+		initializedHome = homeDir
+		return nil
+	}}
+	if err := entrypoint.InitializeSystem(t.Context(), "customer-home"); err != nil {
+		t.Fatalf("InitializeSystem() error = %v", err)
+	}
+	if initializedHome != "customer-home" {
+		t.Fatalf("system initialization home = %q, want customer-home", initializedHome)
 	}
 }
 

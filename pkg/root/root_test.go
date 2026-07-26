@@ -327,21 +327,16 @@ func TestProcessSequentialHomesControlConfigPaths(t *testing.T) {
 	for _, home := range homes {
 		var output bytes.Buffer
 		if err := process.Execute(Input{
-			Args: []string{"you", "config", "init", "--json"}, Env: homeEnvironment(home), Stdout: &output, Context: context.Background(), WorkingDirectory: home,
+			Args: []string{
+				"you", "--json", "factory", "list", "--dir",
+				filepath.Join(home, ".you-agent-factory", "factories"),
+			},
+			Env: homeEnvironment(home), Stdout: &output, Context: context.Background(), WorkingDirectory: home,
 		}); err != nil {
-			t.Fatalf("Process.Execute(config init, home %q) error = %v", home, err)
+			t.Fatalf("Process.Execute(factory list, home %q) error = %v", home, err)
 		}
-		var outcome struct {
-			HomeDir    string `json:"homeDir"`
-			ConfigPath string `json:"configPath"`
-		}
-		if err := json.Unmarshal(output.Bytes(), &outcome); err != nil {
-			t.Fatalf("decode config init output for supplied home %q: %v\noutput:\n%s", home, err, output.String())
-		}
-		if outcome.HomeDir != home {
-			t.Fatalf("config init homeDir = %q, want supplied home %q", outcome.HomeDir, home)
-		}
-		if _, err := os.Stat(outcome.ConfigPath); err != nil {
+		configPath := filepath.Join(home, ".you-agent-factory", "config.json")
+		if _, err := os.Stat(configPath); err != nil {
 			t.Fatalf("Stat(config for supplied home %q) error = %v", home, err)
 		}
 	}
@@ -414,27 +409,26 @@ func TestProcessConcurrentCommandsKeepInvocationStateIndependent(t *testing.T) {
 	}
 }
 
-func TestProcessSetupAndFactoryAuthoringCommandsThroughProductionComposition(t *testing.T) {
+func TestProcessNormalInitializationAndFactoryValidationThroughProductionComposition(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	factoryDir := filepath.Join(t.TempDir(), "authored-factory")
+	factoryDir := filepath.Join(home, ".you-agent-factory", "factories", "@you", "goal")
 	process, err := BuildProcess(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
-	var initOutput bytes.Buffer
 	if err := process.Execute(Input{
-		Args:             []string{"you", "init", "--dir", factoryDir},
+		Args: []string{
+			"you", "--json", "factory", "list", "--dir",
+			filepath.Join(home, ".you-agent-factory", "factories"),
+		},
 		Env:              homeEnvironment(home),
-		Stdout:           &initOutput,
+		Stdout:           io.Discard,
 		Context:          context.Background(),
-		WorkingDirectory: filepath.Dir(factoryDir),
+		WorkingDirectory: t.TempDir(),
 	}); err != nil {
-		t.Fatalf("Process.Execute(init) error = %v", err)
-	}
-	if !strings.Contains(initOutput.String(), "Initialized default factory directory structure") {
-		t.Fatalf("init output = %q", initOutput.String())
+		t.Fatalf("Process.Execute(factory list) error = %v", err)
 	}
 
 	var validateOutput bytes.Buffer

@@ -5,9 +5,7 @@ import (
 	"io"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
-	initcmd "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
-	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
@@ -31,9 +29,6 @@ const (
 	factoryValidatePathInputID       = "you.factory.config.validate.arg.0"
 	factoryFlattenPathInputID        = "you.factory.config.flatten.arg.0"
 	factoryExpandPathInputID         = "you.factory.config.expand.arg.0"
-	initDirInputID                   = "you.init.flag.dir"
-	initTypeInputID                  = "you.init.flag.type"
-	initExecutorInputID              = "you.init.flag.executor"
 	initProviderInputID              = "you.init.flag.provider"
 	initModelInputID                 = "you.init.flag.model"
 	factoryConfigInitServerInputID   = "you.flag.server"
@@ -55,7 +50,6 @@ type FactoryConfigInitHandler interface {
 	FactoryConfigValidate(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
 	FactoryConfigFlatten(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
 	FactoryConfigExpand(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
-	ConfigInit(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
 	Init(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
 }
 
@@ -71,8 +65,6 @@ type FactoryConfigInitServices struct {
 	ValidateFactory       func(factorycli.ValidateConfig) error
 	FlattenFactoryConfig  func(configcli.FactoryConfigFlattenConfig) error
 	ExpandFactoryConfig   func(configcli.FactoryConfigExpandConfig) error
-	InitSystemConfig      func(configinitcmd.InitConfig) error
-	InitFactory           func(initcmd.ScaffoldConfig) error
 	ConfigureInit         func(initsetup.Config) error
 	HomeDir               func() (string, error)
 	DiagnosticsWriter     func(*cobra.Command) io.Writer
@@ -353,31 +345,6 @@ func (h *FactoryConfigInitCommandHandler) FactoryConfigExpand(
 	})
 }
 
-func (h *FactoryConfigInitCommandHandler) ConfigInit(
-	cmd *cobra.Command,
-	_ resolvedinput.Inputs,
-	inherited resolvedinput.Inputs,
-) error {
-	if h == nil || h.services.InitSystemConfig == nil {
-		return fmt.Errorf("system initialization service is required")
-	}
-	if h.services.HomeDir == nil {
-		return fmt.Errorf("config init home directory resolver is required")
-	}
-	homeDir, err := h.services.HomeDir()
-	if err != nil {
-		return fmt.Errorf("resolve config init home directory: %w", err)
-	}
-	globals, err := readFactoryConfigInitGlobals(inherited)
-	if err != nil {
-		return fmt.Errorf("resolve config init inputs: %w", err)
-	}
-	return h.services.InitSystemConfig(configinitcmd.InitConfig{
-		Context: cmd.Context(), HomeDir: homeDir, JSON: globals.json,
-		Output: cmd.OutOrStdout(), Diagnostics: h.diagnostics(cmd), Verbose: globals.verbose,
-	})
-}
-
 func (h *FactoryConfigInitCommandHandler) Init(
 	cmd *cobra.Command,
 	inputs resolvedinput.Inputs,
@@ -386,15 +353,8 @@ func (h *FactoryConfigInitCommandHandler) Init(
 	if h == nil {
 		return fmt.Errorf("init handler is required")
 	}
-	globals, err := readFactoryConfigInitGlobals(inherited)
-	if err != nil {
-		return fmt.Errorf("resolve init inputs: %w", err)
-	}
 	if state, ok := inherited.State(factoryConfigInitJSONInputID); ok && state.Changed {
 		return fmt.Errorf("--json is not supported by you init")
-	}
-	if resolvedInputChanged(inputs, initDirInputID, initTypeInputID, initExecutorInputID) {
-		return h.initLegacyFactoryScaffold(cmd, inputs, globals)
 	}
 	if h.services.ConfigureInit == nil {
 		return fmt.Errorf("init provider/model configuration service is required")
@@ -426,41 +386,5 @@ func (h *FactoryConfigInitCommandHandler) Init(
 		Context: ctx, HomeDir: homeDir, Provider: provider,
 		Model: model, Input: cmd.InOrStdin(), Output: cmd.OutOrStdout(),
 		Interactive: interactive,
-	})
-}
-
-func resolvedInputChanged(inputs resolvedinput.Inputs, inputIDs ...string) bool {
-	for _, inputID := range inputIDs {
-		if state, ok := inputs.State(inputID); ok && state.Changed {
-			return true
-		}
-	}
-	return false
-}
-
-func (h *FactoryConfigInitCommandHandler) initLegacyFactoryScaffold(
-	cmd *cobra.Command,
-	inputs resolvedinput.Inputs,
-	globals factoryConfigInitGlobals,
-) error {
-	if h.services.InitFactory == nil {
-		return fmt.Errorf("legacy init scaffold service is required")
-	}
-	dir, err := inputs.String(initDirInputID)
-	if err != nil {
-		return fmt.Errorf("resolve init inputs: %w", err)
-	}
-	scaffoldType, err := inputs.String(initTypeInputID)
-	if err != nil {
-		return fmt.Errorf("resolve init inputs: %w", err)
-	}
-	executor, err := inputs.String(initExecutorInputID)
-	if err != nil {
-		return fmt.Errorf("resolve init inputs: %w", err)
-	}
-	return h.services.InitFactory(initcmd.ScaffoldConfig{
-		Dir: dir, Type: scaffoldType, Executor: executor, JSON: globals.json,
-		Output: cmd.OutOrStdout(), Diagnostics: h.diagnostics(cmd),
-		Verbose: globals.verbose, Debug: globals.debug,
 	})
 }

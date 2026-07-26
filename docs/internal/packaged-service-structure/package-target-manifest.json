@@ -293,7 +293,6 @@
     "pkg/transports/cli/commandidentity",
     "pkg/transports/cli/commandregistry",
     "pkg/transports/cli/config",
-    "pkg/transports/cli/configinit",
     "pkg/transports/cli/dashboard",
     "pkg/transports/cli/default",
     "pkg/transports/cli/docs",
@@ -1611,11 +1610,6 @@
     },
     {
       "packagePath": "pkg/transports/cli/config",
-      "disposition": "retain",
-      "destination": "transports"
-    },
-    {
-      "packagePath": "pkg/transports/cli/configinit",
       "disposition": "retain",
       "destination": "transports"
     },

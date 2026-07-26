@@ -1524,12 +1524,6 @@
     },
     {
       "fromOwner": "transports",
-      "toOwner": "system_initialization",
-      "class": "protocol_composition",
-      "evidence": "pkg/transports/cli/configinit -\u003e pkg/services/system_initialization"
-    },
-    {
-      "fromOwner": "transports",
       "toOwner": "work",
       "class": "protocol_composition",
       "evidence": "pkg/transports/cli/batchload -\u003e pkg/services/work"
@@ -3944,12 +3938,6 @@
       "destinationKind": "family"
     },
     {
-      "packagePath": "pkg/transports/cli/configinit",
-      "disposition": "retain",
-      "destination": "transports",
-      "destinationKind": "family"
-    },
-    {
       "packagePath": "pkg/transports/cli/dashboard",
       "disposition": "retain",
       "destination": "transports",
@@ -3987,6 +3975,12 @@
     },
     {
       "packagePath": "pkg/transports/cli/generated",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/initsetup",
       "disposition": "retain",
       "destination": "transports",
       "destinationKind": "family"

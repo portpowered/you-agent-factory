@@ -24,7 +24,7 @@ Examples:
 
 Available Commands:
   completion  Generate the autocompletion script for the specified shell
-  config      Initialize operator and system configuration
+  config      Configuration command guide
   docs        Print packaged markdown reference topics
   factory     Inspect and manage factory definitions
   help        Help about any command
