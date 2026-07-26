@@ -60,6 +60,10 @@ func Project(
 	schema climanifest.EffectiveInputSchema,
 	completionContext Context,
 ) (Projection, error) {
+	if schema.FactoryInputMode != climanifest.EffectiveFactoryInputModeSignature {
+		return Projection{}, nil
+	}
+
 	switch completionContext.Target {
 	case TargetFlags:
 		return projectFlags(schema), nil
@@ -92,6 +96,10 @@ func projectValues(schema climanifest.EffectiveInputSchema, bindingID string) Pr
 }
 
 func parameterValues(parameter climanifest.EffectiveFactoryParameter) Projection {
+	if parameter.Sensitive {
+		return Projection{}
+	}
+
 	values := parameter.Choices
 	if len(values) == 0 && parameter.TypeHint == work.InvocationParameterTypeHintBooleanString {
 		values = []string{documentedBooleanTrue, documentedBooleanFalse}

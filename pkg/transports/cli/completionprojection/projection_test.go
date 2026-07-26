@@ -3,6 +3,7 @@ package completionprojection_test
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -219,6 +220,103 @@ func TestProjectValuesAddsDefaultsOnlyToDescriptionMetadata(t *testing.T) {
 	}
 }
 
+func TestProjectSensitiveParameterExposesOnlyItsAddressableFlag(t *testing.T) {
+	const (
+		sensitiveChoiceSentinel     = "sensitive-choice-sentinel"
+		sensitiveDefaultSentinel    = "sensitive-default-sentinel"
+		sensitivePrefixSentinel     = "sensitive-prefix-sentinel"
+		sensitiveDiagnosticSentinel = "sensitive-diagnostic-sentinel"
+	)
+	defaultValue := sensitiveDefaultSentinel
+	schema := effectiveSchema(climanifest.EffectiveFactoryParameter{
+		BindingID:             "credential",
+		PreferredExternalName: "credential",
+		Aliases:               []string{"auth"},
+		Description:           "credential input",
+		Choices:               []string{sensitiveChoiceSentinel},
+		DefaultValue:          &defaultValue,
+		TypeHint:              work.InvocationParameterTypeHintFilePath,
+		Sensitive:             true,
+		Bindings: []work.InvocationParameterBindingConfig{{
+			Kind: work.InvocationParameterBindingKindNamed,
+		}},
+	})
+
+	flags, err := completionprojection.Project(
+		context.Background(),
+		schema,
+		completionprojection.Context{
+			Target:        completionprojection.TargetFlags,
+			EnteredPrefix: sensitivePrefixSentinel,
+		},
+	)
+	if err != nil {
+		t.Fatal("flag projection returned an error")
+	}
+	wantFlags := completionprojection.Projection{Candidates: []completionprojection.Candidate{
+		flagCandidate("credential", "--credential", "credential input"),
+		flagCandidate("credential", "--auth", "credential input"),
+	}}
+	if !reflect.DeepEqual(flags, wantFlags) {
+		t.Fatal("sensitive parameter flag projection differs from addressable flag facts")
+	}
+
+	values, err := completionprojection.Project(
+		context.Background(),
+		schema,
+		completionprojection.Context{
+			Target:             completionprojection.TargetValues,
+			ParameterBindingID: "credential",
+			EnteredPrefix:      sensitivePrefixSentinel,
+		},
+	)
+	if err != nil {
+		t.Fatal("value projection returned an error")
+	}
+	if !reflect.DeepEqual(values, completionprojection.Projection{}) {
+		t.Fatal("sensitive parameter produced value or directive facts")
+	}
+
+	assertProjectionOmitsText(t, flags,
+		sensitiveChoiceSentinel,
+		sensitiveDefaultSentinel,
+		sensitivePrefixSentinel,
+		sensitiveDiagnosticSentinel,
+	)
+	assertProjectionOmitsText(t, values,
+		sensitiveChoiceSentinel,
+		sensitiveDefaultSentinel,
+		sensitivePrefixSentinel,
+		sensitiveDiagnosticSentinel,
+	)
+}
+
+func TestProjectNoSignatureReturnsNoSignatureCompletionFacts(t *testing.T) {
+	schema := climanifest.EffectiveInputSchema{
+		CommandID:        "you.run",
+		FactoryInputMode: climanifest.EffectiveFactoryInputModeCompatibility,
+		StaticInputs: []climanifest.EffectiveStaticInput{{
+			ID:              "you.run.arg.0",
+			Kind:            "argument",
+			ConsumesStdin:   true,
+			PublicSpellings: []string{"input"},
+		}},
+	}
+
+	for _, completionContext := range []completionprojection.Context{
+		{Target: completionprojection.TargetFlags},
+		{Target: completionprojection.TargetValues, ParameterBindingID: "input"},
+	} {
+		got, err := completionprojection.Project(context.Background(), schema, completionContext)
+		if err != nil {
+			t.Fatal("no-signature projection returned an error")
+		}
+		if !reflect.DeepEqual(got, completionprojection.Projection{}) {
+			t.Fatal("no-signature Factory produced signature-only completion facts")
+		}
+	}
+}
+
 func effectiveSchema(parameters ...climanifest.EffectiveFactoryParameter) climanifest.EffectiveInputSchema {
 	return climanifest.EffectiveInputSchema{
 		CommandID:         "you.run",
@@ -290,4 +388,29 @@ func cloneSchema(schema climanifest.EffectiveInputSchema) climanifest.EffectiveI
 		)
 	}
 	return cloned
+}
+
+func assertProjectionOmitsText(
+	t *testing.T,
+	projection completionprojection.Projection,
+	omitted ...string,
+) {
+	t.Helper()
+	for _, candidate := range projection.Candidates {
+		for _, text := range omitted {
+			if strings.Contains(candidate.Value, text) ||
+				strings.Contains(candidate.Description, text) ||
+				strings.Contains(candidate.ParameterBindingID, text) {
+				t.Fatal("projection retained confidential candidate text")
+			}
+		}
+	}
+	for _, directive := range projection.Directives {
+		for _, text := range omitted {
+			if strings.Contains(directive.Kind, text) ||
+				strings.Contains(directive.ParameterBindingID, text) {
+				t.Fatal("projection retained confidential directive text")
+			}
+		}
+	}
 }
