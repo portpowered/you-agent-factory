@@ -24,9 +24,9 @@ func TestLoaderReadFactoryConfigSourceUsesInjectedFileSystem(t *testing.T) {
 		readFile: func(string) ([]byte, error) { return nil, fs.ErrInvalid },
 	}
 	wantSource := filepath.Join("factory-dir", "factory.yaml")
-	loader := &Loader{
-		fileSystem: fileSystem,
-		loadAuthoredSource: func(path string) (factorydefinitions.AuthoredFactorySource, error) {
+	loader := New(
+		fileSystem,
+		func(path string) (factorydefinitions.AuthoredFactorySource, error) {
 			if path != "factory-dir" {
 				t.Fatalf("loaded path = %q, want factory-dir", path)
 			}
@@ -37,7 +37,27 @@ func TestLoaderReadFactoryConfigSourceUsesInjectedFileSystem(t *testing.T) {
 				Data:   []byte(`{"name":"injected"}`),
 			}, nil
 		},
-	}
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
 
 	source, factoryDir, split, err := loader.readFactoryConfigSource("factory-dir")
 	if err != nil {
