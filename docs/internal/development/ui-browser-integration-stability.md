@@ -9,20 +9,30 @@ Canonical rerun command: `make ui-integration-test` (`cd ui && bun run test:inte
 
 ## Runner contract
 
-`ui/scripts/ui-integration-runner.mjs` invokes Vitest with:
+`ui/scripts/ui-integration-runner.mjs` explicitly selects the mocked/static
+browser files and invokes Vitest with bounded file parallelism:
 
 ```text
-vitest run integration --no-file-parallelism --maxWorkers 1
+vitest run <mocked-browser-files...> --fileParallelism --maxWorkers 2
 ```
 
-Integration files therefore execute **serially** within the lane. Do not enable
-file parallelism or multiple Vitest workers for browser integration without
-revisiting every shared-resource note below.
+`UI_BROWSER_INTEGRATION_MAX_WORKERS` overrides the default for measured
+comparison runs. The production dashboard is built once before Vitest starts;
+each worker then owns a dynamically allocated preview/API port pair, Vite proxy,
+mock HTTP/SSE backend, Chromium process, and artifact subdirectory. Files can
+therefore execute concurrently without sharing mutable backend or browser
+state. Cases inside one file remain sequential until they adopt the test-scoped
+scenario fixture described in
+`plans/ui-browser-test-isolation.md`.
+
+The two real Go backend files are not members of this runner. They remain owned
+by `make ui-durable-session-real-backend-integration-test`. Node-only port and
+wait-helper checks are owned by `test:unit` and are not repeated here.
 
 ## Suites that must stay sequential
 
-Every browser integration file uses `describe.sequential` and shares a
-**lane-scoped preview harness** started in `beforeAll`:
+Each mocked browser file currently uses `describe.sequential` and shares a
+**worker-isolated, file-scoped preview harness** started in `beforeAll`:
 
 | Suite file | Shared resource | Why sequential |
 | --- | --- | --- |
@@ -45,7 +55,8 @@ context, but they **reuse** the shared preview process and the module-level
 production build cache (`globalThis.__agentFactoryBrowserIntegrationBuildComplete`).
 
 Do not parallelize cases inside these files until each case owns an isolated
-preview build, API port pair, and download directory.
+preview/API port pair, scenario state, browser context, artifact path, and
+download directory. The build itself is immutable and may remain shared.
 
 ## Isolation for concurrent lanes
 
@@ -57,6 +68,7 @@ preview build, API port pair, and download directory.
 | Preview/API ports | `findAvailablePort()` in `browser-test-harness.mjs`; optional overrides `AGENT_FACTORY_BROWSER_API_PORT` and `AGENT_FACTORY_BROWSER_PREVIEW_PORT` |
 | Production build | Lane-scoped `VITE_AGENT_FACTORY_API_ORIGIN` during `bun run build` |
 | Playwright traces/screenshots | `AGENT_FACTORY_BROWSER_ARTIFACT_DIR` (CI sets `.artifacts/ui-browser-integration/browser`) |
+| Parallel worker artifacts | `worker-<VITEST_POOL_ID>/` below the configured browser artifact root |
 | Captured downloads | Per-test `mkdtemp` directories; `installCapturedDownloadHook` stores blobs in page memory, not a shared folder |
 | Covered UI shards | Separate `coverage/shard-<index>` dirs (no overlap with browser preview ports) |
 

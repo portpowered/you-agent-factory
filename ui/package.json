@@ -52,7 +52,7 @@
     "storybook:wait-for-index": "wait-on --timeout 30000 http://127.0.0.1:6008/index.json",
     "storybook:test-runner:ci": "vitest run --config vitest.storybook.config.ts --project=storybook",
     "test:coverage": "node scripts/run-ui-coverage-with-timings.mjs",
-    "test:integration": "node scripts/run-ui-integration-with-timings.mjs",
+    "test:integration": "bun run build && node scripts/run-ui-integration-with-timings.mjs",
     "test:integration:durable-session-real-backend": "node scripts/run-durable-session-real-backend-integration-with-timings.mjs",
     "test:public-package-release": "vitest run scripts/verify-public-package-release.test.mjs scripts/public-package-publish.test.mjs",
     "test:public-package-retained-memory": "vitest run src/features/timeline/state/timeline/performance/replay-retained-memory.test.ts",

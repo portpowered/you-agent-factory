@@ -1,10 +1,9 @@
 // @vitest-environment node
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 
 import {
   browserScenarioTimeoutMs,
-  buildTimeoutMs,
   expectNoBrowserErrors,
   fillModelWorkerAddOperationDraft,
   fillWorkstationPromptBody,
@@ -12,11 +11,11 @@ import {
   openBrowserPage,
   resolvedDefaultFactorySessionID,
   selectLabeledComboboxOption,
-  startBrowserPreview,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
 } from "./browser-test-harness.mjs";
 import { waitForDashboardReady } from "./factory-name-preservation-browser-helpers.mjs";
+import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
 const editableGraphFactoryDefinition = {
   metadata: {
@@ -480,34 +479,10 @@ async function saveGraphDraft(page, toolbar) {
   }
 }
 
-describe.sequential("factory graph editor node placement browser integration", () => {
-  let preview = null;
-
-  beforeAll(async () => {
-    preview = await startBrowserPreview();
-  }, buildTimeoutMs);
-
-  afterAll(async () => {
-    if (!preview) {
-      return;
-    }
-
-    await Promise.race([
-      preview.stop(),
-      new Promise((resolve) => {
-        setTimeout(resolve, 15_000);
-      }),
-    ]);
-    preview = null;
-  }, 120_000);
-
-  afterEach(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  });
-
+describe.concurrent("factory graph editor node placement browser integration", () => {
   it(
     "places a newly added workstation near the visible viewport center after panning",
-    async () => {
+    async ({ preview }) => {
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: editableGraphFactoryDefinition,
@@ -571,7 +546,7 @@ describe.sequential("factory graph editor node placement browser integration", (
 
   it(
     "nudges a newly added workstation away from an existing viewport-center worker",
-    async () => {
+    async ({ preview }) => {
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: editableGraphFactoryDefinition,
@@ -636,7 +611,7 @@ describe.sequential("factory graph editor node placement browser integration", (
 
   it(
     "persists a newly added workstation in the saved factory payload with its flow position",
-    async () => {
+    async ({ preview }) => {
       const saveRequests = [];
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
@@ -716,7 +691,7 @@ describe.sequential("factory graph editor node placement browser integration", (
 
   it(
     "persists a manually dragged node position in the saved shared layout",
-    async () => {
+    async ({ preview }) => {
       const saveRequests = [];
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
