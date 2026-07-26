@@ -220,11 +220,11 @@ func namedArgumentValuesFromAny(value any) ([]string, error) {
 }
 
 func normalizeCompatibilityArguments(input NormalizeArgumentsInput) (NormalizedArguments, error) {
-	if len(input.NamedArgs) > 0 {
+	if argument, found := compatibilityNamedArgument(input); found {
 		return NormalizedArguments{}, &ArgumentError{
 			Code:     ArgumentErrorCodeInvalidActiveSignature,
 			Message:  "named arguments require a factory invocationSignature",
-			Argument: strings.TrimSpace(input.NamedArgs[0].Key),
+			Argument: argument,
 		}
 	}
 	if len(input.CompatibilityContent) > 0 {
@@ -264,6 +264,16 @@ func normalizeCompatibilityArguments(input NormalizeArgumentsInput) (NormalizedA
 		resolved.Source = InputSourceLabel(ArgumentSourceKindCompatibilityText)
 	}
 	return NormalizedArguments{CompatibilityInput: &resolved}, nil
+}
+
+func compatibilityNamedArgument(input NormalizeArgumentsInput) (string, bool) {
+	if len(input.NamedArgs) > 0 {
+		return strings.TrimSpace(input.NamedArgs[0].Key), true
+	}
+	if len(input.DirectArgs) > 0 {
+		return strings.TrimSpace(input.DirectArgs[0].Key), true
+	}
+	return "", false
 }
 
 func normalizeSignatureArguments(input NormalizeArgumentsInput) (NormalizedArguments, error) {
@@ -646,7 +656,7 @@ func validateArgumentValue(def parameterDefinition, value string) error {
 	if len(def.choices) > 0 && !slices.Contains(def.choices, value) {
 		return &ArgumentError{
 			Code:      ArgumentErrorCodeStringValidationMismatch,
-			Message:   fmt.Sprintf("parameter %q value %q is not one of the declared choices", def.name, value),
+			Message:   fmt.Sprintf("parameter %q value %s is not one of the declared choices", def.name, argumentValueDiagnostic(def, value)),
 			Parameter: def.name,
 		}
 	}
@@ -657,7 +667,7 @@ func validateArgumentValue(def parameterDefinition, value string) error {
 		if _, err := strconv.ParseBool(strings.TrimSpace(value)); err != nil {
 			return &ArgumentError{
 				Code:      ArgumentErrorCodeStringValidationMismatch,
-				Message:   fmt.Sprintf("parameter %q value %q is not a valid BOOLEAN_STRING", def.name, value),
+				Message:   fmt.Sprintf("parameter %q value %s is not a valid BOOLEAN_STRING", def.name, argumentValueDiagnostic(def, value)),
 				Parameter: def.name,
 			}
 		}
@@ -665,7 +675,7 @@ func validateArgumentValue(def parameterDefinition, value string) error {
 		if _, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err != nil {
 			return &ArgumentError{
 				Code:      ArgumentErrorCodeStringValidationMismatch,
-				Message:   fmt.Sprintf("parameter %q value %q is not a valid NUMBER_STRING", def.name, value),
+				Message:   fmt.Sprintf("parameter %q value %s is not a valid NUMBER_STRING", def.name, argumentValueDiagnostic(def, value)),
 				Parameter: def.name,
 			}
 		}
@@ -673,6 +683,13 @@ func validateArgumentValue(def parameterDefinition, value string) error {
 		return newArgumentError(ArgumentErrorCodeInvalidActiveSignature, fmt.Sprintf("parameter %q uses unsupported typeHint %q", def.name, def.typeHint), def.name, "")
 	}
 	return nil
+}
+
+func argumentValueDiagnostic(def parameterDefinition, value string) string {
+	if def.sensitive {
+		return "<redacted>"
+	}
+	return strconv.Quote(value)
 }
 
 func newArgumentError(code ArgumentErrorCode, message, parameter, argument string) *ArgumentError {

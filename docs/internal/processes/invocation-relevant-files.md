@@ -3,6 +3,14 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+- Selection-aware `you run` schema resolution belongs at the CLI read boundary:
+  resolve an already-selected named Factory config path or explicit Factory
+  source through the read-only Factory Definitions loader, check cancellation
+  before and after each synchronous lookup, and pass only the loaded invocation
+  signature into pure `climanifest.ComposeRunInputs`. Keep selection identity,
+  catalog provenance, and filesystem location out of the effective schema so
+  equivalent definitions produce the same downstream facts without
+  materialization, sessions, provider startup, or runtime probing.
 - A conductor-routed native integration must carry the complete cloned
   `workers.ProviderInferenceRequest` through `inferencecontract.InvocationRequest`.
   Keep provider selection and response delivery conductor-owned, while the
@@ -426,6 +434,11 @@ response-stream output.
   alias-backed, and compatibility fallback inputs. Transport stories should
   adapt CLI or API payloads into `NormalizeArgumentsInput` rather than
   re-implementing binding, default, or validation rules at the boundary.
+  Compare transport parity through canonical values and semantic provenance
+  (explicit versus default) because physical CLI and structured API source
+  labels intentionally differ. Validation diagnostics for sensitive parameters
+  must retain the stable error code and parameter identity while replacing the
+  rejected value with the Work-owned redaction marker.
 - JavaScript named-factory lookup carries the authored `argsSchema` and `defaultPolicy` through `pkg/orchestrators/javascript/source/` into `pkg/factory/sessions/execution/PrepareStart`. Validate resolved arguments before runtime execution and resolve policy with that default; `workflowruntime.Request.ArgsSchema` preserves the same no-side-effect guard for direct runtime callers.
 - `pkg/work/invocation/interpolation.go` owns runtime `${parameter}` interpolation
   for signature-backed worker and workstation fields plus pre-dispatch
@@ -745,11 +758,25 @@ response-stream output.
   Static-plus-Factory composition is owned by
   `pkg/transports/cli/climanifest.ComposeRunInputs`: pass the validated `you.run`
   command and only the selected Factory's `InvocationSignatureConfig`. The pure
-  projection keeps manifest inputs separate from dynamic Factory parameters and
+  projection keeps manifest inputs separate from dynamic Factory parameters,
+  detaches all returned collections, and exposes canonical/preferred names,
+  default shape, normalized value mode, cardinality/consumption, type hints,
+  sensitivity, and bindings without requiring downstream adapters to reinterpret
+  the authored signature. It
   rejects command-name, long-name, alias, shorthand, positional, stdin-owner,
   and stable-binding collisions with sorted diagnostics that identify both
-  owners. Named and explicit-file selectors must not enter this composition
+  owners. Check canonical parameter names, preferred external names, and every
+  alias independently after applying the shared Work normalization trimming;
+  do not limit reserved-spelling checks to parameters with named CLI bindings.
+  Named and explicit-file selectors must not enter this composition
   policy; equivalent selected signatures produce equivalent results.
+  Preserve a nil selected signature as explicit compatibility mode rather than
+  replacing it with an empty active signature: compatibility mode exposes only
+  static inputs and delegates positional text, stdin, and API content to the
+  Work-owned compatibility normalizer. It must not synthesize Factory
+  parameters, unknown-named policy, defaults, validation, help, or completion
+  facts, and both CLI-shaped and API-structured named inputs must fail instead
+  of being ignored.
   Keep effective-scope spelling and inheritance checks in
   `internal/contractvalidator` so schema-valid manifests still receive stable,
   path-specific semantic diagnostics before generation or consumption.
