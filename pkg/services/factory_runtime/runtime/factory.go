@@ -58,14 +58,23 @@ type factoryImpl struct {
 	// completeCh is closed when Run() returns (either by termination or error).
 	// WaitToComplete() returns this channel.
 	completeCh           chan struct{}
+	completeOnce         sync.Once
+	runCancel            context.CancelFunc
 	usePool              bool
 	operatorMoveRequests map[string]appliedOperatorMove
+	dispatchIntents      map[string]plannedDispatch
+	retiredDispatches    map[string]factory.AcceptDispatchResultRequest
+	checkpoints          map[string]factory.Checkpoint
 	resumeDrainPending   bool
 }
 
 type appliedOperatorMove struct {
 	workID string
 	result work.OperatorMoveResult
+}
+
+type plannedDispatch struct {
+	request factory.PlanDispatchRequest
 }
 
 type runtimeConfig struct {
@@ -448,6 +457,9 @@ func newFactoryImpl(cfg *runtimeConfig, eng *engine.FactoryEngine, pool dispatch
 		completeCh:           make(chan struct{}),
 		usePool:              usePool,
 		operatorMoveRequests: make(map[string]appliedOperatorMove),
+		dispatchIntents:      make(map[string]plannedDispatch),
+		retiredDispatches:    make(map[string]factory.AcceptDispatchResultRequest),
+		checkpoints:          make(map[string]factory.Checkpoint),
 	}
 }
 
@@ -462,12 +474,20 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 	f.mu.Unlock()
 	f.recordStateChange(previousState, interfaces.FactoryStateRunning, "run started")
 
-	defer close(f.completeCh)
+	defer f.completeOnce.Do(func() { close(f.completeCh) })
 
 	// Use a derived context for the engine so we can stop the engine before
 	// stopping the pool (prevents send-on-closed-channel panics).
 	engCtx, cancelEng := context.WithCancel(ctx)
 	defer cancelEng()
+	f.mu.Lock()
+	f.runCancel = cancelEng
+	f.mu.Unlock()
+	defer func() {
+		f.mu.Lock()
+		f.runCancel = nil
+		f.mu.Unlock()
+	}()
 
 	if f.usePool {
 		f.pool.Start()
