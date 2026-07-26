@@ -25,6 +25,7 @@ type Clock interface {
 
 // Service supervises cron, poller, and watcher automation using injected collaborators.
 type Service struct {
+	automations.ReadyUnimplementedService
 	loggerValue       *zap.Logger
 	clock             Clock
 	commandRunnerEdge workers.CommandRunner
@@ -80,117 +81,6 @@ func NewService(
 		resolveTemplates,
 		executionPolicy,
 	)
-}
-
-// Ready reports that the concrete Automations root is available for published
-// contract slices.
-func (s *Service) Ready(context.Context, automations.ReadyRequest) (automations.ReadyResult, error) {
-	if s == nil {
-		return automations.ReadyResult{}, &automations.Error{
-			Op:   "Ready",
-			Code: automations.ErrorCodeNotReady,
-			Err:  automations.ErrNotReady,
-		}
-	}
-	return automations.ReadyResult{Ready: true}, nil
-}
-
-// Reconcile is the published Automations root reconcile slice. Nested
-// reconciliation ownership remains an IMP-AUTO packet; this additive stub keeps
-// the concrete root aligned with the published Service contract.
-func (s *Service) Reconcile(context.Context, automations.ReconcileRequest) (automations.ReconcileResult, error) {
-	if s == nil {
-		return automations.ReconcileResult{}, &automations.Error{
-			Op:   "Reconcile",
-			Code: automations.ErrorCodeNotReady,
-			Err:  automations.ErrNotReady,
-		}
-	}
-	return automations.ReconcileResult{}, nil
-}
-
-// StartSource is the published Automations root source-start slice. Nested
-// source ownership remains an IMP-AUTO packet; this additive stub keeps the
-// concrete root aligned with the published Service contract.
-func (s *Service) StartSource(context.Context, automations.StartSourceRequest) (automations.StartSourceResult, error) {
-	if s == nil {
-		return automations.StartSourceResult{}, &automations.Error{
-			Op:   "StartSource",
-			Code: automations.ErrorCodeNotReady,
-			Err:  automations.ErrNotReady,
-		}
-	}
-	return automations.StartSourceResult{}, nil
-}
-
-// StopSource is the published Automations root source-stop slice. Nested source
-// ownership remains an IMP-AUTO packet; this additive stub keeps the concrete
-// root aligned with the published Service contract.
-func (s *Service) StopSource(context.Context, automations.StopSourceRequest) (automations.StopSourceResult, error) {
-	if s == nil {
-		return automations.StopSourceResult{}, &automations.Error{
-			Op:   "StopSource",
-			Code: automations.ErrorCodeNotReady,
-			Err:  automations.ErrNotReady,
-		}
-	}
-	return automations.StopSourceResult{}, nil
-}
-
-// WaitSource is the published Automations root source wait/join slice. Nested
-// source ownership remains an IMP-AUTO packet; this additive stub keeps the
-// concrete root aligned with the published Service contract.
-func (s *Service) WaitSource(context.Context, automations.WaitSourceRequest) (automations.WaitSourceResult, error) {
-	if s == nil {
-		return automations.WaitSourceResult{}, &automations.Error{
-			Op:   "WaitSource",
-			Code: automations.ErrorCodeNotReady,
-			Err:  automations.ErrNotReady,
-		}
-	}
-	return automations.WaitSourceResult{}, nil
-}
-
-// SourceStatus is the published Automations root source-status observation
-// slice. Nested source ownership remains an IMP-AUTO packet; this additive stub
-// keeps the concrete root aligned with the published Service contract.
-func (s *Service) SourceStatus(context.Context, automations.SourceStatusRequest) (automations.SourceStatusResult, error) {
-	if s == nil {
-		return automations.SourceStatusResult{}, &automations.Error{
-			Op:   "SourceStatus",
-			Code: automations.ErrorCodeNotReady,
-			Err:  automations.ErrNotReady,
-		}
-	}
-	return automations.SourceStatusResult{}, nil
-}
-
-// GetStatus is the published Automations root instance-status query slice.
-// Nested cursor/status ownership remains an IMP-AUTO packet; this additive stub
-// keeps the concrete root aligned with the published Service contract.
-func (s *Service) GetStatus(context.Context, automations.GetStatusRequest) (automations.GetStatusResult, error) {
-	if s == nil {
-		return automations.GetStatusResult{}, &automations.Error{
-			Op:   "GetStatus",
-			Code: automations.ErrorCodeNotReady,
-			Err:  automations.ErrNotReady,
-		}
-	}
-	return automations.GetStatusResult{}, nil
-}
-
-// GetCursor is the published Automations root cursor/checkpoint query slice.
-// Nested cursor ownership remains an IMP-AUTO packet; this additive stub keeps
-// the concrete root aligned with the published Service contract.
-func (s *Service) GetCursor(context.Context, automations.GetCursorRequest) (automations.GetCursorResult, error) {
-	if s == nil {
-		return automations.GetCursorResult{}, &automations.Error{
-			Op:   "GetCursor",
-			Code: automations.ErrorCodeNotReady,
-			Err:  automations.ErrNotReady,
-		}
-	}
-	return automations.GetCursorResult{}, nil
 }
 
 func (s *Service) logger() *zap.Logger {
