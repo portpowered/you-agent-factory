@@ -17,8 +17,3 @@ type WorkerExecutor interface {
 type WorkstationRequestExecutor interface {
 	Execute(context.Context, workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error)
 }
-
-// Runner executes one normalized runner request.
-type Runner interface {
-	Execute(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error)
-}

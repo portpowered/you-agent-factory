@@ -367,11 +367,20 @@ func validateRequest(request workers.RunnerExecutionRequest, tokens []workers.To
 	for tokenIndex, token := range tokens {
 		for contentIndex, content := range token.Color.Content {
 			if content.Type.Normalized() == work.WorkContentPartTypeImage {
+				location := fmt.Sprintf(
+					"input_tokens[%d].color.content[%d]",
+					tokenIndex,
+					contentIndex,
+				)
+				if content.File != "" {
+					location += fmt.Sprintf(".file: image content %q", content.File)
+				} else {
+					location += ": image content"
+				}
 				return badRequest(
 					fmt.Sprintf(
-						"input_tokens[%d].color.content[%d]: image content is not supported by script runner",
-						tokenIndex,
-						contentIndex,
+						"%s is not supported by script runner; configure modelProvider codex for image-capable execution",
+						location,
 					),
 					nil,
 				)

@@ -1756,3 +1756,10 @@ response-stream output.
   cancellation separately from deadline timeout, retains partial streams, marks
   timeout diagnostics, and records one matching terminal response. Pre-start
   cancellation returns without command or event effects.
+- Script-worker cutovers keep the generic workstation request/result adapter
+  thin: construct and resolve the configured implementation through the private
+  immutable Runners registry, invoke only the common `workers.Runner`, and map
+  its detached result and normalized failure metadata back to `WorkResult`.
+  Compatibility command edges that expose only `Run` may publish one complete
+  stdout chunk followed by one complete stderr chunk; real process edges retain
+  live mixed-stream ordering through `RunStreaming`.

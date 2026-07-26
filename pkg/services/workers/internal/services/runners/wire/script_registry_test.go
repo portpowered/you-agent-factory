@@ -25,7 +25,7 @@ func TestNewScriptRegistryIsInertAndResolvesDetachedMetadata(t *testing.T) {
 		docsCalls.Add(1)
 		return map[string]string{"arg": "original"}, nil
 	})
-	config := script.Config{
+	config := runners.ScriptConfig{
 		Command:          "fixture",
 		Args:             []string{`{{ index .Docs "arg" }}`},
 		FactoryDirectory: "factory-root",
@@ -85,7 +85,7 @@ func TestNewScriptRegistryIsInertAndResolvesDetachedMetadata(t *testing.T) {
 func TestScriptRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
 	command := &scriptConformanceCommand{}
 	registry, err := NewScriptRegistry(
-		script.Config{Command: "fixture", Args: []string{"{{ .Context.Env.FIXTURE }}"}},
+		runners.ScriptConfig{Command: "fixture", Args: []string{"{{ .Context.Env.FIXTURE }}"}},
 		scriptDependencies(command, func(string) (map[string]string, error) {
 			return map[string]string{}, nil
 		}),
@@ -135,7 +135,7 @@ func TestScriptRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
 func TestScriptRegistryResolveAndExecuteConcurrently(t *testing.T) {
 	command := &scriptConformanceCommand{}
 	registry, err := NewScriptRegistry(
-		script.Config{Command: "fixture"},
+		runners.ScriptConfig{Command: "fixture"},
 		scriptDependencies(command, func(string) (map[string]string, error) {
 			return map[string]string{}, nil
 		}),
@@ -214,8 +214,8 @@ func (command *scriptConformanceCommand) Request() workers.CommandRequest {
 func scriptDependencies(
 	command workers.CommandRunner,
 	docs workers.FactoryDocsLoader,
-) script.Dependencies {
-	return script.Dependencies{
+) runners.ScriptDependencies {
+	return runners.ScriptDependencies{
 		CommandRunner: command,
 		FactoryDocs:   docs,
 		Now:           func() time.Time { return time.Unix(0, 0).UTC() },

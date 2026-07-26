@@ -237,7 +237,8 @@ func (s *Service) Build(
 			return Result{}, fmt.Errorf("script worker factory is required")
 		}
 		direct, err := s.scriptFactory.New(
-			def, logger, runtimeConfig.FactoryDir(), scriptRecorder, clock,
+			def, logger, runtimeConfig.FactoryDir(),
+			inferenceProgressPublisher, scriptRecorder, clock,
 		)
 		if err != nil {
 			return Result{}, err

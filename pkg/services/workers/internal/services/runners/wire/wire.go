@@ -16,15 +16,28 @@ func NewService(registrations []runners.Registration) (runners.Service, error) {
 // NewScriptRegistry constructs one Script Runner from explicit effects and
 // publishes it through the immutable private registry.
 func NewScriptRegistry(
-	config script.Config,
-	dependencies script.Dependencies,
+	config runners.ScriptConfig,
+	dependencies runners.ScriptDependencies,
 ) (runners.Service, error) {
-	implementation, err := script.New(config, dependencies)
+	implementation, err := script.New(
+		script.Config{
+			Command:          config.Command,
+			Args:             append([]string(nil), config.Args...),
+			FactoryDirectory: config.FactoryDirectory,
+		},
+		script.Dependencies{
+			CommandRunner: dependencies.CommandRunner,
+			FactoryDocs:   dependencies.FactoryDocs,
+			Now:           dependencies.Now,
+			Publish:       dependencies.Publish,
+			Record:        dependencies.Record,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
 	return NewService([]runners.Registration{{
-		Identity: script.Identity,
+		Identity: runners.ScriptIdentity,
 		Metadata: scriptMetadata(),
 		Runner:   implementation,
 	}})
@@ -32,7 +45,7 @@ func NewScriptRegistry(
 
 func scriptMetadata() workers.RunnerMetadata {
 	return workers.RunnerMetadata{
-		ID:          script.Identity,
+		ID:          runners.ScriptIdentity,
 		DisplayName: "Script",
 		Capabilities: workers.NewCapabilities(
 			workers.RunnerOptionalCapabilitySupport{

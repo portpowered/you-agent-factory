@@ -242,7 +242,7 @@ func TestScriptExecutor_RejectsImageContentBeforeRunner(t *testing.T) {
 		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if !strings.Contains(result.Error, `input_tokens[0].color.content[0].file`) ||
-		!strings.Contains(result.Error, `script executor`) ||
+		!strings.Contains(result.Error, `script runner`) ||
 		!strings.Contains(result.Error, `configure modelProvider codex`) {
 		t.Fatalf("Error = %q", result.Error)
 	}
@@ -726,7 +726,7 @@ func TestScriptExecutor_AttachesCommandDiagnosticsToWorkResult(t *testing.T) {
 	if diag.ExitCode != 3 {
 		t.Fatalf("diagnostic exit code = %d, want 3", diag.ExitCode)
 	}
-	if diag.Env["SCRIPT_DIAG_VAR"] != MetadataOnlyCommandEnvValue {
+	if diag.Env["SCRIPT_DIAG_VAR"] != workerexecution.MetadataOnlyCommandEnvValue {
 		t.Fatalf("diagnostic env SCRIPT_DIAG_VAR = %q, want metadata marker", diag.Env["SCRIPT_DIAG_VAR"])
 	}
 }
@@ -769,10 +769,10 @@ func TestScriptExecutor_CommandDiagnosticsRedactSensitiveEnvWithoutChangingExecu
 		t.Fatal("expected command diagnostics on work result")
 	}
 	diag := result.Diagnostics.Command
-	if got := diag.Env["SCRIPT_API_TOKEN"]; got != RedactedCommandEnvValue {
+	if got := diag.Env["SCRIPT_API_TOKEN"]; got != workerexecution.RedactedCommandEnvValue {
 		t.Fatalf("diagnostic env SCRIPT_API_TOKEN = %q, want redaction marker", got)
 	}
-	if got := diag.Env["SCRIPT_CONTEXT_DIR"]; got != MetadataOnlyCommandEnvValue {
+	if got := diag.Env["SCRIPT_CONTEXT_DIR"]; got != workerexecution.MetadataOnlyCommandEnvValue {
 		t.Fatalf("diagnostic env SCRIPT_CONTEXT_DIR = %q, want metadata marker", got)
 	}
 	if got := diag.Env["CI"]; got != "true" {

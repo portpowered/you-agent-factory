@@ -105,7 +105,9 @@ func (r ExecCommandRunner) RunStreaming(ctx context.Context, req CommandRequest,
 		RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
 	})
 	if !ok {
-		return CommandResult{}, errors.New("injected platform command runner does not support streaming")
+		result, err := platformRunner.Run(ctx, effectRequest(req))
+		publishCompleteCommandOutput(observer, result.Stdout, result.Stderr)
+		return commandResult(result), err
 	}
 	result, err := streaming.RunStreaming(ctx, effectRequest(req), platformprocess.OutputChunkObserver(observer))
 	return commandResult(result), err
@@ -134,6 +136,52 @@ func (r LoggingCommandRunner) Run(ctx context.Context, req CommandRequest) (Comm
 	logger.Info("command runner: request completed", commandCompletionLogFields(req, result, duration, commandResultStatus(ctx, result, err), err)...)
 	logger.Verbose("command runner: verbose output details", commandOutputDetailsLogFields(req, result, duration)...)
 	return result, err
+}
+
+// RunStreaming preserves command logging while forwarding live chunks when the
+// injected edge supports them. Legacy deterministic test edges fall back to
+// one complete chunk per available stream.
+func (r LoggingCommandRunner) RunStreaming(
+	ctx context.Context,
+	req CommandRequest,
+	observer OutputChunkObserver,
+) (CommandResult, error) {
+	logger := logging.EnsureLogger(r.Logger)
+	if r.Runner == nil {
+		return CommandResult{}, errors.New("workers logging command runner is required")
+	}
+	if r.Clock == nil {
+		return CommandResult{}, errors.New("workers logging command clock is required")
+	}
+	logger.Info("command runner: request received", commandRequestLogFields(req)...)
+	logger.Verbose("command runner: verbose request details", commandRequestDetailsLogFields(req)...)
+	started := r.Clock.Now()
+	var result CommandResult
+	var err error
+	if streaming, ok := r.Runner.(interface {
+		RunStreaming(context.Context, CommandRequest, OutputChunkObserver) (CommandResult, error)
+	}); ok {
+		result, err = streaming.RunStreaming(ctx, req, observer)
+	} else {
+		result, err = r.Runner.Run(ctx, req)
+		publishCompleteCommandOutput(observer, result.Stdout, result.Stderr)
+	}
+	duration := r.Clock.Now().Sub(started)
+	logger.Info("command runner: request completed", commandCompletionLogFields(req, result, duration, commandResultStatus(ctx, result, err), err)...)
+	logger.Verbose("command runner: verbose output details", commandOutputDetailsLogFields(req, result, duration)...)
+	return result, err
+}
+
+func publishCompleteCommandOutput(observer OutputChunkObserver, stdout, stderr []byte) {
+	if observer == nil {
+		return
+	}
+	if len(stdout) > 0 {
+		observer(OutputStreamStdout, append([]byte(nil), stdout...))
+	}
+	if len(stderr) > 0 {
+		observer(OutputStreamStderr, append([]byte(nil), stderr...))
+	}
 }
 
 func SubprocessRequestBase(dispatch work.WorkDispatch) CommandRequest {
