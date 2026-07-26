@@ -31,27 +31,13 @@ func TestBuildReturnsDetachedBindingsInRequestOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
-	if len(first.Bindings) != 2 ||
-		first.Bindings[0].RoleName != "writer" ||
-		first.Bindings[0].RoleKind != workers.RuntimeBuildRoleKindWorker ||
-		first.Bindings[1].RoleName != "review" ||
-		first.Bindings[1].RoleKind != workers.RuntimeBuildRoleKindWorkstation {
-		t.Fatalf("Build() bindings = %#v, want writer then review", first.Bindings)
-	}
-	if first.RunnerSelection.RunnerID != workers.RunnerIDCodex ||
-		first.RunnerSelection.Source != workers.RunnerSelectionSourceFactory {
-		t.Fatalf("Build() runner selection = %#v", first.RunnerSelection)
-	}
+	assertOrderedBindings(t, first)
 
 	request.Roles[0].Name = "mutated-request"
 	*request.Opening.InvocationSkipPermissionsOverride = false
 	request.Opening.MockWorkers.MockWorkers[0].WorkInputs[0].WorkID = "mutated-work"
 	*request.Opening.MockWorkers.MockWorkers[0].RejectConfig.ExitCode = 99
-	if !*retained[0].InvocationSkipPermissionsOverride ||
-		retained[0].MockWorkers.MockWorkers[0].WorkInputs[0].WorkID != "work-1" ||
-		*retained[0].MockWorkers.MockWorkers[0].RejectConfig.ExitCode != 17 {
-		t.Fatalf("retained opening changed with request mutation: %#v", retained[0])
-	}
+	assertRetainedOpening(t, retained[0])
 	first.Bindings[0].RoleName = "mutated-result"
 	*retained[0].InvocationSkipPermissionsOverride = false
 	retained[0].MockWorkers.MockWorkers[0].WorkInputs[0].WorkID = "mutated-retained"
@@ -61,6 +47,39 @@ func TestBuildReturnsDetachedBindingsInRequestOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second Build() error = %v", err)
 	}
+	assertDetachedSecondBuild(t, second, retained)
+}
+
+func assertOrderedBindings(t *testing.T, result workers.RuntimeBuildResult) {
+	t.Helper()
+	if len(result.Bindings) != 2 ||
+		result.Bindings[0].RoleName != "writer" ||
+		result.Bindings[0].RoleKind != workers.RuntimeBuildRoleKindWorker ||
+		result.Bindings[1].RoleName != "review" ||
+		result.Bindings[1].RoleKind != workers.RuntimeBuildRoleKindWorkstation {
+		t.Fatalf("Build() bindings = %#v, want writer then review", result.Bindings)
+	}
+	if result.RunnerSelection.RunnerID != workers.RunnerIDCodex ||
+		result.RunnerSelection.Source != workers.RunnerSelectionSourceFactory {
+		t.Fatalf("Build() runner selection = %#v", result.RunnerSelection)
+	}
+}
+
+func assertRetainedOpening(t *testing.T, opening workers.RuntimeBuildOpeningOptions) {
+	t.Helper()
+	if !*opening.InvocationSkipPermissionsOverride ||
+		opening.MockWorkers.MockWorkers[0].WorkInputs[0].WorkID != "work-1" ||
+		*opening.MockWorkers.MockWorkers[0].RejectConfig.ExitCode != 17 {
+		t.Fatalf("retained opening changed with request mutation: %#v", opening)
+	}
+}
+
+func assertDetachedSecondBuild(
+	t *testing.T,
+	second workers.RuntimeBuildResult,
+	retained []workers.RuntimeBuildOpeningOptions,
+) {
+	t.Helper()
 	if second.Bindings[0].RoleName != "writer" ||
 		second.Bindings[1].RoleName != "review" {
 		t.Fatalf("second Build() bindings = %#v, want detached originals", second.Bindings)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
 )
@@ -16,6 +17,24 @@ type recordingRuntimeAssembly struct {
 }
 
 var _ runtimeassembly.Service = (*recordingRuntimeAssembly)(nil)
+
+type inertConstructionSpy struct {
+	currentRuntimeCalls int
+	commandCalls        int
+}
+
+func (spy *inertConstructionSpy) CurrentRuntime() *factorysessions.LiveRuntime {
+	spy.currentRuntimeCalls++
+	return nil
+}
+
+func (spy *inertConstructionSpy) Run(
+	context.Context,
+	workers.CommandRequest,
+) (workers.CommandResult, error) {
+	spy.commandCalls++
+	return workers.CommandResult{}, errors.New("unexpected runner execution")
+}
 
 func (assembly *recordingRuntimeAssembly) Build(
 	_ context.Context,
@@ -115,5 +134,49 @@ func TestBuildRuntimeRequiresPrivateAssemblyCapability(t *testing.T) {
 			len(result.Bindings) != 0 {
 			t.Fatalf("BuildRuntime() result = %#v, want no usable bindings", result)
 		}
+	}
+}
+
+func TestRuntimeAssemblyConstructionAndBuildAreInert(t *testing.T) {
+	t.Parallel()
+
+	spy := &inertConstructionSpy{}
+	assembly, err := newRuntimeAssembly(nil)
+	if err != nil {
+		t.Fatalf("newRuntimeAssembly() error = %v", err)
+	}
+	var root workers.Service = &Service{
+		sessions:              spy,
+		providerCommandRunner: spy,
+		scriptCommandRunner:   spy,
+		runtimeAssembly:       assembly,
+	}
+	if spy.currentRuntimeCalls != 0 || spy.commandCalls != 0 {
+		t.Fatalf(
+			"construction side effects = current runtime %d, commands %d; want zero",
+			spy.currentRuntimeCalls,
+			spy.commandCalls,
+		)
+	}
+
+	result, err := root.BuildRuntime(t.Context(), workers.RuntimeBuildRequest{
+		RunnerID: workers.RunnerIDCodex,
+		Roles: []workers.RuntimeBuildRoleRequest{
+			{Name: "writer", Kind: workers.RuntimeBuildRoleKindWorker},
+			{Name: "review", Kind: workers.RuntimeBuildRoleKindWorkstation},
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildRuntime() error = %v", err)
+	}
+	if len(result.Bindings) != 2 {
+		t.Fatalf("BuildRuntime() bindings = %#v, want two", result.Bindings)
+	}
+	if spy.currentRuntimeCalls != 0 || spy.commandCalls != 0 {
+		t.Fatalf(
+			"assembly side effects = current runtime %d, commands %d; want zero",
+			spy.currentRuntimeCalls,
+			spy.commandCalls,
+		)
 	}
 }
