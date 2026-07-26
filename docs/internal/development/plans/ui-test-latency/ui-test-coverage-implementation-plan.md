@@ -717,6 +717,7 @@ cause rather than runner alone:
 | Aggregate selection switching | `current-selection-widget.selection-switch.test.tsx` | 483ms | Removed the four-case Vitest suite. Workstation, worker, resource, work-item, and work-state dispatch plus cross-selection resets already run in the isolated Bun widget and save contracts and in each detail-card owner. |
 | Public barrel self-tests | five feature `public/index.ts` files and three smoke tests | 93ms in the profiled Vitest smoke plus Bun import work | Removed the unused aggregate barrels and the tests whose only consumer was the barrel itself. Focused public subpaths remain available where a stable single-capability contract is useful. |
 | Stream recovery hook | `useFactoryEventStream.stale-cursor.test.tsx` | 405ms | The six stale-cursor recovery contracts now run under Bun using the shared global-stub and spy compatibility seam; the hook remains beside its event-stream owner. |
+| Cross-feature import workflow | `react-flow-current-activity-card-import-flows.test.tsx` | 457ms | Removed the eight-case current-activity omnibus after reconciling PNG parsing/drop errors, preview dialogs, activation errors, and messages with import owners. A three-case Bun controller contract now owns preview readiness, successful close/refresh, and failed activation retention. |
 | Current-selection editing | prompt-edit and header save/discard integration tests | 443–670ms | Removed both duplicate widget suites. Invalid-to-valid prompt recovery and save submission run in the Bun save contract; exact header-only workstation and worker actions run in their feature-owned detail-card contracts. |
 | Cross-owner trace wiring | `dashboard-trace-wiring.component.test.tsx` | 616ms | Removed the app-shell duplicate after reconciling event lineage, trace merging, trace rendering, and selection callbacks with their timeline, trace, and current-selection owners. |
 
@@ -725,11 +726,10 @@ widget mounts, and process-global module mocks. Assertion execution is not the
 primary cost. Migration therefore starts by narrowing ownership and dependency
 seams; changing only the runner for an app-sized test preserves most latency.
 
-After the stale-cursor and current-selection header reconciliation, the complete
-component command owns 232 Bun files and 117 remaining Vitest files and
-completes locally in 76.71s: 36.85s in Bun and 39.86s in Vitest. The last
-measured unit lane is 18.05s, so the combined non-browser correctness feedback
-is approximately 94.76s.
+After the import-controller reconciliation, the complete component command owns
+233 Bun files and 115 remaining Vitest files and completes locally in 76.47s:
+37.65s in Bun and 38.82s in Vitest. The last measured unit lane is 18.05s, so
+the combined non-browser correctness feedback is approximately 94.52s.
 
 The same reconciliation removed the canonical-section omnibus widget loop.
 Every detail owner structurally composes `SelectionDetailLayout`; the base
