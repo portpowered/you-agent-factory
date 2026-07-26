@@ -17,6 +17,18 @@ const viewports = [
   { height: 900, width: 1440 },
 ];
 
+const catalogResponse = {
+  factories: [
+    {
+      json: { id: "builtin-example", name: "example" },
+      name: "@you/example",
+      project: "builtin-example",
+      slug: "example",
+      yaml: "id: builtin-example\nname: example\n",
+    },
+  ],
+};
+
 describe.sequential("Packaged Factories production route", () => {
   let preview = null;
 
@@ -39,6 +51,17 @@ describe.sequential("Packaged Factories production route", () => {
 
         try {
           await browserPage.page.setViewportSize(viewport);
+          // The Vite preview serves the dashboard only. Fulfill the backend
+          // contract here; its handler response is verified in Go.
+          await browserPage.page.route("**/packaged-factories", (route) => {
+            if (new URL(route.request().url()).pathname !== "/packaged-factories") {
+              return route.continue();
+            }
+            return route.fulfill({
+              body: JSON.stringify(catalogResponse),
+              contentType: "application/json",
+            });
+          });
           await browserPage.page.goto(
             new URL("packaged-factories", preview.previewURL).href,
             { waitUntil: "domcontentloaded" },
