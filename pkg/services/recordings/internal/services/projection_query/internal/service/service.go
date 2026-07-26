@@ -1,6 +1,8 @@
 package service
 
 import (
+	"fmt"
+
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/events"
@@ -24,7 +26,18 @@ func (*Service) ReconstructFactoryWorldState(
 	events []factorydefinitions.FactoryEvent,
 	selectedTick int,
 ) (factorydefinitions.FactoryWorldState, error) {
-	return projections.ReconstructCanonicalFactoryWorldState(events, selectedTick)
+	if selectedTick < 0 {
+		return factorydefinitions.FactoryWorldState{}, recordings.ErrInvalidProjectionInput
+	}
+	state, err := projections.ReconstructCanonicalFactoryWorldState(events, selectedTick)
+	if err != nil {
+		return factorydefinitions.FactoryWorldState{}, fmt.Errorf(
+			"%w: %v",
+			recordings.ErrInvalidProjectionInput,
+			err,
+		)
+	}
+	return state, nil
 }
 
 func (*Service) SimpleDashboardRenderData(
