@@ -1,3 +1,5 @@
+import "../../../../../testing/vitest-dom-capabilities.setup";
+
 import { render, screen } from "@testing-library/react";
 import { DETAIL_CARD_NOW } from "../../../base/components/detail-card/detail-card-test-helpers";
 import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";

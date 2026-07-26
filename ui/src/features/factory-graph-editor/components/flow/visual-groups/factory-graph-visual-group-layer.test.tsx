@@ -1,4 +1,6 @@
 // biome-ignore-all lint/style/noExcessiveLinesPerFile: visual-group layer interaction cases share one React Flow rendering harness.
+import "../../../../../testing/vitest-dom-capabilities.setup";
+
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ReactFlow, ReactFlowProvider } from "@xyflow/react";

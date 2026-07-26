@@ -18,7 +18,6 @@ import {
 
 test("buildUiCoverageMergePhases runs follow-on phases without the main pass", () => {
   expect(buildUiCoverageMergePhases().map((phase) => phase.name)).toEqual([
-    "Isolated React Flow covered pass",
     "Blob report merge pass",
     "Standalone script-style test",
   ]);
@@ -81,7 +80,7 @@ test("runUiCoverageMerge ignores stale blobs before running merge phases", () =>
   expect(existsSync(join(reportsDir, "main.json"))).toBe(false);
   expect(existsSync(join(reportsDir, "main-shard-99.json"))).toBe(false);
   expect(existsSync(join(reportsDir, "main-shard-1-timings.json"))).toBe(false);
-  expect(spawn).toHaveBeenCalledTimes(3);
+  expect(spawn).toHaveBeenCalledTimes(2);
   expect(exit).not.toHaveBeenCalled();
 
   log.mockRestore();
@@ -148,7 +147,7 @@ test("runUiCoverage in merge mode runs follow-on phases when shard blobs exist",
     spawn,
   });
 
-  expect(spawn).toHaveBeenCalledTimes(3);
+  expect(spawn).toHaveBeenCalledTimes(2);
   expect(log).toHaveBeenCalledWith(
     `${phaseLogPrefix} Merged main covered pass slowest test files (top 1):`,
   );

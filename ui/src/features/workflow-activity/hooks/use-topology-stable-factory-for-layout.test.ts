@@ -1,9 +1,8 @@
-import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
-import { useTopologyStableFactoryForLayout } from "./use-topology-stable-factory-for-layout";
+import { resolveTopologyStableFactory } from "./use-topology-stable-factory-for-layout";
 
 function cloneDefinition(): CanonicalFactoryDefinition {
   return structuredClone(baseFactoryDefinition);
@@ -20,16 +19,11 @@ describe("useTopologyStableFactoryForLayout", () => {
       },
     ];
 
-    const { result, rerender } = renderHook(
-      ({ factory }) => useTopologyStableFactoryForLayout(factory),
-      { initialProps: { factory: previous } },
+    const initial = resolveTopologyStableFactory(undefined, previous);
+    expect(initial).toBe(previous);
+    expect(resolveTopologyStableFactory(initial ?? undefined, next)).toBe(
+      previous,
     );
-
-    expect(result.current).toBe(previous);
-
-    rerender({ factory: next });
-
-    expect(result.current).toBe(previous);
   });
 
   it("returns the new factory reference when topology changes", () => {
@@ -50,13 +44,7 @@ describe("useTopologyStableFactoryForLayout", () => {
       },
     ];
 
-    const { result, rerender } = renderHook(
-      ({ factory }) => useTopologyStableFactoryForLayout(factory),
-      { initialProps: { factory: previous } },
-    );
-
-    rerender({ factory: next });
-
-    expect(result.current).toBe(next);
+    const initial = resolveTopologyStableFactory(undefined, previous);
+    expect(resolveTopologyStableFactory(initial ?? undefined, next)).toBe(next);
   });
 });

@@ -660,6 +660,7 @@ func TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier(t *tes
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
 		"verify-pr":                     "@printf '%s\\n' 'stub:verify-pr'\n",
+		"test-ui-performance":           "@printf '%s\\n' 'stub:test-ui-performance'\n",
 		"long-tests-managed-runtime":    "@printf '%s\\n' 'stub:long-tests-managed-runtime'\n",
 		"long-tests-functional-runtime": "@printf '%s\\n' 'stub:long-tests-functional-runtime'\n",
 		"test-functional-long":          "@printf '%s\\n' 'unexpected:test-functional-long'\n\t@exit 99\n",
@@ -677,7 +678,9 @@ func TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier(t *tes
 		"==> pull-request verification tier [make verify-pr]",
 		"stub:verify-pr",
 		"==> opt-in long and specialty suites [make long-tests]",
-		"Running opt-in long and specialty suites: managed runtime coverage + real local inference coverage",
+		"Running opt-in long and specialty suites: UI performance + managed runtime coverage + real local inference coverage",
+		"==> UI Performance specialty lane [make test-ui-performance]",
+		"stub:test-ui-performance",
 		"==> Managed Runtime specialty lane [make long-tests-managed-runtime]",
 		"stub:long-tests-managed-runtime",
 		"==> Real Local Inference specialty lane [make long-tests-functional-runtime]",
@@ -698,6 +701,7 @@ func TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier(t *tes
 func TestLongTestsCommandSmoke_FailureReportsExactSpecialtyLaneRerun(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+		"test-ui-performance":           "@printf '%s\\n' 'stub:test-ui-performance'\n",
 		"long-tests-managed-runtime":    "@printf '%s\\n' 'stub:long-tests-managed-runtime'\n",
 		"long-tests-functional-runtime": "@printf '%s\\n' 'stub:long-tests-functional-runtime'\n\t@exit 29\n",
 	})

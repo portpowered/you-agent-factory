@@ -32,9 +32,11 @@ test("defines stable UI test cost categories", () => {
 });
 
 test("categorizes covered and browser integration paths", () => {
-  expect(categorizeUiTestFile("src/App.session-stream.test.tsx")).toBe(
-    "app-shell-integration",
-  );
+  expect(
+    categorizeUiTestFile(
+      "src/features/dashboard/session/dashboard-session-timeline-isolation.component.test.tsx",
+    ),
+  ).toBe("app-shell-integration");
   expect(
     categorizeUiTestFile(
       "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-editor-chrome.test.tsx",
@@ -45,7 +47,11 @@ test("categorizes covered and browser integration paths", () => {
       "src/features/timeline/state/factoryTimelineStore.test.ts",
     ),
   ).toBe("replay-timeline");
-  expect(categorizeUiTestFile("src/App.import.test.tsx")).toBe("import-export");
+  expect(
+    categorizeUiTestFile(
+      "src/features/import/components/dashboard-import-preview-dialog.test.tsx",
+    ),
+  ).toBe("import-export");
   expect(
     categorizeUiTestFile(
       "scripts/dashboard-shell-storybook-responsive.test.mjs",

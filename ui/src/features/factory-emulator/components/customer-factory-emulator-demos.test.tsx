@@ -415,7 +415,10 @@ describe("CustomerFactoryEmulatorDemos unavailable states", () => {
     );
 
     expect(await screen.findByText("1 Work total")).toBeVisible();
-    expect(screen.getByRole("alert")).toHaveTextContent(
+    const unavailableDemo = screen.getByRole("article", {
+      name: "Review, rework, and failure",
+    });
+    expect(within(unavailableDemo).getByRole("alert")).toHaveTextContent(
       "This demo could not be prepared",
     );
     expect(

@@ -1,3 +1,5 @@
+import "../../../../testing/vitest-dom-capabilities.setup";
+
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";

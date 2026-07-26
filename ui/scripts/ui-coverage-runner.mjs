@@ -23,18 +23,12 @@ import {
 
 export const phaseLogPrefix = "[ui-coverage]";
 export const mainCoveredPhaseName = "Main covered Vitest pass";
-export const defaultMainCoveredMaxWorkers = "2";
+export const defaultMainCoveredMaxWorkers = "4";
 export const defaultShardMainCoveredMaxWorkers = "1";
 export { defaultCapturedStdoutMaxBuffer, defaultSlowFileSummaryLimit };
 export const defaultUiCoverageShardTotal = 10;
 export const defaultTimingReportsDir = ".vitest-report-timings";
-export const isolatedReactFlowCoverageFiles = [
-  "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-editor-chrome.test.tsx",
-  "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-import-flows.test.tsx",
-  "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-graph-semantics.test.tsx",
-  "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-layout.test.tsx",
-  "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-topology-localization.test.tsx",
-];
+export const uiPerformanceTestPattern = "**/performance/*.test.ts";
 
 export function getMainCoveredMaxWorkers(env = process.env, options = {}) {
   if (env.UI_COVERAGE_MAIN_MAX_WORKERS) {
@@ -190,6 +184,8 @@ export function buildMainCoveredVitestArgs(options = {}) {
     : "--coverage.clean=false";
   const args = [
     "run",
+    "--config=vitest.lanes.config.ts",
+    "--project=dashboard-unit",
     "--coverage",
     coverageCleanFlag,
     `--maxWorkers=${mainCoveredMaxWorkers}`,
@@ -208,7 +204,8 @@ export function buildMainCoveredVitestArgs(options = {}) {
     "scripts/ui-coverage-runner.test.mjs",
     "--exclude",
     "scripts/ui-coverage-runner.shard-merge.test.mjs",
-    ...isolatedReactFlowCoverageFiles.flatMap((file) => ["--exclude", file]),
+    "--exclude",
+    uiPerformanceTestPattern,
   ];
 
   if (options.shard) {
@@ -249,27 +246,14 @@ export function buildUiCoveragePhases(options = {}) {
       }),
     },
     {
-      name: "Isolated React Flow covered pass",
-      command: "vitest",
-      args: [
-        "run",
-        "--coverage",
-        "--coverage.clean=false",
-        "--maxWorkers=1",
-        "--coverage.thresholds.lines=0",
-        "--coverage.thresholds.functions=0",
-        "--coverage.thresholds.statements=0",
-        "--coverage.thresholds.branches=0",
-        "--reporter=default",
-        "--reporter=blob",
-        "--outputFile.blob=.vitest-reports/react-flow-current-activity-card.json",
-        ...isolatedReactFlowCoverageFiles,
-      ],
-    },
-    {
       name: "Blob report merge pass",
       command: "vitest",
-      args: ["--mergeReports", ".vitest-reports", "--coverage"],
+      args: [
+        "--mergeReports",
+        ".vitest-reports",
+        "--coverage",
+        "--passWithNoTests",
+      ],
     },
     {
       name: "Standalone script-style test",

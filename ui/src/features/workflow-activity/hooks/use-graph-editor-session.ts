@@ -4,6 +4,7 @@ import type { FactoryGraphEditorTool } from "../../factory-graph-editor/componen
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import { findClassifierGraphEditorUnsupportedWorkstationName } from "./factory-graph-editor-availability";
+import { resolveGraphEditorModeToggleAction } from "./state/graph-editor-session-state";
 
 type CurrentActivityGraphSessionDefinitionStatus =
   | "error"
@@ -61,18 +62,19 @@ export function useGraphEditorSession({
     !sessionState.isSaving;
 
   const handleEditorModeToggle = useCallback(() => {
-    if (!editorMode) {
-      if (editorUnavailableClassifierWorkstationName) {
-        return;
-      }
+    const action = resolveGraphEditorModeToggleAction({
+      editorMode,
+      hasPendingGraphChanges: sessionState.hasPendingGraphChanges,
+      unavailableClassifierWorkstationName:
+        editorUnavailableClassifierWorkstationName,
+    });
+    if (action === "enter") {
       setEditorMode(true);
-      return;
-    }
-    if (sessionState.hasPendingGraphChanges) {
+    } else if (action === "confirm-leave") {
       onAttemptLeaveEditor();
-      return;
+    } else if (action === "leave") {
+      onLeaveEditor();
     }
-    onLeaveEditor();
   }, [
     editorMode,
     editorUnavailableClassifierWorkstationName,

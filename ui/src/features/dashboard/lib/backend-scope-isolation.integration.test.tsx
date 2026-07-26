@@ -13,7 +13,7 @@ import {
   currentFactoryDefinitionQueryKey,
   useCurrentFactoryDefinition,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import type { StreamDerivedCacheIdentity } from "../../timeline/public";
+import type { StreamDerivedCacheIdentity } from "../../timeline/public/stream-identity";
 import { useDashboardSessionLifecycle } from "../hooks/useDashboardSessionLifecycle";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 

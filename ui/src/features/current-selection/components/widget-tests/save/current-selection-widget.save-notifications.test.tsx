@@ -1,3 +1,5 @@
+import "../../../../../testing/vitest-dom-capabilities.setup";
+
 import { fireEvent, screen } from "@testing-library/react";
 import { toast } from "sonner";
 

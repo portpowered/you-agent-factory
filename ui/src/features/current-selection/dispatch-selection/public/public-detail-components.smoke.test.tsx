@@ -1,3 +1,5 @@
+import "../../../../testing/vitest-dom-capabilities.setup";
+
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { workstationRequest } from "../../base/components/detail-card/detail-card-test-helpers";

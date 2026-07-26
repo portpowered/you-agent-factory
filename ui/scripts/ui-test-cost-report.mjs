@@ -108,6 +108,18 @@ export function categorizeUiTestFile(filePath) {
     return "app-shell-integration";
   }
   if (
+    normalized.includes("dashboard-replay-wiring.component.test.tsx") ||
+    normalized.includes("dashboard-trace-wiring.component.test.tsx") ||
+    normalized.includes(
+      "dashboard-session-timeline-isolation.component.test.tsx",
+    ) ||
+    normalized.includes(
+      "use-dashboard-snapshot-checkpoint-lifecycle.component.test.tsx",
+    )
+  ) {
+    return "app-shell-integration";
+  }
+  if (
     normalized.includes("react-flow") ||
     normalized.includes("workflow-activity/components/react-flow")
   ) {

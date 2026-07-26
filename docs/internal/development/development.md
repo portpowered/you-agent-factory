@@ -93,14 +93,18 @@ Run dashboard package commands from `ui/` with Bun 1.3.12+ on PATH. Root `make` 
 
 | Goal | Canonical command | Runner |
 | --- | --- | --- |
-| Unit and component tests (jsdom) | `cd ui && bun run test:unit` or `make ui-test` | Bun (`run-bun-unit.mjs`, `bunfig.toml` preload) |
-| Coverage thresholds and replay fixture guard | `make test-ui-coverage` | Bun covered phases via `test:coverage`, then replay check |
+| Unit tests (Node) | `cd ui && bun run test:unit` or `make ui-test` | Named Vitest `dashboard-unit` project; no DOM setup |
+| Component tests (jsdom) | `cd ui && bun run test:component` | Named Vitest `dashboard-component` project |
+| Coverage thresholds and replay fixture guard | `make test-ui-coverage` | Node unit coverage via `test:coverage`, then replay check |
 | Playwright integration | `cd ui && bun run test:integration` or `make ui-integration-test` | Vitest + Playwright |
-| Unit then integration | `cd ui && bun run test` | Bun unit lane, then Vitest integration |
+| Unit, component, then integration | `cd ui && bun run test` | Named Vitest lanes in increasing cost order |
 | Fresh npm install proof for scoped local components | `make ui-verify-fresh-npm-install` or `cd ui && npm run verify:fresh-npm-install` | Node script runs an isolated dashboard `npm install` and asserts `@you-agent-factory/components` resolves from `packages/components` |
 | Storybook browser integration | `make ui-storybook-integration-test` | Storybook static build plus focused responsive browser checks |
 
-Prefer `bun run test:unit` (or `make ui-test`) over ad hoc `bun test <paths>` for dashboard unit work so batching, exclusions, preload, and worker policy stay aligned with CI. Targeted unit proof may still use `cd ui && bun test <paths>` when a story explicitly needs one file or subtree. Storybook browser, Storybook script verifiers, and the coverage standalone dashboard-shell script phase remain Vitest-only; idea and cleanup writeups should cite `bun run test:unit`, `make ui-test`, `make test-ui-coverage`, or the Storybook Vitest commands above instead of legacy `vitest run` unit invocations.
+Prefer `bun run test:unit` (or `make ui-test`) for dashboard unit work so the
+Node-only project, exclusions, and worker policy stay aligned with CI. Use
+`bun run test:component` when the contract renders React or needs DOM APIs.
+Targeted proof may pass paths to Vitest with the matching lane config.
 
 ## GitHub Actions CI Baseline
 
@@ -157,7 +161,7 @@ test-full` remains the broad unshortened aggregate across every Go package.
 | `make verify-pr` | `make verify-build-contracts` once, then `make verify-tests` once | `make long-tests`, `make test-functional-long`, managed-runtime specialty coverage | rerun `make verify-pr` for the full required envelope, or rerun the failing owned lane called out in output |
 | `make verify-extended` | `make verify-pr`, then `make long-tests` | no extra hidden suites beyond the named long and specialty lanes | rerun `make verify-extended` for the whole opt-in pass, or rerun the failing owned long lane called out in output |
 | `make verify-tests` | `make test-maintenance`, `make test-integration`, `make test-contract`, `make release-surface-smoke`, `make test-built-cli-acceptance`, concurrent UI coverage/browser integration, then independent backend unit and functional coverage | compatibility aliases that would repeat the same confidence outcome | rerun the exact failing required lane printed in output |
-| `make long-tests` | `make long-tests-managed-runtime`, `make long-tests-functional-runtime` | short-path fast and PR-tier suites, unless you intentionally rerun them through `make verify-pr` first | rerun the exact failing specialty lane printed in output |
+| `make long-tests` | `make test-ui-performance`, `make long-tests-managed-runtime`, `make long-tests-functional-runtime` | short-path fast and PR-tier suites, unless you intentionally rerun them through `make verify-pr` first | rerun the exact failing specialty lane printed in output |
 
 Compatibility aliases that still remain on the root command surface:
 
@@ -223,7 +227,14 @@ ownership table above; it does not use the historical coverage-shard matrix.
 | `Backend Functional Coverage` | `make functional-test-viz`: `functional-boundary-check`, then one `cmd/gocoveragecheck` functional coverage run (profile + JSON), then the Markdown catalog generator. | `make functional-test-viz` | Shows the internal-system coverage contributed by functional flows without unit, stress, or release tests affecting the profile, and uploads the inventory-plus-coverage artifact set. Boundary regressions cannot pass this lane on coverage alone. Coverage-only local reruns remain `make test-functional-coverage`. |
 | `Local Inference` | one Linux managed-runtime and real-inference regression through `make verify-pr-inference` after OMNIVOICE runtime and managed-model cache provisioning | `make verify-pr-inference` | Runs only when the Local Inference ownership lane is selected; narrow regression rerun: `make pr-inference-approval`. |
 
-UI coverage orchestration is owned by `ui/scripts/ui-coverage-runner.mjs` behind `ui/package.json`'s `test:coverage` script. The selected Frontend CI job runs `make test-ui-coverage` once; the separate Frontend Browser job owns browser-backed integration. Local shard-and-merge commands remain available for comparison and diagnosis, but are not the pull-request CI implementation.
+UI Coverage orchestration is owned by `ui/scripts/ui-coverage-runner.mjs` behind
+`ui/package.json`'s `test:coverage` script. Its covered phase explicitly selects
+`vitest.lanes.config.ts` and `dashboard-unit`, so no jsdom, component, browser,
+or performance test can enter through a broad default glob. The selected Frontend
+CI job runs `make test-ui-coverage` once; local shard-and-merge commands remain
+available for comparison and diagnosis. The separate Frontend Browser job owns
+browser-backed integration, and the standalone dashboard-shell script remains an
+uncovered structural check.
 
 Focused workflow-activity current activity card verification after split coverage changes: `cd ui && bun x vitest run src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-editor-chrome.test.tsx src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-import-flows.test.tsx src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-graph-semantics.test.tsx src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-layout.test.tsx src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-topology-localization.test.tsx`. Broader dashboard jsdom regressions remain `make ui-test`; full covered UI verification remains `make ui-test` or `make test-ui-coverage` as appropriate for the touched surface.
 
@@ -551,7 +562,7 @@ feature code.
 4. Run `make script-timeout-companion-smoke-100` after changing script timeout, requeue, command-runner, or companion smoke behavior. The target runs `TestIntegrationSmoke_ScriptTimeoutCompanionRequeuesBeforeLaterCompletion` 100 consecutive times through the real timeout/requeue/later-completion flow and fails on the first run that misses the direct timeout signal, retry dispatch, requeue mutation, or final completion.
 5. Run `make current-factory-watcher-switch-smoke` after changing current-factory activation, watched-input listener ownership, or service-mode watcher handoff behavior. The target runs the focused named-factory smoke that proves watched input moves to the activated factory, the previous factory stops receiving watched work, and the handoff leaves only one completed dispatch for the new watched file.
 6. Run `make dashboard-verify` after dashboard UI source changes or embedded asset changes.
-7. Run `make ui-test` (Bun unit lane) for focused dashboard UI behavior.
+7. Run `make ui-test` (Node unit lane) for focused dashboard UI behavior.
 8. Run `make ui-integration-test` when changing browser-backed dashboard workflows, files under `ui/integration/`, shared browser harness seams, or fixture-driven session and graph-editor journeys that must be verified in Chromium.
 9. Run `make ui-storybook` when Storybook fixtures, visual states, or dashboard component stories change.
 10. Run `make ui-test-storybook` after `make ui-storybook` when Storybook play functions, dashboard Storybook runtime mocks, or browser-backed interaction behavior change.
@@ -565,15 +576,15 @@ See [UI Test Lane Boundaries](ui-test-lane-boundaries.md) for observable contrac
 
 | Layer | Scope | Example path |
 | --- | --- | --- |
-| Unit | Pure helpers, fixtures, and harness builders without mounting production React trees | `ui/src/testing/session-factory-mocks.test.ts` |
-| Component | One widget or hook under jsdom with Testing Library | `ui/src/features/submit-work/components/submit-work-widget.test.tsx` |
-| App shell (`App.*.test`) | Full `App` mount with shared fetch, stream, and layout seams | `ui/src/App.import.test.tsx` |
+| Unit | Pure helpers, fixtures, routing, projections, and state operations under Node | `ui/src/features/app-routing/lib/resolve-app-surface.unit.test.ts` |
+| Component | One widget, hook, or named dashboard composition seam under jsdom with Testing Library | `ui/src/features/submit-work/components/submit-work-widget.test.tsx` |
+| Dashboard composition component | Cross-owner session, replay, or trace wiring through `DashboardScreen`, without mounting `App.tsx` or unrelated routes | `ui/src/features/dashboard/components/dashboard-replay-wiring.component.test.tsx` |
 | Browser integration (`ui/integration/`) | Real Chromium flows across session tabs, import/export, or replay fixtures | `ui/integration/factory-import-second-session.integration.test.mjs` |
 | Storybook | Visual states, play functions, and dashboard runtime mocks on built `storybook-static` | `ui/src/features/bento/components/dashboard-bento-metrics-workflow-catalog.stories.tsx` |
 
-### App shell vs card-level harnesses
+### Dashboard composition vs card-level harnesses
 
-Use **`renderApp(...)`** from `ui/src/testing/app-shell-test-utils.tsx` when the regression needs the dashboard shell together: session tab bootstrap, event stream wiring, bento layout, cross-card navigation, locale switching, or end-to-end import/export/submit flows that start from the mounted `App`. Pass optional `sessionID` so `DashboardSessionTestProvider` pins `useDashboardSessionStore` without per-file store seeding.
+Use **`renderApp(...)`** from `ui/src/testing/app-shell-test-utils.tsx` only when the regression needs `DashboardScreen` together: session tab bootstrap, event-stream wiring, timeline checkpoint lifecycle, or cross-card replay/trace projection. The helper deliberately does not mount `App.tsx`; route selection, packaged factories, and emulator code must not enter the dashboard component graph. Pass optional `sessionID` so `DashboardSessionTestProvider` pins `useDashboardSessionStore` without per-file store seeding.
 
 Use **card-level `render(...)`** (or a feature-local test helper) when the behavior is owned by one card, hook, or graph surface and does not depend on shell routing. Combine focused renders with the shared harness modules below instead of duplicating inline `vi.fn()` fetch or mutation stubs.
 
@@ -581,7 +592,7 @@ Use **card-level `render(...)`** (or a feature-local test helper) when the behav
 | --- | --- | --- |
 | Editable factory graph mocks and fixtures | `ui/src/testing/graph-editor-harness.ts` | `use-editable-factory-graph.test.tsx` and other graph-editor suites |
 | Current activity card render/lifecycle helpers | `ui/src/features/workflow-activity/components/current-activity-card/test-support/react-flow-current-activity-card-component.harness.tsx` | split `react-flow-current-activity-card-*.test.tsx` suites under `current-activity-card/` |
-| Session factory GET/PUT fetch doubles | `ui/src/testing/session-factory-mocks.ts` | `App.import.test.tsx`, `ui/src/api/session-factory/*.test.ts` |
+| Session factory GET/PUT fetch doubles | `ui/src/testing/session-factory-mocks.ts` | Import/export feature component tests and `ui/src/api/session-factory/*.test.ts` |
 | Dashboard session store pinning | `ui/src/testing/dashboard-session-test-provider.tsx` | `renderApp({ sessionID })`, `ui/.storybook/dashboard-story-runtime.tsx` |
 | Bento catalog Storybook fixtures | `ui/src/features/bento/components/dashboard-bento-story-shared.tsx` | `dashboard-bento-*-catalog.stories.tsx` |
 | Factory document save mutation states | `ui/src/testing/factory-document-save-mocks.ts` | `current-selection-widget.save.test.tsx`, worker save hook tests |

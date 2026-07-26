@@ -24,11 +24,21 @@ export function useSelectedWorkerAndWorkTypeData(
   selection: DashboardSelection | null,
   snapshot: DashboardSnapshot | null | undefined,
 ) {
+  return useMemo(
+    () => selectWorkerAndWorkTypeData(selection, snapshot),
+    [selection, snapshot],
+  );
+}
+
+export function selectWorkerAndWorkTypeData(
+  selection: DashboardSelection | null,
+  snapshot: DashboardSnapshot | null | undefined,
+) {
   const selectedWorkerName =
     selection?.kind === "worker" ? selection.workerName : null;
   const selectedWorkTypeName =
     selection?.kind === "work-type" ? selection.workTypeName : null;
-  const selectedWorkType = useMemo(() => {
+  const selectedWorkType = (() => {
     if (!snapshot || !selectedWorkTypeName) {
       return null;
     }
@@ -36,15 +46,15 @@ export function useSelectedWorkerAndWorkTypeData(
     return (
       findFactoryWorkTypeInSnapshot(snapshot, selectedWorkTypeName) ?? null
     );
-  }, [selectedWorkTypeName, snapshot]);
-  const selectedWorker = useMemo((): FactoryWorker | null => {
+  })();
+  const selectedWorker = ((): FactoryWorker | null => {
     if (!snapshot || !selectedWorkerName) {
       return null;
     }
 
     return findFactoryWorkerInSnapshot(snapshot, selectedWorkerName) ?? null;
-  }, [selectedWorkerName, snapshot]);
-  const selectedWorkerWorkstationNames = useMemo(() => {
+  })();
+  const selectedWorkerWorkstationNames = (() => {
     if (!snapshot || !selectedWorkerName) {
       return [];
     }
@@ -53,7 +63,7 @@ export function useSelectedWorkerAndWorkTypeData(
       snapshot,
       selectedWorkerName,
     );
-  }, [selectedWorkerName, snapshot]);
+  })();
 
   return {
     selectedWorker,

@@ -10,8 +10,8 @@ import { createReplayHarness } from "../../../testing/replay-harness";
 import { useDashboardBentoStore } from "../../bento/state/dashboardBentoStore";
 import {
   persistTimelineCheckpoint,
-  useFactoryTimelineStore,
-} from "../../timeline/public";
+} from "../../timeline/public/checkpoint-persistence";
+import { useFactoryTimelineStore } from "../../timeline/public/store";
 import { emptyReplayWorldState } from "../../timeline/state/timeline/replayWorldStateSupport";
 import { createMaterializedWorkOutcomeState } from "../../work-outcome/public/materializer";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";

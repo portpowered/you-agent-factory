@@ -9,7 +9,7 @@ import {
   SurfacePanel,
 } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
-import { HostedTopologyReplay } from "../../dashboard/public";
+import { HostedTopologyReplay } from "../../dashboard/public/topology-replay";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { NODE_TYPES } from "../../flowchart/public";
 import { FACTORY_GRAPH_EDGE_TYPES } from "../../graphs/public";

@@ -13,7 +13,7 @@ import {
   resetSelectionHistoryStore,
   useSelectionHistoryStore,
 } from "./features/current-selection/base/public";
-import { DashboardScreen } from "./features/dashboard/public";
+import { DashboardScreen } from "./features/dashboard/public/screen";
 import { getColorPaletteOptions } from "./features/header/messages/color-palette-options";
 import { getHeaderControlsMessages } from "./features/header/messages/header-controls";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";

@@ -1,5 +1,7 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: resource detail card regressions share one mocked factory-document seam.
 // biome-ignore-all lint/style/noExcessiveLinesPerFile: resource detail card regressions share one mocked factory-document seam.
+import "../../../../testing/vitest-dom-capabilities.setup";
+
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";

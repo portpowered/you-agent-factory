@@ -5,15 +5,15 @@ import {
 } from "../../../../api/factory-sessions";
 import { FactorySessionSyncPreflightReasonCode } from "../../../../api/generated/openapi";
 import type {
-  FactoryTimelineCheckpoint,
   PersistedTimelineCheckpointPeek,
   TimelineCheckpointStreamIdentity,
-} from "../../../timeline/public";
+} from "../../../timeline/public/checkpoint-persistence";
 import {
   peekPersistedTimelineCheckpoint,
   readTimelineCheckpoint,
-  reconnectCursorFromCheckpoint,
-} from "../../../timeline/public";
+} from "../../../timeline/public/checkpoint-persistence";
+import { reconnectCursorFromCheckpoint } from "../../../timeline/public/checkpoint-reconnect";
+import type { FactoryTimelineCheckpoint } from "../../../timeline/public/store";
 import { isDefaultToRuntimeSessionAliasRemap } from "../dashboard-session-lifecycle";
 import {
   classifyCheckpointIdentityMismatchDetail,

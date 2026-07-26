@@ -70,6 +70,46 @@ function installAnimationFrameShim() {
   };
 }
 
+export function installLocalStorageShim(): () => void {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "localStorage",
+  );
+  const values = new Map<string, string>();
+  const storage: Storage = {
+    get length() {
+      return values.size;
+    },
+    clear() {
+      values.clear();
+    },
+    getItem(key) {
+      return values.get(String(key)) ?? null;
+    },
+    key(index) {
+      return [...values.keys()][index] ?? null;
+    },
+    removeItem(key) {
+      values.delete(String(key));
+    },
+    setItem(key, value) {
+      values.set(String(key), String(value));
+    },
+  };
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: storage,
+  });
+
+  return () => {
+    if (descriptor) {
+      Object.defineProperty(globalThis, "localStorage", descriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "localStorage");
+    }
+  };
+}
+
 function installElementMeasurementShims() {
   const resizeObserver = globalThis.ResizeObserver;
   const domMatrixReadOnly = globalThis.DOMMatrixReadOnly;
@@ -310,11 +350,13 @@ export function installResizeObserverShim(): () => void {
 }
 
 export function installDashboardBrowserTestShims(): () => void {
+  const restoreLocalStorage = installLocalStorageShim();
   const restoreAnimationFrame = installAnimationFrameShim();
   const restoreElementMeasurements = installElementMeasurementShims();
 
   return () => {
     restoreAnimationFrame();
     restoreElementMeasurements();
+    restoreLocalStorage();
   };
 }

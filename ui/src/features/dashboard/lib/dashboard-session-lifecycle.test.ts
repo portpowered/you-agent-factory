@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { factorySessionDetailQueryKey } from "../../factory-session-detail/hooks/use-factory-session-detail";
-import type { StreamDerivedCacheIdentity } from "../../timeline/public";
+import type { StreamDerivedCacheIdentity } from "../../timeline/public/stream-identity";
 import {
   clearDashboardSessionRuntimeQueries,
   dashboardSessionKey,

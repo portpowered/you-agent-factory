@@ -1,4 +1,6 @@
 // biome-ignore-all lint/style/noExcessiveLinesPerFile: submit-work interaction cases share one form and invocation fixture harness.
+import "../../../testing/vitest-dom-capabilities.setup";
+
 import "@testing-library/jest-dom/vitest";
 import {
   cleanup,
