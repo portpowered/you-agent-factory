@@ -13,7 +13,15 @@ func TestUnimplementedService_ReturnsTypedNotReadyForEveryRootSlice(t *testing.T
 	var service automations.Service = automations.UnimplementedService{}
 	ctx := context.Background()
 
-	_, err := service.Ready(ctx, automations.ReadyRequest{})
+	err := service.StartSchedulerSidecarsForRuntime(ctx, nil, "", nil, nil, nil)
+	assertTypedAutomationsError(
+		t,
+		"StartSchedulerSidecarsForRuntime",
+		err,
+		automations.ErrorCodeNotReady,
+		automations.ErrNotReady,
+	)
+	_, err = service.Ready(ctx, automations.ReadyRequest{})
 	assertTypedAutomationsError(t, "Ready", err, automations.ErrorCodeNotReady, automations.ErrNotReady)
 	_, err = service.Reconcile(ctx, automations.ReconcileRequest{})
 	assertTypedAutomationsError(t, "Reconcile", err, automations.ErrorCodeNotReady, automations.ErrNotReady)

@@ -16,7 +16,7 @@ import (
 // automation. Initializer decides when to start it; Factory Runtime owns what
 // starting it means.
 type RuntimeSidecars struct {
-	automation automations.RuntimeScheduler
+	automation automations.Service
 	enabled    bool
 }
 
@@ -31,7 +31,7 @@ func PreseedRuntimeInputs(ctx context.Context, bundle *factoryhost.Bundle) error
 	return nil
 }
 
-func NewRuntimeSidecars(automation automations.RuntimeScheduler, enabled bool) *RuntimeSidecars {
+func NewRuntimeSidecars(automation automations.Service, enabled bool) *RuntimeSidecars {
 	return &RuntimeSidecars{automation: automation, enabled: enabled}
 }
 

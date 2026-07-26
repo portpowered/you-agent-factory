@@ -69,7 +69,7 @@ type FactoryRuntimeAssembler interface {
 		string,
 		*factorydefinitions.ReplayArtifact,
 		recordings.ReplayExecutionFactory,
-		automations.RuntimeScheduler,
+		automations.Service,
 		bool,
 	) (
 		factoryruntime.ReplacementBuilder,

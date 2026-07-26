@@ -12,11 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	_ automations.Service          = (*Service)(nil)
-	_ automations.RuntimeScheduler = (*Service)(nil)
-	_ automations.Root             = (*Service)(nil)
-)
+var _ automations.Service = (*Service)(nil)
 
 // Clock is the automation time source needed for scheduling and supervision.
 type Clock interface {
@@ -70,7 +66,7 @@ func NewService(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-) automations.Root {
+) automations.Service {
 	return New(
 		logger,
 		clock,

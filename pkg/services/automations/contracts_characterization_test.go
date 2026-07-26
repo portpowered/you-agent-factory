@@ -12,6 +12,7 @@ import (
 // Automations root contracts. It proves the singular root seam is implementable
 // without Automations implementation packages or cron/poller/watcher types.
 type fakeRootService struct {
+	automations.UnimplementedService
 	ready               bool
 	conflictOnReconcile bool
 	sources             map[string]automations.SourceObservation

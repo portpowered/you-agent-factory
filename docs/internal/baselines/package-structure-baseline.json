@@ -2510,7 +2510,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/automations",
-      "target": "pkg/services/automations/contracts.go:HostedPollers,pkg/services/automations/contracts.go:Root,pkg/services/automations/contracts.go:RuntimeScheduler,pkg/services/automations/contracts.go:Service"
+      "target": "pkg/services/automations/contracts.go:HostedPollers,pkg/services/automations/contracts.go:Service"
     },
     {
       "rule": "service-root-interface-count",

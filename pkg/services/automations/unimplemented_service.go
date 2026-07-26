@@ -1,6 +1,11 @@
 package automations
 
-import "context"
+import (
+	"context"
+	"sync"
+
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+)
 
 // UnimplementedService provides typed root-slice defaults so concrete
 // implementers stay assignable to Service before private reconciliation and
@@ -25,6 +30,17 @@ func (ReadyUnimplementedService) Ready(context.Context, ReadyRequest) (ReadyResu
 
 func (UnimplementedService) Ready(context.Context, ReadyRequest) (ReadyResult, error) {
 	return ReadyResult{}, unimplementedError("Ready")
+}
+
+func (UnimplementedService) StartSchedulerSidecarsForRuntime(
+	context.Context,
+	*sync.WaitGroup,
+	string,
+	*factorydefinitions.FactoryConfig,
+	factorydefinitions.RuntimeConfigLookup,
+	WorkRequestSubmitter,
+) error {
+	return unimplementedError("StartSchedulerSidecarsForRuntime")
 }
 
 func (UnimplementedService) Reconcile(

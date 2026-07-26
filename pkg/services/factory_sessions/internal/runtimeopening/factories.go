@@ -52,7 +52,7 @@ type AutomationFactory = func(
 	string,
 	string,
 	automations.HostedPollers,
-) automations.Root
+) automations.Service
 
 type FactorySessionExecutionFactory = func(
 	string,

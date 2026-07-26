@@ -38,10 +38,10 @@ type HostedPollers interface {
 	) error
 }
 
-// RuntimeScheduler is the legacy Runtime-sidecar startup seam. Peers that need
-// published Automations contracts should depend on Service instead. Nested
-// IMP-AUTO cuts retain and eventually privatize this surface.
-type RuntimeScheduler interface {
+// Service is the singular Automations root contract. It retains the existing
+// runtime-sidecar operation for source compatibility and adds reconciliation,
+// source lifecycle, and cursor/status slices using plain root-owned contracts.
+type Service interface {
 	StartSchedulerSidecarsForRuntime(
 		context.Context,
 		*sync.WaitGroup,
@@ -50,12 +50,6 @@ type RuntimeScheduler interface {
 		factorydefinitions.RuntimeConfigLookup,
 		WorkRequestSubmitter,
 	) error
-}
-
-// Service is the singular Automations root contract. Additive reconcile, source
-// lifecycle, and cursor/status slices publish on this interface using plain
-// request, result, value, and typed-error contracts.
-type Service interface {
 	Ready(context.Context, ReadyRequest) (ReadyResult, error)
 	Reconcile(context.Context, ReconcileRequest) (ReconcileResult, error)
 	StartSource(context.Context, StartSourceRequest) (StartSourceResult, error)
@@ -64,13 +58,6 @@ type Service interface {
 	SourceStatus(context.Context, SourceStatusRequest) (SourceStatusResult, error)
 	GetStatus(context.Context, GetStatusRequest) (GetStatusResult, error)
 	GetCursor(context.Context, GetCursorRequest) (GetCursorResult, error)
-}
-
-// Root is the Wire-injectable Automations surface during migration. It composes
-// the published Service root with the legacy RuntimeScheduler seam.
-type Root interface {
-	Service
-	RuntimeScheduler
 }
 
 // ReadyRequest is the plain probe input for Automations root readiness.
