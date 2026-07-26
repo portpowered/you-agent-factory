@@ -4,7 +4,11 @@ BIN_DIR     := bin
 GO          ?= go
 INSTALL_DIR := $(or $(GOBIN),$(shell $(GO) env GOPATH)/bin)
 NPM         ?= npm
+ifeq ($(OS),Windows_NT)
+BUN_BIN     := $(shell where.exe bun >NUL 2>NUL && echo bun)
+else
 BUN_BIN     := $(shell command -v bun 2>/dev/null)
+endif
 BUN_INSTALL := $(BUN_BIN) install --frozen-lockfile
 BUN_PACKAGE_DIRS := ui/packages/components ui
 UI_SCRIPT   := $(if $(BUN_BIN),$(BUN_BIN) run,$(NPM) run)
@@ -89,6 +93,13 @@ define run_verification_step
 	@printf '%s\n' "==> $(2) [make $(1)]"
 	@$(MAKE) $(1) || { status=$$?; printf '%s\n' "FAIL: $(2) [make $(1)] failed. Rerun with: make $(1)"; exit $$status; }
 endef
+
+ifeq ($(OS),Windows_NT)
+define run_verification_step
+	@echo Running $(2) [make $(1)]
+	@$(MAKE) $(1) || (echo FAIL: $(2) [make $(1)] failed. Rerun with: make $(1) & exit /b 1)
+endef
+endif
 
 define run_timed_step
 	@start=$$(date +%s); \

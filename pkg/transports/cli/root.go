@@ -28,6 +28,7 @@ import (
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
@@ -699,11 +700,13 @@ func resolveRunFactorySelection(
 	if !factoryChanged {
 		return nil
 	}
-
 	if cfg.ResolveFactoryConfigRoot == nil {
 		return fmt.Errorf("Factory Definitions config root resolver is required")
 	}
 	factoryRoot, err := cfg.ResolveFactoryConfigRoot(cfg.FactoryConfigPath)
+	if contextErr := cmd.Context().Err(); contextErr != nil {
+		return contextErr
+	}
 	if err != nil {
 		return err
 	}
@@ -782,7 +785,7 @@ func resolveRunFactoryPrompt(
 	if !factoryChanged && !namedChanged {
 		return resolveLegacyRunFactoryPrompt(cmd, promptArgs, preparation)
 	}
-	if len(promptArgs) == 0 && runCommandInputIsTTY(cmd.Context()) {
+	if factoryChanged && runFactorySourceUsesJavaScript(cfg.FactoryConfigPath) {
 		return nil
 	}
 
@@ -790,18 +793,37 @@ func resolveRunFactoryPrompt(
 	if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
 		signatureSource = cfg.FactoryConfigPath
 	}
-	signature, err := runcli.ResolveFactoryInvocationSignature(
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		return fmt.Errorf("load run CLI manifest: %w", err)
+	}
+	schema, diagnostics, err := runcli.ResolveFactoryInvocationInputSchema(
 		cmd.Context(),
+		manifest,
+		"you.run",
 		cfg.LoadFactoryConfigFile,
 		signatureSource,
 	)
 	if err != nil {
 		return err
 	}
+	if err := runcli.MapCompositionDiagnostics(diagnostics); err != nil {
+		return err
+	}
+	signature := runcli.InvocationSignatureFromEffectiveSchema(schema)
 	if signature != nil {
 		return resolveSignatureRunFactoryPrompt(cmd, cfg, promptArgs, signature, preparation)
 	}
 	return resolveCompatibilityRunFactoryPrompt(cmd, cfg, promptArgs, workChanged, preparation)
+}
+
+func runFactorySourceUsesJavaScript(path string) bool {
+	switch strings.ToLower(filepath.Ext(strings.TrimSpace(path))) {
+	case ".js", ".mjs", ".cjs":
+		return true
+	default:
+		return false
+	}
 }
 
 func resolveLegacyRunFactoryPrompt(cmd *cobra.Command, promptArgs []string, preparation work.InvocationInputPreparation) error {

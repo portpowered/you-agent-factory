@@ -196,6 +196,9 @@ func (o *SessionOwner) ResolveInvocationInput(
 // ResolveSessionInvocationInput applies the shared compatibility-content and
 // structured-argument contract used by API and CLI invocation paths.
 func ResolveSessionInvocationInput(cfg *factorydefinitions.FactoryConfig, request InvocationRequest) (ResolvedSessionInvocationInput, error) {
+	if request.PreparedInvocationInput != nil {
+		return resolvedPreparedSessionInvocationInput(cfg, request)
+	}
 	content, err := sessionInvocationCompatibilityContent(request)
 	if err != nil {
 		return ResolvedSessionInvocationInput{}, err
@@ -212,6 +215,55 @@ func ResolveSessionInvocationInput(cfg *factorydefinitions.FactoryConfig, reques
 		signature = cfg.InvocationSignature
 	}
 	return resolveStructuredSessionInvocationInput(signature, directArgs, content)
+}
+
+func resolvedPreparedSessionInvocationInput(
+	cfg *factorydefinitions.FactoryConfig,
+	request InvocationRequest,
+) (ResolvedSessionInvocationInput, error) {
+	if request.Args != nil || request.ContentProvided {
+		return ResolvedSessionInvocationInput{}, &factorydefinitions.RequestValidationError{
+			Message: "prepared invocation input cannot be combined with args or content",
+		}
+	}
+	prepared := request.PreparedInvocationInput.Clone()
+	if prepared == nil ||
+		(prepared.NormalizedArguments == nil) == (prepared.ResolvedInput == nil) {
+		return ResolvedSessionInvocationInput{}, &factorydefinitions.RequestValidationError{
+			Message: "prepared invocation input must contain exactly one canonical result",
+		}
+	}
+	var signature *factorydefinitions.InvocationSignatureConfig
+	if cfg != nil {
+		signature = cfg.InvocationSignature
+	}
+	if prepared.NormalizedArguments != nil && signature == nil {
+		return ResolvedSessionInvocationInput{}, &work.ArgumentError{
+			Code:    work.ArgumentErrorCodeInvalidActiveSignature,
+			Message: "prepared arguments require a factory invocationSignature",
+		}
+	}
+	if prepared.ResolvedInput != nil {
+		if signature != nil {
+			return ResolvedSessionInvocationInput{}, &work.ArgumentError{
+				Code:    work.ArgumentErrorCodeInvalidActiveSignature,
+				Message: "prepared compatibility input requires a factory without an invocationSignature",
+			}
+		}
+		resolved := *prepared.ResolvedInput
+		return ResolvedSessionInvocationInput{
+			Source:  resolved.Source,
+			Content: resolved.Content,
+			NormalizedArguments: &work.NormalizedArguments{
+				CompatibilityInput: &resolved,
+			},
+		}, nil
+	}
+	return ResolvedSessionInvocationInput{
+		Source:              StructuredArgumentsInputSource,
+		Content:             structuredInvocationContent(signature, *prepared.NormalizedArguments),
+		NormalizedArguments: prepared.NormalizedArguments,
+	}, nil
 }
 
 func resolveCompatibilitySessionInvocationInput(content []work.WorkContentPart) (ResolvedSessionInvocationInput, error) {
@@ -339,6 +391,12 @@ func normalizeSessionInvocationError(err error) error {
 
 // SessionInvocationSourceHint reports a low-cardinality source before full normalization.
 func SessionInvocationSourceHint(request InvocationRequest) work.InputSourceLabel {
+	if request.PreparedInvocationInput != nil {
+		if request.PreparedInvocationInput.ResolvedInput != nil {
+			return request.PreparedInvocationInput.ResolvedInput.Source
+		}
+		return StructuredArgumentsInputSource
+	}
 	if request.Args != nil {
 		return StructuredArgumentsInputSource
 	}

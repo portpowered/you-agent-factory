@@ -346,6 +346,14 @@ func waitForTestInvocationReady(ctx context.Context, runner InvocationRunner, ru
 }
 
 func generatedTestInvocationRequest(request factorysessions.InvocationRequest) factoryapi.InvocationRequest {
+	if request.PreparedInvocationInput != nil {
+		result, _, err := invocationRequestFromPreparedInput(*request.PreparedInvocationInput)
+		if err == nil && result != nil {
+			result.RequestId = request.RequestID
+			result.TimeoutMillis = request.TimeoutMillis
+			return *result
+		}
+	}
 	result := factoryapi.InvocationRequest{
 		Args: request.Args, RequestId: request.RequestID, TimeoutMillis: request.TimeoutMillis,
 	}

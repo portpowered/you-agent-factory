@@ -128,9 +128,7 @@ func TestComposeRunInputsRejectsEveryReservedStaticNamespace(t *testing.T) {
 		{Code: CompositionCollisionCommandName, Path: "/invocationSignature/parameters/1/name", StaticOwner: "you.run", FactoryOwner: "run"},
 		{Code: CompositionCollisionCommandName, Path: "/invocationSignature/parameters/2/externalName", StaticOwner: "you", FactoryOwner: "command-alias"},
 		{Code: CompositionCollisionLongName, Path: "/invocationSignature/parameters/0/externalName", StaticOwner: "you.run.flag.output", FactoryOwner: "you.run.binding.output"},
-		{Code: CompositionCollisionPosition, Path: "/invocationSignature/parameters/5/bindings/0/position", StaticOwner: "you.run.arg.0", FactoryOwner: "position"},
 		{Code: CompositionCollisionShorthand, Path: "/invocationSignature/parameters/4/externalName", StaticOwner: "you.flag.verbose", FactoryOwner: "short"},
-		{Code: CompositionCollisionStdin, Path: "/invocationSignature/parameters/6/bindings/0/kind", StaticOwner: "you.run.arg.0", FactoryOwner: "stdin"},
 	}
 	if len(diagnostics) != len(want) {
 		t.Fatalf("diagnostics = %#v, want %#v", diagnostics, want)
@@ -167,7 +165,7 @@ func TestComposeRunInputsCollisionDiagnosticsAreDeterministic(t *testing.T) {
 	}
 }
 
-func TestComposeRunInputsPreservesNonCollidingStaticInputs(t *testing.T) {
+func TestComposeRunInputsPreservesRunFlagsAndReplacesCompatibilityInput(t *testing.T) {
 	manifest := compositionManifest()
 	signature := work.InvocationSignatureConfig{Parameters: []work.InvocationParameterConfig{{
 		Name: "query", ExternalName: "search", Aliases: []string{"q"},
@@ -178,8 +176,9 @@ func TestComposeRunInputsPreservesNonCollidingStaticInputs(t *testing.T) {
 	if err != nil || len(diagnostics) != 0 {
 		t.Fatalf("ComposeRunInputs() err=%v diagnostics=%#v", err, diagnostics)
 	}
-	if !reflect.DeepEqual(effective.StaticInputs, projectStaticInputs(manifest.Commands["you.run"])) {
-		t.Fatalf("static inputs changed during non-colliding composition: %#v", effective.StaticInputs)
+	want := projectStaticInputs(commandWithoutCompatibilityInvocationInput(manifest.Commands["you.run"]))
+	if !reflect.DeepEqual(effective.StaticInputs, want) {
+		t.Fatalf("effective static inputs = %#v, want run flags without compatibility carrier %#v", effective.StaticInputs, want)
 	}
 }
 
