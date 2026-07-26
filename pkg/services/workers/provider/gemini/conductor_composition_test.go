@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	geminipkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
@@ -163,6 +163,92 @@ func TestConductorClassifiesGeminiNativeFailureSafely(t *testing.T) {
 	}
 }
 
+func TestConductorPublishesOnlyCanonicalGeminiFailureMessages(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		stderr      string
+		wantKind    inference.FailureKind
+		wantMessage string
+		rejected    []string
+	}{
+		{
+			name:        "UnmarkedPromptInStructuredFailure",
+			stderr:      `{"error":{"status":"INVALID_ARGUMENT","message":"Retell the private launch roadmap verbatim"}}`,
+			wantKind:    inference.FailureInvalidRequest,
+			wantMessage: "Gemini rejected the request.",
+			rejected:    []string{"launch roadmap", "verbatim"},
+		},
+		{
+			name:        "MachineLocalHomePathsInUnknownFailure",
+			stderr:      `Error: failed reading C:\Users\alice\private\project and /home/alice/private/project`,
+			wantKind:    inference.FailureUnknown,
+			wantMessage: "Gemini invocation failed.",
+			rejected:    []string{`C:\Users\alice`, "/home/alice", "private/project"},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &recordingCommandRunner{result: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte(tc.stderr)}}
+			destination := &recordingDestination{}
+			err := conductor.New(newGeminiRegistryWithRunner(t, runner)).Invoke(
+				context.Background(),
+				"gemini",
+				inference.NewInvocationRequest(inference.InvocationInput{
+					InvocationID: "inv-gemini-safe-" + tc.name,
+					UserMessage:  "customer request without a marker",
+					Required:     inference.NewCapabilitySet(inference.CapabilityPromptSubmission),
+				}),
+				destination,
+			)
+			if err != nil {
+				t.Fatalf("conductor.Invoke() error = %v", err)
+			}
+			failure := destination.completion.Failure()
+			if failure == nil || failure.Kind() != tc.wantKind || failure.Message() != tc.wantMessage {
+				t.Fatalf("failure = %#v, want kind=%q message=%q", failure, tc.wantKind, tc.wantMessage)
+			}
+			for _, rejected := range tc.rejected {
+				if strings.Contains(failure.Message(), rejected) {
+					t.Fatalf("failure message leaked %q: %q", rejected, failure.Message())
+				}
+			}
+		})
+	}
+}
+
+func TestConductorNormalizesGeminiCommandCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runner := &cancelingCommandRunner{cancel: cancel}
+	destination := &recordingDestination{}
+	err := conductor.New(newGeminiRegistryWithRunner(t, runner)).Invoke(
+		ctx,
+		"gemini",
+		inference.NewInvocationRequest(inference.InvocationInput{
+			InvocationID: "inv-gemini-canceled",
+			UserMessage:  "cancel this invocation",
+			Required:     inference.NewCapabilitySet(inference.CapabilityPromptSubmission),
+		}),
+		destination,
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("conductor.Invoke() error = %v, want context.Canceled", err)
+	}
+	if runner.calls != 1 {
+		t.Fatalf("command runner calls = %d, want 1", runner.calls)
+	}
+	failure := destination.completion.Failure()
+	if failure == nil ||
+		failure.Kind() != inference.FailureCanceled ||
+		failure.Message() != "provider invocation was canceled" ||
+		failure.Retryable() {
+		t.Fatalf("failure = %#v, want canonical non-retryable cancellation", failure)
+	}
+}
+
 func newProductionGeminiRegistry(t *testing.T) *registry.Registry {
 	t.Helper()
 	registrations, err := registry.BuiltInRegistrations()
@@ -202,6 +288,17 @@ type recordingCommandRunner struct {
 	request workerprocess.CommandRequest
 	result  workerprocess.CommandResult
 	err     error
+}
+
+type cancelingCommandRunner struct {
+	cancel context.CancelFunc
+	calls  int
+}
+
+func (r *cancelingCommandRunner) Run(ctx context.Context, _ workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
+	r.calls++
+	r.cancel()
+	return workerprocess.CommandResult{}, ctx.Err()
 }
 
 func (r *recordingCommandRunner) Run(_ context.Context, request workerprocess.CommandRequest) (workerprocess.CommandResult, error) {

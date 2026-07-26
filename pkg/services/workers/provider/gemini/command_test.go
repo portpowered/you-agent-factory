@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
 	geminipkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 )
@@ -109,6 +109,17 @@ func TestBuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
 				},
 			},
 			wantErr: "image input is not supported by the gemini runner in v1",
+		},
+		{
+			name: "WorkingDirectory",
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.ProviderGemini),
+				UserMessage:   "summarize the workspace",
+				RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{
+					workerexecution.RunnerOptionalCapabilityWorkingDirectory,
+				},
+			},
+			wantErr: "working directory is not supported by the gemini runner in v1",
 		},
 	}
 

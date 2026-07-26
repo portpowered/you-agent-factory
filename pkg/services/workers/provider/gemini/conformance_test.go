@@ -188,7 +188,7 @@ func geminiFailureConformanceCases() []geminiFailureConformanceCase {
 				Stderr:   []byte("Error report written to .gemini/tmp/private-report.json"),
 			},
 			wantKind:    inference.FailureUnknown,
-			wantMessage: "gemini exited with code 17",
+			wantMessage: "Gemini invocation failed.",
 			reject:      []string{".gemini/tmp/", "private-report"},
 		},
 	}

@@ -61,7 +61,7 @@ func TestParseProviderFailure_RejectsTranscriptAndDiagnosticNoise(t *testing.T) 
 	for _, line := range noise {
 		t.Run(line, func(t *testing.T) {
 			got := parseFailure(providertestdata.FailureInput{ExitCode: 17, Stderr: []byte(line)})
-			if got.Reason != workerexecution.WorkFailureTypeUnknown || got.Message != "gemini exited with code 17" {
+			if got.Reason != workerexecution.WorkFailureTypeUnknown || got.Message != "Gemini invocation failed." {
 				t.Fatalf("ParseProviderFailure() = %#v, want exact safe exit fallback", got)
 			}
 		})
@@ -227,7 +227,7 @@ func geminiClassifyFailureCases() []classifyFailureCase {
 			},
 			wantType:    workerexecution.WorkFailureTypeUnknown,
 			wantFamily:  workerexecution.WorkFailureFamilyTerminal,
-			wantMessage: "gemini exited with code 17",
+			wantMessage: "Gemini invocation failed.",
 		},
 	}
 }

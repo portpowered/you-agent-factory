@@ -905,7 +905,14 @@ response-stream output.
   intact. Move Gemini-native failure and timeout parsing into the same package
   (`ParseProviderFailure`, `TimeoutFailureResult`, `Adapter.ClassifyFailure`) so
   the conductor path consumes provider-owned normalized facts; aggregate exit
-  and timeout bridges may only thin-delegate until legacy deletion. Bind the
+  and timeout bridges may only thin-delegate until legacy deletion. Treat all
+  provider-supplied failure text as classification input only: published
+  failures use fixed class-specific messages, including unknown fallbacks, so
+  unmarked prompts, credentials, and machine-local paths cannot escape a
+  deny-list sanitizer. If a provider command returns `context.Canceled`, return
+  that error before closing the provider response writer so
+  `inferencecontract.ExecuteInvocation` remains the single owner of canonical,
+  non-retryable cancellation. Bind the
   migrated provider as a registry catalog Integration
   (`gemini.NewIntegration`) from `BuiltInRegistrations`, and let
   `UsesNativeRunner` route Integrations that no longer advertise the

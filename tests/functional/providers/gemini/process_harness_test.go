@@ -1,7 +1,10 @@
 package gemini
 
 import (
+	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -59,7 +62,37 @@ func TestGeminiConductorSuccessThroughRootBuildProcess(t *testing.T) {
 	}
 }
 
-func TestGeminiConductorPreservesConfiguredEnvironmentAndWorkingDirectory(t *testing.T) {
+func TestGeminiClassifierRejectsStructuredLabelThroughRootBuildProcess(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	configureClassifierFixture(t, dir)
+	support.WriteWorkstationConfig(t, dir, "process", `---
+type: CLASSIFIER_WORKSTATION
+---
+Classify the work.
+`)
+	workerConfig := strings.Replace(
+		support.BuildModelWorkerConfig(modelprovider.ProviderGemini, "gemini-2.5-flash"),
+		"stopToken: COMPLETE\n",
+		"",
+		1,
+	)
+	support.WriteAgentConfig(t, dir, "worker", workerConfig)
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"gemini classifier"}`))
+
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte(`{"label":"approved"}`)})
+	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 20*time.Second)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed place tokens = %d, want 1 invalid classifier result; listed=%#v", got, listed)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("gemini command runner calls = %d, want 1", runner.CallCount())
+	}
+}
+
+func TestGeminiConductorPreservesConfiguredEnvironment(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
 		modelprovider.ProviderGemini,
@@ -67,7 +100,6 @@ func TestGeminiConductorPreservesConfiguredEnvironmentAndWorkingDirectory(t *tes
 	))
 	support.WriteWorkstationConfig(t, dir, "process", `---
 type: MODEL_WORKSTATION
-workingDirectory: .
 env:
   GEMINI_CONTEXT_FIXTURE: configured
 ---
@@ -86,11 +118,67 @@ Test workstation.
 		t.Fatalf("terminal place tokens = %d, want 1 completed work item; listed=%#v", got, listed)
 	}
 	request := runner.LastRequest()
-	if request.WorkDir != support.ResolvedRuntimePath(dir, ".") {
-		t.Fatalf("work dir = %q, want configured factory working directory", request.WorkDir)
-	}
 	if !containsEnv(request.Env, "GEMINI_CONTEXT_FIXTURE=configured") {
 		t.Fatalf("command environment omitted configured Gemini context")
+	}
+}
+
+func TestGeminiRejectsUnsupportedWorkingDirectoryBeforeProviderIO(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
+		modelprovider.ProviderGemini,
+		"gemini-2.5-flash",
+	))
+	support.WriteWorkstationConfig(t, dir, "process", `---
+type: MODEL_WORKSTATION
+workingDirectory: .
+---
+Test workstation.
+`)
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"gemini rejects working directory"}`))
+
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("provider must not run"),
+	})
+	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 20*time.Second)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed place tokens = %d, want 1 unsupported-capability failure; listed=%#v", got, listed)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("gemini command runner calls = %d, want no provider I/O", runner.CallCount())
+	}
+}
+
+func TestGeminiRejectsUnsupportedStructuredOutputBeforeProviderIO(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
+		modelprovider.ProviderGemini,
+		"gemini-2.5-flash",
+	))
+	support.WriteWorkstationConfig(t, dir, "process", `---
+type: MODEL_WORKSTATION
+outputSchema: '{}'
+worktree: .
+---
+Test workstation.
+`)
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"gemini rejects structured output"}`))
+
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("provider must not run"),
+	})
+	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 20*time.Second)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed place tokens = %d, want 1 unsupported-capability failure; listed=%#v", got, listed)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("gemini command runner calls = %d, want no provider I/O", runner.CallCount())
 	}
 }
 
@@ -164,6 +252,73 @@ func TestGeminiNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 		strings.Contains(payload, "secret-key") {
 		t.Fatalf("factory events leaked unsafe Gemini failure detail: %s", payload)
 	}
+}
+
+func TestGeminiCommandCancellationThroughRootBuildProcessIsCanonical(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
+		modelprovider.ProviderGemini,
+		"gemini-2.5-flash",
+	))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"gemini command error"}`))
+
+	runner := &commandCancellationRunner{}
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 20*time.Second)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed place tokens = %d, want 1; listed=%#v", got, listed)
+	}
+	if runner.calls != 1 {
+		t.Fatalf("gemini command runner calls = %d, want 1", runner.calls)
+	}
+	encoded, err := json.Marshal(events)
+	if err != nil {
+		t.Fatalf("marshal factory events: %v", err)
+	}
+	if strings.Contains(string(encoded), "Gemini command did not complete successfully") {
+		t.Fatalf("factory events used Gemini-local cancellation fallback: %s", encoded)
+	}
+}
+
+type commandCancellationRunner struct {
+	calls int
+}
+
+func configureClassifierFixture(t *testing.T, dir string) {
+	t.Helper()
+	path := filepath.Join(dir, "factory.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read classifier fixture: %v", err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatalf("decode classifier fixture: %v", err)
+	}
+	workstations := config["workstations"].([]any)
+	workstation := workstations[0].(map[string]any)
+	workstation["type"] = "CLASSIFIER_WORKSTATION"
+	delete(workstation, "outputs")
+	workstation["classificationRoutes"] = []map[string]any{{
+		"label": "approved",
+		"outputs": []map[string]any{{
+			"state": "done", "workType": "task",
+		}},
+	}}
+	updated, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("encode classifier fixture: %v", err)
+	}
+	if err := os.WriteFile(path, updated, 0o600); err != nil {
+		t.Fatalf("write classifier fixture: %v", err)
+	}
+}
+
+func (r *commandCancellationRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	r.calls++
+	return platformprocess.CommandResult{}, context.Canceled
 }
 
 func containsArgPair(args []string, flag, value string) bool {

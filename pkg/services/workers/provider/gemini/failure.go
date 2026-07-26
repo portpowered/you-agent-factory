@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"unicode"
 
@@ -13,8 +12,7 @@ import (
 )
 
 const (
-	failureScanBytes    = 64 * 1024
-	failureMessageRunes = 1024
+	failureScanBytes = 64 * 1024
 )
 
 const (
@@ -24,6 +22,7 @@ const (
 	TimeoutFailureMessage  = "Gemini request timed out."
 	timeoutFailureMessage  = TimeoutFailureMessage
 	serverFailureMessage   = "Gemini encountered a temporary server error."
+	unknownFailureMessage  = "Gemini invocation failed."
 )
 
 func tailForFailureScan(output []byte) string {
@@ -58,7 +57,7 @@ func ParseProviderFailure(input FailureInput) FailureResult {
 // TimeoutFailureResult returns the canonical Gemini timeout outcome used by the
 // conductor path and by the temporary aggregate timeout bridge.
 func TimeoutFailureResult() FailureResult {
-	return geminiFailureResult(workerexecution.WorkFailureTypeTimeout, "")
+	return geminiFailureResult(workerexecution.WorkFailureTypeTimeout)
 }
 
 // ClassifyFailure maps Gemini native subprocess outcomes into conductor-compatible
@@ -107,9 +106,8 @@ func normalizedFailureResult(parsed FailureResult, cause error) adapter.FailureR
 // ParseGeminiProviderFailure converts Gemini-owned structured and text failure
 // shapes into one canonical reason/message pair. The final valid structured
 // record wins (stderr is the deterministic cross-stream tie-breaker), followed
-// by recognized stderr text, recognized stdout text, then safe unknown excerpts
-// in that same stderr/stdout order. Both inspected streams and published text
-// are bounded by the Gemini-specific limits above.
+// by recognized stderr text and recognized stdout text. Provider-controlled
+// detail is used only for classification; published messages are canonical.
 func parseProviderFailure(input FailureInput) FailureResult {
 	result := input
 	streams := []string{
@@ -117,9 +115,6 @@ func parseProviderFailure(input FailureInput) FailureResult {
 		tailForFailureScan(result.Stderr),
 	}
 	if failure, ok := lastGeminiStructuredFailure(streams); ok {
-		if failure.Message == "" {
-			failure.Message = fmt.Sprintf("gemini exited with code %d", result.ExitCode)
-		}
 		return failure
 	}
 	if result.ExitCode == 124 {
@@ -133,15 +128,9 @@ func parseProviderFailure(input FailureInput) FailureResult {
 	if failure, ok := lastGeminiTextFailure(stdout); ok {
 		return failure
 	}
-	if message := lastGeminiUnknownMessage(stderr); message != "" {
-		return FailureResult{Reason: workerexecution.WorkFailureTypeUnknown, Message: message}
-	}
-	if message := lastGeminiUnknownMessage(stdout); message != "" {
-		return FailureResult{Reason: workerexecution.WorkFailureTypeUnknown, Message: message}
-	}
 	return FailureResult{
 		Reason:  workerexecution.WorkFailureTypeUnknown,
-		Message: fmt.Sprintf("gemini exited with code %d", result.ExitCode),
+		Message: unknownFailureMessage,
 	}
 }
 
@@ -163,11 +152,11 @@ func lastGeminiStructuredFailure(streams []string) (FailureResult, bool) {
 	}
 	reason := classifyGeminiFailureSignal(last.Type, last.Status, last.Code, last.Message)
 	if reason != workerexecution.WorkFailureTypeUnknown {
-		return geminiFailureResult(reason, last.Message), true
+		return geminiFailureResult(reason), true
 	}
 	return FailureResult{
 		Reason:  workerexecution.WorkFailureTypeUnknown,
-		Message: safeGeminiStructuredMessage(last.Message),
+		Message: unknownFailureMessage,
 	}, true
 }
 
@@ -251,20 +240,10 @@ func lastGeminiTextFailure(stream string) (FailureResult, bool) {
 		if reason == workerexecution.WorkFailureTypeUnknown {
 			continue
 		}
-		last = geminiFailureResult(reason, "")
+		last = geminiFailureResult(reason)
 		found = true
 	}
 	return last, found
-}
-
-func lastGeminiUnknownMessage(stream string) string {
-	var last string
-	for _, line := range strings.Split(stream, "\n") {
-		if candidate := safeGeminiTextCandidate(line); candidate != "" {
-			last = candidate
-		}
-	}
-	return last
 }
 
 func classifyGeminiFailureSignal(errorType, status, code, message string) workerexecution.WorkFailureType {
@@ -348,14 +327,8 @@ func isGeminiErrorSignal(normalized string) bool {
 		"invalid request", "bad request", "service unavailable", "upstream unavailable")
 }
 
-func geminiFailureResult(reason workerexecution.WorkFailureType, upstreamMessage string) FailureResult {
-	message := geminiFixedFailureMessage(reason)
-	if reason == workerexecution.WorkFailureTypeAuthFailure || reason == workerexecution.WorkFailureTypePermanentBadRequest {
-		if safe := safeGeminiStructuredMessage(upstreamMessage); safe != "" {
-			message = safe
-		}
-	}
-	return FailureResult{Reason: reason, Message: message}
+func geminiFailureResult(reason workerexecution.WorkFailureType) FailureResult {
+	return FailureResult{Reason: reason, Message: geminiFixedFailureMessage(reason)}
 }
 
 func geminiFixedFailureMessage(reason workerexecution.WorkFailureType) string {
@@ -371,20 +344,8 @@ func geminiFixedFailureMessage(reason workerexecution.WorkFailureType) string {
 	case workerexecution.WorkFailureTypeInternalServerError:
 		return serverFailureMessage
 	default:
-		return ""
+		return unknownFailureMessage
 	}
-}
-
-func safeGeminiStructuredMessage(message string) string {
-	message = sanitizeGeminiMessage(message)
-	if message == "" {
-		return ""
-	}
-	normalized := strings.ToLower(message)
-	if isRejectedGeminiMessage(normalized) {
-		return ""
-	}
-	return message
 }
 
 func sanitizeGeminiMessage(message string) string {
@@ -395,10 +356,6 @@ func sanitizeGeminiMessage(message string) string {
 		return r
 	}, message)
 	message = strings.Join(strings.Fields(message), " ")
-	runes := []rune(message)
-	if len(runes) > failureMessageRunes {
-		message = string(runes[:failureMessageRunes])
-	}
 	return message
 }
 

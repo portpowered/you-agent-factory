@@ -3,6 +3,7 @@ package gemini
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -79,6 +80,9 @@ func (i *Integration) Invoke(
 		})))
 	}
 	result, runErr := runner.Run(ctx, built.Request)
+	if errors.Is(runErr, context.Canceled) {
+		return runErr
+	}
 	classified := NewAdapter().ClassifyFailure(ctx, adapter.FailureContext{
 		CommandResult: result,
 		CommandError:  runErr,
