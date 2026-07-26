@@ -1,5 +1,6 @@
+// Isolated because Bun module mocks are process-global.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import "@testing-library/jest-dom/vitest";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import {
   act,
   cleanup,
@@ -19,36 +20,48 @@ import {
   renderWithDashboardSessionTest,
 } from "../../../testing";
 import { DashboardSessionStoreTestProvider } from "../../../testing/dashboard-session-test-provider";
+import { bunVi as vi } from "../../../testing/bun/vi-compat";
 import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
-import { useCurrentFactoryDefinition } from "../../current-factory-definition/public";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
-import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmitWorkCard } from "./submit-work-card";
-import { SubmitWorkWidget } from "./submit-work-widget";
 
-vi.mock("../../current-factory-definition/public", async () => {
-  const actual = (await vi.importActual(
-    "../../current-factory-definition/public",
-  )) as typeof import("../../current-factory-definition/public");
+const useCurrentFactoryDefinitionMock = vi.fn(() => ({
+  data: undefined as FactoryDefinition | undefined,
+  error: null,
+  isLoading: false,
+}));
 
-  return {
-    ...actual,
-    useCurrentFactoryDefinition: vi.fn(() => ({
-      data: undefined,
-      error: null,
-      isLoading: false,
-    })),
-  };
-});
+mock.module(
+  "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  () => ({
+    useCurrentFactoryDefinition: useCurrentFactoryDefinitionMock,
+  }),
+);
 
-vi.mock("./invocation/factory-invocation-widget", () => ({
+mock.module("./invocation/factory-invocation-widget", () => ({
   FactoryInvocationWidget: ({
     sessionID,
   }: {
     sessionID: string | null | undefined;
   }) => <div>FactoryInvocationWidget {sessionID}</div>,
 }));
+
+const { useSubmitWorkWidget } = await import("../hooks/use-submit-work-widget");
+const { SubmitWorkWidget } = await import("./submit-work-widget");
+
+/*
+ * Keep the factory-definition seam local to this feature-owned suite. The
+ * production widget imports the focused hook module, so the test does not load
+ * the feature's public barrel merely to replace one hook.
+ */
+function resetCurrentFactoryDefinitionMock() {
+  useCurrentFactoryDefinitionMock.mockReturnValue({
+      data: undefined,
+      error: null,
+      isLoading: false,
+  });
+}
 
 let restoreBrowserShims: (() => void) | undefined;
 let user: ReturnType<typeof userEvent.setup>;
@@ -62,11 +75,7 @@ async function selectWorkType(
 
 describe("SubmitWorkWidget form behavior", () => {
   beforeEach(() => {
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
-      data: undefined,
-      error: null,
-      isLoading: false,
-    });
+    resetCurrentFactoryDefinitionMock();
     restoreBrowserShims = installDashboardBrowserTestShims();
     user = userEvent.setup();
     useDashboardSessionStore.setState({
@@ -82,7 +91,7 @@ describe("SubmitWorkWidget form behavior", () => {
   });
 
   it("routes the supported default-work host through the name-free simple submission contract", async () => {
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
+    useCurrentFactoryDefinitionMock.mockReturnValue({
       data: {
         workTypes: [
           { handlingBehavior: ["DEFAULT"], name: "task", states: [] },
@@ -124,7 +133,7 @@ describe("SubmitWorkWidget form behavior", () => {
   });
 
   it("keeps the supported simple host disabled while viewing history", () => {
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
+    useCurrentFactoryDefinitionMock.mockReturnValue({
       data: {
         workTypes: [
           { handlingBehavior: ["DEFAULT"], name: "task", states: [] },
@@ -200,7 +209,7 @@ describe("SubmitWorkWidget form behavior", () => {
   });
 
   it("switches the dashboard slot to the signature-backed invocation widget when the current factory declares invocationSignature", () => {
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
+    useCurrentFactoryDefinitionMock.mockReturnValue({
       data: {
         invocationSignature: {
           parameters: [{ name: "input" }],

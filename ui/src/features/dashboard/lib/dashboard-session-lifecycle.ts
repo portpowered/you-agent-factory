@@ -6,11 +6,11 @@ import {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { resetSelectionHistoryStore } from "../../current-selection/base/public";
+import { resetSelectionHistoryStore } from "../../current-selection/base/state/selectionHistoryStore";
 import {
   FACTORY_SESSION_DETAIL_QUERY_KEY,
   factorySessionDetailQueryKey,
-} from "../../factory-session-detail/public";
+} from "../../factory-session-detail/hooks/use-factory-session-detail";
 import type { StreamDerivedCacheIdentity } from "../../timeline/public/stream-identity";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 export {
@@ -86,7 +86,7 @@ function resolveSessionRuntimeCacheScope(
   );
 }
 
-export { factorySessionDetailQueryKey } from "../../factory-session-detail/public";
+export { factorySessionDetailQueryKey } from "../../factory-session-detail/hooks/use-factory-session-detail";
 
 export function clearDashboardSessionRuntimeQueries(
   queryClient: QueryClient,

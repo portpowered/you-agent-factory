@@ -1,11 +1,9 @@
 import { useMemo } from "react";
-import { AlertPanel, AlertPanelText } from "../../../../../components/ui";
-import { TraceRelationFlow } from "../../../../trace-drilldown/public";
+import { AlertPanel, AlertPanelText } from "@you-agent-factory/components/feedback";
+import { TraceRelationFlow } from "../../../../trace-drilldown/components/trace-relation-flow";
 import type { useCurrentSelectionDispatchHistoryMessages } from "../../../base/components/presentation/current-selection-locale";
-import {
-  CurrentSelectionExpandableSection,
-  CurrentSelectionSupportingText,
-} from "../../../base/public";
+import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
+import { CurrentSelectionSupportingText } from "../../../base/components/presentation/current-selection-supporting-text";
 import type { SelectedWorkRelationshipGraph } from "../../lib/selected-work-relationship-graph";
 import { projectSelectedWorkRelationshipGraphToDashboardRelations } from "../../lib/selected-work-relationship-relations";
 import { FocusedRelationshipSummary } from "./work-item-relationship-summary";

@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
 
-import { ButtonLink } from "../../../../../components/ui";
+import { ButtonLink } from "@you-agent-factory/components/primitives";
+import { CurrentSelectionDescriptionList } from "../../../base/components/detail/current-selection-description-list";
 import {
-  CurrentSelectionDescriptionList,
   CurrentSelectionDetailCode,
   CurrentSelectionDetailItem,
-  CurrentSelectionDetailSection,
-} from "../../../base/public";
+} from "../../../base/components/detail/current-selection-detail-item";
+import { CurrentSelectionDetailSection } from "../../../base/components/detail/current-selection-detail-section";
 
 export function DispatchDetailSection({
   children,

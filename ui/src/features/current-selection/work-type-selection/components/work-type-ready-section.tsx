@@ -1,20 +1,18 @@
 import { type ReactNode, useId } from "react";
 
-import {
-  Checkbox,
-  DashboardStatusPill,
-  Input,
-  Label,
-} from "../../../../components/ui";
+import { Label } from "@you-agent-factory/components/primitives";
+import { Checkbox } from "../../../../components/ui/checkbox";
+import { DashboardStatusPill } from "../../../../components/ui/dashboard-status-pill";
+import { Input } from "../../../../components/ui/input";
 import type { EditableWorkTypeValidationErrors } from "../../../current-factory-definition/lib/work-type-editable-validation";
 import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/save/detail-card-factory-save-feedback";
+import { CurrentSelectionDetailFeedback } from "../../base/components/detail/current-selection-detail-feedback";
 import {
-  CurrentSelectionDetailFeedback,
   CurrentSelectionFormField,
   CurrentSelectionFormFields,
-  CurrentSelectionSupportingText,
-} from "../../base/public";
+} from "../../base/components/layout/current-selection-form-layout";
+import { CurrentSelectionSupportingText } from "../../base/components/presentation/current-selection-supporting-text";
 import type {
   EditableWorkTypeConfigurationState,
   EditableWorkTypeSaveState,

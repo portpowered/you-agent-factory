@@ -2,7 +2,7 @@ import type { CanonicalFactoryDefinition } from "../../../api/current-factory-de
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import type { components } from "../../../api/generated/openapi";
 import type { ApiRunnerID } from "../../current-selection/workstation-selection/messages/runner-openapi-enums";
-import { BUILT_IN_RUNNER_IDS } from "../../current-selection/workstation-selection/public";
+import { BUILT_IN_RUNNER_IDS } from "../../current-selection/workstation-selection/editing/runner-metadata";
 import {
   type ResolvedRunnerSelection,
   type RunnerSelectionSource,

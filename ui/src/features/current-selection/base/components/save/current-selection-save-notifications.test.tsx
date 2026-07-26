@@ -8,7 +8,7 @@ import { buildGraphSaveErrorToastDescription } from "../../../../factory-graph-e
 import {
   GLOBAL_TOAST_DURATION_MS,
   PERSISTENT_TOAST_DURATION_MS,
-} from "../../../../notifications/public";
+} from "../../../../notifications/lib/save-notification-delivery-policy";
 import { CurrentSelectionSaveNotifications } from "./current-selection-save-notifications";
 
 vi.mock("sonner", () => ({

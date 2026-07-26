@@ -8,7 +8,7 @@ import {
 import { afterEach, beforeEach } from "vitest";
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
-import { NoSelectionDetailCard } from "../../current-selection/base/public";
+import { NoSelectionDetailCard } from "../../current-selection/base/components/detail/no-selection-detail-card";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { WorkTotalsCard } from "../../work-totals/components/work-totals-card";
 import {

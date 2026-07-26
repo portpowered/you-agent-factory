@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { DashboardWidgetFrame } from "../../bento/public";
+import { DashboardWidgetFrame } from "../../bento/components/dashboard-widget-frame/dashboard-widget-frame";
 import { getDashboardWorkChartSeriesDefinitions } from "../lib/chart-contract";
 import type { WorkChartModel } from "../lib/trends";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";

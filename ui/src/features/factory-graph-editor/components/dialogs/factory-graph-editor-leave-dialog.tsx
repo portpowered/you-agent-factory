@@ -6,7 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@you-agent-factory/components/overlays";
-import { Button } from "../../../../components/ui";
+import { Button } from "../../../../components/ui/button";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 
 export function FactoryGraphEditorLeaveDialog({

@@ -3,7 +3,7 @@ import "../../../testing/vitest-dom-capabilities.setup";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { getTerminalWorkMessages } from "../messages/terminal-work";
-import { TerminalWorkWidget } from "../public";
+import { TerminalWorkWidget } from "./terminal-work-widget";
 
 describe("TerminalWorkWidget", () => {
   const originalDocumentLang = document.documentElement.lang;

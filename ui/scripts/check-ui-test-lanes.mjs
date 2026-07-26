@@ -13,7 +13,11 @@ const componentBrowserImportPattern =
   /from\s+["'](?:playwright|@playwright\/test|[^"']*browser-test-harness[^"']*)["']/m;
 const optionalDomCapabilityImportPattern = /vitest-dom-capabilities\.setup/m;
 const aggregateFeaturePublicImportPattern =
-  /(?:from\s+|import\s*\(|vi\.mock\()\s*["'][^"']*\/(?:dashboard|timeline)\/public["']/m;
+  /(?:from\s+|import\s*\(|(?:vi|mock)\.mock\()\s*["'][^"']*(?:\/public|\.\.?\/public)["']/m;
+const generalUiBarrelImportPattern =
+  /from\s+["'][^"']*components\/ui["']/m;
+const rootComponentsPackageImportPattern =
+  /from\s+["']@you-agent-factory\/components["']/m;
 const optionalGlobalSetupPattern =
   /(?:ResizeObserver|HTMLAnchorElement|queryCommandSupported|monaco|test-browser-shims|vitest-dom-capabilities)/i;
 const dashboardCompositionImportPattern =
@@ -90,7 +94,21 @@ export function auditUiSourceFile({ relativePath, source }) {
 
   if (aggregateFeaturePublicImportPattern.test(source)) {
     errors.push(
-      `${normalized}: import a focused dashboard or timeline public module instead of its aggregate barrel`,
+      `${normalized}: import the owning module instead of an aggregate feature public barrel`,
+    );
+  }
+  if (generalUiBarrelImportPattern.test(source)) {
+    errors.push(
+      `${normalized}: import a focused UI module instead of the general components/ui barrel`,
+    );
+  }
+  if (
+    rootComponentsPackageImportPattern.test(source) &&
+    !/\.(?:test|integration)\.[cm]?[jt]sx?$/.test(normalized) &&
+    !/\.stories\.[cm]?[jt]sx?$/.test(normalized)
+  ) {
+    errors.push(
+      `${normalized}: import a focused @you-agent-factory/components subpath instead of its package root`,
     );
   }
   if (

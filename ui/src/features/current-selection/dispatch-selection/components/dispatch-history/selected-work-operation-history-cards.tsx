@@ -6,12 +6,12 @@ import {
   useCurrentSelectionOperationalEnumMessages,
 } from "../../../base/components/presentation/current-selection-locale";
 import { CurrentSelectionBadge } from "../../../base/components/presentation/current-selection-pill";
-import { CurrentSelectionDescriptionList } from "../../../base/public";
+import { CurrentSelectionDescriptionList } from "../../../base/components/detail/current-selection-description-list";
 import {
   CurrentSelectionHistoryCard,
   CurrentSelectionHistoryCardHeader,
-} from "../../../history/public";
-import { InferenceAttemptDetail } from "../../../work-selection/public";
+} from "../../../history/components/current-selection-history-card";
+import { InferenceAttemptDetail } from "../../../work-selection/components/inference-attempt/inference-attempt-detail";
 import {
   requestOutcome,
   requestStartedAt,

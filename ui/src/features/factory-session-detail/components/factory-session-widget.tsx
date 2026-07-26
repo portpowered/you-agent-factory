@@ -1,6 +1,6 @@
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import type { ReactNode } from "react";
-import { DashboardWidgetFrame } from "../../bento/public";
+import { DashboardWidgetFrame } from "../../bento/components/dashboard-widget-frame/dashboard-widget-frame";
 import { readFactorySessionIDSearchParam } from "../lib/search-param/factory-session-search-param";
 import { getFactorySessionWidgetMessages } from "../messages/factory-session-widget";
 import { FactorySessionDetailPanel } from "./factory-session-detail-panel";

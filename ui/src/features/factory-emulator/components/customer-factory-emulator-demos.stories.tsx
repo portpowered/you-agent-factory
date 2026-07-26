@@ -1,7 +1,7 @@
 import type { FactoryEmulatorScenario } from "@you-agent-factory/factory-emulator";
 import { useState } from "react";
 
-import { Button } from "../../../components/ui";
+import { Button } from "@you-agent-factory/components/primitives";
 import { customerFactoryEmulatorDemoFixtures } from "../lib/customer-demo-fixtures";
 import { CustomerFactoryEmulatorDemos } from "./customer-factory-emulator-demos";
 

@@ -3,4 +3,4 @@ export {
   ActivityGraphNodeShell,
   type PlaceNodeType,
   type ZAxisIncompleteHints,
-} from "../../graphs/public";
+} from "../../graphs/components/graph-node-shell";

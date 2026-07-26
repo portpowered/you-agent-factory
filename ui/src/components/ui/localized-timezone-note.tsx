@@ -1,4 +1,4 @@
-import { SurfacePanel } from "@you-agent-factory/components";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
 import { cn } from "../../lib/cn";
 import { DASHBOARD_SUPPORTING_TEXT_CLASS } from "./dashboard-typography";
 import { formatLocalTimezoneContext } from "./formatters";

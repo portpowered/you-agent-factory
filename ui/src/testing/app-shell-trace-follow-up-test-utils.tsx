@@ -4,7 +4,7 @@ import type { FactoryEvent } from "../api/events";
 import { FACTORY_EVENT_TYPES } from "../api/events";
 import { useFactoryTimelineStore } from "../features/timeline/state/factoryTimelineStore";
 import { useTraceDrilldown } from "../features/trace-drilldown/hooks/useTraceDrilldown";
-import { TraceDrilldownWidget } from "../features/trace-drilldown/public";
+import { TraceDrilldownWidget } from "../features/trace-drilldown/components/trace-drilldown-widget";
 
 export const activeWorkID = "work-active-story";
 export const fanInResultLabel = "Implemented Story";

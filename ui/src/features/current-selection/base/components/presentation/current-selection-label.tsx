@@ -1,6 +1,6 @@
 import { forwardRef, type HTMLAttributes } from "react";
 
-import { Label } from "../../../../../components/ui";
+import { Label } from "@you-agent-factory/components/primitives";
 
 export interface CurrentSelectionLabelProps
   extends HTMLAttributes<HTMLSpanElement> {}

@@ -1,5 +1,3 @@
-import { afterEach, beforeEach } from "vitest";
-
 export type ConsoleLevel = "warn" | "error";
 
 export type ConsoleAllowlistEntry = {

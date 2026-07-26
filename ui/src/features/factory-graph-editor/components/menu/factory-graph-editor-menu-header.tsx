@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Text } from "../../../../components/ui";
+import { Text } from "@you-agent-factory/components/primitives";
 
 export function FactoryGraphEditorMenuHeader({
   description,

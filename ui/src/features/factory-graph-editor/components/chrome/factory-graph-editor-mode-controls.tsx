@@ -1,4 +1,4 @@
-import { DashboardStatusPill } from "../../../../components/ui";
+import { DashboardStatusPill } from "../../../../components/ui/dashboard-status-pill";
 import { cn } from "../../../../lib/cn";
 import {
   type FactoryGraphEditorDirtyState,

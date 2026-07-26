@@ -8,16 +8,14 @@ import type {
   FactorySessionsAPIError,
   FactorySessionTarget,
 } from "../../../api/factory-sessions";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
+import { Button, Text } from "@you-agent-factory/components/primitives";
+import { AlertPanel, AlertPanelText } from "../../../components/ui/alert-panel";
+import { Input } from "../../../components/ui/input";
 import {
-  AlertPanel,
-  AlertPanelText,
-  Button,
-  Input,
   StandardListSelection,
   StandardListSelectionItem,
-  SurfacePanel,
-  Text,
-} from "../../../components/ui";
+} from "../../../components/ui/standard-list-selection";
 import {
   type FolderValidationState,
   factorySessionTargetOptionValue,

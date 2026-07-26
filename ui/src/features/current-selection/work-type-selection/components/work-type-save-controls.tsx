@@ -1,7 +1,8 @@
 import { Save } from "lucide-react";
-import { Button, DashboardActionButton } from "../../../../components/ui";
+import { Button } from "@you-agent-factory/components/primitives";
+import { DashboardActionButton } from "../../../../components/ui/dashboard-action-button";
 import { DashboardMutationDialog } from "../../../workflow-activity/components/mutation-dialog";
-import { EditableConfigurationDiscardHeaderAction } from "../../base/public";
+import { EditableConfigurationDiscardHeaderAction } from "../../base/components/save/editable-configuration-discard-header-action";
 import type { EditableWorkTypeSaveState } from "../lib/detail-card-types";
 import { getWorkTypeDetailMessages } from "../messages/work-type-detail";
 

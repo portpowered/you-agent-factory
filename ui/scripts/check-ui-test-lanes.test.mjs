@@ -11,6 +11,7 @@ it.each([
   ["features/example/lib/legacy.test.ts", "unit"],
   ["features/example/components/legacy.test.tsx", "component"],
   ["features/example/components/card.component.test.tsx", "component"],
+  ["features/example/components/card.bun.component.test.tsx", "component"],
   ["features/example/lib/layout.performance.test.ts", "performance"],
   ["features/example/performance/layout.test.ts", "performance"],
   ["integration/example.browser.test.mjs", "browser"],
@@ -18,15 +19,54 @@ it.each([
   expect(classifiedUiTestLane(relativePath)).toBe(expected);
 });
 
-it("rejects aggregate dashboard and timeline public imports", () => {
+it("rejects aggregate feature public imports", () => {
   expect(
     auditUiSourceFile({
       relativePath: "features/example/card.tsx",
       source: 'import { useFactoryTimelineStore } from "../timeline/public";',
     }),
   ).toEqual([
-    "features/example/card.tsx: import a focused dashboard or timeline public module instead of its aggregate barrel",
+    "features/example/card.tsx: import the owning module instead of an aggregate feature public barrel",
   ]);
+});
+
+it("rejects a sibling public barrel import", () => {
+  expect(
+    auditUiSourceFile({
+      relativePath: "features/example/card.test.tsx",
+      source: 'import { ExampleCard } from "../public";',
+    }),
+  ).toEqual([
+    "features/example/card.test.tsx: import the owning module instead of an aggregate feature public barrel",
+  ]);
+});
+
+it("rejects general UI barrels in application code", () => {
+  expect(
+    auditUiSourceFile({
+      relativePath: "features/example/card.tsx",
+      source: 'import { Button } from "../../../components/ui";',
+    }),
+  ).toEqual([
+    "features/example/card.tsx: import a focused UI module instead of the general components/ui barrel",
+  ]);
+  expect(
+    auditUiSourceFile({
+      relativePath: "features/example/card.tsx",
+      source: 'import { Button } from "@you-agent-factory/components";',
+    }),
+  ).toEqual([
+    "features/example/card.tsx: import a focused @you-agent-factory/components subpath instead of its package root",
+  ]);
+});
+
+it("allows package-root imports in explicit package contract tests", () => {
+  expect(
+    auditUiSourceFile({
+      relativePath: "components/ui/package-exports.test.tsx",
+      source: 'import { Button } from "@you-agent-factory/components";',
+    }),
+  ).toEqual([]);
 });
 
 it("requires optional browser capabilities to stay out of global setup", () => {

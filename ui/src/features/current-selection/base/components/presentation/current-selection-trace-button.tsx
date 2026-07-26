@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes } from "react";
 
-import { Button } from "../../../../../components/ui";
+import { Button } from "../../../../../components/ui/button";
 import { cn } from "../../../../../lib/cn";
 
 export interface CurrentSelectionTraceButtonProps

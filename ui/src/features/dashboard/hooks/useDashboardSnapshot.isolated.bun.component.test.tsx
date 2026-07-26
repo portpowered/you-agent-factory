@@ -2,8 +2,14 @@ import "../../../testing/vitest-dom-capabilities.setup";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "bun:test";
 import type { PropsWithChildren } from "react";
-import { vi } from "vitest";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
@@ -11,6 +17,7 @@ import * as factorySessionsAPI from "../../../api/factory-sessions";
 import { FACTORY_SESSIONS_QUERY_KEY } from "../../../api/factory-sessions/query-keys";
 import { FactorySessionSyncPreflightReasonCode } from "../../../api/generated/openapi";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { bunVi as vi } from "../../../testing/bun/vi-compat";
 import { DashboardSessionStoreTestProvider } from "../../../testing/dashboard-session-test-provider";
 import { createReplayHarness } from "../../../testing/replay-harness";
 import {

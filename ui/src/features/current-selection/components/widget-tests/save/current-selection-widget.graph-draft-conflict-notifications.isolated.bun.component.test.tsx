@@ -1,21 +1,15 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: graph-draft conflict notification regressions share one mocked save/notify harness.
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { toast } from "sonner";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { CurrentFactoryDocument } from "../../../../../api/current-factory-definition";
 import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";
 import { settleCurrentSelectionEffects } from "../../../../../testing/current-selection-test-utils";
+import { bunVi as vi } from "../../../../../testing/bun/vi-compat";
 import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
 import { useStrictConsoleGuard } from "../../../../../testing/strict-console-guard";
-import { useCurrentFactoryDocument } from "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { useFactoryDocumentSave } from "../../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { useFactoryGraphTopologyEditorBridge } from "../../../../workflow-activity/state/factory-graph-topology-editor-bridge";
-import {
-  expectGraphDraftConflictWarningToast,
-  expectNoGraphDraftConflictWarningToast,
-  expectWorkerSaveSuccessToast,
-} from "../../../base/components/detail-card/current-selection-save-toast-test-helpers";
 import {
   buildDetailCardCurrentSelection,
   buildDetailCardEditableFactoryDocument,
@@ -30,47 +24,58 @@ import {
   workstationFooterSaveButton,
 } from "../../../base/components/detail-card/detail-card-test-helpers";
 import { resetSelectionHistoryStore } from "../../../state/selectionHistoryStore";
-import { useCurrentWorkstationPromptTemplateValidation } from "../../../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
-import { CurrentSelectionWidget } from "../../widget/current-selection-widget";
 import { renderWithQueryClient } from "../../widget/current-selection-widget-test-utils";
 
 const saveCurrentFactoryMutation = vi.fn();
 
-vi.mock("sonner", () => ({
-  toast: {
-    dismiss: vi.fn(),
-    error: vi.fn(),
-    success: vi.fn(),
-    warning: vi.fn(),
-  },
-}));
+const toast = {
+  dismiss: vi.fn(),
+  error: vi.fn(),
+  success: vi.fn(),
+  warning: vi.fn(),
+};
+const actualSonner = await import("sonner");
+const currentFactoryDefinitionHooks = await import(
+  "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition"
+);
+const useCurrentFactoryDocument = vi.fn<
+  typeof currentFactoryDefinitionHooks.useCurrentFactoryDocument
+>();
+const useFactoryDocumentSave = vi.fn();
+const useCurrentWorkstationPromptTemplateValidation = vi.fn();
 
-vi.mock(
+mock.module("sonner", () => ({ ...actualSonner, toast }));
+mock.module(
   "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  async () => {
-    const actual = await vi.importActual(
-      "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-    );
-
-    return {
-      ...actual,
-      useCurrentFactoryDocument: vi.fn(),
-    };
-  },
+  () => ({
+    ...currentFactoryDefinitionHooks,
+    useCurrentFactoryDocument,
+  }),
 );
 
-vi.mock(
+mock.module(
   "../../../../current-factory-definition/hooks/useFactoryDocumentSave",
   () => ({
-    useFactoryDocumentSave: vi.fn(),
+    useFactoryDocumentSave,
   }),
 );
 
-vi.mock(
+mock.module(
   "../../../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation",
   () => ({
-    useCurrentWorkstationPromptTemplateValidation: vi.fn(),
+    useCurrentWorkstationPromptTemplateValidation,
   }),
+);
+
+const {
+  expectGraphDraftConflictWarningToast,
+  expectNoGraphDraftConflictWarningToast,
+  expectWorkerSaveSuccessToast,
+} = await import(
+  "../../../base/components/detail-card/current-selection-save-toast-test-helpers"
+);
+const { CurrentSelectionWidget } = await import(
+  "../../widget/current-selection-widget"
 );
 
 function resetGraphDraftBridge() {

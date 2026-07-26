@@ -242,6 +242,21 @@ describe("WorkChartCard", () => {
     expectWorkOutcomeCardFillsChartBody(card, messages.chart.cardRegionLabel);
   });
 
+  it("renders zh-CN chart labels", () => {
+    render(<WorkChartCard locale="zh-CN" model={populatedTrend} />);
+
+    const chart = screen.getByRole("img", { name: "15m 的工作结果图表" });
+    expect(within(chart).getByText("排队中")).toBeTruthy();
+    expect(within(chart).getByText("进行中")).toBeTruthy();
+    expect(within(chart).getByText("已完成")).toBeTruthy();
+    const overlay = chart.querySelector<HTMLElement>(
+      "[data-work-chart-overlay='true']",
+    );
+    expect(overlay).toBeTruthy();
+    expect(within(chart).getByText("刻度")).toBeTruthy();
+    expect(within(overlay as HTMLElement).getByText("工作计数")).toBeTruthy();
+  });
+
   it("flattens ready-state chart chrome without duplicating the bento card title", () => {
     const messages = getWorkOutcomeMessages();
     render(

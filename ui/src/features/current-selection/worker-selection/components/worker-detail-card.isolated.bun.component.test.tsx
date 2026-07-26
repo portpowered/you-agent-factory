@@ -1,4 +1,5 @@
-import "@testing-library/jest-dom/vitest";
+// Isolated because Bun module mocks are process-global.
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import {
   cleanup,
   fireEvent,
@@ -7,18 +8,33 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach } from "vitest";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
+import { bunVi as vi } from "../../../../testing/bun/vi-compat";
 import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { expectNoInlineSaveOutcomesIn } from "../../base/components/detail-card/current-selection-save-toast-test-helpers";
 import type {
   EditableWorkerConfigurationState,
   EditableWorkerSaveState,
 } from "../lib/detail-card-types";
 import { EditableWorkerConfigurationHeaderActions } from "./editable/worker-save-controls";
-import { WorkerDetailCard } from "./worker-detail-card";
+
+const currentFactoryDefinitionHooks = await import(
+  "../../../current-factory-definition/hooks/useCurrentFactoryDefinition"
+);
+const useCurrentFactoryDocumentMock = vi.fn<
+  typeof currentFactoryDefinitionHooks.useCurrentFactoryDocument
+>();
+
+mock.module(
+  "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  () => ({
+    ...currentFactoryDefinitionHooks,
+    useCurrentFactoryDocument: useCurrentFactoryDocumentMock,
+  }),
+);
+
+const { WorkerDetailCard } = await import("./worker-detail-card");
 
 const CURRENT_SELECTION_FORM_FIELDS_SELECTOR = ".grid.grid-cols-1.gap-3";
 
@@ -34,24 +50,14 @@ afterEach(() => {
   restoreBrowserShims = undefined;
 });
 
-vi.mock(
-  "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  async () => {
-    const actual = await vi.importActual(
-      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-    );
-
-    return {
-      ...actual,
-      useCurrentFactoryDocument: vi.fn(),
-    };
-  },
-);
-
 function mockFactoryDocumentQuery(
-  overrides: Partial<ReturnType<typeof useCurrentFactoryDocument>> = {},
+  overrides: Partial<
+    ReturnType<
+      typeof currentFactoryDefinitionHooks.useCurrentFactoryDocument
+    >
+  > = {},
 ) {
-  vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+  useCurrentFactoryDocumentMock.mockReturnValue({
     data: undefined,
     error: null,
     failureCount: 0,

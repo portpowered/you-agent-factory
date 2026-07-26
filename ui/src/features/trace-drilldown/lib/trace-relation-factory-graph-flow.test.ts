@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DashboardWorkRelation } from "../../../api/dashboard/types";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { WORK_RELATION_NODE_TYPES } from "../../graphs/public";
+import { WORK_RELATION_NODE_TYPES } from "../../graphs/components/work-relation-node";
 import { buildTraceRelationFactoryGraphFlow } from "./trace-relation-factory-graph-flow";
 
 const RELATIONS: DashboardWorkRelation[] = [

@@ -3,7 +3,7 @@ import {
   type RecordingValidationIssue,
   safeParseFactoryRecording,
 } from "@you-agent-factory/client";
-import { Text } from "@you-agent-factory/components";
+import { Text } from "@you-agent-factory/components/primitives";
 import {
   canonicalizeFactoryEvents,
   type FactoryActivityProjection,

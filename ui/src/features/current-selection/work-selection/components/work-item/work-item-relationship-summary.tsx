@@ -1,15 +1,12 @@
-import {
-  Code,
-  Label,
-  surfacePanelVariants,
-} from "../../../../../components/ui";
+import { surfacePanelVariants } from "@you-agent-factory/components/layout";
+import { Code, Label } from "@you-agent-factory/components/primitives";
 import type { useCurrentSelectionDispatchHistoryMessages } from "../../../base/components/presentation/current-selection-locale";
+import { CurrentSelectionDescriptionList } from "../../../base/components/detail/current-selection-description-list";
 import {
-  CurrentSelectionDescriptionList,
   CurrentSelectionDetailItem,
   CurrentSelectionDetailValue,
-  CurrentSelectionTraceButton,
-} from "../../../base/public";
+} from "../../../base/components/detail/current-selection-detail-item";
+import { CurrentSelectionTraceButton } from "../../../base/components/presentation/current-selection-trace-button";
 import type { SelectedWorkRelationshipNode } from "../../lib/selected-work-relationship-graph";
 
 export function FocusedRelationshipSummary({

@@ -1,7 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
+import { bunVi as vi } from "../../../../testing/bun/vi-compat";
 import {
   readSessionPersistenceDiagnosticRecords,
   resetSessionPersistenceDiagnosticRecords,

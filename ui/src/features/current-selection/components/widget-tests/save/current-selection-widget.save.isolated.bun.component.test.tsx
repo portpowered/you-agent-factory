@@ -1,29 +1,16 @@
-import "../../../../../testing/vitest-dom-capabilities.setup";
-
-import "@testing-library/jest-dom/vitest";
+// Isolated because Bun module mocks are process-global.
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { toast } from "sonner";
 import {
   CurrentFactoryDefinitionError,
   type CurrentFactoryDocument,
 } from "../../../../../api/current-factory-definition";
 import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";
+import { bunVi as vi } from "../../../../../testing/bun/vi-compat";
 import { staleFactoryVersionTarget } from "../../../../../testing/factory-validation-target-fixtures";
 import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
-import { useCurrentFactoryDocument } from "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { useFactoryDocumentSave } from "../../../../current-factory-definition/hooks/useFactoryDocumentSave";
-import {
-  currentSelectionConfigurationSection,
-  expectNoInlineSaveOutcomesIn,
-  expectNoSaveToastDelivery,
-  expectWorkerSaveSuccessToast,
-  expectWorkStateSaveSuccessToast,
-  expectWorkstationSaveFailedToast,
-  expectWorkstationSaveSuccessToast,
-  expectWorkstationStaleSaveWarningToast,
-} from "../../../base/components/detail-card/current-selection-save-toast-test-helpers";
 import {
   buildDetailCardMultiResourceFactoryDocument,
   expandDetailCardResourceConfiguration,
@@ -44,8 +31,6 @@ import {
   workstationFooterSaveButton,
 } from "../../../base/components/detail-card/detail-card-test-helpers";
 import { resetSelectionHistoryStore } from "../../../state/selectionHistoryStore";
-import { useCurrentWorkstationPromptTemplateValidation } from "../../../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
-import { CurrentSelectionWidget } from "../../widget/current-selection-widget";
 import {
   createCurrentSelectionWidgetQueryClient,
   renderWithExistingQueryClient,
@@ -54,41 +39,61 @@ import {
 
 const saveCurrentFactoryMutation = vi.fn();
 
-vi.mock("sonner", () => ({
-  toast: {
-    dismiss: vi.fn(),
-    error: vi.fn(),
-    success: vi.fn(),
-    warning: vi.fn(),
-  },
-}));
+const toast = {
+  dismiss: vi.fn(),
+  error: vi.fn(),
+  success: vi.fn(),
+  warning: vi.fn(),
+};
+const actualSonner = await import("sonner");
+const currentFactoryDefinitionHooks = await import(
+  "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition"
+);
+const useCurrentFactoryDocumentMock = vi.fn<
+  typeof currentFactoryDefinitionHooks.useCurrentFactoryDocument
+>();
+const useFactoryDocumentSaveMock = vi.fn();
+const useCurrentWorkstationPromptTemplateValidationMock = vi.fn();
 
-vi.mock(
+mock.module("sonner", () => ({ ...actualSonner, toast }));
+
+mock.module(
   "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  async () => {
-    const actual = await vi.importActual(
-      "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-    );
-
-    return {
-      ...actual,
-      useCurrentFactoryDocument: vi.fn(),
-    };
-  },
+  () => ({
+    ...currentFactoryDefinitionHooks,
+    useCurrentFactoryDocument: useCurrentFactoryDocumentMock,
+  }),
 );
 
-vi.mock(
+mock.module(
   "../../../../current-factory-definition/hooks/useFactoryDocumentSave",
   () => ({
-    useFactoryDocumentSave: vi.fn(),
+    useFactoryDocumentSave: useFactoryDocumentSaveMock,
   }),
 );
 
-vi.mock(
+mock.module(
   "../../../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation",
   () => ({
-    useCurrentWorkstationPromptTemplateValidation: vi.fn(),
+    useCurrentWorkstationPromptTemplateValidation:
+      useCurrentWorkstationPromptTemplateValidationMock,
   }),
+);
+
+const {
+  currentSelectionConfigurationSection,
+  expectNoInlineSaveOutcomesIn,
+  expectNoSaveToastDelivery,
+  expectWorkerSaveSuccessToast,
+  expectWorkStateSaveSuccessToast,
+  expectWorkstationSaveFailedToast,
+  expectWorkstationSaveSuccessToast,
+  expectWorkstationStaleSaveWarningToast,
+} = await import(
+  "../../../base/components/detail-card/current-selection-save-toast-test-helpers"
+);
+const { CurrentSelectionWidget } = await import(
+  "../../widget/current-selection-widget"
 );
 
 describe("CurrentSelectionWidget workstation save flow", () => {
@@ -101,17 +106,17 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     vi.mocked(toast.success).mockClear();
     vi.mocked(toast.error).mockClear();
     vi.mocked(toast.warning).mockClear();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(
         buildDetailCardEditableFactoryDocument(),
       ),
     );
-    vi.mocked(useFactoryDocumentSave).mockReturnValue(
+    useFactoryDocumentSaveMock.mockReturnValue(
       buildDetailCardFactoryDocumentSaveHookReturn(
         saveCurrentFactoryMutation,
       ) as never,
     );
-    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
+    useCurrentWorkstationPromptTemplateValidationMock.mockReturnValue({
       data: {
         diagnostics: [],
         valid: true,
@@ -132,7 +137,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("blocks saving while prompt diagnostics remain and re-enables save after the draft is corrected", async () => {
-    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockImplementation(
+    useCurrentWorkstationPromptTemplateValidationMock.mockImplementation(
       (_workstationName, prompt) =>
         ({
           data:
@@ -189,7 +194,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("keeps save enabled after syntax recovery while prompt validation refetches settled results", async () => {
-    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockImplementation(
+    useCurrentWorkstationPromptTemplateValidationMock.mockImplementation(
       (_workstationName, prompt) => {
         const isValidPrompt = prompt === "Use {{ .WorkID }}.";
         return {
@@ -521,7 +526,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
     await selectLabeledComboboxOption(user, "Worker", "reviewer");
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(refreshedFactory),
     );
 
@@ -544,7 +549,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("preserves worker models while saving workstation prompt changes against a shared-worker definition", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(
         buildDetailCardSharedWorkerFactoryDocument(),
       ),
@@ -605,7 +610,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(
         buildDetailCardMultiWorkstationFactoryDocument(),
       ),
@@ -684,7 +689,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(
         buildDetailCardMultiWorkstationFactoryDocument(),
       ),
@@ -711,7 +716,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     await expectWorkstationSaveSuccessToast();
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(savedFactory),
     );
 
@@ -787,7 +792,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(
         buildDetailCardMultiWorkstationFactoryDocument(),
       ),
@@ -814,7 +819,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     await expectWorkstationSaveSuccessToast();
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(savedFactory),
     );
 
@@ -867,7 +872,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(
         buildDetailCardMultiWorkstationFactoryDocument(),
       ),
@@ -935,7 +940,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(
         buildDetailCardMultiWorkstationFactoryDocument(),
       ),
@@ -1009,7 +1014,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(
         buildDetailCardMultiWorkstationFactoryDocument(),
       ),
@@ -1094,17 +1099,17 @@ describe("CurrentSelectionWidget resource save flow", () => {
     vi.mocked(toast.success).mockClear();
     vi.mocked(toast.error).mockClear();
     vi.mocked(toast.warning).mockClear();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(
         buildDetailCardMultiResourceFactoryDocument(),
       ),
     );
-    vi.mocked(useFactoryDocumentSave).mockReturnValue(
+    useFactoryDocumentSaveMock.mockReturnValue(
       buildDetailCardFactoryDocumentSaveHookReturn(
         saveCurrentFactoryMutation,
       ) as never,
     );
-    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
+    useCurrentWorkstationPromptTemplateValidationMock.mockReturnValue({
       data: {
         diagnostics: [],
         valid: true,
@@ -1319,12 +1324,12 @@ describe("CurrentSelectionWidget work state save flow", () => {
     vi.mocked(toast.success).mockClear();
     vi.mocked(toast.error).mockClear();
     vi.mocked(toast.warning).mockClear();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(
         buildDetailCardWorkStateFactoryDocument(),
       ),
     );
-    vi.mocked(useFactoryDocumentSave).mockReturnValue(
+    useFactoryDocumentSaveMock.mockReturnValue(
       buildDetailCardFactoryDocumentSaveHookReturn(
         saveCurrentFactoryMutation,
       ) as never,
@@ -1448,12 +1453,12 @@ describe("CurrentSelectionWidget worker save flow", () => {
     vi.mocked(toast.success).mockClear();
     vi.mocked(toast.error).mockClear();
     vi.mocked(toast.warning).mockClear();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(
         buildDetailCardEditableFactoryDocument(),
       ),
     );
-    vi.mocked(useFactoryDocumentSave).mockReturnValue(
+    useFactoryDocumentSaveMock.mockReturnValue(
       buildDetailCardFactoryDocumentSaveHookReturn(
         saveCurrentFactoryMutation,
       ) as never,

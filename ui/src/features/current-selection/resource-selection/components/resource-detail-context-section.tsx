@@ -1,11 +1,9 @@
 import { useId } from "react";
 
-import { Label, Text } from "../../../../components/ui";
+import { Label, Text } from "@you-agent-factory/components/primitives";
 import { formatList } from "../../../../components/ui/formatters";
-import {
-  CurrentSelectionExpandableSection,
-  CurrentSelectionSupportingText,
-} from "../../base/public";
+import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
+import { CurrentSelectionSupportingText } from "../../base/components/presentation/current-selection-supporting-text";
 import type { ResourceDetailState } from "../lib/detail-card-types";
 import {
   resourceShowsModelFields,

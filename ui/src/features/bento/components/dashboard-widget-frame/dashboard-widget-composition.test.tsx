@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FactorySessionEventReplayDisclosure } from "../../../factory-session-detail/components/event-replay/factory-session-event-replay-disclosure";
-import { ProviderSessionWidget } from "../../../provider-session-detail/public";
+import { ProviderSessionWidget } from "../../../provider-session-detail/components/provider-session-widget";
 import { DEFAULT_DASHBOARD_LAYOUT } from "../../hooks/dashboardLayoutSchema";
 import {
   canAddDashboardWidgetType,

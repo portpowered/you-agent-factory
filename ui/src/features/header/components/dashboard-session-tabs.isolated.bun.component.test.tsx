@@ -2,6 +2,7 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing dashboard-session-tabs coverage stayed intact during feature-root migration.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 
 import { FactorySessionsAPIError } from "../../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
@@ -16,13 +17,14 @@ import {
   sessionTabSecondaryPath,
 } from "../lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "../messages/header-controls";
+import { bunVi as vi } from "../../../testing/bun/vi-compat";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 
 const listFactorySessions = vi.fn();
 const openFactorySession = vi.fn();
 const closeFactorySession = vi.fn();
 
-vi.mock("../../../api/factory-sessions", () => ({
+mock.module("../../../api/factory-sessions", () => ({
   FactorySessionsAPIError: class FactorySessionsAPIError extends Error {
     public readonly code: string;
     public readonly responseBody?: unknown;

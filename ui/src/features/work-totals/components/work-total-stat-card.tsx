@@ -1,4 +1,4 @@
-import { AlertPanel, type AlertPanelProps } from "../../../components/ui";
+import { AlertPanel, type AlertPanelProps } from "../../../components/ui/alert-panel";
 import { formatNumber } from "../../../i18n";
 
 export interface WorkTotalStatCardProps {

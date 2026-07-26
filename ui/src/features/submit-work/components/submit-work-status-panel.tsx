@@ -1,4 +1,4 @@
-import { AlertPanel, AlertPanelText } from "../../../components/ui";
+import { AlertPanel, AlertPanelText } from "@you-agent-factory/components/feedback";
 import type { SubmitWorkStatus } from "./submit-work-card";
 
 const SUBMIT_WORK_STATUS_TONE_BY_KIND: Record<

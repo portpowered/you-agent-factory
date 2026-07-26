@@ -1,6 +1,6 @@
 import { type ReactNode, useId } from "react";
 import { cn } from "../../../../../lib/cn";
-import { StandardExpandableSection } from "../../../../standard-card-components/public";
+import { StandardExpandableSection } from "../../../../standard-card-components/components/standard-expandable-section";
 
 export interface CurrentSelectionExpandableSectionProps {
   children: ReactNode;

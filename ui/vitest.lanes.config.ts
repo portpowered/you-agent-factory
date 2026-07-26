@@ -25,7 +25,10 @@ export default mergeConfig(
           test: {
             environment: "jsdom",
             include: ["src/**/*.component.test.ts", "src/**/*.test.tsx"],
-            exclude: ["src/**/performance/*.test.tsx"],
+            exclude: [
+              "src/**/*.bun.component.test.tsx",
+              "src/**/performance/*.test.tsx",
+            ],
             name: "dashboard-component",
           },
         },

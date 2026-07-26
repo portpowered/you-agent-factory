@@ -1,5 +1,9 @@
 import type { components } from "../../../../api/generated/openapi";
-import { AlertPanel, AlertPanelText, Text } from "../../../../components/ui";
+import { Text } from "@you-agent-factory/components/primitives";
+import {
+  AlertPanel,
+  AlertPanelText,
+} from "../../../../components/ui/alert-panel";
 
 type FactoryInvocationExample =
   components["schemas"]["FactoryInvocationExample"];

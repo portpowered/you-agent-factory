@@ -1,6 +1,6 @@
 import { forwardRef, type ReactNode } from "react";
 
-import { SelectableCardButton } from "../../../../../components/ui";
+import { SelectableCardButton } from "../../../../../components/ui/selectable-card-button";
 import { cn } from "../../../../../lib/cn";
 
 type CurrentSelectionSelectableButtonVariant = "card" | "compact";

@@ -9,7 +9,7 @@ import { FactoryEmulatorControls } from "@you-agent-factory/factory-visualizers"
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 
-import { Button } from "../../../components/ui";
+import { Button } from "@you-agent-factory/components/primitives";
 import {
   createFactoryEmulatorInstance,
   type FactoryEmulatorInstance,

@@ -1,6 +1,6 @@
 import { forwardRef, type HTMLAttributes } from "react";
 
-import { FormDescription, FormError } from "../../../../../components/ui";
+import { FormDescription, FormError } from "@you-agent-factory/components/forms";
 import { cn } from "../../../../../lib/cn";
 
 type CurrentSelectionDetailFeedbackTone = "danger" | "neutral";

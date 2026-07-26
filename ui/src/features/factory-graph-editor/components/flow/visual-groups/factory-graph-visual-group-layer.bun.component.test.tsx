@@ -1,16 +1,17 @@
 // biome-ignore-all lint/style/noExcessiveLinesPerFile: visual-group layer interaction cases share one React Flow rendering harness.
 import "../../../../../testing/vitest-dom-capabilities.setup";
 
-import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ReactFlow, ReactFlowProvider } from "@xyflow/react";
+import { describe, expect, it, mock } from "bun:test";
 import type { ComponentProps, CSSProperties } from "react";
-import { describe, expect, it, vi } from "vitest";
 
 import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
 
 import type { FactoryLayoutGroup } from "../../../lib/layout/visual-groups/factory-graph-layout-groups";
 import { FactoryGraphVisualGroupLayer } from "./factory-graph-visual-group-layer";
+
+const vi = { fn: mock };
 
 const sampleGroup: FactoryLayoutGroup = {
   bounds: { height: 120, width: 200, x: 40, y: 60 },

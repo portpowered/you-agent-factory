@@ -3,5 +3,5 @@ export type {
   SelectedWorkRelationshipGraph,
   SelectedWorkRelationshipNode,
   SelectedWorkRelationshipRole,
-} from "../work-selection/public";
-export { buildSelectedWorkRelationshipGraph } from "../work-selection/public";
+} from "../work-selection/lib/selected-work-relationship-graph";
+export { buildSelectedWorkRelationshipGraph } from "../work-selection/lib/selected-work-relationship-graph";

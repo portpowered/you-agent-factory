@@ -8,10 +8,12 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { ComponentProps, ReactNode } from "react";
 
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import { formatDateTime } from "../../../i18n/formatters";
+import { bunVi as vi } from "../../../testing/bun/vi-compat";
 import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
 
 const SELECTED_SESSION = {

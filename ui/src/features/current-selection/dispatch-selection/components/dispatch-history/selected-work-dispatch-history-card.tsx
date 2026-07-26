@@ -18,18 +18,14 @@ import { CurrentSelectionBadge } from "../../../base/components/presentation/cur
 import { CurrentSelectionSelectableButton } from "../../../base/components/presentation/current-selection-selectable-button";
 import { CurrentSelectionTraceButton } from "../../../base/components/presentation/current-selection-trace-button";
 import type { CurrentSelectionDispatchHistoryMessages } from "../../../base/messages/shell/current-selection-dispatch-history";
-import {
-  CurrentSelectionDescriptionList,
-  CurrentSelectionLabel,
-} from "../../../base/public";
+import { CurrentSelectionDescriptionList } from "../../../base/components/detail/current-selection-description-list";
+import { CurrentSelectionLabel } from "../../../base/components/presentation/current-selection-label";
 import {
   CurrentSelectionHistoryCard,
   CurrentSelectionHistoryCardHeader,
-} from "../../../history/public";
-import {
-  InferenceAttemptDetail,
-  WorkItemPayloadList,
-} from "../../../work-selection/public";
+} from "../../../history/components/current-selection-history-card";
+import { InferenceAttemptDetail } from "../../../work-selection/components/inference-attempt/inference-attempt-detail";
+import { WorkItemPayloadList } from "../../../work-selection/components/work-item/work-item-payload-details";
 import {
   dedupeWorkItems,
   requestDurationMillis,

@@ -2,7 +2,7 @@ import { factoryBundledDocDisplayLabel } from "../../../workflow-activity/lib/fa
 import { useFactoryGraphTopologyEditorBridge } from "../../../workflow-activity/state/factory-graph-topology-editor-bridge";
 import { CurrentSelectionGraphDraftConflictNotifications } from "../../base/components/save/current-selection-graph-draft-conflict-notifications";
 import { buildCurrentSelectionSaveToastMessages } from "../../base/lib/build-current-selection-save-toast-messages";
-import { CurrentSelectionSaveNotifications } from "../../base/public";
+import { CurrentSelectionSaveNotifications } from "../../base/components/save/current-selection-save-notifications";
 import type { DashboardSelection } from "../../base/state/selection-types";
 import type { useEditableDocConfigurationState } from "../../doc-selection/hooks/use-editable-doc-configuration-state";
 import type { CurrentSelectionState } from "../../hooks/core/useCurrentSelection";

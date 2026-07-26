@@ -1,4 +1,4 @@
-import { AlertPanel, AlertPanelText } from "../../../../../components/ui";
+import { AlertPanel, AlertPanelText } from "@you-agent-factory/components/feedback";
 import type { DetailCardSaveState } from "../../hooks/detail-card-save-types";
 
 export type DetailCardFactorySaveFeedbackMessages = {

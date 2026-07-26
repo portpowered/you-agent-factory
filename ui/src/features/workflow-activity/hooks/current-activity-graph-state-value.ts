@@ -1,5 +1,5 @@
 import type { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
-import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
+import type { FactoryDocumentSaveState } from "../../current-selection/base/hooks/factory-document-save-types";
 import type {
   FactoryGraphEditorTool,
   FactoryGraphEditorVisibilityPreset,

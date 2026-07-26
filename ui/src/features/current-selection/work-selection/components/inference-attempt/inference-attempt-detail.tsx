@@ -1,5 +1,5 @@
 import type { InferenceAttemptDetailProps } from "../../../base/components/detail-card/detail-card-types";
-import { CurrentSelectionDetailItem } from "../../../base/public";
+import { CurrentSelectionDetailItem } from "../../../base/components/detail/current-selection-detail-item";
 
 export function InferenceAttemptDetail({
   code = false,

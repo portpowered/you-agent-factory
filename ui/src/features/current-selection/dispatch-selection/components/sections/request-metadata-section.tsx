@@ -1,11 +1,9 @@
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import type { MetadataSectionProps } from "../../../base/components/detail-card/detail-card-types";
-import {
-  CurrentSelectionDescriptionList,
-  CurrentSelectionDetailItem,
-  CurrentSelectionExpandableSection,
-  useCurrentSelectionDetailMessages,
-} from "../../../base/public";
+import { CurrentSelectionDescriptionList } from "../../../base/components/detail/current-selection-description-list";
+import { CurrentSelectionDetailItem } from "../../../base/components/detail/current-selection-detail-item";
+import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
+import { useCurrentSelectionDetailMessages } from "../../../base/components/presentation/current-selection-locale";
 
 export function RequestMetadataSection({
   emptyMessage,

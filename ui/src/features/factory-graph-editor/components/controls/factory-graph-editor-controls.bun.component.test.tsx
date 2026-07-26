@@ -1,7 +1,10 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: toolbar controls share stateful harnesses and interaction coverage in one focused suite.
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { describe, expect, it, mock } from "bun:test";
 import { useState } from "react";
+
+const vi = { fn: mock };
 
 import type { FactoryGraphNodeKind } from "../../lib/draft/factory-graph-draft-types";
 import type { FactoryGraphEditorToolbarSelectionState } from "../../lib/selection/factory-graph-editor-toolbar-selection";

@@ -5,7 +5,7 @@ import { useCurrentSelectionDetails } from "../../current-selection/hooks/core/u
 import { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
-import { DashboardImportPreviewDialog } from "../../import/public";
+import { DashboardImportPreviewDialog } from "../../import/components/dashboard-import-preview-dialog";
 import { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
 import { useWorkOutcomeChart } from "../../work-outcome/hooks/useWorkOutcomeChart";
 import { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";

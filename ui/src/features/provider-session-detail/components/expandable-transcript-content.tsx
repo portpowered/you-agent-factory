@@ -1,4 +1,4 @@
-import { CodePanel } from "../../../components/ui";
+import { CodePanel } from "../../../components/ui/code-panel";
 import { AuthoredBodyText } from "../../../lib/authored-body-text";
 
 export function TranscriptContentPanel({

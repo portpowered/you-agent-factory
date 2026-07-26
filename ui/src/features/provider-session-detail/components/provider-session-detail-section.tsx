@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
-import { Label, Text } from "../../../components/ui";
-import { StandardExpandableSection } from "../../standard-card-components/public";
+import { Label, Text } from "@you-agent-factory/components/primitives";
+import { StandardExpandableSection } from "../../standard-card-components/components/standard-expandable-section";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
 
 type SessionDetail = ProviderSessionDetailResponse;

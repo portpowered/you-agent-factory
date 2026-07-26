@@ -1,4 +1,5 @@
-import "@testing-library/jest-dom/vitest";
+// Isolated because Bun module mocks are process-global.
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import {
   cleanup,
   fireEvent,
@@ -7,20 +8,17 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ModelOperationContentType } from "../../../../api/generated/openapi";
 import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
+import { bunVi as vi } from "../../../../testing/bun/vi-compat";
+import * as mockDialog from "../../../../testing/mock-dashboard-dialog";
 
-vi.mock("@you-agent-factory/components/overlays", async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import("@you-agent-factory/components/overlays")
-    >();
-  const mockDialog = await import("../../../../testing/mock-dashboard-dialog");
+const actualOverlays = await import("@you-agent-factory/components/overlays");
 
+mock.module("@you-agent-factory/components/overlays", () => {
   return {
-    ...actual,
+    ...actualOverlays,
     Dialog: mockDialog.Dialog,
     DialogContent: mockDialog.DialogContent,
     DialogDescription: mockDialog.DialogDescription,
@@ -38,7 +36,9 @@ import type { CanonicalFactoryDefinition } from "../../lib/draft/factory-graph-d
 import type { FactoryGraphAddEntityDraft } from "../../lib/editor/factory-graph-editor-additions";
 import { editableWorkstationBehaviorOptions } from "../../lib/editor/factory-graph-editor-additions";
 import { createEmptyFactoryGraphAddModelOperationDraft } from "../../lib/factory-graph-add-model-operation-draft";
-import { FactoryGraphEditorAddEntityDialog } from "./factory-graph-editor-add-dialog";
+const { FactoryGraphEditorAddEntityDialog } = await import(
+  "./factory-graph-editor-add-dialog"
+);
 
 let restoreBrowserShims: (() => void) | undefined;
 

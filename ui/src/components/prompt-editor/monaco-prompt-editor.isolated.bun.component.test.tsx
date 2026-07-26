@@ -1,8 +1,17 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 
-import { MonacoPromptEditor } from "./monaco-prompt-editor";
-import { WORKSTATION_PROMPT_THEME_ID } from "./monaco-prompt-setup";
+import * as monacoEditorAll from "../../testing/mocks/monaco-editor-all";
+import * as monacoEditorApi from "../../testing/mocks/monaco-editor-api";
+import * as monacoReact from "../../testing/mocks/monaco-react";
+
+mock.module("@monaco-editor/react", () => monacoReact);
+mock.module("monaco-editor/esm/vs/editor/editor.all.js", () => monacoEditorAll);
+mock.module("monaco-editor/esm/vs/editor/editor.api.js", () => monacoEditorApi);
+
+const { MonacoPromptEditor } = await import("./monaco-prompt-editor");
+const { WORKSTATION_PROMPT_THEME_ID } = await import("./monaco-prompt-setup");
+const vi = { fn: mock };
 
 const readyAutocompleteState = {
   contract: {

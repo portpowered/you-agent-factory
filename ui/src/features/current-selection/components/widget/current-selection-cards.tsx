@@ -1,12 +1,10 @@
-export { NoSelectionDetailCard } from "../../base/public";
-export { WorkstationRequestDetailCard } from "../../dispatch-selection/public";
+export { NoSelectionDetailCard } from "../../base/components/detail/no-selection-detail-card";
+export { WorkstationRequestDetailCard } from "../../dispatch-selection/components/request-detail/workstation-request-detail";
 export { DocDetailCard } from "../../doc-selection/components/doc-detail-card";
-export { ResourceDetailCard } from "../../resource-selection/public";
-export {
-  TerminalWorkSummaryCard,
-  WorkItemDetailCard,
-} from "../../work-selection/public";
-export { StateNodeDetailCard } from "../../work-state-selection/public";
-export { WorkTypeDetailCard } from "../../work-type-selection/public";
-export { WorkerDetailCard } from "../../worker-selection/public";
-export { WorkstationDetailCard } from "../../workstation-selection/public";
+export { ResourceDetailCard } from "../../resource-selection/components/resource-detail-card";
+export { TerminalWorkSummaryCard } from "../../work-selection/components/execution/terminal-work-summary-detail";
+export { WorkItemDetailCard } from "../../work-selection/components/work-item/work-item-card";
+export { StateNodeDetailCard } from "../../work-state-selection/components/state-node-detail";
+export { WorkTypeDetailCard } from "../../work-type-selection/components/work-type-detail-card";
+export { WorkerDetailCard } from "../../worker-selection/components/worker-detail-card";
+export { WorkstationDetailCard } from "../../workstation-selection/components/detail-card/workstation-detail-card";

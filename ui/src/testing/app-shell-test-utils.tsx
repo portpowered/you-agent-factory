@@ -24,7 +24,7 @@ import {
   currentFactoryDocumentQueryKey,
   useCurrentFactoryDocument,
 } from "../features/current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { resetSelectionHistoryStore } from "../features/current-selection/base/public";
+import { resetSelectionHistoryStore } from "../features/current-selection/base/state/selectionHistoryStore";
 import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import { useDashboardStreamStore } from "../features/dashboard/state/dashboardStreamStore";
 import { useExportDialogStore } from "../features/export/state/exportDialogStore";

@@ -1,7 +1,6 @@
 // biome-ignore-all lint/style/noExcessiveLinesPerFile: submit-work interaction cases share one form and invocation fixture harness.
 import "../../../testing/vitest-dom-capabilities.setup";
 
-import "@testing-library/jest-dom/vitest";
 import {
   cleanup,
   fireEvent,
@@ -11,7 +10,16 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  mock,
+} from "bun:test";
+
+const vi = { fn: mock };
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { selectComboboxOption } from "../../../testing/select-test-helpers";

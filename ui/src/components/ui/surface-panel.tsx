@@ -3,4 +3,4 @@ export {
   SurfacePanel,
   type SurfacePanelProps,
   surfacePanelVariants,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/layout";

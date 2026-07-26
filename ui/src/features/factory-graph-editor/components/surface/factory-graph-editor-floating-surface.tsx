@@ -1,6 +1,6 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
-import { SurfacePanel } from "../../../../components/ui";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
 import { cn } from "../../../../lib/cn";
 
 type FactoryGraphEditorFloatingSurfacePlacement =

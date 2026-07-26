@@ -34,7 +34,6 @@ vi.mock("@you-agent-factory/components/overlays", async (importOriginal) => {
       typeof import("@you-agent-factory/components/overlays")
     >();
   const mockDialog = await import("../../../testing/mock-dashboard-dialog");
-
   return {
     ...actual,
     Dialog: mockDialog.Dialog,
@@ -50,7 +49,6 @@ vi.mock("@you-agent-factory/components/overlays", async (importOriginal) => {
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
-
   return {
     ...actual,
     Background: () => <div data-testid="graph-background" />,

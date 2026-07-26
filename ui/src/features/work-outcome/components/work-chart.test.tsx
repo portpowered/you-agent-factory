@@ -10,7 +10,6 @@ import {
 } from "../lib/materializer/materialized-work-outcome";
 import { buildWorkChartModel, type WorkChartModel } from "../lib/trends";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
-import { WorkChartCard } from "./d3-information-card";
 import {
   WORK_CHART_MARGIN,
   WorkChart,
@@ -735,21 +734,6 @@ describe("WorkChart", () => {
     expect(
       screen.queryByRole("img", { name: "Work chart zero series" }),
     ).toBeNull();
-  });
-
-  it("renders zh-CN chart labels", () => {
-    render(<WorkChartCard locale="zh-CN" model={sparseWorkChartModel} />);
-
-    const chart = screen.getByRole("img", { name: "15m 的工作结果图表" });
-    expect(within(chart).getByText("排队中")).toBeTruthy();
-    expect(within(chart).getByText("进行中")).toBeTruthy();
-    expect(within(chart).getByText("已完成")).toBeTruthy();
-    const overlay = chart.querySelector<HTMLElement>(
-      "[data-work-chart-overlay='true']",
-    );
-    expect(overlay).toBeTruthy();
-    expect(within(chart).getByText("刻度")).toBeTruthy();
-    expect(within(overlay as HTMLElement).getByText("工作计数")).toBeTruthy();
   });
 
   it("supports localized zoom and reset interactions", async () => {

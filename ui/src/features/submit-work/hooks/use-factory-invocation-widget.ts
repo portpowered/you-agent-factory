@@ -12,8 +12,8 @@ import {
   SessionFactoryInvocationError,
   type SessionFactoryInvocationResponse,
 } from "../../../api/session-factory";
-import { useDashboardBentoStore } from "../../bento/public";
-import { useCurrentFactoryDefinition } from "../../current-factory-definition/public";
+import { useDashboardBentoStore } from "../../bento/state/dashboardBentoStore";
+import { useCurrentFactoryDefinition } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import {
   collectInvocationFieldErrors,
   extractInvocationFieldError,

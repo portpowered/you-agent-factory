@@ -13,7 +13,7 @@ import {
   workStatePhaseSemanticIconKind,
   workStatePhaseSurfaceClassName,
 } from "../../factory-graph-editor/lib/work-state/factory-graph-work-state-phase-styling";
-import { GraphNodeButton } from "../../graphs/public";
+import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
 import { currentActivityGraphNodeHoverClassName } from "../lib/current-activity-graph-hover";
 import { getActivityGraphMessages } from "../messages/activity-graph";

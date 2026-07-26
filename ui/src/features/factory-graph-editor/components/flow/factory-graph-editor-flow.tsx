@@ -12,7 +12,7 @@ import {
   type GraphSemanticIconKind,
 } from "../../../flowchart/components/graph-semantic-icon";
 import { currentActivityGraphNodeHoverClassName } from "../../../flowchart/lib/current-activity-graph-hover";
-import { FACTORY_GRAPH_EDGE_TYPES } from "../../../graphs/public";
+import { FACTORY_GRAPH_EDGE_TYPES } from "../../../graphs/components/factory-graph-edge";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphNodeKind,

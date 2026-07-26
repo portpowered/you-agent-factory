@@ -1,22 +1,19 @@
 import { OptionalEnumSelect } from "@you-agent-factory/components/forms";
 import { type ReactNode, useId } from "react";
 
+import { Label, Text } from "@you-agent-factory/components/primitives";
 import {
   AlertPanel,
   AlertPanelText,
-  FormWarning,
-  Input,
-  Label,
-  Text,
-} from "../../../../components/ui";
+} from "../../../../components/ui/alert-panel";
+import { FormWarning } from "../../../../components/ui/form-field";
+import { Input } from "../../../../components/ui/input";
 import { formatList } from "../../../../components/ui/formatters";
 import { EDITABLE_RESOURCE_TYPES } from "../../../current-factory-definition/lib/resource-editable-values";
 import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/save/detail-card-factory-save-feedback";
-import {
-  CurrentSelectionDetailFeedback,
-  CurrentSelectionFormField,
-} from "../../base/public";
+import { CurrentSelectionDetailFeedback } from "../../base/components/detail/current-selection-detail-feedback";
+import { CurrentSelectionFormField } from "../../base/components/layout/current-selection-form-layout";
 import { formatEditableResourceOverwriteFieldLabels } from "../editing/editable-resource-overwrite-fields";
 import type {
   EditableResourceConfigurationState,

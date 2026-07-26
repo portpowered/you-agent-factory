@@ -1,15 +1,17 @@
 import { CodePanel } from "@you-agent-factory/components/data-display";
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import { formatDurationMillis } from "../../../../../components/ui/formatters";
+import { CurrentSelectionDescriptionList } from "../../../base/components/detail/current-selection-description-list";
 import {
-  CurrentSelectionDescriptionList,
   CurrentSelectionDetailCode,
   CurrentSelectionDetailItem,
   CurrentSelectionDetailValue,
-  CurrentSelectionExpandableSection,
+} from "../../../base/components/detail/current-selection-detail-item";
+import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
+import {
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
-} from "../../../base/public";
+} from "../../../base/components/presentation/current-selection-locale";
 import type { WorkstationRequestDetailCardProps } from "../../lib/detail-card-types";
 import type { WorkstationRequestDetailView } from "../request-detail/workstation-request-detail-view";
 

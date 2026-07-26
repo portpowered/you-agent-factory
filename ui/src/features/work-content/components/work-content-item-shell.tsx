@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Label, SurfacePanel } from "../../../components/ui";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
+import { Label } from "@you-agent-factory/components/primitives";
 
 export function WorkContentItemShell({
   children,

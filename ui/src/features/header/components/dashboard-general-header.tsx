@@ -1,4 +1,5 @@
-import { ActionRow, Heading } from "../../../components/ui";
+import { ActionRow } from "@you-agent-factory/components/layout";
+import { Heading } from "@you-agent-factory/components/primitives";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import { cn } from "../../../lib/cn";
 import type { DashboardSessionTabsState } from "../hooks/use-dashboard-session-tabs-state";

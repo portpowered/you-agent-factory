@@ -7,7 +7,7 @@ import { createDefaultFactoryLayout } from "../../factory-graph-editor/lib/layou
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
-vi.mock("../../dashboard/public/topology-replay", () => ({
+vi.mock("../../dashboard/components/topology-replay/hosted-topology-replay", () => ({
   HostedTopologyReplay: (props: { selectedNodeID?: string }) => (
     <div
       data-selected-node-id={props.selectedNodeID}

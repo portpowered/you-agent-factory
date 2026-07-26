@@ -1,3 +1,4 @@
+// @component-test-runner vitest: components package declarations contain relative imports Bun cannot execute.
 import "../../../../testing/app-shell-work-outcome-stub";
 import "../../../../testing/app-shell-workflow-activity-stub";
 

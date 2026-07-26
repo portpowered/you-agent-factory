@@ -1,21 +1,11 @@
 import "../../../../../testing/vitest-dom-capabilities.setup";
 
 import { fireEvent, screen } from "@testing-library/react";
-import { toast } from "sonner";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
 import { CurrentFactoryDefinitionError } from "../../../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";
-import { useCurrentFactoryDocument } from "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { useFactoryDocumentSave } from "../../../../current-factory-definition/hooks/useFactoryDocumentSave";
-import {
-  currentSelectionConfigurationSection,
-  expectNoInlineSaveOutcomesIn,
-  expectNoSaveToastDelivery,
-  expectResourceSaveFailedToast,
-  expectResourceSaveSuccessToast,
-  expectWorkerSaveSuccessToast,
-  expectWorkstationSaveFailedToast,
-} from "../../../base/components/detail-card/current-selection-save-toast-test-helpers";
+import { bunVi as vi } from "../../../../../testing/bun/vi-compat";
 import {
   buildDetailCardEditableFactoryDocument,
   buildDetailCardFactoryDocumentQueryResult,
@@ -30,8 +20,6 @@ import {
   createDetailCardDeferredFactoryDocumentSave,
 } from "../../../base/components/detail-card/detail-card-test-helpers";
 import { resetSelectionHistoryStore } from "../../../state/selectionHistoryStore";
-import { useCurrentWorkstationPromptTemplateValidation } from "../../../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
-import { CurrentSelectionWidget } from "../../widget/current-selection-widget";
 import {
   createCurrentSelectionWidgetQueryClient,
   renderWithExistingQueryClient,
@@ -40,41 +28,58 @@ import {
 
 const saveCurrentFactoryMutation = vi.fn();
 
-vi.mock("sonner", () => ({
-  toast: {
-    dismiss: vi.fn(),
-    error: vi.fn(),
-    success: vi.fn(),
-    warning: vi.fn(),
-  },
-}));
+const toast = {
+  dismiss: vi.fn(),
+  error: vi.fn(),
+  success: vi.fn(),
+  warning: vi.fn(),
+};
+const actualSonner = await import("sonner");
+const currentFactoryDefinitionHooks = await import(
+  "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition"
+);
+const useCurrentFactoryDocument = vi.fn<
+  typeof currentFactoryDefinitionHooks.useCurrentFactoryDocument
+>();
+const useFactoryDocumentSave = vi.fn();
+const useCurrentWorkstationPromptTemplateValidation = vi.fn();
 
-vi.mock(
+mock.module("sonner", () => ({ ...actualSonner, toast }));
+mock.module(
   "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  async () => {
-    const actual = await vi.importActual(
-      "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-    );
-
-    return {
-      ...actual,
-      useCurrentFactoryDocument: vi.fn(),
-    };
-  },
+  () => ({
+    ...currentFactoryDefinitionHooks,
+    useCurrentFactoryDocument,
+  }),
 );
 
-vi.mock(
+mock.module(
   "../../../../current-factory-definition/hooks/useFactoryDocumentSave",
   () => ({
-    useFactoryDocumentSave: vi.fn(),
+    useFactoryDocumentSave,
   }),
 );
 
-vi.mock(
+mock.module(
   "../../../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation",
   () => ({
-    useCurrentWorkstationPromptTemplateValidation: vi.fn(),
+    useCurrentWorkstationPromptTemplateValidation,
   }),
+);
+
+const {
+  currentSelectionConfigurationSection,
+  expectNoInlineSaveOutcomesIn,
+  expectNoSaveToastDelivery,
+  expectResourceSaveFailedToast,
+  expectResourceSaveSuccessToast,
+  expectWorkerSaveSuccessToast,
+  expectWorkstationSaveFailedToast,
+} = await import(
+  "../../../base/components/detail-card/current-selection-save-toast-test-helpers"
+);
+const { CurrentSelectionWidget } = await import(
+  "../../widget/current-selection-widget"
 );
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: cross-entity save notification regressions share one mocked save seam.

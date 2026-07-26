@@ -1,39 +1,51 @@
+// Isolated because Bun module mocks are process-global.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import userEvent from "@testing-library/user-event";
 
-import { SessionFactoryInvocationError } from "../../../../api/session-factory";
 import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
+import { bunVi as vi } from "../../../../testing/bun/vi-compat";
 import { DashboardSessionTestProvider } from "../../../../testing/dashboard-session-test-provider";
 import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
-import { FactoryInvocationWidget } from "./factory-invocation-widget";
 
 const invokeSessionFactory = vi.fn();
 const useCurrentFactoryDefinition = vi.fn();
 let restoreBrowserShims: (() => void) | undefined;
 
-vi.mock("../../../../api/session-factory", async () => {
-  const actual = (await vi.importActual(
-    "../../../../api/session-factory",
-  )) as typeof import("../../../../api/session-factory");
+const actualSessionFactory = await import("../../../../api/session-factory");
+const currentFactoryDefinitionHooks = await import(
+  "../../../current-factory-definition/hooks/useCurrentFactoryDefinition"
+);
+const { SessionFactoryInvocationError } = actualSessionFactory;
 
+mock.module("../../../../api/session-factory", () => {
   return {
-    ...actual,
+    ...actualSessionFactory,
     invokeSessionFactory: (...args: unknown[]) => invokeSessionFactory(...args),
   };
 });
 
-vi.mock("../../../current-factory-definition/public", async () => {
-  const actual = (await vi.importActual(
-    "../../../current-factory-definition/public",
-  )) as typeof import("../../../current-factory-definition/public");
-
-  return {
-    ...actual,
+mock.module(
+  "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  () => ({
+    ...currentFactoryDefinitionHooks,
     useCurrentFactoryDefinition: () => useCurrentFactoryDefinition(),
-  };
-});
+  }),
+);
+
+const { FactoryInvocationWidget } = await import(
+  "./factory-invocation-widget"
+);
+
+/*
+ * The API module remains real apart from the invocation edge. This keeps error
+ * class behavior under test while avoiding the feature's public barrel.
+ */
+function resetInvocationMocks() {
+  invokeSessionFactory.mockReset();
+  useCurrentFactoryDefinition.mockReset();
+}
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: focused widget coverage is kept together for the generated invocation flow.
 describe("FactoryInvocationWidget", () => {
@@ -43,8 +55,7 @@ describe("FactoryInvocationWidget", () => {
 
   afterEach(() => {
     cleanup();
-    invokeSessionFactory.mockReset();
-    useCurrentFactoryDefinition.mockReset();
+    resetInvocationMocks();
     restoreBrowserShims?.();
     restoreBrowserShims = undefined;
   });

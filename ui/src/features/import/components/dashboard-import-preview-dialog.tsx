@@ -11,15 +11,10 @@ import {
   WidgetEmptyStateTitle,
 } from "@you-agent-factory/components/recipes";
 import { useId, useMemo, useState } from "react";
-import {
-  AlertPanel,
-  Button,
-  DescriptionList,
-  Heading,
-  Label,
-  SurfacePanel,
-  Text,
-} from "../../../components/ui";
+import { DescriptionList } from "@you-agent-factory/components/data-display";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
+import { Button, Heading, Label, Text } from "@you-agent-factory/components/primitives";
+import { AlertPanel } from "../../../components/ui/alert-panel";
 import type { FactoryImportActivationState } from "../hooks/use-factory-import-activation";
 import type { FactoryImportPreviewState } from "../hooks/use-factory-import-preview";
 import { allocateImportCreateFactoryName } from "../lib/allocate-import-create-factory-name";

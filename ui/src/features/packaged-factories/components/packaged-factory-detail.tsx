@@ -1,13 +1,9 @@
 import { useId, useState } from "react";
 
-import {
-  AlertPanel,
-  AlertPanelText,
-  CodePanel,
-  DashboardActionButton,
-  Heading,
-  Text,
-} from "../../../components/ui";
+import { Heading, Text } from "@you-agent-factory/components/primitives";
+import { AlertPanel, AlertPanelText } from "../../../components/ui/alert-panel";
+import { CodePanel } from "../../../components/ui/code-panel";
+import { DashboardActionButton } from "../../../components/ui/dashboard-action-button";
 import type {
   PackagedFactoryConfigurationFormat,
   PackagedFactoryDetailViewModel,

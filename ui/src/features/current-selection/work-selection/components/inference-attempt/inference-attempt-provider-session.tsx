@@ -1,5 +1,5 @@
 import type { DashboardInferenceAttempt } from "../../../../../api/dashboard/types";
-import { Code, Text } from "../../../../../components/ui";
+import { Code, Text } from "@you-agent-factory/components/primitives";
 import { getProviderSessionLogTarget } from "../../../../../components/ui/formatters";
 import {
   getLoadableProviderSessionRef,
@@ -11,10 +11,8 @@ import {
   useCurrentSelectionWorkstationDetailMessages,
 } from "../../../base/components/presentation/current-selection-locale";
 import { CurrentSelectionSelectableButton } from "../../../base/components/presentation/current-selection-selectable-button";
-import {
-  CurrentSelectionLabel,
-  CurrentSelectionSupportingText,
-} from "../../../base/public";
+import { CurrentSelectionLabel } from "../../../base/components/presentation/current-selection-label";
+import { CurrentSelectionSupportingText } from "../../../base/components/presentation/current-selection-supporting-text";
 import { InferenceAttemptDetail } from "./inference-attempt-detail";
 
 export interface InferenceAttemptProviderSessionDetailsProps {

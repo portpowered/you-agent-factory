@@ -8,7 +8,7 @@ import type { FactoryReplayWorldReducer } from "@you-agent-factory/factory-repla
 import { afterEach, describe, expect, it } from "vitest";
 
 import { useFactoryTimelineStore } from "../../timeline/public/store";
-import { createFactoryEmulatorInstance } from "../public";
+import { createFactoryEmulatorInstance } from "./factory-emulator-instance";
 
 interface EvidenceState {
   appliedEventIDs: string[];

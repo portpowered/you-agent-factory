@@ -4,9 +4,9 @@ import type { StoreApi } from "zustand/vanilla";
 
 import {
   type FactorySimpleSubmissionEligibilityInput,
-  type FactorySimpleTextSubmission,
   resolveFactorySimpleSubmissionAvailability,
-} from "../../submit-work/public";
+} from "../../submit-work/lib/factory-simple-submission-eligibility";
+import type { FactorySimpleTextSubmission } from "../../submit-work/components/composer/factory-simple-submission-composer";
 import { getFactoryEmulatorMessages } from "../messages/factory-emulator";
 import type {
   FactoryEmulatorCommandOutcome,

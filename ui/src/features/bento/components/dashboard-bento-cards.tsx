@@ -2,33 +2,31 @@
 import type { ReactNode } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import { getCurrentSelectionShellMessages } from "../../current-selection/base/public";
+import { getCurrentSelectionShellMessages } from "../../current-selection/base/messages/shell/current-selection-shell";
 import type { useCurrentSelection } from "../../current-selection/hooks/core/useCurrentSelection";
 import type { useCurrentSelectionDetails } from "../../current-selection/hooks/core/useCurrentSelectionDetails";
-import { CurrentSelectionWidget } from "../../current-selection/public";
+import { CurrentSelectionWidget } from "../../current-selection/components/widget/current-selection-widget";
 import type { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
-import {
-  FactorySessionWidget,
-  getFactorySessionWidgetMessages,
-} from "../../factory-session-detail/public";
+import { FactorySessionWidget } from "../../factory-session-detail/components/factory-session-widget";
+import { getFactorySessionWidgetMessages } from "../../factory-session-detail/messages/factory-session-widget";
 import { getProviderSessionWidgetMessages } from "../../provider-session-detail/messages/provider-session-widget";
-import { ProviderSessionWidget } from "../../provider-session-detail/public";
+import { ProviderSessionWidget } from "../../provider-session-detail/components/provider-session-widget";
 import { getSubmitWorkMessages } from "../../submit-work/messages/submit-work";
-import { SubmitWorkWidget } from "../../submit-work/public";
+import { SubmitWorkWidget } from "../../submit-work/components/submit-work-widget";
 import { getTerminalWorkMessages } from "../../terminal-work/messages/terminal-work";
-import { TerminalWorkWidget } from "../../terminal-work/public";
+import { TerminalWorkWidget } from "../../terminal-work/components/terminal-work-widget";
 import type { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
 import { getTraceDrilldownMessages } from "../../trace-drilldown/messages/trace-drilldown";
-import { TraceDrilldownWidget } from "../../trace-drilldown/public";
+import { TraceDrilldownWidget } from "../../trace-drilldown/components/trace-drilldown-widget";
 import type { useWorkOutcomeChart } from "../../work-outcome/hooks/useWorkOutcomeChart";
 import { getWorkOutcomeMessages } from "../../work-outcome/messages/work-outcome";
-import { WorkOutcomeWidget } from "../../work-outcome/public";
+import { WorkOutcomeWidget } from "../../work-outcome/components/work-outcome-widget";
 import { getWorkTotalsMessages } from "../../work-totals/messages/work-totals";
-import { WorkTotalsWidget } from "../../work-totals/public";
+import { WorkTotalsWidget } from "../../work-totals/components/work-totals-widget";
 import type { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
-import { WorkflowActivityWidget } from "../../workflow-activity/public";
+import { WorkflowActivityWidget } from "../../workflow-activity/components/workflow-activity-widget";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/useDashboardLayout";
 import {
   type DashboardWidgetPickerWidgetType,

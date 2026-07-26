@@ -1,10 +1,7 @@
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
-import {
-  Code,
-  DashboardActionButton,
-  DescriptionList,
-  Text,
-} from "../../../../components/ui";
+import { DescriptionList } from "@you-agent-factory/components/data-display";
+import { Code, Text } from "@you-agent-factory/components/primitives";
+import { DashboardActionButton } from "../../../../components/ui/dashboard-action-button";
 import {
   formatLocalDateTime,
   formatWorkItemLabel,
@@ -20,13 +17,11 @@ import {
   useCurrentSelectionLocale,
   useCurrentSelectionWorkstationDetailMessages,
 } from "../../base/components/presentation/current-selection-locale";
-import {
-  CurrentSelectionBodyLayout,
-  CurrentSelectionExecutionPill,
-  CurrentSelectionExpandableSection,
-  CurrentSelectionSupportingText,
-  CurrentSelectionWorkRow,
-} from "../../base/public";
+import { CurrentSelectionWorkRow } from "../../base/components/current-selection-work-row";
+import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
+import { CurrentSelectionBodyLayout } from "../../base/components/layout/current-selection-body-layout";
+import { CurrentSelectionExecutionPill } from "../../base/components/presentation/current-selection-pill";
+import { CurrentSelectionSupportingText } from "../../base/components/presentation/current-selection-supporting-text";
 import type {
   StateNodeDetailCardProps,
   StatePositionWorkListItemProps,

@@ -1,7 +1,15 @@
-import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  mock,
+} from "bun:test";
+
+const vi = { fn: mock };
 
 import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
 import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";

@@ -3,16 +3,14 @@ import {
   PACKAGED_FACTORIES_HOSTED_PATH,
   PACKAGED_FACTORIES_PATH,
   resolveAppSurface,
-} from "./features/app-routing/public";
+} from "./features/app-routing/lib/resolve-app-surface";
 import { DashboardScreen } from "./features/dashboard/public/screen";
-import { CustomerFactoryEmulatorDemos } from "./features/factory-emulator/public";
-import { AppNotificationToaster } from "./features/notifications/public";
-import {
-  type PackagedFactoryCopyText,
-  PackagedFactoryInventory,
-  type PackagedFactoryPublicDataSource,
-  packagedFactoryPublicDataSource,
-} from "./features/packaged-factories/public";
+import { CustomerFactoryEmulatorDemos } from "./features/factory-emulator/components/customer-factory-emulator-demos";
+import { AppNotificationToaster } from "./features/notifications/components/app-notification-toaster";
+import type { PackagedFactoryCopyText } from "./features/packaged-factories/components/packaged-factory-detail";
+import { PackagedFactoryInventory } from "./features/packaged-factories/components/packaged-factory-inventory";
+import { packagedFactoryPublicDataSource } from "./features/packaged-factories/lib/generated/public-package-data";
+import type { PackagedFactoryPublicDataSource } from "./features/packaged-factories/lib/public-contract";
 import { AppLocaleProvider } from "./i18n";
 import { AppColorPaletteProvider } from "./theme";
 
