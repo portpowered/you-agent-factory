@@ -3,6 +3,14 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+- Selection-aware `you run` schema resolution belongs at the CLI read boundary:
+  resolve an already-selected named Factory config path or explicit Factory
+  source through the read-only Factory Definitions loader, check cancellation
+  before and after each synchronous lookup, and pass only the loaded invocation
+  signature into pure `climanifest.ComposeRunInputs`. Keep selection identity,
+  catalog provenance, and filesystem location out of the effective schema so
+  equivalent definitions produce the same downstream facts without
+  materialization, sessions, provider startup, or runtime probing.
 - A conductor-routed native integration must carry the complete cloned
   `workers.ProviderInferenceRequest` through `inferencecontract.InvocationRequest`.
   Keep provider selection and response delivery conductor-owned, while the

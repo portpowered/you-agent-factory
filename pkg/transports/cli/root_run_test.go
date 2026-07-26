@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -303,6 +304,62 @@ func TestResolveRunNamedFactorySelectionForwardsFailureToInjectedCandidatePaths(
 	}
 	if candidateCalls != 1 {
 		t.Fatalf("candidate resolver calls = %d, want 1", candidateCalls)
+	}
+}
+
+func TestResolveRunNamedFactorySelectionHonorsCancellationWithoutSelection(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		cancelCatalog bool
+	}{
+		{name: "before lookup"},
+		{name: "during catalog lookup", cancelCatalog: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(startupcli.WithWorkingDirectory(context.Background(), "customer-repo"))
+			catalogCalls := 0
+			catalog := rootNamedFactoryCatalogFake{resolve: func(string, string, string) (*interfaces.NamedFactoryResolution, error) {
+				catalogCalls++
+				if test.cancelCatalog {
+					cancel()
+				}
+				return &interfaces.NamedFactoryResolution{FactoryDir: "selected-factory"}, nil
+			}}
+			if !test.cancelCatalog {
+				cancel()
+			}
+			cfg := &runcli.RunConfig{NamedFactoryName: "alpha"}
+
+			err := resolveRunNamedFactorySelection(
+				ctx,
+				cfg,
+				"customer-home",
+				catalog,
+				func(string, string) (interfaces.NamedFactoryRoots, error) {
+					return interfaces.NamedFactoryRoots{Project: "project", Global: "global"}, nil
+				},
+				func(string, string, string) (interfaces.NamedFactoryCandidatePaths, error) {
+					t.Fatal("candidate lookup must not run for a canceled successful catalog lookup")
+					return interfaces.NamedFactoryCandidatePaths{}, nil
+				},
+			)
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("error = %v, want context cancellation", err)
+			}
+			if cfg.Dir != "" || cfg.NamedFactoryResolution != nil {
+				t.Fatalf("canceled lookup returned partial selection: %#v", cfg)
+			}
+			wantCalls := 0
+			if test.cancelCatalog {
+				wantCalls = 1
+			}
+			if catalogCalls != wantCalls {
+				t.Fatalf("catalog calls = %d, want %d", catalogCalls, wantCalls)
+			}
+		})
 	}
 }
 
