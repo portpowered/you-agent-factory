@@ -171,9 +171,12 @@ func providerEffectOwnershipFindingForType(
 	if finding, hit := competingProviderCatalogOrExecutionAbstraction(packagePath, filePath, typed); hit {
 		return finding, true
 	}
-	if !isProviderEffectPortDeclaration(typed, imports) ||
-		isDurableProvidersLeafOwner(packagePath) ||
+	if isDurableProvidersLeafOwner(packagePath) ||
 		packagePath == workersProviderEffectMigrationDebtPackage {
+		return providerEffectOwnershipFinding{}, false
+	}
+	if !isProviderEffectPortDeclaration(typed, imports) &&
+		!structFieldsRedefineProviderEffect(typed, imports) {
 		return providerEffectOwnershipFinding{}, false
 	}
 	return providerEffectOwnershipFinding{
@@ -215,7 +218,7 @@ func edgesProviderEffectRedefinition(
 			typeName:    typed.Name.Name,
 		}, true
 	}
-	if edgesStructFieldRedefinesProviderEffect(typed, imports) {
+	if structFieldsRedefineProviderEffect(typed, imports) {
 		return providerEffectOwnershipFinding{
 			kind:        "edges-redefinition",
 			packagePath: packagePath,
@@ -254,7 +257,7 @@ func interfaceDeclaresProviderEffectMethod(
 	return false
 }
 
-func edgesStructFieldRedefinesProviderEffect(
+func structFieldsRedefineProviderEffect(
 	typed *ast.TypeSpec,
 	imports map[string]string,
 ) bool {

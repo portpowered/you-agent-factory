@@ -100,10 +100,11 @@ primary-result behavior.
   solely because they reuse the production aggregator type name: the AST shape
   distinguishes an allowed `Edges` struct field from an `Edges` alias, defined
   type, or interface that redeclares the leaf contract. Inspect nested field type
-  expressions too: direct leaf fields are aggregation, while anonymous interfaces
-  or other wrappers around the leaf contract are edges-owned redefinitions. Prove
-  ownership behavior with deliberate `run()` fixtures rather than package-local
-  source inventories.
+  expressions in every non-Providers declaration too: direct leaf fields preserve
+  the imported contract, while anonymous interfaces or other wrappers create a
+  locally owned redefinition even outside `edges`. Preserve the explicit Workers
+  inference-contract migration-debt exception. Prove ownership behavior with
+  deliberate `run()` fixtures rather than package-local source inventories.
   Invoke implementations
   through `ExecuteInvocation` so provider-authored drafts are validated for
   provenance, invocation and item correlation, lifecycle ordering, terminal

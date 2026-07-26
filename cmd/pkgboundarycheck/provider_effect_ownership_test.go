@@ -215,6 +215,42 @@ type Provider interface {
 	}
 }
 
+func TestRunRejectsNonProvidersAnonymousFieldProviderEffectRedefinition(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, "pkg/services/factory_runtime/providereffect/dependencies.go", `package providereffect
+
+import "context"
+
+// Deliberate fixture: nesting the effect port in a struct field must not let a
+// non-Providers package claim durable ownership anonymously.
+type Dependencies struct {
+	Provider interface {
+		Infer(context.Context, string) (string, error)
+	}
+}
+`)
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want anonymous non-Providers provider-effect ownership rejected")
+	}
+	got := stderr.String()
+	for _, want := range []string{
+		"prohibited durable provider-effect ownership",
+		"pkg/services/factory_runtime/providereffect",
+		"Dependencies",
+		"canonical owner: " + providersLeafEffectContractPackage,
+		"Providers Execution leaf",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("run() stderr = %q, want substring %q", got, want)
+		}
+	}
+}
+
 func TestRunRejectsEdgesTypeNameRedefiningProvidersLeafEffectContract(t *testing.T) {
 	t.Parallel()
 
@@ -574,6 +610,14 @@ import "context"
 
 type Provider interface {
 	Infer(context.Context, string) (string, error)
+}
+
+// Deliberate fixture: generalized nested-expression inspection preserves this
+// exact package's explicit migration-debt exception.
+type Dependencies struct {
+	ProviderOverride interface {
+		Infer(context.Context, string) (string, error)
+	}
 }
 `)
 
