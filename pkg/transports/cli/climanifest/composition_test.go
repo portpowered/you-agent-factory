@@ -9,7 +9,7 @@ import (
 
 func TestComposeRunInputsProducesCompleteEffectiveSchema(t *testing.T) {
 	manifest, signature := completeCompositionFixture()
-	effective, diagnostics, err := ComposeRunInputs(manifest, "you.run", signature)
+	effective, diagnostics, err := ComposeRunInputs(manifest, "you.run", &signature)
 	if err != nil || len(diagnostics) != 0 {
 		t.Fatalf("ComposeRunInputs() err=%v diagnostics=%#v", err, diagnostics)
 	}
@@ -24,7 +24,7 @@ func TestComposeRunInputsProducesCompleteEffectiveSchema(t *testing.T) {
 		t.Fatalf("Factory parameters = %#v, want %#v", effective.FactoryParameters, want)
 	}
 
-	again, againDiagnostics, err := ComposeRunInputs(manifest, "you.run", signature)
+	again, againDiagnostics, err := ComposeRunInputs(manifest, "you.run", &signature)
 	if err != nil || len(againDiagnostics) != 0 || !reflect.DeepEqual(again, effective) {
 		t.Fatalf("repeated composition differs: first=%#v second=%#v diagnostics=%#v err=%v", effective, again, againDiagnostics, err)
 	}
@@ -32,11 +32,11 @@ func TestComposeRunInputsProducesCompleteEffectiveSchema(t *testing.T) {
 
 func TestComposeRunInputsDetachesCallerAndResultCollections(t *testing.T) {
 	manifest, signature := completeCompositionFixture()
-	effective, diagnostics, err := ComposeRunInputs(manifest, "you.run", signature)
+	effective, diagnostics, err := ComposeRunInputs(manifest, "you.run", &signature)
 	if err != nil || len(diagnostics) != 0 {
 		t.Fatalf("ComposeRunInputs() err=%v diagnostics=%#v", err, diagnostics)
 	}
-	again, againDiagnostics, err := ComposeRunInputs(manifest, "you.run", signature)
+	again, againDiagnostics, err := ComposeRunInputs(manifest, "you.run", &signature)
 	if err != nil || len(againDiagnostics) != 0 {
 		t.Fatalf("second ComposeRunInputs() err=%v diagnostics=%#v", err, againDiagnostics)
 	}
@@ -87,7 +87,7 @@ func TestComposeRunInputsPreservesSupportedTypeHints(t *testing.T) {
 				Name: "value", TypeHint: typeHint,
 				Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}},
 			}}}
-			effective, diagnostics, err := ComposeRunInputs(compositionManifest(), "you.run", signature)
+			effective, diagnostics, err := ComposeRunInputs(compositionManifest(), "you.run", &signature)
 			if err != nil || len(diagnostics) != 0 {
 				t.Fatalf("ComposeRunInputs() err=%v diagnostics=%#v", err, diagnostics)
 			}
@@ -114,7 +114,7 @@ func TestComposeRunInputsRejectsEveryReservedStaticNamespace(t *testing.T) {
 		{Name: "you.run.flag.named", Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindPositional, Position: 2}}},
 	}}
 
-	effective, diagnostics, err := ComposeRunInputs(manifest, "you.run", signature)
+	effective, diagnostics, err := ComposeRunInputs(manifest, "you.run", &signature)
 	if err != nil {
 		t.Fatalf("ComposeRunInputs() error = %v", err)
 	}
@@ -155,12 +155,12 @@ func TestComposeRunInputsCollisionDiagnosticsAreDeterministic(t *testing.T) {
 		}},
 	}}
 
-	_, want, err := ComposeRunInputs(manifest, "you.run", signature)
+	_, want, err := ComposeRunInputs(manifest, "you.run", &signature)
 	if err != nil || len(want) == 0 {
 		t.Fatalf("ComposeRunInputs() err=%v diagnostics=%#v", err, want)
 	}
 	for iteration := 0; iteration < 25; iteration++ {
-		_, got, repeatErr := ComposeRunInputs(manifest, "you.run", signature)
+		_, got, repeatErr := ComposeRunInputs(manifest, "you.run", &signature)
 		if repeatErr != nil || !reflect.DeepEqual(got, want) {
 			t.Fatalf("iteration %d diagnostics=%#v err=%v, want %#v", iteration, got, repeatErr, want)
 		}
@@ -174,7 +174,7 @@ func TestComposeRunInputsPreservesNonCollidingStaticInputs(t *testing.T) {
 		Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}},
 	}}}
 
-	effective, diagnostics, err := ComposeRunInputs(manifest, "you.run", signature)
+	effective, diagnostics, err := ComposeRunInputs(manifest, "you.run", &signature)
 	if err != nil || len(diagnostics) != 0 {
 		t.Fatalf("ComposeRunInputs() err=%v diagnostics=%#v", err, diagnostics)
 	}
@@ -192,11 +192,11 @@ func TestComposeRunInputsNamedAndFileSelectionsAreEquivalent(t *testing.T) {
 		Name: "query", ExternalName: "query", DefaultValue: "all", Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}},
 	}}}
 
-	named, namedDiagnostics, err := ComposeRunInputs(manifest, "you.run", namedFactorySignature)
+	named, namedDiagnostics, err := ComposeRunInputs(manifest, "you.run", &namedFactorySignature)
 	if err != nil {
 		t.Fatalf("named composition error = %v", err)
 	}
-	file, fileDiagnostics, err := ComposeRunInputs(manifest, "you.run", fileFactorySignature)
+	file, fileDiagnostics, err := ComposeRunInputs(manifest, "you.run", &fileFactorySignature)
 	if err != nil {
 		t.Fatalf("file composition error = %v", err)
 	}
@@ -210,16 +210,43 @@ func TestComposeRunInputsNamedAndFileSelectionsAreEquivalent(t *testing.T) {
 	fileColliding := work.InvocationSignatureConfig{Parameters: []work.InvocationParameterConfig{{
 		Name: "query", ExternalName: "output", Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}},
 	}}}
-	_, namedCollisionDiagnostics, _ := ComposeRunInputs(manifest, "you.run", namedColliding)
-	_, fileCollisionDiagnostics, _ := ComposeRunInputs(manifest, "you.run", fileColliding)
+	_, namedCollisionDiagnostics, _ := ComposeRunInputs(manifest, "you.run", &namedColliding)
+	_, fileCollisionDiagnostics, _ := ComposeRunInputs(manifest, "you.run", &fileColliding)
 	if !reflect.DeepEqual(namedCollisionDiagnostics, fileCollisionDiagnostics) {
 		t.Fatalf("equivalent selection diagnostics differ: named=%#v file=%#v", namedCollisionDiagnostics, fileCollisionDiagnostics)
 	}
 }
 
 func TestComposeRunInputsRequiresStaticCommand(t *testing.T) {
-	if _, _, err := ComposeRunInputs(Manifest{}, "you.run", work.InvocationSignatureConfig{}); err == nil {
+	if _, _, err := ComposeRunInputs(Manifest{}, "you.run", nil); err == nil {
 		t.Fatal("ComposeRunInputs() error = nil, want missing static command failure")
+	}
+}
+
+func TestComposeRunInputsKeepsNoSignatureCompatibilityDistinct(t *testing.T) {
+	manifest := compositionManifest()
+	compatibility, diagnostics, err := ComposeRunInputs(manifest, "you.run", nil)
+	if err != nil || len(diagnostics) != 0 {
+		t.Fatalf("compatibility composition err=%v diagnostics=%#v", err, diagnostics)
+	}
+	if compatibility.FactoryInputMode != EffectiveFactoryInputModeCompatibility {
+		t.Fatalf("FactoryInputMode = %q, want compatibility", compatibility.FactoryInputMode)
+	}
+	if compatibility.UnknownNamedArgumentPolicy != "" || len(compatibility.FactoryParameters) != 0 {
+		t.Fatalf("no-signature schema synthesized signature facts: %#v", compatibility)
+	}
+	if !reflect.DeepEqual(compatibility.StaticInputs, projectStaticInputs(manifest.Commands["you.run"])) {
+		t.Fatalf("compatibility static inputs = %#v", compatibility.StaticInputs)
+	}
+
+	emptySignature := work.InvocationSignatureConfig{}
+	signature, signatureDiagnostics, err := ComposeRunInputs(manifest, "you.run", &emptySignature)
+	if err != nil || len(signatureDiagnostics) != 0 {
+		t.Fatalf("empty signature composition err=%v diagnostics=%#v", err, signatureDiagnostics)
+	}
+	if signature.FactoryInputMode != EffectiveFactoryInputModeSignature ||
+		signature.UnknownNamedArgumentPolicy != work.InvocationUnknownNamedArgumentPolicyReject {
+		t.Fatalf("empty active signature facts = %#v", signature)
 	}
 }
 

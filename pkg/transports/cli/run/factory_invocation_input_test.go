@@ -125,6 +125,44 @@ func TestResolveFactoryInvocationInputSchemaHonorsCancellationWithoutPartialResu
 	}
 }
 
+func TestResolveFactoryInvocationInputSchemaNoSignatureNamedAndFileSelectionsAreEquivalent(t *testing.T) {
+	t.Parallel()
+
+	namedPath := filepath.Join("project", "factory", "legacy", interfaces.FactoryConfigFile)
+	filePath := filepath.Join("fixtures", "legacy-factory.yaml")
+	load := interfaces.FactoryConfigFileLoader(func(path string) (*interfaces.FactoryConfig, error) {
+		switch path {
+		case namedPath, filePath:
+			return &interfaces.FactoryConfig{Name: filepath.Base(filepath.Dir(path))}, nil
+		default:
+			return nil, errors.New("unexpected Factory path")
+		}
+	})
+
+	manifest := runSchemaFixtureManifest()
+	named, namedDiagnostics, err := ResolveFactoryInvocationInputSchema(
+		context.Background(), manifest, "you.run", load, namedPath,
+	)
+	if err != nil {
+		t.Fatalf("named selection: %v", err)
+	}
+	file, fileDiagnostics, err := ResolveFactoryInvocationInputSchema(
+		context.Background(), manifest, "you.run", load, filePath,
+	)
+	if err != nil {
+		t.Fatalf("file selection: %v", err)
+	}
+	if !reflect.DeepEqual(named, file) || !reflect.DeepEqual(namedDiagnostics, fileDiagnostics) {
+		t.Fatalf("no-signature selections differ: named=%#v/%#v file=%#v/%#v", named, namedDiagnostics, file, fileDiagnostics)
+	}
+	if named.FactoryInputMode != climanifest.EffectiveFactoryInputModeCompatibility {
+		t.Fatalf("FactoryInputMode = %q, want compatibility", named.FactoryInputMode)
+	}
+	if named.UnknownNamedArgumentPolicy != "" || len(named.FactoryParameters) != 0 {
+		t.Fatalf("no-signature selection synthesized signature facts: %#v", named)
+	}
+}
+
 func cloneInvocationSignatureFixture(signature interfaces.InvocationSignatureConfig) *interfaces.InvocationSignatureConfig {
 	cloned := signature
 	cloned.Parameters = append([]interfaces.InvocationParameterConfig(nil), signature.Parameters...)

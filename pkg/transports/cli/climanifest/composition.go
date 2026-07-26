@@ -25,6 +25,9 @@ const (
 	EffectiveValueConsumptionFileContents         = "file-contents"
 
 	EffectiveUnboundedCardinality = -1
+
+	EffectiveFactoryInputModeSignature     = "signature"
+	EffectiveFactoryInputModeCompatibility = "compatibility"
 )
 
 // EffectiveInputSchema is the immutable result of composing one static CLI
@@ -32,6 +35,7 @@ const (
 // manifest-owned; the Factory contributes only invocation parameters.
 type EffectiveInputSchema struct {
 	CommandID                  string
+	FactoryInputMode           string
 	UnknownNamedArgumentPolicy string
 	StaticInputs               []EffectiveStaticInput
 	FactoryParameters          []EffectiveFactoryParameter
@@ -91,21 +95,27 @@ type factorySpelling struct {
 }
 
 // ComposeRunInputs combines a validated static command and selected Factory
-// signature without mutating either contract. Any collision rejects the
-// composition; callers must not use the returned schema when diagnostics are
-// present.
-func ComposeRunInputs(manifest Manifest, commandID string, signature work.InvocationSignatureConfig) (EffectiveInputSchema, []CompositionDiagnostic, error) {
+// signature without mutating either contract. A nil signature preserves the
+// documented compatibility-input mode. Any collision rejects the composition;
+// callers must not use the returned schema when diagnostics are present.
+func ComposeRunInputs(manifest Manifest, commandID string, signature *work.InvocationSignatureConfig) (EffectiveInputSchema, []CompositionDiagnostic, error) {
 	command, ok := manifest.Commands[commandID]
 	if !ok {
 		return EffectiveInputSchema{}, nil, fmt.Errorf("CLI manifest missing static command %q", commandID)
 	}
 
 	schema := EffectiveInputSchema{
-		CommandID:                  commandID,
-		UnknownNamedArgumentPolicy: normalizedUnknownNamedArgumentPolicy(signature.UnknownNamedArgumentPolicy),
-		StaticInputs:               projectStaticInputs(command),
-		FactoryParameters:          projectFactoryParameters(signature.Parameters),
+		CommandID:        commandID,
+		FactoryInputMode: EffectiveFactoryInputModeCompatibility,
+		StaticInputs:     projectStaticInputs(command),
 	}
+	if signature == nil {
+		return schema, nil, nil
+	}
+
+	schema.FactoryInputMode = EffectiveFactoryInputModeSignature
+	schema.UnknownNamedArgumentPolicy = normalizedUnknownNamedArgumentPolicy(signature.UnknownNamedArgumentPolicy)
+	schema.FactoryParameters = projectFactoryParameters(signature.Parameters)
 	diagnostics := compositionDiagnostics(manifest, command, signature.Parameters)
 	if len(diagnostics) != 0 {
 		return EffectiveInputSchema{}, diagnostics, nil

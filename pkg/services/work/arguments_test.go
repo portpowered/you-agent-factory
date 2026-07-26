@@ -360,6 +360,134 @@ func TestNormalizeArguments_CompatibilityPreservesAPIContentFallback(t *testing.
 	}
 }
 
+func TestNormalizeArguments_CompatibilityAcceptsOnlyDocumentedInputSources(t *testing.T) {
+	positionalText := "from compatibility text"
+	stdinText := "from stdin"
+	tests := []struct {
+		name       string
+		input      NormalizeArgumentsInput
+		wantText   string
+		wantSource InputSourceLabel
+	}{
+		{
+			name: "positional arguments",
+			input: NormalizeArgumentsInput{
+				PositionalArgs: []string{"from", "arguments"},
+			},
+			wantText:   "from arguments",
+			wantSource: InputSourcePositionalText,
+		},
+		{
+			name: "stdin",
+			input: NormalizeArgumentsInput{
+				StdinText: &stdinText,
+			},
+			wantText:   stdinText,
+			wantSource: InputSourceStdinText,
+		},
+		{
+			name: "compatibility text",
+			input: NormalizeArgumentsInput{
+				CompatibilityText: &positionalText,
+			},
+			wantText:   positionalText,
+			wantSource: InputSourceLabel(ArgumentSourceKindCompatibilityText),
+		},
+		{
+			name: "compatibility content",
+			input: NormalizeArgumentsInput{
+				CompatibilityContent: []WorkContentPart{{
+					Type: WorkContentPartTypeText,
+					Text: "from content",
+				}},
+			},
+			wantText:   "from content",
+			wantSource: InputSourceLabel(ArgumentSourceKindCompatibilityContent),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := NormalizeArguments(test.input)
+			if err != nil {
+				t.Fatalf("NormalizeArguments: %v", err)
+			}
+			if got.CompatibilityInput == nil ||
+				got.CompatibilityInput.Text != test.wantText ||
+				got.CompatibilityInput.Source != test.wantSource {
+				t.Fatalf("compatibility input = %#v, want text %q source %q", got.CompatibilityInput, test.wantText, test.wantSource)
+			}
+			if len(got.Arguments) != 0 || len(got.UnknownNamedArgs) != 0 {
+				t.Fatalf("no-signature input synthesized argument facts: %#v", got)
+			}
+		})
+	}
+}
+
+func TestNormalizeArguments_CompatibilityRejectsSignatureOnlyNamedInputs(t *testing.T) {
+	tests := []struct {
+		name  string
+		input NormalizeArgumentsInput
+	}{
+		{
+			name: "CLI named argument",
+			input: NormalizeArgumentsInput{
+				NamedArgs: []NamedArgumentInput{{Key: "mode", Values: []string{"fast"}}},
+			},
+		},
+		{
+			name: "API structured argument",
+			input: NormalizeArgumentsInput{
+				DirectArgs: []NamedArgumentInput{{Key: "mode", Values: []string{"fast"}}},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := NormalizeArguments(test.input)
+			assertArgumentErrorCode(t, err, ArgumentErrorCodeInvalidActiveSignature)
+			if got.CompatibilityInput != nil || len(got.Arguments) != 0 {
+				t.Fatalf("rejected named input returned partial facts: %#v", got)
+			}
+		})
+	}
+}
+
+func TestNormalizeArguments_CompatibilitySourceConflictsUseStableCode(t *testing.T) {
+	positionalText := "from compatibility text"
+	stdinText := "from stdin"
+	tests := []NormalizeArgumentsInput{
+		{PositionalArgs: []string{"from arguments"}, StdinText: &stdinText},
+		{CompatibilityText: &positionalText, StdinText: &stdinText},
+		{
+			CompatibilityContent: []WorkContentPart{{
+				Type: WorkContentPartTypeText,
+				Text: "from content",
+			}},
+			PositionalArgs: []string{"from arguments"},
+		},
+	}
+	for index, input := range tests {
+		got, err := NormalizeArguments(input)
+		if got.CompatibilityInput != nil {
+			t.Fatalf("case %d returned partial compatibility input: %#v", index, got)
+		}
+		var inputErr *InputError
+		var argumentErr *ArgumentError
+		switch {
+		case errors.As(err, &inputErr):
+			if inputErr.Code != InputErrorCodeSourceConflict {
+				t.Fatalf("case %d code = %q, want source conflict", index, inputErr.Code)
+			}
+		case errors.As(err, &argumentErr):
+			if argumentErr.Code != ArgumentErrorCodeSourceConflict {
+				t.Fatalf("case %d code = %q, want source conflict", index, argumentErr.Code)
+			}
+		default:
+			t.Fatalf("case %d error = %v, want stable source-conflict error", index, err)
+		}
+	}
+}
+
 func TestNamedArgumentInputsFromAnyMap_SortsAndAcceptsStringsAndStringArrays(t *testing.T) {
 	got, err := NamedArgumentInputsFromAnyMap(map[string]any{
 		"mode": "fast",

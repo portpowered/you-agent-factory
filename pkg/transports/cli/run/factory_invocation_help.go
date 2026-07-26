@@ -56,10 +56,7 @@ func ResolveFactoryInvocationInputSchema(
 	if err != nil {
 		return climanifest.EffectiveInputSchema{}, nil, err
 	}
-	if signature == nil {
-		signature = &interfaces.InvocationSignatureConfig{}
-	}
-	return climanifest.ComposeRunInputs(manifest, commandID, *signature)
+	return climanifest.ComposeRunInputs(manifest, commandID, signature)
 }
 
 type factoryInvocationHelpData struct {

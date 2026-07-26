@@ -743,6 +743,13 @@ response-stream output.
   do not limit reserved-spelling checks to parameters with named CLI bindings.
   Named and explicit-file selectors must not enter this composition
   policy; equivalent selected signatures produce equivalent results.
+  Preserve a nil selected signature as explicit compatibility mode rather than
+  replacing it with an empty active signature: compatibility mode exposes only
+  static inputs and delegates positional text, stdin, and API content to the
+  Work-owned compatibility normalizer. It must not synthesize Factory
+  parameters, unknown-named policy, defaults, validation, help, or completion
+  facts, and both CLI-shaped and API-structured named inputs must fail instead
+  of being ignored.
   Keep effective-scope spelling and inheritance checks in
   `internal/contractvalidator` so schema-valid manifests still receive stable,
   path-specific semantic diagnostics before generation or consumption.

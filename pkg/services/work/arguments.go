@@ -220,11 +220,11 @@ func namedArgumentValuesFromAny(value any) ([]string, error) {
 }
 
 func normalizeCompatibilityArguments(input NormalizeArgumentsInput) (NormalizedArguments, error) {
-	if len(input.NamedArgs) > 0 {
+	if argument, found := compatibilityNamedArgument(input); found {
 		return NormalizedArguments{}, &ArgumentError{
 			Code:     ArgumentErrorCodeInvalidActiveSignature,
 			Message:  "named arguments require a factory invocationSignature",
-			Argument: strings.TrimSpace(input.NamedArgs[0].Key),
+			Argument: argument,
 		}
 	}
 	if len(input.CompatibilityContent) > 0 {
@@ -264,6 +264,16 @@ func normalizeCompatibilityArguments(input NormalizeArgumentsInput) (NormalizedA
 		resolved.Source = InputSourceLabel(ArgumentSourceKindCompatibilityText)
 	}
 	return NormalizedArguments{CompatibilityInput: &resolved}, nil
+}
+
+func compatibilityNamedArgument(input NormalizeArgumentsInput) (string, bool) {
+	if len(input.NamedArgs) > 0 {
+		return strings.TrimSpace(input.NamedArgs[0].Key), true
+	}
+	if len(input.DirectArgs) > 0 {
+		return strings.TrimSpace(input.DirectArgs[0].Key), true
+	}
+	return "", false
 }
 
 func normalizeSignatureArguments(input NormalizeArgumentsInput) (NormalizedArguments, error) {
