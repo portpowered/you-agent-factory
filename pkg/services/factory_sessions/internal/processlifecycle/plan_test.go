@@ -49,6 +49,34 @@ type planComponent struct {
 	events *[]string
 }
 
+type blockingPlanComponent struct {
+	started chan struct{}
+	stopped chan struct{}
+	waitErr error
+}
+
+func (component *blockingPlanComponent) Start(context.Context) error {
+	close(component.started)
+	return nil
+}
+
+func (component *blockingPlanComponent) Stop(context.Context) error {
+	select {
+	case <-component.stopped:
+	default:
+		close(component.stopped)
+	}
+	return nil
+}
+
+func (component *blockingPlanComponent) Wait(ctx context.Context) error {
+	if component.waitErr != nil {
+		return component.waitErr
+	}
+	<-ctx.Done()
+	return ctx.Err()
+}
+
 func (component *planComponent) Start(context.Context) error {
 	*component.events = append(*component.events, component.name+":start")
 	return nil
@@ -92,6 +120,79 @@ func TestRuntimeLifecycleOwnsActivationAndReverseShutdown(t *testing.T) {
 	}
 	if !reflect.DeepEqual(runtime.events, want) {
 		t.Fatalf("events = %v, want %v", runtime.events, want)
+	}
+}
+
+func TestRunCompletionStopsAndJoinsOwnedTransport(t *testing.T) {
+	runtime := &planRuntime{}
+	transport := &blockingPlanComponent{
+		started: make(chan struct{}),
+		stopped: make(chan struct{}),
+	}
+	completed := make(chan struct{})
+	plan, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{
+		Runtime: runtime,
+		Components: factorysessions.BoundProcessComponents{
+			Transport: transport,
+		},
+		Completion: func(ctx context.Context) error {
+			select {
+			case <-transport.started:
+				close(completed)
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildLifecyclePlan: %v", err)
+	}
+	if err := lifecycle.NewManager().Run(t.Context(), plan); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	select {
+	case <-completed:
+	default:
+		t.Fatal("terminal completion did not run after transport activation")
+	}
+	select {
+	case <-transport.stopped:
+	default:
+		t.Fatal("terminal completion did not join the owned transport")
+	}
+}
+
+func TestRunTransportFailureCancelsWaitingCompletion(t *testing.T) {
+	transportErr := errors.New("listener startup failed")
+	runtime := &planRuntime{}
+	transport := &blockingPlanComponent{
+		started: make(chan struct{}),
+		stopped: make(chan struct{}),
+		waitErr: transportErr,
+	}
+	completionCanceled := make(chan struct{})
+	plan, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{
+		Runtime: runtime,
+		Components: factorysessions.BoundProcessComponents{
+			Transport: transport,
+		},
+		Completion: func(ctx context.Context) error {
+			<-ctx.Done()
+			close(completionCanceled)
+			return ctx.Err()
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildLifecyclePlan: %v", err)
+	}
+	if err := lifecycle.NewManager().Run(t.Context(), plan); !errors.Is(err, transportErr) {
+		t.Fatalf("Run error = %v, want %v", err, transportErr)
+	}
+	select {
+	case <-completionCanceled:
+	default:
+		t.Fatal("listener failure did not cancel the waiting completion")
 	}
 }
 

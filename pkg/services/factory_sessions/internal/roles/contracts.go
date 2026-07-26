@@ -209,6 +209,7 @@ type LifecyclePlanRequest struct {
 	Runtime    ProcessRuntime
 	Components factorysessions.BoundProcessComponents
 	Close      func() error
+	Completion func(context.Context) error
 }
 
 type LifecyclePlanOperation func(LifecyclePlanRequest) (lifecycle.Plan, error)

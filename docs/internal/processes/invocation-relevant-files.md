@@ -98,6 +98,13 @@ primary-result behavior.
   `CompleteStartup` succeeds, so startup failure cannot report false readiness
   or open a browser. Cancellation must join the starter before reverse-order
   Factory Session cleanup returns.
+- A one-shot run that owns an API listener must express its terminal
+  invocation as part of the Factory Sessions lifecycle plan. Start the runtime,
+  workers, and transport first; gate the terminal operation on the published
+  ready binding; then let either transport failure or terminal completion
+  cancel and join the other side before reverse-order cleanup. Keep the hosted
+  runtime alive in service mode during that transaction without changing the
+  customer-visible one-shot run mode.
 - Root/global CLI inputs have one writable definition path:
   `contracts/cli/commands.json`. `climanifestcobra` generically projects those
   records into Cobra and resolved inputs; `make cli-manifest-check` compares

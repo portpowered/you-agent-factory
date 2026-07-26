@@ -174,7 +174,7 @@ func Open(
 	requestedPort := cfg.Port
 	emitNamedFactoryResolutionDiagnostics(cfg, logger)
 
-	if invocationMode {
+	if invocationMode && !cfg.WithServer && !cfg.WithSite {
 		emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
 		return openInvocation(
 			ctx,
@@ -194,31 +194,34 @@ func Open(
 	if buildRuntimeRequest == nil {
 		return nil, errors.New("construct local runtime: runtime opening request factory is required")
 	}
-	var factorySvc initializer.LocalRuntimeRunner
-	onBound := func(binding factorysessions.RuntimeHostBinding) {
-		resolved := cfg
-		resolved.Port = binding.Port
-		emitVerboseStartupDiagnostics(resolved, recordPath, requestedPort)
-		if emitStartupMessages(resolved, runtimeLogDiagnosticsForRunner(factorySvc)) {
-			openDashboardAtBoundEndpoint(ctx, resolved, cfg.BrowserOpener)
-		}
+	operation, runtimeCfg, err := prepareHostedInvocation(
+		ctx, cfg, logger, invocationRequest, recordPath, invocation,
+		presentation, mockWorkersConfig, invocationMode,
+	)
+	if err != nil {
+		return nil, err
 	}
-	openingRequest := buildRuntimeRequest(cfg, mockWorkersConfig, onBound)
+	var factorySvc initializer.LocalRuntimeRunner
+	onBound := newRuntimeHostObserver(
+		ctx, cfg, recordPath, requestedPort,
+		func() runtimeartifact.Diagnostics { return runtimeLogDiagnosticsForRunner(factorySvc) },
+	)
+	openingRequest := buildRuntimeRequest(runtimeCfg, mockWorkersConfig, onBound)
+	openingRequest.Completion = hostedInvocationCompletion(operation)
 	if cfg.Port <= 0 {
 		emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
 	}
-	var visualizationSink factoryvisualization.Sink
-	if !cfg.SuppressDashboardRendering && cfg.Output != nil {
-		visualizationSink = factoryvisualization.SinkFunc(func(input factoryvisualization.View) {
-			renderSimpleDashboard(cfg.Output, input)
-		})
-	}
+	visualizationSink := runVisualizationSink(cfg)
 	factorySvc, err = buildRunner(ctx, openingRequest, logger, visualizationSink)
 	if err != nil {
 		return nil, err
 	}
 	if factorySvc == nil {
 		return nil, fmt.Errorf("construct local runtime: builder returned nil runner")
+	}
+	if operation != nil {
+		operation.runner = factorySvc
+		return operation, nil
 	}
 
 	return &Operation{
@@ -227,16 +230,77 @@ func Open(
 	}, nil
 }
 
+func prepareHostedInvocation(
+	ctx context.Context,
+	cfg RunConfig,
+	logger *zap.Logger,
+	request *factoryapi.InvocationRequest,
+	recordPath resolvedRunRecordPath,
+	invocation InvocationOperation,
+	presentation factoryvisualization.ResponsePresentation,
+	mockWorkersConfig *workers.MockWorkersConfig,
+	invocationMode bool,
+) (*Operation, RunConfig, error) {
+	if !invocationMode {
+		return nil, cfg, nil
+	}
+	operation, err := openInvocation(
+		ctx, cfg, logger, request, recordPath, invocation, presentation, mockWorkersConfig,
+	)
+	if err != nil {
+		return nil, RunConfig{}, err
+	}
+	// The hosted runtime remains alive until the invocation reaches its
+	// terminal result; the customer-visible run is still one-shot.
+	runtimeCfg := cfg
+	runtimeCfg.Continuously = true
+	return operation, runtimeCfg, nil
+}
+
+func newRuntimeHostObserver(
+	ctx context.Context,
+	cfg RunConfig,
+	recordPath resolvedRunRecordPath,
+	requestedPort int,
+	diagnostics func() runtimeartifact.Diagnostics,
+) factorysessions.RuntimeHostObserver {
+	return func(binding factorysessions.RuntimeHostBinding) {
+		resolved := cfg
+		resolved.Port = binding.Port
+		emitVerboseStartupDiagnostics(resolved, recordPath, requestedPort)
+		emitStartupMessages(resolved, diagnostics())
+		if shouldOpenDashboard(resolved) {
+			openDashboardAtBoundEndpoint(ctx, resolved, cfg.BrowserOpener)
+		}
+	}
+}
+
+func runVisualizationSink(cfg RunConfig) factoryvisualization.Sink {
+	if cfg.SuppressDashboardRendering || cfg.Output == nil {
+		return nil
+	}
+	return factoryvisualization.SinkFunc(func(input factoryvisualization.View) {
+		renderSimpleDashboard(cfg.Output, input)
+	})
+}
+
+func hostedInvocationCompletion(operation *Operation) func(context.Context) error {
+	if operation == nil {
+		return nil
+	}
+	return operation.runInvocation
+}
+
 // Run activates an operation that was opened successfully.
 func (operation *Operation) Run(ctx context.Context) error {
 	if operation == nil {
 		return fmt.Errorf("run local operation: operation is required")
 	}
 	if operation.invocationMode {
-		return runFactoryInvocation(
-			ctx, operation.cfg, operation.invocationTarget, *operation.invocationRequest,
-			operation.invocation, operation.presentation,
-		)
+		if operation.runner != nil {
+			return operation.runner.Run(ctx)
+		}
+		return operation.runInvocation(ctx)
 	}
 
 	if operation.cfg.Port <= 0 {
@@ -252,13 +316,25 @@ func (operation *Operation) Run(ctx context.Context) error {
 	)
 }
 
+func (operation *Operation) runInvocation(ctx context.Context) error {
+	if operation == nil || operation.invocationRequest == nil {
+		return fmt.Errorf("run factory invocation: operation is required")
+	}
+	return runFactoryInvocation(
+		ctx, operation.cfg, operation.invocationTarget, *operation.invocationRequest,
+		operation.invocation, operation.presentation,
+	)
+}
+
 func normalizeRunInvocationMode(cfg RunConfig) RunConfig {
 	if !cfg.CleanInvocation {
 		return cfg
 	}
 	cfg.SuppressDashboardRendering = true
 	cfg.StartupOutput = nil
-	cfg.OpenDashboard = false
+	if !cfg.WithSite {
+		cfg.OpenDashboard = false
+	}
 	return cfg
 }
 
@@ -549,6 +625,10 @@ func emitStartupMessages(
 	return true
 }
 
+func shouldOpenDashboard(cfg RunConfig) bool {
+	return cfg.OpenDashboard && (cfg.WithSite || cfg.OutputIsTTY)
+}
+
 func reportRecordingPathOnShutdown(output io.Writer, recordPath resolvedRunRecordPath) {
 	if output == nil || !recordPath.autoGenerated || strings.TrimSpace(recordPath.reportedPath) == "" {
 		return
@@ -563,14 +643,20 @@ func openDashboardAtBoundEndpoint(
 ) {
 	url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
 	if openDashboard == nil {
-		fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: browser opener is required\nOpen the dashboard at %s\n", url)
+		if cfg.StartupOutput != nil {
+			fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: browser opener is required\nOpen the dashboard at %s\n", url)
+		}
 		return
 	}
 	if err := openDashboard(ctx, url); err != nil {
-		fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: %v\nOpen the dashboard at %s\n", err, url)
+		if cfg.StartupOutput != nil {
+			fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: %v\nOpen the dashboard at %s\n", err, url)
+		}
 		return
 	}
-	fmt.Fprintf(cfg.StartupOutput, "Opening dashboard: %s\n", url)
+	if cfg.StartupOutput != nil {
+		fmt.Fprintf(cfg.StartupOutput, "Opening dashboard: %s\n", url)
+	}
 }
 
 // CountTokenStates counts tokens by their state category based on place ID conventions.

@@ -130,6 +130,42 @@ func TestServerCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
 	}
 }
 
+func TestRunScopedSiteMissingCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
+	workingDirectory := t.TempDir()
+	var effects atomic.Int32
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
+			effects.Add(1)
+			return nil
+		},
+		BrowserOpener: func(context.Context, string) error {
+			effects.Add(1)
+			return nil
+		},
+		FactorySessionIDGenerator: func() string {
+			effects.Add(1)
+			return "unexpected-session"
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	stdout, stderr, executeErr := executeFactoryArgs(
+		t,
+		process,
+		workingDirectory,
+		[]string{"you", "run", "--no-record", "--with-site"},
+		false,
+		t.Context(),
+	)
+	if executeErr == nil {
+		t.Fatalf("missing Current Factory succeeded; stdout=%q stderr=%q", stdout, stderr)
+	}
+	if effects.Load() != 0 {
+		t.Fatalf("pre-session site failure product effects = %d, want 0", effects.Load())
+	}
+}
+
 func runCurrentFactoryFailureCase(
 	t *testing.T,
 	prepare func(*testing.T, string),
@@ -329,6 +365,132 @@ func TestCurrentFactoryRunsToIdleWithoutStartingServer(t *testing.T) {
 	}
 }
 
+func TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness(t *testing.T) {
+	tests := []struct {
+		name        string
+		flag        string
+		wantBrowser int32
+	}{
+		{name: "server", flag: "--with-server"},
+		{name: "site", flag: "--with-site", wantBrowser: 1},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			workingDirectory := t.TempDir()
+			factoryDir := filepath.Join(workingDirectory, "factory")
+			if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+				t.Fatalf("create Current Factory directory: %v", err)
+			}
+			if err := os.WriteFile(
+				filepath.Join(factoryDir, "factory.json"),
+				[]byte(idleCurrentFactoryJSON),
+				0o600,
+			); err != nil {
+				t.Fatalf("write Current Factory: %v", err)
+			}
+
+			serverStopped := make(chan struct{})
+			var bound, browserCalls atomic.Int32
+			process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+					bound.Store(1)
+					request.OnBound(platformhttpserver.Binding{Port: request.Port})
+					<-ctx.Done()
+					close(serverStopped)
+					return ctx.Err()
+				},
+				BrowserOpener: func(context.Context, string) error {
+					if bound.Load() == 0 {
+						return errors.New("browser opened before listener readiness")
+					}
+					browserCalls.Add(1)
+					return nil
+				},
+			})
+			if err != nil {
+				t.Fatalf("BuildProcess() error = %v", err)
+			}
+
+			stdout, stderr, executeErr := executeFactoryArgs(
+				t,
+				process,
+				workingDirectory,
+				[]string{"you", "run", "--no-record", test.flag},
+				false,
+				t.Context(),
+			)
+			if executeErr != nil {
+				t.Fatalf("Process.Execute(%s) error = %v; stdout=%q stderr=%q", test.flag, executeErr, stdout, stderr)
+			}
+			if stderr != "" {
+				t.Fatalf("%s stderr = %q, want empty", test.flag, stderr)
+			}
+			if browserCalls.Load() != test.wantBrowser {
+				t.Fatalf("%s browser calls = %d, want %d", test.flag, browserCalls.Load(), test.wantBrowser)
+			}
+			select {
+			case <-serverStopped:
+			case <-time.After(5 * time.Second):
+				t.Fatalf("%s did not join its owned listener after idle", test.flag)
+			}
+		})
+	}
+}
+
+func TestContinuousRunScopedServerKeepsListenerUntilCancellation(t *testing.T) {
+	workingDirectory := t.TempDir()
+	factoryDir := filepath.Join(workingDirectory, "factory")
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("create Current Factory directory: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(factoryDir, "factory.json"),
+		[]byte(idleCurrentFactoryJSON),
+		0o600,
+	); err != nil {
+		t.Fatalf("write Current Factory: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	serverStopped := make(chan struct{})
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		APIServerStarter: func(serverCtx context.Context, request platformhttpserver.StartRequest) error {
+			request.OnBound(platformhttpserver.Binding{Port: request.Port})
+			cancel()
+			<-serverCtx.Done()
+			close(serverStopped)
+			return serverCtx.Err()
+		},
+		BrowserOpener: func(context.Context, string) error {
+			return errors.New("--with-server must not open a browser")
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	stdout, stderr, executeErr := executeFactoryArgs(
+		t,
+		process,
+		workingDirectory,
+		[]string{"you", "run", "--no-record", "--continuously", "--with-server"},
+		false,
+		ctx,
+	)
+	if executeErr != nil && !errors.Is(executeErr, context.Canceled) {
+		t.Fatalf("continuous run error = %v; stdout=%q stderr=%q", executeErr, stdout, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("continuous run stderr = %q, want empty", stderr)
+	}
+	select {
+	case <-serverStopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("continuous cancellation did not join the owned listener")
+	}
+}
+
 func executeCurrentFactory(
 	t *testing.T,
 	process interface{ Execute(root.Input) error },
@@ -356,13 +518,25 @@ func executeFactoryCommandWithContext(
 	ctx context.Context,
 ) (string, string, error) {
 	t.Helper()
-	var stdout, stderr bytes.Buffer
-	stdinIsTTY := true
-	home := t.TempDir()
 	args := []string{"you", command}
 	if command == "run" {
 		args = append(args, "--no-record")
 	}
+	return executeFactoryArgs(t, process, workingDirectory, args, stdoutIsTTY, ctx)
+}
+
+func executeFactoryArgs(
+	t *testing.T,
+	process interface{ Execute(root.Input) error },
+	workingDirectory string,
+	args []string,
+	stdoutIsTTY bool,
+	ctx context.Context,
+) (string, string, error) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	stdinIsTTY := true
+	home := t.TempDir()
 	err := process.Execute(root.Input{
 		Args:             args,
 		Env:              append(os.Environ(), "HOME="+home, "USERPROFILE="+home),

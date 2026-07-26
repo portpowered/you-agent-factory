@@ -80,8 +80,9 @@ type ApplicationOpeningPorts struct {
 
 // ApplicationOpeningRequest binds a runtime request to invocation-local ports.
 type ApplicationOpeningRequest struct {
-	Runtime *RuntimeOpeningRequest
-	Ports   ApplicationOpeningPorts
+	Runtime    *RuntimeOpeningRequest
+	Ports      ApplicationOpeningPorts
+	Completion func(context.Context) error
 }
 
 // RuntimeHTTPServices is the detached set of opened runtime services consumed

@@ -496,6 +496,14 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 	return err
 }
 
+func applyRunScopedServerMode(cfg runcli.RunConfig) runcli.RunConfig {
+	if cfg.WithSite {
+		cfg.WithServer = true
+		cfg.OpenDashboard = true
+	}
+	return cfg
+}
+
 func runUsesCurrentFactory(cmd *cobra.Command) bool {
 	return cmd != nil &&
 		!cmd.Flags().Changed("dir") &&

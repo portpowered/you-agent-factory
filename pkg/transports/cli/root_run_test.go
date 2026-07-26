@@ -521,6 +521,58 @@ func TestResolveRunNamedFactorySelectionForwardsFailureToInjectedCandidatePaths(
 	}
 }
 
+func TestRunScopedServerIntentIncludesInvocationAndSiteDashboard(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		cfg           runcli.RunConfig
+		wantDashboard bool
+	}{
+		{
+			name: "positional invocation with API",
+			cfg: runcli.RunConfig{
+				WithServer:               true,
+				Port:                     7437,
+				InvocationPositionalText: new(string),
+			},
+		},
+		{
+			name: "stdin invocation with site",
+			cfg: runcli.RunConfig{
+				WithServer:          true,
+				WithSite:            true,
+				Port:                7437,
+				InvocationStdinText: new(string),
+			},
+			wantDashboard: true,
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			var got startupcli.RunIntent
+			options := CommandFactory{
+				initializer: startupcli.Functions{
+					RunFunc: func(_ context.Context, intent startupcli.RunIntent, _ startupcli.RunSelection) error {
+						got = intent
+						return nil
+					},
+				},
+				openRunSelection: func(runcli.RunConfig) startupcli.RunSelection {
+					return testRunSelection{}
+				},
+			}
+			if err := delegateRunInitialization(t.Context(), test.cfg, false, options); err != nil {
+				t.Fatalf("delegateRunInitialization: %v", err)
+			}
+			if !got.APIEnabled || got.DashboardEnabled != test.wantDashboard {
+				t.Fatalf("RunIntent = %#v, want API=true dashboard=%t", got, test.wantDashboard)
+			}
+		})
+	}
+}
+
 func TestResolveRunNamedFactorySelectionHonorsCancellationWithoutSelection(t *testing.T) {
 	t.Parallel()
 
