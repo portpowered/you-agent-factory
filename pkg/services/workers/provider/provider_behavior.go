@@ -124,11 +124,6 @@ type codexProviderBehavior struct {
 	logger logging.Logger
 }
 
-type geminiProviderBehavior struct {
-	sharedNonCodexProviderBehavior
-	logger logging.Logger
-}
-
 type kiroProviderBehavior struct {
 	logger logging.Logger
 }
@@ -152,8 +147,6 @@ func providerBehaviorFor(provider string, logger logging.Logger) providerBehavio
 	switch provider {
 	case string(modelprovider.ProviderCodex):
 		return codexProviderBehavior{logger: logger}
-	case string(modelprovider.ProviderGemini):
-		return geminiProviderBehavior{logger: logger}
 	case string(modelprovider.ProviderKiro):
 		return kiroProviderBehavior{logger: logger}
 	case string(modelprovider.ProviderCursor):
@@ -256,23 +249,6 @@ func BuildCodexStructuredCommand(
 	}
 	args = append(args[:1], append([]string{"--json"}, args[1:]...)...)
 	return behavior.BuildCommandRequest(req, args), cleanup, nil
-}
-
-func (b geminiProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
-	if err := validateGeminiOptionalCapabilities(req); err != nil {
-		return nil, err
-	}
-	args := []string{"--prompt", req.UserMessage}
-	if req.Model != "" {
-		args = append(args, "--model", req.Model)
-	}
-	if req.SessionID != "" {
-		args = append(args, "--resume", req.SessionID)
-	}
-	if skipPermissions {
-		args = append(args, "--approval-mode", "yolo", "--sandbox", "false")
-	}
-	return args, nil
 }
 
 func (b kiroProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
@@ -420,25 +396,6 @@ func (b piProviderBehavior) BuildArgs(_ context.Context, req workerexecution.Pro
 	}
 	args = append(args, req.UserMessage)
 	return args, nil
-}
-
-func validateGeminiOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {
-	unsupported := map[workerexecution.RunnerOptionalCapability]string{
-		workerexecution.RunnerOptionalCapabilityImageInput:       "image input is not supported by the gemini runner in v1",
-		workerexecution.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the gemini runner in v1",
-		workerexecution.RunnerOptionalCapabilitySessionResume:    "session resume is not supported by the gemini runner in v1",
-		workerexecution.RunnerOptionalCapabilityWorkingDirectory: "working directory is not supported by the gemini runner in v1",
-		workerexecution.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the gemini runner in v1",
-	}
-	for _, capability := range req.RequiredOptionalCapabilities {
-		if message, blocked := unsupported[capability]; blocked {
-			return errors.New(message)
-		}
-	}
-	if req.SessionID != "" {
-		return errors.New("session resume is not supported by the gemini runner in v1")
-	}
-	return nil
 }
 
 func validateCodexOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {

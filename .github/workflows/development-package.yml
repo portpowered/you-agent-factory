@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: development-package-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   BUN_VERSION: 1.3.12
@@ -21,9 +21,37 @@ env:
 
 jobs:
   validate:
-    name: Validate Development Package Prerequisites
+    name: Validate Development Package Prerequisites (${{ matrix.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Typecheck
+            command: make typecheck
+            needs_playwright: false
+          - name: Lint and package boundaries
+            command: make lint
+            needs_playwright: false
+          - name: Repository tests
+            command: make test
+            needs_playwright: false
+          - name: Contract generation
+            command: make contracts-smoke
+            needs_playwright: false
+          - name: API parity
+            command: make api-smoke
+            needs_playwright: false
+          - name: API package consumption
+            command: make api-package-pack-smoke
+            needs_playwright: false
+          - name: Packaged Factories consumption
+            command: make packaged-factory-package-smoke
+            needs_playwright: false
+          - name: Public frontend package release
+            command: make ui-public-package-release
+            needs_playwright: true
     steps:
       - name: Check out the candidate commit
         uses: actions/checkout@v4
@@ -51,37 +79,16 @@ jobs:
       - name: Install dashboard dependencies
         run: make ui-deps
 
-      - name: Run typecheck
-        run: make typecheck
-
-      - name: Run lint and package boundary gates
-        run: make lint
-
-      - name: Run relevant repository tests
-        run: make test
-
-      - name: Validate repeated contract generation and drift
-        run: make contracts-smoke
-
-      - name: Validate generated API parity
-        run: make api-smoke
-
-      - name: Validate package allowlist, packing, and isolated consumption
-        run: make api-package-pack-smoke
-
-      - name: Validate Packaged Factories generation, packing, and isolated consumption
-        run: make packaged-factory-package-smoke
-
       - name: Install Playwright browser for frontend package verification
+        if: matrix.needs_playwright
         run: make ui-install-playwright
 
-      - name: Validate the canonical frontend package release family
-        run: make ui-public-package-release
+      - name: Run validation lane
+        run: ${{ matrix.command }}
 
   dry-run-candidate:
     name: Build and Smoke Exact Candidate (No Publish)
     if: github.event_name == 'pull_request'
-    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -116,7 +123,6 @@ jobs:
             --event-name "${{ github.event_name }}" \
             --output-directory .artifacts/api-development-candidate/package \
             --package-directory packages/api \
-            --prerequisite-result "${{ needs.validate.result }}" \
             --pull-request-head-sha "${{ github.event.pull_request.head.sha }}" \
             --ref "${{ github.ref }}" \
             --repository "${{ github.repository }}" \
@@ -142,7 +148,6 @@ jobs:
             --event-name "${{ github.event_name }}" \
             --output-directory .artifacts/packaged-factories-development-candidate/package \
             --package-directory packages/packaged-factories \
-            --prerequisite-result "${{ needs.validate.result }}" \
             --pull-request-head-sha "${{ github.event.pull_request.head.sha }}" \
             --ref "${{ github.ref }}" \
             --repository "${{ github.repository }}" \
@@ -179,7 +184,6 @@ jobs:
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
       github.repository == 'portpowered/you-agent-factory'
-    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -211,7 +215,6 @@ jobs:
           --event-name "${{ github.event_name }}"
           --output-directory .artifacts/api-development-candidate
           --package-directory packages/api
-          --prerequisite-result "${{ needs.validate.result }}"
           --ref "${{ github.ref }}"
           --repository "${{ github.repository }}"
           --run-id "${{ github.run_id }}"
@@ -232,7 +235,6 @@ jobs:
           --event-name "${{ github.event_name }}"
           --output-directory .artifacts/packaged-factories-development-candidate
           --package-directory packages/packaged-factories
-          --prerequisite-result "${{ needs.validate.result }}"
           --ref "${{ github.ref }}"
           --repository "${{ github.repository }}"
           --run-id "${{ github.run_id }}"

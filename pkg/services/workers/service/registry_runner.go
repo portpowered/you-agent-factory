@@ -99,6 +99,7 @@ func invocationRequestFromRunner(request workers.RunnerExecutionRequest) inferen
 		UserMessage:  request.UserMessage,
 		OutputSchema: request.OutputSchema,
 		Required:     requiredCapabilitiesFromRunner(request),
+		Execution:    request,
 	})
 }
 

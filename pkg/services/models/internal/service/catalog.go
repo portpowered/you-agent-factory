@@ -12,6 +12,29 @@ import (
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
 )
 
+// Scoped catalog discovery is contract-only until the Models implementation
+// packet owns runtime-scope registration and lookup.
+func (s *Service) ListCatalog(
+	context.Context,
+	models.ListModelsRequest,
+) (models.ListModelsResult, error) {
+	return models.ListModelsResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *Service) GetCatalogModel(
+	context.Context,
+	models.GetModelRequest,
+) (models.GetModelResult, error) {
+	return models.GetModelResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *Service) GetModelReadiness(
+	context.Context,
+	models.GetModelReadinessRequest,
+) (models.GetModelReadinessResult, error) {
+	return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
+}
+
 // ListModels returns configured model summaries with managed-runtime readiness projection.
 func (s *Service) ListModels(ctx context.Context) (modelcatalog.List, error) {
 	runtimeCfg := s.runtimeConfig()

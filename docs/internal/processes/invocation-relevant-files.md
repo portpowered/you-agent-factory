@@ -3,6 +3,16 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+- A conductor-routed native integration must carry the complete cloned
+  `workers.ProviderInferenceRequest` through `inferencecontract.InvocationRequest`.
+  Keep provider selection and response delivery conductor-owned, while the
+  provider-owned command builder receives the original environment, process
+  environment, working directory, worktree, dispatch metadata, worker and
+  workstation metadata, project ID, and input tokens. Prove configured
+  environment and working-directory delivery through `root.BuildProcess` with
+  an injected command-runner edge; do not expose configured secrets in events
+  or assertion output.
+
 - Review-gated factories that must revise rejected work should preserve the
   original input on the work-stage route, retain non-empty worker output in the
   `_last_output` token tag, and read `Payload`, `PreviousOutput`, and
@@ -125,14 +135,16 @@ primary-result behavior.
   from the same authoritative registry: `NewRuntimeWithSelection` constructs
   `conductor.New(providerRegistry)` and `runtimeRunnerDecorators` wrap the
   retained provider-native runner with `conductorInvocationRunner` when
-  `ProviderOverride` is absent.   Externally supplied selectable identities
-  resolve onto their canonical conductor identity; bundled built-ins continue
-  on the provider-native Infer/command path without migrating Gemini, Kiro,
-  Cursor, Claude, Codex, Pi, OpenCode, or Agy ownership. Aggregate
-  dispatch/failure branches and `ProviderOverride` remain intact and bypass
-  the registry/conductor decorators. Concurrent cancel, overlapping dispatch,
-  and destination write-failure/backpressure evidence lives in
-  `conductor/concurrency_test.go`: cancelled closes still reject late writes,
+  `ProviderOverride` is absent. Externally supplied selectable identities
+  resolve onto their canonical conductor identity. Bundled built-ins remain on
+  the provider-native Infer/command path until their package-owned Integration
+  replaces the native-runtime compatibility stub; `UsesNativeRunner` keeps the
+  stub on the native path and routes migrated Integrations (currently Gemini)
+  through the conductor without a concrete-provider switch in shared
+  orchestration. Aggregate dispatch/failure branches and `ProviderOverride`
+  remain intact and bypass the registry/conductor decorators. Concurrent cancel,
+  overlapping dispatch, and destination write-failure/backpressure evidence lives
+  in `conductor/concurrency_test.go`: cancelled closes still reject late writes,
   shared-conductor dispatch keeps per-invocation correlation/order/terminals
   isolated, and sink backpressure remains the sole terminal for the affected
   invocation without leaking unsafe provider detail into sibling successes.
@@ -881,7 +893,56 @@ response-stream output.
   `pkg/workers/provider/commandenv` so provider variables retain the established
   non-interactive Git/editor safeguards, and the production mode-selection
   boundary must preserve provider input validation before starting either
-  runner. Native JSONL fixture tests should
+  runner. When migrating a built-in out of aggregate `provider_behavior`, move
+  argv construction, optional-capability rejection, and
+  `BuildCommandRequest`/env assembly into `pkg/services/workers/provider/<name>`
+  first (see Gemini `BuildArgs`/`BuildCommandRequest`/`Adapter.BuildCommand`);
+  keep only a thin aggregate delegate until the later legacy-branch deletion
+  story. After the migrated provider is registry+conductor exclusive, delete
+  only that provider's corresponding aggregate command/decode/failure/timeout/
+  session branches (and relocate aggregate-owned tests into the provider
+  package); leave the aggregate shell, ProviderOverride, and other providers
+  intact. Move Gemini-native failure and timeout parsing into the same package
+  (`ParseProviderFailure`, `TimeoutFailureResult`, `Adapter.ClassifyFailure`) so
+  the conductor path consumes provider-owned normalized facts; aggregate exit
+  and timeout bridges may only thin-delegate until legacy deletion. Treat all
+  provider-supplied failure text as classification input only: published
+  failures use fixed class-specific messages, including unknown fallbacks, so
+  unmarked prompts, credentials, and machine-local paths cannot escape a
+  deny-list sanitizer. If a provider command returns `context.Canceled`, return
+  that error before closing the provider response writer so
+  `inferencecontract.ExecuteInvocation` remains the single owner of canonical,
+  non-retryable cancellation. Bind the
+  migrated provider as a registry catalog Integration
+  (`gemini.NewIntegration`) from `BuiltInRegistrations`, and let
+  `UsesNativeRunner` route Integrations that no longer advertise the
+  native-runtime compatibility marker through `conductor.Invoke` without adding
+  a concrete-provider switch in shared orchestration. Process composition
+  passes the shared `ProviderCommandRunner` edge into
+  `BuiltInRegistrations(BuiltInDependencies{CommandRunner})` so migrated
+  Integrations and native executors share one command boundary. Worker
+  construction resolves persisted plus invocation-override permission policy
+  once, then an outer invocation-policy runner records the effective value on
+  `ProviderInferenceRequest`; this outer boundary must wrap the conductor
+  decorator because a migrated Integration does not call the retained native
+  runner. Provider Integrations consume that request-local value when building
+  commands and must not store worker permission policy in registry-global
+  Integration instances. Functional provider packages under
+  `tests/functional/providers/<name>` prove success, command policy, and safe
+  native-failure postures through `root.BuildProcess` /
+  `support.RunFactoryToCompletionWithEdges` without importing provider package
+  internals. `providers` is an approved deep functional domain; aggregate files
+  directly under `tests/functional/providers` remain shallow deletion-only
+  debt. Prove each migrated
+  Integration against the shared inference contract through
+  `inferencecontract.ExecuteInvocation` for the success and failure postures
+  that apply to that provider's authored support/capability set (for Gemini:
+  prompt_submission + message_snapshots success, plus native
+  auth/invalid/throttle/timeout/unknown failures). Do not invent streaming or
+  tool-lifecycle factories just to call `inferencecontract/testkit.Run` when the
+  manifest does not advertise those capabilities; keep selection on the
+  registry Integration boundary rather than Adapter internals. Native
+  JSONL fixture tests should
   fragment reads and flush an unterminated final record so command selection,
   decoder buffering, and final-result parsing are proven independently.
   Provider retry and compaction records should publish only bounded typed facts
@@ -1492,6 +1553,7 @@ response-stream output.
   flows even when backend runtime validation already accepts the factory.
 - Managed-runtime invocation readiness gating and direct invocation policy live in `pkg/models/service/invoke.go`; the canonical service consumes neutral `pkg/models/host.Host.InspectReadiness` snapshots, projects public readiness through `pkg/transports/mapping/managed_runtime_invocation.go`, and owns invocation failure classification and readiness logs. Stable provider command identity lives in `pkg/models/provider`; worker and model invocation exchange `pkg/workers/execution` requests, results, provider sessions, and normalized failures, while `pkg/workers/diagnostics` owns the safe generated projection. `pkg/wire/production.go` supplies the active-runtime reader, process model host, assets, logger, clock, metrics, invocation executor builder, and runner identity directly; `FactoryService` and `runtimehost.Host` only retain compatibility forwarding/composition seams and are never passed into the model family. Factory worker execution routes through `pkg/models/host/execution.go` when a process-wide host is configured, otherwise through the local manager fallback. Process-wide local-runtime ownership and lease boundaries belong in `pkg/models/host`; keep `pkg/models/local` as the managed-runtime catalog compatibility projection layer. See `docs/architecture/model-host.md`.
 - When a shared merge introduces a backend package-coverage floor that the reviewed head no longer reaches, use the failing CI profile's exact reported value to make the smallest manifest adjustment; do not run the manifest updater against the whole repository because it can ratchet unrelated package floors.
+- Functional event-leak assertions must target the injected sensitive fixture, not generic temporary-directory fragments: root-process event payloads legitimately include the harness's factory source and working-directory paths.
 - After a canonical CLI-family cutover shrinks a package (for example
   `pkg/transports/cli/mcp` or Models
   `pkg/services/models/transports/cli` command handlers), restore unit-coverage

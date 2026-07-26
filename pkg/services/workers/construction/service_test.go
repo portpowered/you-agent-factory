@@ -43,6 +43,24 @@ func TestServiceBuildProviderBackedExposesDispatchAndDirectBoundaries(t *testing
 	}
 }
 
+func TestEffectiveSkipPermissionsRunnerAppliesPolicyOutsideDecorators(t *testing.T) {
+	t.Parallel()
+
+	captured := workerexecution.ProviderInferenceRequest{}
+	inner := runnerFunc(func(_ context.Context, request workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+		captured = request
+		return workers.RunnerExecutionResult{}, nil
+	})
+	runner := effectiveSkipPermissionsRunner{next: inner, enabled: true}
+
+	if _, err := runner.Execute(t.Context(), workers.RunnerExecutionRequest{UserMessage: "fixture"}); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !captured.SkipPermissions {
+		t.Fatal("Execute() omitted invocation-effective skip-permissions policy")
+	}
+}
+
 func TestServiceBuildLogicalWorkerHasDispatchOnly(t *testing.T) {
 	runtimeConfig := runtimefixtures.RuntimeConfigLookupFixture{Workers: map[string]*interfaces.FactoryWorkerConfig{
 		"logical": {Name: "logical", Type: interfaces.WorkstationTypeLogical},
@@ -188,6 +206,15 @@ func TestServiceWithExecutionFactoriesPreservesRunnerAndProviderWiring(t *testin
 }
 
 type providerStub struct{}
+
+type runnerFunc func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error)
+
+func (fn runnerFunc) Execute(
+	ctx context.Context,
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	return fn(ctx, request)
+}
 
 func testClock() time.Time { return time.Date(2026, time.July, 20, 12, 0, 0, 0, time.UTC) }
 

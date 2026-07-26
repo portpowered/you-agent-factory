@@ -15,7 +15,6 @@ import (
 	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode"
 	claudeexitfailure "github.com/portpowered/infinite-you/pkg/services/workers/provider/claude/exitfailure"
 	codexexitfailure "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex/exitfailure"
-	geminipkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	kiropkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro"
 )
 
@@ -26,8 +25,6 @@ const (
 	claudeBadRequestFailureMessage       = "Claude rejected the request as invalid."
 	claudeConfigFailureMessage           = "Claude is not configured correctly."
 	claudeFailureScanBytes               = 64 * 1024
-	geminiThrottleFailureMessage         = "The provider is rate limited; retry after capacity becomes available."
-	geminiTimeoutFailureMessage          = geminipkg.TimeoutFailureMessage
 	codexGPT56SolUpgradeMessage          = codexexitfailure.GPT56SolUpgradeMessage
 	codexUnknownFailureMessage           = codexexitfailure.UnknownFailureMessage
 	codexAuthFailureMessage              = codexexitfailure.AuthFailureMessage
@@ -82,13 +79,6 @@ func knownKiroFailure(reason workerexecution.WorkFailureType) ProviderFailureRes
 
 func ParseClaudeProviderFailure(result CommandResult) ProviderFailureResult {
 	parsed := claudeexitfailure.ParseProviderFailure(claudeexitfailure.FailureInput{
-		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-	})
-	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
-}
-
-func ParseGeminiProviderFailure(result CommandResult) ProviderFailureResult {
-	parsed := geminipkg.ParseProviderFailure(geminipkg.FailureInput{
 		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
 	})
 	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
@@ -959,11 +949,6 @@ func TestParseProviderExitFailure_RoutesOwnedProviderPackages(t *testing.T) {
 			provider: string(modelprovider.ProviderClaude),
 			result:   CommandResult{ExitCode: 1, Stderr: []byte(`API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"sign in"}}`)},
 			want:     workerexecution.WorkFailureTypeAuthFailure,
-		},
-		{
-			provider: string(modelprovider.ProviderGemini),
-			result:   CommandResult{ExitCode: 1, Stderr: []byte("ERROR: 429 RESOURCE_EXHAUSTED")},
-			want:     workerexecution.WorkFailureTypeThrottled,
 		},
 		{
 			provider: string(modelprovider.ProviderKiro),

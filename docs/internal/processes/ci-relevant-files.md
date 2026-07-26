@@ -62,11 +62,26 @@
   fail-fast-disabled matrix gated only by Classify PR Impact. Preserve the
   explicit run/intentional-skip summary, per-suite coverage thresholds,
   diagnostics, and artifacts; neither lane may depend on Build, Lint, or API.
-  Their exact local reruns are `make test-unit-coverage` and
-  `make test-functional-coverage`. Both commands serialize Go package coverage
+  Exact local reruns are `make test-unit-coverage` and
+  `make functional-test-viz` (required Backend Functional Coverage). Coverage-
+  only functional reruns remain `make test-functional-coverage`.
+  `make test-functional-coverage` always runs `functional-boundary-check` first,
+  and `make functional-test-viz` composes that coverage lane once with profile
+  plus `-json-output` before rendering Markdown, so the required CI functional
+  lane cannot succeed without a successful boundary check; the unit coverage
+  lane stays independent of that prerequisite. CI keeps the established upload
+  root `.artifacts/backend-functional-coverage/` by setting
+  `FUNCTIONAL_TEST_VIZ_DIR` for the functional matrix leg, tees `command.log`,
+  and uploads `functional-tests.md`, `coverage-summary.json`, `coverage.out`,
+  and `command.log` on success and failure when those files exist (upload step
+  uses `if: always()`). Both coverage commands serialize Go package coverage
   writers before canonicalizing repeated source blocks into one sorted profile;
   keep that ordering so concurrent packages cannot corrupt the shared profile
-  and the uploaded artifact matches the totals enforced by the lane.
+  and the uploaded artifact matches the totals enforced by the lane. Prove the
+  functional boundary-before-coverage composition with stubbed Make wrapper
+  smoke under
+  `tests/functional/observability/coverage/functional_coverage_boundary_test.go`
+  rather than the full functional suite.
   The default functional and functional-coverage lanes share dynamic package
   selection through `internal/testlanes`: retain execution of the complete
   `go list ./tests/functional/...` result, the shared-support exclusion, and
@@ -99,11 +114,32 @@
   `gocoveragecheck` coverage-summary JSON file (never a second `.out`
   profile parser), attaches golden manifest provenance fail-closed, and
   writes `.artifacts/functional-test-viz/functional-tests.md` by default
-  via `Generate` / `WriteCatalogFile`. Report semantics stay in the library;
-  Make/CI upload wiring remains a later cell (`make functional-test-viz` is
-  intentionally not owned here). Prove rendering with focused package/cmd
-  golden fixtures under `internal/functionaltestviz/testdata/` rather than
-  executing the full functional suite.
+  via `Generate` / `WriteCatalogFile`. Report semantics stay in the library.
+  Maintainer/CI composition is `make functional-test-viz`: boundary check,
+  one short functional coverage lane with
+  `GO_FUNCTIONAL_COVERAGE_PROFILE` / `GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT`
+  under `.artifacts/functional-test-viz/`, then `cmd/functionaltestviz`.
+  The target is fail-closed: boundary, suite, coverage-floor, metadata, or
+  rendering failures exit non-zero. It never deletes the artifact root on
+  failure, so already-written diagnostics remain (for example profile/JSON
+  after a floor fail, or those files before a render fail). Prove fail-closed
+  preservation with stubbed Make wrapper smoke under
+  `tests/functional/observability/coverage/functional_test_viz_fail_closed_test.go`
+  rather than the full functional suite. Prove rendering with focused
+  package/cmd golden fixtures under `internal/functionaltestviz/testdata/`.
+  Required CI Backend Functional Coverage runs `make functional-test-viz`
+  (with `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage`) so
+  `functional-boundary-check` stays unavoidable through the nested
+  `test-functional-coverage` call, and the lane uploads Markdown, coverage
+  JSON, profile, and command log on success and failure. Prove default
+  `functional-test-viz` wiring (boundary first, single coverage with profile
+  + JSON under `.artifacts/functional-test-viz/`, Markdown generator) with
+  dry-run / stubbed Make wrapper smoke under
+  `tests/functional/observability/coverage/functional_test_viz_contract_test.go`
+  rather than the full functional suite. Those Make helpers scrub ambient
+  `FUNCTIONAL_TEST_VIZ_*` / `GO_FUNCTIONAL_COVERAGE_*` from the child Make
+  environment so default-path assertions still hold when the suite inherits
+  CI's `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage`.
   `make functional-boundary-check` also owns the deletion-only inventory of
   grandfathered `tests/functional/providers/*_test.go` files: existing entries
   must be removed in the same change as their files migrate so stale exceptions
@@ -130,7 +166,11 @@ Wave 0 functional-tests-expansion planning authority lives under
   `tests/functional/internal/support` is the only shared harness exception;
   other `tests/functional/internal/*` roots (for example `restclient`) are
   unclassified deletion-only debt, and new `runtime_api` files or top-level
-  `Test*` scenarios fail immediately. Prove accept/reject outcomes with
+  `Test*` scenarios fail immediately. `tests/functional/providers/<provider>`
+  is an approved provider-specific domain path, while aggregate Go files
+  directly under `tests/functional/providers` remain shallow deletion-only
+  debt guarded by both package-structure and functional-boundary checks. Prove
+  accept/reject outcomes with
   focused `cmd/pkgstructurecheck` tests (see
   `TestDomainLayoutEnforcementProof`) plus `make pkg-structure` and
   `make verify-fast`. When enabling a new layout rule, baseline the current
