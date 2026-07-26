@@ -8,26 +8,22 @@ import type {
 import type { FactoryGraphBulkSelectionSummary } from "../../../factory-graph-editor/lib/selection/factory-graph-bulk-selection-summary";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
 import { useFactoryGraphEditorSelectionBridge } from "../../../workflow-activity/state/factory-graph-editor-selection-bridge";
-import {
-  CurrentSelectionHeaderActionProvider,
-  CurrentSelectionLocaleProvider,
-} from "../../base/public";
+import { CurrentSelectionHeaderActionProvider } from "../../base/components/layout/current-selection-detail-layout";
+import { CurrentSelectionLocaleProvider } from "../../base/components/presentation/current-selection-locale";
 import { useEditableDocConfigurationState } from "../../doc-selection/hooks/use-editable-doc-configuration-state";
 import { GraphBulkSelectionDetailCard } from "../../graph-selection/components/graph-bulk-selection-detail-card";
 import { resolveActiveGraphBulkSelectionSummary } from "../../graph-selection/lib/resolve-active-graph-bulk-selection-summary";
 import type { CurrentSelectionState } from "../../hooks/core/useCurrentSelection";
 import { useEditableResourceConfigurationState } from "../../resource-selection/hooks/use-editable-resource-configuration-state";
 import { useSelectedProviderSessionState } from "../../work-selection/hooks/useSelectedProviderSessionState";
-import type {
-  SelectedWorkItemExecutionDetails,
-  SelectedWorkRelationshipGraph,
-} from "../../work-selection/public";
-import { WorkItemDetailCard } from "../../work-selection/public";
+import { WorkItemDetailCard } from "../../work-selection/components/work-item/work-item-card";
+import type { SelectedWorkItemExecutionDetails } from "../../work-selection/state/executionDetails";
+import type { SelectedWorkRelationshipGraph } from "../../work-selection/lib/selected-work-relationship-graph";
 import { useEditableWorkStateConfigurationState } from "../../work-state-selection/hooks/use-editable-work-state-configuration-state";
 import { useEditableWorkTypeConfigurationState } from "../../work-type-selection/hooks/use-editable-work-type-configuration-state";
 import { useEditableWorkerConfigurationState } from "../../worker-selection/hooks/use-editable-worker-configuration-state";
 import { useEditableWorkstationConfigurationState } from "../../workstation-selection/hooks/use-editable-workstation-configuration-state";
-import { WorkstationDetailCard } from "../../workstation-selection/public";
+import { WorkstationDetailCard } from "../../workstation-selection/components/detail-card/workstation-detail-card";
 import {
   DocDetailCard,
   NoSelectionDetailCard,

@@ -120,7 +120,7 @@ endef
 
 .PHONY: test test-full test-unit test-unit-fresh test-lane-audit test-maintenance test-integration test-contract test-stress test-release
 .PHONY: test-functional test-functional-long test-backend-functional functional-boundary-check functional-test-viz
-.PHONY: test-ui-coverage-merge test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend
+.PHONY: test-ui-coverage-merge test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
 .PHONY: test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
 
@@ -149,7 +149,7 @@ endef
 
 .PHONY: ci ci-typecheck ci-verify-build-contracts ci-verify-tests
 
-.PHONY: ui-deps ui-lint ui-build ui-test ui-integration-test ui-storybook-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright
+.PHONY: ui-deps ui-lint ui-build ui-test ui-performance-test ui-integration-test ui-storybook-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright
 .PHONY: ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install
 .PHONY: ui-public-package-release ui-public-package-publish-prepare
 .PHONY: ui-storybook  ui-deadcode
@@ -438,6 +438,9 @@ test-ui-storybook-integration:
 test-ui-durable-session-real-backend:
 	$(MAKE) ui-durable-session-real-backend-integration-test
 
+test-ui-performance:
+	$(MAKE) ui-performance-test
+
 test-backend-coverage:
 	$(MAKE) test-unit-coverage
 
@@ -449,7 +452,8 @@ test-backend-functional:
 	$(MAKE) test-functional-coverage
 
 long-tests:
-	$(info Running opt-in long and specialty suites: managed runtime coverage + real local inference coverage)
+	$(info Running opt-in long and specialty suites: UI performance + managed runtime coverage + real local inference coverage)
+	$(call run_verification_step,test-ui-performance,UI Performance specialty lane)
 	$(call run_verification_step,long-tests-managed-runtime,Managed Runtime specialty lane)
 	$(call run_verification_step,long-tests-functional-runtime,Real Local Inference specialty lane)
 
@@ -711,6 +715,12 @@ endif
 
 ui-test:
 	cd ui && $(UI_SCRIPT) test:unit
+
+ui-component-test:
+	cd ui && $(UI_SCRIPT) test:component
+
+ui-performance-test:
+	cd ui && $(UI_SCRIPT) test:performance
 
 ui-integration-test:
 ifeq ($(BUN_BIN),)

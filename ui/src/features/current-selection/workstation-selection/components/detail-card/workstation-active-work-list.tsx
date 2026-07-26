@@ -1,15 +1,13 @@
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
-import { DashboardActionButton } from "../../../../../components/ui";
+import { DashboardActionButton } from "../../../../../components/ui/dashboard-action-button";
 import {
   formatDurationFromISO,
   formatWorkItemLabel,
 } from "../../../../../components/ui/formatters";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import { CurrentSelectionExecutionPill } from "../../../base/components/presentation/current-selection-pill";
-import {
-  CurrentSelectionSupportingText,
-  CurrentSelectionWorkRow,
-} from "../../../base/public";
+import { CurrentSelectionWorkRow } from "../../../base/components/current-selection-work-row";
+import { CurrentSelectionSupportingText } from "../../../base/components/presentation/current-selection-supporting-text";
 import type { WorkstationActiveWorkListProps } from "../../lib/keys/detail-card-types";
 
 export function WorkstationActiveWorkList({

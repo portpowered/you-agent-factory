@@ -13,15 +13,13 @@ import {
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
 } from "../../../base/components/presentation/current-selection-locale";
-import { CurrentSelectionDescriptionList } from "../../../base/public";
+import { CurrentSelectionDescriptionList } from "../../../base/components/detail/current-selection-description-list";
 import {
   CurrentSelectionHistoryCard,
   CurrentSelectionHistoryCardHeader,
-} from "../../../history/public";
-import {
-  InferenceAttemptCard,
-  InferenceAttemptDetail,
-} from "../../../work-selection/public";
+} from "../../../history/components/current-selection-history-card";
+import { InferenceAttemptCard } from "../../../work-selection/components/inference-attempt/inference-attempt";
+import { InferenceAttemptDetail } from "../../../work-selection/components/inference-attempt/inference-attempt-detail";
 import {
   requestModel,
   requestProvider,

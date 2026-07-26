@@ -39,7 +39,7 @@ Slowest individual cases before split:
 | Editable workstation configuration across switches | App shell | `workstation-detail-card.editable-configuration.test.tsx` |
 | Localized workstation editing options | App shell | `current-selection-widget.localization.test.tsx` |
 | State-node detail from graph selection | App shell | `state-node-detail.test.tsx` |
-| Work outcome chart series + timeline refresh | App shell | `work-chart.test.tsx`, `d3-information-card.test.tsx`, `useWorkOutcomeChart.test.ts` |
+| Work outcome chart series + timeline refresh | App shell | `work-chart.test.tsx`, `d3-information-card.test.tsx`, `useWorkOutcomeChart.component.test.ts` |
 | Responsive bento widget catalog at 1366/1024/640 | App shell | `agent-bento.test.tsx`, `dashboard-screen.single-scroll.test.tsx` |
 | Terminal place occupancy details | App shell | `state-node-detail.test.tsx`, `terminal-work-summary-detail.test.tsx` |
 | Retained trace history unavailable copy | App shell | `trace-grid-card.test.tsx` |

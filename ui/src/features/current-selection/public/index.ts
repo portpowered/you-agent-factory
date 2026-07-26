@@ -3,5 +3,5 @@ export type {
   DashboardWorkItemSelection,
   DashboardWorkstationRequestSelection,
   StatePositionWorkItem,
-} from "../base/public";
+} from "../base/state/selection-types";
 export * from "../components/widget/current-selection-widget";

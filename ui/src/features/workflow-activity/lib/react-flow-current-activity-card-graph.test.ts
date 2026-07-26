@@ -10,7 +10,7 @@ import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import { factoryFromDashboardTopology } from "../../../components/dashboard/fixtures";
 import { mediumBranchingDashboardTopology } from "../../../components/dashboard/fixtures/topologies";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { resolveDashboardSelection } from "../../current-selection/base/public";
+import { resolveDashboardSelection } from "../../current-selection/base/state/dashboardSelection";
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-graph";
 import { factoryGraphConnectionAnchorContext } from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";

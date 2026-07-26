@@ -5,7 +5,7 @@ import { CurrentFactoryDefinitionError } from "../../../api/current-factory-defi
 import {
   GLOBAL_TOAST_DURATION_MS,
   PERSISTENT_TOAST_DURATION_MS,
-} from "../../notifications/public";
+} from "../../notifications/lib/save-notification-delivery-policy";
 import { CurrentActivityGraphSaveNotifications } from "./react-flow-current-activity-card-save-notifications";
 
 vi.mock("sonner", () => ({

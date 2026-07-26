@@ -1,7 +1,7 @@
 import { expect, waitFor, within } from "storybook/test";
 
 import "../../../styles.css";
-import { ProviderSessionWidget } from "../../provider-session-detail/public";
+import { ProviderSessionWidget } from "../../provider-session-detail/components/provider-session-widget";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/dashboardLayoutSchema";
 import {
   expectBentoHeaderDragSurface,

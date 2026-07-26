@@ -2,7 +2,7 @@ import { render } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { toast } from "sonner";
 
-import { GLOBAL_TOAST_DURATION_MS } from "../../../../notifications/public";
+import { GLOBAL_TOAST_DURATION_MS } from "../../../../notifications/lib/save-notification-delivery-policy";
 import { getCurrentSelectionGraphDraftConflictMessages } from "../../messages/operational/current-selection-graph-draft-conflict";
 import { CurrentSelectionGraphDraftConflictNotifications } from "./current-selection-graph-draft-conflict-notifications";
 import { CurrentSelectionSaveNotifications } from "./current-selection-save-notifications";

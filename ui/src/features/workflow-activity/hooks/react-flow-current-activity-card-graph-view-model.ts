@@ -18,7 +18,7 @@ import type { FactoryLayout } from "../../factory-graph-editor/lib/layout/factor
 import { decorateProjectedEdgesWithWaypoints } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-edge-waypoint-projection";
 import type { FactoryGraphReactFlowEdge } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-projection";
 import type { GraphLayout } from "../../flowchart/lib/layout";
-import type { CurrentActivityNode } from "../../flowchart/public";
+import type { CurrentActivityNode } from "../../flowchart/components/current-activity-nodes";
 import {
   buildGraphEdges,
   initialFocusNodes,

@@ -10,15 +10,26 @@ export function useWorkerDetailState({
   worker?: FactoryWorker | null;
   workstationNames?: readonly string[] | null;
 }): WorkerDetailState {
-  return useMemo((): WorkerDetailState => {
-    if (!worker) {
-      return { status: "empty" };
-    }
+  return useMemo(
+    () => deriveWorkerDetailState({ worker, workstationNames }),
+    [worker, workstationNames],
+  );
+}
 
-    return {
-      status: "ready",
-      worker,
-      workstationNames: [...(workstationNames ?? [])],
-    };
-  }, [worker, workstationNames]);
+export function deriveWorkerDetailState({
+  worker,
+  workstationNames,
+}: {
+  worker?: FactoryWorker | null;
+  workstationNames?: readonly string[] | null;
+}): WorkerDetailState {
+  if (!worker) {
+    return { status: "empty" };
+  }
+
+  return {
+    status: "ready",
+    worker,
+    workstationNames: [...(workstationNames ?? [])],
+  };
 }

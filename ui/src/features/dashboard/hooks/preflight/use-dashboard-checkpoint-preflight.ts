@@ -2,14 +2,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import type { FactoryEventReconnectCursor } from "../../../../api/events";
-import type {
-  FactoryTimelineCheckpoint,
-  TimelineCheckpointStreamIdentity,
-} from "../../../timeline/public";
 import {
   clearTimelineCheckpointsForSession,
   deletePersistedTimelineCheckpoint,
-} from "../../../timeline/public";
+  type TimelineCheckpointStreamIdentity,
+} from "../../../timeline/public/checkpoint-persistence";
+import type { FactoryTimelineCheckpoint } from "../../../timeline/public/store";
 import {
   isDefaultToRuntimeSessionAliasRemap,
   recoverDashboardSessionScopedState,

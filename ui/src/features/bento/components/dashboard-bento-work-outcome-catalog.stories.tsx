@@ -8,7 +8,7 @@ import {
 } from "../../work-outcome/lib/work-chart-legend-contract";
 import { expectSingleWorkOutcomeCardHeader } from "../../work-outcome/lib/work-outcome-card-header-contract";
 import { getWorkOutcomeMessages } from "../../work-outcome/messages/work-outcome";
-import { WorkOutcomeWidget } from "../../work-outcome/public";
+import { WorkOutcomeWidget } from "../../work-outcome/components/work-outcome-widget";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/dashboardLayoutSchema";
 import {
   emptyWorkOutcomeModel,

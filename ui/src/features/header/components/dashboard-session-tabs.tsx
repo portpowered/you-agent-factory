@@ -9,7 +9,8 @@ import {
 import type { DashboardStreamState } from "../../../api/dashboard/types";
 import type { FactorySessionSummary } from "../../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
-import { AlertPanel, Button, Text } from "../../../components/ui";
+import { Button, Text } from "@you-agent-factory/components/primitives";
+import { AlertPanel } from "../../../components/ui/alert-panel";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import {
   type DashboardSessionTabsState,

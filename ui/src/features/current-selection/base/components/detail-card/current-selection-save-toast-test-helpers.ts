@@ -1,11 +1,16 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
-import { expect, vi } from "vitest";
+
+// This helper is shared by Bun and Vitest component files. Both runners install
+// expect globally; keep the dependency type-only so importing the helper does
+// not initialize the other runner at runtime.
+declare const expect: typeof import("vitest").expect;
+
 import { settleCurrentSelectionEffects } from "../../../../../testing/current-selection-test-utils";
 import {
   GLOBAL_TOAST_DURATION_MS,
   PERSISTENT_TOAST_DURATION_MS,
-} from "../../../../notifications/public";
+} from "../../../../notifications/lib/notification-toast-duration";
 import { getWorkstationDetailMessages } from "../../../workstation-selection/messages/workstation-detail";
 import { getCurrentSelectionGraphDraftConflictMessages } from "../../messages/operational/current-selection-graph-draft-conflict";
 
@@ -165,12 +170,14 @@ export async function expectGraphDraftConflictWarningToast() {
 
 export async function expectNoGraphDraftConflictWarningToast() {
   await waitFor(() => {
-    const conflictCalls = vi
-      .mocked(toast.warning)
-      .mock.calls.filter(
-        (call) =>
-          call[0] === graphDraftConflictMessages.graphDraftConflictWarningTitle,
-      );
+    const conflictCalls = (
+      toast.warning as unknown as {
+        mock: { calls: Array<[unknown, ...unknown[]]> };
+      }
+    ).mock.calls.filter(
+      (call) =>
+        call[0] === graphDraftConflictMessages.graphDraftConflictWarningTitle,
+    );
     expect(conflictCalls).toHaveLength(0);
   });
   await settleCurrentSelectionEffects();

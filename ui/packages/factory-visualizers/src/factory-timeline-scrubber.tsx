@@ -1,4 +1,4 @@
-import { Button, Heading, Text } from "@you-agent-factory/components";
+import { Button, Heading, Text } from "@you-agent-factory/components/primitives";
 import { type ChangeEvent, type HTMLAttributes, useId } from "react";
 
 export type FactoryTimelineMode = "current" | "history";

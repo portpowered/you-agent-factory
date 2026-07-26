@@ -6,13 +6,13 @@ import "../../../styles.css";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { ImportFactoryValue } from "../../../api/session-factory";
 import {
-  resourceOccupancySnapshotForTick,
   semanticWorkflowDashboardSnapshot,
   singleNodeDashboardSnapshot,
   twentyNodeDashboardSnapshot,
   workstationKindParityDashboardSnapshot,
   workstationKindParityExpectations,
 } from "../../../components/dashboard/test-fixtures";
+import { resourceOccupancySnapshotForTick } from "../../../components/dashboard/timeline-test-fixtures";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,

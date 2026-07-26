@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Button } from "@you-agent-factory/components";
+import { Button } from "@you-agent-factory/components/primitives";
 import { useEffect, useState } from "react";
 import { expect, within } from "storybook/test";
 

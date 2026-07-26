@@ -1,3 +1,5 @@
+import "../../../testing/vitest-dom-capabilities.setup";
+
 import { render, screen, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
@@ -7,7 +9,7 @@ import { getProviderSessionWidgetMessages } from "../../provider-session-detail/
 import { SubmitWorkCard } from "../../submit-work/components/submit-work-card";
 import { getSubmitWorkMessages } from "../../submit-work/messages/submit-work";
 import { getTerminalWorkMessages } from "../../terminal-work/messages/terminal-work";
-import { TerminalWorkWidget } from "../../terminal-work/public";
+import { TerminalWorkWidget } from "../../terminal-work/components/terminal-work-widget";
 import { TraceDrilldownWidget } from "../../trace-drilldown/components/trace-drilldown-widget";
 import { getTraceDrilldownMessages } from "../../trace-drilldown/messages/trace-drilldown";
 import { WorkChartCard } from "../../work-outcome/components/d3-information-card";

@@ -5,7 +5,7 @@ import type { PropsWithChildren } from "react";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
 import { DashboardSessionStoreTestProvider } from "../../../../testing/dashboard-session-test-provider";
 import { createReplayHarness } from "../../../../testing/replay-harness";
-import { useFactoryTimelineStore } from "../../../timeline/public";
+import { useFactoryTimelineStore } from "../../../timeline/public/store";
 import { useDashboardSessionStore } from "../../state/dashboardSessionStore";
 import {
   createDefaultDashboardStreamState,

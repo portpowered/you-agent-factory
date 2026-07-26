@@ -5,7 +5,7 @@ import {
   useId,
   useState,
 } from "react";
-import { Heading, Text } from "../../../components/ui";
+import { Heading, Text } from "@you-agent-factory/components/primitives";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { cn } from "../../../lib/cn";
 

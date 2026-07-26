@@ -1,3 +1,4 @@
+// @component-test-runner vitest: ELK's browser bundle requires Vitest/jsdom module globals.
 import "@xyflow/react/dist/style.css";
 
 import {

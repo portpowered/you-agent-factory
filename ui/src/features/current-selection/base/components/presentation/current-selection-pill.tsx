@@ -3,7 +3,7 @@ import { forwardRef, type HTMLAttributes } from "react";
 import {
   DashboardStatusPill,
   type DashboardStatusPillTone,
-} from "../../../../../components/ui";
+} from "../../../../../components/ui/dashboard-status-pill";
 import { cn } from "../../../../../lib/cn";
 
 interface CurrentSelectionPillBaseProps

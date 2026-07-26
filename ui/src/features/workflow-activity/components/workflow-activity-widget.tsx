@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import type { DashboardSelection } from "../../current-selection/public";
+import type { DashboardSelection } from "../../current-selection/base/state/selection-types";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { WorkflowActivityBentoCard } from "./workflow-activity-bento-card";
 

@@ -13,7 +13,7 @@ import {
   type SaveNotificationDeliveryKey,
   type SaveNotificationStableIdentity,
   shouldDeliverSaveNotification,
-} from "../../notifications/public";
+} from "../../notifications/lib/save-notification-delivery-policy";
 import type { CurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
 
 function readSaveErrorCode(error: unknown): string | null {

@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 
 import { CurrentSelectionWidgetSaveNotifications } from "./current-selection-widget-save-notifications";
 
-vi.mock("../../base/public", () => ({
+vi.mock("../../base/components/save/current-selection-save-notifications", () => ({
   CurrentSelectionSaveNotifications: ({
     entityKind,
     messages,

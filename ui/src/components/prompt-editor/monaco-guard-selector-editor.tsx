@@ -5,7 +5,8 @@ import "monaco-editor/esm/vs/editor/editor.all.js";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import { cn } from "../../lib/cn";
-import { Text, Textarea } from "../ui";
+import { Text } from "@you-agent-factory/components/primitives";
+import { Textarea } from "../ui/textarea";
 import {
   applyWorkstationGuardSelectorTheme,
   registerWorkstationGuardSelectorCompletionProvider,

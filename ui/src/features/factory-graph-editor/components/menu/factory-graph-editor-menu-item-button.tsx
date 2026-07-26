@@ -1,7 +1,7 @@
 import {
   DashboardActionButton,
   type DashboardActionButtonProps,
-} from "../../../../components/ui";
+} from "../../../../components/ui/dashboard-action-button";
 import { cn } from "../../../../lib/cn";
 
 const FACTORY_GRAPH_EDITOR_MENU_ITEM_BUTTON_CLASS =

@@ -10,4 +10,4 @@ export {
   Label as DashboardLabel,
   Text as DashboardText,
   type TextProps as DashboardTextProps,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/primitives";

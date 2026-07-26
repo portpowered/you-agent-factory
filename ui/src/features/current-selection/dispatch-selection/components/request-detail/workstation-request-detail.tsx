@@ -1,22 +1,22 @@
 import { formatDurationMillis } from "../../../../../components/ui/formatters";
 import { LocalizedTimezoneNote } from "../../../../../components/ui/localized-timezone-note";
 import { SelectionDetailLayout } from "../../../base/components/layout/current-selection-detail-layout";
+import { CurrentSelectionBodyLayout } from "../../../base/components/layout/current-selection-body-layout";
+import { CurrentSelectionDescriptionList } from "../../../base/components/detail/current-selection-description-list";
 import {
-  CurrentSelectionBodyLayout,
-  CurrentSelectionDescriptionList,
   CurrentSelectionDetailCode,
   CurrentSelectionDetailValue,
-  CurrentSelectionExpandableSection,
+} from "../../../base/components/detail/current-selection-detail-item";
+import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
+import {
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
   useCurrentSelectionShellMessages,
-} from "../../../base/public";
+} from "../../../base/components/presentation/current-selection-locale";
 import { getRunnerDisplayName } from "../../../editing/runner-metadata";
-import {
-  InferenceAttemptDetail,
-  InferenceAttemptsSection,
-  WorkItemPayloadList,
-} from "../../../work-selection/public";
+import { InferenceAttemptsSection } from "../../../work-selection/components/execution/execution-details";
+import { InferenceAttemptDetail } from "../../../work-selection/components/inference-attempt/inference-attempt-detail";
+import { WorkItemPayloadList } from "../../../work-selection/components/work-item/work-item-payload-details";
 import type { WorkstationRequestDetailCardProps } from "../../lib/detail-card-types";
 import { AgentRunInspectionSection } from "../sections/agent-run-inspection-section";
 import { RequestMetadataSection } from "../sections/request-metadata-section";

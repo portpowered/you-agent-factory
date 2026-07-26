@@ -6,15 +6,13 @@ import {
   getCurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
-import {
-  useDashboardSession,
-  useDashboardStreamStore,
-} from "../../dashboard/public";
+import { useDashboardStreamStore } from "../../dashboard/public/runtime-cache-scope";
+import { useDashboardSession } from "../../dashboard/public/session-context";
 import {
   normalizeStreamDerivedCacheIdentity,
   type StreamDerivedCacheIdentity,
   streamDerivedCacheKeyPrefix,
-} from "../../timeline/public";
+} from "../../timeline/public/stream-identity";
 
 export const CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX =
   "current-factory-definition";

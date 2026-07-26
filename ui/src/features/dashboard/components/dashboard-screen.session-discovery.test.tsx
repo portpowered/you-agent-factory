@@ -18,13 +18,19 @@ const useDashboardSnapshot = vi.fn(() => ({
   },
 }));
 
-vi.mock("../../bento/public", () => ({
+vi.mock("../../bento/components/dashboard-bento", () => ({
   DashboardBento: () => <section>Dashboard bento</section>,
 }));
 
-vi.mock("../../header/public", () => ({
+vi.mock("../../header/components/dashboard-export-dialog", () => ({
   DashboardExportDialog: () => null,
+}));
+
+vi.mock("../../header/components/dashboard-header", () => ({
   DashboardHeader: () => <header>Dashboard header</header>,
+}));
+
+vi.mock("../../header/components/dashboard-status-panel", () => ({
   DashboardStatusPanel: ({
     actions,
     detail,

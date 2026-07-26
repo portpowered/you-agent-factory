@@ -1,11 +1,11 @@
+import { Text } from "@you-agent-factory/components/primitives";
+import { FileInput } from "../../../components/ui/file-input";
 import {
-  FileInput,
   FormDescription,
   FormError,
   FormLabel,
-  Text,
-} from "../../../components/ui";
-import { ChooseFileField } from "../../choose-file/public";
+} from "../../../components/ui/form-field";
+import { ChooseFileField } from "../../choose-file/components/choose-file-field";
 
 export interface ExportFactoryDialogImageFieldProps {
   imageDescription: string;

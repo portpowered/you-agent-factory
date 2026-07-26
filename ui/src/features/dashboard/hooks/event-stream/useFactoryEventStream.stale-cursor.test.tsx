@@ -10,7 +10,7 @@ import {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
 } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import * as timelinePublic from "../../../timeline/public";
+import * as timelinePublic from "../../../timeline/public/checkpoint-persistence";
 import { useFactoryTimelineStore } from "../../../timeline/state/factoryTimelineStore";
 import { factorySessionDetailQueryKey } from "../../lib/dashboard-session-lifecycle";
 import {

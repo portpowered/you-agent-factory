@@ -1,4 +1,7 @@
-import { afterEach, beforeEach } from "vitest";
+// This helper runs under both Bun and Vitest. Each component setup installs
+// these hooks globally; type them without initializing either runner here.
+declare const afterEach: typeof import("vitest").afterEach;
+declare const beforeEach: typeof import("vitest").beforeEach;
 
 export type ConsoleLevel = "warn" | "error";
 

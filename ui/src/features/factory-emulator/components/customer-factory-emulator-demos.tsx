@@ -1,5 +1,5 @@
 import type { FactoryEvent } from "@you-agent-factory/client";
-import { Heading, Text } from "@you-agent-factory/components";
+import { Heading, Text } from "@you-agent-factory/components/primitives";
 import {
   FactoryEmulatorView,
   type FactoryEmulatorViewProps,

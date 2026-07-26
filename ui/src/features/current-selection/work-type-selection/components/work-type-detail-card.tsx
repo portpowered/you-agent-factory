@@ -1,9 +1,7 @@
 import { SelectionDetailLayout } from "../../base/components/layout/current-selection-detail-layout";
-import {
-  CurrentSelectionBodyLayout,
-  CurrentSelectionDetailFeedback,
-  CurrentSelectionExpandableSection,
-} from "../../base/public";
+import { CurrentSelectionDetailFeedback } from "../../base/components/detail/current-selection-detail-feedback";
+import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
+import { CurrentSelectionBodyLayout } from "../../base/components/layout/current-selection-body-layout";
 import type { WorkTypeDetailCardProps } from "../lib/detail-card-types";
 import { getWorkTypeDetailMessages } from "../messages/work-type-detail";
 import { WorkTypeEditableConfigurationSection } from "./work-type-ready-section";

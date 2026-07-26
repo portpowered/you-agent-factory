@@ -1,8 +1,6 @@
 import type { DashboardSnapshot } from "../../api/dashboard/types";
 import type { WorkstationIconMetadata } from "../../features/flowchart/lib/workstation-icon-metadata";
 import { workstationIconMetadata } from "../../features/flowchart/lib/workstation-icon-metadata";
-import { buildFactoryTimelineSnapshot } from "../../features/timeline/state/factoryTimelineStore";
-import { resourceCountTimelineEvents } from "./fixtures/resource-count-events";
 import {
   activeWorkRuntimeOverlay,
   activeWorkWithMultimodalPayloadRuntimeOverlay,
@@ -83,9 +81,3 @@ export const twentyNodeDashboardSnapshot: DashboardSnapshot =
     activeWorkRuntimeOverlay,
     failedOutcomeRuntimeOverlay,
   ]);
-
-export function resourceOccupancySnapshotForTick(
-  tick: number,
-): DashboardSnapshot {
-  return buildFactoryTimelineSnapshot(resourceCountTimelineEvents, tick);
-}

@@ -1,7 +1,7 @@
 import {
   FactoryEmulatorControls as PlaybackControls,
   type FactoryEmulatorControlsProps as PlaybackControlsProps,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/factory-emulator";
 import type { HTMLAttributes } from "react";
 import {
   FactoryEmulatorErrorBoundary,

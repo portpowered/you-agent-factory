@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { isFactoryDocumentSaveSubmitting } from "../../current-selection/base/hooks/factory-document-save-types";
-import { useScopedFactoryDocumentSave } from "../../current-selection/base/public";
+import { useScopedFactoryDocumentSave } from "../../current-selection/base/hooks/useScopedFactoryDocumentSave";
 import { mapGraphSaveOutcomeToDocumentSaveState } from "../lib/document-save/graph-document-save-state";
 import type {
   CanonicalFactoryDefinition,

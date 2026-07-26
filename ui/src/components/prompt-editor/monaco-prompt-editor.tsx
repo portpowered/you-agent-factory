@@ -5,7 +5,7 @@ import "monaco-editor/esm/vs/editor/editor.all.js";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import { cn } from "../../lib/cn";
-import { Code, Text } from "../ui";
+import { Code, Text } from "@you-agent-factory/components/primitives";
 import {
   applyWorkstationPromptTheme,
   buildWorkstationPromptMarkers,

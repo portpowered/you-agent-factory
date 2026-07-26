@@ -1,6 +1,6 @@
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import type { DashboardWorkstationRequest } from "../../../../../api/dashboard/types";
-import { DashboardActionButton } from "../../../../../components/ui";
+import { DashboardActionButton } from "../../../../../components/ui/dashboard-action-button";
 import {
   formatDurationFromISO,
   formatDurationMillis,
@@ -8,7 +8,7 @@ import {
 } from "../../../../../components/ui/formatters";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import { CurrentSelectionExecutionPill } from "../../../base/components/presentation/current-selection-pill";
-import { CurrentSelectionSupportingText } from "../../../base/public";
+import { CurrentSelectionSupportingText } from "../../../base/components/presentation/current-selection-supporting-text";
 import type { WorkstationRequestHistorySectionProps } from "../../lib/keys/detail-card-types";
 import type { getWorkstationDetailMessages } from "../../messages/workstation-detail";
 import { WorkstationDispatchRow } from "./workstation-dispatch-row";

@@ -10,7 +10,7 @@ import { DashboardSessionTestProvider } from "../../../testing/dashboard-session
 import { baseFactoryDefinitionDocument } from "../../../testing/graph-editor-harness";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
-import type { DashboardSelection } from "../../current-selection/public";
+import type { DashboardSelection } from "../../current-selection/base/state/selection-types";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";

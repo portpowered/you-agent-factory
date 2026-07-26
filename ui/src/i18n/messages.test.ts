@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
-import {
-  currentSelectionDetailMessagesByLocale,
-  currentSelectionDispatchHistoryMessagesByLocale,
-  currentSelectionShellMessagesByLocale,
-} from "../features/current-selection/base/public";
-import { workstationDetailMessagesByLocale } from "../features/current-selection/workstation-selection/public";
+import { currentSelectionDetailMessagesByLocale } from "../features/current-selection/base/messages/shell/current-selection-detail";
+import { currentSelectionDispatchHistoryMessagesByLocale } from "../features/current-selection/base/messages/shell/current-selection-dispatch-history";
+import { currentSelectionShellMessagesByLocale } from "../features/current-selection/base/messages/shell/current-selection-shell";
+import { workstationDetailMessagesByLocale } from "../features/current-selection/workstation-selection/messages/workstation-detail";
 import { exportDialogMessagesByLocale } from "../features/export/messages/export-dialog";
 import { headerControlsMessagesByLocale } from "../features/header/messages/header-controls";
 import { importPreviewDialogMessagesByLocale } from "../features/import/messages/import-preview-dialog";

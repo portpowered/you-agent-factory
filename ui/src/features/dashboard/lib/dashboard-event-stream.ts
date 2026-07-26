@@ -12,7 +12,7 @@ import {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import type { StreamDerivedCacheIdentity } from "../../timeline/public";
+import type { StreamDerivedCacheIdentity } from "../../timeline/public/stream-identity";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 
 export function clearQueuedFlush(
@@ -21,10 +21,10 @@ export function clearQueuedFlush(
   if (flushHandleRef.current === null) {
     return;
   }
-  if (typeof window.cancelAnimationFrame === "function") {
-    window.cancelAnimationFrame(flushHandleRef.current);
+  if (typeof globalThis.cancelAnimationFrame === "function") {
+    globalThis.cancelAnimationFrame(flushHandleRef.current);
   } else {
-    window.clearTimeout(flushHandleRef.current);
+    globalThis.clearTimeout(flushHandleRef.current);
   }
   flushHandleRef.current = null;
 }

@@ -11,10 +11,8 @@ import {
 } from "../../../api/factory-sessions";
 import { FACTORY_SESSIONS_QUERY_KEY } from "../../../api/factory-sessions/query-keys";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
-import {
-  clearTimelineCheckpointsForSession,
-  useFactoryTimelineStore,
-} from "../../timeline/public";
+import { clearTimelineCheckpointsForSession } from "../../timeline/public/checkpoint-persistence";
+import { useFactoryTimelineStore } from "../../timeline/public/store";
 import {
   classifyFactorySessionFolderValidationError,
   type FolderValidationState,

@@ -1,12 +1,8 @@
 import { useId, useState } from "react";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
-import {
-  AlertPanel,
-  DashboardStatusPill,
-  Heading,
-  Label,
-  Text,
-} from "../../../components/ui";
+import { Heading, Label, Text } from "@you-agent-factory/components/primitives";
+import { AlertPanel } from "../../../components/ui/alert-panel";
+import { DashboardStatusPill } from "../../../components/ui/dashboard-status-pill";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { getLocalDateTimeDisplay } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";

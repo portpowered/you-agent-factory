@@ -1,7 +1,5 @@
-import type {
-  FactoryTimelineCheckpoint,
-  TimelineCheckpointStreamIdentity,
-} from "../features/timeline/public";
+import type { TimelineCheckpointStreamIdentity } from "../features/timeline/public/checkpoint-persistence";
+import type { FactoryTimelineCheckpoint } from "../features/timeline/public/store";
 import { emptyReplayWorldState } from "../features/timeline/state/timeline/replayWorldStateSupport";
 import { createMaterializedWorkOutcomeState } from "../features/work-outcome/public/materializer";
 

@@ -14,7 +14,7 @@ import type {
   CurrentFactoryDocument,
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
-import { useFactoryDocumentSave } from "../../../current-factory-definition/public";
+import { useFactoryDocumentSave } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { doesFactoryDefinitionChangeAffectGraphTopology } from "../../../factory-graph-editor/lib/operations/factory-graph-topology-impact";
 import type { FactoryDocumentSaveState } from "./factory-document-save-types";
 

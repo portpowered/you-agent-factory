@@ -1,9 +1,10 @@
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import type { ReactNode } from "react";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
-import { AlertPanel, Heading, Label, Text } from "../../../components/ui";
+import { Heading, Label, Text } from "@you-agent-factory/components/primitives";
+import { AlertPanel } from "../../../components/ui/alert-panel";
 import { cn } from "../../../lib/cn";
-import { CurrentSelectionHistoryCard } from "../../current-selection/history/public";
+import { CurrentSelectionHistoryCard } from "../../current-selection/history/components/current-selection-history-card";
 import { useProviderSessionDetail } from "../hooks/use-provider-session-detail";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";

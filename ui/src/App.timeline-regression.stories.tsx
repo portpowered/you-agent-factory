@@ -6,10 +6,10 @@ import {
   resourceCountTimelineEvents,
 } from "./components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
-import { AgentBentoLayout } from "./features/bento/public";
+import { AgentBentoLayout } from "./features/bento/components/agent-bento";
 import { useExportDialogStore } from "./features/export/state/exportDialogStore";
-import { DashboardHeader } from "./features/header/public";
-import { WorkTotalsWidget } from "./features/work-totals/public";
+import { DashboardHeader } from "./features/header/components/dashboard-header";
+import { WorkTotalsWidget } from "./features/work-totals/components/work-totals-widget";
 import {
   activeStoryTrace,
   currentSelectionCard,

@@ -1,11 +1,10 @@
 import { OptionalEnumSelect } from "@you-agent-factory/components/forms";
 import type { ReactNode } from "react";
 
-import { FormWarning, Label, Text } from "../../../../../../../components/ui";
-import {
-  CurrentSelectionDetailFeedback,
-  CurrentSelectionFormField,
-} from "../../../../../base/public";
+import { Label, Text } from "@you-agent-factory/components/primitives";
+import { FormWarning } from "../../../../../../../components/ui/form-field";
+import { CurrentSelectionDetailFeedback } from "../../../../../base/components/detail/current-selection-detail-feedback";
+import { CurrentSelectionFormField } from "../../../../../base/components/layout/current-selection-form-layout";
 import type { EditableWorkerOverwriteField } from "../../../../lib/detail-card-types";
 import type {
   ReadyWorkerEditableConfigurationState,

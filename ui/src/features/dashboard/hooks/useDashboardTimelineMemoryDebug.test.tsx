@@ -1,3 +1,5 @@
+import "../../../testing/vitest-dom-capabilities.setup";
+
 import { renderHook, waitFor } from "@testing-library/react";
 
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../api/events";

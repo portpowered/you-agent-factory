@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { DashboardStreamState } from "../../../../api/dashboard/types";
 import type { FactoryEvent } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
-import type { StreamDerivedCacheIdentity } from "../../../timeline/public";
-import { useFactoryTimelineStore } from "../../../timeline/public";
+import { useFactoryTimelineStore } from "../../../timeline/public/store";
+import type { StreamDerivedCacheIdentity } from "../../../timeline/public/stream-identity";
 import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,

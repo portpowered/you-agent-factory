@@ -4,14 +4,16 @@ import type { FactoryEvent } from "../../../api/events";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import {
   clearTimelineCheckpoint,
-  type FactoryTimelineCheckpoint,
-  normalizeStreamDerivedCacheIdentity,
   persistTimelineCheckpoint,
-  readFactoryTimelineDebugOptions,
-  reconnectCursorFromCheckpoint,
   type TimelineCheckpointStreamIdentity,
+} from "../../timeline/public/checkpoint-persistence";
+import { reconnectCursorFromCheckpoint } from "../../timeline/public/checkpoint-reconnect";
+import {
+  type FactoryTimelineCheckpoint,
   useFactoryTimelineStore,
-} from "../../timeline/public";
+} from "../../timeline/public/store";
+import { normalizeStreamDerivedCacheIdentity } from "../../timeline/public/stream-identity";
+import { readFactoryTimelineDebugOptions } from "../../timeline/public/debug";
 import { useDashboardSession } from "../session/dashboard-session-provider";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";

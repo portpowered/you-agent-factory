@@ -1,10 +1,10 @@
 import type { DashboardWorkItemRef } from "../../../../../api/dashboard/types";
-import { surfacePanelVariants } from "../../../../../components/ui";
+import { surfacePanelVariants } from "@you-agent-factory/components/layout";
 import { formatWorkItemLabel } from "../../../../../components/ui/formatters";
-import { WorkContentReadOnlyList } from "../../../../work-content/public";
+import { WorkContentReadOnlyList } from "../../../../work-content/components/work-content-read-only-list";
 import { useCurrentSelectionDetailMessages } from "../../../base/components/presentation/current-selection-locale";
 import { CurrentSelectionSelectableButton } from "../../../base/components/presentation/current-selection-selectable-button";
-import { CurrentSelectionLabel } from "../../../base/public";
+import { CurrentSelectionLabel } from "../../../base/components/presentation/current-selection-label";
 
 interface WorkItemPayloadMessages {
   consumedPayloadEmpty: string;

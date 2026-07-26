@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as factorySessionsAPI from "../../../../api/factory-sessions";
-import * as timelinePublic from "../../../timeline/public";
+import * as timelinePublic from "../../../timeline/public/checkpoint-persistence";
 import * as preflightResolver from "../../lib/preflight/resolve-dashboard-checkpoint-preflight";
 import {
   createSessionPersistenceCorrelationToken,

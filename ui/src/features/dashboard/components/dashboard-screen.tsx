@@ -1,13 +1,11 @@
-import { Button } from "../../../components/ui";
+import { Button } from "@you-agent-factory/components/primitives";
 import { useAppLocale } from "../../../i18n";
-import { DashboardBento } from "../../bento/public";
+import { DashboardBento } from "../../bento/components/dashboard-bento";
 import { useDashboardBentoStore } from "../../bento/state/dashboardBentoStore";
 import { getHeaderControlsMessages } from "../../header/messages/header-controls";
-import {
-  DashboardExportDialog,
-  DashboardHeader,
-  DashboardStatusPanel,
-} from "../../header/public";
+import { DashboardExportDialog } from "../../header/components/dashboard-export-dialog";
+import { DashboardHeader } from "../../header/components/dashboard-header";
+import { DashboardStatusPanel } from "../../header/components/dashboard-status-panel";
 import { useDashboardSnapshot } from "../hooks/useDashboardSnapshot";
 import { useDashboardWorldView } from "../hooks/useDashboardWorldView";
 import { getDashboardRecoveryMessages } from "../messages/dashboard-recovery";

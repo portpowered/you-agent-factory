@@ -9,7 +9,7 @@ import {
   isModelProviderWorkerType,
   isPollerWorkerType,
   isScriptWorkerType,
-} from "../../../current-factory-definition/public";
+} from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import type { WorkerDetailMessages } from "../messages/worker-detail-types";
 
 export type EditableWorkerValidationField =

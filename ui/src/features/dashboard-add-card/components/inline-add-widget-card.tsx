@@ -2,7 +2,7 @@ import { type ReactElement, useEffect, useMemo, useState } from "react";
 import type { DashboardWidgetPickerAvailability } from "../../bento/lib/dashboard-widget-picker";
 import { getInlineAddWidgetMessages } from "../../bento/messages/inline-add-widget";
 import { getInlineWidgetPickerOptions } from "../../bento/messages/inline-widget-picker";
-import { AgentBentoCard } from "../../bento/public";
+import { AgentBentoCard } from "../../bento/components/agent-bento";
 import { InlineAddWidgetAddButton } from "./inline-add-widget-add-button";
 import { InlineAddWidgetSelector } from "./inline-add-widget-selector";
 

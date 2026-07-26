@@ -12,9 +12,9 @@ import {
   FormError,
   FormField,
   FormLabel,
-  Input,
-  Textarea,
-} from "../../../../components/ui";
+} from "../../../../components/ui/form-field";
+import { Input } from "../../../../components/ui/input";
+import { Textarea } from "../../../../components/ui/textarea";
 
 export function FactoryGraphEditorAddField({
   children,

@@ -7,6 +7,7 @@ import type {
   CanonicalFactoryDefinition,
   FactoryGraphNodeKind,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import { composeGraphEditorControllers } from "./state/graph-editor-controller-composition";
 import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
 import { useFactoryGraphAddEntityController } from "./use-current-activity-graph-add-controller";
@@ -61,9 +62,9 @@ export function useGraphEditorControllers({
     saveEditableDefinition,
   });
 
-  return {
+  return composeGraphEditorControllers(
     addEntityController,
-    ...connectionController,
-    ...removalController,
-  };
+    connectionController,
+    removalController,
+  );
 }

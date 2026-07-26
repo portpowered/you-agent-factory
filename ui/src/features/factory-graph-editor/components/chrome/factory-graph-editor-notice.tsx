@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import {
   AlertPanel,
   AlertPanelText,
-  DashboardIconButtonShell,
-} from "../../../../components/ui";
+} from "../../../../components/ui/alert-panel";
+import { DashboardIconButtonShell } from "../../../../components/ui/dashboard-icon-button-shell";
 
 export type FactoryGraphEditorNoticeTone = "danger" | "neutral" | "warning";
 

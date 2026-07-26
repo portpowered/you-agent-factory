@@ -3,17 +3,15 @@ import { OptionalEnumSelect } from "@you-agent-factory/components/forms";
 import { Plus, X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { SessionFactoryInvocationResponse } from "../../../../api/session-factory";
+import { Button, Label, Text } from "@you-agent-factory/components/primitives";
 import {
   AlertPanel,
   AlertPanelText,
-  Button,
-  DashboardIconButtonShell,
-  FormError,
-  Input,
-  Label,
-  Text,
-} from "../../../../components/ui";
-import { DashboardWidgetFrame } from "../../../bento/public";
+} from "../../../../components/ui/alert-panel";
+import { DashboardIconButtonShell } from "../../../../components/ui/dashboard-icon-button-shell";
+import { FormError } from "../../../../components/ui/form-field";
+import { Input } from "../../../../components/ui/input";
+import { DashboardWidgetFrame } from "../../../bento/components/dashboard-widget-frame/dashboard-widget-frame";
 import { useFactoryInvocationWidget } from "../../hooks/use-factory-invocation-widget";
 import type { InvocationFieldModel } from "../../lib/factory-invocation-form";
 import { getSubmitWorkMessages } from "../../messages/submit-work";

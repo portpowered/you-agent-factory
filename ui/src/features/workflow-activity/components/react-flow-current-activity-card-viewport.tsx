@@ -54,8 +54,8 @@ import {
 import type { FactoryLayoutGroup } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import { FACTORY_GRAPH_EDITOR_REACT_FLOW_GESTURE_PROPS } from "../../factory-graph-editor/lib/selection/factory-graph-editor-react-flow-interaction";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { useFactoryGraphTouchPanePan } from "../../factory-graph-editor/public";
-import { GraphViewportSurface } from "../../graphs/public";
+import { useFactoryGraphTouchPanePan } from "../../factory-graph-editor/hooks/selection/use-factory-graph-touch-pane-pan";
+import { GraphViewportSurface } from "../../graphs/components/dashboard-graph-viewport-surface";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCanonicalLayoutViewportSync } from "../lib/layout/use-canonical-layout-viewport-sync";
 import { handleCurrentActivityReactFlowError } from "../lib/react-flow-current-activity-card-errors";

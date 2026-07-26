@@ -40,7 +40,9 @@ export function registerWorkstationPromptMonaco(monaco: MonacoModule) {
 
 export function applyWorkstationPromptTheme(
   monaco: MonacoModule,
-  root: Element | null = document.documentElement,
+  root: Element | null = typeof document === "undefined"
+    ? null
+    : document.documentElement,
 ) {
   monaco.editor.defineTheme(
     WORKSTATION_PROMPT_THEME_ID,

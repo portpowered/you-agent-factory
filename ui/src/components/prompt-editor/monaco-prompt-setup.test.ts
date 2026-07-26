@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/noExcessiveLinesPerFile lint/complexity/noExcessiveLinesPerFunction: prompt completion contracts share a single Monaco API fixture vocabulary.
 import { describe, expect, it, vi } from "vitest";
 
 import {

@@ -1,18 +1,24 @@
-import { DashboardScreen } from "./features/dashboard/public";
-import { CustomerFactoryEmulatorDemos } from "./features/factory-emulator/public";
-import { AppNotificationToaster } from "./features/notifications/public";
 import {
-  type PackagedFactoryCopyText,
-  PackagedFactoryInventory,
-  type PackagedFactoryPublicDataSource,
-  packagedFactoryPublicDataSource,
-} from "./features/packaged-factories/public";
+  CUSTOMER_FACTORY_EMULATOR_DEMOS_PATH,
+  PACKAGED_FACTORIES_HOSTED_PATH,
+  PACKAGED_FACTORIES_PATH,
+  resolveAppSurface,
+} from "./features/app-routing/lib/resolve-app-surface";
+import { DashboardScreen } from "./features/dashboard/public/screen";
+import { CustomerFactoryEmulatorDemos } from "./features/factory-emulator/components/customer-factory-emulator-demos";
+import { AppNotificationToaster } from "./features/notifications/components/app-notification-toaster";
+import type { PackagedFactoryCopyText } from "./features/packaged-factories/components/packaged-factory-detail";
+import { PackagedFactoryInventory } from "./features/packaged-factories/components/packaged-factory-inventory";
+import { packagedFactoryPublicDataSource } from "./features/packaged-factories/lib/generated/public-package-data";
+import type { PackagedFactoryPublicDataSource } from "./features/packaged-factories/lib/public-contract";
 import { AppLocaleProvider } from "./i18n";
 import { AppColorPaletteProvider } from "./theme";
 
-export const CUSTOMER_FACTORY_EMULATOR_DEMOS_PATH = "/factory-emulator-demos";
-export const PACKAGED_FACTORIES_PATH = "/packaged-factories";
-export const PACKAGED_FACTORIES_HOSTED_PATH = `/dashboard/ui${PACKAGED_FACTORIES_PATH}`;
+export {
+  CUSTOMER_FACTORY_EMULATOR_DEMOS_PATH,
+  PACKAGED_FACTORIES_HOSTED_PATH,
+  PACKAGED_FACTORIES_PATH,
+};
 
 export interface AppProps {
   browserLanguage?: string | null;
@@ -34,6 +40,7 @@ export function App({
   packagedFactorySource = packagedFactoryPublicDataSource,
 }: AppProps) {
   const pathname = locationPathname ?? window.location.pathname;
+  const surface = resolveAppSurface(pathname);
 
   return (
     <AppColorPaletteProvider>
@@ -43,12 +50,11 @@ export function App({
         initialLocale={initialLocale}
         locationSearch={locationSearch}
       >
-        {pathname === CUSTOMER_FACTORY_EMULATOR_DEMOS_PATH ? (
+        {surface === "customer-factory-emulator-demos" ? (
           <main className="min-h-screen overflow-x-hidden bg-surface p-1 md:p-2">
             <CustomerFactoryEmulatorDemos />
           </main>
-        ) : pathname === PACKAGED_FACTORIES_PATH ||
-          pathname === PACKAGED_FACTORIES_HOSTED_PATH ? (
+        ) : surface === "packaged-factories" ? (
           <main className="min-h-screen overflow-x-hidden bg-surface p-4 md:p-6">
             <div className="mx-auto min-w-0 max-w-7xl">
               <PackagedFactoryInventory

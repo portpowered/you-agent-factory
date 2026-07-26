@@ -1,18 +1,22 @@
 import { useId } from "react";
 
-import { AlertPanel, AlertPanelText, Text } from "../../../../../components/ui";
+import { Text } from "@you-agent-factory/components/primitives";
+import {
+  AlertPanel,
+  AlertPanelText,
+} from "../../../../../components/ui/alert-panel";
 import { formatList } from "../../../../../components/ui/formatters";
 import {
   isModelProviderWorkerType,
   isScriptWorkerType,
-} from "../../../../current-factory-definition/public";
+} from "../../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../../base/components/save/detail-card-factory-save-feedback";
+import { CurrentSelectionDetailFeedback } from "../../../base/components/detail/current-selection-detail-feedback";
 import {
-  CurrentSelectionDetailFeedback,
   CurrentSelectionFormField,
   CurrentSelectionFormFields,
-} from "../../../base/public";
+} from "../../../base/components/layout/current-selection-form-layout";
 import { formatEditableWorkerOverwriteFieldLabels } from "../../editing/editable-worker-overwrite-fields";
 import type {
   EditableWorkerOverwriteField,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { isFactoryDocumentSaveConfirming } from "../../current-selection/base/hooks/factory-document-save-types";
-import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
+import type { FactoryDocumentSaveState } from "../../current-selection/base/hooks/factory-document-save-types";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import type {
   EditableFactoryGraphDocumentSaveControls,

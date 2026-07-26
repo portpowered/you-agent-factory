@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
-import { ActionRow, Text } from "../../../../components/ui";
+import { ActionRow } from "@you-agent-factory/components/layout";
+import { Text } from "@you-agent-factory/components/primitives";
 
 export interface CurrentSelectionWorkRowProps {
   actions?: ReactNode;

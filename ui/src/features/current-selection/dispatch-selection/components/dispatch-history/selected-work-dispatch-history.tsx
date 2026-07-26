@@ -5,7 +5,7 @@ import { useCurrentSelectionDispatchHistoryMessages } from "../../../base/compon
 import type { SelectedWorkOperationHistoryItem } from "../../../hooks/helpers/selected-work-operation-history";
 import { requestDispatchID } from "../../../hooks/helpers/useCurrentSelection.request-helpers";
 import { getWorkstationDetailMessages } from "../../../workstation-selection/messages/workstation-detail";
-import { ProviderSessionAttempts } from "../../../workstation-selection/public";
+import { ProviderSessionAttempts } from "../../../workstation-selection/components/fields/provider-session-attempts";
 import type { SelectedWorkDispatchHistorySectionProps } from "../../lib/detail-card-types";
 import { DispatchHistoryCard } from "./selected-work-dispatch-history-card";
 import {

@@ -9,13 +9,11 @@ import {
   useCurrentSelectionOperationalEnumMessages,
   useCurrentSelectionShellMessages,
 } from "../../../base/components/presentation/current-selection-locale";
-import {
-  CurrentSelectionContentSection,
-  CurrentSelectionDescriptionList,
-  CurrentSelectionDetailItem,
-  CurrentSelectionDetailSection,
-  CurrentSelectionTraceButton,
-} from "../../../base/public";
+import { CurrentSelectionDescriptionList } from "../../../base/components/detail/current-selection-description-list";
+import { CurrentSelectionDetailItem } from "../../../base/components/detail/current-selection-detail-item";
+import { CurrentSelectionDetailSection } from "../../../base/components/detail/current-selection-detail-section";
+import { CurrentSelectionContentSection } from "../../../base/components/layout/current-selection-content-section";
+import { CurrentSelectionTraceButton } from "../../../base/components/presentation/current-selection-trace-button";
 import type {
   ExecutionDetailsSectionProps,
   InferenceAttemptsSectionProps,

@@ -1,11 +1,8 @@
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import { useId, useState } from "react";
-import {
-  AlertPanel,
-  DashboardStatusPill,
-  Label,
-  Text,
-} from "../../../../components/ui";
+import { Label, Text } from "@you-agent-factory/components/primitives";
+import { AlertPanel } from "../../../../components/ui/alert-panel";
+import { DashboardStatusPill } from "../../../../components/ui/dashboard-status-pill";
 import { ExpandablePanelTrigger } from "../../../../components/ui/expandable-panel-trigger";
 import { useFactorySessionEventReplay } from "../../hooks/use-factory-session-event-replay";
 import { buildFactorySessionEventReplayTimeline } from "../../lib/factory-session-event-replay-timeline";

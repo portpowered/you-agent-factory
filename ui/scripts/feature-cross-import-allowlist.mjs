@@ -376,7 +376,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "src/features/workflow-activity/hooks/react-flow-current-activity-card-graph-selection-gestures.ts",
     importSpecifiers: [
       "../../factory-graph-editor/hooks/selection/use-factory-graph-editor-selection",
-      "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-gestures",
     ],
     reason:
       "Workflow-activity graph selection gestures reuse editor-local selection helpers pending a public boundary split.",

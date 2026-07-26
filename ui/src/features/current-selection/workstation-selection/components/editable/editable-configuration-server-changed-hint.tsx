@@ -1,4 +1,4 @@
-import { FormWarning } from "../../../../../components/ui";
+import { FormWarning } from "@you-agent-factory/components/forms";
 import type {
   EditableWorkstationOverwriteField,
   WorkstationDetailCardProps,

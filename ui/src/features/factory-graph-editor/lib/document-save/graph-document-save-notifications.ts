@@ -1,6 +1,6 @@
 import type { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
 import type { FactoryValidationTarget } from "../../../../api/factory-validation";
-import type { FactoryDocumentSaveState } from "../../../current-selection/base/public";
+import type { FactoryDocumentSaveState } from "../../../current-selection/base/hooks/factory-document-save-types";
 import type { FactoryGraphEditorMessages } from "../../messages/editor";
 import { STALE_FACTORY_GRAPH_DRAFT_WARNING } from "../document-save/graph-document-save-state";
 

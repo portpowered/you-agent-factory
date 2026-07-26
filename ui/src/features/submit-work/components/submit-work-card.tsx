@@ -6,15 +6,12 @@ import {
 } from "@you-agent-factory/components/overlays";
 import { Plus } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import {
-  Button,
-  DashboardIconButtonShell,
-  FormError,
-  Input,
-  Label,
-  Text,
-} from "../../../components/ui";
-import { DashboardWidgetFrame } from "../../bento/public";
+import { FormError } from "@you-agent-factory/components/forms";
+import { Label, Text } from "@you-agent-factory/components/primitives";
+import { Button } from "../../../components/ui/button";
+import { DashboardIconButtonShell } from "../../../components/ui/dashboard-icon-button-shell";
+import { Input } from "../../../components/ui/input";
+import { DashboardWidgetFrame } from "../../bento/components/dashboard-widget-frame/dashboard-widget-frame";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmissionItemsList } from "./submit-work-items-list";
 import { SubmitWorkStatusPanel } from "./submit-work-status-panel";

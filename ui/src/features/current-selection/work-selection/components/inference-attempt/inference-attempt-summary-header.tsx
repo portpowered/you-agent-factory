@@ -1,9 +1,9 @@
 import type { DashboardInferenceAttempt } from "../../../../../api/dashboard/types";
-import { surfacePanelVariants } from "../../../../../components/ui";
+import { surfacePanelVariants } from "@you-agent-factory/components/layout";
 import type { LoadableProviderSessionRef } from "../../../../provider-session-detail/lib/provider-session-ref";
 import { useCurrentSelectionOperationalEnumMessages } from "../../../base/components/presentation/current-selection-locale";
 import { CurrentSelectionExecutionPill } from "../../../base/components/presentation/current-selection-pill";
-import { CurrentSelectionSupportingText } from "../../../base/public";
+import { CurrentSelectionSupportingText } from "../../../base/components/presentation/current-selection-supporting-text";
 import { InferenceAttemptProviderSessionPreview } from "./inference-attempt-provider-session";
 
 export interface InferenceAttemptSummaryHeaderProps {

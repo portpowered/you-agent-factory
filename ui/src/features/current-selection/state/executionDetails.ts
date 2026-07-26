@@ -1,5 +1,5 @@
 export type {
   SelectedWorkItemExecutionDetails,
   SelectWorkItemExecutionDetailsInput,
-} from "../work-selection/public";
-export { selectWorkItemExecutionDetails } from "../work-selection/public";
+} from "../work-selection/state/executionDetails";
+export { selectWorkItemExecutionDetails } from "../work-selection/state/executionDetails";
