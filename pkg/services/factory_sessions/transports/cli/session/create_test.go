@@ -60,6 +60,71 @@ func TestCreate_PerformsPOSTFactorySessions(t *testing.T) {
 	}
 }
 
+func TestCreate_UsesConfiguredServerBasePath(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.OpenFactorySessionResponse{
+			Session: &factoryapi.FactorySessionSummary{Id: "session-custom-server"},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	err := NewCreate(testHTTPProtocol(t))(CreateConfig{
+		Server: srv.URL + "/api",
+		Port:   1,
+		Dir:    "/workspace/fleet",
+		Output: io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if gotPath != "/api/factory-sessions" {
+		t.Fatalf("path = %q, want /api/factory-sessions", gotPath)
+	}
+}
+
+func TestCreate_ExplicitPortTakesPrecedenceOverServer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.OpenFactorySessionResponse{
+			Session: &factoryapi.FactorySessionSummary{Id: "session-explicit-port"},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	err := NewCreate(testHTTPProtocol(t))(CreateConfig{
+		Server:       "http://127.0.0.1:1",
+		Port:         serverPort(t, srv),
+		PortExplicit: true,
+		Dir:          "/workspace/fleet",
+		Output:       io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+}
+
+func TestCreate_RejectsInvalidConfiguredServer(t *testing.T) {
+	err := NewCreate(testHTTPProtocol(t))(CreateConfig{
+		Server: "localhost:7437",
+		Dir:    "/workspace/fleet",
+		Output: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected server validation error")
+	}
+	if !strings.Contains(err.Error(), "resolve session create endpoint") ||
+		!strings.Contains(err.Error(), "must be http or https") {
+		t.Fatalf("error = %q, want endpoint resolution error for invalid scheme", err)
+	}
+}
+
 func TestCreate_HumanOutputPrintsOpenedSession(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
