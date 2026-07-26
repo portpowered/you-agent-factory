@@ -71,6 +71,7 @@ func TestSessionEnumerationJSON(t *testing.T) {
 	}
 }
 
+// TestSessionCreateInitializesNewFactoryThroughSupportedAPI proves the supported session API creates a new Factory.
 func TestSessionCreateInitializesNewFactoryThroughSupportedAPI(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 	support.SetWorkingDirectory(t, dir)

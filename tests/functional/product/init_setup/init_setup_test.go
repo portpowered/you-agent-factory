@@ -127,6 +127,7 @@ func TestInitSuppliedInputFailuresDoNotWrite(t *testing.T) {
 	}
 }
 
+// TestRetiredInitializationPathsAreRejectedWithoutWrites proves retired setup surfaces cannot mutate customer state.
 func TestRetiredInitializationPathsAreRejectedWithoutWrites(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -176,6 +177,7 @@ func TestRetiredInitializationPathsAreRejectedWithoutWrites(t *testing.T) {
 	}
 }
 
+// TestNormalCommandInitializesPackagedFactoriesWithoutSetupCommand proves normal initialization owns packaged Factory setup.
 func TestNormalCommandInitializesPackagedFactoriesWithoutSetupCommand(t *testing.T) {
 	fixture := newInitFixture(t)
 	if err := os.Remove(fixture.configPath); err != nil {
@@ -274,6 +276,7 @@ func TestInitInteractiveInputsConfigureOnlyProviderModelDefaults(t *testing.T) {
 	}
 }
 
+// TestInitInteractiveExistingDefaultsAreAccepted proves prompts can retain current provider and model defaults.
 func TestInitInteractiveExistingDefaultsAreAccepted(t *testing.T) {
 	fixture := newInitFixture(t)
 	err := fixture.executeInteractive(
@@ -292,6 +295,7 @@ func TestInitInteractiveExistingDefaultsAreAccepted(t *testing.T) {
 	}
 }
 
+// TestInitInteractiveRejectedOrTerminatedInputDoesNotWrite proves abandoned prompts leave configuration unchanged.
 func TestInitInteractiveRejectedOrTerminatedInputDoesNotWrite(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -343,6 +347,7 @@ func TestInitInteractiveRejectedOrTerminatedInputDoesNotWrite(t *testing.T) {
 	}
 }
 
+// TestInitInteractiveContextCancellationAtModelDoesNotWrite proves model-prompt cancellation is write-free.
 func TestInitInteractiveContextCancellationAtModelDoesNotWrite(t *testing.T) {
 	fixture := newInitFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -363,6 +368,7 @@ func TestInitInteractiveContextCancellationAtModelDoesNotWrite(t *testing.T) {
 	}
 }
 
+// TestInitInteractivePreCommitFailurePreservesConfig proves failed prompted commits preserve the original config.
 func TestInitInteractivePreCommitFailurePreservesConfig(t *testing.T) {
 	fixture := newInitFixture(t)
 	tempFailure := errors.New("prompted temporary target unavailable")

@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestRootBuiltProcessExecutesThroughSharedSupport proves the shared harness executes a root-built process.
 func TestRootBuiltProcessExecutesThroughSharedSupport(t *testing.T) {
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	inputs := support.FakeInputs(t.Context(), []string{"you", "--help"})
@@ -28,6 +29,7 @@ func TestRootBuiltProcessExecutesThroughSharedSupport(t *testing.T) {
 	}
 }
 
+// TestGeminiConductorSuccessThroughRootBuildProcess proves successful Gemini execution through the product graph.
 func TestGeminiConductorSuccessThroughRootBuildProcess(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
@@ -62,6 +64,7 @@ func TestGeminiConductorSuccessThroughRootBuildProcess(t *testing.T) {
 	}
 }
 
+// TestGeminiClassifierRejectsStructuredLabelThroughRootBuildProcess proves unsupported structured labels fail at the boundary.
 func TestGeminiClassifierRejectsStructuredLabelThroughRootBuildProcess(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	configureClassifierFixture(t, dir)
@@ -92,6 +95,7 @@ Classify the work.
 	}
 }
 
+// TestGeminiConductorPreservesConfiguredEnvironment proves configured environment reaches Gemini execution.
 func TestGeminiConductorPreservesConfiguredEnvironment(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
@@ -123,6 +127,7 @@ Test workstation.
 	}
 }
 
+// TestGeminiRejectsUnsupportedWorkingDirectoryBeforeProviderIO proves invalid working directories fail before provider IO.
 func TestGeminiRejectsUnsupportedWorkingDirectoryBeforeProviderIO(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
@@ -152,6 +157,7 @@ Test workstation.
 	}
 }
 
+// TestGeminiRejectsUnsupportedStructuredOutputBeforeProviderIO proves unsupported output fails before provider IO.
 func TestGeminiRejectsUnsupportedStructuredOutputBeforeProviderIO(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
@@ -182,6 +188,7 @@ Test workstation.
 	}
 }
 
+// TestGeminiConductorPreservesConfiguredSkipPermissions proves permission policy reaches Gemini execution.
 func TestGeminiConductorPreservesConfiguredSkipPermissions(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	workerConfig := strings.Replace(
@@ -210,6 +217,7 @@ func TestGeminiConductorPreservesConfiguredSkipPermissions(t *testing.T) {
 	}
 }
 
+// TestGeminiNativeFailureThroughRootBuildProcessIsSafe proves native provider failures return safely.
 func TestGeminiNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
@@ -254,6 +262,7 @@ func TestGeminiNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 	}
 }
 
+// TestGeminiCommandCancellationThroughRootBuildProcessIsCanonical proves cancellation returns the canonical outcome.
 func TestGeminiCommandCancellationThroughRootBuildProcessIsCanonical(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(

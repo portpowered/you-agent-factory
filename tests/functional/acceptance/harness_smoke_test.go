@@ -126,6 +126,7 @@ func TestBuiltCLIHarness_NonZeroExitIncludesDiagnostics(t *testing.T) {
 	}
 }
 
+// TestBuiltCLI_HelpPrintsUsageAndExitsSuccessfully proves the built CLI exposes usable root help.
 func TestBuiltCLI_HelpPrintsUsageAndExitsSuccessfully(t *testing.T) {
 	t.Parallel()
 

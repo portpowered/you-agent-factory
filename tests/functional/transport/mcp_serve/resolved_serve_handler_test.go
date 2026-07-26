@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// TestResolvedServeHandler_ReportsMissingCanonicalInputsBeforeInitializer proves input errors precede initialization.
 func TestResolvedServeHandler_ReportsMissingCanonicalInputsBeforeInitializer(t *testing.T) {
 	handler := mcpcli.ResolvedServeHandler(mcpcli.ServeBinding{
 		InitializeStdio: func(context.Context, mcpcli.MCPIntent) error {
@@ -41,6 +42,7 @@ func TestResolvedServeHandler_ReportsMissingCanonicalInputsBeforeInitializer(t *
 	}
 }
 
+// TestResolvedServeHandler_RequiresInjectedDependencies proves missing transport dependencies fail explicitly.
 func TestResolvedServeHandler_RequiresInjectedDependencies(t *testing.T) {
 	t.Run("stdio initializer", func(t *testing.T) {
 		err := mcpcli.ResolvedServeHandler(mcpcli.ServeBinding{})(
@@ -69,6 +71,7 @@ func TestResolvedServeHandler_RequiresInjectedDependencies(t *testing.T) {
 	})
 }
 
+// TestResolvedServeHandler_FixtureAndRuntimePathsReachInitializer proves both serve paths delegate initialization.
 func TestResolvedServeHandler_FixtureAndRuntimePathsReachInitializer(t *testing.T) {
 	t.Run("fixture-backed", func(t *testing.T) {
 		want := errors.New("fixture initialize failed")
@@ -132,6 +135,7 @@ func TestResolvedServeHandler_FixtureAndRuntimePathsReachInitializer(t *testing.
 	})
 }
 
+// TestProcessMCPServe_RuntimeRejectsMissingHomeEnvironment proves runtime serve requires a customer home.
 func TestProcessMCPServe_RuntimeRejectsMissingHomeEnvironment(t *testing.T) {
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	inputs := support.FakeInputs(t.Context(), []string{

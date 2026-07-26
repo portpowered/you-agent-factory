@@ -7,6 +7,7 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
+// TestModelsRootScopeCapabilityRequestsValidateForFactoryPeer proves Factory peers receive validated model capabilities.
 func TestModelsRootScopeCapabilityRequestsValidateForFactoryPeer(t *testing.T) {
 	t.Parallel()
 
@@ -79,6 +80,7 @@ func TestModelsRootScopeCapabilityRequestsValidateForFactoryPeer(t *testing.T) {
 	}
 }
 
+// TestModelsRootDetachedValuesDoNotSharePeerMutation proves returned model values are detached across peer mutation.
 func TestModelsRootDetachedValuesDoNotSharePeerMutation(t *testing.T) {
 	t.Parallel()
 

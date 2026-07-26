@@ -55,14 +55,19 @@ The default path uses the Codex-backed starter scaffold:
 
 For factory authoring, CLI topics, and advanced setup, see [Authoring factories](./docs/reference/authoring-factories.md) and [`you docs`](./docs/reference/README.md).
 
-### Alternate executor: Claude
+### Configure a model provider
 
-To scaffold a factory with Claude as the starter worker instead of Codex:
+`you init` configures the default provider and optional model used by
+model-backed workers. It does not scaffold a Factory:
 
 ```sh
-you init --executor claude --dir my-factory
-you docs workstation
+you init --provider claude --model claude-sonnet-4-5
 ```
+
+Run `you` to materialize the packaged/default Factories. To author your own,
+follow [Authoring factories](./docs/reference/authoring-factories.md), then
+persist a reusable definition with
+`you factory create <name> --from ./factory.json`.
 
 ## Features
 
@@ -72,7 +77,7 @@ you-agent-factory is a factory runtime: you define how work moves between workst
 - **Workflow customization** — Model processes as config (`factory.json`, workstation routes, `AGENTS.md`) instead of a fixed pipeline; adapt write/review loops, cron triggers, git worktrees, or other patterns to your repo.
 - **Review loops** — Route completed work to reviewer workstations and re-queue failed items; shipped factories such as Ralph and writer-reviewer demonstrate iterative plan/code/review cycles.
 - **Batch submission** — Submit single items from the CLI (`you submit`) or drive larger inputs through batch work types and dashboard submission.
-- **Example factories** — Load starter and advanced factories from [`examples/factories/`](./examples/factories/) in the dashboard, or scaffold your own with `you init`.
+- **Example factories** — Load starter and advanced factories from [`examples/factories/`](./examples/factories/) in the dashboard, or author a `factory.json` and persist it with `you factory create`.
 
 Deeper product documentation:
 

@@ -105,6 +105,7 @@ func TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer(t *te
 	}
 }
 
+// TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs proves both selection paths retain compatibility inputs.
 func TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test for no-signature Factory invocation compatibility")
@@ -164,6 +165,7 @@ func TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs(t *
 	}
 }
 
+// TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatureInput proves selection does not change effective input.
 func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatureInput(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test for named and explicit Factory invocation parity")
@@ -310,6 +312,7 @@ func assertEffectiveSignatureSubmission(t *testing.T, arguments *work.Invocation
 	}
 }
 
+// TestRun_EmptyEffectiveSignatureInputUsesSchemaBeforeExecution proves schema preparation precedes execution.
 func TestRun_EmptyEffectiveSignatureInputUsesSchemaBeforeExecution(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test for empty selected-Factory invocation preparation")
@@ -462,6 +465,7 @@ func emptyInvocationArguments(selection, factoryPath string) []string {
 
 const preparationFailureSensitiveValue = "credential-that-must-not-leak"
 
+// TestRun_EffectiveSchemaPreparationFailuresStopBeforeExecutionSideEffects proves preparation failure is side-effect free.
 func TestRun_EffectiveSchemaPreparationFailuresStopBeforeExecutionSideEffects(t *testing.T) {
 	t.Parallel()
 

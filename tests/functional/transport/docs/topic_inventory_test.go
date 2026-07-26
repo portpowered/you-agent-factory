@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestDocsTopicInventory_AliasesRemainQueryableThroughPackagedSurface proves packaged topic aliases remain public.
 func TestDocsTopicInventory_AliasesRemainQueryableThroughPackagedSurface(t *testing.T) {
 	entries := docscli.TopicIndexEntries()
 	commands := docscli.SupportedTopicCommands()
