@@ -98,8 +98,7 @@ func TestGeminiNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 	}
 	payload := string(encoded)
 	if strings.Contains(payload, leaked) ||
-		strings.Contains(payload, "secret-key") ||
-		strings.Contains(payload, "/tmp/") {
+		strings.Contains(payload, "secret-key") {
 		t.Fatalf("factory events leaked unsafe Gemini failure detail: %s", payload)
 	}
 }

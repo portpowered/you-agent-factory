@@ -105,6 +105,12 @@ func TestParseProviderFailure_StructuredSignalsUseCanonicalMessages(t *testing.T
 			wantReason:  workerexecution.WorkFailureTypeInternalServerError,
 			wantMessage: "Gemini encountered a temporary server error.",
 		},
+		{
+			name:        "TopLevelErrorRecord",
+			stderr:      `{"type":"error","status":"UNAUTHENTICATED"}`,
+			wantReason:  workerexecution.WorkFailureTypeAuthFailure,
+			wantMessage: "Gemini authentication failed.",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -254,4 +260,3 @@ func TestAdapterClassifyFailure_MapsNativeSignalsToConductorFacts(t *testing.T) 
 		})
 	}
 }
-
