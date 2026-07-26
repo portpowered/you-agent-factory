@@ -215,12 +215,30 @@ func edgesProviderEffectRedefinition(
 			typeName:    typed.Name.Name,
 		}, true
 	}
+	if edgesStructFieldRedefinesProviderEffect(typed, imports) {
+		return providerEffectOwnershipFinding{
+			kind:        "edges-redefinition",
+			packagePath: packagePath,
+			filePath:    filePath,
+			typeName:    typed.Name.Name,
+		}, true
+	}
 	return providerEffectOwnershipFinding{}, false
 }
 
 func declaresProviderEffectMethod(typed *ast.TypeSpec, imports map[string]string) bool {
 	interfaceType, ok := typed.Type.(*ast.InterfaceType)
-	if !ok || interfaceType.Methods == nil {
+	if !ok {
+		return false
+	}
+	return interfaceDeclaresProviderEffectMethod(interfaceType, imports)
+}
+
+func interfaceDeclaresProviderEffectMethod(
+	interfaceType *ast.InterfaceType,
+	imports map[string]string,
+) bool {
+	if interfaceType.Methods == nil {
 		return false
 	}
 	for _, method := range interfaceType.Methods.List {
@@ -234,6 +252,46 @@ func declaresProviderEffectMethod(typed *ast.TypeSpec, imports map[string]string
 		}
 	}
 	return false
+}
+
+func edgesStructFieldRedefinesProviderEffect(
+	typed *ast.TypeSpec,
+	imports map[string]string,
+) bool {
+	structure, ok := typed.Type.(*ast.StructType)
+	if !ok || structure.Fields == nil {
+		return false
+	}
+	for _, field := range structure.Fields.List {
+		if referencesProvidersLeafEffectContract(field.Type, imports) {
+			continue
+		}
+		if typeExpressionRedefinesProviderEffect(field.Type, imports) {
+			return true
+		}
+	}
+	return false
+}
+
+func typeExpressionRedefinesProviderEffect(expression ast.Expr, imports map[string]string) bool {
+	redefines := false
+	ast.Inspect(expression, func(node ast.Node) bool {
+		if redefines || node == nil {
+			return false
+		}
+		typed, ok := node.(ast.Expr)
+		if ok && referencesProvidersLeafEffectContract(typed, imports) {
+			redefines = true
+			return false
+		}
+		interfaceType, ok := node.(*ast.InterfaceType)
+		if ok && interfaceDeclaresProviderEffectMethod(interfaceType, imports) {
+			redefines = true
+			return false
+		}
+		return true
+	})
+	return redefines
 }
 
 func isProviderEffectMethodSignature(signature *ast.FuncType, imports map[string]string) bool {

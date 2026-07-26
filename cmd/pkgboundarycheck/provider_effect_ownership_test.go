@@ -139,6 +139,82 @@ type Edges struct {
 	}
 }
 
+func TestRunRejectsEdgesAnonymousFieldProviderEffectRedefinitions(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		fieldType string
+	}{
+		{
+			name: "embedded Providers leaf",
+			fieldType: `interface {
+	leaf.Provider
+	Infer(context.Context, string) (string, error)
+}`,
+		},
+		{
+			name: "embedded Providers leaf wrapper",
+			fieldType: `interface {
+	leaf.Provider
+}`,
+		},
+		{
+			name: "locally declared provider effect method",
+			fieldType: `interface {
+	Infer(context.Context, string) (string, error)
+}`,
+		},
+	}
+
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			repoRoot := t.TempDir()
+			writeGoSourceFile(t, repoRoot, providersLeafEffectContractPackage+"/contract.go", `package inferencecontract
+
+import "context"
+
+type Provider interface {
+	Infer(context.Context, string) (string, error)
+}
+`)
+			writeGoSourceFile(
+				t,
+				repoRoot,
+				"pkg/services/edges/definition.go",
+				"package edges\n\n"+
+					"import (\n"+
+					"\t\"context\"\n"+
+					"\tleaf \"github.com/portpowered/infinite-you/"+providersLeafEffectContractPackage+"\"\n"+
+					")\n\n"+
+					"var _ leaf.Provider\n\n"+
+					"type Edges struct {\n\tProviderOverride "+testCase.fieldType+"\n}\n",
+			)
+
+			stderr := &bytes.Buffer{}
+			err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+			if err == nil {
+				t.Fatal("run() error = nil, want anonymous field provider-effect redefinition rejected")
+			}
+			got := stderr.String()
+			for _, want := range []string{
+				"prohibited provider-effect contract redefinition",
+				"pkg/services/edges",
+				"Edges",
+				"aggregate the exact Providers leaf effect contract unchanged",
+				"canonical owner: " + providersLeafEffectContractPackage,
+			} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("run() stderr = %q, want substring %q", got, want)
+				}
+			}
+		})
+	}
+}
+
 func TestRunRejectsEdgesTypeNameRedefiningProvidersLeafEffectContract(t *testing.T) {
 	t.Parallel()
 

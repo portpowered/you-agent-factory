@@ -99,8 +99,11 @@ primary-result behavior.
   `Provider` interfaces and aliases remain valid. Do not exempt declarations
   solely because they reuse the production aggregator type name: the AST shape
   distinguishes an allowed `Edges` struct field from an `Edges` alias, defined
-  type, or interface that redeclares the leaf contract. Prove ownership behavior
-  with deliberate `run()` fixtures rather than package-local source inventories.
+  type, or interface that redeclares the leaf contract. Inspect nested field type
+  expressions too: direct leaf fields are aggregation, while anonymous interfaces
+  or other wrappers around the leaf contract are edges-owned redefinitions. Prove
+  ownership behavior with deliberate `run()` fixtures rather than package-local
+  source inventories.
   Invoke implementations
   through `ExecuteInvocation` so provider-authored drafts are validated for
   provenance, invocation and item correlation, lifecycle ordering, terminal
