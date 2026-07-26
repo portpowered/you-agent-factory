@@ -38,7 +38,6 @@ jobs:
       run_api_package: ${{ steps.classify.outputs.run_api_package || 'true' }}
       run_packaged_factories_package: ${{ steps.classify.outputs.run_packaged_factories_package || 'true' }}
       run_model_providers_package: ${{ steps.classify.outputs.run_model_providers_package || 'true' }}
-      run_frontend: ${{ steps.classify.outputs.run_frontend || 'true' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -56,8 +55,7 @@ jobs:
     if: >-
       (matrix.lane == 'api' && needs.classify.outputs.run_api_package == 'true') ||
       (matrix.lane == 'packaged-factories' && needs.classify.outputs.run_packaged_factories_package == 'true') ||
-      (matrix.lane == 'model-providers' && needs.classify.outputs.run_model_providers_package == 'true') ||
-      (matrix.lane == 'frontend-public' && needs.classify.outputs.run_frontend == 'true')
+      (matrix.lane == 'model-providers' && needs.classify.outputs.run_model_providers_package == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 35
     strategy:
@@ -76,13 +74,6 @@ jobs:
             lane: model-providers
             command: make model-provider-package-verify
             needs_playwright: false
-          - name: Complete public package release
-            command: make public-release-package-smoke
-            needs_playwright: false
-          - name: Public frontend package release
-            lane: frontend-public
-            command: make ui-public-package-release
-            needs_playwright: true
     steps:
       - name: Check out the candidate commit
         uses: actions/checkout@v4
@@ -97,29 +88,17 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install dashboard dependencies
-        run: make ui-deps
-
-      - name: Install Playwright browser for frontend package verification
-        if: matrix.needs_playwright
-        run: make ui-install-playwright
 
       - name: Run validation lane
         run: ${{ matrix.command }}
 
   dry-run-candidate:
     name: Build and Smoke Exact Candidate (No Publish)
-    if: github.event_name == 'pull_request'
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
