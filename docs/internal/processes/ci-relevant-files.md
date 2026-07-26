@@ -280,7 +280,10 @@ Wave 0 functional-tests-expansion planning authority lives under
   every match for a wildcard target. Keep the legacy
   `factories/goal/factory.json` compatibility artifact as a separate Packaged
   Factories required-file check, outside the general export-map contract, and
-  keep lifecycle scripts disabled for every candidate pack.
+  keep lifecycle scripts disabled for every candidate pack. Prove that behavior
+  at the API, Packaged Factories, and frontend production packing boundaries
+  with lifecycle-hook sentinel fixtures; command-argument inventory assertions
+  are not sufficient release evidence.
   tagged Release workflow uploads that complete set as one artifact. Its
   `scripts/public-release-package-publish.mjs` boundary rejects unknown scopes,
   duplicates, missing or extra packages, source-commit drift, and child

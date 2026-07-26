@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+	access,
 	cp,
 	mkdir,
 	mkdtemp,
@@ -24,6 +25,32 @@ async function temporaryDirectory(t, name) {
 	t.after(() => rm(directory, { recursive: true, force: true }));
 	return directory;
 }
+
+test("candidate packing suppresses lifecycle script side effects", async (t) => {
+	const fixtureRoot = await temporaryDirectory(t, "you-api-pack-lifecycle-");
+	const fixturePackage = join(fixtureRoot, "package");
+	const packDestination = join(fixtureRoot, "packed");
+	const sentinel = join(fixtureRoot, "lifecycle-ran");
+	await cp(packageDirectory, fixturePackage, { recursive: true });
+	await mkdir(packDestination);
+
+	const manifestPath = join(fixturePackage, "package.json");
+	const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+	manifest.scripts = { prepack: "node create-sentinel.mjs" };
+	await Promise.all([
+		writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`),
+		writeFile(
+			join(fixturePackage, "create-sentinel.mjs"),
+			`import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(sentinel)}, "ran");\n`,
+		),
+	]);
+
+	await packAndVerify({
+		packageDirectory: fixturePackage,
+		packDestination,
+	});
+	await assert.rejects(access(sentinel), { code: "ENOENT" });
+});
 
 test("real npm tarball contains the complete reviewed inventory deterministically", async (t) => {
 	const firstDestination = await temporaryDirectory(t, "you-api-pack-first-");
