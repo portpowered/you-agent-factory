@@ -34,6 +34,12 @@ reports the selected defaults and operator-config path. `you init` updates only
 the provider/model defaults and preserves all other operator settings. It does
 not support global `--json`; passing that flag fails without changing the file.
 
+Run `you init` without flags in a terminal for guided setup. The provider and
+model prompts show current defaults in brackets; press Enter to retain a
+displayed value. Enter `/cancel`, send EOF, or interrupt the command to abandon
+setup without changing the operator config. Outside a terminal, `--provider` is
+required.
+
 The operator file can supply defaults for model-backed workers that omit their
 own provider or model:
 

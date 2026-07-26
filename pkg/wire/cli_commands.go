@@ -3,11 +3,13 @@ package wire
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -149,7 +151,12 @@ func provideInitSystemConfigOperation(
 func provideConfigureInitOperation(
 	service operatorsettings.ConfigDocumentService,
 ) cli.ConfigureInitOperation {
-	return initsetup.NewConfigurer(service)
+	return initsetup.NewConfigurer(
+		service,
+		func(input io.Reader, maxLines int) (initsetup.ContextLineReader, error) {
+			return platformstdio.NewContextLineReader(input, maxLines)
+		},
+	)
 }
 
 func provideQueryFactoryOperation(transport standardCLIHTTPProtocol) cli.QueryFactoryOperation {

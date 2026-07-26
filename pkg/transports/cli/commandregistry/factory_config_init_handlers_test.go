@@ -1,11 +1,13 @@
 package commandregistry_test
 
 import (
+	"context"
 	"errors"
 	"io"
 	"strings"
 	"testing"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	initcmd "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
@@ -120,10 +122,15 @@ func TestFactoryConfigInitCommandHandlerMapsSuppliedSetupInputs(t *testing.T) {
 	)
 	cmd := &cobra.Command{}
 	cmd.SetOut(io.Discard)
+	ctx := startupcli.WithStdinTTY(context.Background(), true)
+	ctx = startupcli.WithStdoutTTY(ctx, true)
+	cmd.SetContext(ctx)
 	if err := handler.Init(cmd, inputs, resolvedFactoryGlobals(t, false, false, false)); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
-	if got.HomeDir != "operator-home" || got.Provider != "codex" || got.Model == nil || *got.Model != "free-form/model" {
+	if got.HomeDir != "operator-home" || got.Provider != "codex" ||
+		got.Model == nil || *got.Model != "free-form/model" ||
+		got.Input == nil || !got.Interactive {
 		t.Fatalf("init setup config = %#v, want supplied stable-ID values", got)
 	}
 }

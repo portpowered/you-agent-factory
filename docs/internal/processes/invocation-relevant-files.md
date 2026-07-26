@@ -529,7 +529,12 @@ response-stream output.
   handler in `pkg/transports/cli/commandregistry`, which translates stable
   `you.init.flag.provider` and `you.init.flag.model` inputs into the narrow
   `pkg/transports/cli/initsetup.Config` request. The initsetup adapter owns
-  home-to-config-path translation and human output, while
+  home-to-config-path translation, prompt rendering, and human output. Enable
+  prompts only from the invocation-local stdin/stdout TTY classifications on
+  the process context, pass Cobra's invocation-local input/output streams, and
+  preserve cancellation from that same context; do not inspect host streams in
+  the transport. The prompt must collect every value without writing before it
+  delegates to the prompted settings operation, while
   `ConfigDocumentService` retains provider-catalog validation, semantic merge,
   unrelated-field preservation, and the atomic commit.
 - Canonical `you config init` system bootstrap belongs in

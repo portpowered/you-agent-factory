@@ -2,6 +2,7 @@ package init_setup
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -146,6 +147,157 @@ func TestInitSuppliedInputsPreserveConfigWhenAtomicWriteCannotStart(t *testing.T
 	}
 }
 
+// TestInitInteractiveInputsConfigureOnlyProviderModelDefaults proves terminal
+// setup presents current defaults and commits complete prompted input through
+// the same atomic settings operation as supplied flags.
+func TestInitInteractiveInputsConfigureOnlyProviderModelDefaults(t *testing.T) {
+	fixture := newInitFixture(t)
+	var stdout bytes.Buffer
+
+	err := fixture.executeInteractive(
+		serviceedges.Edges{},
+		context.Background(),
+		strings.NewReader("codex\nprovider/free-form:v3\n"),
+		&stdout,
+	)
+	if err != nil {
+		t.Fatalf("Process.Execute() error = %v", err)
+	}
+	for _, want := range []string{
+		"Provider [claude]:",
+		"Model [old-model]:",
+		"Configured default provider codex and model provider/free-form:v3",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+	configured := fixture.readConfig()
+	for _, want := range []string{
+		`"backendScopeID": "scope-existing"`,
+		`"workerModelProvider": "codex"`,
+		`"workerModel": "provider/free-form:v3"`,
+		`"directory": "custom-logs"`,
+		`"directory": "custom-metrics"`,
+		`"model": "preset-model"`,
+	} {
+		if !strings.Contains(configured, want) {
+			t.Fatalf("configured document omitted %q:\n%s", want, configured)
+		}
+	}
+}
+
+func TestInitInteractiveExistingDefaultsAreAccepted(t *testing.T) {
+	fixture := newInitFixture(t)
+	err := fixture.executeInteractive(
+		serviceedges.Edges{},
+		context.Background(),
+		strings.NewReader("\n\n"),
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("Process.Execute() error = %v", err)
+	}
+	configured := fixture.readConfig()
+	if !strings.Contains(configured, `"workerModelProvider": "claude"`) ||
+		!strings.Contains(configured, `"workerModel": "old-model"`) {
+		t.Fatalf("existing defaults were not retained:\n%s", configured)
+	}
+}
+
+func TestInitInteractiveRejectedOrTerminatedInputDoesNotWrite(t *testing.T) {
+	tests := []struct {
+		name    string
+		ctx     context.Context
+		input   string
+		wantErr string
+	}{
+		{
+			name:    "invalid provider",
+			ctx:     context.Background(),
+			input:   "not-registered\nfree-form\n",
+			wantErr: `unsupported worker model provider "not-registered"`,
+		},
+		{
+			name:    "EOF at model",
+			ctx:     context.Background(),
+			input:   "codex\n",
+			wantErr: "setup canceled",
+		},
+		{
+			name:    "user cancellation at provider",
+			ctx:     context.Background(),
+			input:   "/cancel\n",
+			wantErr: "setup canceled",
+		},
+		{
+			name:    "interrupt at model",
+			ctx:     context.Background(),
+			input:   "codex\n\x03\n",
+			wantErr: "setup canceled",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newInitFixture(t)
+			err := fixture.executeInteractive(
+				serviceedges.Edges{},
+				test.ctx,
+				strings.NewReader(test.input),
+				io.Discard,
+			)
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("Process.Execute() error = %v, want %q", err, test.wantErr)
+			}
+			if got := fixture.readConfig(); got != existingOperatorConfig {
+				t.Fatalf("operator config changed after rejected prompt:\n%s", got)
+			}
+		})
+	}
+}
+
+func TestInitInteractiveContextCancellationAtModelDoesNotWrite(t *testing.T) {
+	fixture := newInitFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	input := &blockingAfterProviderReader{
+		provider: strings.NewReader("codex\n"),
+		release:  release,
+	}
+	output := &cancelOnModelPromptWriter{cancel: cancel}
+
+	err := fixture.executeInteractive(serviceedges.Edges{}, ctx, input, output)
+	if err == nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("Process.Execute() error = %v, want context cancellation", err)
+	}
+	if got := fixture.readConfig(); got != existingOperatorConfig {
+		t.Fatalf("operator config changed after context cancellation:\n%s", got)
+	}
+}
+
+func TestInitInteractivePreCommitFailurePreservesConfig(t *testing.T) {
+	fixture := newInitFixture(t)
+	tempFailure := errors.New("prompted temporary target unavailable")
+	edges := serviceedges.Edges{
+		OperatorSettingsCreateTemporaryFile: func(string, string) (operatorsettings.TemporaryFile, error) {
+			return nil, tempFailure
+		},
+	}
+	err := fixture.executeInteractive(
+		edges,
+		context.Background(),
+		strings.NewReader("codex\nnew-model\n"),
+		io.Discard,
+	)
+	if err == nil || !errors.Is(err, tempFailure) {
+		t.Fatalf("Process.Execute() error = %v, want temporary-file failure", err)
+	}
+	if got := fixture.readConfig(); got != existingOperatorConfig {
+		t.Fatalf("operator config changed after prompted pre-commit failure:\n%s", got)
+	}
+}
+
 type initFixture struct {
 	t          *testing.T
 	homeDir    string
@@ -192,6 +344,35 @@ func (fixture initFixture) execute(
 	})
 }
 
+func (fixture initFixture) executeInteractive(
+	edges serviceedges.Edges,
+	ctx context.Context,
+	stdin io.Reader,
+	stdout io.Writer,
+) error {
+	fixture.t.Helper()
+	process, err := root.BuildProcess(fixture.t.Context(), edges)
+	if err != nil {
+		return err
+	}
+	isTTY := true
+	return process.Execute(root.Input{
+		Args: []string{"you", "init"},
+		Env: append(
+			os.Environ(),
+			"HOME="+fixture.homeDir,
+			"USERPROFILE="+fixture.homeDir,
+		),
+		Stdin:            stdin,
+		Stdout:           stdout,
+		Stderr:           io.Discard,
+		Context:          ctx,
+		WorkingDirectory: fixture.workingDir,
+		StdinIsTTY:       &isTTY,
+		StdoutIsTTY:      &isTTY,
+	})
+}
+
 func (fixture initFixture) readConfig() string {
 	fixture.t.Helper()
 	payload, err := os.ReadFile(fixture.configPath)
@@ -199,4 +380,28 @@ func (fixture initFixture) readConfig() string {
 		fixture.t.Fatalf("ReadFile(config): %v", err)
 	}
 	return string(payload)
+}
+
+type blockingAfterProviderReader struct {
+	provider *strings.Reader
+	release  <-chan struct{}
+}
+
+func (reader *blockingAfterProviderReader) Read(payload []byte) (int, error) {
+	if reader.provider.Len() > 0 {
+		return reader.provider.Read(payload)
+	}
+	<-reader.release
+	return 0, io.EOF
+}
+
+type cancelOnModelPromptWriter struct {
+	cancel context.CancelFunc
+}
+
+func (writer *cancelOnModelPromptWriter) Write(payload []byte) (int, error) {
+	if strings.Contains(string(payload), "Model") {
+		writer.cancel()
+	}
+	return len(payload), nil
 }

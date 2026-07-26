@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	initcmd "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
@@ -417,9 +418,14 @@ func (h *FactoryConfigInitCommandHandler) Init(
 	if err != nil {
 		return fmt.Errorf("resolve init home directory: %w", err)
 	}
+	ctx := cmd.Context()
+	interactive := ctx != nil &&
+		startupcli.StdinIsTTY(ctx) &&
+		startupcli.StdoutIsTTY(ctx)
 	return h.services.ConfigureInit(initsetup.Config{
-		Context: cmd.Context(), HomeDir: homeDir, Provider: provider,
-		Model: model, Output: cmd.OutOrStdout(),
+		Context: ctx, HomeDir: homeDir, Provider: provider,
+		Model: model, Input: cmd.InOrStdin(), Output: cmd.OutOrStdout(),
+		Interactive: interactive,
 	})
 }
 
