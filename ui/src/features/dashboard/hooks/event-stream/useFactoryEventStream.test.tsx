@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
+import { bunVi as vi } from "../../../../testing/bun/vi-compat";
 import {
   CURRENT_FACTORY_DEFINITION_QUERY_KEY,
   CURRENT_FACTORY_DOCUMENT_QUERY_KEY,
