@@ -361,24 +361,29 @@ Verification:
 
 Frontend changes **MUST** include evidence at the right testing layer.
 
-The expected testing layers are:
+The expected testing layers are unit, component, and browser:
 
-- unit tests for pure logic, formatting helpers, selectors, parsers, and reducers
-- component tests for rendered behavior of isolated components and hooks
-- app-level functional tests for product flows with mocked backend behavior
-- integration tests under `ui/integration/` for broader frontend behavior and fixtures
-- Storybook stories and Storybook test-runner coverage for reusable UI states when applicable
-- performance tests for load, memory, or sustained interaction risks
+- unit tests cover pure logic, formatting helpers, selectors, parsers, and reducers without a DOM
+- component tests cover browserless rendered behavior of one feature-owned component or hook
+- browser tests cover app-level product flows, routing, layout, browser APIs, and third-party behavior that requires a real browser; repository browser tests live under `ui/integration/` or an explicitly named Storybook browser check
+
+Storybook stories and performance tests supplement those three layers. They do
+not create additional correctness-test categories.
 
 Rules:
 
 - Most UI confidence **SHOULD** come from component and functional tests.
 - Unit tests **SHOULD NOT** dominate coverage at the expense of real rendered behavior.
-- Integration tests **SHOULD** focus on contract confidence and regression-prone seams.
+- Browser tests **SHOULD** focus on high-risk product flows and browser-dependent seams rather than duplicating feature-owned component contracts.
 - Performance tests **SHOULD** exist for surfaces known to handle high event volume, large datasets, or long-lived sessions.
 - Storybook stories **SHOULD** represent meaningful states, not only the happy path.
 - Complex interactive surfaces **SHOULD** test domain operations and projection adapters directly, in addition to rendered component behavior.
 - Third-party UI library integrations **SHOULD** have a small number of focused component or functional tests proving that user interactions dispatch the intended feature operations and that projected state visibly changes.
+- Unit and component tests **SHOULD** stay beside the smallest production owner. A component with several distinct rendered contracts **MAY** use a local `contracts/` directory; the repository **SHOULD NOT** introduce a central component-test directory.
+- `ui/src/testing/` **SHOULD** contain reusable infrastructure and fixtures only, not feature behavior contracts.
+- Native Bun is the default component runner. A Vitest compatibility exception **MUST** document the unsupported runtime dependency or API and **SHOULD** be migrated or moved to the browser lane when that dependency is removed.
+- Component tests **MUST NOT** launch Playwright, a preview server, or a real backend. Tests that require those facilities are browser tests.
+- Component tests **SHOULD NOT** mount the full application or import an aggregate feature barrel to prove behavior already owned by narrower components, hooks, operations, or projections.
 
 Expected evidence for complex interactive surfaces:
 
@@ -400,9 +405,10 @@ Repository test and check commands:
 
 - `cd ui && bun run check` runs Biome, semantic color checks, Tailwind spacing-token checks, and feature-root file checks.
 - `cd ui && bun run tsc` runs TypeScript project checking.
-- `cd ui && bun run test:unit` runs Vitest unit and component tests outside `ui/integration/`.
-- `cd ui && bun run test:integration` runs integration tests under `ui/integration/`.
-- `cd ui && bun run test` runs the standard frontend unit and integration suites.
+- `cd ui && bun run test:unit` runs the pure Vitest unit lane without a DOM.
+- `cd ui && bun run test:component` runs the browserless component lane, using native Bun first and the bounded Vitest compatibility sublane second.
+- `cd ui && bun run test:integration` runs browser tests under `ui/integration/`.
+- `cd ui && bun run test` runs the standard frontend unit, component, and browser suites.
 - `cd ui && bun run test-storybook` and `cd ui && bun run storybook:test-runner:ci` cover Storybook-driven UI behavior when a change touches reusable or story-covered components.
 - `cd ui && bun run generate-api` regenerates `ui/src/api/generated/openapi.ts` from `api/openapi.yaml`; generated output should not be hand-edited.
 
