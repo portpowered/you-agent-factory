@@ -100,13 +100,18 @@ func TestComposeRunInputsPreservesSupportedTypeHints(t *testing.T) {
 
 func TestComposeRunInputsRejectsEveryReservedStaticNamespace(t *testing.T) {
 	manifest := compositionManifest()
+	root := manifest.Commands["you"]
+	root.Aliases = []string{"execute"}
+	manifest.Commands["you"] = root
 	signature := work.InvocationSignatureConfig{Parameters: []work.InvocationParameterConfig{
-		{Name: "you.run.binding.output", ExternalName: "output", Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}}},
-		{Name: "command", ExternalName: "run", Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}}},
-		{Name: "alias", ExternalName: "emit", Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}}},
+		{Name: " you.run.binding.output ", ExternalName: " output ", Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}}},
+		{Name: "run", Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindPositional, Position: 2}}},
+		{Name: "command-alias", ExternalName: "execute", Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}}},
+		{Name: "alias", Aliases: []string{" emit "}, Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}}},
 		{Name: "short", ExternalName: "v", Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}}},
 		{Name: "position", Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindPositional, Position: 1}}},
-		{Name: "stdin", Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindStdin}}},
+		{Name: "stdin", Bindings: []work.InvocationParameterBindingConfig{{Kind: " STDIN "}}},
+		{Name: "you.run.flag.named", Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindPositional, Position: 2}}},
 	}}
 
 	effective, diagnostics, err := ComposeRunInputs(manifest, "you.run", signature)
@@ -117,13 +122,15 @@ func TestComposeRunInputsRejectsEveryReservedStaticNamespace(t *testing.T) {
 		t.Fatalf("effective schema = %#v, want rejected composition to produce no schema", effective)
 	}
 	want := []CompositionDiagnostic{
-		{Code: CompositionCollisionAlias, Path: "/invocationSignature/parameters/2/externalName", StaticOwner: "you.run.flag.output", FactoryOwner: "alias"},
+		{Code: CompositionCollisionAlias, Path: "/invocationSignature/parameters/3/aliases/0", StaticOwner: "you.run.flag.output", FactoryOwner: "alias"},
 		{Code: CompositionCollisionBindingID, Path: "/invocationSignature/parameters/0/name", StaticOwner: "you.run.flag.output", FactoryOwner: "you.run.binding.output"},
-		{Code: CompositionCollisionCommandName, Path: "/invocationSignature/parameters/1/externalName", StaticOwner: "you.run", FactoryOwner: "command"},
+		{Code: CompositionCollisionBindingID, Path: "/invocationSignature/parameters/7/name", StaticOwner: "you.run.flag.named", FactoryOwner: "you.run.flag.named"},
+		{Code: CompositionCollisionCommandName, Path: "/invocationSignature/parameters/1/name", StaticOwner: "you.run", FactoryOwner: "run"},
+		{Code: CompositionCollisionCommandName, Path: "/invocationSignature/parameters/2/externalName", StaticOwner: "you", FactoryOwner: "command-alias"},
 		{Code: CompositionCollisionLongName, Path: "/invocationSignature/parameters/0/externalName", StaticOwner: "you.run.flag.output", FactoryOwner: "you.run.binding.output"},
-		{Code: CompositionCollisionPosition, Path: "/invocationSignature/parameters/4/bindings/0/position", StaticOwner: "you.run.arg.0", FactoryOwner: "position"},
-		{Code: CompositionCollisionShorthand, Path: "/invocationSignature/parameters/3/externalName", StaticOwner: "you.flag.verbose", FactoryOwner: "short"},
-		{Code: CompositionCollisionStdin, Path: "/invocationSignature/parameters/5/bindings/0/kind", StaticOwner: "you.run.arg.0", FactoryOwner: "stdin"},
+		{Code: CompositionCollisionPosition, Path: "/invocationSignature/parameters/5/bindings/0/position", StaticOwner: "you.run.arg.0", FactoryOwner: "position"},
+		{Code: CompositionCollisionShorthand, Path: "/invocationSignature/parameters/4/externalName", StaticOwner: "you.flag.verbose", FactoryOwner: "short"},
+		{Code: CompositionCollisionStdin, Path: "/invocationSignature/parameters/6/bindings/0/kind", StaticOwner: "you.run.arg.0", FactoryOwner: "stdin"},
 	}
 	if len(diagnostics) != len(want) {
 		t.Fatalf("diagnostics = %#v, want %#v", diagnostics, want)
@@ -136,6 +143,43 @@ func TestComposeRunInputsRejectsEveryReservedStaticNamespace(t *testing.T) {
 		if got.Message == "" {
 			t.Fatalf("diagnostic[%d] has no owner-aware message", index)
 		}
+	}
+}
+
+func TestComposeRunInputsCollisionDiagnosticsAreDeterministic(t *testing.T) {
+	manifest := compositionManifest()
+	signature := work.InvocationSignatureConfig{Parameters: []work.InvocationParameterConfig{
+		{Name: "output", Aliases: []string{"v", "emit"}, Bindings: []work.InvocationParameterBindingConfig{
+			{Kind: work.InvocationParameterBindingKindPositional, Position: 1},
+			{Kind: work.InvocationParameterBindingKindStdin},
+		}},
+	}}
+
+	_, want, err := ComposeRunInputs(manifest, "you.run", signature)
+	if err != nil || len(want) == 0 {
+		t.Fatalf("ComposeRunInputs() err=%v diagnostics=%#v", err, want)
+	}
+	for iteration := 0; iteration < 25; iteration++ {
+		_, got, repeatErr := ComposeRunInputs(manifest, "you.run", signature)
+		if repeatErr != nil || !reflect.DeepEqual(got, want) {
+			t.Fatalf("iteration %d diagnostics=%#v err=%v, want %#v", iteration, got, repeatErr, want)
+		}
+	}
+}
+
+func TestComposeRunInputsPreservesNonCollidingStaticInputs(t *testing.T) {
+	manifest := compositionManifest()
+	signature := work.InvocationSignatureConfig{Parameters: []work.InvocationParameterConfig{{
+		Name: "query", ExternalName: "search", Aliases: []string{"q"},
+		Bindings: []work.InvocationParameterBindingConfig{{Kind: work.InvocationParameterBindingKindNamed}},
+	}}}
+
+	effective, diagnostics, err := ComposeRunInputs(manifest, "you.run", signature)
+	if err != nil || len(diagnostics) != 0 {
+		t.Fatalf("ComposeRunInputs() err=%v diagnostics=%#v", err, diagnostics)
+	}
+	if !reflect.DeepEqual(effective.StaticInputs, projectStaticInputs(manifest.Commands["you.run"])) {
+		t.Fatalf("static inputs changed during non-colliding composition: %#v", effective.StaticInputs)
 	}
 }
 

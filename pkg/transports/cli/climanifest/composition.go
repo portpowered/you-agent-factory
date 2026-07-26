@@ -85,6 +85,11 @@ type reservedSpelling struct {
 	owner string
 }
 
+type factorySpelling struct {
+	path  string
+	value string
+}
+
 // ComposeRunInputs combines a validated static command and selected Factory
 // signature without mutating either contract. Any collision rejects the
 // composition; callers must not use the returned schema when diagnostics are
@@ -237,19 +242,19 @@ func compositionDiagnostics(manifest Manifest, command Command, parameters []wor
 	positions, stdinOwner, bindingIDs := reservedStaticInputs(command)
 	var diagnostics []CompositionDiagnostic
 	for index, parameter := range parameters {
-		owner := parameter.Name
+		owner := strings.TrimSpace(parameter.Name)
 		path := fmt.Sprintf("/invocationSignature/parameters/%d", index)
-		if staticOwner, collision := bindingIDs[parameter.Name]; collision {
-			diagnostics = append(diagnostics, newCompositionDiagnostic(CompositionCollisionBindingID, path+"/name", parameter.Name, staticOwner, owner))
+		if staticOwner, collision := bindingIDs[owner]; collision {
+			diagnostics = append(diagnostics, newCompositionDiagnostic(CompositionCollisionBindingID, path+"/name", owner, staticOwner, owner))
 		}
-		for field, value := range factoryNamedSpellings(parameter) {
-			for _, reserved := range spellings[value] {
-				diagnostics = append(diagnostics, newCompositionDiagnostic(collisionCode(reserved.kind), path+field, value, reserved.owner, owner))
+		for _, spelling := range factorySpellings(parameter) {
+			for _, reserved := range spellings[spelling.value] {
+				diagnostics = append(diagnostics, newCompositionDiagnostic(collisionCode(reserved.kind), path+spelling.path, spelling.value, reserved.owner, owner))
 			}
 		}
 		for bindingIndex, binding := range parameter.Bindings {
 			bindingPath := fmt.Sprintf("%s/bindings/%d", path, bindingIndex)
-			switch binding.Kind {
+			switch strings.TrimSpace(binding.Kind) {
 			case work.InvocationParameterBindingKindPositional:
 				if staticOwner, collision := positions[binding.Position]; collision {
 					diagnostics = append(diagnostics, newCompositionDiagnostic(CompositionCollisionPosition, bindingPath+"/position", fmt.Sprint(binding.Position), staticOwner, owner))
@@ -301,7 +306,8 @@ func reservedStaticInputs(command Command) (map[int]string, string, map[string]s
 	positions := make(map[int]string)
 	bindingIDs := make(map[string]string)
 	stdinOwner := ""
-	for _, argument := range command.Arguments {
+	for _, argumentID := range sortedArgumentIDs(command.Arguments) {
+		argument := command.Arguments[argumentID]
 		// Factory positions are 1-based while static manifest slots are 0-based.
 		positions[argument.Position+1] = argument.ID
 		addBindingOwners(bindingIDs, argument.ID, argument.HandlerBindingID)
@@ -309,7 +315,8 @@ func reservedStaticInputs(command Command) (map[int]string, string, map[string]s
 			stdinOwner = argument.ID
 		}
 	}
-	for _, flag := range command.Flags {
+	for _, flagID := range sortedFlagIDs(command.Flags) {
+		flag := command.Flags[flagID]
 		addBindingOwners(bindingIDs, flag.ID, flag.HandlerBindingID)
 		if stdinOwner == "" && containsString(flag.AcceptedSources, SourceStdin) {
 			stdinOwner = flag.ID
@@ -318,27 +325,21 @@ func reservedStaticInputs(command Command) (map[int]string, string, map[string]s
 	return positions, stdinOwner, bindingIDs
 }
 
-func factoryNamedSpellings(parameter work.InvocationParameterConfig) map[string]string {
-	hasNamedBinding := false
-	for _, binding := range parameter.Bindings {
-		if binding.Kind == work.InvocationParameterBindingKindNamed || binding.Kind == work.InvocationParameterBindingKindNamedRest {
-			hasNamedBinding = true
-			break
-		}
+func factorySpellings(parameter work.InvocationParameterConfig) []factorySpelling {
+	spellings := make([]factorySpelling, 0, len(parameter.Aliases)+2)
+	if name := strings.TrimSpace(parameter.Name); name != "" {
+		spellings = append(spellings, factorySpelling{path: "/name", value: name})
 	}
-	if !hasNamedBinding {
-		return nil
-	}
-	primary := parameter.ExternalName
-	if primary == "" {
-		primary = parameter.Name
-	}
-	spellings := map[string]string{"/externalName": primary}
-	if parameter.ExternalName == "" {
-		spellings = map[string]string{"/name": primary}
+	if externalName := strings.TrimSpace(parameter.ExternalName); externalName != "" {
+		spellings = append(spellings, factorySpelling{path: "/externalName", value: externalName})
 	}
 	for index, alias := range parameter.Aliases {
-		spellings[fmt.Sprintf("/aliases/%d", index)] = alias
+		if trimmed := strings.TrimSpace(alias); trimmed != "" {
+			spellings = append(spellings, factorySpelling{
+				path:  fmt.Sprintf("/aliases/%d", index),
+				value: trimmed,
+			})
+		}
 	}
 	return spellings
 }
@@ -394,6 +395,15 @@ func sortedCommandIDs(commands map[string]Command) []string {
 func sortedFlagIDs(flags map[string]Flag) []string {
 	ids := make([]string, 0, len(flags))
 	for id := range flags {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func sortedArgumentIDs(arguments map[string]Argument) []string {
+	ids := make([]string, 0, len(arguments))
+	for id := range arguments {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)

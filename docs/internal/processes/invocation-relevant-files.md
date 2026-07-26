@@ -725,7 +725,10 @@ response-stream output.
   the authored signature. It
   rejects command-name, long-name, alias, shorthand, positional, stdin-owner,
   and stable-binding collisions with sorted diagnostics that identify both
-  owners. Named and explicit-file selectors must not enter this composition
+  owners. Check canonical parameter names, preferred external names, and every
+  alias independently after applying the shared Work normalization trimming;
+  do not limit reserved-spelling checks to parameters with named CLI bindings.
+  Named and explicit-file selectors must not enter this composition
   policy; equivalent selected signatures produce equivalent results.
   Keep effective-scope spelling and inheritance checks in
   `internal/contractvalidator` so schema-valid manifests still receive stable,
