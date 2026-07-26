@@ -7,6 +7,7 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
 )
 
@@ -94,6 +95,7 @@ func TestBuildRuntimePreservesAssemblyErrorIdentity(t *testing.T) {
 		workers.ErrInvalidRuntimeBuildRequest,
 		workers.ErrMissingRunnerSelection,
 		workers.ErrUnknownRunnerSelection,
+		workers.ErrUnsupportedRunnerCapability,
 		workers.ErrRuntimeAssemblyRejected,
 		workers.ErrIncompleteRuntimeAssembly,
 	} {
@@ -113,6 +115,104 @@ func TestBuildRuntimePreservesAssemblyErrorIdentity(t *testing.T) {
 				t.Fatalf("BuildRuntime() result = %#v, want no usable bindings", result)
 			}
 		})
+	}
+}
+
+type runtimeRunnerSpy struct {
+	calls int
+}
+
+func (runner *runtimeRunnerSpy) Execute(
+	context.Context,
+	workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	runner.calls++
+	return workers.RunnerExecutionResult{}, errors.New("unexpected runner execution")
+}
+
+func TestRuntimeBuildUsesPrivateRegistryWithoutRunnerExecution(t *testing.T) {
+	t.Parallel()
+
+	runner := &runtimeRunnerSpy{}
+	metadata, ok := workers.BuiltInRunnerMetadata(workers.RunnerIDCodex)
+	if !ok {
+		t.Fatal("Codex metadata is unavailable")
+	}
+	assembly, err := newRuntimeAssemblyFromRegistrations([]runners.Registration{{
+		Identity: workers.RunnerIDCodex,
+		Metadata: metadata,
+		Runner:   runner,
+	}})
+	if err != nil {
+		t.Fatalf("newRuntimeAssemblyFromRegistrations() error = %v", err)
+	}
+	var root workers.Service = &Service{runtimeAssembly: assembly}
+	valid := workers.RuntimeBuildRequest{
+		RunnerID: workers.RunnerIDCodex,
+		RequiredRunnerCapabilities: []workers.RunnerOptionalCapability{
+			workers.RunnerOptionalCapabilityWorktree,
+		},
+		Roles: []workers.RuntimeBuildRoleRequest{{
+			Name: "writer",
+			Kind: workers.RuntimeBuildRoleKindWorker,
+		}},
+	}
+
+	result, err := root.BuildRuntime(t.Context(), valid)
+	if err != nil {
+		t.Fatalf("BuildRuntime(valid) error = %v", err)
+	}
+	if result.RunnerSelection.RunnerID != workers.RunnerIDCodex ||
+		len(result.Bindings) != 1 ||
+		result.Bindings[0].RunnerSelection != result.RunnerSelection {
+		t.Fatalf("BuildRuntime(valid) = %#v, want registry-backed binding", result)
+	}
+
+	cases := []struct {
+		name    string
+		request workers.RuntimeBuildRequest
+		want    error
+	}{
+		{
+			name: "missing",
+			request: workers.RuntimeBuildRequest{
+				Roles: valid.Roles,
+			},
+			want: workers.ErrMissingRunnerSelection,
+		},
+		{
+			name: "unknown",
+			request: workers.RuntimeBuildRequest{
+				RunnerID: "unknown",
+				Roles:    valid.Roles,
+			},
+			want: workers.ErrUnknownRunnerSelection,
+		},
+		{
+			name: "unsupported",
+			request: workers.RuntimeBuildRequest{
+				RunnerID: workers.RunnerIDCodex,
+				RequiredRunnerCapabilities: []workers.RunnerOptionalCapability{
+					workers.RunnerOptionalCapability("unsupported"),
+				},
+				Roles: valid.Roles,
+			},
+			want: workers.ErrUnsupportedRunnerCapability,
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			failed, buildErr := root.BuildRuntime(t.Context(), test.request)
+			if !errors.Is(buildErr, test.want) {
+				t.Fatalf("BuildRuntime() error = %v, want %v", buildErr, test.want)
+			}
+			if len(failed.Bindings) != 0 {
+				t.Fatalf("BuildRuntime() result = %#v, want unusable result", failed)
+			}
+		})
+	}
+	if runner.calls != 0 {
+		t.Fatalf("runner execution calls = %d, want zero", runner.calls)
 	}
 }
 

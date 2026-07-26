@@ -18,6 +18,8 @@ import (
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/construction"
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/execution/recording"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
 	runtimeassemblywire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire"
 	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
@@ -171,24 +173,19 @@ func NewRuntimeWithSelection(
 func newRuntimeAssembly(
 	registry *providerregistry.Registry,
 ) (runtimeassembly.Service, error) {
-	resolveRunner := func(
-		_ context.Context,
-		identity string,
-	) (workers.ResolvedRunnerSelection, bool, error) {
-		canonical := workers.NormalizeRunnerID(identity)
-		if registry != nil {
-			resolved, err := registry.CanonicalIdentity(canonical)
-			if err != nil {
-				return workers.ResolvedRunnerSelection{}, false, nil
-			}
-			canonical = resolved
-		} else if !workers.IsBuiltInRunnerID(canonical) {
-			return workers.ResolvedRunnerSelection{}, false, nil
-		}
-		return workers.ResolvedRunnerSelection{
-			RunnerID: canonical,
-			Source:   workers.RunnerSelectionSourceFactory,
-		}, true, nil
+	registrations, err := runtimeAssemblyRegistrations(registry)
+	if err != nil {
+		return nil, err
+	}
+	return newRuntimeAssemblyFromRegistrations(registrations)
+}
+
+func newRuntimeAssemblyFromRegistrations(
+	registrations []runners.Registration,
+) (runtimeassembly.Service, error) {
+	runnerRegistry, err := runnerswire.NewService(registrations)
+	if err != nil {
+		return nil, fmt.Errorf("construct Workers Runtime Assembly runner registry: %w", err)
 	}
 	assembleBinding := func(
 		_ context.Context,
@@ -202,7 +199,68 @@ func newRuntimeAssembly(
 			RunnerSelection: selection,
 		}, nil
 	}
-	return runtimeassemblywire.NewService(resolveRunner, assembleBinding)
+	return runtimeassemblywire.NewService(runnerRegistry, assembleBinding)
+}
+
+type runtimeAssemblyRunner struct{}
+
+func (runtimeAssemblyRunner) Execute(
+	context.Context,
+	workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	return workers.RunnerExecutionResult{}, fmt.Errorf(
+		"%w: runtime assembly binding cannot execute",
+		workers.ErrIncompleteRuntimeAssembly,
+	)
+}
+
+func runtimeAssemblyRegistrations(
+	registry *providerregistry.Registry,
+) ([]runners.Registration, error) {
+	implementation := runtimeAssemblyRunner{}
+	if registry != nil {
+		entries := registry.Entries()
+		registrations := make([]runners.Registration, 0, len(entries))
+		for _, entry := range entries {
+			if !entry.Selectable() {
+				continue
+			}
+			metadata, err := registry.RunnerMetadata(string(entry.Identity()))
+			if err != nil {
+				return nil, fmt.Errorf(
+					"construct Workers Runtime Assembly runner metadata %q: %w",
+					entry.Identity(),
+					err,
+				)
+			}
+			registrations = append(registrations, runners.Registration{
+				Identity: metadata.ID,
+				Metadata: metadata,
+				Runner:   implementation,
+			})
+		}
+		return registrations, nil
+	}
+
+	identities := []string{
+		workers.RunnerIDAgy,
+		workers.RunnerIDCodex,
+		workers.RunnerIDCursorCLI,
+		workers.RunnerIDGemini,
+		workers.RunnerIDKiro,
+		workers.RunnerIDOpenCode,
+		workers.RunnerIDPi,
+	}
+	registrations := make([]runners.Registration, 0, len(identities))
+	for _, identity := range identities {
+		metadata, _ := workers.BuiltInRunnerMetadata(identity)
+		registrations = append(registrations, runners.Registration{
+			Identity: identity,
+			Metadata: metadata,
+			Runner:   implementation,
+		})
+	}
+	return registrations, nil
 }
 
 // BuildRuntimeExecutors invokes the concrete Workers implementation selected

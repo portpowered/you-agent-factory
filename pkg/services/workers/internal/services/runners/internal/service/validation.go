@@ -24,24 +24,25 @@ func validateMetadata(metadata workers.RunnerMetadata) error {
 func validateBaselineCapabilities(
 	capabilities []workers.RunnerBaselineCapability,
 ) error {
-	required := map[workers.RunnerBaselineCapability]bool{
+	recognized := map[workers.RunnerBaselineCapability]bool{
 		workers.RunnerBaselineCapabilityPromptSubmission: false,
 		workers.RunnerBaselineCapabilityToolExecution:    false,
 	}
 	for _, capability := range capabilities {
-		seen, recognized := required[capability]
-		if !recognized {
+		seen, known := recognized[capability]
+		if !known {
 			return fmt.Errorf("unknown baseline capability %q", capability)
 		}
 		if seen {
 			return fmt.Errorf("duplicate baseline capability %q", capability)
 		}
-		required[capability] = true
+		recognized[capability] = true
 	}
-	for capability, present := range required {
-		if !present {
-			return fmt.Errorf("missing baseline capability %q", capability)
-		}
+	if !recognized[workers.RunnerBaselineCapabilityPromptSubmission] {
+		return fmt.Errorf(
+			"missing baseline capability %q",
+			workers.RunnerBaselineCapabilityPromptSubmission,
+		)
 	}
 	return nil
 }

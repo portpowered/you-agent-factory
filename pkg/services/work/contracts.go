@@ -575,7 +575,9 @@ func cloneAnySlice(values []any) []any {
 		return nil
 	}
 	clone := make([]any, len(values))
-	copy(clone, values)
+	for index, value := range values {
+		clone[index] = cloneAnyValue(value)
+	}
 	return clone
 }
 
@@ -617,9 +619,28 @@ func cloneAnyMap(values map[string]any) map[string]any {
 	}
 	clone := make(map[string]any, len(values))
 	for key, value := range values {
-		clone[key] = value
+		clone[key] = cloneAnyValue(value)
 	}
 	return clone
+}
+
+func cloneAnyValue(value any) any {
+	switch typed := value.(type) {
+	case []any:
+		return cloneAnySlice(typed)
+	case map[string]any:
+		return cloneAnyMap(typed)
+	case []string:
+		return append([]string(nil), typed...)
+	case []byte:
+		return append([]byte(nil), typed...)
+	case map[string]string:
+		return cloneStringMap(typed)
+	case map[string][]string:
+		return cloneStringSliceMap(typed)
+	default:
+		return value
+	}
 }
 
 func cloneStringMap(values map[string]string) map[string]string {

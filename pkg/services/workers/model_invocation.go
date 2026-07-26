@@ -43,9 +43,10 @@ type RuntimeBuildRoleRequest struct {
 // RuntimeBuildRequest is the plain Workers-owned runtime-build input covering
 // execution selection and role-assembly facts peers need.
 type RuntimeBuildRequest struct {
-	RunnerID string
-	Opening  RuntimeBuildOpeningOptions
-	Roles    []RuntimeBuildRoleRequest
+	RunnerID                   string
+	RequiredRunnerCapabilities []RunnerOptionalCapability
+	Opening                    RuntimeBuildOpeningOptions
+	Roles                      []RuntimeBuildRoleRequest
 }
 
 // AssembledRuntimeBinding is one detached immutable role/binding fact peers

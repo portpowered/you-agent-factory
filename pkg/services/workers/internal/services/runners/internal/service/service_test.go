@@ -97,6 +97,32 @@ func TestNewSnapshotsCallerOwnedRegistrationMetadata(t *testing.T) {
 	}
 }
 
+func TestNewAcceptsPromptOnlyRunnerMetadata(t *testing.T) {
+	input := registration(workers.RunnerIDCodex, "Prompt only", &runnerSpy{})
+	input.Metadata.Capabilities.Baseline = []workers.RunnerBaselineCapability{
+		workers.RunnerBaselineCapabilityPromptSubmission,
+	}
+	registry, err := New([]runners.Registration{input})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	binding, err := registry.Resolve(runners.ResolutionRequest{
+		Identity: workers.RunnerIDCodex,
+	})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if !reflect.DeepEqual(
+		binding.Metadata.Capabilities.Baseline,
+		input.Metadata.Capabilities.Baseline,
+	) {
+		t.Fatalf(
+			"Resolve() baseline = %#v, want prompt-only metadata",
+			binding.Metadata.Capabilities.Baseline,
+		)
+	}
+}
+
 func TestNewRejectsInvalidRegistryAtomically(t *testing.T) {
 	var typedNil *runnerSpy
 	valid := registration(workers.RunnerIDCodex, "Codex", &runnerSpy{})
@@ -192,6 +218,28 @@ func TestNewRejectsInvalidRegistryAtomically(t *testing.T) {
 				t.Fatalf("New() registry = %#v, want nil after atomic rejection", registry)
 			}
 		})
+	}
+}
+
+func TestNewRejectsMissingPromptBaseline(t *testing.T) {
+	registry, err := New([]runners.Registration{{
+		Identity: workers.RunnerIDCodex,
+		Metadata: workers.RunnerMetadata{
+			ID:          workers.RunnerIDCodex,
+			DisplayName: "Codex",
+			Capabilities: workers.RunnerCapabilities{
+				Baseline: []workers.RunnerBaselineCapability{
+					workers.RunnerBaselineCapabilityToolExecution,
+				},
+			},
+		},
+		Runner: &runnerSpy{},
+	}})
+	if !errors.Is(err, workers.ErrInvalidRunnerRegistration) {
+		t.Fatalf("New() error = %v, want invalid registration", err)
+	}
+	if registry != nil {
+		t.Fatalf("New() registry = %#v, want nil after atomic rejection", registry)
 	}
 }
 

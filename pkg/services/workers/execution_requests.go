@@ -208,7 +208,34 @@ func cloneAnySlice(values []any) []any {
 	if len(values) == 0 {
 		return nil
 	}
-	return append([]any(nil), values...)
+	clone := make([]any, len(values))
+	for index, value := range values {
+		clone[index] = cloneAnyValue(value)
+	}
+	return clone
+}
+
+func cloneAnyValue(value any) any {
+	switch typed := value.(type) {
+	case []any:
+		return cloneAnySlice(typed)
+	case map[string]any:
+		clone := make(map[string]any, len(typed))
+		for key, nested := range typed {
+			clone[key] = cloneAnyValue(nested)
+		}
+		return clone
+	case []string:
+		return append([]string(nil), typed...)
+	case []byte:
+		return append([]byte(nil), typed...)
+	case map[string]string:
+		return cloneStringMap(typed)
+	case map[string][]string:
+		return cloneStringSliceMap(typed)
+	default:
+		return value
+	}
 }
 
 func cloneStringMap(values map[string]string) map[string]string {
