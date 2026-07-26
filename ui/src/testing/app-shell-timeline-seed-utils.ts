@@ -90,27 +90,3 @@ export function seedTimelineSnapshot(
     },
   });
 }
-
-export function seedTimelineSnapshots(snapshots: DashboardSnapshot[]): void {
-  const worldViewCache = Object.fromEntries(
-    snapshots.map(
-      (snapshot) =>
-        [
-          snapshot.tick_count,
-          timelineSnapshot(snapshot) satisfies WorldState,
-        ] as const,
-    ),
-  );
-  const latestTick = Math.max(
-    ...snapshots.map((snapshot) => snapshot.tick_count),
-  );
-
-  seedTimelineState({
-    events: [],
-    latestTick,
-    mode: "current",
-    receivedEventIDs: [],
-    selectedTick: latestTick,
-    worldViewCache,
-  });
-}
