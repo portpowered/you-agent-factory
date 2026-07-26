@@ -498,6 +498,7 @@ tests/functional/
   observability/
     logging/
     metrics/
+    coverage/            # Make/CI functional coverage + viz contract smokes
   product/
     docs/
     dashboard/
@@ -559,7 +560,7 @@ we have these as many as possible since they test system flows the best.
 | Functional tests do not import service implementations, Wire, Initializer, runtime scopes, replay projections, or internal orchestration. | `functionalboundarycheck` plus `pkgboundarycheck` test/import rules. | **Partial** | The forbidden import lists are explicit. Apply the generic service-owner rule and permit only root contracts, edges, and generated public clients. |
 | Functional tests use `tests/functional/<domain>/<subsection>/...` under approved domain nouns and have a durable domain owner. | `make pkg-structure` rejects new shallow, catch-all, and unclassified Go sources and records existing nonconforming paths as exact deletion-only debt. | **Enforced** | Burn down the baseline by moving each source to its owning domain/subsection; `internal/support` is the only shared harness exception. |
 | `tests/functional/runtime_api` receives no new files or scenarios and converges to deletion. | `make pkg-structure` records both the exact Go-file inventory and exact `Test*` scenario inventory. | **Enforced** | Move files and scenarios to domain/subsection owners and delete stale baseline entries. |
-| `functional-boundary-check` is merge-blocking. | `make test-functional` runs it. The CI functional coverage lane does not call that Make target directly. | **Missing** | Add it to `make verify-lint` or invoke it from the required CI functional coverage path. |
+| `functional-boundary-check` is merge-blocking. | `make test-functional` and `make test-functional-coverage` both run it. Required CI Backend Functional Coverage invokes `make functional-test-viz`, which nests `test-functional-coverage`, so the lane cannot succeed without the boundary check. | **Enforced** | Keep the prerequisite on `test-functional-coverage`; do not let CI call bare `gocoveragecheck` for the functional lane. |
 
 # integration tests
 

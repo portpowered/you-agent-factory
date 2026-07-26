@@ -8,8 +8,9 @@
 - Ordinary unit and package-integration lane: `make test-unit`
 - Stress lane: `make test-stress`
 - Release-package lane: `make test-release`
-- Independent functional coverage report: `make test-functional-coverage`
+- Independent functional coverage report: `make test-functional-coverage` (runs `functional-boundary-check` first; coverage-only local rerun)
 - Independent backend unit coverage report: `make test-unit-coverage`
+- Inventory-plus-coverage Markdown catalog (boundary → one coverage run → viz): `make functional-test-viz` (fail-closed; keeps already-written `.artifacts/functional-test-viz/` diagnostics on later-step failure). Required CI Backend Functional Coverage runs this target with `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage` and uploads `functional-tests.md`, `coverage-summary.json`, `coverage.out`, and `command.log` on success and failure when present. Wiring is covered by stubbed/dry-run Make contract smoke under `tests/functional/observability/coverage/functional_test_viz_contract_test.go` (does not run the full functional suite).
 - Built-CLI S24 acceptance lane (also run by `make verify-pr`): `make test-built-cli-acceptance`
 - Opt-in long lane: `make test-functional-long`
 - Real local-inference lane: `make long-tests`

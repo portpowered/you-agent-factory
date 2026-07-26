@@ -69,15 +69,18 @@ test("production pull request command reaches only exact-head dry-run", async ()
 	assert.deepEqual(subject.calls.publish, []);
 });
 
-test("failed prerequisites block every production action before side effects", async () => {
-	for (const action of Object.values(DEVELOPMENT_PACKAGE_ACTIONS)) {
+test("dry-run and candidate preparation do not wait for prerequisites", async () => {
+	for (const action of [
+		DEVELOPMENT_PACKAGE_ACTIONS.DRY_RUN,
+		DEVELOPMENT_PACKAGE_ACTIONS.PREPARE_MAIN,
+	]) {
 		const subject = fixture({
 			action,
 			eventName:
 				action === DEVELOPMENT_PACKAGE_ACTIONS.DRY_RUN
 					? "pull_request"
 					: "push",
-			prerequisiteResult: "failure",
+			prerequisiteResult: undefined,
 			pullRequestHeadSha:
 				action === DEVELOPMENT_PACKAGE_ACTIONS.DRY_RUN
 					? sourceCommit
@@ -87,12 +90,30 @@ test("failed prerequisites block every production action before side effects", a
 					? "refs/pull/1160/merge"
 					: "refs/heads/main",
 		});
-		await assert.rejects(
-			executeDevelopmentPackageCommand(subject.input, subject.dependencies),
-			/not allowed for outcome PREREQUISITES_BLOCKED/,
+		await executeDevelopmentPackageCommand(subject.input, subject.dependencies);
+		assert.equal(
+			action === DEVELOPMENT_PACKAGE_ACTIONS.DRY_RUN
+				? subject.calls.dryRun.length
+				: subject.calls.prepare.length,
+			1,
 		);
-		assert.deepEqual(subject.calls, { dryRun: [], prepare: [], publish: [] });
+		assert.deepEqual(subject.calls.publish, []);
 	}
+});
+
+test("failed prerequisites block publishing before side effects", async () => {
+	const subject = fixture({
+		action: DEVELOPMENT_PACKAGE_ACTIONS.PUBLISH_MAIN,
+		eventName: "push",
+		prerequisiteResult: "failure",
+		pullRequestHeadSha: undefined,
+		ref: "refs/heads/main",
+	});
+	await assert.rejects(
+		executeDevelopmentPackageCommand(subject.input, subject.dependencies),
+		/not allowed for outcome PREREQUISITES_BLOCKED/,
+	);
+	assert.deepEqual(subject.calls, { dryRun: [], prepare: [], publish: [] });
 });
 
 test("production protected-main commands prepare once and publish the preserved directory", async () => {
