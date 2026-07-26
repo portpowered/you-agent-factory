@@ -64,6 +64,10 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	factoryNamesOperation := provideFactoryNameCompletionOperation(effectiveCatalogService)
+	selectedFactorySignatureOperation, err := provideSelectedFactorySignatureCompletionOperation(effectiveCatalogService)
+	if err != nil {
+		return nil, err
+	}
 	namedFactoryRootsResolver := provideNamedFactoryRootsResolver()
 	namedFactoryCandidatePathsResolver := provideNamedFactoryCandidatePathsResolver(namedPathResolver)
 	v3 := provideCurrentFactoryDirectoryResolver(namedPathResolver)
@@ -445,6 +449,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ObserveCLI:                        cliObserver,
 		NamedFactoryCatalog:               v,
 		CompleteFactoryNames:              factoryNamesOperation,
+		CompleteSelectedFactorySignature:  selectedFactorySignatureOperation,
 		ResolveNamedFactoryRoots:          namedFactoryRootsResolver,
 		ResolveNamedFactoryCandidatePaths: namedFactoryCandidatePathsResolver,
 		ResolveCurrentFactoryDir:          v3,
@@ -724,6 +729,7 @@ var cliCommandOperationsSet = wire2.NewSet(
 	provideCurrentFactoryPointerReader,
 	provideListFactoriesOperation,
 	provideFactoryNameCompletionOperation,
+	provideSelectedFactorySignatureCompletionOperation,
 	provideValidateFactoryOperation,
 	provideCreateFactoryFromFileOperation,
 	provideReplaceFactoryCurrentOperation,

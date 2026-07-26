@@ -88,12 +88,12 @@ type MoveWorkOperation func(workcli.MoveConfig) error
 type VisualizeWorkOperation func(workcli.VisualizeConfig) error
 type NamedFactoryRootsResolver func(homeDir, workingDir string) (interfaces.NamedFactoryRoots, error)
 
-// CommandOperations is the complete inert CLI operation graph assembled by
-// Wire. No transport constructor selects implementations for missing fields.
+// CommandOperations is the complete inert CLI operation graph assembled by Wire.
 type CommandOperations struct {
 	ObserveCLI                        platformprocess.CLIObserver
 	NamedFactoryCatalog               interfaces.NamedFactoryCatalog
 	CompleteFactoryNames              cobracompletion.FactoryNamesOperation
+	CompleteSelectedFactorySignature  cobracompletion.SelectedFactorySignatureOperation
 	ResolveNamedFactoryRoots          NamedFactoryRootsResolver
 	ResolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver
 	ResolveCurrentFactoryDir          interfaces.CurrentFactoryDirectoryResolver
@@ -137,9 +137,8 @@ type CommandOperations struct {
 	OpenRunSelection                  runcli.SelectionFactory
 }
 
-// CommandFactory constructs a fresh Cobra tree for each process invocation.
-// Its fields are immutable command entrypoints supplied by Wire, not a second
-// service graph. NewCommand adds only invocation-local process edges.
+// CommandFactory constructs a fresh Cobra tree for each invocation from
+// immutable Wire-supplied entrypoints and invocation-local process edges.
 type CommandFactory struct {
 	observeCLI                        platformprocess.CLIObserver
 	homeDir                           func() (string, error)
@@ -147,6 +146,7 @@ type CommandFactory struct {
 	initializer                       startupcli.Initializer
 	namedFactoryCatalog               interfaces.NamedFactoryCatalog
 	completeFactoryNames              cobracompletion.FactoryNamesOperation
+	completeSelectedFactorySignature  cobracompletion.SelectedFactorySignatureOperation
 	resolveNamedFactoryRoots          NamedFactoryRootsResolver
 	resolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver
 	resolveCurrentFactoryDir          interfaces.CurrentFactoryDirectoryResolver
@@ -191,13 +191,13 @@ type CommandFactory struct {
 	openRunSelection      runcli.SelectionFactory
 }
 
-// NewCommandFactory copies the complete Wire-built operation graph without
-// selecting implementations or installing defaults.
+// NewCommandFactory copies the Wire-built graph without installing defaults.
 func NewCommandFactory(operations CommandOperations) CommandFactory {
 	return CommandFactory{
 		observeCLI:                        operations.ObserveCLI,
 		namedFactoryCatalog:               operations.NamedFactoryCatalog,
 		completeFactoryNames:              operations.CompleteFactoryNames,
+		completeSelectedFactorySignature:  operations.CompleteSelectedFactorySignature,
 		resolveNamedFactoryRoots:          operations.ResolveNamedFactoryRoots,
 		resolveNamedFactoryCandidatePaths: operations.ResolveNamedFactoryCandidatePaths,
 		resolveCurrentFactoryDir:          operations.ResolveCurrentFactoryDir,

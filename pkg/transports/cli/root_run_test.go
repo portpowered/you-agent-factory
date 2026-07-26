@@ -100,6 +100,83 @@ func TestRunCanonicalNamedFlagRegistersFactoryNameCompletion(t *testing.T) {
 	}
 }
 
+func TestRunCanonicalNamedSelectionCompletesSignatureInputs(t *testing.T) {
+	var gotRequest cobracompletion.SelectedFactorySignatureRequest
+	options := CommandFactory{
+		homeDir: func() (string, error) { return "customer-home", nil },
+		resolveNamedFactoryRoots: func(home, workingDirectory string) (
+			interfaces.NamedFactoryRoots,
+			error,
+		) {
+			if home != "customer-home" || workingDirectory != "customer-repo" {
+				t.Fatalf("root inputs = (%q, %q)", home, workingDirectory)
+			}
+			return interfaces.NamedFactoryRoots{
+				Project: "project-root",
+				Global:  "global-root",
+			}, nil
+		},
+		completeSelectedFactorySignature: func(
+			_ context.Context,
+			request cobracompletion.SelectedFactorySignatureRequest,
+		) cobracompletion.SelectedFactorySignatureResult {
+			gotRequest = request
+			return cobracompletion.SelectedFactorySignatureResult{
+				Completions: []cobra.Completion{
+					cobra.CompletionWithDesc("--output-format", "output format"),
+				},
+				Directive: cobra.ShellCompDirectiveNoFileComp,
+			}
+		},
+	}
+
+	commands, err := buildRunSubmitProductionCommands(
+		&cliGlobalOptions{},
+		&cliDiagnosticsOptions{},
+		&cliOperatorDefaultsOptions{},
+		options,
+	)
+	if err != nil {
+		t.Fatalf("buildRunSubmitProductionCommands() error = %v", err)
+	}
+	commands.Run.SetContext(startupcli.WithWorkingDirectory(t.Context(), "customer-repo"))
+
+	got, directive := commands.Run.ValidArgsFunction(
+		commands.Run,
+		[]string{"--named", "alpha"},
+		"--out",
+	)
+	want := []cobra.Completion{
+		cobra.CompletionWithDesc("--output-format", "output format"),
+	}
+	if !reflect.DeepEqual(got, want) ||
+		directive != cobra.ShellCompDirectiveNoFileComp {
+		t.Fatalf("completion = (%#v, %v), want (%#v, no-file)", got, directive, want)
+	}
+	if gotRequest.ProjectRoot != "project-root" ||
+		gotRequest.GlobalRoot != "global-root" ||
+		gotRequest.FactoryName != "alpha" ||
+		gotRequest.Target != "flags" ||
+		gotRequest.EnteredPrefix != "--out" {
+		t.Fatalf("completion request = %#v", gotRequest)
+	}
+
+	var output bytes.Buffer
+	root := &cobra.Command{Use: "you"}
+	root.SetOut(&output)
+	root.SetErr(io.Discard)
+	root.SetContext(startupcli.WithWorkingDirectory(t.Context(), "customer-repo"))
+	root.AddCommand(commands.Run)
+	root.SetArgs([]string{"__complete", "run", "--named", "alpha", "--out"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute Cobra completion protocol: %v", err)
+	}
+	if !strings.Contains(output.String(), "--output-format\toutput format") ||
+		!strings.Contains(output.String(), ":4") {
+		t.Fatalf("Cobra completion output = %q", output.String())
+	}
+}
+
 // Legacy mutable delegates remain test-only while older command tests migrate
 // to CommandFactory. Production command construction has no mutable
 // package-level service bindings.

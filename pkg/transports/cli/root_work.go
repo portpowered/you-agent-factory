@@ -389,39 +389,49 @@ func buildRunSubmitProductionCommands(
 	if err := registerSelectedFactoryNameCompletion(components.Run, options); err != nil {
 		return runSubmitProductionCommands{}, err
 	}
+	if err := registerSelectedFactorySignatureCompletion(components.Run, options); err != nil {
+		return runSubmitProductionCommands{}, err
+	}
 	return runSubmitProductionCommands{Run: components.Run, Submit: components.Submit}, nil
 }
 
 func registerSelectedFactoryNameCompletion(run *cobra.Command, options CommandFactory) error {
 	return cobracompletion.RegisterFactoryNames(
-		run,
-		options.completeFactoryNames,
-		func(cmd *cobra.Command, enteredPrefix string) (
-			cobracompletion.FactoryNamesRequest,
-			bool,
-		) {
-			if cmd == nil || options.resolveNamedFactoryRoots == nil {
-				return cobracompletion.FactoryNamesRequest{}, false
-			}
-			workingDirectory := startupcli.WorkingDirectory(cmd.Context())
-			if strings.TrimSpace(workingDirectory) == "" {
-				return cobracompletion.FactoryNamesRequest{}, false
-			}
-			home, err := resolveProcessHomeDir(options)
-			if err != nil {
-				return cobracompletion.FactoryNamesRequest{}, false
-			}
-			roots, err := options.resolveNamedFactoryRoots(home, workingDirectory)
-			if err != nil {
-				return cobracompletion.FactoryNamesRequest{}, false
-			}
-			return cobracompletion.FactoryNamesRequest{
-				ProjectRoot:   roots.Project,
-				GlobalRoot:    roots.Global,
-				EnteredPrefix: enteredPrefix,
-			}, true
-		},
+		run, options.completeFactoryNames, selectedFactoryCompletionRootsResolver(options),
 	)
+}
+
+func registerSelectedFactorySignatureCompletion(run *cobra.Command, options CommandFactory) error {
+	return cobracompletion.RegisterSelectedFactorySignature(
+		run,
+		options.completeSelectedFactorySignature,
+		selectedFactoryCompletionRootsResolver(options),
+	)
+}
+
+func selectedFactoryCompletionRootsResolver(options CommandFactory) cobracompletion.FactoryNamesRequestResolver {
+	return func(cmd *cobra.Command, enteredPrefix string) (cobracompletion.FactoryNamesRequest, bool) {
+		if cmd == nil || options.resolveNamedFactoryRoots == nil {
+			return cobracompletion.FactoryNamesRequest{}, false
+		}
+		workingDirectory := startupcli.WorkingDirectory(cmd.Context())
+		if strings.TrimSpace(workingDirectory) == "" {
+			return cobracompletion.FactoryNamesRequest{}, false
+		}
+		home, err := resolveProcessHomeDir(options)
+		if err != nil {
+			return cobracompletion.FactoryNamesRequest{}, false
+		}
+		roots, err := options.resolveNamedFactoryRoots(home, workingDirectory)
+		if err != nil {
+			return cobracompletion.FactoryNamesRequest{}, false
+		}
+		return cobracompletion.FactoryNamesRequest{
+			ProjectRoot:   roots.Project,
+			GlobalRoot:    roots.Global,
+			EnteredPrefix: enteredPrefix,
+		}, true
+	}
 }
 
 func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions CommandFactory) *cobra.Command {

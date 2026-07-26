@@ -156,5 +156,5 @@ func factoryNameValueRequest(
 }
 
 func factoryNameFailure() ([]cobra.Completion, cobra.ShellCompDirective) {
-	return nil, cobra.ShellCompDirectiveError | cobra.ShellCompDirectiveNoFileComp
+	return nil, factoryNameFailureDirective()
 }
