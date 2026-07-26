@@ -82,11 +82,15 @@ fi
 source %s
 function you { %s "$@"; }
 
+COMP_LINE='you run --named shell-fi'
+COMP_POINT=${#COMP_LINE}
 COMP_WORDS=(you run --named shell-fi)
 COMP_CWORD=3
 __start_you
 printf 'factory=%%s\n' "${COMPREPLY[@]}"
 
+COMP_LINE='you run --named shell-fixture --mode j'
+COMP_POINT=${#COMP_LINE}
 COMP_WORDS=(you run --named shell-fixture --mode j)
 COMP_CWORD=5
 __start_you
