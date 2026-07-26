@@ -326,12 +326,18 @@ export function formatPhaseElapsed(phaseName, elapsedMs) {
   return `${phaseLogPrefix} ${phaseName} elapsed: ${formatElapsedMs(elapsedMs)}`;
 }
 
-export function cleanCoverageArtifacts() {
-  rmSync("coverage", { force: true, recursive: true });
-  rmSync(".vitest-reports", { force: true, recursive: true });
-  rmSync(defaultTimingReportsDir, { force: true, recursive: true });
-  mkdirSync("coverage/.tmp", { recursive: true });
-  mkdirSync(".vitest-reports", { recursive: true });
+export function cleanCoverageArtifacts(rootDirectory = ".") {
+  const coverageDirectory = join(rootDirectory, "coverage");
+  const reportsDirectory = join(rootDirectory, ".vitest-reports");
+
+  rmSync(coverageDirectory, { force: true, recursive: true });
+  rmSync(reportsDirectory, { force: true, recursive: true });
+  rmSync(join(rootDirectory, defaultTimingReportsDir), {
+    force: true,
+    recursive: true,
+  });
+  mkdirSync(join(coverageDirectory, ".tmp"), { recursive: true });
+  mkdirSync(reportsDirectory, { recursive: true });
 }
 
 export function runTimedPhase(phase, spawn = spawnSync, options = {}) {
