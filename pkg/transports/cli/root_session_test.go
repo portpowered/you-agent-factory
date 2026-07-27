@@ -1009,6 +1009,74 @@ func TestSessionDataCommandsPreserveBehaviorThroughProductionComposition(t *test
 	}
 }
 
+func TestSessionLifecycleCommandsPreserveBehaviorThroughProductionComposition(t *testing.T) {
+	t.Parallel()
+
+	operationFailure := errors.New("session lifecycle operation failed")
+	tests := []struct {
+		name       string
+		args       []string
+		wantError  error
+		operations func(*testing.T, error) CommandOperations
+	}{
+		{
+			name: "pause default compatibility session",
+			args: []string{
+				"--verbose", "--json", "--server", "https://factory.example",
+				"session", "pause",
+			},
+			wantError: operationFailure,
+			operations: func(t *testing.T, result error) CommandOperations {
+				return CommandOperations{PauseSession: func(cfg session.LifecycleControlConfig) error {
+					if cfg.Context == nil || cfg.Server != "https://factory.example" ||
+						cfg.SessionID != "" || !cfg.JSON || !cfg.Verbose {
+						t.Fatalf("pause config = %#v", cfg)
+					}
+					return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+				}}
+			},
+		},
+		{
+			name: "resume named session",
+			args: []string{
+				"--verbose", "--json", "--server", "https://factory.example",
+				"session", "resume", "session-beta",
+			},
+			wantError: context.Canceled,
+			operations: func(t *testing.T, result error) CommandOperations {
+				return CommandOperations{ResumeSession: func(cfg session.LifecycleControlConfig) error {
+					if cfg.Context == nil || cfg.Server != "https://factory.example" ||
+						cfg.SessionID != "session-beta" || !cfg.JSON || !cfg.Verbose {
+						t.Fatalf("resume config = %#v", cfg)
+					}
+					return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+				}}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name+" success", func(t *testing.T) {
+			stdout, stderr, err := executeSessionComposition(t, test.operations(t, nil), test.args)
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if stdout != "session-ok\n" || stderr != "session-diagnostic\n" {
+				t.Fatalf("stdout = %q, stderr = %q", stdout, stderr)
+			}
+		})
+		t.Run(test.name+" failure", func(t *testing.T) {
+			stdout, stderr, err := executeSessionComposition(t, test.operations(t, test.wantError), test.args)
+			if !errors.Is(err, test.wantError) {
+				t.Fatalf("Execute() error = %v, want %v", err, test.wantError)
+			}
+			if stdout != "" || stderr != fmt.Sprintf("Error: %v\n", test.wantError) {
+				t.Fatalf("failure stdout = %q, stderr = %q", stdout, stderr)
+			}
+		})
+	}
+}
+
 func executeSessionComposition(
 	t *testing.T,
 	operations CommandOperations,
