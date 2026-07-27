@@ -13,7 +13,105 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func TestRunnerReturnsHandledModelsSuccessContent(t *testing.T) {
+func TestRunnerDelegatesToCompositionWhenModelsDeclines(t *testing.T) {
+	modelsEdge := &captureModelsService{
+		result: models.LocalInvocationResult{Handled: false},
+	}
+	delegate := &captureDelegateRunner{
+		result: workers.RunnerExecutionResult{Content: "provider output"},
+	}
+	inferenceRunner, err := New(validConfig(), Dependencies{
+		Models:   modelsEdge,
+		Delegate: delegate,
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	request := validRequest()
+	result, err := inferenceRunner.Execute(t.Context(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Content != "provider output" {
+		t.Fatalf("result content = %q, want delegate-owned output", result.Content)
+	}
+	if modelsEdge.Calls() != 1 {
+		t.Fatalf("Models calls = %d, want 1", modelsEdge.Calls())
+	}
+	if delegate.Calls() != 1 {
+		t.Fatalf("delegate calls = %d, want 1", delegate.Calls())
+	}
+	if delegate.Request().ModelOperation != request.ModelOperation {
+		t.Fatalf("delegate request = %#v, want cloned runner request", delegate.Request())
+	}
+}
+
+func TestRunnerRejectsInvalidBindingsBeforeModelsInvocation(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*workers.RunnerExecutionRequest)
+	}{
+		{
+			name: "empty binding slot",
+			mutate: func(request *workers.RunnerExecutionRequest) {
+				request.ModelBindings[0].Slot = ""
+			},
+		},
+		{
+			name: "invalid binding source",
+			mutate: func(request *workers.RunnerExecutionRequest) {
+				request.ModelBindings[0].Source = "UNKNOWN"
+			},
+		},
+		{
+			name: "whitespace binding slot",
+			mutate: func(request *workers.RunnerExecutionRequest) {
+				request.ModelBindings[0].Slot = "   "
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			modelsEdge := &captureModelsService{}
+			inferenceRunner := newTestRunner(t, modelsEdge)
+			request := validRequest()
+			test.mutate(&request)
+			_, err := inferenceRunner.Execute(t.Context(), request)
+			assertFailureType(t, err, workers.WorkFailureTypePermanentBadRequest)
+			if modelsEdge.Calls() != 0 {
+				t.Fatalf("Models calls = %d, want 0 before validation rejection", modelsEdge.Calls())
+			}
+		})
+	}
+}
+
+func TestRunnerNormalizesUnavailableModelReadinessFailure(t *testing.T) {
+	readinessErr := &models.InvocationError{
+		Identity:       "WHISPER",
+		ReadinessState: models.ReadinessStateMissing,
+		Cause:          models.ErrMissing,
+	}
+	modelsEdge := &captureModelsService{
+		result: models.LocalInvocationResult{Handled: true},
+		err:    readinessErr,
+	}
+	inferenceRunner := newTestRunner(t, modelsEdge)
+
+	_, err := inferenceRunner.Execute(t.Context(), validRequest())
+	failure, ok := workers.AsInferenceFailure(err)
+	if !ok || failure.Class != workers.InferenceFailureClassMissingModel {
+		t.Fatalf("Execute() error = %#v, want missing-model InferenceFailure", err)
+	}
+	if !errors.Is(err, models.ErrMissing) {
+		t.Fatalf("Execute() error = %v, want Models ErrMissing cause", err)
+	}
+	if modelsEdge.Calls() != 1 {
+		t.Fatalf("Models calls = %d, want 1", modelsEdge.Calls())
+	}
+}
+
+func TestRunnerPreservesHandledModelsSuccessContent(t *testing.T) {
 	modelsEdge := &captureModelsService{
 		result: models.LocalInvocationResult{Handled: true, Content: "  model output  "},
 	}
@@ -401,4 +499,35 @@ func assertFailureType(t *testing.T, err error, want workers.WorkFailureType) {
 	if !errors.As(err, &failure) || failure.Type != want {
 		t.Fatalf("error = %#v, want ProviderError type %q", err, want)
 	}
+}
+
+type captureDelegateRunner struct {
+	mu      sync.Mutex
+	request workers.RunnerExecutionRequest
+	result  workers.RunnerExecutionResult
+	err     error
+	calls   int
+}
+
+func (runner *captureDelegateRunner) Execute(
+	_ context.Context,
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	runner.calls++
+	runner.request = workers.CloneProviderInferenceRequest(request)
+	return runner.result, runner.err
+}
+
+func (runner *captureDelegateRunner) Calls() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.calls
+}
+
+func (runner *captureDelegateRunner) Request() workers.RunnerExecutionRequest {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return workers.CloneProviderInferenceRequest(runner.request)
 }
