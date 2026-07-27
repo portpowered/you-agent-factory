@@ -49,7 +49,12 @@ func InputValues(cmd *cobra.Command) (map[string]any, error) {
 		}
 		getter, ok := flag.Value.(interface{ Get() any })
 		if !ok {
-			return nil, fmt.Errorf("read generic command input %q: flag %q has no typed value", inputID, longName)
+			value, err := parseGenericFlagString(flag.Value.Type(), flag.Value.String())
+			if err != nil {
+				return nil, fmt.Errorf("read generic command input %q: parse flag %q value: %w", inputID, longName, err)
+			}
+			values[inputID] = cloneGenericInputValue(value)
+			continue
 		}
 		values[inputID] = cloneGenericInputValue(getter.Get())
 	}
@@ -856,7 +861,10 @@ func parseArgumentValues(argument climanifest.Argument, raw []string) (any, erro
 		if err != nil {
 			return nil, fmt.Errorf("value %q: %w", item, err)
 		}
-		if err := validateArgumentCandidate(argument, value); err != nil {
+		// Positional enums project completion choices but do not replace the
+		// operation's established invalid-value diagnostic. This matches
+		// Cobra's ValidArgs behavior while patterns remain parser constraints.
+		if err := validateArgumentPattern(argument, value); err != nil {
 			return nil, err
 		}
 		values[index] = value
@@ -871,6 +879,10 @@ func validateArgumentCandidate(argument climanifest.Argument, value any) error {
 	if err := validateGenericChoice(stringChoiceSet(argument.Enum), value); err != nil {
 		return err
 	}
+	return validateArgumentPattern(argument, value)
+}
+
+func validateArgumentPattern(argument climanifest.Argument, value any) error {
 	if argument.Pattern == "" {
 		return nil
 	}

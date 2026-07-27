@@ -6,10 +6,14 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/construction"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
+	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
+	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
@@ -81,7 +85,12 @@ func (s *Service) WithCommandRunners(providerRunner, scriptRunner workers.Comman
 		clone.scriptCommandRunner = scriptRunner
 		clone.scriptCommandInjected = true
 	}
-	clone.executorBuilder = workerconstruction.New(
+	// Each opened Factory Runtime owns an independent workstation lifecycle.
+	// Sharing the process-level pool would couple route admission, cancellation,
+	// and terminal stop state across otherwise separate Factory Sessions.
+	clone.workstations = workstationswire.NewService()
+	clone.executorBuilder = rebuildExecutorBuilder(
+		s.executorBuilder,
 		clone.providerFactory,
 		clone.scriptFactory,
 		clone.interpolation,
@@ -94,6 +103,36 @@ func (s *Service) WithCommandRunners(providerRunner, scriptRunner workers.Comman
 		clone.decisionEnvelopes,
 	)
 	return &clone, nil
+}
+
+func rebuildExecutorBuilder(
+	current workerconstruction.Builder,
+	providerFactory *workerprovider.Factory,
+	scriptFactory *workerexecutor.ScriptFactory,
+	interpolation factorydefinitions.InvocationInterpolationService,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	factoryDocs workers.FactoryDocsLoader,
+	worktreePreparer workers.FactoryWorktreePreparer,
+	agentRunHarness workeragentrun.HarnessAdapter,
+	retryRandom platformrandom.Source,
+	workstationFiles platformfilesystem.ReadFileInspector,
+	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
+) workerconstruction.Builder {
+	if existing, ok := current.(*workerconstruction.Service); ok {
+		return existing.WithExecutionFactories(providerFactory, scriptFactory)
+	}
+	return workerconstruction.New(
+		providerFactory,
+		scriptFactory,
+		interpolation,
+		executionPolicy,
+		factoryDocs,
+		worktreePreparer,
+		agentRunHarness,
+		retryRandom,
+		workstationFiles,
+		decisionEnvelopes,
+	)
 }
 
 // WithProgressPublisher returns a runtime-specific copy that publishes

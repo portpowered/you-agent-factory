@@ -61,6 +61,7 @@ type FactorySessionExecutionFactory = func(
 	factoryruntime.Clock,
 	map[string]struct{},
 	factoryruntime.JavaScriptWorkerSettings,
+	bool,
 ) (factorysessions.ExecutionService, error)
 
 type RecordingsProjectionFactory = func() recordings.ProjectionService
@@ -74,6 +75,7 @@ type ReplayClockFactory = func(*factorydefinitions.ReplayArtifact) recordings.Cl
 type WorkersRuntimeFactory = func(
 	roles.CurrentRuntimeResolver,
 	models.Service,
+	models.RuntimeScopeRef,
 	workers.CommandRunner,
 	workers.CommandRunner,
 	agypty.PTYAllocator,
@@ -122,6 +124,7 @@ type WorkerExecutionFactory func(
 	workerprovider.Provider,
 	roles.CurrentRuntimeResolver,
 	models.Service,
+	models.RuntimeScopeRef,
 	work.ContentMaterializer,
 	WorkersRuntimeFactory,
 ) (workers.RuntimeService, error)

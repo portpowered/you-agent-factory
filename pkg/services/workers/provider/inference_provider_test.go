@@ -24,7 +24,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	cursorpkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor"
 )
 
 // --- NewScriptWrapProvider ---
@@ -680,9 +679,6 @@ func TestScriptWrapProvider_Infer_NonCodexPayloadUsesExpectedCommandRequestAndNo
 	for _, tc := range nonCodexInferencePayloadTestCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			stdout := []byte(strings.ToLower(tc.name) + " output")
-			if tc.req.ModelProvider == string(modelprovider.ProviderCursor) {
-				stdout = cursorpkg.SuccessStdoutJSON(strings.ToLower(tc.name)+" output", "cursor-session-from-json")
-			}
 			fakeExec := &recordingProviderExec{
 				result: CommandResult{Stdout: stdout},
 			}
@@ -721,53 +717,6 @@ type nonCodexInferencePayloadTestCase struct {
 
 func nonCodexInferencePayloadTestCases() []nonCodexInferencePayloadTestCase {
 	return []nonCodexInferencePayloadTestCase{
-		{
-			name: "Gemini",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderGemini),
-				Model:         "gemini-2.5-flash",
-				UserMessage:   "run the tests",
-				EnvVars: map[string]string{
-					"AGENT_FACTORY_GEMINI_ENV": "enabled",
-				},
-			},
-			wantArgs: []string{"--prompt", "run the tests", "--model", "gemini-2.5-flash"},
-			wantEnv:  "AGENT_FACTORY_GEMINI_ENV=enabled",
-		},
-		{
-			name: "Kiro",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderKiro),
-				SystemPrompt:  "You are a careful reviewer.",
-				SessionID:     "kiro-session-123",
-				UserMessage:   "run the tests",
-				EnvVars: map[string]string{
-					"AGENT_FACTORY_KIRO_ENV": "enabled",
-				},
-			},
-			wantArgs: []string{
-				"chat",
-				"--no-interactive",
-				"--resume-id",
-				"kiro-session-123",
-				"System instructions:\nYou are a careful reviewer.\n\nUser request:\nrun the tests",
-			},
-			wantEnv: "AGENT_FACTORY_KIRO_ENV=enabled",
-		},
-		{
-			name: "Cursor",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderCursor),
-				Model:         "gpt-5",
-				SessionID:     "cursor-session-123",
-				UserMessage:   "run the tests",
-				EnvVars: map[string]string{
-					"AGENT_FACTORY_CURSOR_ENV": "enabled",
-				},
-			},
-			wantArgs: []string{"-p", "--model", "gpt-5", "--resume", "cursor-session-123", "--output-format", "stream-json", "--stream-partial-output", "run the tests"},
-			wantEnv:  "AGENT_FACTORY_CURSOR_ENV=enabled",
-		},
 		{
 			name: "OpenCode",
 			req: workerexecution.ProviderInferenceRequest{

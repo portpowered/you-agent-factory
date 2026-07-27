@@ -15,7 +15,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testlanes"
@@ -40,6 +39,7 @@ const defaultPackageCoverageBaselinePath = "docs/internal/baselines/go-coverage-
 const defaultFunctionalPackageCoverageBaselinePath = "docs/internal/baselines/go-functional-coverage-package-baseline.txt"
 const defaultPackageCoverageMin = 80.0
 const defaultCoverageJobs = 2
+const windowsCoveragePackageArgumentLimit = 16_000
 
 var (
 	defaultCoveragePatterns                   = []string{"./pkg/..."}
@@ -354,45 +354,6 @@ func formatCommandLine(name string, args ...string) string {
 	parts = append(parts, name)
 	parts = append(parts, args...)
 	return strings.Join(parts, " ")
-}
-
-func runGoTestCoverageShards(baseArgs []string, testPackages []string, jobs int, profilePath string, repoRoot string, coverPackages []string) error {
-	if jobs < 1 {
-		jobs = 1
-	}
-	if jobs > len(testPackages) {
-		jobs = len(testPackages)
-	}
-	shardDir, err := os.MkdirTemp("", "go-coverage-shards-*")
-	if err != nil {
-		return fmt.Errorf("create go coverage shard directory: %w", err)
-	}
-	defer os.RemoveAll(shardDir)
-
-	shards := make([][]string, jobs)
-	for index, testPackage := range testPackages {
-		shards[index%jobs] = append(shards[index%jobs], testPackage)
-	}
-	profiles := make([]string, jobs)
-	errs := make([]error, jobs)
-	var wait sync.WaitGroup
-	for index, packages := range shards {
-		profiles[index] = filepath.Join(shardDir, fmt.Sprintf("shard-%d.out", index+1))
-		args := append(slices.Clone(baseArgs), fmt.Sprintf("-coverprofile=%s", profiles[index]))
-		args = append(args, packages...)
-		wait.Add(1)
-		go func(index int, args []string) {
-			defer wait.Done()
-			_, _, errs[index] = runGoTestCoverageLane(args, fmt.Sprintf("run go test coverage shard %d/%d", index+1, jobs))
-		}(index, args)
-	}
-	wait.Wait()
-	for _, err := range errs {
-		if err != nil {
-			return err
-		}
-	}
-	return mergeCoverageProfiles(profiles, profilePath, repoRoot, coverPackages)
 }
 
 func mergeGoTestFailureDetail(stderr string, stdout string) string {

@@ -5,16 +5,31 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 )
+
+type rootTestHTTPClock struct{}
+
+func (rootTestHTTPClock) Now() time.Time { return time.Unix(1, 0) }
+
+func rootTestHTTPProtocol() clihttp.Protocol {
+	protocol, err := clihttp.NewProtocol(&http.Client{}, rootTestHTTPClock{})
+	if err != nil {
+		panic(err)
+	}
+	return protocol
+}
 
 func TestSessionCommand_RegistersSubcommands(t *testing.T) {
 	root := newLegacyTestRootCommand()
@@ -820,15 +835,18 @@ func (sessionListRequestPreparation) PrepareEventReconnect(
 	return fse.EventReconnectRequest{}, fmt.Errorf("unexpected PrepareEventReconnect call")
 }
 
-func TestNewRepresentativeHandlerRegistryWiresHandwrittenSessionShow(t *testing.T) {
+func TestNewRepresentativeHandlerRegistryLeavesSessionShowToResolvedRegistry(t *testing.T) {
 	globals := &cliGlobalOptions{}
 	diagnostics := &cliDiagnosticsOptions{}
 	registry, err := newRepresentativeHandlerRegistry(globals, diagnostics, &cliOperatorDefaultsOptions{}, CommandFactory{})
 	if err != nil {
 		t.Fatalf("newRepresentativeHandlerRegistry() error = %v", err)
 	}
-	if _, err := registry.Lookup("you.session.show"); err != nil {
-		t.Fatalf("Lookup(you.session.show) error = %v", err)
+	if _, err := registry.Lookup("you"); err != nil {
+		t.Fatalf("Lookup(you) error = %v", err)
+	}
+	if _, err := registry.Lookup("you.session.show"); err == nil {
+		t.Fatal("Lookup(you.session.show) error = nil, want Session resolved registry ownership")
 	}
 }
 
@@ -850,7 +868,7 @@ func TestProductionRootUsesGeneratedSessionFamilyCutover(t *testing.T) {
 			t.Fatalf("Find(session %s) error = %v", name, findErr)
 		}
 		if command.RunE == nil {
-			t.Fatalf("session %s must attach handwritten RunE through generated cutover", name)
+			t.Fatalf("session %s must attach resolved RunE through generated cutover", name)
 		}
 	}
 	for _, name := range []string{"run", "submit", "factory", "models", "work"} {
@@ -863,11 +881,13 @@ func TestProductionRootUsesGeneratedSessionFamilyCutover(t *testing.T) {
 func TestShowSessionUsesInjectedService(t *testing.T) {
 	called := false
 	root := (CommandFactory{
-		ModelsCLI: legacyModelsCLIService{},
-		ShowSession: func(cfg session.ShowConfig) error {
-			called = true
-			return nil
-		},
+		ModelsCLI: rootModelsCLI,
+		SessionsCLI: session.Bind(session.Operations{
+			Show: func(cfg session.ShowConfig) error {
+				called = true
+				return nil
+			},
+		}),
 	}).NewCommand(nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)

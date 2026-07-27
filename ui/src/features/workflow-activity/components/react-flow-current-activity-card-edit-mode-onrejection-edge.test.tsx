@@ -1,3 +1,5 @@
+import "../../../testing/vitest-dom-capabilities.setup";
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,

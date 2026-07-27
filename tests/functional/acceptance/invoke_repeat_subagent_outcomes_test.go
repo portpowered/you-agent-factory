@@ -206,7 +206,6 @@ func namedGoalJSONRunArgs(session *builtcliacceptance.Session, mockWorkersPath, 
 		"--named", goal.PackagedFactoryName,
 		"--with-mock-workers",
 		"--no-record",
-		"--quiet",
 		mockWorkersPath,
 		goalText,
 	)
@@ -225,7 +224,6 @@ func namedSubagentJSONRunArgs(
 		"--named", factorydefinitions.PackagedSubagentFactoryName,
 		"--with-mock-workers",
 		"--no-record",
-		"--quiet",
 		mockWorkersPath,
 		requestText,
 	)
@@ -258,16 +256,11 @@ func writePackagedSubagentMockWorkersConfig(t *testing.T) string {
 func materializedNamedFactoryDir(t *testing.T, initialized configInitOutcome, factoryName string) string {
 	t.Helper()
 
-	for _, installed := range initialized.PackagedFactories {
-		if installed.Name == factoryName {
-			if strings.TrimSpace(installed.FactoryDir) == "" {
-				t.Fatalf("config init returned empty Factory directory for %q: %#v", factoryName, initialized.PackagedFactories)
-			}
-			return installed.FactoryDir
-		}
+	factoryDir := filepath.Join(initialized.NamedFactoriesRoot, filepath.FromSlash(factoryName))
+	if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
+		t.Fatalf("initializer omitted packaged Factory %q at %s: %v", factoryName, factoryDir, err)
 	}
-	t.Fatalf("config init omitted packaged Factory %q: %#v", factoryName, initialized.PackagedFactories)
-	return ""
+	return factoryDir
 }
 
 func decodeInvocationResponse(t *testing.T, stdout string) factoryapi.InvocationResponse {

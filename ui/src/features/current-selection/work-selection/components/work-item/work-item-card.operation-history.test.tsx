@@ -1,3 +1,5 @@
+import "../../../../../testing/vitest-dom-capabilities.setup";
+
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

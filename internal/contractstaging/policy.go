@@ -40,7 +40,8 @@ var (
 	}
 	rawArtifacts = []RawArtifact{
 		{Source: CanonicalOpenAPIPath, Target: StagedOpenAPIPath},
-		{Source: "contracts/testdata/baseline/cli-commands.json", Target: "packages/api/generated/cli/commands.json"},
+		{Source: "contracts/cli/commands.json", Target: "packages/api/generated/cli/commands.json"},
+		{Source: "contracts/cli/command-manifest.schema.json", Target: "packages/api/generated/cli/command-manifest.schema.json"},
 		{Source: "contracts/testdata/baseline/mcp-tools.json", Target: "packages/api/generated/mcp/tools.json"},
 		{Source: "contracts/config/you-config.schema.json", Target: "packages/api/generated/schemas/you-config.schema.json"},
 		{Source: "contracts/config/mock-workers.schema.json", Target: "packages/api/generated/schemas/mock-workers.schema.json"},
@@ -61,38 +62,6 @@ func JoinInput(repositoryRoot string) contractjoiner.Input {
 // RawArtifacts returns independent copies of the reviewed raw projection map.
 func RawArtifacts() []RawArtifact {
 	return append([]RawArtifact(nil), rawArtifacts...)
-}
-
-// SourceIdentityPaths returns the canonical repository paths whose latest change
-// identifies the package source commit recorded in the publication manifest.
-func SourceIdentityPaths() []string {
-	paths := make([]string, 0, len(joinedRoots)+len(joinedComponents)+len(rawArtifacts)+3)
-	paths = append(paths, joinedRoots...)
-	paths = append(paths, joinedComponents...)
-	for _, artifact := range rawArtifacts {
-		paths = append(paths, artifact.Source)
-	}
-	paths = append(paths,
-		FactorySchemaAuthoredPath,
-		"docs/internal/contract/factory-schema-b16-gaps.json",
-		"internal/contractstaging/factory_schema.go",
-		"internal/contractstaging/factory_schema_b16_gaps.go",
-		"internal/contractstaging/factory_recording_schema.go",
-		"internal/contractstaging/manifest.go",
-		"internal/contractstaging/openapi.go",
-		"internal/contractstaging/policy.go",
-	)
-	sort.Strings(paths)
-	compact := paths[:0]
-	var previous string
-	for _, path := range paths {
-		if path == previous {
-			continue
-		}
-		compact = append(compact, path)
-		previous = path
-	}
-	return compact
 }
 
 // AllowedArtifacts returns the complete reviewed generated artifact set in

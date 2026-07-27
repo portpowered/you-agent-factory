@@ -66,6 +66,25 @@ func TestLoaderFailsClosedWithoutLoadingFileSystem(t *testing.T) {
 	}
 }
 
+func TestLoadRuntimeSourcePreservesCurrentDirectoryResolutionFailure(t *testing.T) {
+	t.Parallel()
+
+	want := errors.New("resolve current Factory")
+	loader := &Loader{
+		resolveCurrentDir: func(string) (string, error) {
+			return "", want
+		},
+	}
+
+	source, err := loader.LoadRuntimeSource("requested-factory", nil)
+	if source != nil {
+		t.Fatalf("loaded source = %#v, want nil", source)
+	}
+	if !errors.Is(err, want) {
+		t.Fatalf("LoadRuntimeSource error = %v, want %v", err, want)
+	}
+}
+
 func TestSourceContextErrorNamesAuthoredFormat(t *testing.T) {
 	t.Parallel()
 

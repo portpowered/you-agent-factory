@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"go.uber.org/zap"
 )
 
@@ -35,6 +36,69 @@ func TestFinalizeArtifacts_RequiresClock(t *testing.T) {
 	err := factoryhost.FinalizeArtifacts(&factoryhost.Bundle{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "clock is required") {
 		t.Fatalf("FinalizeArtifacts() error = %v, want required clock error", err)
+	}
+}
+
+type terminalRecording struct {
+	finalizeCalls int
+	finishedAt    time.Time
+}
+
+func (*terminalRecording) BindRecordingService(
+	recordings.Service,
+	recordings.CanonicalEventScope,
+) error {
+	return nil
+}
+func (*terminalRecording) Start(context.Context)               {}
+func (*terminalRecording) Stop()                               {}
+func (*terminalRecording) RecordEvent(interfaces.FactoryEvent) {}
+func (*terminalRecording) RecordError(error)                   {}
+func (*terminalRecording) Finish(time.Time)                    {}
+func (*terminalRecording) Flush() error                        { return nil }
+func (*terminalRecording) Err() error                          { return nil }
+func (r *terminalRecording) Finalize(finishedAt time.Time) error {
+	r.finalizeCalls++
+	r.finishedAt = finishedAt
+	return nil
+}
+
+var _ recordings.RuntimeRecorder = (*terminalRecording)(nil)
+
+func TestStopDelegatesEveryRuntimeOutcomeToRecordingFinalization(t *testing.T) {
+	t.Parallel()
+
+	finishedAt := time.Date(2026, 7, 27, 19, 0, 0, 0, time.UTC)
+	tests := map[string]error{
+		"normal completion":   nil,
+		"caller cancellation": context.Canceled,
+		"runtime crash":       errors.New("runtime crashed"),
+	}
+	for name, runErr := range tests {
+		t.Run(name, func(t *testing.T) {
+			recording := &terminalRecording{}
+			handle := &factoryhost.Handle{
+				Bundle:  &factoryhost.Bundle{Recording: recording},
+				RunDone: make(chan struct{}),
+			}
+			handle.SetRunResult(runErr)
+
+			err := factoryhost.Stop(handle, clockwork.NewFakeClockAt(finishedAt))
+			if runErr != nil && !errors.Is(err, runErr) {
+				t.Fatalf("Stop error = %v, want run error %v", err, runErr)
+			}
+			if runErr == nil && err != nil {
+				t.Fatalf("Stop error = %v, want nil", err)
+			}
+			if recording.finalizeCalls != 1 || !recording.finishedAt.Equal(finishedAt) {
+				t.Fatalf(
+					"recording finalization = (%d, %s), want one call at %s",
+					recording.finalizeCalls,
+					recording.finishedAt,
+					finishedAt,
+				)
+			}
+		})
 	}
 }
 
@@ -109,6 +173,53 @@ func (f *lifecycleObserverFactory) SubscribeFactoryEvents(context.Context, *inte
 }
 func (f *lifecycleObserverFactory) Pause(context.Context) error  { return nil }
 func (f *lifecycleObserverFactory) Resume(context.Context) error { return nil }
+func (f *lifecycleObserverFactory) Terminate(context.Context, factory.TerminateRequest) (factory.TerminateResult, error) {
+	return factory.TerminateResult{Outcome: factory.ControlOutcomeAccepted}, nil
+}
+func (f *lifecycleObserverFactory) Observe(context.Context, factory.ObserveRequest) (factory.ObserveResult, error) {
+	return factory.ObserveResult{}, nil
+}
+func (f *lifecycleObserverFactory) PlanDispatch(_ context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
+	return factory.PlanDispatchResult{
+		Outcome:       factory.DispatchPlanOutcomeAccepted,
+		DispatchID:    req.DispatchID,
+		CorrelationID: req.CorrelationID,
+	}, nil
+}
+func (f *lifecycleObserverFactory) AcceptDispatchResult(_ context.Context, req factory.AcceptDispatchResultRequest) (factory.AcceptDispatchResultResult, error) {
+	return factory.AcceptDispatchResultResult{
+		Outcome:       factory.DispatchPlanOutcomeRetired,
+		DispatchID:    req.DispatchID,
+		CorrelationID: req.CorrelationID,
+	}, nil
+}
+func (f *lifecycleObserverFactory) CaptureCheckpoint(_ context.Context, req factory.CaptureCheckpointRequest) (factory.CaptureCheckpointResult, error) {
+	id := req.CheckpointID
+	if id == "" {
+		id = "checkpoint-stub"
+	}
+	return factory.CaptureCheckpointResult{
+		Outcome: factory.CheckpointOutcomeCaptured,
+		Checkpoint: factory.Checkpoint{
+			CheckpointID:  id,
+			SchemaVersion: 1,
+			StrategyKind:  "runtime",
+			Payload:       []byte(`{}`),
+		},
+	}, nil
+}
+func (f *lifecycleObserverFactory) LoadCheckpoint(_ context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
+	if req.CheckpointID == "" {
+		return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
+	}
+	return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
+}
+func (f *lifecycleObserverFactory) RestoreCheckpoint(_ context.Context, req factory.RestoreCheckpointRequest) (factory.RestoreCheckpointResult, error) {
+	return factory.RestoreCheckpointResult{
+		Outcome:      factory.CheckpointOutcomeRestored,
+		CheckpointID: req.Checkpoint.CheckpointID,
+	}, nil
+}
 func (f *lifecycleObserverFactory) MoveWork(context.Context, string, string, work.WorkStateChangeSource, string) (work.OperatorMoveResult, error) {
 	return work.OperatorMoveResult{}, nil
 }

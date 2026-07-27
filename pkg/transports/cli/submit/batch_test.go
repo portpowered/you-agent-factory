@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -434,11 +435,17 @@ func TestSubmitBatch_ValidationFailsBeforeHTTP(t *testing.T) {
 	}
 }
 
-func TestSubmitBatch_HTTPErrorSurfacesAPIMessage(t *testing.T) {
+func TestSubmitBatch_HTTPErrorReturnsTypedSafeFields(t *testing.T) {
+	const credential = "sk-proj-secret123"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(factoryapi.ErrorResponse{Message: "request_id path and requestId body must match"})
+		_, _ = io.WriteString(w, `{
+			"message":"payload-secret access-token-secret",
+			"code":"BAD_REQUEST",
+			"family":"BAD_REQUEST",
+			"workId":"`+credential+`"
+		}`)
 	}))
 	defer srv.Close()
 
@@ -451,16 +458,29 @@ func TestSubmitBatch_HTTPErrorSurfacesAPIMessage(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected HTTP error")
 	}
-	if !strings.Contains(err.Error(), "400") || !strings.Contains(err.Error(), "request_id path and requestId body must match") {
-		t.Fatalf("error = %v, want status and API message", err)
+	var httpErr *SubmissionHTTPError
+	if !errors.As(err, &httpErr) {
+		t.Fatalf("error type = %T, want *SubmissionHTTPError", err)
+	}
+	if httpErr.StatusCode != http.StatusBadRequest ||
+		httpErr.Code != factoryapi.ErrorResponseCodeBADREQUEST ||
+		httpErr.Family != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("typed HTTP error = %#v", httpErr)
+	}
+	if strings.Contains(err.Error(), "payload-secret") ||
+		strings.Contains(err.Error(), "access-token") ||
+		strings.Contains(err.Error(), credential) {
+		t.Fatalf("error leaked unsafe server response: %v", err)
 	}
 }
 
-func TestSubmitBatch_HTTP404SurfacesAPIMessage(t *testing.T) {
+func TestSubmitBatch_HTTPErrorRejectsUnsafeTypedFields(t *testing.T) {
+	const secret = "sk-proj-secret123"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(factoryapi.ErrorResponse{Message: "factory session not found"})
+		_, _ = io.WriteString(w, `{"message":"payload-secret","code":"`+secret+
+			`","family":"`+secret+`","workId":"`+secret+`"}`)
 	}))
 	defer srv.Close()
 
@@ -473,16 +493,23 @@ func TestSubmitBatch_HTTP404SurfacesAPIMessage(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected HTTP error")
 	}
-	if !strings.Contains(err.Error(), "404") || !strings.Contains(err.Error(), "factory session not found") {
-		t.Fatalf("error = %v, want status and API message", err)
+	var httpErr *SubmissionHTTPError
+	if !errors.As(err, &httpErr) {
+		t.Fatalf("error type = %T, want *SubmissionHTTPError", err)
+	}
+	if httpErr.Code != "" || httpErr.Family != "" {
+		t.Fatalf("unsafe typed fields were retained: %#v", httpErr)
+	}
+	if strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), "payload-secret") {
+		t.Fatalf("error leaked unsafe server response: %v", err)
 	}
 }
 
-func TestSubmitBatch_HTTPErrorUsesBoundedNonJSONBodyPreview(t *testing.T) {
-	longBody := strings.Repeat("x", batchErrorBodyPreviewLimit+30)
+func TestSubmitBatch_HTTPErrorDoesNotEchoNonJSONBody(t *testing.T) {
+	const unsafeBody = "payload-secret access-token-secret"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = io.WriteString(w, longBody)
+		_, _ = io.WriteString(w, unsafeBody)
 	}))
 	defer srv.Close()
 
@@ -495,12 +522,28 @@ func TestSubmitBatch_HTTPErrorUsesBoundedNonJSONBodyPreview(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected HTTP error")
 	}
-	wantPreview := longBody[:batchErrorBodyPreviewLimit] + "..."
-	if !strings.Contains(err.Error(), wantPreview) {
-		t.Fatalf("error = %v, want bounded preview %q", err, wantPreview)
+	if strings.Contains(err.Error(), unsafeBody) || strings.Contains(err.Error(), "access-token") {
+		t.Fatalf("error leaked non-JSON server response: %v", err)
 	}
-	if strings.Contains(err.Error(), longBody) {
-		t.Fatalf("error included full response body")
+}
+
+func TestSubmitBatch_PreservesContextCancellation(t *testing.T) {
+	path := writeBatchFile(t, validBatchJSON("batch-cancelled", "alpha"))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var out bytes.Buffer
+	err := submitBatchForTest(t, BatchConfig{
+		Context: ctx,
+		Args:    []string{path},
+		Server:  "http://127.0.0.1:19999",
+		Output:  &out,
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("SubmitBatch() error = %v, want context.Canceled", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on cancellation", out.String())
 	}
 }
 

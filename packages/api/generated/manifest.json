@@ -1,7 +1,37 @@
 {
   "exports": {
+    "generated.cli.command-manifest": {
+      "artifactHash": "6223f77257033566d5d4998babd8ebfdb8b986e534e5aa355b6dd96f645ccd1f",
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Published generated.cli.command-manifest contract as raw JSON or YAML data.",
+            "id": "generated.cli.command-manifest.description"
+          },
+          "title": {
+            "canonicalEnglish": "Published generated.cli.command-manifest contract",
+            "id": "generated.cli.command-manifest.title"
+          }
+        },
+        "examples": [
+          "generated/cli/command-manifest.schema.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "generated.cli.command-manifest",
+        "sourceHash": "6223f77257033566d5d4998babd8ebfdb8b986e534e5aa355b6dd96f645ccd1f",
+        "visibility": "public"
+      },
+      "family": "cli",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "generated.cli.command-manifest",
+        "since": "0.0.0",
+        "state": "active"
+      },
+      "path": "generated/cli/command-manifest.schema.json"
+    },
     "generated.cli.commands": {
-      "artifactHash": "21d05f64a5a921effcd1f7a02f1698c96e1e3cc94f0615d5faa7099ddc1d40ed",
+      "artifactHash": "120abf95ed7b235a13881b8159c79a32b97887457eb531dcbf8cf1386e9785c1",
       "documentation": {
         "documentation": {
           "description": {
@@ -18,7 +48,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.cli.commands",
-        "sourceHash": "21d05f64a5a921effcd1f7a02f1698c96e1e3cc94f0615d5faa7099ddc1d40ed",
+        "sourceHash": "120abf95ed7b235a13881b8159c79a32b97887457eb531dcbf8cf1386e9785c1",
         "visibility": "public"
       },
       "family": "cli",
@@ -121,7 +151,7 @@
       "path": "generated/joined/contracts/common/documentation.schema.json"
     },
     "generated.joined.contracts.manifest": {
-      "artifactHash": "4dae080e46652c697025016b97d82a03437cdf27f3f0c43f1485812fa271a339",
+      "artifactHash": "86be29cba2f697c1d32657dab9f1521da0c36e941f5dca74642656e6fbafd980",
       "documentation": {
         "documentation": {
           "description": {
@@ -138,7 +168,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.joined.contracts.manifest",
-        "sourceHash": "4dae080e46652c697025016b97d82a03437cdf27f3f0c43f1485812fa271a339",
+        "sourceHash": "86be29cba2f697c1d32657dab9f1521da0c36e941f5dca74642656e6fbafd980",
         "visibility": "public"
       },
       "family": "shared",
@@ -181,7 +211,7 @@
       "path": "generated/mcp/tools.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "08a3f0e1fb5aa073d53355557976d52ed54f9f7c38856c13ef4590f4d1b5c7cb",
+      "artifactHash": "bae8d044192899a2ac8fa75ba00ed736a046d430f96d58cce5aed7f38eeb3001",
       "documentation": {
         "documentation": {
           "description": {
@@ -198,7 +228,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "08a3f0e1fb5aa073d53355557976d52ed54f9f7c38856c13ef4590f4d1b5c7cb",
+        "sourceHash": "bae8d044192899a2ac8fa75ba00ed736a046d430f96d58cce5aed7f38eeb3001",
         "visibility": "public"
       },
       "family": "openapi",
@@ -331,7 +361,7 @@
       "path": "generated/schemas/mock-workers.schema.json"
     },
     "generated.schemas.you-config": {
-      "artifactHash": "97f199e5132d5ba82e1a92354c99171ede9dbbebd690eb55bd59039345d51a0b",
+      "artifactHash": "b3ca3685bb0276d9930f85aadcc601026378f65feab1c20b1accdb228ce40287",
       "documentation": {
         "documentation": {
           "description": {
@@ -348,7 +378,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.you-config",
-        "sourceHash": "97f199e5132d5ba82e1a92354c99171ede9dbbebd690eb55bd59039345d51a0b",
+        "sourceHash": "b3ca3685bb0276d9930f85aadcc601026378f65feab1c20b1accdb228ce40287",
         "visibility": "public"
       },
       "family": "config",
@@ -371,6 +401,5 @@
   },
   "formatVersion": "1.0.0",
   "packageId": "you-agent-factory.api",
-  "packageVersion": "0.0.0",
-  "sourceCommit": "d27eee741041069b1edd64681f5f58c9b0224871"
+  "packageVersion": "0.0.0"
 }

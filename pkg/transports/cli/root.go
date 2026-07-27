@@ -19,16 +19,19 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
-	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
@@ -72,7 +75,8 @@ type OwnedExecutionService interface {
 type ExecutionServiceBuilder func(context.Context, string, string, string, string) (OwnedExecutionService, error)
 type FlattenFactoryConfigOperation func(configcli.FactoryConfigFlattenConfig) error
 type ExpandFactoryConfigOperation func(configcli.FactoryConfigExpandConfig) error
-type InitSystemConfigOperation func(configinitcmd.InitConfig) error
+type ConfigureInitOperation func(initsetup.Config) error
+type InstallPackagedFactoryOperation func(factorydefinitionscli.InstallPackagedFactoryConfig) error
 type QueryFactoryOperation func(factorycli.QueryConfig) error
 type ListFactoriesOperation func(factorycli.ListConfig) error
 type ValidateFactoryOperation func(factorycli.ValidateConfig) error
@@ -86,11 +90,13 @@ type MoveWorkOperation func(workcli.MoveConfig) error
 type VisualizeWorkOperation func(workcli.VisualizeConfig) error
 type NamedFactoryRootsResolver func(homeDir, workingDir string) (interfaces.NamedFactoryRoots, error)
 
-// CommandOperations is the complete inert CLI operation graph assembled by
-// Wire. No transport constructor selects implementations for missing fields.
+// CommandOperations is the complete inert CLI operation graph assembled by Wire.
 type CommandOperations struct {
 	ObserveCLI                        platformprocess.CLIObserver
 	NamedFactoryCatalog               interfaces.NamedFactoryCatalog
+	CompleteFactoryNames              cobracompletion.FactoryNamesOperation
+	CompletePackagedFactoryNames      cobracompletion.PackagedFactoryNamesOperation
+	CompleteSelectedFactorySignature  cobracompletion.SelectedFactorySignatureOperation
 	ResolveNamedFactoryRoots          NamedFactoryRootsResolver
 	ResolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver
 	ResolveCurrentFactoryDir          interfaces.CurrentFactoryDirectoryResolver
@@ -119,7 +125,8 @@ type CommandOperations struct {
 	FlattenFactoryConfig              FlattenFactoryConfigOperation
 	ExpandFactoryConfig               ExpandFactoryConfigOperation
 	InitFactory                       interfaces.ScaffoldInitializer
-	InitSystemConfig                  InitSystemConfigOperation
+	ConfigureInit                     ConfigureInitOperation
+	InstallPackagedFactory            InstallPackagedFactoryOperation
 	QueryFactory                      QueryFactoryOperation
 	ListFactories                     ListFactoriesOperation
 	ValidateFactory                   ValidateFactoryOperation
@@ -134,15 +141,17 @@ type CommandOperations struct {
 	OpenRunSelection                  runcli.SelectionFactory
 }
 
-// CommandFactory constructs a fresh Cobra tree for each process invocation.
-// Its fields are immutable command entrypoints supplied by Wire, not a second
-// service graph. NewCommand adds only invocation-local process edges.
+// CommandFactory constructs a fresh Cobra tree for each invocation from
+// immutable Wire-supplied entrypoints and invocation-local process edges.
 type CommandFactory struct {
 	observeCLI                        platformprocess.CLIObserver
 	homeDir                           func() (string, error)
 	lookupEnv                         func(string) (string, bool)
 	initializer                       startupcli.Initializer
 	namedFactoryCatalog               interfaces.NamedFactoryCatalog
+	completeFactoryNames              cobracompletion.FactoryNamesOperation
+	completePackagedFactoryNames      cobracompletion.PackagedFactoryNamesOperation
+	completeSelectedFactorySignature  cobracompletion.SelectedFactorySignatureOperation
 	resolveNamedFactoryRoots          NamedFactoryRootsResolver
 	resolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver
 	resolveCurrentFactoryDir          interfaces.CurrentFactoryDirectoryResolver
@@ -160,19 +169,14 @@ type CommandFactory struct {
 
 	SubmitWork            func(submitcli.SubmitConfig) error
 	SubmitBatch           func(submitcli.BatchConfig) error
-	ListSessions          func(sessioncli.ListConfig) error
-	ShowSession           func(sessioncli.ShowConfig) error
-	PauseSession          func(sessioncli.LifecycleControlConfig) error
-	ResumeSession         func(sessioncli.LifecycleControlConfig) error
-	ListSessionDispatches func(sessioncli.DispatchesConfig) error
-	CreateSession         func(sessioncli.CreateConfig) error
-	DeleteSession         func(sessioncli.DeleteConfig) error
+	SessionsCLI           sessioncli.Service
 	BuildExecution        ExecutionServiceBuilder
 	ModelsCLI             modelscli.Service
 	FlattenFactoryConfig  func(configcli.FactoryConfigFlattenConfig) error
 	ExpandFactoryConfig   func(configcli.FactoryConfigExpandConfig) error
 	InitFactory           interfaces.ScaffoldInitializer
-	InitSystemConfig      func(configinitcmd.InitConfig) error
+	ConfigureInit         func(initsetup.Config) error
+	InstallPackagedFactory func(factorydefinitionscli.InstallPackagedFactoryConfig) error
 	QueryFactory          func(factorycli.QueryConfig) error
 	ListFactories         func(factorycli.ListConfig) error
 	ValidateFactory       func(factorycli.ValidateConfig) error
@@ -187,12 +191,14 @@ type CommandFactory struct {
 	openRunSelection      runcli.SelectionFactory
 }
 
-// NewCommandFactory copies the complete Wire-built operation graph without
-// selecting implementations or installing defaults.
+// NewCommandFactory copies the Wire-built graph without installing defaults.
 func NewCommandFactory(operations CommandOperations) CommandFactory {
 	return CommandFactory{
 		observeCLI:                        operations.ObserveCLI,
 		namedFactoryCatalog:               operations.NamedFactoryCatalog,
+		completeFactoryNames:              operations.CompleteFactoryNames,
+		completePackagedFactoryNames:      operations.CompletePackagedFactoryNames,
+		completeSelectedFactorySignature:  operations.CompleteSelectedFactorySignature,
 		resolveNamedFactoryRoots:          operations.ResolveNamedFactoryRoots,
 		resolveNamedFactoryCandidatePaths: operations.ResolveNamedFactoryCandidatePaths,
 		resolveCurrentFactoryDir:          operations.ResolveCurrentFactoryDir,
@@ -209,19 +215,14 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		loadOperatorConfig:                operations.LoadOperatorConfig,
 		SubmitWork:                        operations.SubmitWork,
 		SubmitBatch:                       operations.SubmitBatch,
-		ListSessions:                      operations.ListSessions,
-		ShowSession:                       operations.ShowSession,
-		PauseSession:                      operations.PauseSession,
-		ResumeSession:                     operations.ResumeSession,
-		ListSessionDispatches:             operations.ListSessionDispatches,
-		CreateSession:                     operations.CreateSession,
-		DeleteSession:                     operations.DeleteSession,
+		SessionsCLI:                       assembleSessionsCLI(operations),
 		BuildExecution:                    operations.BuildExecution,
 		ModelsCLI:                         operations.ModelsCLI,
 		FlattenFactoryConfig:              operations.FlattenFactoryConfig,
 		ExpandFactoryConfig:               operations.ExpandFactoryConfig,
 		InitFactory:                       operations.InitFactory,
-		InitSystemConfig:                  operations.InitSystemConfig,
+		ConfigureInit:                     operations.ConfigureInit,
+		InstallPackagedFactory:            operations.InstallPackagedFactory,
 		QueryFactory:                      operations.QueryFactory,
 		ListFactories:                     operations.ListFactories,
 		ValidateFactory:                   operations.ValidateFactory,
@@ -235,6 +236,27 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		VisualizeWork:                     operations.VisualizeWork,
 		openRunSelection:                  operations.OpenRunSelection,
 	}
+}
+
+func assembleSessionsCLI(operations CommandOperations) sessioncli.Service {
+	if operations.ListSessions == nil &&
+		operations.ShowSession == nil &&
+		operations.PauseSession == nil &&
+		operations.ResumeSession == nil &&
+		operations.ListSessionDispatches == nil &&
+		operations.CreateSession == nil &&
+		operations.DeleteSession == nil {
+		return nil
+	}
+	return sessioncli.Bind(sessioncli.Operations{
+		List:           operations.ListSessions,
+		Show:           operations.ShowSession,
+		Pause:          operations.PauseSession,
+		Resume:         operations.ResumeSession,
+		ListDispatches: operations.ListSessionDispatches,
+		Create:         operations.CreateSession,
+		Delete:         operations.DeleteSession,
+	})
 }
 
 // NewCommand constructs one fresh command tree from invocation-local process
@@ -267,7 +289,7 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 	root.SetErr(input.Stderr)
 	root.SetContext(input.Context)
 	if factory.observeCLI == nil {
-		return root.Execute()
+		return cobracompletion.ExecuteWithPowerShellFilesystemDelegation(root)
 	}
 	snapshot, err := cliobservation.CaptureSnapshot(root)
 	if err != nil {
@@ -293,10 +315,6 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 		return fmt.Errorf("observe CLI command: %w", err)
 	}
 	return parseErr
-}
-
-func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
-	return newRootCommandWithGeneratedRepresentativeFamily(options)
 }
 
 func buildWorkflowExecutionService(
@@ -340,12 +358,6 @@ func rejectDeprecatedPortFlag(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func registerDeprecatedPortFlag(cmd *cobra.Command) {
-	var deprecatedPort int
-	cmd.Flags().IntVar(&deprecatedPort, "port", 0, "deprecated; use --server")
-	_ = cmd.Flags().MarkHidden("port")
-}
-
 func (opts *cliDiagnosticsOptions) resolvePolicy(quiet bool) terminalpolicy.Policy {
 	return terminalpolicy.Resolve(terminalpolicy.Options{
 		Quiet:   quiet,
@@ -362,15 +374,19 @@ func (opts *cliDiagnosticsOptions) writer(cmd *cobra.Command) io.Writer {
 	return opts.resolvePolicy(false).DiagnosticsWriter(cmd.ErrOrStderr())
 }
 
-func newMCPCommand(options CommandFactory) *cobra.Command {
+func newMCPCommand(options CommandFactory) (*cobra.Command, error) {
 	var initializeStdio startupcli.StdioHandler
 	if options.initializer != nil {
 		initializeStdio = options.initializer.Stdio
 	}
-	return mcpcli.NewCommandWithStdioInitializer(initializeStdio, options.homeDir)
+	return climanifestcobra.NewMCPCommand(mcpcli.ResolvedServeHandler(mcpcli.ServeBinding{
+		HomeDir:         options.homeDir,
+		InitializeStdio: initializeStdio,
+	}))
 }
 
 func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy, rootOptions CommandFactory, defaultInvocation bool) error {
+	cfg = applyRunScopedServerMode(cfg)
 	logger, err := policy.BuildLogger(rootOptions.buildTerminalLogger)
 	if err != nil {
 		return err
@@ -451,12 +467,11 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 }
 
 func delegateRunInitialization(ctx context.Context, cfg runcli.RunConfig, defaultInvocation bool, options CommandFactory) error {
-	invocationOnly := cfg.CleanInvocation || cfg.PreparedInvocationInput != nil || cfg.InvocationPositionalText != nil || cfg.InvocationStdinText != nil || cfg.InvocationNormalizedArguments != nil
 	intent := startupcli.RunIntent{
 		DefaultInvocation:     defaultInvocation,
 		Continuous:            cfg.Continuously,
-		APIEnabled:            cfg.Port > 0 && !invocationOnly,
-		DashboardEnabled:      cfg.Port > 0 && !cfg.SuppressDashboardRendering && !invocationOnly,
+		APIEnabled:            (defaultInvocation || cfg.WithServer) && cfg.Port > 0,
+		DashboardEnabled:      (defaultInvocation || cfg.WithSite) && cfg.Port > 0,
 		WorkerSidecarsEnabled: true,
 	}
 	if options.openRunSelection == nil {
@@ -626,7 +641,7 @@ func operatorConfigSourceValue(
 	if err != nil {
 		// A config path below a non-directory ancestor is unavailable in
 		// the same way as a missing optional config. Commands such as
-		// `you config init` still own the later, actionable creation error.
+		// initializer-owned startup still owns the later, actionable creation error.
 		if errors.Is(err, syscall.ENOTDIR) {
 			return resolvedinput.Value{}, false, nil
 		}
@@ -659,11 +674,7 @@ func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.Run
 	}
 	cfg.BindHost = target.Host
 	cfg.Port = target.Port
-	if cmd.Root().PersistentFlags().Changed("server") {
-		cfg.AutoPort = false
-	} else {
-		cfg.AutoPort = true
-	}
+	cfg.AutoPort = true
 	return nil
 }
 
@@ -700,11 +711,13 @@ func resolveRunFactorySelection(
 	if !factoryChanged {
 		return nil
 	}
-
 	if cfg.ResolveFactoryConfigRoot == nil {
 		return fmt.Errorf("Factory Definitions config root resolver is required")
 	}
 	factoryRoot, err := cfg.ResolveFactoryConfigRoot(cfg.FactoryConfigPath)
+	if contextErr := cmd.Context().Err(); contextErr != nil {
+		return contextErr
+	}
 	if err != nil {
 		return err
 	}
@@ -720,6 +733,9 @@ func resolveRunNamedFactorySelection(
 	resolveNamedFactoryRoots NamedFactoryRootsResolver,
 	resolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver,
 ) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if namedFactoryCatalog == nil {
 		return fmt.Errorf("Factory Definitions named-factory catalog is required")
 	}
@@ -734,6 +750,9 @@ func resolveRunNamedFactorySelection(
 		return fmt.Errorf("resolve current working directory for --named: process working directory is required")
 	}
 	roots, err := resolveNamedFactoryRoots(homeDir, cwd)
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
 	if err != nil {
 		return fmt.Errorf("resolve named-Factory roots: %w", err)
 	}
@@ -742,12 +761,18 @@ func resolveRunNamedFactorySelection(
 		roots.Global,
 		cfg.NamedFactoryName,
 	)
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
 	if err != nil {
 		candidates, candidateErr := resolveNamedFactoryCandidatePaths(
 			roots.Project,
 			roots.Global,
 			cfg.NamedFactoryName,
 		)
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
 		if candidateErr != nil {
 			return err
 		}
@@ -771,7 +796,7 @@ func resolveRunFactoryPrompt(
 	if !factoryChanged && !namedChanged {
 		return resolveLegacyRunFactoryPrompt(cmd, promptArgs, preparation)
 	}
-	if len(promptArgs) == 0 && runCommandInputIsTTY(cmd.Context()) {
+	if factoryChanged && runFactorySourceUsesJavaScript(cfg.FactoryConfigPath) {
 		return nil
 	}
 
@@ -779,17 +804,37 @@ func resolveRunFactoryPrompt(
 	if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
 		signatureSource = cfg.FactoryConfigPath
 	}
-	signature, err := runcli.ResolveFactoryInvocationSignature(
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		return fmt.Errorf("load run CLI manifest: %w", err)
+	}
+	schema, diagnostics, err := runcli.ResolveFactoryInvocationInputSchema(
+		cmd.Context(),
+		manifest,
+		"you.run",
 		cfg.LoadFactoryConfigFile,
 		signatureSource,
 	)
 	if err != nil {
 		return err
 	}
+	if err := runcli.MapCompositionDiagnostics(diagnostics); err != nil {
+		return err
+	}
+	signature := runcli.InvocationSignatureFromEffectiveSchema(schema)
 	if signature != nil {
 		return resolveSignatureRunFactoryPrompt(cmd, cfg, promptArgs, signature, preparation)
 	}
 	return resolveCompatibilityRunFactoryPrompt(cmd, cfg, promptArgs, workChanged, preparation)
+}
+
+func runFactorySourceUsesJavaScript(path string) bool {
+	switch strings.ToLower(filepath.Ext(strings.TrimSpace(path))) {
+	case ".js", ".mjs", ".cjs":
+		return true
+	default:
+		return false
+	}
 }
 
 func resolveLegacyRunFactoryPrompt(cmd *cobra.Command, promptArgs []string, preparation work.InvocationInputPreparation) error {
@@ -928,16 +973,12 @@ func runCommandInputIsTTY(ctx context.Context) bool {
 func newProductionDocsCommand(
 	diagnostics *cliDiagnosticsOptions,
 ) (*cobra.Command, error) {
-	registry, err := commandregistry.NewDocsRegistry(commandregistry.DocsHandlers{
-		DocsRunE: commandregistry.DocsRunE(commandregistry.DocsBinding{
+	return climanifestcobra.NewDocsCommand(commandregistry.DocsResolvedRunE(
+		commandregistry.DocsBinding{
 			BinaryName: cliBinaryName, DiagnosticsWriter: diagnostics.writer,
 			Verbose: diagnostics.verboseEnabled,
-		}),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return climanifestcobra.NewDocsCommand(registry)
+		},
+	))
 }
 
 func newProductionModelsCommand(
@@ -951,10 +992,6 @@ func newProductionModelsCommand(
 	}
 	handler := modelscli.NewCommandHandler(
 		rootOptions.ModelsCLI,
-		&globals.server,
-		&globals.json,
-		diagnostics.verboseEnabled,
-		&diagnostics.debug,
 		diagnostics.writer,
 		rootOptions.homeDir,
 		func(cmd *cobra.Command, homeDir string) (operatorconfig.ResolvedDefaults, error) {
@@ -965,9 +1002,5 @@ func newProductionModelsCommand(
 			return policy.BuildLogger(rootOptions.buildTerminalLogger)
 		},
 	)
-	registry, err := commandregistry.NewModelsRegistry(handler)
-	if err != nil {
-		return nil, err
-	}
-	return climanifestcobra.NewModelsCommand(registry)
+	return climanifestcobra.NewModelsCommand(handler)
 }

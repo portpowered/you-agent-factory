@@ -9,11 +9,13 @@ import (
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
+	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
+	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 )
 
 // New constructs the public Factory Definitions service.
 func New(
-	sessionHost factorydefinitions.SessionHost,
+	sessionHost factoryroot.SessionHost,
 	clock factoryroot.Clock,
 	versionFileSystem factoryroot.VersionFileSystem,
 	validator factorydefinitions.Validator,
@@ -25,11 +27,15 @@ func New(
 	preparePortableFactoryConfig factorydefinitions.PortableFactoryConfigPreparer,
 	captureFactorySnapshot factorydefinitions.FactorySnapshotCapturer,
 	replaceFactoryLayout factorydefinitions.FactoryLayoutReplacer,
-	namedPaths interface {
-		ResolveExistingDir(string, string) (string, error)
-	},
-) factorydefinitions.Service {
-	if sessionHost == nil || clock == nil || versionFileSystem == nil {
+	namedPaths factoryroot.NamedPathResolver,
+	namedFactoryCatalogFileSystem factoryroot.NamedFactoryCatalogFileSystem,
+	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
+	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
+) factoryroot.Service {
+	if sessionHost == nil || clock == nil || versionFileSystem == nil ||
+		namedPaths == nil || namedFactoryCatalogFileSystem == nil ||
+		packagedCatalog.List == nil || packagedCatalog.Resolve == nil ||
+		packagedInstaller.Install == nil {
 		return nil
 	}
 	host, err := factorydefinition.NewHost(
@@ -66,7 +72,19 @@ func New(
 	if err != nil {
 		return nil
 	}
-	definitions := factorydefinition.New(host, versionFileSystem)
+	// The exact ports were rejected above, which exhausts the catalog
+	// constructor's failure cases.
+	catalogService, _ := catalogwire.NewService(catalog.Dependencies{
+		Paths:      namedPaths,
+		FileSystem: namedFactoryCatalogFileSystem,
+	})
+	definitions := factorydefinition.NewWithCatalogPackagesAndInstallation(
+		host,
+		catalogService,
+		packagedCatalog,
+		packagedInstaller,
+		versionFileSystem,
+	)
 	sessionHost.AttachFactoryDefinitions(definitions)
 	return definitions
 }

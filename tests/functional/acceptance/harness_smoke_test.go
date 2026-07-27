@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
@@ -16,34 +15,35 @@ import (
 )
 
 type configInitOutcome struct {
-	HomeDir             string                             `json:"homeDir"`
-	ConfigPath          string                             `json:"configPath"`
-	SystemConfigOutcome string                             `json:"systemConfigOutcome"`
-	PackagedFactories   []configInitPackagedFactoryOutcome `json:"packagedFactories"`
-}
-
-type configInitPackagedFactoryOutcome struct {
-	Name       string `json:"name"`
-	FactoryDir string `json:"factoryDirectory"`
+	HomeDir             string
+	ConfigPath          string
+	NamedFactoriesRoot  string
+	SystemConfigOutcome string
 }
 
 func initializeConfig(t testing.TB, ctx context.Context, session *builtcliacceptance.Session, scenario string) (builtcliacceptance.RunResult, configInitOutcome) {
 	t.Helper()
 
-	result, err := session.Run(ctx, "config", "init", "--json")
-	session.RequireSuccess(t, scenario, result, err)
-
-	var outcome configInitOutcome
-	if err := json.Unmarshal([]byte(result.Stdout), &outcome); err != nil {
-		t.Fatalf("%s: decode config init JSON: %v\nstdout:\n%s", scenario, err, result.Stdout)
+	configPath := filepath.Join(session.HomeDir, ".you-agent-factory", "config.json")
+	namedFactoriesRoot := filepath.Join(session.HomeDir, ".you-agent-factory", "factories")
+	outcome := "skipped"
+	if _, err := os.Stat(configPath); errors.Is(err, os.ErrNotExist) {
+		outcome = "created"
 	}
-	if strings.TrimSpace(outcome.ConfigPath) == "" {
-		t.Fatalf("%s: config init JSON has empty configPath: %s", scenario, result.Stdout)
+	missingFactory := filepath.Join(session.WorkDir, "missing-initialization-factory.json")
+	result, err := session.Run(ctx, "run", "--factory", missingFactory)
+	if err == nil || !strings.Contains(result.Stdout+result.Stderr+err.Error(), filepath.Base(missingFactory)) {
+		t.Fatalf("%s: run missing Factory error = %v; stdout=%q stderr=%q", scenario, err, result.Stdout, result.Stderr)
 	}
-	if outcome.HomeDir != session.HomeDir {
-		t.Fatalf("%s: config init homeDir = %q, want isolated session home %q", scenario, outcome.HomeDir, session.HomeDir)
+	if _, err := os.Stat(configPath); err != nil {
+		t.Fatalf("%s: initializer-owned config missing at %s: %v", scenario, configPath, err)
 	}
-	return result, outcome
+	return result, configInitOutcome{
+		HomeDir:             session.HomeDir,
+		ConfigPath:          configPath,
+		NamedFactoriesRoot:  namedFactoriesRoot,
+		SystemConfigOutcome: outcome,
+	}
 }
 
 func TestBuiltCLIHarness_IsolatesHomeAndLogDirectoriesAcrossSessions(t *testing.T) {
@@ -126,6 +126,174 @@ func TestBuiltCLIHarness_NonZeroExitIncludesDiagnostics(t *testing.T) {
 	}
 	if failure.BinaryPath != harness.BinaryPath {
 		t.Fatalf("failure binary = %q, want %q", failure.BinaryPath, harness.BinaryPath)
+	}
+}
+
+// TestBuiltCLI_HelpPrintsUsageAndExitsSuccessfully proves the built CLI exposes usable root help.
+func TestBuiltCLI_HelpPrintsUsageAndExitsSuccessfully(t *testing.T) {
+	t.Parallel()
+
+	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	session := harness.NewSession(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	result, err := session.Run(ctx, "-h")
+	session.RequireSuccess(t, "cli-help", result, err)
+	if !strings.Contains(result.Stdout, "Usage:\n  you [flags]") {
+		t.Fatalf("help output did not contain root usage:\n%s", result.Stdout)
+	}
+}
+
+// TestBuiltCLI_ConfigAndFactoryAuthoringUseAcceptedInputs proves the built
+// executable accepts canonical config and Factory-authoring inputs.
+func TestBuiltCLI_ConfigAndFactoryAuthoringUseAcceptedInputs(t *testing.T) {
+	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	session := harness.NewSession(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	assertBuiltCLIInitContract(t, ctx, session)
+	sourcePath := testutil.MustRepoPath(
+		t,
+		"tests/release/testdata/cli_smoke_factory/factory.json",
+	)
+	createdPath := assertBuiltCLIFactoryAuthoring(t, ctx, session, sourcePath)
+	assertBuiltCLIFactoryConfigTransforms(t, ctx, session, sourcePath, createdPath)
+}
+
+func assertBuiltCLIInitContract(
+	t *testing.T,
+	ctx context.Context,
+	session *builtcliacceptance.Session,
+) {
+	t.Helper()
+	configPath := filepath.Join(session.HomeDir, ".you-agent-factory", "config.json")
+	removed, removedErr := session.Run(ctx, "init", "--dir", "legacy-factory")
+	if removedErr == nil ||
+		!strings.Contains(removed.Stdout+removed.Stderr+removedErr.Error(), "use --provider") {
+		t.Fatalf(
+			"init without packaged selection = (%v, stdout=%q, stderr=%q), want provider setup requirement",
+			removedErr,
+			removed.Stdout,
+			removed.Stderr,
+		)
+	}
+	if _, err := os.Stat(configPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("removed init input config stat = %v, want not exist", err)
+	}
+
+	initResult, initErr := session.Run(
+		ctx,
+		"init",
+		"--provider", "codex",
+		"--model", "gpt-5",
+	)
+	session.RequireSuccess(t, "non-interactive-init", initResult, initErr)
+	var configured struct {
+		Defaults struct {
+			WorkerModelProvider string `json:"workerModelProvider"`
+			WorkerModel         string `json:"workerModel"`
+		} `json:"defaults"`
+	}
+	configData, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read configured operator defaults: %v", err)
+	}
+	if err := json.Unmarshal(configData, &configured); err != nil {
+		t.Fatalf("decode configured operator defaults: %v", err)
+	}
+	if configured.Defaults.WorkerModelProvider != "codex" ||
+		configured.Defaults.WorkerModel != "gpt-5" {
+		t.Fatalf("configured defaults = %#v, want codex/gpt-5", configured.Defaults)
+	}
+}
+
+func assertBuiltCLIFactoryAuthoring(
+	t *testing.T,
+	ctx context.Context,
+	session *builtcliacceptance.Session,
+	sourcePath string,
+) string {
+	t.Helper()
+	factoryRoot := filepath.Join(session.WorkDir, "named-factories")
+	createResult, createErr := session.Run(
+		ctx,
+		"factory", "create", "acceptance",
+		"--from", sourcePath,
+		"--dir", factoryRoot,
+	)
+	session.RequireSuccess(t, "factory-create", createResult, createErr)
+	if !strings.Contains(createResult.Stdout, "Created factory acceptance") {
+		t.Fatalf("factory create stdout = %q", createResult.Stdout)
+	}
+	createdPath := filepath.Join(factoryRoot, "acceptance", "factory.json")
+	if _, err := os.Stat(createdPath); err != nil {
+		t.Fatalf("created Factory config missing: %v", err)
+	}
+
+	updateResult, updateErr := session.Run(
+		ctx,
+		"factory", "update", "acceptance",
+		"--from", sourcePath,
+		"--dir", factoryRoot,
+	)
+	session.RequireSuccess(t, "factory-update", updateResult, updateErr)
+	if !strings.Contains(updateResult.Stdout, "Updated factory acceptance") {
+		t.Fatalf("factory update stdout = %q", updateResult.Stdout)
+	}
+	return createdPath
+}
+
+func assertBuiltCLIFactoryConfigTransforms(
+	t *testing.T,
+	ctx context.Context,
+	session *builtcliacceptance.Session,
+	sourcePath string,
+	createdPath string,
+) {
+	t.Helper()
+	validateResult, validateErr := session.Run(
+		ctx,
+		"factory", "config", "validate", createdPath,
+	)
+	session.RequireSuccess(t, "factory-config-validate", validateResult, validateErr)
+	if !strings.Contains(validateResult.Stdout, "Factory validation passed.") {
+		t.Fatalf("factory validation stdout = %q", validateResult.Stdout)
+	}
+
+	flattenResult, flattenErr := session.Run(
+		ctx,
+		"factory", "config", "flatten", filepath.Dir(createdPath),
+	)
+	session.RequireSuccess(t, "factory-config-flatten", flattenResult, flattenErr)
+	var flattened map[string]any
+	if err := json.Unmarshal([]byte(flattenResult.Stdout), &flattened); err != nil {
+		t.Fatalf("flattened Factory output is not JSON: %v\n%s", err, flattenResult.Stdout)
+	}
+
+	expandDir := filepath.Join(session.WorkDir, "expand-case")
+	if err := os.MkdirAll(expandDir, 0o755); err != nil {
+		t.Fatalf("create expand fixture directory: %v", err)
+	}
+	expandSource := filepath.Join(expandDir, "factory.json")
+	sourceData, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatalf("read expand source: %v", err)
+	}
+	if err := os.WriteFile(expandSource, sourceData, 0o600); err != nil {
+		t.Fatalf("write expand source: %v", err)
+	}
+	expandResult, expandErr := session.Run(
+		ctx,
+		"factory", "config", "expand", expandSource,
+	)
+	session.RequireSuccess(t, "factory-config-expand", expandResult, expandErr)
+	if !strings.Contains(expandResult.Stdout, "Expanded factory config into "+expandDir) {
+		t.Fatalf("factory expand stdout = %q, want target %q", expandResult.Stdout, expandDir)
+	}
+	if _, err := os.Stat(filepath.Join(expandDir, "workers", "worker-a", "AGENTS.md")); err != nil {
+		t.Fatalf("expanded worker instructions missing: %v", err)
 	}
 }
 

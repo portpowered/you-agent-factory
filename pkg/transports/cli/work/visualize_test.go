@@ -16,7 +16,7 @@ func TestVisualize_ForwardsRequestAndWritesWorkOwnedResult(t *testing.T) {
 		return "flowchart TD\n", nil
 	}
 	var output bytes.Buffer
-	err := Visualize(operation, VisualizeConfig{
+	err := NewVisualize(operation)(VisualizeConfig{
 		BatchFile: "batch.json", Format: "markdown-mermaid", Output: &output,
 	})
 	if err != nil {

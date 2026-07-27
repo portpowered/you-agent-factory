@@ -1,4 +1,21 @@
 {
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@you-agent-factory/components": ["packages/components/src/index.ts"],
+      "@you-agent-factory/components/*": ["packages/components/src/*"],
+      "@you-agent-factory/client": ["packages/client/src/index.ts"],
+      "@you-agent-factory/factory-emulator": [
+        "packages/factory-emulator/src/index.ts"
+      ],
+      "@you-agent-factory/factory-replay": [
+        "packages/factory-replay/src/index.ts"
+      ],
+      "@you-agent-factory/factory-visualizers": [
+        "packages/factory-visualizers/src/index.ts"
+      ]
+    }
+  },
   "files": [],
   "references": [
     { "path": "./tsconfig.app.json" },

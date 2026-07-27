@@ -1,3 +1,4 @@
+// @component-test-runner vitest: Bun 1.3.12 on Linux does not reliably flush Monaco palette MutationObservers.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { beforeEach } from "vitest";

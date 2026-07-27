@@ -153,6 +153,7 @@ type InvocationInput struct {
 	OutputSchema    string
 	Required        CapabilitySet
 	ProviderSession *ProviderSession
+	Execution       workers.ProviderInferenceRequest
 }
 
 // InvocationRequest is an immutable provider invocation request.
@@ -164,6 +165,7 @@ type InvocationRequest struct {
 	outputSchema    string
 	required        CapabilitySet
 	providerSession *ProviderSession
+	execution       workers.ProviderInferenceRequest
 }
 
 // NewInvocationRequest detaches all mutable input from the caller.
@@ -176,6 +178,7 @@ func NewInvocationRequest(input InvocationInput) InvocationRequest {
 		outputSchema:    input.OutputSchema,
 		required:        NewCapabilitySet(input.Required.Values()...),
 		providerSession: cloneProviderSession(input.ProviderSession),
+		execution:       workers.CloneProviderInferenceRequest(input.Execution),
 	}
 }
 
@@ -189,6 +192,13 @@ func (r InvocationRequest) RequiredCapabilities() CapabilitySet {
 }
 func (r InvocationRequest) ProviderSession() *ProviderSession {
 	return cloneProviderSession(r.providerSession)
+}
+
+// Execution returns a detached worker execution context for provider-owned
+// process construction. It preserves runtime configuration while the
+// conductor retains ownership of provider selection and response delivery.
+func (r InvocationRequest) Execution() workers.ProviderInferenceRequest {
+	return workers.CloneProviderInferenceRequest(r.execution)
 }
 
 // FailureKind is a provider-neutral invocation failure category.

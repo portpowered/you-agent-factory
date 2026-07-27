@@ -81,7 +81,9 @@ func (r *Registry) selectionRunnerID(identity string) (string, error) {
 }
 
 // RunnerID resolves a provider canonical ID or alias to the stable native
-// runner ID retained by the current execution path.
+// runner ID retained by the current execution path. Externally supplied
+// integrations are selectable through selectionRunnerID / ResolveRunnerSelection
+// and route through the provider-neutral conductor instead.
 func (r *Registry) RunnerID(identity string) (string, error) {
 	entry, err := r.Lookup(identity)
 	if err != nil {
@@ -98,6 +100,33 @@ func (r *Registry) RunnerID(identity string) (string, error) {
 		return legacyCursorRunnerID, nil
 	}
 	return canonical, nil
+}
+
+// UsesNativeRunner reports whether the resolved identity still executes through
+// the retained provider-native runner path rather than the conductor.
+// Bundled providers remain native only while their Integration still advertises
+// the native-runtime compatibility marker; migrated Integrations route through
+// the conductor without naming a concrete provider in shared orchestration.
+func (r *Registry) UsesNativeRunner(identity string) bool {
+	if r == nil {
+		return false
+	}
+	entry, err := r.Lookup(identity)
+	if err != nil {
+		return false
+	}
+	if entry.Manifest().ImplementationAvailability != ImplementationBundled {
+		return false
+	}
+	integration, err := r.Integration(identity)
+	if err != nil {
+		return true
+	}
+	type nativeRuntimeCompatibility interface {
+		UsesProviderNativeRuntime() bool
+	}
+	marker, ok := integration.(nativeRuntimeCompatibility)
+	return ok && marker.UsesProviderNativeRuntime()
 }
 
 // RunnerMetadata projects manifest-authoritative execution capabilities onto
@@ -124,7 +153,8 @@ func (r *Registry) RunnerMetadata(identity string) (workers.RunnerMetadata, erro
 }
 
 // ValidateRunnerPrerequisites checks the manifest-declared executable
-// prerequisites without executing a provider command.
+// prerequisites without executing a provider command. Externally supplied
+// conductor-routed integrations skip native executable LookPath checks.
 func (r *Registry) ValidateRunnerPrerequisites(
 	locator platformprocess.ExecutableLocator,
 	identity string,
@@ -132,6 +162,9 @@ func (r *Registry) ValidateRunnerPrerequisites(
 	entry, err := r.Lookup(identity)
 	if err != nil {
 		return err
+	}
+	if entry.Manifest().ImplementationAvailability != ImplementationBundled {
+		return nil
 	}
 	if locator == nil {
 		return fmt.Errorf("%s runner executable locator is required", entry.Manifest().DisplayName.Value)

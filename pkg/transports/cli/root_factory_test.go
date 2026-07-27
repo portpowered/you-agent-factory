@@ -14,11 +14,9 @@ import (
 	"testing"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
-	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -35,7 +33,7 @@ func TestProductionMCPServeGeneratedMetadataDelegatesStdioInitializer(t *testing
 	resolveHome := factorysessions.HomeDirectoryResolver(func() (string, error) {
 		return t.TempDir(), nil
 	})
-	root := CommandFactory{ModelsCLI: legacyModelsCLIService{}}.NewCommand(resolveHome, nil, startupcli.Functions{StdioFunc: initializeStdio})
+	root := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI}).NewCommand(resolveHome, nil, startupcli.Functions{StdioFunc: initializeStdio})
 	root.SetIn(stdin)
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
@@ -718,66 +716,8 @@ func TestFactoryQueryCommand_PortFlagRejected(t *testing.T) {
 	}
 }
 
-func TestNewFactoryConfigInitHandlerRegistryWiresContractedRunnableIDs(t *testing.T) {
-	globals := &cliGlobalOptions{}
-	diagnostics := &cliDiagnosticsOptions{}
-	state := factoryConfigInitBindingState{
-		listDir:      defaultcmd.FactoryDir,
-		createDir:    defaultcmd.FactoryDir,
-		updateDir:    defaultcmd.FactoryDir,
-		deleteDir:    defaultcmd.FactoryDir,
-		initDir:      defaultcmd.FactoryDir,
-		initType:     string(factorydefinitions.DefaultScaffoldType),
-		initExecutor: factorydefinitions.DefaultStarterExecutor,
-	}
-	registry, err := newFactoryConfigInitHandlerRegistry(globals, diagnostics, CommandFactory{}, &state)
-	if err != nil {
-		t.Fatalf("newFactoryConfigInitHandlerRegistry() error = %v", err)
-	}
-	for _, commandID := range []string{
-		"you.factory.query",
-		"you.factory.list",
-		"you.factory.create",
-		"you.factory.update",
-		"you.factory.delete",
-		"you.factory.replace-current",
-		"you.factory.config.validate",
-		"you.factory.config.flatten",
-		"you.factory.config.expand",
-		"you.config.init",
-		"you.init",
-	} {
-		if _, lookupErr := registry.Lookup(commandID); lookupErr != nil {
-			t.Fatalf("Lookup(%q) error = %v", commandID, lookupErr)
-		}
-	}
-}
-func TestNewFactoryConfigInitWiringReturnsRegistryAndBindings(t *testing.T) {
-	globals := &cliGlobalOptions{}
-	diagnostics := &cliDiagnosticsOptions{}
-	registry, bindings, err := newFactoryConfigInitWiring(globals, diagnostics, CommandFactory{})
-	if err != nil {
-		t.Fatalf("newFactoryConfigInitWiring() error = %v", err)
-	}
-	if registry == nil {
-		t.Fatal("registry = nil, want handler registry")
-	}
-	if bindings.FactoryListDir == nil || bindings.InitDir == nil {
-		t.Fatalf("bindings = %#v, want populated flag pointers", bindings)
-	}
-}
-
-func TestFactoryConfigInitFlagUsagesIncludesContractedKeys(t *testing.T) {
-	usages := factoryConfigInitFlagUsages()
-	for _, key := range []string{"dir", "from", "set-current", "session", "type", "executor"} {
-		if usages[key] == "" {
-			t.Fatalf("factoryConfigInitFlagUsages() missing %q", key)
-		}
-	}
-}
-
 func TestProductionFactoryConfigInitCommandsUsesGeneratedFamily(t *testing.T) {
-	commands := productionFactoryConfigInitCommands(&cliGlobalOptions{}, &cliDiagnosticsOptions{}, CommandFactory{})
+	commands := productionFactoryConfigInitCommands(&cliDiagnosticsOptions{}, CommandFactory{})
 	if commands.Factory == nil || commands.Config == nil || commands.Init == nil {
 		t.Fatalf("production commands = %#v, want factory/config/init", commands)
 	}

@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 
-import { Button, Label, Textarea } from "../../../../components/ui";
+import { Label } from "@you-agent-factory/components/primitives";
+import { Button } from "../../../../components/ui/button";
+import { Textarea } from "../../../../components/ui/textarea";
 import {
   type FactorySimpleSubmissionAvailability,
   type FactorySimpleSubmissionEligibilityInput,

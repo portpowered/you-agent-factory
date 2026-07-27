@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "claude",
+    "-p",
+    "--model",
+    "claude-sonnet-4",
+    "--output-format",
+    "stream-json",
+    "--include-partial-messages",
+    "Call the weather tool for Oslo and finish with COMPLETE for the Claude tool lifecycle golden."
+  ],
+  "provider": "claude",
+  "model": "claude-sonnet-4",
+  "exitCode": 0,
+  "stdoutStream": true,
+  "stderrStream": false,
+  "workingDirectoryRole": "factory-root",
+  "timeoutCancelClass": "none",
+  "terminalErrorClass": "none"
+}

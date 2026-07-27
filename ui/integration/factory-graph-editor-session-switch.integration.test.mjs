@@ -1,16 +1,14 @@
 // @vitest-environment node
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe } from "vitest";
 
 import {
   browserScenarioTimeoutMs,
-  buildTimeoutMs,
   expectNoBrowserErrors,
-  openBrowserPage,
-  startBrowserPreview,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
 } from "./browser-test-harness.mjs";
+import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
 const betaSessionID = "session-beta";
 
@@ -219,7 +217,7 @@ async function enterGraphEditor(page) {
     .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 }
 
-async function addUnsavedWorkType(page, identifier) {
+async function addUnsavedWorkType(page, identifier, expect) {
   const graphCard = factoryGraphCardScope(page);
   const toolbar = graphCard.getByRole("region", {
     name: "Factory graph editor tools",
@@ -251,7 +249,7 @@ async function addUnsavedWorkType(page, identifier) {
     .toBe(true);
 }
 
-async function expectEditorModeOff(page) {
+async function expectEditorModeOff(page, expect) {
   const graphCard = factoryGraphCardScope(page);
   await graphCard
     .getByRole("button", { name: "Edit mode" })
@@ -283,7 +281,11 @@ async function expectEditorModeOff(page) {
     .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 }
 
-async function runSessionSwitchClearsDirtyEditorScenario(preview) {
+async function runSessionSwitchClearsDirtyEditorScenario({
+  expect,
+  openBrowserPage,
+  preview,
+}) {
   const server = await startFactoryApiServer({
     apiPort: preview.apiPort,
     currentFactory: alphaGraphFactoryDefinition,
@@ -316,7 +318,7 @@ async function runSessionSwitchClearsDirtyEditorScenario(preview) {
     });
 
     await enterGraphEditor(browserPage.page);
-    await addUnsavedWorkType(browserPage.page, "essay");
+    await addUnsavedWorkType(browserPage.page, "essay", expect);
     await expect
       .poll(
         async () =>
@@ -334,7 +336,7 @@ async function runSessionSwitchClearsDirtyEditorScenario(preview) {
       })
       .toBe("true");
 
-    await expectEditorModeOff(browserPage.page);
+    await expectEditorModeOff(browserPage.page, expect);
     expect(
       await browserPage.page.getByTestId("rf__node-work-type:essay").count(),
     ).toBe(0);
@@ -352,7 +354,7 @@ async function runSessionSwitchClearsDirtyEditorScenario(preview) {
       })
       .toBe("true");
 
-    await expectEditorModeOff(browserPage.page);
+    await expectEditorModeOff(browserPage.page, expect);
     await browserPage.page
       .getByTestId("rf__node-workstation:draft")
       .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
@@ -371,7 +373,11 @@ async function runSessionSwitchClearsDirtyEditorScenario(preview) {
   }
 }
 
-async function runLeaveEditorUnsavedPromptScenario(preview) {
+async function runLeaveEditorUnsavedPromptScenario({
+  expect,
+  openBrowserPage,
+  preview,
+}) {
   const server = await startFactoryApiServer({
     apiPort: preview.apiPort,
     currentFactory: alphaGraphFactoryDefinition,
@@ -386,7 +392,7 @@ async function runLeaveEditorUnsavedPromptScenario(preview) {
     await server.replayCompleted;
 
     await enterGraphEditor(browserPage.page);
-    await addUnsavedWorkType(browserPage.page, "memo");
+    await addUnsavedWorkType(browserPage.page, "memo", expect);
 
     const graphCard = factoryGraphCardScope(browserPage.page);
     await graphCard.getByRole("button", { name: "Leave editor" }).click();
@@ -417,7 +423,7 @@ async function runLeaveEditorUnsavedPromptScenario(preview) {
       state: "hidden",
       timeout: uiInteractionTimeoutMs,
     });
-    await expectEditorModeOff(browserPage.page);
+    await expectEditorModeOff(browserPage.page, expect);
 
     expectNoBrowserErrors(
       browserPage.pageErrors,
@@ -430,27 +436,26 @@ async function runLeaveEditorUnsavedPromptScenario(preview) {
   }
 }
 
-describe.sequential("factory graph editor session switch browser integration", () => {
-  let preview = null;
-
-  beforeAll(async () => {
-    preview = await startBrowserPreview();
-  }, buildTimeoutMs);
-
-  afterAll(async () => {
-    await preview?.stop();
-    preview = null;
-  });
-
+describe.concurrent("factory graph editor session switch browser integration", () => {
   it(
     "clears unsaved graph editor chrome and session A topology when switching to session B",
-    async () => runSessionSwitchClearsDirtyEditorScenario(preview),
+    async ({ expect, openBrowserPage, preview }) =>
+      runSessionSwitchClearsDirtyEditorScenario({
+        expect,
+        openBrowserPage,
+        preview,
+      }),
     browserScenarioTimeoutMs,
   );
 
   it(
     "prompts before leaving graph editor with unsaved edits within one session",
-    async () => runLeaveEditorUnsavedPromptScenario(preview),
+    async ({ expect, openBrowserPage, preview }) =>
+      runLeaveEditorUnsavedPromptScenario({
+        expect,
+        openBrowserPage,
+        preview,
+      }),
     browserScenarioTimeoutMs,
   );
 });

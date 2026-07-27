@@ -13,6 +13,7 @@ import (
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/packagedtts"
 	invocationruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/runtimeadapter"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation"
 	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
 )
@@ -31,7 +32,11 @@ func NewInvocationOwner(
 	}
 	return invocationwire.New(invocationservice.Dependencies{
 		FactoryConfig: func(sessionID string) (*interfaces.FactoryConfig, error) {
-			return invocationruntime.FactoryConfig(fs.sessionState, sessionID)
+			runtimeConfig, err := runtimebinding.RuntimeConfigForSession(fs.sessionState, sessionID)
+			if err != nil {
+				return nil, err
+			}
+			return runtimeConfig.FactoryConfig(), nil
 		},
 		SubmitWork: fs.submitOwnedSessionInvocationWork,
 		Observe: func(ctx context.Context, sessionID string, input sessioninvocation.SessionInvocationWaitInput) (sessioninvocation.SessionInvocationObservation, error) {

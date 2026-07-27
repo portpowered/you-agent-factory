@@ -50,7 +50,7 @@ const SHARED_SELECTED_SESSION: LoadableProviderSessionRef = {
   provider: "codex",
 };
 
-vi.mock("../../current-selection/public", () => ({
+vi.mock("../../current-selection/components/widget/current-selection-widget", () => ({
   CurrentSelectionWidget: ({
     headerAction,
     onSelectProviderSession,
@@ -105,7 +105,7 @@ vi.mock(
   },
 );
 
-vi.mock("../../provider-session-detail/public", () => ({
+vi.mock("../../provider-session-detail/components/provider-session-widget", () => ({
   ProviderSessionWidget: ({
     headerAction,
     selectedProviderSession,
@@ -121,17 +121,17 @@ vi.mock("../../provider-session-detail/public", () => ({
   ),
 }));
 
-vi.mock("../../import/public", () => ({
+vi.mock("../../import/components/dashboard-import-preview-dialog", () => ({
   DashboardImportPreviewDialog: () => null,
 }));
 
-vi.mock("../../submit-work/public", () => ({
+vi.mock("../../submit-work/components/submit-work-widget", () => ({
   SubmitWorkWidget: ({ headerAction }: { headerAction?: React.ReactNode }) => (
     <section>{headerAction}Submit work card</section>
   ),
 }));
 
-vi.mock("../../terminal-work/public", () => ({
+vi.mock("../../terminal-work/components/terminal-work-widget", () => ({
   TerminalWorkWidget: ({
     headerAction,
   }: {
@@ -197,7 +197,7 @@ vi.mock("../../trace-drilldown/hooks/useTraceDrilldown", () => ({
   }),
 }));
 
-vi.mock("../../trace-drilldown/public", () => ({
+vi.mock("../../trace-drilldown/components/trace-drilldown-widget", () => ({
   TraceDrilldownWidget: ({
     headerAction,
   }: {
@@ -212,19 +212,19 @@ vi.mock("../../work-outcome/hooks/useWorkOutcomeChart", () => ({
   }),
 }));
 
-vi.mock("../../work-outcome/public", () => ({
+vi.mock("../../work-outcome/components/work-outcome-widget", () => ({
   WorkOutcomeWidget: ({ headerAction }: { headerAction?: React.ReactNode }) => (
     <section>{headerAction}Work outcome card</section>
   ),
 }));
 
-vi.mock("../../work-totals/public", () => ({
+vi.mock("../../work-totals/components/work-totals-widget", () => ({
   WorkTotalsWidget: ({ headerAction }: { headerAction?: React.ReactNode }) => (
     <section>{headerAction}Work totals card</section>
   ),
 }));
 
-vi.mock("../../workflow-activity/public", () => ({
+vi.mock("../../workflow-activity/components/workflow-activity-widget", () => ({
   WorkflowActivityWidget: ({
     headerAction,
     widgetInstanceID,

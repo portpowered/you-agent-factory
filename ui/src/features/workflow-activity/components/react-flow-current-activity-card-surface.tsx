@@ -3,16 +3,14 @@ import { factoryTopologyNodeId } from "@you-agent-factory/factory-replay";
 import { useId, useMemo, useRef, useState } from "react";
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import {
-  AlertPanelText,
-  ExpandablePanelTrigger,
-  SurfacePanel,
-} from "../../../components/ui";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
+import { AlertPanelText } from "../../../components/ui/alert-panel";
+import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { cn } from "../../../lib/cn";
-import { HostedTopologyReplay } from "../../dashboard/public";
+import { HostedTopologyReplay } from "../../dashboard/components/topology-replay/hosted-topology-replay";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { NODE_TYPES } from "../../flowchart/public";
-import { FACTORY_GRAPH_EDGE_TYPES } from "../../graphs/public";
+import { NODE_TYPES } from "../../flowchart/components/current-activity-nodes";
+import { FACTORY_GRAPH_EDGE_TYPES } from "../../graphs/components/factory-graph-edge";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import type { CurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";

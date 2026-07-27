@@ -16,6 +16,7 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl(t *testing.T) {
@@ -291,14 +292,6 @@ func startRootRuntimeMCPServer(
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)
 	}
-	if err := process.Execute(root.Input{
-		Args:             []string{"you", "init", "--dir", projectRoot},
-		Env:              os.Environ(),
-		Context:          t.Context(),
-		WorkingDirectory: projectRoot,
-	}); err != nil {
-		t.Fatalf("initialize root MCP runtime fixture: %v", err)
-	}
 	stdinRead, stdinWrite, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("stdin pipe: %v", err)
@@ -315,13 +308,20 @@ func startRootRuntimeMCPServer(
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
+	homeDir := t.TempDir()
+	t.Cleanup(func() {
+		// Remove initializer-owned files before testing.TempDir performs its
+		// strict Windows cleanup, matching the project-root persistence cleanup.
+		_ = os.RemoveAll(homeDir)
+	})
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 
 	serveErr := make(chan error, 1)
 	var stderr bytes.Buffer
 	go func() {
 		serveErr <- process.Execute(root.Input{
 			Args:             []string{"you", "mcp", "serve", "--runtime", "--project-root", projectRoot},
-			Env:              os.Environ(),
+			Env:              env,
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
 			Stderr:           &stderr,
@@ -749,7 +749,7 @@ func waitForMCPDispatchStatus(
 func setupMCPRuntimeResumeSmokeWorkflowFixture(t *testing.T, fixtureName, workflowName string) string {
 	t.Helper()
 
-	projectRoot := t.TempDir()
+	projectRoot := support.ScaffoldSingleStepFactory(t, "mcp-resume-smoke")
 	t.Cleanup(func() {
 		_ = os.RemoveAll(projectRoot)
 	})

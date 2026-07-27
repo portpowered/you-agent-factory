@@ -1,8 +1,8 @@
 import { forwardRef, type HTMLAttributes, type ReactNode } from "react";
-import { surfacePanelVariants } from "../../../../components/ui";
+import { surfacePanelVariants } from "@you-agent-factory/components/layout";
 import { cn } from "../../../../lib/cn";
 import { CurrentSelectionExecutionPill } from "../../base/components/presentation/current-selection-pill";
-import { CurrentSelectionSupportingText } from "../../base/public";
+import { CurrentSelectionSupportingText } from "../../base/components/presentation/current-selection-supporting-text";
 
 export interface CurrentSelectionHistoryCardProps
   extends HTMLAttributes<HTMLElement> {

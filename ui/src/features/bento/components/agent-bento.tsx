@@ -6,7 +6,7 @@ import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
 import { ScrollArea } from "@you-agent-factory/components/overlays";
-import { Heading } from "../../../components/ui";
+import { Heading } from "@you-agent-factory/components/primitives";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import { cn } from "../../../lib/cn";
 import { getAgentBentoMessages } from "../messages/agent-bento";

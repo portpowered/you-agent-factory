@@ -21,24 +21,24 @@ export {
 
 import { useCurrentSelection } from "../../current-selection/hooks/core/useCurrentSelection";
 import { useCurrentSelectionDetails } from "../../current-selection/hooks/core/useCurrentSelectionDetails";
-import { CurrentSelectionWidget } from "../../current-selection/public";
+import { CurrentSelectionWidget } from "../../current-selection/components/widget/current-selection-widget";
 import { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
-import { ProviderSessionWidget } from "../../provider-session-detail/public";
+import { ProviderSessionWidget } from "../../provider-session-detail/components/provider-session-widget";
 import {
   SubmitWorkCard,
   type SubmitWorkDraft,
   type SubmitWorkStatus,
 } from "../../submit-work/components/submit-work-card";
-import { SubmitWorkWidget } from "../../submit-work/public";
-import { TerminalWorkWidget } from "../../terminal-work/public";
+import { SubmitWorkWidget } from "../../submit-work/components/submit-work-widget";
+import { TerminalWorkWidget } from "../../terminal-work/components/terminal-work-widget";
 import type { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
-import { TraceDrilldownWidget } from "../../trace-drilldown/public";
+import { TraceDrilldownWidget } from "../../trace-drilldown/components/trace-drilldown-widget";
 import type { WorkChartModel } from "../../work-outcome/lib/trends";
-import { WorkOutcomeWidget } from "../../work-outcome/public";
-import { WorkTotalsWidget } from "../../work-totals/public";
+import { WorkOutcomeWidget } from "../../work-outcome/components/work-outcome-widget";
+import { WorkTotalsWidget } from "../../work-totals/components/work-totals-widget";
 import { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";
-import { WorkflowActivityWidget } from "../../workflow-activity/public";
+import { WorkflowActivityWidget } from "../../workflow-activity/components/workflow-activity-widget";
 import {
   DASHBOARD_WIDGET_IDS,
   DEFAULT_DASHBOARD_LAYOUT,

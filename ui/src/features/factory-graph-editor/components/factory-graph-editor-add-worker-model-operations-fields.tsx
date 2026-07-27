@@ -1,4 +1,5 @@
-import { Button, Checkbox } from "../../../components/ui";
+import { Button } from "../../../components/ui/button";
+import { Checkbox } from "../../../components/ui/checkbox";
 import {
   createEmptyFactoryGraphAddModelOperationDraft,
   createEmptyFactoryGraphAddModelOperationSlotDraft,

@@ -1,7 +1,6 @@
 package climanifestcobra_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
@@ -9,7 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
 
@@ -113,7 +112,7 @@ func TestNewWorkFamilyCommandRegistersContractedFlagsAndArgs(t *testing.T) {
 	assertWorkVisualizeContractedFlags(t, work)
 }
 
-func TestNewWorkFamilyCommandAppliesBindingFlagUsages(t *testing.T) {
+func TestNewWorkFamilyCommandAppliesManifestFlagUsages(t *testing.T) {
 	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
 		ListRunE:      noopRunE,
 		ShowRunE:      noopRunE,
@@ -123,12 +122,23 @@ func TestNewWorkFamilyCommandAppliesBindingFlagUsages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWorkRegistry() error = %v", err)
 	}
-	bindings := testWorkBindings()
-	bindings.FlagUsages = map[string]string{
-		"session": "custom session help for parity",
-		"format":  "custom visualize format help",
-	}
-	work, err := climanifestcobra.NewWorkFamilyCommand(registry, bindings)
+	manifest := mustWorkFamilyManifest(t)
+	listRecord := manifest.Commands["you.work.list"]
+	listFlag := listRecord.Flags["you.work.list.flag.session"]
+	listFlag.Usage = "custom session help from manifest"
+	listRecord.Flags[listFlag.ID] = listFlag
+	manifest.Commands[listRecord.ID] = listRecord
+	visualizeRecord := manifest.Commands["you.work.visualize"]
+	formatFlag := visualizeRecord.Flags["you.work.visualize.flag.format"]
+	formatFlag.Usage = "custom visualize format help from manifest"
+	visualizeRecord.Flags[formatFlag.ID] = formatFlag
+	manifest.Commands[visualizeRecord.ID] = visualizeRecord
+
+	work, err := climanifestcobra.NewWorkFamilyCommandFromManifest(
+		manifest,
+		registry,
+		testWorkBindings(),
+	)
 	if err != nil {
 		t.Fatalf("NewWorkFamilyCommand() error = %v", err)
 	}
@@ -136,15 +146,15 @@ func TestNewWorkFamilyCommandAppliesBindingFlagUsages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindCommandByPath(work list) error = %v", err)
 	}
-	if got := list.Flags().Lookup("session").Usage; got != "custom session help for parity" {
-		t.Fatalf("session flag usage = %q, want custom binding usage", got)
+	if got := list.Flags().Lookup("session").Usage; got != "custom session help from manifest" {
+		t.Fatalf("session flag usage = %q, want custom manifest usage", got)
 	}
 	visualize, err := findCommandByPath(work, "work visualize")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(work visualize) error = %v", err)
 	}
-	if got := visualize.Flags().Lookup("format").Usage; got != "custom visualize format help" {
-		t.Fatalf("format flag usage = %q, want custom binding usage", got)
+	if got := visualize.Flags().Lookup("format").Usage; got != "custom visualize format help from manifest" {
+		t.Fatalf("format flag usage = %q, want custom manifest usage", got)
 	}
 }
 
@@ -340,17 +350,24 @@ func mustWorkFamilyTree(t *testing.T) (*cobra.Command, *commandregistry.Registry
 }
 
 func testWorkBindings() climanifestcobra.WorkFamilyBindings {
-	listCfg := workcli.ListConfig{Context: context.Background()}
-	showCfg := workcli.ShowConfig{Context: context.Background()}
-	moveCfg := workcli.MoveConfig{Context: context.Background()}
-	format := "mermaid"
-	return climanifestcobra.WorkFamilyBindings{
-		ListConfig:      &listCfg,
-		ShowConfig:      &showCfg,
-		MoveConfig:      &moveCfg,
-		VisualizeFormat: &format,
-	}
+	return climanifestcobra.WorkFamilyBindings{LocalTargets: map[string]any{
+		"you.work.list.flag.state-name":     testScalarTarget(""),
+		"you.work.list.flag.state-type":     testScalarTarget(""),
+		"you.work.list.flag.name":           testScalarTarget(""),
+		"you.work.list.flag.work-type-name": testScalarTarget(""),
+		"you.work.list.flag.trace-id":       testScalarTarget(""),
+		"you.work.list.flag.sort-by":        testScalarTarget(""),
+		"you.work.list.flag.max-results":    testScalarTarget(0),
+		"you.work.list.flag.next-token":     testScalarTarget(""),
+		"you.work.list.flag.session":        testScalarTarget(""),
+		"you.work.show.flag.session":        testScalarTarget(""),
+		"you.work.move.flag.session":        testScalarTarget(""),
+		"you.work.move.flag.request-id":     testScalarTarget(""),
+		"you.work.visualize.flag.format":    testScalarTarget("mermaid"),
+	}}
 }
+
+func testScalarTarget[T bool | string | int](value T) *T { return &value }
 
 func workPathForID(commandID string) string {
 	switch commandID {
@@ -384,4 +401,251 @@ func workCommandWithInheritedFlags(t *testing.T, work *cobra.Command) *cobra.Com
 	root.PersistentFlags().StringVar(&defaultWorkerModel, "default-worker-model", "", "")
 	root.AddCommand(work)
 	return root
+}
+
+func TestNewResolvedWorkCommandTreeBuildsOnlyGeneratedWorkFamily(t *testing.T) {
+	root, err := climanifestcobra.NewResolvedWorkCommandTree(noopResolvedWorkHandlers())
+	if err != nil {
+		t.Fatalf("NewResolvedWorkCommandTree() error = %v", err)
+	}
+	if root.Name() != "you" || len(root.Commands()) != 1 {
+		t.Fatalf("root = %q with %d children, want you with only work", root.Name(), len(root.Commands()))
+	}
+	work, _, err := root.Find([]string{"work"})
+	if err != nil {
+		t.Fatalf("Find(work) error = %v", err)
+	}
+	if len(work.Commands()) != 4 {
+		t.Fatalf("work children=%d, want 4", len(work.Commands()))
+	}
+	for _, path := range [][]string{
+		{"work", "list"},
+		{"work", "show"},
+		{"work", "move"},
+		{"work", "visualize"},
+	} {
+		command, remaining, findErr := root.Find(path)
+		if findErr != nil || len(remaining) != 0 || !command.Runnable() {
+			t.Fatalf("Find(%v) = %v, %v, runnable=%t", path, remaining, findErr, command.Runnable())
+		}
+	}
+	if _, remaining, _ := root.Find([]string{"work", "submit"}); len(remaining) == 0 {
+		t.Fatal("resolved Work tree unexpectedly exposes work submit")
+	}
+}
+
+func TestNewResolvedWorkCommandTreeUsesManifestInputsAndStableHandlerID(t *testing.T) {
+	manifest, err := generated.WorkFamilyManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	listRecord := manifest.Commands["you.work.list"]
+	listRecord.Handler.ID = "stable.work.list.test-handler"
+	sessionFlag := listRecord.Flags["you.work.list.flag.session"]
+	sessionFlag.Aliases = []string{"factory-session"}
+	listRecord.Flags[sessionFlag.ID] = sessionFlag
+	manifest.Commands[listRecord.ID] = listRecord
+
+	var local resolvedinput.Inputs
+	var inherited resolvedinput.Inputs
+	handlers := noopResolvedWorkHandlers()
+	handlers.List = func(
+		_ *cobra.Command,
+		gotLocal resolvedinput.Inputs,
+		gotInherited resolvedinput.Inputs,
+	) error {
+		local = gotLocal
+		inherited = gotInherited
+		return nil
+	}
+	root, err := climanifestcobra.NewResolvedWorkCommandTreeFromManifest(manifest, handlers)
+	if err != nil {
+		t.Fatalf("NewResolvedWorkCommandTreeFromManifest() error = %v", err)
+	}
+	root.SetArgs([]string{
+		"--server", "https://factory.example",
+		"work", "list",
+		"--factory-session", "session-alpha",
+		"--name", "review",
+		"--max-results", "7",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	assertResolvedString(t, local, "you.work.list.flag.session", "session-alpha")
+	assertResolvedString(t, local, "you.work.list.flag.name", "review")
+	maximum, err := local.Int("you.work.list.flag.max-results")
+	if err != nil || maximum != 7 {
+		t.Fatalf("resolved max-results = %d, %v; want 7", maximum, err)
+	}
+	assertResolvedString(t, inherited, "you.flag.server", "https://factory.example")
+	assertWorkResolvedState(t, local, "you.work.list.flag.session", resolvedinput.State{
+		Provenance: resolvedinput.SourceCLIFlag,
+		Changed:    true,
+	})
+}
+
+func TestNewResolvedWorkCommandTreeSuppliesFreshTypedSnapshots(t *testing.T) {
+	first := executeResolvedWorkList(t, []string{"work", "list", "--name", "first"})
+	second := executeResolvedWorkList(t, []string{"work", "list"})
+
+	assertResolvedString(t, first, "you.work.list.flag.name", "first")
+	assertResolvedString(t, second, "you.work.list.flag.name", "")
+	assertWorkResolvedState(t, second, "you.work.list.flag.name", resolvedinput.State{
+		Provenance: resolvedinput.SourceManifestDefault,
+		Default:    true,
+	})
+}
+
+func TestNewResolvedWorkCommandTreeResolvesGeneratedArgumentsAndDefaults(t *testing.T) {
+	var showInputs resolvedinput.Inputs
+	var visualizeInputs resolvedinput.Inputs
+	handlers := noopResolvedWorkHandlers()
+	handlers.Show = func(_ *cobra.Command, local, _ resolvedinput.Inputs) error {
+		showInputs = local
+		return nil
+	}
+	handlers.Visualize = func(_ *cobra.Command, local, _ resolvedinput.Inputs) error {
+		visualizeInputs = local
+		return nil
+	}
+	root, err := climanifestcobra.NewResolvedWorkCommandTree(handlers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.SetArgs([]string{"work", "show", "work-123"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("show Execute() error = %v", err)
+	}
+	assertResolvedString(t, showInputs, "you.work.show.arg.0", "work-123")
+
+	root, err = climanifestcobra.NewResolvedWorkCommandTree(handlers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.SetArgs([]string{"work", "visualize", "batch.json"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("visualize Execute() error = %v", err)
+	}
+	assertResolvedString(t, visualizeInputs, "you.work.visualize.arg.0", "batch.json")
+	assertResolvedString(t, visualizeInputs, "you.work.visualize.flag.format", "mermaid")
+}
+
+func TestNewResolvedWorkCommandTreeEnforcesManifestArgumentCardinality(t *testing.T) {
+	calls := 0
+	handlers := noopResolvedWorkHandlers()
+	handlers.Show = func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
+		calls++
+		return nil
+	}
+	for _, args := range [][]string{
+		{"work", "show"},
+		{"work", "show", "work-123", "extra"},
+	} {
+		root, err := climanifestcobra.NewResolvedWorkCommandTree(handlers)
+		if err != nil {
+			t.Fatal(err)
+		}
+		root.SetArgs(args)
+		if err := root.Execute(); err == nil {
+			t.Fatalf("Execute(%v) error = nil", args)
+		}
+	}
+	if calls != 0 {
+		t.Fatalf("show handler calls = %d, want zero", calls)
+	}
+}
+
+func TestNewResolvedWorkCommandTreeRejectsMissingAndForeignContracts(t *testing.T) {
+	handlers := noopResolvedWorkHandlers()
+	handlers.Move = nil
+	if _, err := climanifestcobra.NewResolvedWorkCommandTree(handlers); err == nil {
+		t.Fatal("missing move handler error = nil")
+	}
+
+	manifest, err := generated.WorkFamilyManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreign := manifest.Commands["you.work.list"]
+	foreign.ID = "you.work.submit"
+	foreign.Name = "submit"
+	foreign.Path = "you work submit"
+	delete(manifest.Commands, "you.work.list")
+	manifest.Commands[foreign.ID] = foreign
+	if _, err := climanifestcobra.NewResolvedWorkCommandTreeFromManifest(
+		manifest,
+		noopResolvedWorkHandlers(),
+	); err == nil {
+		t.Fatal("foreign command error = nil")
+	}
+}
+
+func TestNewResolvedWorkCommandReturnsDetachedSubtree(t *testing.T) {
+	work, err := climanifestcobra.NewResolvedWorkCommand(noopResolvedWorkHandlers())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if work.Name() != "work" || work.Parent() != nil || len(work.Commands()) != 4 {
+		t.Fatalf(
+			"detached work = name %q parent %v children %d",
+			work.Name(),
+			work.Parent(),
+			len(work.Commands()),
+		)
+	}
+}
+
+func executeResolvedWorkList(t *testing.T, args []string) resolvedinput.Inputs {
+	t.Helper()
+	var got resolvedinput.Inputs
+	handlers := noopResolvedWorkHandlers()
+	handlers.List = func(_ *cobra.Command, local, _ resolvedinput.Inputs) error {
+		got = local
+		return nil
+	}
+	root, err := climanifestcobra.NewResolvedWorkCommandTree(handlers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute(%v) error = %v", args, err)
+	}
+	return got
+}
+
+func noopResolvedWorkHandlers() commandregistry.ResolvedWorkHandlers {
+	noop := func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
+		return nil
+	}
+	return commandregistry.ResolvedWorkHandlers{
+		List: noop, Show: noop, Move: noop, Visualize: noop,
+	}
+}
+
+func assertResolvedString(
+	t *testing.T,
+	inputs resolvedinput.Inputs,
+	inputID string,
+	want string,
+) {
+	t.Helper()
+	got, err := inputs.String(inputID)
+	if err != nil || got != want {
+		t.Fatalf("resolved %s = %q, %v; want %q", inputID, got, err, want)
+	}
+}
+
+func assertWorkResolvedState(
+	t *testing.T,
+	inputs resolvedinput.Inputs,
+	inputID string,
+	want resolvedinput.State,
+) {
+	t.Helper()
+	got, ok := inputs.State(inputID)
+	if !ok || got != want {
+		t.Fatalf("resolved %s state = %#v, %t; want %#v", inputID, got, ok, want)
+	}
 }

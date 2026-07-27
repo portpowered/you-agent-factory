@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -672,8 +673,13 @@ func TestSubmit_ServerError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for server error response")
 	}
-	if got := err.Error(); got != "submission failed (400): workTypeName is required" {
+	if got := err.Error(); got != "submission failed (400): code=BAD_REQUEST" {
 		t.Errorf("unexpected error: %v", got)
+	}
+	var httpErr *SubmissionHTTPError
+	if !errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusBadRequest ||
+		httpErr.Code != factoryapi.ErrorResponseCodeBADREQUEST {
+		t.Fatalf("error = %#v, want typed 400 BAD_REQUEST failure", err)
 	}
 }
 
@@ -703,12 +709,12 @@ func TestSubmit_FactoryNotRunning(t *testing.T) {
 	}
 }
 
-func TestSubmit_NonJSONErrorBodyUsesBoundedPreview(t *testing.T) {
-	longBody := strings.Repeat("x", submitErrorBodyPreviewLimit+30)
+func TestSubmit_NonJSONErrorBodyIsNotExposed(t *testing.T) {
+	const unsafeBody = "payload-secret access-token-secret"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(longBody))
+		_, _ = w.Write([]byte(unsafeBody))
 	}))
 	defer srv.Close()
 
@@ -729,17 +735,38 @@ func TestSubmit_NonJSONErrorBodyUsesBoundedPreview(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for non-JSON failure body")
 	}
-	wantPreview := longBody[:submitErrorBodyPreviewLimit] + "..."
-	if got := err.Error(); got != "submission failed (500): "+wantPreview {
-		t.Fatalf("error = %q, want bounded preview %q", got, wantPreview)
+	if got := err.Error(); got != "submission failed (500)" {
+		t.Fatalf("error = %q, want status-only safe failure", got)
+	}
+	if strings.Contains(err.Error(), unsafeBody) || strings.Contains(err.Error(), "access-token") {
+		t.Fatalf("error leaked unsafe server response: %v", err)
 	}
 	if out.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty on API failure", out.String())
 	}
 }
 
-func TestSubmit_ErrorIncludesWorkIdWhenPresent(t *testing.T) {
-	workID := "batch-req-duplicate-submit"
+func TestSubmitFailureErrorRejectsUntrustedTypedFields(t *testing.T) {
+	const secret = "sk-proj-secret123"
+	err := submitFailureError(http.StatusBadGateway, []byte(
+		`{"message":"payload-secret","code":"`+secret+`","family":"`+
+			secret+`","workId":"`+secret+`"}`,
+	))
+	if got := err.Error(); got != "submission failed (502)" {
+		t.Fatalf("error = %q, want status-only safe failure", got)
+	}
+	if strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), "payload-secret") {
+		t.Fatalf("error leaked untrusted response fields: %v", err)
+	}
+	var httpErr *SubmissionHTTPError
+	if !errors.As(err, &httpErr) || httpErr.Code != "" ||
+		httpErr.Family != "" {
+		t.Fatalf("typed error retained untrusted fields: %#v", httpErr)
+	}
+}
+
+func TestSubmit_ErrorExcludesUntrustedWorkID(t *testing.T) {
+	const credential = "sk-proj-secret123"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
@@ -747,7 +774,7 @@ func TestSubmit_ErrorIncludesWorkIdWhenPresent(t *testing.T) {
 			"message": "work already accepted",
 			"family":  "client",
 			"code":    "BAD_REQUEST",
-			"workId":  workID,
+			"workId":  credential,
 		}); err != nil {
 			t.Errorf("encode error response: %v", err)
 		}
@@ -771,8 +798,11 @@ func TestSubmit_ErrorIncludesWorkIdWhenPresent(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when API returns workId")
 	}
-	if got := err.Error(); got != "submission failed (409): work already accepted workId="+workID {
-		t.Fatalf("error = %q, want stable workId suffix", got)
+	if got := err.Error(); got != "submission failed (409): code=BAD_REQUEST" {
+		t.Fatalf("error = %q, want only allowlisted typed fields", got)
+	}
+	if strings.Contains(err.Error(), credential) {
+		t.Fatalf("error leaked credential-shaped workId: %v", err)
 	}
 	if out.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty on API failure", out.String())

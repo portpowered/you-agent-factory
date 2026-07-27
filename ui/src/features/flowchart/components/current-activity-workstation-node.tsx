@@ -2,4 +2,4 @@ export {
   type CurrentActivityWorkstationNode,
   type WorkstationNodeData,
   WorkstationNodeView,
-} from "../../graphs/public";
+} from "../../graphs/components/workstation-node-view";

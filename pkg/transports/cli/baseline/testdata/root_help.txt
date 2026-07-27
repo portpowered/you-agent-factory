@@ -4,8 +4,8 @@ What:
 CPN-based workflow factory CLI for running factories, submitting work, and inspecting live sessions.
 
 How to use:
-Run you run --work ./docs/examples/startup-work.json to start the current Factory with explicit Work and the local dashboard (http://localhost:7437/dashboard/ui).
-Use you run --dir factory --work ./docs/examples/startup-work.json for an explicit Factory directory. See you <cmd> --help for subcommand details.
+Run you run --work ./docs/examples/startup-work.json to start the exact Current Factory at ./factory/factory.json with explicit Work and no local server.
+Use you server to serve that Current Factory API and dashboard continuously, or add --with-server or --with-site to own a server only for one run. See you <cmd> --help for subcommand details.
 
 Agents:
 Start with you docs agents for orientation, you submit or you submit batch to enqueue work, and you session list to confirm a live factory.
@@ -24,14 +24,15 @@ Examples:
 
 Available Commands:
   completion  Generate the autocompletion script for the specified shell
-  config      Initialize operator and system configuration
+  config      Configuration command guide
   docs        Print packaged markdown reference topics
   factory     Inspect and manage factory definitions
   help        Help about any command
-  init        Create factory directory structure
+  init        Configure provider and model defaults
   mcp         Model Context Protocol servers for Factory Session tools
   models      Inspect discovered models from a running service
   run         Load workflow and run the factory engine
+  server      Serve the Current Factory API and dashboard
   session     List, open, and close factory sessions on a running host
   submit      Submit work to a running factory
   work        Inspect work from a running factory
@@ -42,7 +43,7 @@ Flags:
       --default-worker-model-provider string   default worker model provider for model workers with omitted modelProvider (accepted canonical providers: CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE, PI, AGY; accepted aliases include codex, claude, gemini, kiro-cli, opencode, pi, agy, agent, cursor, anthropic, and openai; DEFAULT resolves through lower-precedence concrete provider)
   -h, --help                                   help for you
       --json                                   emit structured JSON on stdout for supported commands; diagnostics remain on stderr
-      --server string                          factory API base URI (http:// or https://); HTTP client commands target this URI and you run binds locally to its host and port (default "http://localhost:7437")
+      --server string                          factory API base URI (http:// or https://); HTTP client commands target this URI, while you server and server-enabled runs bind its loopback host and port (default "http://localhost:7437")
   -v, --verbose                                emit concise command diagnostics to stderr
 
 Use "you [command] --help" for more information about a command.

@@ -1,6 +1,7 @@
 package cliserver
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -13,12 +14,38 @@ type LocalBindTarget struct {
 	Port int
 }
 
+// LocalBindError reports an invalid local server endpoint selected for a
+// run/server host.
+type LocalBindError struct {
+	Cause error
+}
+
+func (err *LocalBindError) Error() string {
+	if err == nil || err.Cause == nil {
+		return "invalid local server endpoint"
+	}
+	return err.Cause.Error()
+}
+
+func (err *LocalBindError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.Cause
+}
+
+// IsLocalBindError reports whether err contains local server endpoint failure.
+func IsLocalBindError(err error) bool {
+	var bindErr *LocalBindError
+	return errors.As(err, &bindErr)
+}
+
 // LocalBindTargetFromServer resolves server into a validated local bind host and TCP port.
 // The server host must be a local loopback name (localhost, 127.0.0.1, or ::1).
 func LocalBindTargetFromServer(server string) (LocalBindTarget, error) {
 	base, err := ResolveBase(server)
 	if err != nil {
-		return LocalBindTarget{}, err
+		return LocalBindTarget{}, &LocalBindError{Cause: err}
 	}
 	return LocalBindTargetFromBase(base)
 }
@@ -27,11 +54,11 @@ func LocalBindTargetFromServer(server string) (LocalBindTarget, error) {
 func LocalBindTargetFromBase(base Base) (LocalBindTarget, error) {
 	host, err := localBindHostname(base.URL.Hostname())
 	if err != nil {
-		return LocalBindTarget{}, err
+		return LocalBindTarget{}, &LocalBindError{Cause: err}
 	}
 	port, err := tcpPortFromURL(base.URL)
 	if err != nil {
-		return LocalBindTarget{}, err
+		return LocalBindTarget{}, &LocalBindError{Cause: err}
 	}
 	return LocalBindTarget{Host: host, Port: port}, nil
 }

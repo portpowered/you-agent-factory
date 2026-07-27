@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 
@@ -17,7 +16,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
 	agyadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy"
 	codexprogress "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex/progress"
-	cursorprogress "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor/progress"
 )
 
 const (
@@ -110,15 +108,6 @@ func FailedFragment(dispatchID string, providerSession *workerexecution.Provider
 		Payload:            payload,
 		ProviderSessionRef: workerexecution.CloneProviderSessionMetadata(providerSession),
 	}
-}
-
-// StructuredResponseEvent carries one provider-neutral draft to the
-// session-owned response-event publisher without converting it to a legacy
-// response or progress fragment.
-func StructuredResponseEvent(draft factoryresponseevents.Draft) InferenceProgressFragment {
-	cloned := draft
-	cloned.Payload = append(json.RawMessage(nil), draft.Payload...)
-	return CanonicalDraftFragment(draft.DispatchID, cloned)
 }
 
 // InferenceProgressPublishingCommandRunner publishes internal response-stream
@@ -226,28 +215,54 @@ func (p *ScriptWrapProvider) executeAgy(
 	duration := p.providerNow().Sub(started)
 	diagnostics := commandDiagnostics(result.Request, result.Command, duration, result.Outcome == adapter.CommandOutcomeCanceled)
 	if result.Failure != nil {
-		providerErr := providerErrorFromAdapterFailure(result.Failure, executeErr, diagnostics)
+		providerErr := agyProviderErrorWithSession(req, providerErrorFromAdapterFailure(result.Failure, executeErr, diagnostics))
 		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result.Command, duration)...)
 		p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
 		return workerexecution.InferenceResponse{}, providerErr
 	}
 	if executeErr != nil {
 		if orchestrated := agyadapter.ClassifyOrchestrationError(executeErr); orchestrated.Failure != nil {
-			providerErr := providerErrorFromAdapterFailure(orchestrated.Failure, executeErr, diagnostics)
+			providerErr := agyProviderErrorWithSession(req, providerErrorFromAdapterFailure(orchestrated.Failure, executeErr, diagnostics))
 			logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result.Command, duration)...)
 			p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
 			return workerexecution.InferenceResponse{}, providerErr
 		}
-		providerErr := normalizeProviderExecutionError(req.ModelProvider, result.Command, executeErr, result.Response.ProviderSession, diagnostics)
+		providerErr := agyProviderErrorWithSession(req, normalizeProviderExecutionError(req.ModelProvider, result.Command, executeErr, result.Response.ProviderSession, diagnostics))
 		p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
 		return workerexecution.InferenceResponse{}, providerErr
 	}
 	response := result.Response
+	response.ProviderSession = agyEffectiveProviderSession(req, response.ProviderSession)
 	response.Diagnostics = diagnostics
 	logger.Info("inferencer: request completed",
 		appendProviderSessionLogFields(providerLogFields(req, "output_len", len(response.Content)), response.ProviderSession)...)
 	p.publishOpenCodeCompleted(req.Dispatch.DispatchID, response.ProviderSession, len(result.Drafts) > 0)
 	return response, nil
+}
+
+func agyEffectiveProviderSession(
+	req workerexecution.ProviderInferenceRequest,
+	existing *workerexecution.ProviderSessionMetadata,
+) *workerexecution.ProviderSessionMetadata {
+	if existing != nil && strings.TrimSpace(existing.Provider) != "" {
+		return existing
+	}
+	session := &workerexecution.ProviderSessionMetadata{
+		Provider: workerexecution.CanonicalProviderSessionProvider(req.ModelProvider),
+		Kind:     providerSessionKindSessionID,
+	}
+	if sessionID := strings.TrimSpace(req.SessionID); sessionID != "" {
+		session.ID = sessionID
+	}
+	return session
+}
+
+func agyProviderErrorWithSession(req workerexecution.ProviderInferenceRequest, err *ProviderError) *ProviderError {
+	if err == nil {
+		return nil
+	}
+	err.ProviderSession = agyEffectiveProviderSession(req, err.ProviderSession)
+	return err
 }
 
 func (p *ScriptWrapProvider) agyRequestValidationError(req workerexecution.ProviderInferenceRequest, err error) *ProviderError {
@@ -268,9 +283,6 @@ type progressStreamObserver interface {
 }
 
 func progressStreamIdentity(command string) adapter.Identity {
-	if cursorprogress.IsCommand(command) {
-		return adapter.Identity(modelprovider.ProviderCursor)
-	}
 	if codexprogress.IsCommand(command) {
 		return adapter.Identity(modelprovider.ProviderCodex)
 	}
@@ -282,14 +294,7 @@ func newProgressStreamObserver(
 	publisher InferenceProgressPublisher,
 	logger logging.Logger,
 ) progressStreamObserver {
-	dispatchID := strings.TrimSpace(req.DispatchID)
 	switch progressStreamIdentity(req.Command) {
-	case adapter.Identity(modelprovider.ProviderCursor):
-		return &cursorProgressObserver{
-			stream: cursorprogress.NewResponseEventStream(dispatchID, func(fragment cursorprogress.ProgressFragment) {
-				publisher(inferenceProgressFragmentFromCursor(fragment))
-			}, logger),
-		}
 	case adapter.Identity(modelprovider.ProviderCodex):
 		return &codexProgressObserver{
 			stream: codexprogress.NewProgressStream(req, func(fragment codexprogress.ProgressFragment) {
@@ -299,19 +304,6 @@ func newProgressStreamObserver(
 	default:
 		return nil
 	}
-}
-
-type cursorProgressObserver struct {
-	stream *cursorprogress.ResponseEventStream
-}
-
-func (o *cursorProgressObserver) observe(ctx context.Context, stream string, chunk []byte) bool {
-	o.stream.Observe(ctx, stream, chunk)
-	return true
-}
-
-func (o *cursorProgressObserver) flush(ctx context.Context, result CommandResult, err error) {
-	o.stream.Flush(ctx, cursorprogress.FlushReason(ctx, result.ExitCode, err))
 }
 
 type codexProgressObserver struct {
@@ -324,18 +316,6 @@ func (o *codexProgressObserver) observe(_ context.Context, stream string, chunk 
 
 func (o *codexProgressObserver) flush(_ context.Context, _ CommandResult, _ error) {
 	o.stream.Flush()
-}
-
-func inferenceProgressFragmentFromCursor(fragment cursorprogress.ProgressFragment) InferenceProgressFragment {
-	if fragment.HasCanonicalDraft {
-		return StructuredResponseEvent(fragment.CanonicalDraft)
-	}
-	return InferenceProgressFragment{
-		DispatchID:        fragment.DispatchID,
-		Kind:              fragment.Kind,
-		Payload:           fragment.Payload,
-		ExternalEventType: fragment.ExternalEventType,
-	}
 }
 
 func inferenceProgressFragmentFromCodex(fragment codexprogress.ProgressFragment) InferenceProgressFragment {

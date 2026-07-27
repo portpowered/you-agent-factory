@@ -4,16 +4,29 @@ package wire
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
-	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
+	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	assetswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire"
+	catalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
+	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
+	runtimehostwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire"
+	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
+)
+
+const (
+	defaultAssetBaseURL    = "https://huggingface.co"
+	defaultAssetAPIBaseURL = "https://huggingface.co/api"
 )
 
 // NewService constructs the inert, process-scoped Models service.
@@ -41,12 +54,15 @@ func NewService(
 	runtimeTempFile models.RuntimeCreateTempFile,
 	logger *zap.Logger,
 	now func() time.Time,
+	issuerEntropy platformrandom.Source,
 	pullMetrics models.PullMetricsRecorder,
 	hostLogger models.HostDiagnosticLogger,
 	hostMetrics models.HostMetricsRecorder,
 	localHooks models.LocalRuntimeHooks,
 ) (models.Service, error) {
-	defaultEndpoints := modelassets.DefaultEndpoints()
+	defaultEndpoints := models.RuntimeAssetEndpoints{
+		BaseURL: defaultAssetBaseURL, APIBaseURL: defaultAssetAPIBaseURL,
+	}
 	if assetEndpoints.BaseURL != "" {
 		defaultEndpoints.BaseURL = assetEndpoints.BaseURL
 	}
@@ -65,16 +81,49 @@ func NewService(
 	if runtimeTempFile != nil {
 		createTempFile = runtimeTempFileAdapter{next: runtimeTempFile}.create
 	}
+	issuerID, err := runtimeScopeIssuerID(issuerEntropy)
+	if err != nil {
+		return nil, fmt.Errorf("construct Models Runtime Scopes issuer identity: %w", err)
+	}
+	runtimeScopes, err := runtimescopeswire.NewService(func() string { return issuerID })
+	if err != nil {
+		return nil, err
+	}
+	assetService, err := assetswire.NewService(
+		runtimeScopes, assetPlatform, assetHTTP,
+		models.RuntimeAssetEndpoints{
+			BaseURL: defaultEndpoints.BaseURL, APIBaseURL: defaultEndpoints.APIBaseURL,
+		},
+		assetMkdirAll, assetStat, assetHome, assetWriteFile, assetRename,
+		assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen,
+	)
+	if err != nil {
+		return nil, err
+	}
+	catalogService, err := catalogwire.NewService(
+		runtimeScopes,
+		newCatalogReadinessQuery(assetService),
+	)
+	if err != nil {
+		return nil, err
+	}
+	runtimeHost, err := runtimehostwire.NewService(
+		runtimeScopes,
+		assetService,
+		processLauncher,
+		hostHTTP,
+		hostClock,
+		hostLogger,
+		hostMetrics,
+	)
+	if err != nil {
+		return nil, err
+	}
 	service, err := modelsservice.NewRoot(
-		localmodels.HostPlatform(assetPlatform), assetHTTP, defaultEndpoints,
-		modelassets.MakeDirectories(assetMkdirAll), modelassets.InspectPath(assetStat),
-		modelassets.ResolveHomeDirectory(assetHome), modelassets.WriteFile(assetWriteFile),
-		modelassets.RenamePath(assetRename), modelassets.RemovePath(assetRemove),
-		modelassets.ReadFile(assetReadFile), modelassets.ReadDirectory(assetReadDir),
-		modelassets.CreateFile(assetCreate), modelassets.OpenFile(assetOpen),
 		launcher, hostHTTP, clock,
 		runtimeRunner, runtimeHTTP, localmodels.InspectFile(runtimeInspect),
 		localmodels.TempDirectory(runtimeTempDir), createTempFile,
+		runtimeScopes, catalogService, assetService, runtimeHost,
 		models.ProcessDependencies{
 			Logger: logger, Clock: now, PullMetrics: pullMetrics,
 			HostLogger: hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,
@@ -84,6 +133,42 @@ func NewService(
 		return nil, err
 	}
 	return service, nil
+}
+
+func newCatalogReadinessQuery(assetService scopedassets.Service) catalog.ReadinessQuery {
+	return func(
+		ctx context.Context,
+		scopeRef models.RuntimeScopeRef,
+		scope models.RuntimeScopeConfig,
+		detail models.Detail,
+	) (models.Runtime, error) {
+		puller, err := localmodels.NewScopedAssetPuller(assetService, scopeRef)
+		if err != nil {
+			return models.Runtime{}, err
+		}
+		return localmodels.ManagedRuntimeReadinessForFactoryContext(
+			ctx,
+			&scope.Runtime,
+			detail.Name,
+			puller,
+			localmodels.DefaultManagedRuntimeSourceResolver(),
+		)
+	}
+}
+
+func runtimeScopeIssuerID(entropy platformrandom.Source) (string, error) {
+	if entropy == nil {
+		return "", fmt.Errorf("issuer entropy is required")
+	}
+	var identity [16]byte
+	for index := range identity {
+		value, err := entropy.Int63n(256)
+		if err != nil {
+			return "", err
+		}
+		identity[index] = byte(value)
+	}
+	return hex.EncodeToString(identity[:]), nil
 }
 
 // NewInvocationArtifactExporter constructs the Models-owned invocation artifact exporter.

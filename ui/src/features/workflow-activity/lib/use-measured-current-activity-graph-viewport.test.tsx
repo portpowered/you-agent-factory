@@ -19,30 +19,49 @@ function HookProbe() {
   );
 }
 
-describe("useMeasuredCurrentActivityGraphViewport", () => {
-  const originalResizeObserver = globalThis.ResizeObserver;
-  const originalNavigatorDescriptor = Object.getOwnPropertyDescriptor(
-    window.navigator,
-    "userAgent",
-  );
-  const originalBoundingClientRect =
-    HTMLElement.prototype.getBoundingClientRect;
-  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+const originalBoundingClientRectDescriptor = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  "getBoundingClientRect",
+);
+const originalResizeObserver = globalThis.ResizeObserver;
+const originalNavigatorDescriptor = Object.getOwnPropertyDescriptor(
+  window.navigator,
+  "userAgent",
+);
+const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
 
-  afterEach(() => {
-    globalThis.ResizeObserver = originalResizeObserver;
-    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-    globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
-    if (originalNavigatorDescriptor) {
-      Object.defineProperty(
-        window.navigator,
-        "userAgent",
-        originalNavigatorDescriptor,
-      );
-    }
-    HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
+function setBoundingClientRect(
+  value: typeof HTMLElement.prototype.getBoundingClientRect,
+) {
+  Object.defineProperty(HTMLElement.prototype, "getBoundingClientRect", {
+    configurable: true,
+    value,
   });
+}
+
+function restoreBrowserGlobals() {
+  globalThis.ResizeObserver = originalResizeObserver;
+  globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+  globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+  if (originalNavigatorDescriptor) {
+    Object.defineProperty(
+      window.navigator,
+      "userAgent",
+      originalNavigatorDescriptor,
+    );
+  }
+  if (originalBoundingClientRectDescriptor) {
+    Object.defineProperty(
+      HTMLElement.prototype,
+      "getBoundingClientRect",
+      originalBoundingClientRectDescriptor,
+    );
+  }
+}
+
+describe("useMeasuredCurrentActivityGraphViewport", () => {
+  afterEach(restoreBrowserGlobals);
 
   it("waits for non-zero viewport dimensions before marking the graph ready", () => {
     let resizeCallback: ResizeObserverCallback | undefined;
@@ -65,18 +84,20 @@ describe("useMeasuredCurrentActivityGraphViewport", () => {
     });
     globalThis.ResizeObserver =
       ResizeObserverMock as unknown as typeof ResizeObserver;
-    HTMLElement.prototype.getBoundingClientRect = () =>
-      ({
-        bottom: 0,
-        height: 0,
-        left: 0,
-        right: 0,
-        top: 0,
-        width: 0,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      }) as DOMRect;
+    setBoundingClientRect(
+      () =>
+        ({
+          bottom: 0,
+          height: 0,
+          left: 0,
+          right: 0,
+          top: 0,
+          width: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        }) as DOMRect,
+    );
 
     render(<HookProbe />);
 
@@ -125,7 +146,7 @@ describe("useMeasuredCurrentActivityGraphViewport", () => {
       return 1;
     }) as typeof requestAnimationFrame;
     globalThis.cancelAnimationFrame = vi.fn();
-    HTMLElement.prototype.getBoundingClientRect = () => {
+    setBoundingClientRect(() => {
       measureCount += 1;
       const width = measureCount >= 2 ? 640 : 0;
       const height = measureCount >= 2 ? 480 : 0;
@@ -141,7 +162,7 @@ describe("useMeasuredCurrentActivityGraphViewport", () => {
         y: 0,
         toJSON: () => ({}),
       } as DOMRect;
-    };
+    });
 
     render(<HookProbe />);
 

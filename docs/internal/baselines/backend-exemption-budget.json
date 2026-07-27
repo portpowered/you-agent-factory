@@ -477,18 +477,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_definitions/scaffold/init_test.go#assertInitScaffoldFilesCanonical",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_definitions/scaffold/init_test.go#assertRalphRuntimeConfig",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/factory_runtime/runtime/factory_event_history_test.go#assertBatchRequestReplayEvents",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
@@ -994,12 +982,6 @@
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/workers/provider/inference_provider_exit_failure_test.go#TestNewFromInputRejectsMissingRequiredEdges",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/provider/provider_behavior.go#cursorProviderBehavior.BuildArgs",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },

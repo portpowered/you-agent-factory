@@ -2,15 +2,20 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 )
@@ -83,6 +88,28 @@ func TestProductionDocsAndModelsCommandsBuildIndependently(t *testing.T) {
 	}
 }
 
+func TestProductionDocsCompletionComesFromManifestTopicChoices(t *testing.T) {
+	docs, err := newProductionDocsCommand(&cliDiagnosticsOptions{})
+	if err != nil {
+		t.Fatalf("newProductionDocsCommand() error = %v", err)
+	}
+	manifest, err := generated.ModelsDocsFamilyManifest()
+	if err != nil {
+		t.Fatalf("ModelsDocsFamilyManifest() error = %v", err)
+	}
+	record, err := manifest.CommandByID("you.docs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic, err := record.RequireArgumentAt(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(docs.ValidArgs, topic.Enum) {
+		t.Fatalf("docs completion = %#v, want manifest choices %#v", docs.ValidArgs, topic.Enum)
+	}
+}
+
 func TestProductionModelsInspectAndPullHonorJSONFlag(t *testing.T) {
 	var inspectJSON, pullJSON bool
 	root := (CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
@@ -107,6 +134,93 @@ func TestProductionModelsInspectAndPullHonorJSONFlag(t *testing.T) {
 	}
 	if !inspectJSON || !pullJSON {
 		t.Fatalf("json bindings = inspect %t pull %t, want true", inspectJSON, pullJSON)
+	}
+}
+
+func TestProductionModelsPullRejectsInvalidInputsBeforeService(t *testing.T) {
+	testCases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "missing model", args: []string{"models", "pull"}, want: "accepts 1 arg(s), received 0"},
+		{name: "extra model", args: []string{"models", "pull", "model-a", "model-b"}, want: "accepts 1 arg(s), received 2"},
+		{name: "unknown flag", args: []string{"models", "pull", "--unknown"}, want: "unknown flag: --unknown"},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			called := false
+			root := (CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
+				pull: func(modelscli.PullConfig) error {
+					called = true
+					return nil
+				},
+			}}).NewCommand(nil, nil, nil)
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs(testCase.args)
+			err := root.Execute()
+			if err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("execute %v error = %v, want %q", testCase.args, err, testCase.want)
+			}
+			if called {
+				t.Fatal("invalid pull input invoked Models service")
+			}
+		})
+	}
+}
+
+func TestProductionModelsInvokeRejectsInvalidInputsBeforeService(t *testing.T) {
+	testCases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "missing model", args: []string{"models", "invoke"}, want: "accepts 1 arg(s), received 0"},
+		{name: "extra model", args: []string{"models", "invoke", "model-a", "model-b"}, want: "accepts 1 arg(s), received 2"},
+		{name: "unknown flag", args: []string{"models", "invoke", "model-a", "--unknown"}, want: "unknown flag: --unknown"},
+		{name: "invalid operation", args: []string{"models", "invoke", "model-a", "--operation", "INVALID"}, want: "not one of the declared choices"},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			called := false
+			root := (CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
+				invoke: func(modelscli.InvokeConfig) error {
+					called = true
+					return nil
+				},
+			}}).NewCommand(nil, nil, nil)
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs(testCase.args)
+			err := root.Execute()
+			if err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("execute %v error = %v, want %q", testCase.args, err, testCase.want)
+			}
+			if called {
+				t.Fatal("invalid invoke input invoked Models service")
+			}
+		})
+	}
+}
+
+func TestProductionModelsPullPreservesCancellationAndOperationFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	root := (CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
+		pull: func(cfg modelscli.PullConfig) error {
+			if cfg.Context.Err() != context.Canceled {
+				t.Fatalf("pull context error = %v, want canceled", cfg.Context.Err())
+			}
+			return context.Canceled
+		},
+	}}).NewCommand(nil, nil, nil)
+	root.SetContext(ctx)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"models", "pull", "model-a"})
+	if err := root.Execute(); !errors.Is(err, context.Canceled) {
+		t.Fatalf("execute canceled models pull error = %v, want context.Canceled", err)
 	}
 }
 
@@ -141,7 +255,7 @@ func TestProductionDocsExecutesTopicWithVerboseDiagnostics(t *testing.T) {
 
 func TestModelsListUsesInjectedService(t *testing.T) {
 	called := false
-	root := (CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
+	root := NewCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
 		list: func(modelscli.ListConfig) error {
 			called = true
 			return nil
@@ -162,7 +276,7 @@ func TestInjectedModelServicesRouteGeneratedCutoverCommands(t *testing.T) {
 	var listed bool
 	var inspected, pulled string
 	var invocations []modelscli.InvokeConfig
-	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
+	factory := withTestInjectedPlatformRoles(NewCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
 		list: func(modelscli.ListConfig) error { listed = true; return nil },
 		inspect: func(cfg modelscli.InspectConfig) error {
 			inspected = cfg.ModelName
@@ -176,7 +290,7 @@ func TestInjectedModelServicesRouteGeneratedCutoverCommands(t *testing.T) {
 			invocations = append(invocations, cfg)
 			return nil
 		},
-	}})
+	}}))
 	root := factory.NewCommand(
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
@@ -201,6 +315,179 @@ func TestInjectedModelServicesRouteGeneratedCutoverCommands(t *testing.T) {
 	if invocations[0].Operation != "TTS" || invocations[0].Text != "hello" {
 		t.Fatalf("invoke config = %#v, want operation/text bindings", invocations[0])
 	}
+}
+
+func TestModelsCommandsPreserveBehaviorThroughProductionComposition(t *testing.T) {
+	t.Parallel()
+
+	defaults := operatorconfig.ResolvedDefaults{
+		WorkerModelProvider: "CODEX",
+		WorkerModel:         "gpt-test",
+	}
+	for _, test := range modelsCompositionCases() {
+		t.Run(test.name+" success", func(t *testing.T) {
+			service := modelsCompositionService(t, test.name, defaults, nil)
+			stdout, stderr, err := executeModelsComposition(t, service, defaults, test.args)
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if stdout != "models-ok\n" || stderr != "models-diagnostic\n" {
+				t.Fatalf("stdout = %q, stderr = %q", stdout, stderr)
+			}
+		})
+		t.Run(test.name+" failure", func(t *testing.T) {
+			service := modelsCompositionService(t, test.name, defaults, test.wantError)
+			stdout, stderr, err := executeModelsComposition(t, service, defaults, test.args)
+			if !errors.Is(err, test.wantError) {
+				t.Fatalf("Execute() error = %v, want %v", err, test.wantError)
+			}
+			if stdout != "" || stderr != fmt.Sprintf("Error: %v\n", test.wantError) {
+				t.Fatalf("failure stdout = %q, stderr = %q", stdout, stderr)
+			}
+		})
+	}
+}
+
+type modelsCompositionCase struct {
+	name      string
+	args      []string
+	wantError error
+}
+
+func modelsCompositionCases() []modelsCompositionCase {
+	operationFailure := errors.New("models operation failed")
+	common := []string{"--verbose", "--json", "--server", "https://factory.example", "models"}
+	return []modelsCompositionCase{
+		{name: "list", args: append(append([]string(nil), common...), "list"), wantError: operationFailure},
+		{
+			name:      "inspect",
+			args:      append(append([]string(nil), common...), "inspect", "model-alpha"),
+			wantError: modelscli.ErrModelNotFound,
+		},
+		{
+			name: "invoke",
+			args: []string{
+				"--verbose", "--json", "--server", "https://factory.example",
+				"--default-worker-model-provider", "codex", "--default-worker-model", "gpt-test",
+				"models", "invoke", "model-alpha", "--operation", "TTS",
+				"--text", "hello", "--output", "speech.wav",
+			},
+			wantError: context.Canceled,
+		},
+		{
+			name:      "pull",
+			args:      append(append([]string(nil), common...), "pull", "model-alpha"),
+			wantError: operationFailure,
+		},
+	}
+}
+
+func modelsCompositionService(
+	t *testing.T,
+	command string,
+	defaults operatorconfig.ResolvedDefaults,
+	result error,
+) modelscli.Service {
+	t.Helper()
+	switch command {
+	case "list":
+		return modelsCLIServiceFunctions{list: func(cfg modelscli.ListConfig) error {
+			assertModelsCommonConfig(t, cfg.Context, cfg.Server, cfg.JSON, cfg.Verbose)
+			return writeModelsCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+		}}
+	case "inspect":
+		return modelsCLIServiceFunctions{inspect: func(cfg modelscli.InspectConfig) error {
+			assertModelsCommonConfig(t, cfg.Context, cfg.Server, cfg.JSON, cfg.Verbose)
+			assertModelsName(t, cfg.ModelName)
+			return writeModelsCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+		}}
+	case "invoke":
+		return modelsCLIServiceFunctions{invoke: func(cfg modelscli.InvokeConfig) error {
+			assertModelsCommonConfig(t, cfg.Context, cfg.Server, cfg.JSON, cfg.Verbose)
+			if cfg.ModelName != "model-alpha" || cfg.Operation != "TTS" ||
+				cfg.Text != "hello" || cfg.OutputPath != "speech.wav" ||
+				cfg.HomeDir == "" || cfg.OperatorDefaults != defaults || cfg.Logger == nil {
+				t.Fatalf("invoke config = %#v", cfg)
+			}
+			return writeModelsCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+		}}
+	case "pull":
+		return modelsCLIServiceFunctions{pull: func(cfg modelscli.PullConfig) error {
+			assertModelsCommonConfig(t, cfg.Context, cfg.Server, cfg.JSON, cfg.Verbose)
+			assertModelsName(t, cfg.ModelName)
+			return writeModelsCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+		}}
+	default:
+		t.Fatalf("unsupported models composition command %q", command)
+		return nil
+	}
+}
+
+func executeModelsComposition(
+	t *testing.T,
+	service modelscli.Service,
+	defaults operatorconfig.ResolvedDefaults,
+	args []string,
+) (string, string, error) {
+	t.Helper()
+	factory := withTestInjectedPlatformRoles(NewCommandFactory(CommandOperations{ModelsCLI: service}))
+	factory.resolveOperatorDefaults = func(
+		_ string,
+		_ operatorconfig.Defaults,
+		flags operatorconfig.FlagOverrides,
+	) (operatorconfig.ResolvedDefaults, error) {
+		if flags.WorkerModelProvider != "codex" || flags.WorkerModel != "gpt-test" {
+			t.Fatalf("operator default flags = %#v", flags)
+		}
+		return defaults, nil
+	}
+	root := factory.NewCommand(
+		func() (string, error) { return t.TempDir(), nil },
+		func(string) (string, bool) { return "", false },
+		nil,
+	)
+	var stdout, stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs(args)
+	err := root.Execute()
+	return stdout.String(), stderr.String(), err
+}
+
+func assertModelsCommonConfig(
+	t *testing.T,
+	ctx context.Context,
+	server string,
+	jsonOutput, verbose bool,
+) {
+	t.Helper()
+	if ctx == nil || server != "https://factory.example" || !jsonOutput || !verbose {
+		t.Fatalf(
+			"common config = context %v, server %q, JSON %t, verbose %t",
+			ctx,
+			server,
+			jsonOutput,
+			verbose,
+		)
+	}
+}
+
+func assertModelsName(t *testing.T, modelName string) {
+	t.Helper()
+	if modelName != "model-alpha" {
+		t.Fatalf("ModelName = %q, want model-alpha", modelName)
+	}
+}
+
+func writeModelsCompositionOutput(output, diagnostics io.Writer, result error) error {
+	if result != nil {
+		return result
+	}
+	if _, err := fmt.Fprintln(output, "models-ok"); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintln(diagnostics, "models-diagnostic")
+	return err
 }
 
 func TestProductionRootUsesGeneratedModelsDocsFamilyCutover(t *testing.T) {
@@ -368,15 +655,17 @@ func TestFactoryReplaceCurrentCommand_GlobalJSONMapsToConfig(t *testing.T) {
 }
 
 func TestModelsInspectCommand_GlobalJSONMapsToConfig(t *testing.T) {
-	originalInspectModel := inspectModel
+	originalModelsCLI := rootModelsCLI
 	defer func() {
-		inspectModel = originalInspectModel
+		rootModelsCLI = originalModelsCLI
 	}()
 
 	var got modelscli.InspectConfig
-	inspectModel = func(cfg modelscli.InspectConfig) error {
-		got = cfg
-		return nil
+	rootModelsCLI = modelsCLIServiceFunctions{
+		inspect: func(cfg modelscli.InspectConfig) error {
+			got = cfg
+			return nil
+		},
 	}
 
 	root := newLegacyTestRootCommand()
@@ -473,15 +762,15 @@ func TestFactoryDeleteCommand_GlobalJSONMapsToConfig(t *testing.T) {
 	}
 }
 
-func TestInitCommand_GlobalJSONMapsToConfig(t *testing.T) {
+func TestInitCommand_GlobalJSONIsRejectedBeforeInitService(t *testing.T) {
 	originalInitFactory := initFactory
 	defer func() {
 		initFactory = originalInitFactory
 	}()
 
-	var got factorydefinitions.ScaffoldConfig
-	initFactory = func(cfg factorydefinitions.ScaffoldConfig) error {
-		got = cfg
+	called := false
+	initFactory = func(factorydefinitions.ScaffoldConfig) error {
+		called = true
 		return nil
 	}
 
@@ -490,24 +779,27 @@ func TestInitCommand_GlobalJSONMapsToConfig(t *testing.T) {
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "init"})
 
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute init with global --json: %v", err)
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "--json is not supported by you init") {
+		t.Fatalf("execute init with global --json error = %v", err)
 	}
-	if !got.JSON {
-		t.Fatal("expected global --json to map to InitConfig.JSON")
+	if called {
+		t.Fatal("init service called after global --json rejection")
 	}
 }
 
 func TestModelsListCommand_DefaultServerAndJSONFlagMapToConfig(t *testing.T) {
-	originalListModels := listModels
+	originalModelsCLI := rootModelsCLI
 	defer func() {
-		listModels = originalListModels
+		rootModelsCLI = originalModelsCLI
 	}()
 
 	var got modelscli.ListConfig
-	listModels = func(cfg modelscli.ListConfig) error {
-		got = cfg
-		return nil
+	rootModelsCLI = modelsCLIServiceFunctions{
+		list: func(cfg modelscli.ListConfig) error {
+			got = cfg
+			return nil
+		},
 	}
 
 	root := newLegacyTestRootCommand()
@@ -527,23 +819,25 @@ func TestModelsListCommand_DefaultServerAndJSONFlagMapToConfig(t *testing.T) {
 }
 
 func TestModelsListCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStderr(t *testing.T) {
-	originalListModels := listModels
+	originalModelsCLI := rootModelsCLI
 	defer func() {
-		listModels = originalListModels
+		rootModelsCLI = originalModelsCLI
 	}()
 
-	listModels = func(cfg modelscli.ListConfig) error {
-		if !cfg.Verbose {
-			t.Fatal("expected verbose config")
-		}
-		if cfg.Diagnostics == nil {
-			t.Fatal("expected diagnostics writer")
-		}
-		if _, err := fmt.Fprintln(cfg.Diagnostics, "diagnostic: models list"); err != nil {
+	rootModelsCLI = modelsCLIServiceFunctions{
+		list: func(cfg modelscli.ListConfig) error {
+			if !cfg.Verbose {
+				t.Fatal("expected verbose config")
+			}
+			if cfg.Diagnostics == nil {
+				t.Fatal("expected diagnostics writer")
+			}
+			if _, err := fmt.Fprintln(cfg.Diagnostics, "diagnostic: models list"); err != nil {
+				return err
+			}
+			_, err := fmt.Fprintln(cfg.Output, `{"results":[]}`)
 			return err
-		}
-		_, err := fmt.Fprintln(cfg.Output, `{"results":[]}`)
-		return err
+		},
 	}
 
 	var stdout bytes.Buffer
@@ -570,15 +864,17 @@ func TestModelsListCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStderr
 }
 
 func TestModelsInspectCommand_MapsModelArgumentAndServer(t *testing.T) {
-	originalInspectModel := inspectModel
+	originalModelsCLI := rootModelsCLI
 	defer func() {
-		inspectModel = originalInspectModel
+		rootModelsCLI = originalModelsCLI
 	}()
 
 	var got modelscli.InspectConfig
-	inspectModel = func(cfg modelscli.InspectConfig) error {
-		got = cfg
-		return nil
+	rootModelsCLI = modelsCLIServiceFunctions{
+		inspect: func(cfg modelscli.InspectConfig) error {
+			got = cfg
+			return nil
+		},
 	}
 
 	root := newLegacyTestRootCommand()
@@ -598,15 +894,17 @@ func TestModelsInspectCommand_MapsModelArgumentAndServer(t *testing.T) {
 }
 
 func TestModelsInvokeCommand_MapsArgumentsAndFlags(t *testing.T) {
-	originalInvokeModel := invokeModel
+	originalModelsCLI := rootModelsCLI
 	defer func() {
-		invokeModel = originalInvokeModel
+		rootModelsCLI = originalModelsCLI
 	}()
 
 	var got modelscli.InvokeConfig
-	invokeModel = func(cfg modelscli.InvokeConfig) error {
-		got = cfg
-		return nil
+	rootModelsCLI = modelsCLIServiceFunctions{
+		invoke: func(cfg modelscli.InvokeConfig) error {
+			got = cfg
+			return nil
+		},
 	}
 
 	root := newLegacyTestRootCommand()
@@ -623,15 +921,17 @@ func TestModelsInvokeCommand_MapsArgumentsAndFlags(t *testing.T) {
 }
 
 func TestModelsPullCommand_MapsArgumentsAndFlags(t *testing.T) {
-	originalPullModel := pullModel
+	originalModelsCLI := rootModelsCLI
 	defer func() {
-		pullModel = originalPullModel
+		rootModelsCLI = originalModelsCLI
 	}()
 
 	var got modelscli.PullConfig
-	pullModel = func(cfg modelscli.PullConfig) error {
-		got = cfg
-		return nil
+	rootModelsCLI = modelsCLIServiceFunctions{
+		pull: func(cfg modelscli.PullConfig) error {
+			got = cfg
+			return nil
+		},
 	}
 
 	root := newLegacyTestRootCommand()

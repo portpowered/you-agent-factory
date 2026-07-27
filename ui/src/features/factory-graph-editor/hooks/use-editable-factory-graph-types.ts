@@ -1,5 +1,5 @@
-import type { useFactoryDocumentSave } from "../../current-factory-definition/public";
-import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
+import type { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
+import type { FactoryDocumentSaveState } from "../../current-selection/base/hooks/factory-document-save-types";
 
 export type EditableFactoryGraphSaveMutation = Pick<
   ReturnType<typeof useFactoryDocumentSave>,

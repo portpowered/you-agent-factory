@@ -8,9 +8,10 @@ are not JavaScript module APIs.
 
 | Export | Raw artifact |
 | --- | --- |
-| `@you-agent-factory/api/manifest` | Contract publication manifest JSON with export metadata and artifact hashes |
+| `@you-agent-factory/api/manifest` | Commit-independent development metadata and artifact hashes; publication candidates add source provenance |
 | `@you-agent-factory/api/openapi` | Bundled OpenAPI YAML |
-| `@you-agent-factory/api/cli` | CLI command inventory JSON |
+| `@you-agent-factory/api/cli` | Authoritative static CLI command manifest |
+| `@you-agent-factory/api/schemas/cli-command-manifest` | CLI command-manifest JSON Schema |
 | `@you-agent-factory/api/mcp` | MCP tool inventory JSON |
 | `@you-agent-factory/api/schemas/you-config` | `you` configuration JSON Schema |
 | `@you-agent-factory/api/schemas/factory` | Factory configuration JSON Schema |
@@ -43,7 +44,11 @@ const openapiYAML = await readFile(fileURLToPath(openapiURL), "utf8");
 
 Use the same resolution-and-read pattern for CLI, MCP, schema, JavaScript
 runtime-contract, and joined artifacts. Parse `.json` files as JSON and pass
-`.yaml` files to the YAML reader chosen by your application.
+`.yaml` files to the YAML reader chosen by your application. The CLI manifest
+contains the static command graph and stable input and handler bindings. Combine
+its `you.run` input metadata with a selected Factory's `invocationSignature`
+from the Factory schema; a missing signature selects the documented
+compatibility-input mode.
 
 ## Data-only package
 

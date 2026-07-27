@@ -16,10 +16,8 @@ import {
   DashboardGraphControls,
   DashboardGraphFrame,
 } from "../../../components/dashboard/dashboard-graph";
-import {
-  FACTORY_GRAPH_EDGE_TYPES,
-  WORK_RELATION_NODE_TYPES,
-} from "../../graphs/public";
+import { FACTORY_GRAPH_EDGE_TYPES } from "../../graphs/components/factory-graph-edge";
+import { WORK_RELATION_NODE_TYPES } from "../../graphs/components/work-relation-node";
 import {
   traceRelationTopologyLayoutKey,
   useTraceRelationFactoryGraphLayoutPositions,

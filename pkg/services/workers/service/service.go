@@ -2,6 +2,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -18,8 +19,11 @@ import (
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/construction"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
+	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
+	workstations "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
+	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	"github.com/portpowered/infinite-you/pkg/services/workers/skippermissions"
@@ -32,6 +36,7 @@ import (
 type Service struct {
 	sessions                          CurrentRuntimeResolver
 	models                            models.Service
+	modelsScope                       models.RuntimeScopeRef
 	providerFactory                   *workerprovider.Factory
 	scriptFactory                     *workerexecutor.ScriptFactory
 	executorBuilder                   workerconstruction.Builder
@@ -59,7 +64,12 @@ type Service struct {
 	temporaryFiles                    platformfilesystem.TemporaryFileSystem
 	executableLocator                 platformprocess.ExecutableLocator
 	providerRegistry                  *providerregistry.Registry
+	invocationConductor               *providerconductor.Conductor
+	runtimeAssembly                   runtimeassembly.Service
+	workstations                      workstations.Service
 }
+
+var _ workers.RuntimeService = (*Service)(nil)
 
 type CurrentRuntimeResolver interface {
 	CurrentRuntime() *factorysessions.LiveRuntime
@@ -206,6 +216,78 @@ func firstDecisionEnvelopeService(
 	return services[0]
 }
 
+// BuildRuntime delegates the singular Workers root operation to its
+// parent-private Runtime Assembly capability.
+func (s *Service) BuildRuntime(
+	ctx context.Context,
+	request workers.RuntimeBuildRequest,
+) (workers.RuntimeBuildResult, error) {
+	if s == nil || s.runtimeAssembly == nil {
+		return workers.RuntimeBuildResult{}, fmt.Errorf(
+			"%w: Workers Runtime Assembly is required",
+			workers.ErrIncompleteRuntimeAssembly,
+		)
+	}
+	return s.runtimeAssembly.Build(ctx, request)
+}
+
+// StartWorkstationPool delegates lifecycle activation to the parent-private
+// workstation capability.
+func (s *Service) StartWorkstationPool(
+	ctx context.Context,
+	request workers.WorkstationPoolStartRequest,
+) (workers.WorkstationPoolStartResult, error) {
+	if s == nil || s.workstations == nil {
+		return workers.WorkstationPoolStartResult{}, workers.ErrWorkstationPoolUnavailable
+	}
+	return s.workstations.Start(ctx, request)
+}
+
+// StopWorkstationPool delegates terminal shutdown to the parent-private
+// workstation capability.
+func (s *Service) StopWorkstationPool(
+	ctx context.Context,
+) (workers.WorkstationPoolStopResult, error) {
+	if s == nil || s.workstations == nil {
+		return workers.WorkstationPoolStopResult{}, workers.ErrWorkstationPoolUnavailable
+	}
+	return s.workstations.Stop(ctx)
+}
+
+// WorkstationRoute reports availability through the private lifecycle owner.
+func (s *Service) WorkstationRoute(
+	ctx context.Context,
+	request workers.WorkstationRouteRequest,
+) (workers.WorkstationRouteResult, error) {
+	if s == nil || s.workstations == nil {
+		return workers.WorkstationRouteResult{}, workers.ErrWorkstationPoolUnavailable
+	}
+	return s.workstations.Route(ctx, request)
+}
+
+// DispatchWorkstation delegates execution to the private workstation owner.
+func (s *Service) DispatchWorkstation(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+) (workers.WorkstationDispatchResult, error) {
+	if s == nil || s.workstations == nil {
+		return workers.WorkstationDispatchResult{}, workers.ErrWorkstationPoolUnavailable
+	}
+	return s.workstations.Dispatch(ctx, request)
+}
+
+// CancelWorkstationDispatch delegates explicit cancellation to the private
+// workstation owner.
+func (s *Service) CancelWorkstationDispatch(
+	ctx context.Context,
+	request workers.WorkstationDispatchCancelRequest,
+) (workers.WorkstationDispatchCancelResult, error) {
+	if s == nil || s.workstations == nil {
+		return workers.WorkstationDispatchCancelResult{}, workers.ErrWorkstationPoolUnavailable
+	}
+	return s.workstations.Cancel(ctx, request)
+}
+
 func (s *Service) modelInvocationExecutor(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	factoryCfg *interfaces.FactoryConfig,
@@ -256,7 +338,7 @@ func (s *Service) BuildModelInvocationExecutor(runtimeCfg interfaces.RuntimeConf
 		logging.NewZapLogger(s.logger, s.verbose),
 		s.invocationSkipPermissionsOverride, s.providerOverride,
 		nil, nil, nil, nil, s.clock, s.processEnvironment, s.currentWorkingDirectory,
-		s.runtimeRunnerDecorators(runtimeCfg, factoryCfg, nil, s.clock, s.providerOverride == nil),
+		s.runtimeRunnerDecorators(runtimeCfg, factoryCfg, nil, s.clock, s.providerOverride == nil, nil),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("construct model worker %q: %w", workerName, err)

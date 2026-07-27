@@ -1,0 +1,462 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
+import type { ReactNode } from "react";
+
+import type {
+  FactoryValidationResult,
+  validateFactoryDefinition,
+} from "../../../../api/factory-validation";
+import { baseFactoryDefinition } from "../../lib/draft/factory-graph-draft.test-helpers";
+import { buildDraftAppliedFactoryDefinition } from "../../lib/draft/factory-graph-draft-apply";
+import { createEmptyFactoryGraphDraft } from "../../lib/draft/factory-graph-draft-types";
+import {
+  connectFactoryGraphNodes,
+  disconnectFactoryGraphEdge,
+  removeFactoryGraphNode,
+} from "../../lib/operations/factory-graph-operations";
+import { useFactoryValidation } from "./use-factory-validation";
+import { validationFixtures } from "./use-factory-validation.test.helpers";
+
+type ValidationImplementation = (
+  ...args: Parameters<typeof validateFactoryDefinition>
+) => ReturnType<typeof validateFactoryDefinition>;
+
+function createValidationHarness() {
+  const implementations: ValidationImplementation[] = [];
+  const validate = mock(
+    (...args: Parameters<typeof validateFactoryDefinition>) => {
+      const implementation = implementations.shift();
+      if (!implementation) {
+        throw new Error("expected an enqueued factory validation response");
+      }
+      return implementation(...args);
+    },
+  );
+
+  return { implementations, validate };
+}
+
+let validationHarness = createValidationHarness();
+let validateDefinition = validationHarness.validate;
+
+beforeEach(() => {
+  validationHarness = createValidationHarness();
+  validateDefinition = validationHarness.validate;
+});
+
+function enqueueValidationResults(...results: FactoryValidationResult[]) {
+  validationHarness.implementations.push(
+    ...results.map((result) => async () => result),
+  );
+}
+
+function enqueueValidationImplementations(
+  ...implementations: ValidationImplementation[]
+) {
+  validationHarness.implementations.push(...implementations);
+}
+
+function createQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        gcTime: Infinity,
+        retry: false,
+      },
+    },
+  });
+}
+
+function createWrapper(queryClient: QueryClient) {
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+  };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+function renderValidationHook(
+  queryClient: QueryClient,
+  initialDefinition: ReturnType<typeof buildDraftAppliedFactoryDefinition>,
+) {
+  return renderHook(
+    ({ definition }) =>
+      useFactoryValidation(definition, true, {
+        debounceMs: 0,
+        validateDefinition,
+      }),
+    {
+      initialProps: {
+        definition: initialDefinition,
+      },
+      wrapper: createWrapper(queryClient),
+    },
+  );
+}
+
+describe("useFactoryValidation debounce", () => {
+  const debounceMs = 50;
+
+  it("waits for debounce before validating rapid draft changes", async () => {
+    enqueueValidationResults(
+      validationFixtures.validFactory,
+      validationFixtures.validFactory,
+    );
+
+    const queryClient = createQueryClient();
+    const emptyDraftDefinition = buildDraftAppliedFactoryDefinition(
+      baseFactoryDefinition,
+      createEmptyFactoryGraphDraft(),
+    );
+    const repeaterDraft = createEmptyFactoryGraphDraft();
+    repeaterDraft.additions.workstations.push({
+      inputs: [],
+      name: "repeater",
+      outputs: [],
+      type: "REPEATER_WORKSTATION",
+      worker: "writer",
+    });
+    const repeaterDraftDefinition = buildDraftAppliedFactoryDefinition(
+      baseFactoryDefinition,
+      repeaterDraft,
+    );
+
+    const { rerender } = renderHook(
+      ({ definition }) =>
+        useFactoryValidation(definition, true, {
+          debounceMs,
+          validateDefinition,
+        }),
+      {
+        initialProps: {
+          definition: emptyDraftDefinition,
+        },
+        wrapper: createWrapper(queryClient),
+      },
+    );
+
+    await waitFor(() => {
+      expect(validateDefinition).toHaveBeenCalledTimes(1);
+    });
+    const initialValidationCallCount = validateDefinition.mock.calls.length;
+
+    rerender({
+      definition: repeaterDraftDefinition,
+    });
+
+    expect(validateDefinition).toHaveBeenCalledTimes(initialValidationCallCount);
+
+    await waitFor(
+      () => {
+        expect(validateDefinition).toHaveBeenCalledTimes(
+          initialValidationCallCount + 1,
+        );
+      },
+      { timeout: debounceMs * 4 },
+    );
+    expect(validateDefinition).toHaveBeenCalledWith(
+      repeaterDraftDefinition,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+});
+
+describe("useFactoryValidation abort", () => {
+  it("aborts in-flight validation when a newer draft definition is requested", async () => {
+    const firstDeferred = createDeferred<FactoryValidationResult>();
+    const capturedSignals: AbortSignal[] = [];
+    enqueueValidationImplementations(
+      (_definition, options) => {
+        if (options?.signal) {
+          capturedSignals.push(options.signal);
+        }
+        return firstDeferred.promise;
+      },
+      async () => validationFixtures.validFactory,
+    );
+
+    const queryClient = createQueryClient();
+    const repeaterDraft = createEmptyFactoryGraphDraft();
+    repeaterDraft.additions.workstations.push({
+      inputs: [],
+      name: "repeater",
+      outputs: [],
+      type: "REPEATER_WORKSTATION",
+      worker: "writer",
+    });
+
+    const { rerender } = renderValidationHook(
+      queryClient,
+      buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        createEmptyFactoryGraphDraft(),
+      ),
+    );
+
+    await waitFor(() => {
+      expect(validateDefinition).toHaveBeenCalledTimes(1);
+    });
+
+    rerender({
+      definition: buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        repeaterDraft,
+      ),
+    });
+
+    await waitFor(() => {
+      expect(validateDefinition).toHaveBeenCalledTimes(2);
+    });
+
+    expect(capturedSignals[0]?.aborted).toBe(true);
+  });
+});
+
+describe("useFactoryValidation stale response handling", () => {
+  it("ignores stale validation responses after a newer draft definition is requested", async () => {
+    const firstDeferred = createDeferred<FactoryValidationResult>();
+    const secondDeferred = createDeferred<FactoryValidationResult>();
+    enqueueValidationImplementations(
+      () => firstDeferred.promise,
+      () => secondDeferred.promise,
+    );
+
+    const queryClient = createQueryClient();
+    const repeaterDraft = createEmptyFactoryGraphDraft();
+    repeaterDraft.additions.workstations.push({
+      inputs: [],
+      name: "repeater",
+      outputs: [],
+      type: "REPEATER_WORKSTATION",
+      worker: "writer",
+    });
+
+    const { rerender, result } = renderValidationHook(
+      queryClient,
+      buildDraftAppliedFactoryDefinition(baseFactoryDefinition, repeaterDraft),
+    );
+
+    rerender({
+      definition: buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        createEmptyFactoryGraphDraft(),
+      ),
+    });
+
+    await act(async () => {
+      firstDeferred.resolve(validationFixtures.repeaterWithoutRejectRoute);
+      await firstDeferred.promise.catch(() => undefined);
+    });
+
+    expect(result.current.targets).toEqual([]);
+
+    await act(async () => {
+      secondDeferred.resolve(validationFixtures.validFactory);
+      await secondDeferred.promise;
+    });
+
+    await waitFor(() => {
+      expect(result.current.targets).toEqual([]);
+    });
+  });
+});
+
+describe("useFactoryValidation draft mutation refresh on add and remove", () => {
+  it("refreshes targets after an add operation changes the draft-applied factory", async () => {
+    enqueueValidationResults(
+      validationFixtures.validFactory,
+      validationFixtures.repeaterWithoutRejectRoute,
+    );
+
+    const queryClient = createQueryClient();
+    const repeaterDraft = createEmptyFactoryGraphDraft();
+    repeaterDraft.additions.workstations.push({
+      inputs: [],
+      name: "repeater",
+      outputs: [],
+      type: "REPEATER_WORKSTATION",
+      worker: "writer",
+    });
+
+    const { rerender, result } = renderValidationHook(
+      queryClient,
+      buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        createEmptyFactoryGraphDraft(),
+      ),
+    );
+
+    await waitFor(() => {
+      expect(result.current.targets).toEqual([]);
+    });
+
+    rerender({
+      definition: buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        repeaterDraft,
+      ),
+    });
+
+    await waitFor(() => {
+      expect(result.current.targets).toHaveLength(1);
+      expect(result.current.targets[0]?.subject.location).toBe("ON_REJECTION");
+    });
+  });
+
+  it("refreshes targets after a remove operation changes the draft-applied factory", async () => {
+    enqueueValidationResults(
+      validationFixtures.validFactory,
+      validationFixtures.reviewRemoved,
+    );
+
+    const queryClient = createQueryClient();
+    const removeDraft = removeFactoryGraphNode({
+      baseFactoryDefinition,
+      draft: createEmptyFactoryGraphDraft(),
+      nodeId: "workstation:draft",
+    });
+    expect(removeDraft.ok).toBe(true);
+
+    const { rerender, result } = renderValidationHook(
+      queryClient,
+      buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        createEmptyFactoryGraphDraft(),
+      ),
+    );
+
+    await waitFor(() => {
+      expect(result.current.targets).toEqual([]);
+    });
+
+    rerender({
+      definition: buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        expectOk(removeDraft).value,
+      ),
+    });
+
+    await waitFor(() => {
+      expect(result.current.targets).toHaveLength(1);
+      expect(result.current.targets[0]?.code).toBe(
+        "factory.route.danglingPlaceReference",
+      );
+    });
+  });
+});
+
+describe("useFactoryValidation draft mutation refresh on connect and disconnect", () => {
+  it("refreshes targets after a connect operation changes the draft-applied factory", async () => {
+    enqueueValidationResults(
+      validationFixtures.disconnectedFailureRoute,
+      validationFixtures.validFactory,
+    );
+
+    const queryClient = createQueryClient();
+    const disconnectedDraft = createEmptyFactoryGraphDraft();
+    const connectedDraft = connectFactoryGraphNodes({
+      baseFactoryDefinition,
+      draft: disconnectedDraft,
+      sourceAnchorId: "workstation-on-failure-source",
+      sourceNodeId: "workstation:draft",
+      targetAnchorId: "work-state-input-target",
+      targetNodeId: "work-state:story:done",
+    });
+    expect(connectedDraft.ok).toBe(true);
+
+    const { rerender, result } = renderValidationHook(
+      queryClient,
+      buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        disconnectedDraft,
+      ),
+    );
+
+    await waitFor(() => {
+      expect(result.current.targets).toHaveLength(1);
+      expect(result.current.targets[0]?.subject.location).toBe("ON_FAILURE");
+    });
+
+    rerender({
+      definition: buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        expectOk(connectedDraft).value,
+      ),
+    });
+
+    await waitFor(() => {
+      expect(result.current.targets).toEqual([]);
+    });
+  });
+
+  it("refreshes targets after a disconnect operation changes the draft-applied factory", async () => {
+    enqueueValidationResults(
+      validationFixtures.validFactory,
+      validationFixtures.disconnectedFailureRoute,
+    );
+
+    const queryClient = createQueryClient();
+    const connectedDraft = connectFactoryGraphNodes({
+      baseFactoryDefinition,
+      draft: createEmptyFactoryGraphDraft(),
+      sourceAnchorId: "workstation-on-failure-source",
+      sourceNodeId: "workstation:draft",
+      targetAnchorId: "work-state-input-target",
+      targetNodeId: "work-state:story:done",
+    });
+    expect(connectedDraft.ok).toBe(true);
+    const disconnectedDraft = disconnectFactoryGraphEdge({
+      baseFactoryDefinition,
+      draft: expectOk(connectedDraft).value,
+      edgeId: "workstation-on-failure:workstation:draft->work-state:story:done",
+    });
+    expect(disconnectedDraft.ok).toBe(true);
+
+    const { rerender, result } = renderValidationHook(
+      queryClient,
+      buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        expectOk(connectedDraft).value,
+      ),
+    );
+
+    await waitFor(() => {
+      expect(result.current.targets).toEqual([]);
+    });
+
+    rerender({
+      definition: buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        expectOk(disconnectedDraft).value,
+      ),
+    });
+
+    await waitFor(() => {
+      expect(result.current.targets).toHaveLength(1);
+      expect(result.current.targets[0]?.subject.location).toBe("ON_FAILURE");
+    });
+  });
+});
+
+function expectOk<T>(
+  result:
+    | {
+        ok: true;
+        value: T;
+      }
+    | {
+        ok: false;
+      },
+): { ok: true; value: T } {
+  expect(result.ok).toBe(true);
+  return result as { ok: true; value: T };
+}

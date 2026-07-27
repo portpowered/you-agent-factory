@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -34,22 +35,22 @@ var providerSessionAllowedFidelityClasses = map[string]struct{}{
 
 // ProviderSessionGoldenManifest is the schema for a provider-session golden case.
 type ProviderSessionGoldenManifest struct {
-	SchemaVersion                 int      `json:"schemaVersion"`
-	ID                            string   `json:"id"`
-	Provider                      string   `json:"provider"`
-	ProviderVersion               string   `json:"providerVersion"`
-	FidelityClass                 string   `json:"fidelityClass"`
-	Case                          string   `json:"case"`
-	StdoutFile                    string   `json:"stdoutFile"`
-	StderrFile                    string   `json:"stderrFile"`
-	RequestFile                   string   `json:"requestFile"`
-	ProcessFile                   string   `json:"processFile"`
-	ExpectedProviderSessionFile   string   `json:"expectedProviderSessionFile"`
-	ExpectedResponseEventsFile    string   `json:"expectedResponseEventsFile"`
-	ExpectedInvocationResultFile  string   `json:"expectedInvocationResultFile"`
-	NormalizedFields              []string `json:"normalizedFields"`
-	SanitizerVersion              int      `json:"sanitizerVersion"`
-	Source                        string   `json:"source"`
+	SchemaVersion                int      `json:"schemaVersion"`
+	ID                           string   `json:"id"`
+	Provider                     string   `json:"provider"`
+	ProviderVersion              string   `json:"providerVersion"`
+	FidelityClass                string   `json:"fidelityClass"`
+	Case                         string   `json:"case"`
+	StdoutFile                   string   `json:"stdoutFile"`
+	StderrFile                   string   `json:"stderrFile"`
+	RequestFile                  string   `json:"requestFile"`
+	ProcessFile                  string   `json:"processFile"`
+	ExpectedProviderSessionFile  string   `json:"expectedProviderSessionFile"`
+	ExpectedResponseEventsFile   string   `json:"expectedResponseEventsFile"`
+	ExpectedInvocationResultFile string   `json:"expectedInvocationResultFile"`
+	NormalizedFields             []string `json:"normalizedFields"`
+	SanitizerVersion             int      `json:"sanitizerVersion"`
+	Source                       string   `json:"source"`
 }
 
 // ProviderSessionManifestPaths holds case-relative and absolute resolved fixture paths.
@@ -337,7 +338,7 @@ func validateRelativeFixturePointer(caseID, field, value string) error {
 			Detail: "must not include leading or trailing whitespace",
 		}
 	}
-	if filepath.IsAbs(filepath.FromSlash(value)) || filepath.IsAbs(value) {
+	if path.IsAbs(value) || filepath.IsAbs(filepath.FromSlash(value)) || filepath.IsAbs(value) {
 		return &ProviderSessionManifestError{
 			CaseID: caseID,
 			Field:  field,

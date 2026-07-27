@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 
 import type { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
-import { useScopedFactoryDocumentSave } from "../../base/public";
+import { useScopedFactoryDocumentSave } from "../../base/hooks/useScopedFactoryDocumentSave";
 import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationSaveState,

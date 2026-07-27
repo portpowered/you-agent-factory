@@ -6,13 +6,14 @@ import {
   WidgetEmptyStateTitle,
   WidgetSubtitle,
 } from "@you-agent-factory/components/recipes";
-import { Label, SurfacePanel, Text } from "../../../components/ui";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
+import { Label, Text } from "@you-agent-factory/components/primitives";
 import {
   formatDurationMillis,
   formatTraceOutcome,
 } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
-import { DashboardWidgetFrame } from "../../bento/public";
+import { DashboardWidgetFrame } from "../../bento/components/dashboard-widget-frame/dashboard-widget-frame";
 import {
   dashboardChartAxisClassName,
   dashboardChartSurfaceClassName,

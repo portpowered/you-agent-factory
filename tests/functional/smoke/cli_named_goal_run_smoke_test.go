@@ -28,7 +28,6 @@ func TestNamedGoalRun_RealCLICompletesBatchInvocationWithPrimaryResultOnStdout(t
 	homeDir := t.TempDir()
 	mockWorkersPath := writePackagedGoalBuiltinMockWorkersConfig(t)
 	binaryPath := buildYouCLIBinary(t)
-	initializeCLISystemConfig(t, binaryPath, homeDir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -83,7 +82,6 @@ func TestNamedGoalRun_RealCLIExitsAfterBatchCompletionWithoutContinuousMode(t *t
 	homeDir := t.TempDir()
 	mockWorkersPath := writePackagedGoalBuiltinMockWorkersConfig(t)
 	binaryPath := buildYouCLIBinary(t)
-	initializeCLISystemConfig(t, binaryPath, homeDir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -116,16 +114,5 @@ func TestNamedGoalRun_RealCLIExitsAfterBatchCompletionWithoutContinuousMode(t *t
 		}
 	case <-ctx.Done():
 		t.Fatalf("timed out waiting for batch invocation to exit: %v", ctx.Err())
-	}
-}
-
-func initializeCLISystemConfig(t *testing.T, binaryPath, homeDir string) {
-	t.Helper()
-	command := exec.Command(binaryPath, "config", "init")
-	command.Dir = t.TempDir()
-	command.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	output, err := command.CombinedOutput()
-	if err != nil {
-		t.Fatalf("you config init: %v\noutput:\n%s", err, output)
 	}
 }

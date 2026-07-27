@@ -502,3 +502,18 @@ func (m *blockingInvocationExecutor) invocationContextsHonored() int {
 }
 
 var _ workerexecution.InvocationExecutor = (*blockingInvocationExecutor)(nil)
+
+func TestProviderInferenceRequestFromChild_PropagatesPresetAsWorkerType(t *testing.T) {
+	t.Parallel()
+
+	req := providerInferenceRequestFromChild("session-1", "dispatch-1", factory.JavaScriptChildExecutionRequest{
+		Prompt: "mocked child prompt",
+		Preset: "worker-a",
+	})
+	if req.WorkerType != "worker-a" {
+		t.Fatalf("WorkerType = %q, want worker-a", req.WorkerType)
+	}
+	if req.Dispatch.WorkerType != "worker-a" {
+		t.Fatalf("Dispatch.WorkerType = %q, want worker-a", req.Dispatch.WorkerType)
+	}
+}

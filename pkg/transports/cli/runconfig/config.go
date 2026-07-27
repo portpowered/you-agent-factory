@@ -68,6 +68,8 @@ type Config struct {
 	ModelCacheDir                 string
 	MockWorkersEnabled            bool
 	MockWorkersConfigPath         string
+	WithServer                    bool
+	WithSite                      bool
 	Verbose                       bool
 	TerminalPolicy                terminalpolicy.Policy
 	SuppressDashboardRendering    bool

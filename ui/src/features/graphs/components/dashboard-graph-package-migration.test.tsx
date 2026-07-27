@@ -2,11 +2,9 @@ import { render, screen } from "@testing-library/react";
 import { Position } from "@xyflow/react";
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  FACTORY_GRAPH_EDGE_TYPES,
-  GraphNodeButton,
-  GraphViewportSurface,
-} from "../public";
+import { GraphNodeButton } from "@you-agent-factory/components/graphs";
+import { GraphViewportSurface } from "./dashboard-graph-viewport-surface";
+import { FACTORY_GRAPH_EDGE_TYPES } from "./factory-graph-edge";
 import { ActivityGraphNodeShell } from "./graph-node-shell";
 
 vi.mock("@xyflow/react", () => ({

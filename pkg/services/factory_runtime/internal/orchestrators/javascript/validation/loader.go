@@ -12,8 +12,10 @@ const (
 
 // LoadRequest carries file-backed workflow source to load for validation.
 type LoadRequest struct {
-	SourceRef string
-	Content   string
+	SourceRef    string
+	Content      string
+	FactoryRoot  string
+	BundleReader SourceReader
 }
 
 // LoadedSource is the resolved workflow source metadata for validation or preview.
@@ -53,7 +55,15 @@ func Load(req LoadRequest) (LoadedSource, []Issue) {
 
 	switch format {
 	case FormatJavaScript:
-		loaded.ExecutableSource = content
+		executable := content
+		if strings.TrimSpace(req.FactoryRoot) != "" && req.BundleReader != nil && ContainsFactoryRelativeImports(content) {
+			bundled, bundleIssues := BundleFactoryRelativeImports(sourceRef, content, req.BundleReader)
+			if len(bundleIssues) > 0 {
+				return loaded, bundleIssues
+			}
+			executable = bundled
+		}
+		loaded.ExecutableSource = executable
 	case FormatTypeScript:
 		executable, lineMap, stripIssues := stripTypeScript(content)
 		if len(stripIssues) > 0 {

@@ -16,13 +16,6 @@ import { fileURLToPath } from "node:url";
 const packageDirectory = "packages/model-providers";
 const typeOutput = `${packageDirectory}/types/index.d.ts`;
 const manifestOutput = `${packageDirectory}/metadata/manifest.json`;
-const sourceIdentityPaths = Object.freeze([
-	"api/openapi.yaml",
-	"internal/contractopenapiconverter",
-	"internal/providercatalog",
-	`${packageDirectory}/providers`,
-	"scripts/model-provider-package.mjs",
-]);
 const artifacts = Object.freeze([
 	{
 		id: "catalog",
@@ -170,8 +163,7 @@ function artifactExport({ id, path, title }, payload) {
 	];
 }
 
-export async function generateManifest(repositoryRoot, runGit = runCommand) {
-	const sourceCommit = await resolveSourceCommit(repositoryRoot, runGit);
+export async function generateManifest(repositoryRoot) {
 	const exports = Object.fromEntries(
 		await Promise.all(
 			artifacts.map(async (artifact) =>
@@ -187,78 +179,12 @@ export async function generateManifest(repositoryRoot, runGit = runCommand) {
 			formatVersion: "1.0.0",
 			packageId: "you-agent-factory.model-providers",
 			packageVersion: "0.0.0",
-			sourceCommit,
 			familyFormatVersions: { "model-providers": "1.0.0" },
 			exports,
 		},
 		null,
 		2,
 	)}\n`;
-}
-
-export async function resolveSourceCommit(repositoryRoot, runGit = runCommand) {
-	const git = (...args) => runGit("git", ["-C", repositoryRoot, ...args]);
-	const head = (await git("rev-parse", "HEAD")).trim();
-	const sourceCommit = (
-		await git("rev-list", "-1", "HEAD", "--", ...sourceIdentityPaths)
-	).trim();
-	if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(sourceCommit)) {
-		throw new Error(
-			`[model-provider-package] invalid source commit ${JSON.stringify(sourceCommit)}`,
-		);
-	}
-	if (sourceCommit !== head) {
-		return sourceCommit;
-	}
-
-	const changedPaths = (
-		await git(
-			"diff-tree",
-			"--no-commit-id",
-			"--name-only",
-			"-r",
-			head,
-			"--",
-			...sourceIdentityPaths,
-		)
-	).trim();
-	if (changedPaths !== "") {
-		return sourceCommit;
-	}
-
-	let parent;
-	try {
-		parent = (await git("rev-parse", "HEAD^")).trim();
-	} catch {
-		if ((await git("rev-parse", "--is-shallow-repository")).trim() === "true") {
-			throw shallowSourceHistoryError();
-		}
-		return sourceCommit;
-	}
-
-	let parentSource;
-	try {
-		parentSource = (
-			await git("rev-list", "-1", parent, "--", ...sourceIdentityPaths)
-		).trim();
-	} catch {
-		return sourceCommit;
-	}
-	if (parentSource !== "" && parentSource !== sourceCommit) {
-		try {
-			await git("rev-parse", "--verify", `${head}^2`);
-			return sourceCommit;
-		} catch {
-			throw shallowSourceHistoryError();
-		}
-	}
-	return sourceCommit;
-}
-
-function shallowSourceHistoryError() {
-	return new Error(
-		"[model-provider-package] git history is too shallow to determine the last change to package source inputs; fetch full history (for example fetch-depth: 0 in CI)",
-	);
 }
 
 function runCommand(command, arguments_, options = {}) {

@@ -26,8 +26,8 @@ For example:
 
 ### Prerequisites
 
-- **[Codex CLI](https://developers.openai.com/codex/cli)** (default agent backend for the starter factory): `npm i -g @openai/codex`
-- A project directory where you want the local `factory/` scaffold to live
+- **[Codex CLI](https://developers.openai.com/codex/cli)** (default agent backend for the packaged Factories): `npm i -g @openai/codex`
+- Credentials for the model provider you plan to use
 
 ### Install the `you` CLI
 
@@ -47,22 +47,31 @@ For custom install locations or pinned versions, see the [install script](./scri
 
 ## Quick start
 
-The default path uses the Codex-backed starter scaffold:
+Normal startup materializes packaged/default Factories under
+`~/.you-agent-factory/factories` and uses the current Factory. It does not
+create a project-local `./factory` scaffold:
 
-1. `cd your-project-directory`
-2. Run `you` — bootstraps `./factory`, starts the runtime, and prints the dashboard URL (usually `http://localhost:7437/dashboard/ui`)
-3. Submit a task from the dashboard (for example, “write a report on my codebase to TEST.md”) and wait for completion
+1. Run `you init --provider codex` to configure the default model provider.
+2. Run `you` to initialize the packaged Factories, start the current Factory, and print the dashboard URL (usually `http://localhost:7437/dashboard/ui`).
+3. Submit a task from the dashboard (for example, “write a report on my codebase to TEST.md”) and wait for completion.
 
-For factory authoring, CLI topics, and advanced setup, see [Authoring factories](./docs/reference/authoring-factories.md) and [`you docs`](./docs/reference/README.md).
+To author a Factory, follow [Authoring factories](./docs/reference/authoring-factories.md)
+and persist it with `you factory create <name> --from ./factory.json`. For CLI
+topics and advanced setup, see [`you docs`](./docs/reference/README.md).
 
-### Alternate executor: Claude
+### Configure a model provider
 
-To scaffold a factory with Claude as the starter worker instead of Codex:
+`you init` configures the default provider and optional model used by
+model-backed workers. It does not scaffold a Factory:
 
 ```sh
-you init --executor claude --dir my-factory
-you docs workstation
+you init --provider claude --model claude-sonnet-4-5
 ```
+
+Run `you` to materialize the packaged/default Factories. To author your own,
+follow [Authoring factories](./docs/reference/authoring-factories.md), then
+persist a reusable definition with
+`you factory create <name> --from ./factory.json`.
 
 ## Features
 
@@ -72,7 +81,7 @@ you-agent-factory is a factory runtime: you define how work moves between workst
 - **Workflow customization** — Model processes as config (`factory.json`, workstation routes, `AGENTS.md`) instead of a fixed pipeline; adapt write/review loops, cron triggers, git worktrees, or other patterns to your repo.
 - **Review loops** — Route completed work to reviewer workstations and re-queue failed items; shipped factories such as Ralph and writer-reviewer demonstrate iterative plan/code/review cycles.
 - **Batch submission** — Submit single items from the CLI (`you submit`) or drive larger inputs through batch work types and dashboard submission.
-- **Example factories** — Load starter and advanced factories from [`examples/factories/`](./examples/factories/) in the dashboard, or scaffold your own with `you init`.
+- **Example factories** — Load starter and advanced factories from [`examples/factories/`](./examples/factories/) in the dashboard, or author a `factory.json` and persist it with `you factory create`.
 
 Deeper product documentation:
 
@@ -83,21 +92,20 @@ Deeper product documentation:
 
 ## Comparison
 
-How **you-agent-factory** fits next to nearby agent and workflow orchestrators. Dimensions focus on execution model, workflow flexibility, agent-harness support, and operational weight—not “best tool” claims. For a longer maintainer write-up, see [Comparing orchestration systems](./docs/comparatives/comparing-systems.md).
+How **you-agent-factory** fits next to nearby agent and workflow orchestrators. Dimensions focus on execution model, workflow flexibility, agent-harness support, and operational weight—not “best tool” claims.
 
 | System | Execution model | Workflow shape | Agent harness | Durability / ops weight | Reference |
 | --- | --- | --- | --- | --- | --- |
-| **you-agent-factory** | Self-hosted `you` runtime and dashboard route work through factory workstations | Custom in-repo flow (`factory.json`, `AGENTS.md`, routes) without a fixed pipeline | Codex, Claude, and shell workers wired through factory config | Lightweight local runtime; no built-in durable workflow engine | [Architecture](./docs/architecture/architecture.md) · [Comparing systems](./docs/comparatives/comparing-systems.md) |
+| **you-agent-factory** | Self-hosted `you` runtime and dashboard route work through factory workstations | Custom in-repo flow (`factory.json`, `AGENTS.md`, routes) without a fixed pipeline | Codex, Claude, and shell workers wired through factory config | Lightweight local runtime; no built-in durable workflow engine | [Architecture](./docs/architecture/architecture.md) |
 | **[Gastown](https://github.com/steveyegge/gastown)** | Mayor-led multi-agent workspace with git-backed hooks and worktrees | Opinionated mayor/beads/convoy coordination around git | Hooks inject context into Claude Code, Copilot, Codex, and peers | Git/worktree persistence; heavier git + beads/dolt stack | [Gastown](https://github.com/steveyegge/gastown) |
 | **[Symphony](https://github.com/openai/symphony)** | Long-running orchestrator polls issue trackers and runs per-issue workspaces | Policy in-repo (`WORKFLOW.md`); spec-driven daemon workflow | Codex app-server sessions in isolated workspaces | Elixir daemon with supervision/retries; tracker-centric | [Symphony](https://github.com/openai/symphony) |
 | **[Factory](https://factory.ai/)** | Droid Missions orchestrator with Mission Control for multi-day projects | Milestone/feature decomposition with validation contracts | Droid workers with MCP, skills, hooks, and custom droids | Productized orchestration with milestone validation loops | [Factory Missions](https://docs.factory.ai/cli/features/missions) |
 | **[8090 Software Factory](https://www.8090.ai/software-factory)** | Hosted SDLC control plane (requirements → blueprints → work orders) | Upstream planning modules feed agents through MCP-connected work orders | External agents (Cursor, Claude Code, etc.) via MCP | Cloud platform with knowledge graph and audit trail | [8090 docs](https://www.8090.ai/docs/general/introduction) |
 | **[Claude workflow plugins](https://github.com/sighup/claude-workflow)** | In-IDE Claude Code skills/commands drive spec → plan → execute loops | Plugin-defined task graphs, parallel dispatch, and worktrees | Native Claude Code subagents and skills | Session/task files on disk; no separate orchestration server | [sighup/claude-workflow](https://github.com/sighup/claude-workflow) |
-| **Other orchestrators** ([Temporal](https://temporal.io/), [n8n](https://n8n.io/), [DBOS](https://www.dbos.dev/)) | General-purpose durable or RPA workflow engines | DAG/state-machine or node graphs; often code- or node-config driven | Agent harnesses typically custom-built | Strong durability/transactions; heavier for ad-hoc agent loops | [Comparing systems](./docs/comparatives/comparing-systems.md) |
+| **Other orchestrators** ([Temporal](https://temporal.io/), [n8n](https://n8n.io/), [DBOS](https://www.dbos.dev/)) | General-purpose durable or RPA workflow engines | DAG/state-machine or node graphs; often code- or node-config driven | Agent harnesses typically custom-built | Strong durability/transactions; heavier for ad-hoc agent loops | - |
 
 ## References
 
-- [Comparing orchestration systems](./docs/comparatives/comparing-systems.md) — background on how you-agent-factory relates to nearby agent and workflow tools
 - [Authoring factories](./docs/reference/authoring-factories.md) — primary guide for defining and running factories
 - [CLI reference index](./docs/reference/README.md) — packaged `you docs` topics and links to customer-facing guides
 - [Work submission](./docs/reference/work.md) — `you submit`, batch inputs, and dashboard submission

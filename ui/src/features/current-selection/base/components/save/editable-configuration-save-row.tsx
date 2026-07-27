@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
-import { ActionRow, DashboardActionButton } from "../../../../../components/ui";
+import { ActionRow } from "@you-agent-factory/components/layout";
+import { DashboardActionButton } from "../../../../../components/ui/dashboard-action-button";
 
 export interface EditableConfigurationSaveRowProps {
   busyLabel: string;

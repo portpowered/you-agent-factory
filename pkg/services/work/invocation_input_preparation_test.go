@@ -27,6 +27,21 @@ func TestResolveFactoryInvocationInput_PositionalOnly(t *testing.T) {
 	}
 }
 
+func TestResolveFactoryInvocationInput_NoSignatureDoesNotActivateNamedSemantics(t *testing.T) {
+	prepared, err := prepareInvocationInput(t, InvocationInputPreparationRequest{
+		Arguments: []string{"--mode", "fast"},
+	})
+	if err != nil {
+		t.Fatalf("PrepareInvocationInput: %v", err)
+	}
+	if prepared.ResolvedInput == nil || prepared.ResolvedInput.Text != "--mode fast" {
+		t.Fatalf("prepared = %#v, want literal compatibility text", prepared)
+	}
+	if prepared.NormalizedArguments != nil {
+		t.Fatalf("normalized arguments = %#v, want nil without a signature", prepared.NormalizedArguments)
+	}
+}
+
 func TestResolveFactoryInvocationInput_StdinOnlyFromDash(t *testing.T) {
 	stdin := "Fix the tests\n"
 	prepared, err := prepareInvocationInput(t, InvocationInputPreparationRequest{Arguments: []string{"-"}, StdinText: &stdin})

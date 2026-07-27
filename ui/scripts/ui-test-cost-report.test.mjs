@@ -32,9 +32,11 @@ test("defines stable UI test cost categories", () => {
 });
 
 test("categorizes covered and browser integration paths", () => {
-  expect(categorizeUiTestFile("src/App.session-stream.test.tsx")).toBe(
-    "app-shell-integration",
-  );
+  expect(
+    categorizeUiTestFile(
+      "src/features/dashboard/session/dashboard-session-timeline-isolation.component.test.tsx",
+    ),
+  ).toBe("app-shell-integration");
   expect(
     categorizeUiTestFile(
       "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-editor-chrome.test.tsx",
@@ -45,7 +47,11 @@ test("categorizes covered and browser integration paths", () => {
       "src/features/timeline/state/factoryTimelineStore.test.ts",
     ),
   ).toBe("replay-timeline");
-  expect(categorizeUiTestFile("src/App.import.test.tsx")).toBe("import-export");
+  expect(
+    categorizeUiTestFile(
+      "src/features/import/components/dashboard-import-preview-dialog.test.tsx",
+    ),
+  ).toBe("import-export");
   expect(
     categorizeUiTestFile(
       "scripts/dashboard-shell-storybook-responsive.test.mjs",
@@ -98,5 +104,20 @@ test("formats browser integration slow-file summaries with categories", () => {
     "[ui-browser-integration] Browser integration slowest test files (top 2):",
     "[ui-browser-integration]   src/App.test.tsx 120.00s [app-shell-integration]",
     "[ui-browser-integration]   src/features/timeline/state/factoryTimelineStore.test.ts 5.00s [replay-timeline]",
+  ]);
+});
+
+test("aggregates verbose parallel test timings when Vitest omits file timing lines", () => {
+  expect(
+    parseVitestFileDurationsFromLog(
+      [
+        " ✓ integration/a.integration.test.mjs > scenario > first 125ms",
+        " ✓ integration/a.integration.test.mjs > scenario > second 75ms",
+        " ✓ integration/b.integration.test.mjs > scenario > only 40ms",
+      ].join("\n"),
+    ),
+  ).toEqual([
+    { durationMs: 200, path: "integration/a.integration.test.mjs" },
+    { durationMs: 40, path: "integration/b.integration.test.mjs" },
   ]);
 });

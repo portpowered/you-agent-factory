@@ -184,6 +184,7 @@ func (s *harnessSession) Start(ctx context.Context) error {
 		"--dir", s.workspacePath,
 		"--continuously",
 		"--with-mock-workers",
+		"--with-server",
 		"--server", s.baseURL,
 		"--quiet",
 	)

@@ -1,6 +1,7 @@
 package local
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -126,6 +127,58 @@ func ManagedRuntimeReadinessForFactory(
 		return managedruntime.Runtime{}, fmt.Errorf("%w: empty model name", managedruntime.ErrNotFound)
 	}
 	return managedRuntimeForCatalog(runtimeCfg, modelName, runtimeCacheInspector, sourceResolver)
+}
+
+// ManagedRuntimeReadinessForFactoryContext returns the current readiness
+// projection while preserving cancellation across the cache fact boundary.
+func ManagedRuntimeReadinessForFactoryContext(
+	ctx context.Context,
+	runtimeCfg *models.RuntimeConfig,
+	modelName string,
+	runtimeCacheInspector RuntimeCacheInspector,
+	sourceResolver ManagedRuntimeSourceResolver,
+) (managedruntime.Runtime, error) {
+	if err := ctx.Err(); err != nil {
+		return managedruntime.Runtime{}, err
+	}
+	baseline, err := ManagedRuntimeReadinessForFactory(
+		runtimeCfg,
+		modelName,
+		nil,
+		sourceResolver,
+	)
+	if err != nil {
+		return managedruntime.Runtime{}, err
+	}
+	if runtimeCacheInspector == nil {
+		return baseline, nil
+	}
+	inspection, err := runtimeCacheInspector.InspectRuntimeCache(ctx, runtimeCfg, modelName)
+	if err != nil {
+		return managedruntime.Runtime{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return managedruntime.Runtime{}, err
+	}
+	detail, err := GetModelWithRuntime(
+		runtimeCfg,
+		modelName,
+		fixedRuntimeCacheInspector{inspection: inspection},
+		sourceResolver,
+	)
+	return detail.ManagedRuntime, err
+}
+
+type fixedRuntimeCacheInspector struct {
+	inspection RuntimeCacheInspection
+}
+
+func (inspector fixedRuntimeCacheInspector) InspectRuntimeCache(
+	context.Context,
+	*models.RuntimeConfig,
+	string,
+) (RuntimeCacheInspection, error) {
+	return inspector.inspection, nil
 }
 
 // EnsureManagedRuntimeReadyForInvocation classifies one managed runtime using

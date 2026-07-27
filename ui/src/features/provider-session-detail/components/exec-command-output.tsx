@@ -1,5 +1,6 @@
 import { isAPIRecord } from "../../../api/transport";
-import { Label, SurfacePanel, Text } from "../../../components/ui";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
+import { Label, Text } from "@you-agent-factory/components/primitives";
 import { formatNumber } from "../../../i18n/formatters";
 import { cn } from "../../../lib/cn";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";

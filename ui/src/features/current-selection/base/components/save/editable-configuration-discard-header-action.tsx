@@ -1,6 +1,6 @@
 import { RotateCcw } from "lucide-react";
 
-import { DashboardActionButton } from "../../../../../components/ui";
+import { DashboardActionButton } from "../../../../../components/ui/dashboard-action-button";
 import { getEditableConfigurationControlsMessages } from "../../messages/operational/editable-configuration-controls";
 
 export function EditableConfigurationDiscardHeaderAction({

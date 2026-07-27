@@ -1,8 +1,7 @@
-import { type HTMLAttributes, type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import { AgentBentoCard } from "../../bento/public";
-import type { DashboardSelection } from "../../current-selection/public";
+import type { DashboardSelection } from "../../current-selection/base/state/selection-types";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
@@ -12,6 +11,7 @@ import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
 import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import { ReactFlowCurrentActivityCardView } from "./react-flow-current-activity-card-view";
+import { WorkflowActivityBentoShell } from "./bento-card/workflow-activity-bento-shell";
 
 interface WorkflowActivityBentoCardProps {
   headerAction?: ReactNode;
@@ -107,17 +107,7 @@ export function WorkflowActivityBentoCard({
   ]);
 
   return (
-    <AgentBentoCard
-      bodyClassName="h-full max-h-full min-h-0 overflow-hidden"
-      bodyProps={
-        {
-          "data-workflow-activity-graph-body": "",
-          style: { height: "100%", maxHeight: "100%", overflow: "hidden" },
-        } as HTMLAttributes<HTMLDivElement>
-      }
-      bodyScroll={false}
-      chromeDensity="compact"
-      className="h-full max-h-full min-h-0 overflow-hidden"
+    <WorkflowActivityBentoShell
       headerAction={
         <CurrentActivityGraphHeaderActions
           key={`graph-editor-header-${editorControls.isEditing}-${viewModel.status.hasSharedGraphChanges}-${viewModel.status.preferencesDirty}`}
@@ -136,7 +126,6 @@ export function WorkflowActivityBentoCard({
           showModeToggle={!editorControls.isEditing}
         />
       }
-      style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
       title={messages.widgetTitle}
     >
       <section
@@ -161,7 +150,7 @@ export function WorkflowActivityBentoCard({
           onSelectWorkstation={onSelectWorkstation}
         />
       </section>
-    </AgentBentoCard>
+    </WorkflowActivityBentoShell>
   );
 }
 

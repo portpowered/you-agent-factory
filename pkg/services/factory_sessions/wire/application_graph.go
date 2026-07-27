@@ -47,6 +47,8 @@ type (
 	StdioOpeningOperation                = roles.StdioOpeningOperation
 	DirectJavaScriptRunOperation         = roles.DirectJavaScriptRunOperation
 	DirectJavaScriptSyncRunner           = roles.DirectJavaScriptSyncRunner
+	DirectJavaScriptHostAdapter          = roles.DirectJavaScriptHostAdapter
+	DirectJavaScriptLifecycle            = roles.DirectJavaScriptLifecycle
 	RequestPreparation                   = roles.RequestPreparation
 	Registry                             = roles.Registry
 	RuntimePersistenceStore              = roles.RuntimePersistenceStore
@@ -104,13 +106,16 @@ type (
 	FactoryDefinitionsFactory       = runtimeopening.FactoryDefinitionsFactory
 	DurableExecutionFactory         = runtimeopening.DurableExecutionFactory
 	WorkerExecutionFactory          = runtimeopening.WorkerExecutionFactory
-	WorkerCommandRunnerAdapter      = runtimeopening.WorkerCommandRunnerAdapter
-	FactoryRuntimeAssembler         = runtimeopening.FactoryRuntimeAssembler
+	WorkerCommandRunnerAdapter           = runtimeopening.WorkerCommandRunnerAdapter
+	ProviderFromCommandRunnerFactory     = runtimeopening.ProviderFromCommandRunnerFactory
+	FactoryRuntimeAssembler              = runtimeopening.FactoryRuntimeAssembler
 	RuntimeOpeningFactory           = runtimeopening.Factory
 	RuntimeRoot                     = runtimeopening.RuntimeRoot
 
 	StandaloneSessionExecutionFactory = executionopening.StandaloneSessionExecutionFactory
-	WorkerInvocationFactory           = executionopening.WorkerInvocationFactory
+	WorkerInvocationFactory             = executionopening.WorkerInvocationFactory
+	WorkerInvocationWithProgressFactory = executionopening.WorkerInvocationWithProgressFactory
+	LiveChildInvocationFactory          = execution.LiveChildInvocationFactory
 	ExecutionOpeningFactory           = executionopening.Factory
 	StdioOpeningService               = executionopening.StdioOpeningService
 )
@@ -164,8 +169,9 @@ type RuntimeOpeningDependencies struct {
 	CaptureLoadedFactorySnapshot    factorydefinitions.LoadedFactorySnapshotCapturer
 	ResolveClock                    factoryruntime.ClockResolver
 	NewSessionLogger                factoryruntime.SessionLoggerFactory
-	AdaptWorkerCommandRunner        WorkerCommandRunnerAdapter
-	ProcessRuntimeFactory           ProcessRuntimeFactory
+	AdaptWorkerCommandRunner            WorkerCommandRunnerAdapter
+	ProviderFromCommandRunnerFactory    ProviderFromCommandRunnerFactory
+	ProcessRuntimeFactory               ProcessRuntimeFactory
 	EnsureOperatorBackendScope      operatorsettings.BackendScopeEnsurer
 	GenerateRuntimeInstanceID       factorysessions.RuntimeInstanceIDGenerator
 	ResolveHome                     factorysessions.HomeDirectoryResolver
@@ -188,7 +194,8 @@ func NewRuntimeOpeningFactory(deps RuntimeOpeningDependencies) (*RuntimeOpeningF
 		deps.InitialFactorySnapshotFactory, deps.FactoryRuntimeAssembler, deps.ContentMaterializer,
 		deps.LoadFactory, deps.NewLoadedFactory, deps.DecodeReplayConfig, deps.LoadReplay,
 		deps.CaptureLoadedFactorySnapshot, deps.ResolveClock, deps.NewSessionLogger,
-		deps.AdaptWorkerCommandRunner, deps.ProcessRuntimeFactory, deps.EnsureOperatorBackendScope,
+		deps.AdaptWorkerCommandRunner, deps.ProviderFromCommandRunnerFactory, deps.ProcessRuntimeFactory,
+		deps.EnsureOperatorBackendScope,
 		deps.GenerateRuntimeInstanceID, deps.ResolveHome, deps.ReplayFiles,
 		deps.ProviderIdentities,
 	)
@@ -237,8 +244,9 @@ func NewDirectJavaScriptRunOperation(
 	build ExecutionServiceBuilder,
 	runSync DirectJavaScriptSyncRunner,
 	generateSessionID factorysessions.SessionIDGenerator,
+	host roles.DirectJavaScriptHostAdapter,
 ) (DirectJavaScriptRunOperation, error) {
-	return executionopening.NewDirectJavaScriptRunOperation(build, runSync, generateSessionID)
+	return executionopening.NewDirectJavaScriptRunOperation(build, runSync, generateSessionID, host)
 }
 
 func NewStdioOpeningService(

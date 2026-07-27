@@ -4,6 +4,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -15,8 +16,6 @@ import (
 	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode"
 	claudeexitfailure "github.com/portpowered/infinite-you/pkg/services/workers/provider/claude/exitfailure"
 	codexexitfailure "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex/exitfailure"
-	geminipkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
-	kiropkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro"
 )
 
 const (
@@ -26,8 +25,6 @@ const (
 	claudeBadRequestFailureMessage       = "Claude rejected the request as invalid."
 	claudeConfigFailureMessage           = "Claude is not configured correctly."
 	claudeFailureScanBytes               = 64 * 1024
-	geminiThrottleFailureMessage         = "The provider is rate limited; retry after capacity becomes available."
-	geminiTimeoutFailureMessage          = geminipkg.TimeoutFailureMessage
 	codexGPT56SolUpgradeMessage          = codexexitfailure.GPT56SolUpgradeMessage
 	codexUnknownFailureMessage           = codexexitfailure.UnknownFailureMessage
 	codexAuthFailureMessage              = codexexitfailure.AuthFailureMessage
@@ -63,32 +60,8 @@ func codexTextFailureMessage(reason workerexecution.WorkFailureType) string {
 	}
 }
 
-func knownKiroFailure(reason workerexecution.WorkFailureType) ProviderFailureResult {
-	message := ""
-	switch reason {
-	case workerexecution.WorkFailureTypeAuthFailure:
-		message = "Kiro authentication failed. Sign in again and retry."
-	case workerexecution.WorkFailureTypePermanentBadRequest:
-		message = "Kiro rejected the request as invalid."
-	case workerexecution.WorkFailureTypeThrottled:
-		message = "Kiro is temporarily unavailable due to usage or capacity limits."
-	case workerexecution.WorkFailureTypeTimeout:
-		message = kiropkg.TimeoutFailureMessage
-	case workerexecution.WorkFailureTypeInternalServerError:
-		message = "Kiro encountered a temporary service error."
-	}
-	return ProviderFailureResult{Reason: reason, Message: message}
-}
-
 func ParseClaudeProviderFailure(result CommandResult) ProviderFailureResult {
 	parsed := claudeexitfailure.ParseProviderFailure(claudeexitfailure.FailureInput{
-		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-	})
-	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
-}
-
-func ParseGeminiProviderFailure(result CommandResult) ProviderFailureResult {
-	parsed := geminipkg.ParseProviderFailure(geminipkg.FailureInput{
 		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
 	})
 	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
@@ -689,6 +662,66 @@ func TestWorkFailureMetadataFromError_ProducesGeneralizedFailureMetadata(t *test
 	}
 }
 
+func TestProviderFailureBoundaryHelpersPreserveSafeObservableBehavior(t *testing.T) {
+	t.Parallel()
+
+	if got := NormalizeProviderExecutionError(nil); got != nil {
+		t.Fatalf("NormalizeProviderExecutionError(nil) = %#v, want nil", got)
+	}
+	if got := NormalizeProviderExecutionError(errors.New("unclassified failure")); got != nil {
+		t.Fatalf("NormalizeProviderExecutionError(unclassified) = %#v, want nil", got)
+	}
+	deadlineErr := NormalizeProviderExecutionError(context.DeadlineExceeded)
+	if deadlineErr == nil || deadlineErr.Type != workerexecution.WorkFailureTypeTimeout {
+		t.Fatalf("NormalizeProviderExecutionError(deadline) = %#v, want timeout", deadlineErr)
+	}
+
+	if got := SafeProviderFailureDetail(nil); got != nil {
+		t.Fatalf("SafeProviderFailureDetail(nil) = %#v, want nil", got)
+	}
+	providerErr := NewProviderError(
+		workerexecution.WorkFailureTypeAuthFailure,
+		"Authentication failed.",
+		errors.New("secret native output"),
+	)
+	detail := SafeProviderFailureDetail(providerErr)
+	if detail == nil {
+		t.Fatal("SafeProviderFailureDetail(error) = nil, want public detail")
+	}
+	if detail.Reason != workerexecution.WorkFailureTypeAuthFailure || detail.Message != "Provider authentication failed." {
+		t.Fatalf("SafeProviderFailureDetail(error) = %#v, want stable auth detail", detail)
+	}
+	for _, unsafe := range []string{"Authentication failed.", "secret native output"} {
+		if strings.Contains(detail.Message, unsafe) {
+			t.Fatalf("SafeProviderFailureDetail(error) leaked %q: %#v", unsafe, detail)
+		}
+	}
+
+	if got := ClassifyProviderFailure(nil); got != (workerexecution.WorkFailureDecision{}) {
+		t.Fatalf("ClassifyProviderFailure(nil) = %#v, want zero decision", got)
+	}
+	if got := WorkFailureMetadataFromError(nil); got != nil {
+		t.Fatalf("WorkFailureMetadataFromError(nil) = %#v, want nil", got)
+	}
+}
+
+func TestProviderCompatibilityHelpersReportCapabilitiesAndStopTokens(t *testing.T) {
+	t.Parallel()
+
+	runner := NewInferenceProgressPublishingCommandRunner(nil, logging.NoopLogger{})
+	streaming, ok := runner.(interface{ SupportsResponseStreaming() bool })
+	if !ok || !streaming.SupportsResponseStreaming() {
+		t.Fatalf("progress runner = %T, want streaming-capable runner", runner)
+	}
+
+	if !ContainsStopToken("work <promise>COMPLETE</promise>", "<promise>COMPLETE</promise>") {
+		t.Fatal("ContainsStopToken() = false, want exact token match")
+	}
+	if ContainsStopToken("work COMPLETE", "") {
+		t.Fatal("ContainsStopToken() = true for empty token")
+	}
+}
+
 func TestWorkFailureDecisionFromProviderError_UsesFailureMetadataProjection(t *testing.T) {
 	t.Parallel()
 	providerErr := NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "high demand", nil)
@@ -958,16 +991,6 @@ func TestParseProviderExitFailure_RoutesOwnedProviderPackages(t *testing.T) {
 		{
 			provider: string(modelprovider.ProviderClaude),
 			result:   CommandResult{ExitCode: 1, Stderr: []byte(`API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"sign in"}}`)},
-			want:     workerexecution.WorkFailureTypeAuthFailure,
-		},
-		{
-			provider: string(modelprovider.ProviderGemini),
-			result:   CommandResult{ExitCode: 1, Stderr: []byte("ERROR: 429 RESOURCE_EXHAUSTED")},
-			want:     workerexecution.WorkFailureTypeThrottled,
-		},
-		{
-			provider: string(modelprovider.ProviderKiro),
-			result:   CommandResult{ExitCode: 1, Stderr: []byte("ERROR: Unauthorized")},
 			want:     workerexecution.WorkFailureTypeAuthFailure,
 		},
 		{

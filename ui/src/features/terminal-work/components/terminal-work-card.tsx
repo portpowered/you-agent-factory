@@ -1,17 +1,17 @@
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import type { ReactNode } from "react";
-import {
-  DashboardActionButton,
-  surfacePanelVariants,
-} from "../../../components/ui";
+import { surfacePanelVariants } from "@you-agent-factory/components/layout";
+import { DashboardActionButton } from "../../../components/ui/dashboard-action-button";
 import { cn } from "../../../lib/cn";
-import { DashboardWidgetFrame } from "../../bento/public";
+import { DashboardWidgetFrame } from "../../bento/components/dashboard-widget-frame/dashboard-widget-frame";
 import { CurrentSelectionExecutionPill } from "../../current-selection/base/components/presentation/current-selection-pill";
 import { CurrentSelectionSupportingText } from "../../current-selection/base/components/presentation/current-selection-supporting-text";
 import { WorkstationDispatchRow } from "../../current-selection/workstation-selection/components/detail-card/workstation-dispatch-row";
-import type { GraphSemanticIconKind } from "../../flowchart/public";
-import { GraphSemanticIcon } from "../../flowchart/public";
-import { StandardExpandableSection } from "../../standard-card-components/public";
+import {
+  GraphSemanticIcon,
+  type GraphSemanticIconKind,
+} from "../../flowchart/components/graph-semantic-icon";
+import { StandardExpandableSection } from "../../standard-card-components/components/standard-expandable-section";
 import type { TerminalWorkItem, TerminalWorkStatus } from "../lib/types";
 import { getTerminalWorkMessages } from "../messages/terminal-work";
 

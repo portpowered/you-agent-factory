@@ -107,7 +107,6 @@ var transportPrivateServiceSubpackages = []string{
 // paths whose external callers have been migrated to the owning service root.
 // Packages within the same service may continue using these paths internally.
 var convergedServiceSubpackageRoots = map[string]string{
-	"pkg/services/automations/timework":                         "automations",
 	"pkg/services/factory_definitions/contracts":                "factory_definitions",
 	"pkg/services/factory_definitions/decisionenvelope":         "factory_definitions",
 	"pkg/services/factory_definitions/invocationinterpolation":  "factory_definitions",
@@ -160,7 +159,6 @@ var convergedServiceSubpackageRoots = map[string]string{
 	"pkg/services/factory_definitions/editable":                 "factory_definitions",
 	"pkg/services/factory_definitions/packages":                 "factory_definitions",
 	"pkg/services/factory_definitions/scaffold":                 "factory_definitions",
-	"pkg/services/provider_sessions/codex":                      "provider_sessions",
 	"pkg/services/provider_sessions/cursor":                     "provider_sessions",
 	"pkg/services/recordings/events":                            "recordings",
 	"pkg/services/recordings/projections/dashboard":             "recordings",
@@ -213,7 +211,8 @@ var retiredPackageRoots = append([]retiredPackageRoot{
 	{packagePath: "pkg/services/provider_sessions/cursor/persistence", canonicalOwner: "pkg/services/factory_sessions/internal/cursors/persistence"},
 	{packagePath: "pkg/services/factory_sessions/internal/execution/testharness", canonicalOwner: "owner-local _test.go construction in pkg/services/factory_sessions/internal/execution"},
 	{packagePath: "pkg/testutil", canonicalOwner: "internal/testutil or package-local test helpers"},
-	{packagePath: "pkg/timework", canonicalOwner: "pkg/services/automations/timework"},
+	{packagePath: "pkg/timework", canonicalOwner: "pkg/services/automations/internal/services/cron"},
+	{packagePath: "pkg/services/automations/timework", canonicalOwner: "pkg/services/automations/internal/services/cron"},
 	{packagePath: "pkg/work", canonicalOwner: "pkg/services/work"},
 	{packagePath: "pkg/workcontent", canonicalOwner: "pkg/services/work"},
 	{packagePath: "pkg/workers", canonicalOwner: "pkg/services/workers"},
@@ -236,9 +235,15 @@ var approvedApplicationGraphImporters = []string{
 // only contracts owned by the leaf packages that directly perform these
 // external effects. This is deliberately not a general service-subpackage
 // exception.
+//
+// Provider inference/process effects: the durable owner is the Providers
+// Execution leaf (providersLeafEffectContractImport). Workers
+// provider/inferencecontract entries remain only as migration debt until later
+// Providers packets land; they are not the durable normative owner.
 var approvedPeerServiceContractImports = map[string]struct{}{
 	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/workers/agypty":                                                        {},
 	"pkg/platform/pty\x00github.com/portpowered/infinite-you/pkg/services/workers/agypty":                                                          {},
+	"pkg/services/edges\x00" + providersLeafEffectContractImport:                                                                                   {},
 	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                                    {},
 	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic":                                         {},
 	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear":                                  {},
@@ -259,7 +264,10 @@ var approvedPeerServiceContractImports = map[string]struct{}{
 // leaf adapter that crosses the process, network, filesystem, clock, or host
 // boundary. Tests may import these exact ports to supply edges.Edges values;
 // they are not permission to construct the owning service implementation.
+// Workers provider/inferencecontract remains migration debt; Providers leaf is
+// the durable public effect port.
 var publicExternalEffectContractImports = map[string]struct{}{
+	providersLeafEffectContractImport:                                                       {},
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty":                       {},
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":   {},
 	"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic":        {},
@@ -341,6 +349,7 @@ type config struct {
 	writeTransportBehaviorBaseline    bool
 	writeProductionDefaultBaseline    bool
 	writeTestBehaviorBaseline         bool
+	writePetriPublicSurfaceBaseline   bool
 }
 
 type scanResult struct {
@@ -380,6 +389,10 @@ type scanResult struct {
 	testBehaviorFindings               []testBehaviorFinding
 	staleTestBehaviorEntries           []testBehaviorBaselineEntry
 	testBehaviorBaselineCount          int
+	petriPublicSurfaceFindings         []petriPublicSurfaceFinding
+	stalePetriPublicSurfaceEntries     []petriPublicSurfaceBaselineEntry
+	petriPublicSurfaceBaselineCount    int
+	providerEffectOwnershipFindings    []providerEffectOwnershipFinding
 }
 
 type retiredPackageRoot struct {
@@ -531,6 +544,13 @@ func main() {
 		}
 		return
 	}
+	if cfg.writePetriPublicSurfaceBaseline {
+		if err := createPetriPublicSurfaceBaseline(cfg); err != nil {
+			fmt.Fprintln(stderrWriter, err)
+			exitFunc(1)
+		}
+		return
+	}
 	if err := run(cfg, stdoutWriter, stderrWriter); err != nil {
 		fmt.Fprintln(stderrWriter, err)
 		exitFunc(1)
@@ -570,6 +590,12 @@ func parseConfig() config {
 		"create-test-behavior-boundary-baseline",
 		false,
 		"create the exact deletion-only test behavior baseline; fails when the file exists or no debt exists",
+	)
+	flag.BoolVar(
+		&cfg.writePetriPublicSurfaceBaseline,
+		"create-petri-public-surface-baseline",
+		false,
+		"create the exact deletion-only Petri public-surface baseline; fails when the file exists or no debt exists",
 	)
 	flag.Parse()
 	return cfg
@@ -620,6 +646,9 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 		len(findings.staleInitializerBehaviorEntries)
 	blockingViolationCount += len(findings.testBehaviorFindings) +
 		len(findings.staleTestBehaviorEntries)
+	blockingViolationCount += len(findings.petriPublicSurfaceFindings) +
+		len(findings.stalePetriPublicSurfaceEntries)
+	blockingViolationCount += len(findings.providerEffectOwnershipFindings)
 	if blockingViolationCount == 0 {
 		fmt.Fprintln(stdout, "[agent-factory:pkg-boundary] package boundary passed (no blocking package-boundary violations)")
 		writePeerServiceBaselineSummary(stdout, findings.peerServiceBaselineCount)
@@ -630,6 +659,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 		writeProductionDefaultBaselineSummary(stdout, findings.productionDefaultBaselineCount)
 		writeInitializerBehaviorBaselineSummary(stdout, findings.initializerBehaviorBaselineCount)
 		writeTestBehaviorBaselineSummary(stdout, findings.testBehaviorBaselineCount)
+		writePetriPublicSurfaceBaselineSummary(stdout, findings.petriPublicSurfaceBaselineCount)
 		writeGeneratedCodeExceptionSummary(stdout, policy)
 		return nil
 	}
@@ -674,6 +704,10 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 	writeTestBehaviorFindings(stderr, findings.testBehaviorFindings)
 	writeStaleTestBehaviorBaselineEntries(stderr, findings.staleTestBehaviorEntries)
 	writeTestBehaviorBaselineSummary(stderr, findings.testBehaviorBaselineCount)
+	writePetriPublicSurfaceFindings(stderr, findings.petriPublicSurfaceFindings)
+	writeStalePetriPublicSurfaceBaselineEntries(stderr, findings.stalePetriPublicSurfaceEntries)
+	writePetriPublicSurfaceBaselineSummary(stderr, findings.petriPublicSurfaceBaselineCount)
+	writeProviderEffectOwnershipFindings(stderr, findings.providerEffectOwnershipFindings)
 	writeGeneratedCodeExceptionSummary(stderr, policy)
 	return fmt.Errorf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", blockingViolationCount)
 }
@@ -894,6 +928,24 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		return scanResult{}, err
 	}
 	result.initializerBehaviorBaselineCount = len(initializerBehaviorBaseline.Entries)
+	petriPublicSurfaceFindings, err := scanPetriPublicSurface(repoRoot)
+	if err != nil {
+		return scanResult{}, err
+	}
+	petriPublicSurfaceBaseline, err := loadPetriPublicSurfaceBaseline(repoRoot)
+	if err != nil {
+		return scanResult{}, err
+	}
+	result.petriPublicSurfaceFindings, result.stalePetriPublicSurfaceEntries, err =
+		partitionPetriPublicSurfaceFindings(petriPublicSurfaceFindings, petriPublicSurfaceBaseline)
+	if err != nil {
+		return scanResult{}, err
+	}
+	result.petriPublicSurfaceBaselineCount = len(petriPublicSurfaceBaseline.Entries)
+	result.providerEffectOwnershipFindings, err = scanProviderEffectOwnership(repoRoot)
+	if err != nil {
+		return scanResult{}, err
+	}
 
 	slices.SortFunc(result.rootPackageFindings, func(left, right rootPackageFinding) int {
 		return strings.Compare(left.packagePath, right.packagePath)

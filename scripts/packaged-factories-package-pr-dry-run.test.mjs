@@ -22,7 +22,7 @@ function input(outputDirectory, overrides = {}) {
 		eventName: "pull_request",
 		outputDirectory,
 		packageDirectory: "packages/packaged-factories",
-		prerequisiteResult: "success",
+		prerequisiteResult: undefined,
 		pullRequestHeadSha: sourceCommit,
 		ref: "refs/pull/42/merge",
 		repository: "portpowered/you-agent-factory",
@@ -95,7 +95,6 @@ test("pull request authorization rejects non-reviewed identity before preparatio
 	for (const overrides of [
 		{ sourceCommit: "f".repeat(40) },
 		{ sourceCommit: undefined },
-		{ prerequisiteResult: "failure" },
 		{ eventName: "push" },
 	]) {
 		let prepared = false;

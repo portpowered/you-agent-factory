@@ -41,7 +41,7 @@ func TestOwningPersistence_CreateNamedFactoryIsDurableWithoutSave(t *testing.T) 
 		},
 	})
 	var out strings.Builder
-	if err := testList(ListConfig{Dir: rootDir, Output: &out}); err != nil {
+	if err := testList(ListConfig{ProjectRoot: rootDir, GlobalRoot: rootDir, Output: &out}); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 	if !strings.Contains(out.String(), "gamma\t"+filepath.Join(rootDir, "gamma")) {

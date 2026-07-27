@@ -11,6 +11,7 @@ import (
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 )
 
@@ -24,10 +25,34 @@ const (
 )
 
 // Service owns current and named factory definition reads, persistence, and
-// activation policy.
+// activation policy. UnimplementedService keeps the CTR-DEF root slice methods
+// assignable until nested IMP-DEF collaborators are wired.
 type Service struct {
+	nonCatalogDefaults
+	catalog.Service
 	host              Host
 	versionFileSystem factoryroot.VersionFileSystem
+	packagedCatalog   factoryroot.PackagedFactoryCatalogOperations
+	packagedInstaller factoryroot.PackagedFactoryInstallationOperations
+}
+
+type nonCatalogDefaults interface {
+	ListEffectiveFactories(context.Context, factoryroot.ListEffectiveFactoriesRequest) (factoryroot.ListEffectiveFactoriesResult, error)
+	PrepareFactoryLayout(context.Context, factoryroot.PrepareFactoryLayoutRequest) (factoryroot.PrepareFactoryLayoutResult, error)
+	FlattenFactoryLayout(context.Context, factoryroot.FlattenFactoryLayoutRequest) (factoryroot.FlattenFactoryLayoutResult, error)
+	ExpandFactoryLayout(context.Context, factoryroot.ExpandFactoryLayoutRequest) (factoryroot.ExpandFactoryLayoutResult, error)
+	CreateNamedFactory(context.Context, factoryroot.CreateNamedFactoryRequest) (factoryroot.CreateNamedFactoryResult, error)
+	ReplaceNamedFactory(context.Context, factoryroot.ReplaceNamedFactoryRequest) (factoryroot.ReplaceNamedFactoryResult, error)
+	CompileEffectiveFactorySource(context.Context, factoryroot.CompileEffectiveFactorySourceRequest) (factoryroot.CompileEffectiveFactorySourceResult, error)
+	ValidateStructuralFactoryDefinition(context.Context, factoryroot.ValidateStructuralFactoryDefinitionRequest) (factoryroot.ValidateStructuralFactoryDefinitionResult, error)
+	ValidateEffectiveFactoryDefinition(context.Context, factoryroot.ValidateEffectiveFactoryDefinitionRequest) (factoryroot.ValidateEffectiveFactoryDefinitionResult, error)
+	CaptureFactorySnapshot(context.Context, factoryroot.CaptureFactorySnapshotRequest) (factoryroot.CaptureFactorySnapshotResult, error)
+	PrepareFactorySnapshotImport(context.Context, factoryroot.PrepareFactorySnapshotImportRequest) (factoryroot.PrepareFactorySnapshotImportResult, error)
+	MaterializeFactorySnapshot(context.Context, factoryroot.MaterializeFactorySnapshotRequest) (factoryroot.MaterializeFactorySnapshotResult, error)
+	ListBuiltInPackagedFactories(context.Context, factoryroot.ListBuiltInPackagedFactoriesRequest) (factoryroot.ListBuiltInPackagedFactoriesResult, error)
+	ResolveBuiltInPackagedFactory(context.Context, factoryroot.ResolveBuiltInPackagedFactoryRequest) (factoryroot.ResolveBuiltInPackagedFactoryResult, error)
+	InstallPackagedFactory(context.Context, factoryroot.InstallPackagedFactoryRequest) (factoryroot.InstallPackagedFactoryResult, error)
+	CreateFactoryScaffold(context.Context, factoryroot.CreateFactoryScaffoldRequest) (factoryroot.CreateFactoryScaffoldResult, error)
 }
 
 // New constructs a factory-definition read collaborator with explicit dependencies.
@@ -36,7 +61,121 @@ func New(host Host, versionFileSystems ...factoryroot.VersionFileSystem) *Servic
 	if len(versionFileSystems) > 0 {
 		versionFileSystem = versionFileSystems[0]
 	}
-	return &Service{host: host, versionFileSystem: versionFileSystem}
+	return &Service{
+		nonCatalogDefaults: factoryroot.UnimplementedService{},
+		Service:            factoryroot.UnimplementedService{},
+		host:               host,
+		versionFileSystem:  versionFileSystem,
+	}
+}
+
+// NewWithCatalog constructs the Definitions root collaborator with private
+// catalog ownership for the CTR-DEF catalog slice.
+func NewWithCatalog(
+	host Host,
+	catalogService catalog.Service,
+	versionFileSystems ...factoryroot.VersionFileSystem,
+) *Service {
+	service := New(host, versionFileSystems...)
+	service.Service = catalogService
+	return service
+}
+
+// NewWithCatalogAndPackages constructs the Definitions root collaborator with
+// both persisted and embedded catalog operations.
+func NewWithCatalogAndPackages(
+	host Host,
+	catalogService catalog.Service,
+	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
+	versionFileSystems ...factoryroot.VersionFileSystem,
+) *Service {
+	service := NewWithCatalog(host, catalogService, versionFileSystems...)
+	service.packagedCatalog = packagedCatalog
+	return service
+}
+
+// NewWithCatalogPackagesAndInstallation constructs the complete Definitions
+// root collaborator for catalog selection and canonical packaged installation.
+func NewWithCatalogPackagesAndInstallation(
+	host Host,
+	catalogService catalog.Service,
+	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
+	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
+	versionFileSystems ...factoryroot.VersionFileSystem,
+) *Service {
+	service := NewWithCatalogAndPackages(
+		host,
+		catalogService,
+		packagedCatalog,
+		versionFileSystems...,
+	)
+	service.packagedInstaller = packagedInstaller
+	return service
+}
+
+func (s *Service) ListBuiltInPackagedFactories(
+	ctx context.Context,
+	request factoryroot.ListBuiltInPackagedFactoriesRequest,
+) (factoryroot.ListBuiltInPackagedFactoriesResult, error) {
+	if s == nil || s.packagedCatalog.List == nil {
+		return factoryroot.UnimplementedService{}.ListBuiltInPackagedFactories(ctx, request)
+	}
+	return s.packagedCatalog.ListBuiltInPackagedFactories(ctx, request)
+}
+
+func (s *Service) ResolveBuiltInPackagedFactory(
+	ctx context.Context,
+	request factoryroot.ResolveBuiltInPackagedFactoryRequest,
+) (factoryroot.ResolveBuiltInPackagedFactoryResult, error) {
+	if s == nil || s.packagedCatalog.Resolve == nil {
+		return factoryroot.UnimplementedService{}.ResolveBuiltInPackagedFactory(ctx, request)
+	}
+	return s.packagedCatalog.ResolveBuiltInPackagedFactory(ctx, request)
+}
+
+func (s *Service) InstallPackagedFactory(
+	ctx context.Context,
+	request factoryroot.InstallPackagedFactoryRequest,
+) (factoryroot.InstallPackagedFactoryResult, error) {
+	if err := ctx.Err(); err != nil {
+		return factoryroot.InstallPackagedFactoryResult{}, err
+	}
+	if err := factoryroot.ValidateInstallPackagedFactoryRequest(request); err != nil {
+		return factoryroot.InstallPackagedFactoryResult{}, err
+	}
+	resolved, err := s.ResolveBuiltInPackagedFactory(
+		ctx,
+		factoryroot.ResolveBuiltInPackagedFactoryRequest{Name: request.Name},
+	)
+	if err != nil {
+		return factoryroot.InstallPackagedFactoryResult{}, err
+	}
+	if s == nil || s.packagedInstaller.Install == nil {
+		return factoryroot.InstallPackagedFactoryResult{},
+			fmt.Errorf("%w: packaged Factory installation collaborator is required",
+				factoryroot.ErrFactoryDistributeFailed)
+	}
+	installed, err := s.packagedInstaller.InstallPackagedFactory(
+		ctx,
+		factoryroot.PackagedFactoryInstallParams{
+			NamedFactoriesRoot: request.RootDir,
+			Definition:         resolved.Definition,
+			Format:             request.Format,
+			Replace:            request.Replace,
+		},
+	)
+	if err != nil {
+		return factoryroot.InstallPackagedFactoryResult{},
+			fmt.Errorf("%w: %w", factoryroot.ErrFactoryDistributeFailed, err)
+	}
+	return factoryroot.InstallPackagedFactoryResult{
+		Definition: factoryroot.DistributedFactoryDefinitionFacts{
+			Name:       installed.Name,
+			FactoryDir: installed.FactoryDir,
+		},
+		Outcome: installed.Outcome,
+		Format:  installed.Format,
+	}, nil
 }
 
 // Save coordinates the session-scoped definition submission pipeline for the

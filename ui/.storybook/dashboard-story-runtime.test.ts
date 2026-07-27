@@ -9,7 +9,7 @@ import { DEFAULT_FACTORY_SESSION_ID } from "../src/api/session-routing";
 import {
   resetSelectionHistoryStore,
   useSelectionHistoryStore,
-} from "../src/features/current-selection/base/public";
+} from "../src/features/current-selection/base/state/selectionHistoryStore";
 import { useDashboardSession } from "../src/features/dashboard/session/dashboard-session-provider";
 import {
   resetDashboardSessionStore,

@@ -12,19 +12,23 @@ import {
 import { useState } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
 import { useAppLocale } from "../../i18n";
+import { Button } from "./button";
+import { Calendar } from "./calendar";
 import {
-  Button,
-  Calendar,
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
-  DataTable,
-  Input,
+} from "./chart";
+import { DataTable } from "./data-table";
+import { Input } from "./input";
+import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
+} from "./resizable";
+import {
   Select,
   SelectContent,
   SelectField,
@@ -34,7 +38,9 @@ import {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
-  Skeleton,
+} from "./select";
+import { Skeleton } from "./skeleton";
+import {
   Table,
   TableBody,
   TableCaption,
@@ -42,8 +48,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Textarea,
-} from ".";
+} from "./table";
+import { Textarea } from "./textarea";
 import { getSharedPrimitiveMessages } from "./messages/shared-primitives";
 
 const chartData = [

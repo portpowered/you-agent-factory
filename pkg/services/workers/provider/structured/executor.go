@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
 	claudeadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/claude"
 	codexadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex"
+	cursoradapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor"
 	piadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/pi"
 )
 
@@ -27,7 +28,7 @@ type Executor struct {
 
 // NewExecutor constructs the production structured adapter registry.
 func NewExecutor() *Executor {
-	registry, err := adapter.NewRegistry(claudeadapter.NewAdapter(), codexadapter.NewResponseAdapter(), piadapter.NewAdapter())
+	registry, err := adapter.NewRegistry(claudeadapter.NewAdapter(), codexadapter.NewResponseAdapter(), piadapter.NewAdapter(), cursoradapter.NewAdapter())
 	if err != nil {
 		panic(fmt.Sprintf("register structured provider adapters: %v", err))
 	}
@@ -92,7 +93,8 @@ func (r commandRunner) Run(
 ) (workerprocess.CommandResult, error) {
 	switch r.runner.(type) {
 	case workerprovider.InferenceProgressPublishingCommandRunner, *workerprovider.InferenceProgressPublishingCommandRunner,
-		workerprocess.ExecCommandRunner, *workerprocess.ExecCommandRunner:
+		workerprocess.ExecCommandRunner, *workerprocess.ExecCommandRunner,
+		workerprocess.StreamingAdaptedCommandRunner, *workerprocess.StreamingAdaptedCommandRunner:
 		return runObservedCommand(ctx, req, observe, r.runner, r.logger)
 	}
 	runner := r.runner

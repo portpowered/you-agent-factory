@@ -1,5 +1,8 @@
+// biome-ignore-all lint/style/noExcessiveLinesPerFile lint/complexity/noExcessiveLinesPerFunction: event-stream unit contracts share one factory-event fixture vocabulary.
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
+
+// Timing globals are stubbed per test; these contracts do not require a DOM.
 
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import {

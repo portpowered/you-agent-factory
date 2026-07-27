@@ -160,14 +160,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
   },
   {
-    relativeFilePath: "src/features/current-selection/base/public/index.ts",
-    importSpecifiers: [
-      "../../../current-factory-definition/hooks/useFactoryDocumentSave",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
     relativeFilePath:
       "src/features/current-selection/base/state/factoryGraphNodeSelection.ts",
     importSpecifiers: [
@@ -376,7 +368,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "src/features/workflow-activity/hooks/react-flow-current-activity-card-graph-selection-gestures.ts",
     importSpecifiers: [
       "../../factory-graph-editor/hooks/selection/use-factory-graph-editor-selection",
-      "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-gestures",
     ],
     reason:
       "Workflow-activity graph selection gestures reuse editor-local selection helpers pending a public boundary split.",

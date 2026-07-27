@@ -1,6 +1,7 @@
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
+import { Code, Text } from "@you-agent-factory/components/primitives";
 import type { DashboardProviderSession } from "../../../../../api/dashboard/types";
-import { ButtonLink, Code, Text } from "../../../../../components/ui";
+import { ButtonLink } from "../../../../../components/ui/button-link";
 import { getProviderSessionLogTarget } from "../../../../../components/ui/formatters";
 import {
   getLoadableProviderSessionRef,
@@ -16,11 +17,11 @@ import { CurrentSelectionSectionHeader } from "../../../base/components/layout/c
 import { useCurrentSelectionOperationalEnumMessages } from "../../../base/components/presentation/current-selection-locale";
 import { CurrentSelectionBadge } from "../../../base/components/presentation/current-selection-pill";
 import { CurrentSelectionSelectableButton } from "../../../base/components/presentation/current-selection-selectable-button";
-import { CurrentSelectionSupportingText } from "../../../base/public";
+import { CurrentSelectionSupportingText } from "../../../base/components/presentation/current-selection-supporting-text";
 import {
   CurrentSelectionHistoryCard,
   CurrentSelectionHistoryCardHeader,
-} from "../../../history/public";
+} from "../../../history/components/current-selection-history-card";
 import { getWorkstationDetailMessages } from "../../messages/workstation-detail";
 import type { WorkstationDetailMessages } from "../../messages/workstation-detail-types";
 

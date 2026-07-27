@@ -5,14 +5,38 @@ This repository releases from a maintainer-created semantic-version tag on
 checkout; that command verifies readiness and pushes only the tag. GitHub
 Actions owns every publication side effect.
 
-## Data package candidates
+## Public package sets
 
-`@you-agent-factory/api` and
-`@you-agent-factory/packaged-factories` use one candidate identity policy. A
-candidate version has the form
-`0.0.0-dev.<workflow-run-id>.<first-12-source-commit-characters>`. Candidate
-evidence and the staged contract manifest record the same full source commit.
-The checked-in package versions remain the `0.0.0` staging placeholder.
+Development publication covers only the five-package frontend family:
+`@you-agent-factory/client`, `@you-agent-factory/factory-replay`,
+`@you-agent-factory/factory-emulator`, `@you-agent-factory/components`, and
+`@you-agent-factory/factory-visualizers`. Each protected-main candidate uses
+the immutable version
+`0.0.0-dev.<workflow-run-id>.<reviewed-source-commit>`. Pull-request runs
+prepare the same frontend-only shape without publishing it.
+
+Tagged releases use one complete seven-package set. They add
+`@you-agent-factory/api` and `@you-agent-factory/packaged-factories` to the
+frontend family, and every tarball uses the requested stable release version.
+Candidate preparation stages patched manifests in temporary directories; the
+checked-in package versions remain the `0.0.0` staging placeholder.
+
+To prepare the complete tagged-release candidate locally without publishing,
+run this from the repository root with an empty output directory:
+
+```bash
+node scripts/public-release-package-candidate.mjs \
+  --output-directory .artifacts/public-release-candidate \
+  --run-id 1 \
+  --source-commit "$(git rev-parse HEAD)" \
+  --version 1.2.3
+```
+
+The command writes the seven tarballs and their evidence beneath
+`.artifacts/public-release-candidate`. It does not contact the npm publication
+endpoint.
+
+## Packaged Factories contract
 
 The Packaged Factories package is data-only. Its supported npm exports are:
 
@@ -46,18 +70,18 @@ evidence, and installed-consumer evidence.
 
 Pull-request jobs can generate, pack, install, verify, and preserve candidates,
 but they have no npm publication step or publication credentials. The
-Development Package workflow prepares separate API and Packaged Factories
-artifacts from the reviewed pull-request head. A protected `main` run prepares
-and uploads each candidate before a later job downloads and publishes it.
+Development Package workflow prepares only the frontend family from the
+reviewed pull-request head. A protected `main` run preserves that exact
+frontend-only candidate before a later job publishes it with provenance under
+the `dev` distribution tag. API and Packaged Factories artifacts are not part
+of development candidate preparation or publication.
 
-The tagged Release workflow follows the same boundary. One job prepares both
-data-package candidates from
-`github.event.workflow_run.head_sha` and preserves them under distinct artifact
-names. The publication job downloads those candidates, requires their evidence
-to name that exact source commit, and never repacks mutable checkout sources.
-Trusted npm publication uses provenance and the candidate's `dev` distribution
-tag. The frontend package family retains its separate release-version and
-`latest`-tag policy.
+The tagged Release workflow prepares the complete seven-package set from
+`github.event.workflow_run.head_sha` and preserves it as one artifact. The
+publication job requires the top-level and child evidence to name that exact
+source commit and release version, and it never repacks mutable checkout
+sources. Trusted npm publication uses provenance and the `latest` distribution
+tag.
 
 ## Reconciliation and recovery
 

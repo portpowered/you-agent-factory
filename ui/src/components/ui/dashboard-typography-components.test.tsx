@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 
-import { Code, Heading, Label, Text } from "@you-agent-factory/components";
+import { Code, Heading, Label, Text } from "@you-agent-factory/components/primitives";
 
 describe("dashboard typography components", () => {
   it("renders page and section heading roles", () => {

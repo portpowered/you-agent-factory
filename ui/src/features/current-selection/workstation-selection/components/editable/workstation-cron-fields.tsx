@@ -1,14 +1,10 @@
 import type { ReactNode } from "react";
 
-import {
-  Checkbox,
-  FormDescription,
-  FormError,
-  Input,
-  Label,
-  Text,
-} from "../../../../../components/ui";
-import { CurrentSelectionFormField } from "../../../base/public";
+import { FormDescription, FormError } from "@you-agent-factory/components/forms";
+import { Label, Text } from "@you-agent-factory/components/primitives";
+import { Checkbox } from "../../../../../components/ui/checkbox";
+import { Input } from "../../../../../components/ui/input";
+import { CurrentSelectionFormField } from "../../../base/components/layout/current-selection-form-layout";
 import type {
   EditableWorkstationOverwriteField,
   WorkstationDetailCardProps,

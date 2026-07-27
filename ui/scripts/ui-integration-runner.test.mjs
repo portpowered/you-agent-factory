@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 
 import {
+  browserIntegrationMaxWorkers,
   browserIntegrationPhaseName,
   buildBrowserIntegrationVitestArgs,
   buildFocusedBrowserIntegrationVitestArgs,
@@ -9,17 +10,31 @@ import {
   runBrowserIntegration,
   runFocusedBrowserIntegration,
 } from "./ui-integration-runner.mjs";
-import { durableSessionRealBackendIntegrationFiles } from "./ui-integration-targets.mjs";
+import {
+  durableSessionRealBackendIntegrationFiles,
+  mockedBackendBrowserIntegrationFiles,
+} from "./ui-integration-targets.mjs";
 
 test("builds stable browser integration vitest args", () => {
-  expect(buildBrowserIntegrationVitestArgs()).toEqual([
+  expect(buildBrowserIntegrationVitestArgs({})).toEqual([
     "run",
-    "--dir",
-    "integration",
-    "--no-file-parallelism",
+    ...mockedBackendBrowserIntegrationFiles,
+    "--fileParallelism",
     "--maxWorkers",
-    "1",
+    "3",
+    "--reporter=verbose",
   ]);
+});
+
+test("accepts a measured mocked-browser worker override", () => {
+  expect(
+    browserIntegrationMaxWorkers({ UI_BROWSER_INTEGRATION_MAX_WORKERS: "3" }),
+  ).toBe(3);
+  expect(() =>
+    browserIntegrationMaxWorkers({
+      UI_BROWSER_INTEGRATION_MAX_WORKERS: "not-a-worker-count",
+    }),
+  ).toThrow(/must be a positive integer/);
 });
 
 test("builds focused browser integration vitest args for durable session proof", () => {
@@ -58,6 +73,9 @@ test("runBrowserIntegration emits categorized slow-file summary", () => {
     buildBrowserIntegrationVitestArgs(),
     expect.objectContaining({
       encoding: "utf8",
+      env: expect.objectContaining({
+        AGENT_FACTORY_BROWSER_ARTIFACT_WORKER_ISOLATION: "true",
+      }),
       stdio: ["inherit", "pipe", "inherit"],
     }),
   );

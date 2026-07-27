@@ -1,13 +1,12 @@
 import { type KeyboardEvent, useId, useRef } from "react";
 
+import { SurfacePanel } from "@you-agent-factory/components/layout";
+import { Heading } from "@you-agent-factory/components/primitives";
+import { AlertPanel, AlertPanelText } from "../../../components/ui/alert-panel";
 import {
-  AlertPanel,
-  AlertPanelText,
-  Heading,
   StandardListSelection,
   StandardListSelectionItem,
-  SurfacePanel,
-} from "../../../components/ui";
+} from "../../../components/ui/standard-list-selection";
 import { useAppLocale } from "../../../i18n";
 import { usePackagedFactoryInventory } from "../hooks/use-packaged-factory-inventory";
 import type { PackagedFactoryPublicDataSource } from "../lib/public-contract";

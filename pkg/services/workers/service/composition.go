@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -17,6 +18,12 @@ import (
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/construction"
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/execution/recording"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
+	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
+	runtimeassemblywire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire"
+	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
+	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic"
@@ -29,6 +36,7 @@ import (
 func NewRuntime(
 	sessions CurrentRuntimeResolver,
 	modelService models.Service,
+	modelsScope models.RuntimeScopeRef,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
 	allocator agypty.PTYAllocator,
@@ -56,7 +64,7 @@ func NewRuntime(
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 ) (workers.RuntimeService, error) {
-	return New(
+	runtimeService, err := New(
 		sessions,
 		modelService,
 		providerCommandRunner,
@@ -87,6 +95,17 @@ func NewRuntime(
 		temporaryFiles,
 		decisionEnvelopes,
 	)
+	if err != nil {
+		return nil, err
+	}
+	runtimeService.modelsScope = modelsScope
+	assembly, err := newRuntimeAssembly(nil)
+	if err != nil {
+		return nil, err
+	}
+	runtimeService.runtimeAssembly = assembly
+	runtimeService.workstations = workstationswire.NewService()
+	return runtimeService, nil
 }
 
 // NewRuntimeWithSelection constructs the Workers runtime while preserving
@@ -95,6 +114,7 @@ func NewRuntime(
 func NewRuntimeWithSelection(
 	sessions CurrentRuntimeResolver,
 	modelService models.Service,
+	modelsScope models.RuntimeScopeRef,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
 	allocator agypty.PTYAllocator,
@@ -126,7 +146,7 @@ func NewRuntimeWithSelection(
 	providerRegistry *providerregistry.Registry,
 ) (workers.RuntimeService, error) {
 	runtimeService, err := NewRuntime(
-		sessions, modelService, providerCommandRunner, scriptCommandRunner,
+		sessions, modelService, modelsScope, providerCommandRunner, scriptCommandRunner,
 		allocator, logger, verbose, factoryRunnerID, invocationSkipPermissionsOverride,
 		providerOverride, now, processEnvironment, currentWorkingDirectory, contentMaterializer, interpolation, executionPolicy,
 		factoryDocs, resolveSymlinks, executableLocator, executableInspector, executableFiles, operatingSystem,
@@ -140,6 +160,12 @@ func NewRuntimeWithSelection(
 	service.scriptCommandInjected = scriptCommandInjected
 	service.providerRegistry = providerRegistry
 	if providerRegistry != nil {
+		assembly, assemblyErr := newRuntimeAssembly(providerRegistry)
+		if assemblyErr != nil {
+			return nil, assemblyErr
+		}
+		service.runtimeAssembly = assembly
+		service.invocationConductor = providerconductor.New(providerRegistry)
 		if builder, ok := service.executorBuilder.(*workerconstruction.Service); ok {
 			service.executorBuilder = builder.
 				WithRunnerSelection(providerRegistry.ResolveRunnerSelection).
@@ -147,6 +173,99 @@ func NewRuntimeWithSelection(
 		}
 	}
 	return service, nil
+}
+
+func newRuntimeAssembly(
+	registry *providerregistry.Registry,
+) (runtimeassembly.Service, error) {
+	registrations, err := runtimeAssemblyRegistrations(registry)
+	if err != nil {
+		return nil, err
+	}
+	return newRuntimeAssemblyFromRegistrations(registrations)
+}
+
+func newRuntimeAssemblyFromRegistrations(
+	registrations []runners.Registration,
+) (runtimeassembly.Service, error) {
+	runnerRegistry, err := runnerswire.NewService(registrations)
+	if err != nil {
+		return nil, fmt.Errorf("construct Workers Runtime Assembly runner registry: %w", err)
+	}
+	assembleBinding := func(
+		_ context.Context,
+		role workers.RuntimeBuildRoleRequest,
+		_ workers.RuntimeBuildOpeningOptions,
+		selection workers.ResolvedRunnerSelection,
+	) (workers.AssembledRuntimeBinding, error) {
+		return workers.AssembledRuntimeBinding{
+			RoleName:        role.Name,
+			RoleKind:        role.Kind,
+			RunnerSelection: selection,
+		}, nil
+	}
+	return runtimeassemblywire.NewService(runnerRegistry, assembleBinding)
+}
+
+type runtimeAssemblyRunner struct{}
+
+func (runtimeAssemblyRunner) Execute(
+	context.Context,
+	workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	return workers.RunnerExecutionResult{}, fmt.Errorf(
+		"%w: runtime assembly binding cannot execute",
+		workers.ErrIncompleteRuntimeAssembly,
+	)
+}
+
+func runtimeAssemblyRegistrations(
+	registry *providerregistry.Registry,
+) ([]runners.Registration, error) {
+	implementation := runtimeAssemblyRunner{}
+	if registry != nil {
+		entries := registry.Entries()
+		registrations := make([]runners.Registration, 0, len(entries))
+		for _, entry := range entries {
+			if !entry.Selectable() {
+				continue
+			}
+			metadata, err := registry.RunnerMetadata(string(entry.Identity()))
+			if err != nil {
+				return nil, fmt.Errorf(
+					"construct Workers Runtime Assembly runner metadata %q: %w",
+					entry.Identity(),
+					err,
+				)
+			}
+			registrations = append(registrations, runners.Registration{
+				Identity: metadata.ID,
+				Metadata: metadata,
+				Runner:   implementation,
+			})
+		}
+		return registrations, nil
+	}
+
+	identities := []string{
+		workers.RunnerIDAgy,
+		workers.RunnerIDCodex,
+		workers.RunnerIDCursorCLI,
+		workers.RunnerIDGemini,
+		workers.RunnerIDKiro,
+		workers.RunnerIDOpenCode,
+		workers.RunnerIDPi,
+	}
+	registrations := make([]runners.Registration, 0, len(identities))
+	for _, identity := range identities {
+		metadata, _ := workers.BuiltInRunnerMetadata(identity)
+		registrations = append(registrations, runners.Registration{
+			Identity: identity,
+			Metadata: metadata,
+			Runner:   implementation,
+		})
+	}
+	return registrations, nil
 }
 
 // BuildRuntimeExecutors invokes the concrete Workers implementation selected
@@ -218,4 +337,25 @@ func NewHostedPollers(
 // Models runtime.
 func LocalRuntimeHooks() models.LocalRuntimeHooks {
 	return modelrecording.Hooks()
+}
+
+func resolveInferenceRunner(
+	inner workers.Runner,
+	modelsService models.Service,
+	modelsScope models.RuntimeScopeRef,
+	factoryCfg *factorydefinitions.FactoryConfig,
+	workerCfg *factorydefinitions.FactoryWorkerConfig,
+) workers.Runner {
+	if factoryCfg == nil {
+		return runnerswire.NewInferenceCompositionRunner(
+			inner, modelsService, modelsScope, workerCfg, nil,
+		)
+	}
+	return runnerswire.NewInferenceCompositionRunner(
+		inner,
+		modelsService,
+		modelsScope,
+		workerCfg,
+		factoryCfg.Resources,
+	)
 }

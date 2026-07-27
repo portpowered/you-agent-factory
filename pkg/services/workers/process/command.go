@@ -45,7 +45,13 @@ type ExecCommandRunner struct {
 // AdaptCommandRunner projects a low-level subprocess effect into the
 // Workers-owned command boundary.
 func AdaptCommandRunner(runner platformprocess.CommandRunner) CommandRunner {
-	return ExecCommandRunner{Runner: runner}
+	adapted := ExecCommandRunner{Runner: runner}
+	if _, ok := runner.(interface {
+		RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
+	}); ok {
+		return StreamingAdaptedCommandRunner{ExecCommandRunner: adapted}
+	}
+	return adapted
 }
 
 func (r ExecCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
@@ -94,9 +100,13 @@ func (r StreamingExecCommandRunner) Run(ctx context.Context, req CommandRequest)
 	return streaming.RunStreaming(ctx, req, r.Observer)
 }
 
-// RunStreaming forwards incremental output through the injected Platform
-// command capability when available.
-func (r ExecCommandRunner) RunStreaming(ctx context.Context, req CommandRequest, observer OutputChunkObserver) (CommandResult, error) {
+// StreamingAdaptedCommandRunner preserves the optional streaming capability
+// only when the injected platform effect actually implements it.
+type StreamingAdaptedCommandRunner struct {
+	ExecCommandRunner
+}
+
+func (r StreamingAdaptedCommandRunner) RunStreaming(ctx context.Context, req CommandRequest, observer OutputChunkObserver) (CommandResult, error) {
 	if r.Runner == nil {
 		return CommandResult{}, errors.New("workers process command runner is required")
 	}
@@ -105,7 +115,9 @@ func (r ExecCommandRunner) RunStreaming(ctx context.Context, req CommandRequest,
 		RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
 	})
 	if !ok {
-		return CommandResult{}, errors.New("injected platform command runner does not support streaming")
+		result, err := platformRunner.Run(ctx, effectRequest(req))
+		publishCompleteCommandOutput(observer, result.Stdout, result.Stderr)
+		return commandResult(result), err
 	}
 	result, err := streaming.RunStreaming(ctx, effectRequest(req), platformprocess.OutputChunkObserver(observer))
 	return commandResult(result), err
@@ -134,6 +146,52 @@ func (r LoggingCommandRunner) Run(ctx context.Context, req CommandRequest) (Comm
 	logger.Info("command runner: request completed", commandCompletionLogFields(req, result, duration, commandResultStatus(ctx, result, err), err)...)
 	logger.Verbose("command runner: verbose output details", commandOutputDetailsLogFields(req, result, duration)...)
 	return result, err
+}
+
+// RunStreaming preserves command logging while forwarding live chunks when the
+// injected edge supports them. Legacy deterministic test edges fall back to
+// one complete chunk per available stream.
+func (r LoggingCommandRunner) RunStreaming(
+	ctx context.Context,
+	req CommandRequest,
+	observer OutputChunkObserver,
+) (CommandResult, error) {
+	logger := logging.EnsureLogger(r.Logger)
+	if r.Runner == nil {
+		return CommandResult{}, errors.New("workers logging command runner is required")
+	}
+	if r.Clock == nil {
+		return CommandResult{}, errors.New("workers logging command clock is required")
+	}
+	logger.Info("command runner: request received", commandRequestLogFields(req)...)
+	logger.Verbose("command runner: verbose request details", commandRequestDetailsLogFields(req)...)
+	started := r.Clock.Now()
+	var result CommandResult
+	var err error
+	if streaming, ok := r.Runner.(interface {
+		RunStreaming(context.Context, CommandRequest, OutputChunkObserver) (CommandResult, error)
+	}); ok {
+		result, err = streaming.RunStreaming(ctx, req, observer)
+	} else {
+		result, err = r.Runner.Run(ctx, req)
+		publishCompleteCommandOutput(observer, result.Stdout, result.Stderr)
+	}
+	duration := r.Clock.Now().Sub(started)
+	logger.Info("command runner: request completed", commandCompletionLogFields(req, result, duration, commandResultStatus(ctx, result, err), err)...)
+	logger.Verbose("command runner: verbose output details", commandOutputDetailsLogFields(req, result, duration)...)
+	return result, err
+}
+
+func publishCompleteCommandOutput(observer OutputChunkObserver, stdout, stderr []byte) {
+	if observer == nil {
+		return
+	}
+	if len(stdout) > 0 {
+		observer(OutputStreamStdout, append([]byte(nil), stdout...))
+	}
+	if len(stderr) > 0 {
+		observer(OutputStreamStderr, append([]byte(nil), stderr...))
+	}
 }
 
 func SubprocessRequestBase(dispatch work.WorkDispatch) CommandRequest {
@@ -178,6 +236,16 @@ func execCommandRunnerWithLogger(runner CommandRunner, logger logging.Logger) Co
 			typed.Logger = logger
 		}
 		return typed
+	case StreamingAdaptedCommandRunner:
+		if typed.Logger == nil {
+			typed.Logger = logger
+		}
+		return typed
+	case *StreamingAdaptedCommandRunner:
+		if typed != nil && typed.Logger == nil {
+			typed.Logger = logger
+		}
+		return typed
 	default:
 		return runner
 	}
@@ -192,5 +260,6 @@ func commandResult(result platformprocess.CommandResult) CommandResult {
 }
 
 var _ CommandRunner = ExecCommandRunner{}
+var _ CommandRunner = StreamingAdaptedCommandRunner{}
 var _ CommandRunner = StreamingExecCommandRunner{}
 var _ CommandRunner = (*LoggingCommandRunner)(nil)

@@ -46,12 +46,13 @@ func TestResponseEventDecoder_MapsCursorInitializationAndAssistantFixture(t *tes
 	if len(result.Diagnostics) != 0 {
 		t.Fatalf("diagnostics = %#v, want none", result.Diagnostics)
 	}
-	if len(result.Drafts) != 3 {
-		t.Fatalf("draft count = %d, want 3: %#v", len(result.Drafts), result.Drafts)
+	if len(result.Drafts) != 4 {
+		t.Fatalf("draft count = %d, want 4: %#v", len(result.Drafts), result.Drafts)
 	}
 	assertCursorSessionDraft(t, result.Drafts[0])
-	assertCursorMessageDelta(t, result.Drafts[1], "Plan ")
-	assertCursorMessageDelta(t, result.Drafts[2], "done")
+	assertCursorMessageStarted(t, result.Drafts[1])
+	assertCursorMessageDelta(t, result.Drafts[2], "Plan ")
+	assertCursorMessageDelta(t, result.Drafts[3], "done")
 	for index, draft := range result.Drafts {
 		if draft.Kind == factorysessions.ResponseEventKindReasoning {
 			t.Fatalf("draft[%d] inferred reasoning: %#v", index, draft)
@@ -76,8 +77,8 @@ func TestResponseEventDecoder_ChunkingAndFinalRecordTerminationDoNotChangeSemant
 	if !reflect.DeepEqual(whole, chunked) || !reflect.DeepEqual(whole, terminated) {
 		t.Fatalf("semantic results differ by delivery: whole=%#v chunked=%#v terminated=%#v", whole, chunked, terminated)
 	}
-	if len(whole.Drafts) != 2 {
-		t.Fatalf("draft count = %d, want session and message", len(whole.Drafts))
+	if len(whole.Drafts) != 3 {
+		t.Fatalf("draft count = %d, want session and message lifecycle", len(whole.Drafts))
 	}
 }
 
@@ -96,10 +97,11 @@ func TestResponseEventDecoder_BoundsDiagnosticsAndRecoversAfterMalformedAndUnkno
 			t.Fatalf("unsafe diagnostic = %#v", diagnostic)
 		}
 	}
-	if len(result.Drafts) != 1 {
+	if len(result.Drafts) != 2 {
 		t.Fatalf("drafts = %#v, want later valid assistant draft", result.Drafts)
 	}
-	assertCursorMessageDelta(t, result.Drafts[0], "recovered")
+	assertCursorMessageStarted(t, result.Drafts[0])
+	assertCursorMessageDelta(t, result.Drafts[1], "recovered")
 }
 
 func TestResponseEventDecoder_CorrelatesSafeToolLifecycleFixture(t *testing.T) {
@@ -339,11 +341,11 @@ func TestResponseEventDecoder_TerminalResultIsAuthoritativeSnapshot(t *testing.T
 		final      string
 		wantDrafts int
 	}{
-		{name: "ExactMatch", deltas: []string{"final"}, final: "final", wantDrafts: 2},
-		{name: "PrefixExtension", deltas: []string{"final"}, final: "final answer", wantDrafts: 2},
-		{name: "Divergent", deltas: []string{"draft"}, final: "replacement", wantDrafts: 2},
+		{name: "ExactMatch", deltas: []string{"final"}, final: "final", wantDrafts: 3},
+		{name: "PrefixExtension", deltas: []string{"final"}, final: "final answer", wantDrafts: 3},
+		{name: "Divergent", deltas: []string{"draft"}, final: "replacement", wantDrafts: 3},
 		{name: "SnapshotOnly", final: "final", wantDrafts: 1},
-		{name: "EmptySuccess", deltas: []string{"draft"}, final: "", wantDrafts: 2},
+		{name: "EmptySuccess", deltas: []string{"draft"}, final: "", wantDrafts: 3},
 	}
 
 	for _, tc := range testCases {
@@ -374,10 +376,10 @@ func TestResponseEventDecoder_TerminalResultIsAuthoritativeSnapshot(t *testing.T
 func TestResponseEventDecoder_TerminalFixtureAndInferenceResultStayAligned(t *testing.T) {
 	raw := readCursorStreamFixture(t, "terminal_results.ndjson")
 	decoded := decodeCursorObservations(t, []adapter.Observation{{Stream: adapter.OutputStreamStdout, Chunk: raw}})
-	if len(decoded.Drafts) != 4 || len(decoded.Diagnostics) != 0 {
-		t.Fatalf("decoded = %#v, want session, two deltas, and snapshot", decoded)
+	if len(decoded.Drafts) != 5 || len(decoded.Diagnostics) != 0 {
+		t.Fatalf("decoded = %#v, want session, started message, two deltas, and snapshot", decoded)
 	}
-	assertCursorMessageSnapshot(t, decoded.Drafts[3], "Plan done")
+	assertCursorMessageSnapshot(t, decoded.Drafts[4], "Plan done")
 
 	parsed, failure := ParseInferenceResult(string(modelprovider.ProviderCursor), raw)
 	if failure != nil || parsed == nil || parsed.Content != "Plan done" {
@@ -633,6 +635,21 @@ func assertCursorSessionDraft(t *testing.T, draft factorysessions.ResponseEventD
 	}
 	if draft.Provenance.Provider != "cursor" || draft.Provenance.NativeEventType != "system" || draft.Provenance.NativeEventSubtype != "init" {
 		t.Fatalf("session provenance = %#v", draft.Provenance)
+	}
+}
+
+func assertCursorMessageStarted(t *testing.T, draft factorysessions.ResponseEventDraft) {
+	t.Helper()
+	if draft.Kind != factorysessions.ResponseEventKindMessage ||
+		draft.Phase != factorysessions.ResponseEventPhaseStarted ||
+		draft.ItemID != "cursor-message/run-cursor-1" {
+		t.Fatalf("message start = %#v", draft)
+	}
+	var payload factorysessions.ResponseEventMessage
+	decodeCursorPayload(t, draft, &payload)
+	if payload.Role != "assistant" || len(payload.ContentBlocks) != 1 ||
+		payload.ContentBlocks[0].Kind != factorysessions.ResponseEventContentBlockText {
+		t.Fatalf("message start payload = %#v", payload)
 	}
 }
 

@@ -9,10 +9,12 @@ import type { DashboardStreamState } from "../../../../api/dashboard/types";
 import {
   type FactoryTimelineEntryState,
   factoryTimelineEntryKey,
+  useFactoryTimelineStore,
+} from "../../../timeline/public/store";
+import {
   normalizeStreamDerivedCacheIdentity,
   type StreamDerivedCacheIdentity,
-  useFactoryTimelineStore,
-} from "../../../timeline/public";
+} from "../../../timeline/public/stream-identity";
 import { useDashboardStreamStore } from "../../state/dashboardStreamStore";
 
 export type HostedTopologyReplayAdapterState =

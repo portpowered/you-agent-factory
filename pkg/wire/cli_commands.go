@@ -3,12 +3,15 @@ package wire
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
@@ -16,9 +19,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
-	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -139,20 +144,93 @@ func provideExpandFactoryConfigOperation(
 	return configcli.NewExpandFactoryConfig(persistence)
 }
 
-func provideInitSystemConfigOperation(
-	initialize func(configinitcmd.InitConfig) error,
-) cli.InitSystemConfigOperation {
-	return initialize
+func provideConfigureInitOperation(
+	service operatorsettings.ConfigDocumentService,
+) cli.ConfigureInitOperation {
+	return initsetup.NewConfigurer(
+		service,
+		func(input io.Reader, maxLines int) (initsetup.ContextLineReader, error) {
+			return platformstdio.NewContextLineReader(input, maxLines)
+		},
+	)
 }
 
 func provideQueryFactoryOperation(transport standardCLIHTTPProtocol) cli.QueryFactoryOperation {
 	return factorycli.NewQuery(transport.Protocol)
 }
 
-func provideListFactoriesOperation(
+func provideEffectiveFactoryCatalogDiscovery(
 	catalog factorydefinitions.NamedFactoryCatalog,
+	files factorydefinitions.AuthoredLayoutReaderFileSystem,
+	packaged []factorydefinitions.PackagedDefinition,
+) (factorydefinitions.EffectiveFactoryCatalogDiscovery, error) {
+	return factorydefinitionsservice.NewEffectiveCatalogDiscovery(
+		catalog.ListNamedFactories,
+		files.ReadFile,
+		packaged,
+	)
+}
+
+func provideEffectiveFactoryDefinitionNormalizer() factorydefinitions.EffectiveFactoryDefinitionNormalizer {
+	mapper := factorymapping.NewFactoryConfigMapper()
+	return func(
+		ctx context.Context,
+		candidate factorydefinitions.EffectiveFactoryCatalogCandidate,
+	) (*factorydefinitions.FactoryConfig, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		definition, err := mapper.Expand(candidate.Canonical)
+		if contextErr := ctx.Err(); contextErr != nil {
+			return nil, contextErr
+		}
+		return definition, err
+	}
+}
+
+func provideEffectiveFactoryCatalogOperation(
+	discovery factorydefinitions.EffectiveFactoryCatalogDiscovery,
+	normalize factorydefinitions.EffectiveFactoryDefinitionNormalizer,
+) (factorydefinitions.EffectiveFactoryCatalogOperation, error) {
+	return factorydefinitionsservice.NewEffectiveCatalog(discovery, normalize)
+}
+
+func provideEffectiveFactoryDefinitionsService(
+	catalog factorydefinitions.EffectiveFactoryCatalogOperation,
+) (*factorydefinitionsservice.EffectiveCatalogService, error) {
+	return factorydefinitionsservice.NewEffectiveCatalogService(catalog)
+}
+
+func provideCurrentFactoryPointerReader(
+	namedPaths factorydefinitions.NamedPathResolver,
+) factorydefinitions.CurrentFactoryPointerReader {
+	return namedPaths.ReadCurrentPointer
+}
+
+func provideListFactoriesOperation(
+	definitions *factorydefinitionsservice.EffectiveCatalogService,
+	readCurrent factorydefinitions.CurrentFactoryPointerReader,
 ) cli.ListFactoriesOperation {
-	return factorycli.NewList(catalog)
+	return factorycli.NewList(definitions.ListEffectiveFactories, readCurrent)
+}
+
+func provideFactoryNameCompletionOperation(
+	definitions *factorydefinitionsservice.EffectiveCatalogService,
+) cobracompletion.FactoryNamesOperation {
+	return cobracompletion.NewFactoryNames(definitions.ListEffectiveFactories)
+}
+
+func provideSelectedFactorySignatureCompletionOperation(
+	definitions *factorydefinitionsservice.EffectiveCatalogService,
+) (cobracompletion.SelectedFactorySignatureOperation, error) {
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		return nil, err
+	}
+	return cobracompletion.NewSelectedFactorySignature(
+		definitions.ListEffectiveFactories,
+		manifest,
+	), nil
 }
 
 func provideValidateFactoryOperation(
@@ -186,8 +264,10 @@ func provideUpdateFactoryFromFileOperation(
 	}
 }
 
-func provideFactoryConfigRootResolver() factorydefinitions.FactoryConfigRootResolver {
-	return factorydefinitions.NewFactoryConfigRootResolver(platformfilesystem.Local{})
+func provideFactoryConfigRootResolver(
+	source factorydefinitions.AuthoredLayoutReaderFileSystem,
+) factorydefinitions.FactoryConfigRootResolver {
+	return factorydefinitions.NewFactoryConfigRootResolver(source)
 }
 
 func provideFactoryConfigFileLoader(

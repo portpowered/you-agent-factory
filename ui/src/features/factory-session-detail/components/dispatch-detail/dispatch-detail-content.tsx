@@ -1,11 +1,7 @@
 import type { ReactNode } from "react";
-import {
-  ButtonLink,
-  DashboardStatusPill,
-  DescriptionList,
-  Label,
-  Text,
-} from "../../../../components/ui";
+import { DescriptionList } from "@you-agent-factory/components/data-display";
+import { ButtonLink, Label, Text } from "@you-agent-factory/components/primitives";
+import { DashboardStatusPill } from "../../../../components/ui/dashboard-status-pill";
 import type { FactorySessionDispatchDrilldownModel } from "../../lib/factory-session-dispatch-detail";
 import { getFactorySessionDetailMessages } from "../../messages/factory-session-detail";
 import { resolveFactoryDispatchStatusTone } from "../../messages/factory-session-runtime-display";

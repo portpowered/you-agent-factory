@@ -26,3 +26,14 @@ func OOTBRunConfig(defaults runcli.RunConfig) runcli.RunConfig {
 	cfg.OpenDashboard = true
 	return cfg
 }
+
+// ServerRunConfig returns the owned, long-running Current Factory server
+// configuration. Current Factory selection and validation happen before this
+// configuration reaches Initializer, so the server never bootstraps a missing
+// definition as a side effect.
+func ServerRunConfig(defaults runcli.RunConfig) runcli.RunConfig {
+	cfg := ExplicitRunConfig(defaults)
+	cfg.Continuously = true
+	cfg.OpenDashboard = true
+	return cfg
+}

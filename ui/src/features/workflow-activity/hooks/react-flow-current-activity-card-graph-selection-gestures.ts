@@ -3,9 +3,9 @@ import { useCallback, useRef } from "react";
 
 import type { FactoryGraphEditorSelectionController } from "../../factory-graph-editor/hooks/selection/use-factory-graph-editor-selection";
 import {
-  collectFactoryGraphSelectionItemsFromReactFlow,
-  isFactoryGraphEditorReactFlowSelectionNoOp,
-} from "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-gestures";
+  resolveCurrentActivityGraphSelectionChange,
+  selectGraphEdgePresentationChanges,
+} from "./state/current-activity-graph-selection-gesture-state";
 
 export function useCurrentActivityGraphEdgePresentation(
   graphSelection: FactoryGraphEditorSelectionController,
@@ -13,17 +13,10 @@ export function useCurrentActivityGraphEdgePresentation(
 ) {
   const handleEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
-      const selectionChanges = changes.filter((change) => {
-        if (
-          change.type === "remove" ||
-          change.type === "add" ||
-          change.type === "replace"
-        ) {
-          return true;
-        }
-
-        return change.type === "select" && !graphSelectionGesturesEnabled;
-      });
+      const selectionChanges = selectGraphEdgePresentationChanges(
+        changes,
+        graphSelectionGesturesEnabled,
+      );
 
       if (selectionChanges.length > 0) {
         graphSelection.applyEdgeSelectChanges(selectionChanges);
@@ -43,28 +36,19 @@ export function useCurrentActivityGraphSelectionGestures(
 
   const handleGraphSelectionChange = useCallback<OnSelectionChangeFunc>(
     (params) => {
-      if (!graphSelectionEnabled) {
-        return;
+      const resolution = resolveCurrentActivityGraphSelectionChange({
+        additive: additiveMarqueeRef.current,
+        edges: params.edges,
+        enabled: graphSelectionEnabled,
+        nodes: params.nodes,
+        selectionState: graphSelection.state,
+      });
+      if (resolution) {
+        graphSelection.applyReactFlowSelection(
+          resolution.items,
+          resolution.mode,
+        );
       }
-
-      const mode = additiveMarqueeRef.current ? "add" : "replace";
-      const items = collectFactoryGraphSelectionItemsFromReactFlow(
-        params.nodes,
-        params.edges,
-      );
-
-      if (
-        isFactoryGraphEditorReactFlowSelectionNoOp(
-          graphSelection.state,
-          items,
-          mode,
-        )
-      ) {
-        additiveMarqueeRef.current = false;
-        return;
-      }
-
-      graphSelection.applyReactFlowSelection(items, mode);
       additiveMarqueeRef.current = false;
     },
     [graphSelection, graphSelectionEnabled],

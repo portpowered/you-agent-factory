@@ -22,7 +22,11 @@ func NewRuntimeLedger(
 	streamGenerationID string,
 	definitions interfaces.RuntimeDefinitionLookup,
 ) recordings.RuntimeEventLedger {
-	return NewFactoryEventHistory(topology, now, streamGenerationID, definitions)
+	history := NewFactoryEventHistory(topology, now, streamGenerationID, definitions)
+	if history == nil {
+		return nil
+	}
+	return history
 }
 
 var _ recordings.RuntimeEventLedger = (*FactoryEventHistory)(nil)

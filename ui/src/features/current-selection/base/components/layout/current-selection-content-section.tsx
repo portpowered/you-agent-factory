@@ -1,6 +1,6 @@
 import { type HTMLAttributes, type ReactNode, useId } from "react";
 
-import { Heading } from "../../../../../components/ui";
+import { Heading } from "@you-agent-factory/components/primitives";
 import { cn } from "../../../../../lib/cn";
 
 export interface CurrentSelectionContentSectionProps

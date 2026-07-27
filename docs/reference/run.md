@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-07-23
+last-modified: 2026-07-27
 doc-id: agent-factory/guides/run
 ---
 
@@ -14,25 +14,36 @@ continuous, and mock-worker run tasks.
 
 | Task | Run shape |
 |------|-----------|
-| Run the current `./factory` with initial Work | `you run --work <batch.json>` |
+| Run the exact Current Factory with initial Work | `you run --work <batch.json>` |
 | Start a Factory directory | `you run --dir <factory-dir> --work <batch.json>` |
 | Invoke one portable or named Factory | `you run --factory <factory-file-or-directory> <text>` or `you run --named <name> <text>` |
-| Execute a JavaScript workflow as a Factory Session | `you run --factory <workflow.js>` |
+| Execute a JavaScript workflow | `you run --factory <workflow.js>` |
 | Keep a local Factory Session alive while idle | Add `--continuously` |
 | Replace live worker dispatch with deterministic outcomes | Add `--with-mock-workers [config.json]` |
+| Serve an API only for the run lifetime | Add `--with-server` |
+| Serve the embedded dashboard and open it once | Add `--with-site` |
+| Serve the Current Factory continuously | `you server` |
 
 Run `you run --help` for the complete live flag boundary.
 
 ## Run the current Factory
 
-From a project whose Factory is under `./factory`, submit explicit initial Work:
+Without `--dir`, `--named`, or `--factory`, `you run` selects exactly
+`<invocation-working-directory>/factory/factory.json`. It does not bootstrap a
+missing Factory, follow `.current-factory`, or search another directory.
+
+From a project with that exact file, submit explicit initial Work:
 
 ```bash
 you run --work ./docs/examples/startup-work.json
 ```
 
-This starts the local Factory, submits the batch, and exits after the Factory
-becomes idle. To select another Factory directory explicitly:
+This starts the Current Factory without an HTTP listener or browser, submits the
+batch, and exits after the Factory becomes idle. Missing or invalid Current
+Factory definitions fail before a Factory Session, worker, runtime host,
+listener, or browser is activated.
+
+To select another Factory directory explicitly:
 
 ```bash
 you run --dir ./factory --work ./docs/examples/startup-work.json
@@ -78,8 +89,8 @@ It has a logical split, branch A, branch B, and final merge. The complete
 fan-out/fan-in workflow preserves the original request and both branch outputs;
 the final merge is gated until both branches finish.
 
-Install packaged factories with `you config init`, then invoke it through the
-same named-factory path:
+Packaged Factories are materialized automatically during normal runtime
+initialization. Invoke one through the same named-factory path:
 
 ```bash
 you run --named @you/quorum "Compare the two proposed release plans."
@@ -106,7 +117,7 @@ signature.
 ## Run a JavaScript Factory Session
 
 Passing a `.js`, `.mjs`, or `.cjs` workflow file to `--factory` selects the
-JavaScript session runtime and waits for the Factory Session to finish:
+standalone durable JavaScript execution path and waits for it to finish:
 
 ```bash
 you run --factory ./factory.js
@@ -157,6 +168,51 @@ you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json --
 
 Use `you docs mock-workers` for the config contract and passthrough behavior.
 
+## Server and site lifecycles
+
+Ordinary `you run` shapes are serverless. This includes Current Factory batch
+and continuous runs, named and portable one-shot invocation, replay,
+mock-worker execution, JavaScript-orchestrated Factories, and raw `.js`, `.mjs`,
+or `.cjs` workflows.
+
+Add `--with-server` to serve the generated Current Factory API only for that run
+without opening a browser:
+
+```bash
+you run --work ./docs/examples/startup-work.json --with-server
+you run --factory ./workflow.js --with-server
+```
+
+The listener becomes ready before the run begins observable work. When a
+one-shot run completes, or a continuous run is cancelled, the command cancels
+and joins the listener and runtime before returning. Listener startup failure
+cancels a waiting run and produces no browser effect.
+
+Add `--with-site` to imply the same API server, serve the embedded dashboard,
+and open it exactly once after listener and runtime readiness:
+
+```bash
+you run --named team-review --with-site "Review the release notes"
+```
+
+Use `you server` when the server itself is the continuous operation. It
+validates the exact invocation-local `./factory/factory.json`, opens the
+dashboard once after readiness, and runs until cancellation. It never
+bootstraps a missing Current Factory:
+
+```bash
+you server
+you --server http://127.0.0.1:7437 server
+```
+
+For `you server` and server-enabled runs, global `--server` supplies the
+preferred local endpoint. The host must be `localhost` or a loopback IP. The
+listener binds that exact host; it never binds a wildcard address. If the
+preferred port is occupied, binding advances monotonically to the next
+available port through `65535`, and startup output and browser presentation use
+the actual bound URL. Invalid hosts, invalid or exhausted ports, and terminal
+listener failures return `SERVER_BIND_FAILED`.
+
 ## Invocation output
 
 Supported one-shot `--factory` and `--named` invocations expose three stdout
@@ -175,7 +231,8 @@ you run --factory ./factory.json "Summarize the changelog" > result.txt
 Add `--quiet` when the same terminal-only contract must also suppress operator
 diagnostics. Quiet stdout is the raw primary result: it has no lifecycle text,
 event records, JSON wrapper, or provider-session chunks. Live and `--replay`
-invocations use the same quiet presentation rule.
+invocations use the same quiet presentation rule. `--quiet` conflicts with
+global `--json` and with explicit `--output`.
 
 ### Single-JSON automation mode
 
@@ -234,6 +291,17 @@ returns a failed `InvocationResponse`, single-JSON and NDJSON modes still write
 that terminal response once to stdout; human stream mode writes its terminal
 outcome, while quiet mode writes no terminal value. Provider response chunks
 are never used as error output.
+
+Current Factory selection reports `CURRENT_FACTORY_NOT_FOUND` or
+`CURRENT_FACTORY_INVALID`. Output selection conflicts report
+`INVOCATION_OUTPUT_CONFLICT`; unsupported output values or run shapes report
+`INVOCATION_OUTPUT_UNSUPPORTED`. Invocation execution failures report
+`RUN_INVOCATION_FAILED`, and local hosting failures report
+`SERVER_BIND_FAILED`.
+
+Successful commands exit `0`; usage and runtime failures exit `1`. Cancelling
+`you run` or `you server` through the normal process interrupt exits `130`
+after owned lifecycle resources have joined.
 
 ### Mode availability
 

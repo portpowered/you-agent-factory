@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
@@ -23,26 +22,22 @@ func TestModelsDocumentation_ExamplesReachCurrentCLIBoundary(t *testing.T) {
 	}
 	requireDocumentedModelCommands(t, doc)
 
-	originalList := listModels
-	originalInspect := inspectModel
-	originalPull := pullModel
-	originalInvoke := invokeModel
+	originalModelsCLI := rootModelsCLI
 	defer func() {
-		listModels = originalList
-		inspectModel = originalInspect
-		pullModel = originalPull
-		invokeModel = originalInvoke
+		rootModelsCLI = originalModelsCLI
 	}()
 
 	var listed bool
 	var inspected, pulled string
 	var invocations []modelscli.InvokeConfig
-	listModels = func(modelscli.ListConfig) error { listed = true; return nil }
-	inspectModel = func(cfg modelscli.InspectConfig) error { inspected = cfg.ModelName; return nil }
-	pullModel = func(cfg modelscli.PullConfig) error { pulled = cfg.ModelName; return nil }
-	invokeModel = func(cfg modelscli.InvokeConfig) error {
-		invocations = append(invocations, cfg)
-		return nil
+	rootModelsCLI = modelsCLIServiceFunctions{
+		list:    func(modelscli.ListConfig) error { listed = true; return nil },
+		inspect: func(cfg modelscli.InspectConfig) error { inspected = cfg.ModelName; return nil },
+		pull:    func(cfg modelscli.PullConfig) error { pulled = cfg.ModelName; return nil },
+		invoke: func(cfg modelscli.InvokeConfig) error {
+			invocations = append(invocations, cfg)
+			return nil
+		},
 	}
 
 	executeDocumentedModelExample(t, []string{"models", "list"})
@@ -116,7 +111,7 @@ func TestConfigDocumentation_ExamplesReachCurrentCLIPathBoundary(t *testing.T) {
 		t.Fatalf("Markdown(config) error = %v", err)
 	}
 	for _, command := range []string{
-		"you config init",
+		"you init --provider codex",
 		"you factory config validate ./factory/factory.json",
 		"you factory config flatten ./factory > ./dist/factory.json",
 		"you factory config expand ./dist/factory.json",
@@ -564,7 +559,10 @@ func TestRootCommand_HelpDocumentsConciseOrientation(t *testing.T) {
 		"How to use:",
 		"Agents:",
 		"you run --work ./docs/examples/startup-work.json",
-		"http://localhost:7437/dashboard/ui",
+		"exact Current Factory at ./factory/factory.json",
+		"you server",
+		"--with-server",
+		"--with-site",
 		"you docs agents",
 		"you submit batch",
 		"you session list",
@@ -735,60 +733,7 @@ func TestDocsCommand_VerboseLogsTopicResolutionWithoutChangingMarkdown(t *testin
 	}
 }
 
-func TestInitCommand_DefaultDir(t *testing.T) {
-	root := newLegacyTestRootCommand()
-	initCmd, _, err := root.Find([]string{"init"})
-	if err != nil {
-		t.Fatalf("find init: %v", err)
-	}
-
-	dirFlag := initCmd.Flags().Lookup("dir")
-	if dirFlag == nil {
-		t.Fatal("expected --dir flag on init command")
-	}
-	if dirFlag.DefValue != "factory" {
-		t.Errorf("default dir = %q, want %q", dirFlag.DefValue, "factory")
-	}
-
-	executorFlag := initCmd.Flags().Lookup("executor")
-	if executorFlag == nil {
-		t.Fatal("expected --executor flag on init command")
-	}
-	if executorFlag.DefValue != factorydefinitions.DefaultStarterExecutor {
-		t.Errorf("default executor = %q, want %q", executorFlag.DefValue, factorydefinitions.DefaultStarterExecutor)
-	}
-}
-
-func TestInitCommand_ExecutorFlagMapsToInitConfig(t *testing.T) {
-	originalInitFactory := initFactory
-	defer func() {
-		initFactory = originalInitFactory
-	}()
-
-	var got factorydefinitions.ScaffoldConfig
-	initFactory = func(cfg factorydefinitions.ScaffoldConfig) error {
-		got = cfg
-		return nil
-	}
-
-	root := newLegacyTestRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"init", "--dir", "custom-factory", "--executor", "claude"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute init --executor claude: %v", err)
-	}
-
-	if got.Dir != "custom-factory" {
-		t.Fatalf("dir = %q, want %q", got.Dir, "custom-factory")
-	}
-	if got.Executor != "claude" {
-		t.Fatalf("executor = %q, want %q", got.Executor, "claude")
-	}
-}
-
-func TestInitCommand_HelpDocumentsExecutorOptions(t *testing.T) {
+func TestInitCommand_HelpDocumentsProviderModelSetup(t *testing.T) {
 	var out bytes.Buffer
 	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
@@ -800,15 +745,17 @@ func TestInitCommand_HelpDocumentsExecutorOptions(t *testing.T) {
 	}
 
 	help := out.String()
-	for _, want := range []string{"--executor", "codex", "claude"} {
+	for _, want := range []string{
+		"Configure provider and model defaults",
+		"--provider",
+		"--model",
+		"registered default model provider",
+		"optional non-empty free-form default model identifier",
+		"--package",
+		"packaged Factory",
+	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("init help missing %q:\n%s", want, help)
 		}
-	}
-	if !strings.Contains(help, "Omitting --executor preserves the default Codex-backed starter scaffold") {
-		t.Fatalf("init help should describe default executor behavior:\n%s", help)
-	}
-	if !strings.Contains(help, "Supported starter scaffold values are codex and claude") {
-		t.Fatalf("init help should describe supported executor values:\n%s", help)
 	}
 }

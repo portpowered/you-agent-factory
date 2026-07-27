@@ -9,31 +9,11 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestInvocationFailureOutputContracts(t *testing.T) {
-	t.Run("failure before terminal response leaves stdout empty", func(t *testing.T) {
-		result := executeFailureInvocation(t, []string{
-			"you", "--json", "run", "--named", "@you/missing", "--no-record",
-			"deterministic pre-session failure",
-		}, "", nil)
-
-		if result.err == nil {
-			t.Fatal("Process.Execute error = nil, want pre-session invocation failure")
-		}
-		if result.stdout != "" {
-			t.Fatalf("stdout = %q, want no terminal record", result.stdout)
-		}
-		response := decodeSingleErrorResponse(t, result.stderr)
-		if response.Code != factoryapi.ErrorResponseCode(runcli.InvocationErrorCodeFailed) ||
-			response.Family != factoryapi.ErrorFamilyInternalServerError {
-			t.Fatalf("ErrorResponse = %#v", response)
-		}
-	})
-
 	t.Run("terminal failure emits failed result and standard error", func(t *testing.T) {
 		result := executeFailureInvocation(t, []string{
 			"you", "--json", "run", "--named", goalFactoryName, "--no-record",

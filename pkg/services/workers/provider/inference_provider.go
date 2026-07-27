@@ -24,7 +24,6 @@ import (
 	claudeexitfailure "github.com/portpowered/infinite-you/pkg/services/workers/provider/claude/exitfailure"
 	codexexitfailure "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex/exitfailure"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/commandenv"
-	cursorpkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor"
 	geminipkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	kiropkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro"
@@ -211,17 +210,13 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req workerexecution.Ru
 	duration := p.providerNow().Sub(started)
 	commandDiagnostics := commandDiagnostics(execReq, result, duration, false)
 	providerSession := effectiveProviderSession(req, result)
-	cursorProvider := req.ModelProvider == string(modelprovider.ProviderCursor)
 	if err != nil {
 		logger.Error("inference dispatch failed with error",
 			providerLogFields(req, "error", err.Error())...)
 		providerErr := normalizeProviderExecutionError(
-			req.ModelProvider, result, err, providerSession,
-			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
+			req.ModelProvider, result, err, providerSession, commandDiagnostics,
 		)
 		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result, duration)...)
-		logger.Error("inferencer: request failed",
-			cursorFailureLogFields(req, cursorProvider, result, "has_error", true)...)
 		p.publishFailureFragment(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr)
 		return workerexecution.InferenceResponse{}, providerErr
 	}
@@ -232,19 +227,13 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req workerexecution.Ru
 				"stdout_bytes", len(result.Stdout),
 				"stderr_bytes", len(result.Stderr))...)
 		providerErr := normalizeProviderExitFailure(
-			req.ModelProvider, result, providerSession,
-			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
+			req.ModelProvider, result, providerSession, commandDiagnostics,
 		)
 		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result, duration)...)
-		logger.Error("inferencer: request failed",
-			cursorFailureLogFields(req, cursorProvider, result, "exit_code", result.ExitCode)...)
 		p.publishFailureFragment(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr)
 		return workerexecution.InferenceResponse{}, providerErr
 	}
 
-	if cursorProvider {
-		return p.completeCursorInference(req, result, commandDiagnostics, logger)
-	}
 	content := string(result.Stdout)
 	logger.Info("inferencer: request completed",
 		appendProviderSessionLogFields(providerLogFields(req,
@@ -415,7 +404,8 @@ func (r execAdapterRunner) Run(
 
 func (p *ScriptWrapProvider) openCodeAdapterRunner() provideradapter.StreamingCommandRunner {
 	switch runner := p.exec.(type) {
-	case workerprocess.ExecCommandRunner, *workerprocess.ExecCommandRunner:
+	case workerprocess.ExecCommandRunner, *workerprocess.ExecCommandRunner,
+		workerprocess.StreamingAdaptedCommandRunner, *workerprocess.StreamingAdaptedCommandRunner:
 		return execAdapterRunner{runner: runner, logger: logging.EnsureLogger(p.Logger)}
 	case InferenceProgressPublishingCommandRunner:
 		return execAdapterRunner{runner: runner.Runner, logger: logging.EnsureLogger(runner.Logger)}
@@ -585,25 +575,6 @@ func providerRequestValidationFailure(
 //--------
 
 func normalizeProviderExecutionError(provider string, result CommandResult, err error, session *workerexecution.ProviderSessionMetadata, diagnostics *workerexecution.WorkDiagnostics) *ProviderError {
-	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
-	if normalizedProvider == string(modelprovider.ProviderCursor) {
-		fallbackReason := workerexecution.WorkFailureTypeUnknown
-		switch {
-		case isProviderExecutionTimeout(err, result):
-			fallbackReason = workerexecution.WorkFailureTypeTimeout
-			if diagnostics != nil && diagnostics.Command != nil {
-				diagnostics.Command.TimedOut = true
-			}
-		case errors.Is(err, exec.ErrNotFound):
-			fallbackReason = workerexecution.WorkFailureTypeMisconfigured
-		default:
-			var execErr *exec.Error
-			if errors.As(err, &execErr) {
-				fallbackReason = workerexecution.WorkFailureTypeMisconfigured
-			}
-		}
-		return cursorProviderError(result, fallbackReason, "", err, session, diagnostics)
-	}
 	switch {
 	case isProviderExecutionTimeout(err, result):
 		if diagnostics != nil && diagnostics.Command != nil {
@@ -663,29 +634,11 @@ func parseProviderExitFailure(provider string, result CommandResult) parsedProvi
 			failure:       ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message},
 			internalCause: codexexitfailure.ExitInternalCause(result.ExitCode),
 		}
-	case string(modelprovider.ProviderKiro):
-		failure := kiropkg.ParseProviderFailure(kiropkg.FailureInput{
-			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-		})
-		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
 	case string(modelprovider.ProviderOpenCode):
 		failure := opencodeadapter.ParseProviderFailure(opencodeadapter.FailureInput{
 			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
 		})
 		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
-	case string(modelprovider.ProviderGemini):
-		failure := geminipkg.ParseProviderFailure(geminipkg.FailureInput{
-			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-		})
-		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
-	case string(modelprovider.ProviderCursor):
-		failure := cursorpkg.ParseProviderFailure(cursorpkg.FailureInput{
-			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-		})
-		return parsedProviderFailure{
-			failure:         ProviderFailureResult{Reason: failure.Reason, Message: failure.Message},
-			providerSession: failure.ProviderSession,
-		}
 	default:
 		return parsedProviderFailure{failure: parseUnknownProviderFailure(normalizedProvider, result)}
 	}
@@ -712,35 +665,31 @@ func parseUnknownProviderFailure(provider string, result CommandResult) Provider
 	}
 }
 
-func cursorProviderError(
-	result CommandResult,
-	fallbackReason workerexecution.WorkFailureType,
-	fallbackMessage string,
-	cause error,
-	session *workerexecution.ProviderSessionMetadata,
-	diagnostics *workerexecution.WorkDiagnostics,
-) *ProviderError {
-	failure := cursorpkg.ParseProviderFailure(cursorpkg.FailureInput{
-		Stdout:          result.Stdout,
-		Stderr:          result.Stderr,
-		ExitCode:        result.ExitCode,
-		FallbackReason:  fallbackReason,
-		FallbackMessage: fallbackMessage,
-	})
-	if failure.ProviderSession != nil {
-		session = failure.ProviderSession
-	}
-	return newProviderErrorFromResultWithDiagnostics(
-		ProviderFailureResult{Reason: failure.Reason, Message: failure.Message},
-		cause,
-		session,
-		diagnostics,
-	)
-}
-
 // NormalizeProviderExitFailure exposes the canonical provider exit-failure
 // normalization path for compatibility shims and behavior-focused tests.
 func NormalizeProviderExitFailure(provider string, result CommandResult, session *workerexecution.ProviderSessionMetadata, diagnostics *workerexecution.WorkDiagnostics) *ProviderError {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case string(modelprovider.ProviderGemini):
+		failure := geminipkg.ParseProviderFailure(geminipkg.FailureInput{
+			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+		})
+		return newProviderErrorFromResultWithDiagnostics(
+			ProviderFailureResult{Reason: failure.Reason, Message: failure.Message},
+			nil,
+			session,
+			diagnostics,
+		)
+	case string(modelprovider.ProviderKiro):
+		failure := kiropkg.ParseProviderFailure(kiropkg.FailureInput{
+			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+		})
+		return newProviderErrorFromResultWithDiagnostics(
+			ProviderFailureResult{Reason: failure.Reason, Message: failure.Message},
+			nil,
+			session,
+			diagnostics,
+		)
+	}
 	return normalizeProviderExitFailure(provider, result, session, diagnostics)
 }
 
@@ -781,85 +730,11 @@ func parseProviderTimeoutFailure(provider string, result CommandResult) Provider
 		if codexError, ok := extractCodexErrorLine(result); ok {
 			message = codexError
 		}
-	case string(modelprovider.ProviderGemini):
-		message = geminipkg.TimeoutFailureMessage
-	case string(modelprovider.ProviderKiro):
-		message = kiropkg.TimeoutFailureMessage
 	}
 	return ProviderFailureResult{
 		Reason:  workerexecution.WorkFailureTypeTimeout,
 		Message: message,
 	}
-}
-
-func cursorFailureLogFields(req workerexecution.RunnerExecutionRequest, cursorProvider bool, result CommandResult, extra ...any) []any {
-	return providerLogFields(req, extra...)
-}
-
-func cursorInferenceFailureDiagnostics(
-	cursorProvider bool,
-	commandDiagnostics *workerexecution.WorkDiagnostics,
-	result CommandResult,
-) *workerexecution.WorkDiagnostics {
-	if !cursorProvider {
-		return commandDiagnostics
-	}
-	return cursorpkg.WithCommandOutputExcerpts(commandDiagnostics, result.Stdout, result.Stderr)
-}
-
-func (p *ScriptWrapProvider) completeCursorInference(
-	req workerexecution.RunnerExecutionRequest,
-	result CommandResult,
-	commandDiagnostics *workerexecution.WorkDiagnostics,
-	logger logging.Logger,
-) (workerexecution.InferenceResponse, error) {
-	parsed, parseErr := cursorpkg.ParseInferenceResult(req.ModelProvider, result.Stdout)
-	if parseErr != nil {
-		logger.Error("inferencer: cursor JSON parse failed",
-			cursorFailureLogFields(req, true, result,
-				"error", parseErr.Message)...)
-		failureDiagnostics := cursorpkg.WithCommandOutputExcerpts(commandDiagnostics, result.Stdout, result.Stderr)
-		providerSession := parseErr.ProviderSession
-		if providerSession == nil {
-			providerSession = effectiveProviderSession(req, result)
-		}
-		providerErr := cursorParseProviderError(result, parseErr, providerSession, failureDiagnostics)
-		p.publishFailureFragment(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr)
-		return workerexecution.InferenceResponse{}, providerErr
-	}
-	diagnostics := cursorpkg.WithResponseMetadata(commandDiagnostics, parsed.ResponseMetadata)
-	logger.Info("inferencer: request completed",
-		appendProviderSessionLogFields(providerLogFields(req,
-			"output_len", len(parsed.Content)), parsed.ProviderSession)...)
-	p.publishCompletedFragment(req.Dispatch.DispatchID, parsed.ProviderSession)
-	return workerexecution.InferenceResponse{
-		Content:         parsed.Content,
-		ProviderSession: parsed.ProviderSession,
-		Diagnostics:     diagnostics,
-	}, nil
-}
-
-func cursorParseProviderError(
-	result CommandResult,
-	parseErr *cursorpkg.ParseFailure,
-	session *workerexecution.ProviderSessionMetadata,
-	diagnostics *workerexecution.WorkDiagnostics,
-) *ProviderError {
-	failure, canonical := parseErr.CanonicalResult()
-	if !canonical {
-		return cursorProviderError(
-			result, parseErr.Type, parseErr.Message, parseErr.Cause, session, diagnostics,
-		)
-	}
-	if failure.ProviderSession != nil {
-		session = failure.ProviderSession
-	}
-	return newProviderErrorFromResultWithDiagnostics(
-		ProviderFailureResult{Reason: failure.Reason, Message: failure.Message},
-		parseErr.Cause,
-		session,
-		diagnostics,
-	)
 }
 
 func (p *ScriptWrapProvider) publishCompletedFragment(dispatchID string, providerSession *workerexecution.ProviderSessionMetadata) {
@@ -944,7 +819,7 @@ func effectiveProviderSession(req workerexecution.ProviderInferenceRequest, resu
 	if session != nil {
 		return session
 	}
-	if (req.ModelProvider == string(modelprovider.ProviderClaude) || req.ModelProvider == string(modelprovider.ProviderCursor) || req.ModelProvider == string(modelprovider.ProviderOpenCode) || req.ModelProvider == string(modelprovider.ProviderPi)) && req.SessionID != "" {
+	if (req.ModelProvider == string(modelprovider.ProviderClaude) || req.ModelProvider == string(modelprovider.ProviderOpenCode) || req.ModelProvider == string(modelprovider.ProviderPi) || req.ModelProvider == string(modelprovider.ProviderAgy)) && req.SessionID != "" {
 		return &workerexecution.ProviderSessionMetadata{
 			Provider: workerexecution.CanonicalProviderSessionProvider(req.ModelProvider),
 			Kind:     providerSessionKindSessionID,

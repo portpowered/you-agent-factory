@@ -42,6 +42,7 @@ func TestRunModeCompat_RealCLIOperatorContinuousRunReportsStartupOutputWithoutQu
 		"--factory", factoryPath,
 		"--with-mock-workers",
 		"--no-record",
+		"--with-server",
 		"--server", baseURL,
 		"--continuously",
 		mockWorkersPath,

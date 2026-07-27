@@ -58,7 +58,7 @@ Preferred structure:
 - `ui/src/api/` for transport, handwritten API wrappers, request/response normalization, generated OpenAPI types, and API-focused tests
 - `ui/src/components/` for shared presentational, dashboard, and primitive UI building blocks
 - `ui/src/features/` for feature-specific UI, hooks, view models, state, messages, selectors, and orchestration
-- `ui/src/features/<feature>/public/` for the feature's intentional import boundary
+- `ui/src/features/<feature>/public/` for focused, stable feature entry points when an explicit public contract is useful
 - `ui/src/features/<feature>/components/` for feature-owned React components
 - `ui/src/features/<feature>/hooks/` for feature-owned stateful React hooks
 - `ui/src/features/<feature>/lib/` for feature-owned pure logic, projections, operations, parsers, and helpers
@@ -78,7 +78,8 @@ Rules:
 - Shared UI primitives **MUST NOT** depend on feature-specific modules.
 - Feature modules **MAY** depend on shared components, shared utilities, testing helpers in tests, and API modules.
 - Feature root directories under `ui/src/features/<feature>/` **MUST** contain subdirectories only. New feature files belong under an approved subdirectory such as `public/`, `components/`, `hooks/`, `messages/`, `state/`, `selectors/`, `lib/`, or a more specific domain folder.
-- Cross-feature imports **SHOULD** go through another feature's `public/` boundary unless a narrower local exception is already established and documented by existing code.
+- Cross-feature imports **MAY** target a focused owned module directly when that keeps the dependency graph narrow, especially for component-test latency. Aggregate `public/index` feature barrels **SHOULD NOT** be introduced for import convenience because they compile and initialize unrelated feature code.
+- Focused `public/` subpaths remain appropriate when a feature needs a stable API for multiple consumers. They **SHOULD** re-export only the named capability and **MUST NOT** fan out through a feature-wide barrel.
 - Feature-local state and hooks **SHOULD** remain inside the owning feature. Create cross-feature `ui/src/lib/` or shared component utilities only when there is a real cross-feature owner and reuse case.
 - Network transport, parsing, and server contract details **MUST NOT** live inline inside rendering components.
 - Generated API clients **MUST** remain generated artifacts; handwritten wrappers belong alongside them rather than inside them.
@@ -360,24 +361,29 @@ Verification:
 
 Frontend changes **MUST** include evidence at the right testing layer.
 
-The expected testing layers are:
+The expected testing layers are unit, component, and browser:
 
-- unit tests for pure logic, formatting helpers, selectors, parsers, and reducers
-- component tests for rendered behavior of isolated components and hooks
-- app-level functional tests for product flows with mocked backend behavior
-- integration tests under `ui/integration/` for broader frontend behavior and fixtures
-- Storybook stories and Storybook test-runner coverage for reusable UI states when applicable
-- performance tests for load, memory, or sustained interaction risks
+- unit tests cover pure logic, formatting helpers, selectors, parsers, and reducers without a DOM
+- component tests cover browserless rendered behavior of one feature-owned component or hook
+- browser tests cover app-level product flows, routing, layout, browser APIs, and third-party behavior that requires a real browser; repository browser tests live under `ui/integration/` or an explicitly named Storybook browser check
+
+Storybook stories and performance tests supplement those three layers. They do
+not create additional correctness-test categories.
 
 Rules:
 
 - Most UI confidence **SHOULD** come from component and functional tests.
 - Unit tests **SHOULD NOT** dominate coverage at the expense of real rendered behavior.
-- Integration tests **SHOULD** focus on contract confidence and regression-prone seams.
+- Browser tests **SHOULD** focus on high-risk product flows and browser-dependent seams rather than duplicating feature-owned component contracts.
 - Performance tests **SHOULD** exist for surfaces known to handle high event volume, large datasets, or long-lived sessions.
 - Storybook stories **SHOULD** represent meaningful states, not only the happy path.
 - Complex interactive surfaces **SHOULD** test domain operations and projection adapters directly, in addition to rendered component behavior.
 - Third-party UI library integrations **SHOULD** have a small number of focused component or functional tests proving that user interactions dispatch the intended feature operations and that projected state visibly changes.
+- Unit and component tests **SHOULD** stay beside the smallest production owner. A component with several distinct rendered contracts **MAY** use a local `contracts/` directory; the repository **SHOULD NOT** introduce a central component-test directory.
+- `ui/src/testing/` **SHOULD** contain reusable infrastructure and fixtures only, not feature behavior contracts.
+- Native Bun is the default component runner. A Vitest compatibility exception **MUST** document the unsupported runtime dependency or API and **SHOULD** be migrated or moved to the browser lane when that dependency is removed.
+- Component tests **MUST NOT** launch Playwright, a preview server, or a real backend. Tests that require those facilities are browser tests.
+- Component tests **SHOULD NOT** mount the full application or import an aggregate feature barrel to prove behavior already owned by narrower components, hooks, operations, or projections.
 
 Expected evidence for complex interactive surfaces:
 
@@ -399,9 +405,10 @@ Repository test and check commands:
 
 - `cd ui && bun run check` runs Biome, semantic color checks, Tailwind spacing-token checks, and feature-root file checks.
 - `cd ui && bun run tsc` runs TypeScript project checking.
-- `cd ui && bun run test:unit` runs Vitest unit and component tests outside `ui/integration/`.
-- `cd ui && bun run test:integration` runs integration tests under `ui/integration/`.
-- `cd ui && bun run test` runs the standard frontend unit and integration suites.
+- `cd ui && bun run test:unit` runs the pure Vitest unit lane without a DOM.
+- `cd ui && bun run test:component` runs the browserless component lane, using native Bun first and the bounded Vitest compatibility sublane second.
+- `cd ui && bun run test:integration` runs browser tests under `ui/integration/`.
+- `cd ui && bun run test` runs the standard frontend unit, component, and browser suites.
 - `cd ui && bun run test-storybook` and `cd ui && bun run storybook:test-runner:ci` cover Storybook-driven UI behavior when a change touches reusable or story-covered components.
 - `cd ui && bun run generate-api` regenerates `ui/src/api/generated/openapi.ts` from `api/openapi.yaml`; generated output should not be hand-edited.
 

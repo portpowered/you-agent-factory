@@ -49,6 +49,39 @@ type planComponent struct {
 	events *[]string
 }
 
+type blockingPlanComponent struct {
+	started chan struct{}
+	stopped chan struct{}
+	waitErr error
+}
+
+type nonWaitablePlanComponent struct{}
+
+func (*nonWaitablePlanComponent) Start(context.Context) error { return nil }
+func (*nonWaitablePlanComponent) Stop(context.Context) error  { return nil }
+
+func (component *blockingPlanComponent) Start(context.Context) error {
+	close(component.started)
+	return nil
+}
+
+func (component *blockingPlanComponent) Stop(context.Context) error {
+	select {
+	case <-component.stopped:
+	default:
+		close(component.stopped)
+	}
+	return nil
+}
+
+func (component *blockingPlanComponent) Wait(ctx context.Context) error {
+	if component.waitErr != nil {
+		return component.waitErr
+	}
+	<-ctx.Done()
+	return ctx.Err()
+}
+
 func (component *planComponent) Start(context.Context) error {
 	*component.events = append(*component.events, component.name+":start")
 	return nil
@@ -92,6 +125,79 @@ func TestRuntimeLifecycleOwnsActivationAndReverseShutdown(t *testing.T) {
 	}
 	if !reflect.DeepEqual(runtime.events, want) {
 		t.Fatalf("events = %v, want %v", runtime.events, want)
+	}
+}
+
+func TestRunCompletionStopsAndJoinsOwnedTransport(t *testing.T) {
+	runtime := &planRuntime{}
+	transport := &blockingPlanComponent{
+		started: make(chan struct{}),
+		stopped: make(chan struct{}),
+	}
+	completed := make(chan struct{})
+	plan, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{
+		Runtime: runtime,
+		Components: factorysessions.BoundProcessComponents{
+			Transport: transport,
+		},
+		Completion: func(ctx context.Context) error {
+			select {
+			case <-transport.started:
+				close(completed)
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildLifecyclePlan: %v", err)
+	}
+	if err := lifecycle.NewManager().Run(t.Context(), plan); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	select {
+	case <-completed:
+	default:
+		t.Fatal("terminal completion did not run after transport activation")
+	}
+	select {
+	case <-transport.stopped:
+	default:
+		t.Fatal("terminal completion did not join the owned transport")
+	}
+}
+
+func TestRunTransportFailureCancelsWaitingCompletion(t *testing.T) {
+	transportErr := errors.New("listener startup failed")
+	runtime := &planRuntime{}
+	transport := &blockingPlanComponent{
+		started: make(chan struct{}),
+		stopped: make(chan struct{}),
+		waitErr: transportErr,
+	}
+	completionCanceled := make(chan struct{})
+	plan, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{
+		Runtime: runtime,
+		Components: factorysessions.BoundProcessComponents{
+			Transport: transport,
+		},
+		Completion: func(ctx context.Context) error {
+			<-ctx.Done()
+			close(completionCanceled)
+			return ctx.Err()
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildLifecyclePlan: %v", err)
+	}
+	if err := lifecycle.NewManager().Run(t.Context(), plan); !errors.Is(err, transportErr) {
+		t.Fatalf("Run error = %v, want %v", err, transportErr)
+	}
+	select {
+	case <-completionCanceled:
+	default:
+		t.Fatal("listener failure did not cancel the waiting completion")
 	}
 }
 
@@ -173,6 +279,95 @@ func TestBuildLifecyclePlanFailsClosedWithoutRuntimeOrTransport(t *testing.T) {
 				t.Fatal("BuildLifecyclePlan error = nil")
 			}
 		})
+	}
+}
+
+func TestDirectJavaScriptLifecycleRunsCompletionAndClosesExecution(t *testing.T) {
+	var events []string
+	plan, err := BuildDirectJavaScriptLifecyclePlan(
+		nil,
+		func(context.Context) error {
+			events = append(events, "completion")
+			return nil
+		},
+		func() error {
+			events = append(events, "close")
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildDirectJavaScriptLifecyclePlan: %v", err)
+	}
+	if err := lifecycle.NewManager().Run(t.Context(), plan); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if want := []string{"completion", "close"}; !reflect.DeepEqual(events, want) {
+		t.Fatalf("events = %v, want %v", events, want)
+	}
+}
+
+func TestDirectJavaScriptLifecycleJoinsOwnedTransport(t *testing.T) {
+	transport := &blockingPlanComponent{
+		started: make(chan struct{}),
+		stopped: make(chan struct{}),
+	}
+	completed := make(chan struct{})
+	plan, err := BuildDirectJavaScriptLifecyclePlan(
+		transport,
+		func(ctx context.Context) error {
+			select {
+			case <-transport.started:
+				close(completed)
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("BuildDirectJavaScriptLifecyclePlan: %v", err)
+	}
+	if err := lifecycle.NewManager().Run(t.Context(), plan); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	select {
+	case <-completed:
+	default:
+		t.Fatal("terminal completion did not run after transport activation")
+	}
+	select {
+	case <-transport.stopped:
+	default:
+		t.Fatal("terminal completion did not join the owned transport")
+	}
+}
+
+func TestDirectJavaScriptLifecycleRejectsNonWaitableTransport(t *testing.T) {
+	plan, err := BuildDirectJavaScriptLifecyclePlan(
+		&nonWaitablePlanComponent{},
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("BuildDirectJavaScriptLifecyclePlan: %v", err)
+	}
+	err = lifecycle.NewManager().Run(t.Context(), plan)
+	if err == nil || !strings.Contains(err.Error(), "application transport is not waitable") {
+		t.Fatalf("Run error = %v, want non-waitable transport failure", err)
+	}
+}
+
+func TestDirectJavaScriptLifecycleRejectsMissingCompletion(t *testing.T) {
+	if _, err := BuildDirectJavaScriptLifecyclePlan(nil, nil, nil); err == nil ||
+		!strings.Contains(err.Error(), "completion is required") {
+		t.Fatalf("BuildDirectJavaScriptLifecyclePlan error = %v", err)
+	}
+	if operation := NewLifecyclePlanOperation(); operation == nil {
+		t.Fatal("NewLifecyclePlanOperation returned nil")
 	}
 }
 

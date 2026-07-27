@@ -14,25 +14,41 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
-func TestModelsServiceIsConstructedDirectlyAndBindsRuntimeData(t *testing.T) {
+func TestModelsServiceIsConstructedOnceAndOpensRuntimeScopeOnSameRoot(t *testing.T) {
 	t.Parallel()
 
-	service, err := provideModelsService(serviceedges.Edges{})
+	root, err := provideModelsService(serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("provideModelsService: %v", err)
 	}
-	if _, err := service.ListModels(context.Background()); err == nil {
+	if _, err := root.ListModels(context.Background()); err == nil {
 		t.Fatal("unbound Models service unexpectedly accepted a catalog operation")
 	}
-	bound, err := service.ForRuntime(models.RuntimeBinding{
-		CacheDirectory: t.TempDir(),
-		RuntimeConfig:  func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
+	opened, err := root.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{
+		Config: models.RuntimeScopeConfig{
+			CacheDirectory: t.TempDir(),
+			Runtime:        models.RuntimeConfig{},
+		},
 	})
 	if err != nil {
-		t.Fatalf("ForRuntime: %v", err)
+		t.Fatalf("OpenRuntimeScope: %v", err)
 	}
-	if bound == nil {
-		t.Fatal("ForRuntime returned a nil Models service")
+	if opened.Scope.IsZero() {
+		t.Fatal("OpenRuntimeScope returned a zero scope")
+	}
+	if _, err := root.ListCatalog(context.Background(), models.ListModelsRequest{
+		Scope: opened.Scope,
+	}); err != nil {
+		t.Fatalf("same process-scoped Models root rejected its opened scope: %v", err)
+	}
+	closed, err := root.CloseRuntimeScope(context.Background(), models.CloseRuntimeScopeRequest{
+		Scope: opened.Scope,
+	})
+	if err != nil {
+		t.Fatalf("CloseRuntimeScope: %v", err)
+	}
+	if !closed.Closed || closed.Scope != opened.Scope {
+		t.Fatalf("CloseRuntimeScope result = %#v, want issued scope closed", closed)
 	}
 }
 

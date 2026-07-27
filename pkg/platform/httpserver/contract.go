@@ -12,6 +12,7 @@ import (
 
 // Binding identifies the endpoint selected for one hosted HTTP runtime.
 type Binding struct {
+	Host string
 	Port int
 }
 
@@ -22,6 +23,7 @@ type BoundObserver func(Binding)
 // StartRequest contains the exact host inputs for one runtime.
 type StartRequest struct {
 	Handler  http.Handler
+	Host     string
 	Port     int
 	AutoPort bool
 	Logger   *zap.Logger

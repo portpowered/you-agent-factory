@@ -190,8 +190,9 @@ type MutableLoadedFactorySource interface {
 }
 
 type PreparedFactoryLayoutPayload struct {
-	Config    *FactoryConfig
-	Canonical []byte
+	Config       *FactoryConfig
+	Canonical    []byte
+	RootFileName string
 }
 
 type FactorySplitLayoutReplaceResult struct {

@@ -1,6 +1,6 @@
 import { forwardRef, type HTMLAttributes } from "react";
 
-import { Code, Text } from "../../../../../components/ui";
+import { Code, Text } from "@you-agent-factory/components/primitives";
 import { cn } from "../../../../../lib/cn";
 
 type CurrentSelectionSupportingTextTone = "notice" | "status";

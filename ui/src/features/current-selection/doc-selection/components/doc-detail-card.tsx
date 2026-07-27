@@ -1,10 +1,8 @@
 import { factoryBundledDocDisplayLabel } from "../../../workflow-activity/lib/factory-bundled-docs";
 import { SelectionDetailLayout } from "../../base/components/layout/current-selection-detail-layout";
-import {
-  CurrentSelectionBodyLayout,
-  CurrentSelectionDetailFeedback,
-  CurrentSelectionExpandableSection,
-} from "../../base/public";
+import { CurrentSelectionDetailFeedback } from "../../base/components/detail/current-selection-detail-feedback";
+import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
+import { CurrentSelectionBodyLayout } from "../../base/components/layout/current-selection-body-layout";
 import { useDocDetailState } from "../hooks/use-doc-detail-state";
 import type { DocDetailCardProps } from "../lib/detail-card-types";
 import { getDocDetailMessages } from "../messages/doc-detail";

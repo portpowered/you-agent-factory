@@ -18,6 +18,12 @@ type BoundProcessComponents struct {
 	Visualization lifecycle.Component
 }
 
+// DirectJavaScriptApplication is the Factory Sessions-owned lifecycle plan
+// for one raw workflow-file run.
+type DirectJavaScriptApplication struct {
+	Plan lifecycle.Plan
+}
+
 // RuntimeHostRequest contains the process-hosting values needed after a
 // Factory Session runtime has started. It deliberately excludes the broader
 // process configuration and edge aggregates.
@@ -26,12 +32,14 @@ type RuntimeHostRequest struct {
 	RuntimeMode interfaces.RuntimeMode
 	WorkFile    string
 	MockWorkers bool
+	Host        string
 	Port        int
 	AutoPort    bool
 }
 
 // RuntimeHostBinding is the endpoint selected by the external HTTP host.
 type RuntimeHostBinding struct {
+	Host string
 	Port int
 }
 

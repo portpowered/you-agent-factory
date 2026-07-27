@@ -157,6 +157,29 @@ func TestCoverageTestJobs(t *testing.T) {
 	}
 }
 
+func TestPartitionCoveragePackagesKeepsExactInventoryWithinArgumentLimit(t *testing.T) {
+	packages := []string{"example.com/alpha", "example.com/beta", "example.com/gamma"}
+	shards := partitionCoveragePackages(packages, len("-coverpkg=example.com/alpha,example.com/beta"))
+	if len(shards) != 2 {
+		t.Fatalf("shard count = %d, want 2: %v", len(shards), shards)
+	}
+	var flattened []string
+	for _, shard := range shards {
+		flattened = append(flattened, shard...)
+		if got := len("-coverpkg=" + strings.Join(shard, ",")); got > len("-coverpkg=example.com/alpha,example.com/beta") {
+			t.Fatalf("coverage argument length = %d", got)
+		}
+	}
+	if !slices.Equal(flattened, packages) {
+		t.Fatalf("flattened packages = %v, want %v", flattened, packages)
+	}
+
+	args := replaceCoveragePackageArgument([]string{"test", "-coverpkg=old", "-short"}, shards[0])
+	if got := strings.Join(args, " "); got != "test -coverpkg=example.com/alpha,example.com/beta -short" {
+		t.Fatalf("replaced args = %q", got)
+	}
+}
+
 func TestResolveCoverageLaneOverrides(t *testing.T) {
 	t.Parallel()
 

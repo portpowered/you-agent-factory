@@ -4,23 +4,21 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe } from "vitest";
 import { buildReplayCoverageReport } from "../src/testing/replay-fixture-catalog";
 import {
   browserScenarioTimeoutMs,
-  buildTimeoutMs,
   expectNoBrowserErrors,
   exportCoverImagePath,
   fillWorkstationPromptBody,
-  openBrowserPage,
   resolvedDefaultFactorySessionID,
-  startBrowserPreview,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
   waitForCapturedDownloadOrDialogError,
   waitForDialogHidden,
   waitForDurableControlEnabled,
 } from "./browser-test-harness.mjs";
+import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
 const exportFactoryDefinition = {
   metadata: {
@@ -230,7 +228,7 @@ function factoryGraphCardScope(page) {
   return page.getByRole("article", { name: "Factory graph" });
 }
 
-async function expectConsolidatedDirtyGraphEditorChrome(page) {
+async function expectConsolidatedDirtyGraphEditorChrome(page, expect) {
   const graphCard = factoryGraphCardScope(page);
   await expect
     .poll(
@@ -256,21 +254,10 @@ async function expectConsolidatedDirtyGraphEditorChrome(page) {
   expect(await toolbar.locator('[role="status"]').count()).toBe(0);
 }
 
-describe.sequential("factory graph editor browser integration", () => {
-  let preview = null;
-
-  beforeAll(async () => {
-    preview = await startBrowserPreview();
-  }, buildTimeoutMs);
-
-  afterAll(async () => {
-    await preview?.stop();
-    preview = null;
-  });
-
+describe.concurrent("factory graph editor browser integration", () => {
   it(
     "enters graph editor mode through the graph card controls",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: exportFactoryDefinition,
@@ -330,7 +317,7 @@ describe.sequential("factory graph editor browser integration", () => {
 
   it(
     "exports the current factory as a downloadable PNG without uncaught browser exceptions",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const sessionFactoryPutRequests = [];
       const replayCoverageReport = buildReplayCoverageReport();
       const pngCoverageScenario = replayCoverageReport.scenarios.find(
@@ -552,7 +539,7 @@ describe.sequential("factory graph editor browser integration", () => {
 
   it(
     "creates a workstation, links it through labeled graph anchors, and saves the topology payload",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const saveRequests = [];
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
@@ -592,10 +579,16 @@ describe.sequential("factory graph editor browser integration", () => {
         });
 
         await toolbar.getByRole("button", { name: "Add" }).click();
-        await browserPage.page
-          .getByLabel("Add graph entity menu")
+        const addEntityMenu = browserPage.page.getByLabel(
+          "Add graph entity menu",
+        );
+        await addEntityMenu.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await addEntityMenu
           .getByRole("button", { name: "Workstation" })
-          .evaluate((button) => button.click());
+          .click();
 
         const addDialog = browserPage.page.getByRole("dialog", {
           name: "Add workstation",
@@ -636,7 +629,10 @@ describe.sequential("factory graph editor browser integration", () => {
           })
           .toBe(true);
 
-        await expectConsolidatedDirtyGraphEditorChrome(browserPage.page);
+        await expectConsolidatedDirtyGraphEditorChrome(
+          browserPage.page,
+          expect,
+        );
 
         await saveChangesButton.focus();
         await saveChangesButton.press("Enter");
@@ -718,7 +714,7 @@ describe.sequential("factory graph editor browser integration", () => {
 
   it(
     "shows consolidated unsaved status chrome after a topology edit and clears it after discard",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: editableGraphFactoryDefinition,
@@ -783,7 +779,10 @@ describe.sequential("factory graph editor browser integration", () => {
           })
           .toBe(true);
 
-        await expectConsolidatedDirtyGraphEditorChrome(browserPage.page);
+        await expectConsolidatedDirtyGraphEditorChrome(
+          browserPage.page,
+          expect,
+        );
 
         await discardChangesButton.click();
         expect(
@@ -807,7 +806,7 @@ describe.sequential("factory graph editor browser integration", () => {
 
   it(
     "discards pending graph edits and leaves the factory graph editor without saving",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const saveRequests = [];
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,

@@ -414,6 +414,118 @@ type workerModelService struct {
 	runtime       modelinference.Runtime
 }
 
+func (workerModelService) OpenRuntimeScope(
+	context.Context,
+	modelinference.OpenRuntimeScopeRequest,
+) (modelinference.OpenRuntimeScopeResult, error) {
+	return modelinference.OpenRuntimeScopeResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) CloseRuntimeScope(
+	context.Context,
+	modelinference.CloseRuntimeScopeRequest,
+) (modelinference.CloseRuntimeScopeResult, error) {
+	return modelinference.CloseRuntimeScopeResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) ListCatalog(
+	context.Context,
+	modelinference.ListModelsRequest,
+) (modelinference.ListModelsResult, error) {
+	return modelinference.ListModelsResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) GetCatalogModel(
+	context.Context,
+	modelinference.GetModelRequest,
+) (modelinference.GetModelResult, error) {
+	return modelinference.GetModelResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) GetModelReadiness(
+	context.Context,
+	modelinference.GetModelReadinessRequest,
+) (modelinference.GetModelReadinessResult, error) {
+	return modelinference.GetModelReadinessResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) PrepareModelAssets(
+	context.Context,
+	modelinference.PrepareModelAssetsRequest,
+) (modelinference.PrepareModelAssetsResult, error) {
+	return modelinference.PrepareModelAssetsResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) InspectModelAssets(
+	context.Context,
+	modelinference.InspectModelAssetsRequest,
+) (modelinference.InspectModelAssetsResult, error) {
+	return modelinference.InspectModelAssetsResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) RemoveModelAssets(
+	context.Context,
+	modelinference.RemoveModelAssetsRequest,
+) (modelinference.RemoveModelAssetsResult, error) {
+	return modelinference.RemoveModelAssetsResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) EnsureModelHost(
+	context.Context,
+	modelinference.EnsureModelHostRequest,
+) (modelinference.EnsureModelHostResult, error) {
+	return modelinference.EnsureModelHostResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) InspectModelHost(
+	context.Context,
+	modelinference.InspectModelHostRequest,
+) (modelinference.InspectModelHostResult, error) {
+	return modelinference.InspectModelHostResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) StopModelHost(
+	context.Context,
+	modelinference.StopModelHostRequest,
+) (modelinference.StopModelHostResult, error) {
+	return modelinference.StopModelHostResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) AcquireModelLease(
+	context.Context,
+	modelinference.AcquireModelLeaseRequest,
+) (modelinference.AcquireModelLeaseResult, error) {
+	return modelinference.AcquireModelLeaseResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) GetModelLease(
+	context.Context,
+	modelinference.GetModelLeaseRequest,
+) (modelinference.GetModelLeaseResult, error) {
+	return modelinference.GetModelLeaseResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) ReleaseModelLease(
+	context.Context,
+	modelinference.ReleaseModelLeaseRequest,
+) (modelinference.ReleaseModelLeaseResult, error) {
+	return modelinference.ReleaseModelLeaseResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) InvokeModelWithLease(
+	context.Context,
+	modelinference.InvokeModelRequest,
+) (modelinference.InvokeModelResult, error) {
+	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (workerModelService) CancelInvocation(
+	context.Context,
+	modelinference.CancelInvocationRequest,
+) (modelinference.CancelInvocationResult, error) {
+	return modelinference.CancelInvocationResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (s workerModelService) ForRuntime(modelinference.RuntimeBinding) (modelinference.Service, error) {
 	return s, nil
 }
@@ -430,8 +542,23 @@ func (workerModelService) PullModel(context.Context, string) (modelinference.Pul
 	return modelinference.PullResult{}, nil
 }
 
+func (workerModelService) PullModelForScope(
+	context.Context,
+	modelinference.PullModelRequest,
+) (modelinference.PullResult, error) {
+	return modelinference.PullResult{}, nil
+}
+
 func (workerModelService) InvokeLocal(context.Context, modelinference.LocalInvocationRequest) (modelinference.LocalInvocationResult, error) {
 	return modelinference.LocalInvocationResult{}, nil
+}
+
+func (workerModelService) AcquireLease(context.Context, modelinference.AcquireLeaseRequest) (modelinference.HostLease, error) {
+	return modelinference.HostLease{}, nil
+}
+
+func (workerModelService) ReleaseLease(context.Context, modelinference.ReleaseLeaseRequest) error {
+	return nil
 }
 
 func (s workerModelService) InspectRuntime(ctx context.Context, modelName string) (modelinference.Runtime, error) {

@@ -1,23 +1,21 @@
 // @vitest-environment node
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe } from "vitest";
 
 import {
   browserScenarioTimeoutMs,
-  buildTimeoutMs,
   emptyMaterializedWorkOutcomeState,
   expectNoBrowserErrors,
   initialEditableFactoryDefinitionVersion,
-  openBrowserPage,
   openDashboardWithSeededCheckpoint,
   resolvedDefaultFactorySessionID,
-  startBrowserPreview,
   startFactoryApiServer,
   timelineCheckpointDBVersion,
   timelineCheckpointSchemaVersion,
   uiInteractionTimeoutMs,
   waitForDurableCheckpoint,
 } from "./browser-test-harness.mjs";
+import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
 const defaultFactoryDefinition = {
   name: "Browser Recovery Harness Factory",
@@ -178,7 +176,7 @@ async function readCapturedEventStreamURLs(page) {
   return page.evaluate(() => window.__capturedEventStreamURLs ?? []);
 }
 
-async function assertRecoveryPanelVisible(page, viewport) {
+async function assertRecoveryPanelVisible(page, viewport, expect) {
   await page.setViewportSize(viewport);
   await page
     .getByRole("heading", { name: "Session replay needs attention" })
@@ -199,21 +197,10 @@ async function assertRecoveryPanelVisible(page, viewport) {
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: browser recovery scenarios share one preview harness and IndexedDB seeding helpers.
-describe.sequential("dashboard session recovery browser integration", () => {
-  let preview = null;
-
-  beforeAll(async () => {
-    preview = await startBrowserPreview();
-  }, buildTimeoutMs);
-
-  afterAll(async () => {
-    await preview?.stop();
-    preview = null;
-  });
-
+describe.concurrent("dashboard session recovery browser integration", () => {
   it(
     "reuses a matching checkpoint cursor and ignores stale stream identity checkpoints",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: defaultFactoryDefinition,
@@ -254,8 +241,6 @@ describe.sequential("dashboard session recovery browser integration", () => {
           ),
         ).toBe(true);
 
-        await browserPage.page.reload({ waitUntil: "domcontentloaded" });
-        await new Promise((resolve) => setTimeout(resolve, 800));
         await clearTimelineCheckpoints(browserPage.page);
         await seedTimelineCheckpoint(
           browserPage.page,
@@ -269,10 +254,12 @@ describe.sequential("dashboard session recovery browser integration", () => {
             selectedTick: 9,
           },
         );
-        await browserPage.page.evaluate(() => {
-          window.__capturedEventStreamURLs = [];
+        // Stop the active dashboard before it can persist its old checkpoint
+        // over the stale fixture during the next navigation.
+        await browserPage.page.goto("about:blank");
+        await browserPage.page.goto(preview.previewURL, {
+          waitUntil: "domcontentloaded",
         });
-        await browserPage.page.reload({ waitUntil: "domcontentloaded" });
 
         await waitForDurableCheckpoint("stale identity reconnect", async () => {
           const urls = await readCapturedEventStreamURLs(browserPage.page);
@@ -310,7 +297,7 @@ describe.sequential("dashboard session recovery browser integration", () => {
 
   it(
     "shows a distinct recoverable replay failure state at desktop and narrow viewports",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: defaultFactoryDefinition,
@@ -400,14 +387,16 @@ describe.sequential("dashboard session recovery browser integration", () => {
             .count(),
         ).toBe(0);
 
-        await assertRecoveryPanelVisible(browserPage.page, {
-          height: 900,
-          width: 1280,
-        });
-        await assertRecoveryPanelVisible(browserPage.page, {
-          height: 700,
-          width: 390,
-        });
+        await assertRecoveryPanelVisible(
+          browserPage.page,
+          { height: 900, width: 1280 },
+          expect,
+        );
+        await assertRecoveryPanelVisible(
+          browserPage.page,
+          { height: 700, width: 390 },
+          expect,
+        );
 
         expectNoBrowserErrors(
           browserPage.pageErrors,

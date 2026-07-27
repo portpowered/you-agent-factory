@@ -17,7 +17,7 @@ import {
   DashboardImportPreviewDialog,
   type DashboardImportPreviewDialogProps,
   FactoryImportPreviewDialog,
-} from "../public";
+} from "./dashboard-import-preview-dialog";
 
 function createReadyImportPreviewState(): DashboardImportPreviewDialogProps["importPreviewState"] {
   return {

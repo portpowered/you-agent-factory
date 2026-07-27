@@ -15,6 +15,7 @@ import (
 // reviewed B06 package export map. Later-phase families such as components are
 // intentionally omitted when no canonical owner exists yet.
 var exportMapRawTargets = []string{
+	"packages/api/generated/cli/command-manifest.schema.json",
 	"packages/api/generated/cli/commands.json",
 	"packages/api/generated/javascript/runtime-api.json",
 	"packages/api/generated/mcp/tools.json",

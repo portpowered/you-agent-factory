@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -18,15 +20,35 @@ type workRuntimeAdapter struct {
 }
 
 func (a workRuntimeAdapter) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	return a.runtime.SubmitWorkRequest(ctx, request)
+	legacyRuntime, ok := a.runtime.(factoryruntime.APIFactory)
+	if !ok {
+		return work.WorkRequestSubmitResult{}, factoryruntime.ErrCapabilityUnavailable
+	}
+	return legacyRuntime.SubmitWorkRequest(ctx, request)
 }
 
 func (a workRuntimeAdapter) MoveWork(ctx context.Context, workID, state string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
-	return a.runtime.MoveWork(ctx, workID, state, source, requestID)
+	result, err := a.runtime.ControlMoveWork(ctx, factoryruntime.MoveWorkRequest{
+		WorkID: workID, StateName: state, Source: factoryruntime.WorkMoveSource(source), RequestID: requestID,
+	})
+	if err != nil {
+		if errors.Is(err, factoryruntime.ErrMoveWorkRequestConflict) {
+			return work.OperatorMoveResult{}, work.ErrMoveWorkRequestAlreadyApplied
+		}
+		return work.OperatorMoveResult{}, err
+	}
+	return work.OperatorMoveResult{
+		WorkID: result.WorkID, WorkTypeID: result.WorkTypeID,
+		FromState: result.FromState, ToState: result.ToState,
+	}, nil
 }
 
 func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnapshot, error) {
-	snapshot, err := a.runtime.GetEngineStateSnapshot(ctx)
+	legacyObservation, err := runtimebinding.LegacyObservationForService(a.runtime)
+	if err != nil {
+		return work.ReadSnapshot{}, err
+	}
+	snapshot, err := legacyObservation.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		return work.ReadSnapshot{}, err
 	}

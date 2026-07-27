@@ -111,7 +111,9 @@ func initNewFactoryAndOpenSession(
 		)
 	}
 	reason, _, ok := sessionvalidation.ReasonFromError(discoverErr)
-	if !ok || reason != factorysessions.ValidationReasonNotRunnable {
+	if !ok ||
+		(reason != factorysessions.ValidationReasonNotRunnable &&
+			reason != factorysessions.ValidationReasonConfigLoadFailed) {
 		return nil, discoverErr
 	}
 

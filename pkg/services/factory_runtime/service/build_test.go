@@ -40,6 +40,7 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
 			return nil, nil
 		},
+		testRuntimeWorkers{},
 		nil,
 	)
 	if err != nil {
@@ -82,6 +83,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 			func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
 				return nil, nil
 			},
+			testRuntimeWorkers{},
 			nil,
 		)
 	if err != nil {
@@ -122,6 +124,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
 			return nil, nil
 		},
+		testRuntimeWorkers{},
 		nil,
 	)
 	if err != nil {
@@ -136,6 +139,35 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 	if disabledBundle.MetricsSink != nil {
 		t.Fatal("MetricsSink = non-nil, want nil when runtime metrics policy is explicitly disabled")
 	}
+}
+
+type testRuntimeWorkers struct{}
+
+func (testRuntimeWorkers) StartWorkstationPool(
+	context.Context,
+	workers.WorkstationPoolStartRequest,
+) (workers.WorkstationPoolStartResult, error) {
+	return workers.WorkstationPoolStartResult{}, nil
+}
+
+func (testRuntimeWorkers) StopWorkstationPool(
+	context.Context,
+) (workers.WorkstationPoolStopResult, error) {
+	return workers.WorkstationPoolStopResult{}, nil
+}
+
+func (testRuntimeWorkers) DispatchWorkstation(
+	context.Context,
+	workers.WorkstationDispatchRequest,
+) (workers.WorkstationDispatchResult, error) {
+	return workers.WorkstationDispatchResult{}, nil
+}
+
+func (testRuntimeWorkers) CancelWorkstationDispatch(
+	context.Context,
+	workers.WorkstationDispatchCancelRequest,
+) (workers.WorkstationDispatchCancelResult, error) {
+	return workers.WorkstationDispatchCancelResult{}, nil
 }
 
 func loadedFactoryFixture(dir string) (interfaces.MutableLoadedFactorySource, error) {

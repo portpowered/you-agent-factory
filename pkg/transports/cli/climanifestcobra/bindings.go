@@ -2,9 +2,9 @@ package climanifestcobra
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
-	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
@@ -31,6 +31,15 @@ type CobraHandler func(*cobra.Command, []string, map[string]any, resolvedinput.I
 // CobraHandlerRegistry maps stable manifest handler IDs to migration adapters.
 type CobraHandlerRegistry map[string]CobraHandler
 
+// ResolvedCobraHandler is the transport-edge adapter for commands whose local
+// inputs have migrated to the canonical resolved-input model. The second
+// snapshot contains the invocation's inherited root inputs.
+type ResolvedCobraHandler = func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
+
+// ResolvedCobraHandlerRegistry maps stable handler IDs to typed transport-edge
+// adapters without exposing public argument spellings or raw Cobra arguments.
+type ResolvedCobraHandlerRegistry map[string]ResolvedCobraHandler
+
 // InputBinding receives a normalized value whenever Cobra parses the named
 // stable input. It is a migration seam for handlers that still own typed
 // option structs; generic handlers should consume their values map directly.
@@ -56,24 +65,33 @@ type ResolvedInputsBinding func(resolvedinput.Inputs) error
 // a generic manifest. Additional stable-ID registries can be added here without
 // coupling manifest records to public command or input spellings.
 type GenericBindings struct {
-	Completions   CompletionRegistry
-	Handlers      HandlerRegistry
-	CobraHandlers CobraHandlerRegistry
-	Inputs        InputBindingRegistry
-	SourceValues  SourceCandidateProvider
-	RootInputs    ResolvedInputsBinding
+	Completions             CompletionRegistry
+	Handlers                HandlerRegistry
+	CobraHandlers           CobraHandlerRegistry
+	ResolvedCobraHandlers   ResolvedCobraHandlerRegistry
+	Inputs                  InputBindingRegistry
+	SourceValues            SourceCandidateProvider
+	RootInputs              ResolvedInputsBinding
+	GuardUnknownSubcommands bool
 }
 
-// SessionFamilyBindings supplies the legacy typed option structs updated by
-// stable input-ID bindings while Session handlers migrate to normalized values.
-type SessionFamilyBindings struct {
-	Create     *sessioncli.CreateConfig
-	List       *sessioncli.ListConfig
-	Delete     *sessioncli.DeleteConfig
-	Dispatches *sessioncli.DispatchesConfig
-	Pause      *sessioncli.LifecycleControlConfig
-	Resume     *sessioncli.LifecycleControlConfig
-	FlagUsages map[string]string
+
+// InputChanged reports whether the CLI explicitly supplied a manifest input.
+// Callers identify the input only by stable ID; public flag spellings remain
+// private to the generated Cobra projection.
+func InputChanged(cmd *cobra.Command, inputID string) (bool, error) {
+	if cmd == nil {
+		return false, fmt.Errorf("read generic command input state: command is required")
+	}
+	longName, ok := cmd.Annotations[genericInputAnnotationPrefix+inputID]
+	if !ok {
+		return false, fmt.Errorf("read generic command input state %q: input is unavailable", inputID)
+	}
+	flag := lookupCommandFlag(cmd, longName)
+	if flag == nil {
+		return false, fmt.Errorf("read generic command input state %q: projected flag is unavailable", inputID)
+	}
+	return flag.Changed, nil
 }
 
 type persistentInputResolver struct {
@@ -90,6 +108,46 @@ type resolvedPersistentInputsContextKey struct{}
 type persistentInputInvocation struct {
 	resolver persistentInputResolver
 	inputs   resolvedinput.Inputs
+}
+
+// LocalInputValues returns only the parsed local inputs declared by record.
+// Detached command families use it to avoid treating inherited root inputs as
+// locally owned values while still addressing every value by stable input ID.
+func LocalInputValues(cmd *cobra.Command, record climanifest.Command) (map[string]any, error) {
+	if cmd == nil {
+		return nil, fmt.Errorf("read local command inputs: command is required")
+	}
+	values := make(map[string]any, len(record.Arguments)+len(record.Flags))
+	for _, argument := range record.Arguments {
+		encoded, ok := cmd.Annotations[genericArgumentAnnotationPrefix+argument.ID]
+		if !ok {
+			return nil, fmt.Errorf("read local command argument %q: value is unavailable", argument.ID)
+		}
+		value, err := decodeArgumentValue(encoded)
+		if err != nil {
+			return nil, fmt.Errorf("read local command argument %q: %w", argument.ID, err)
+		}
+		values[argument.ID] = value
+	}
+	for _, flag := range record.Flags {
+		if flag.Scope != "local" {
+			continue
+		}
+		longName, ok := cmd.Annotations[genericInputAnnotationPrefix+flag.ID]
+		if !ok {
+			return nil, fmt.Errorf("read local command input %q: binding is unavailable", flag.ID)
+		}
+		parsed := lookupCommandFlag(cmd, longName)
+		if parsed == nil {
+			return nil, fmt.Errorf("read local command input %q: flag is unavailable", flag.ID)
+		}
+		getter, ok := parsed.Value.(interface{ Get() any })
+		if !ok {
+			return nil, fmt.Errorf("read local command input %q: flag has no typed value", flag.ID)
+		}
+		values[flag.ID] = cloneGenericInputValue(getter.Get())
+	}
+	return values, nil
 }
 
 func newPersistentInputResolver(
@@ -391,6 +449,228 @@ func resolvedValue(value any) (resolvedinput.Value, error) {
 	default:
 		return resolvedinput.Value{}, fmt.Errorf("unsupported canonical value type %T", value)
 	}
+}
+
+func resolvedCommandInputs(
+	cmd *cobra.Command,
+	record climanifest.Command,
+	values map[string]any,
+) (resolvedinput.Inputs, error) {
+	definitions := make([]resolvedinput.Definition, 0, len(record.Arguments)+len(record.Flags))
+	candidates := make([]resolvedinput.Candidate, 0, len(record.Arguments)+len(record.Flags))
+	if err := appendResolvedArguments(
+		cmd,
+		record,
+		values,
+		&definitions,
+		&candidates,
+	); err != nil {
+		return resolvedinput.Inputs{}, err
+	}
+	if err := appendResolvedLocalFlags(
+		cmd,
+		record,
+		values,
+		&definitions,
+		&candidates,
+	); err != nil {
+		return resolvedinput.Inputs{}, err
+	}
+	inputs, err := resolvedinput.Resolve(definitions, candidates)
+	if err != nil {
+		return resolvedinput.Inputs{}, fmt.Errorf("resolve command inputs: %w", err)
+	}
+	return inputs, nil
+}
+
+func appendResolvedArguments(
+	cmd *cobra.Command,
+	record climanifest.Command,
+	values map[string]any,
+	definitions *[]resolvedinput.Definition,
+	candidates *[]resolvedinput.Candidate,
+) error {
+	for _, argument := range record.Arguments {
+		definition, err := resolvedArgumentDefinition(argument, record.Precedence)
+		if err != nil {
+			return fmt.Errorf("resolve argument %q: %w", argument.ID, err)
+		}
+		*definitions = append(*definitions, definition)
+		if argument.DefaultValue != nil {
+			value, err := typedGenericInputValue(argument.ValueType, argument.DefaultValue)
+			if err != nil {
+				return fmt.Errorf("resolve argument %q default: %w", argument.ID, err)
+			}
+			candidate, err := resolvedCommandCandidate(argument.ID, resolvedinput.SourceManifestDefault, value)
+			if err != nil {
+				return err
+			}
+			*candidates = append(*candidates, candidate)
+		}
+		present, err := storedArgumentPresent(cmd, argument.ID)
+		if err != nil {
+			return fmt.Errorf("resolve argument %q: %w", argument.ID, err)
+		}
+		if present {
+			candidate, err := resolvedCommandCandidate(
+				argument.ID,
+				resolvedinput.SourcePositionalArgument,
+				values[argument.ID],
+			)
+			if err != nil {
+				return err
+			}
+			*candidates = append(*candidates, candidate)
+		}
+	}
+	return nil
+}
+
+func appendResolvedLocalFlags(
+	cmd *cobra.Command,
+	record climanifest.Command,
+	values map[string]any,
+	definitions *[]resolvedinput.Definition,
+	candidates *[]resolvedinput.Candidate,
+) error {
+	for _, flag := range record.Flags {
+		if flag.Scope != "local" {
+			continue
+		}
+		definition, err := resolvedLocalFlagDefinition(flag, record.Precedence)
+		if err != nil {
+			return fmt.Errorf("resolve flag %q: %w", flag.ID, err)
+		}
+		*definitions = append(*definitions, definition)
+		if hasGenericFlagDefault(flag) || !isCanonicalFlagRecord(flag) {
+			value, err := genericFlagDefault(flag)
+			if err != nil {
+				return fmt.Errorf("resolve flag %q default: %w", flag.ID, err)
+			}
+			candidate, err := resolvedCommandCandidate(flag.ID, resolvedinput.SourceManifestDefault, value)
+			if err != nil {
+				return err
+			}
+			*candidates = append(*candidates, candidate)
+		}
+		if parsed := lookupCommandFlag(cmd, flag.Long); parsed != nil && parsed.Changed {
+			candidate, err := resolvedCommandCandidate(flag.ID, resolvedinput.SourceCLIFlag, values[flag.ID])
+			if err != nil {
+				return err
+			}
+			*candidates = append(*candidates, candidate)
+		}
+	}
+	return nil
+}
+
+func resolvedArgumentDefinition(
+	argument climanifest.Argument,
+	precedence climanifest.Precedence,
+) (resolvedinput.Definition, error) {
+	if argument.HandlerBindingID != "" {
+		return resolvedCommandInputDefinition(
+			argument.ID, argument.ValueType, argument.AcceptedSources,
+			precedence, true, false,
+		)
+	}
+	kind, err := resolvedValueKind(argument.ValueType)
+	if err != nil {
+		return resolvedinput.Definition{}, err
+	}
+	return resolvedinput.Definition{
+		ID: argument.ID, Kind: kind,
+		Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument},
+	}, nil
+}
+
+func resolvedLocalFlagDefinition(
+	flag climanifest.Flag,
+	precedence climanifest.Precedence,
+) (resolvedinput.Definition, error) {
+	if isCanonicalFlagRecord(flag) {
+		return resolvedCommandInputDefinition(
+			flag.ID, flag.ValueType, flag.AcceptedSources, precedence, false,
+			flag.Sensitivity != "" && flag.Sensitivity != "public",
+		)
+	}
+	kind, err := resolvedValueKind(flag.ValueType)
+	if err != nil {
+		return resolvedinput.Definition{}, err
+	}
+	return resolvedinput.Definition{
+		ID: flag.ID, Kind: kind,
+		Precedence: []resolvedinput.Source{
+			resolvedinput.SourceCLIFlag,
+			resolvedinput.SourceManifestDefault,
+		},
+	}, nil
+}
+
+func resolvedCommandInputDefinition(
+	id string,
+	valueType string,
+	acceptedSources []string,
+	precedence climanifest.Precedence,
+	positional bool,
+	sensitive bool,
+) (resolvedinput.Definition, error) {
+	kind, err := resolvedValueKind(valueType)
+	if err != nil {
+		return resolvedinput.Definition{}, err
+	}
+	accepted := make(map[string]bool, len(acceptedSources))
+	for _, source := range acceptedSources {
+		accepted[source] = true
+	}
+	sources := make([]resolvedinput.Source, 0, len(acceptedSources))
+	for _, source := range precedence.Order {
+		if !accepted[source] {
+			continue
+		}
+		mapped, err := resolvedCommandSource(source, positional)
+		if err != nil {
+			return resolvedinput.Definition{}, err
+		}
+		sources = append(sources, mapped)
+	}
+	return resolvedinput.Definition{
+		ID: id, Kind: kind, Precedence: sources, Sensitive: sensitive,
+	}, nil
+}
+
+func resolvedCommandSource(source string, positional bool) (resolvedinput.Source, error) {
+	if source == climanifest.SourceCLI && positional {
+		return resolvedinput.SourcePositionalArgument, nil
+	}
+	return resolvedSource(source)
+}
+
+func resolvedCommandCandidate(
+	inputID string,
+	source resolvedinput.Source,
+	value any,
+) (resolvedinput.Candidate, error) {
+	resolved, err := resolvedValue(value)
+	if err != nil {
+		return resolvedinput.Candidate{}, fmt.Errorf("resolve input %q value: %w", inputID, err)
+	}
+	return resolvedinput.Candidate{InputID: inputID, Source: source, Value: resolved}, nil
+}
+
+func storedArgumentPresent(cmd *cobra.Command, inputID string) (bool, error) {
+	if cmd == nil {
+		return false, fmt.Errorf("command is required")
+	}
+	encoded, exists := cmd.Annotations[genericArgumentAnnotationPrefix+inputID]
+	if !exists {
+		return false, fmt.Errorf("parsed value is unavailable")
+	}
+	var value encodedArgumentValue
+	if err := json.Unmarshal([]byte(encoded), &value); err != nil {
+		return false, fmt.Errorf("decode parsed value: %w", err)
+	}
+	return value.Present, nil
 }
 
 func resolvedSource(source string) (resolvedinput.Source, error) {

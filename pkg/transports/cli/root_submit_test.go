@@ -119,11 +119,11 @@ func TestSubmitCommand_MissingWorkTypeNameReturnsLocalValidationError(t *testing
 	if err == nil {
 		t.Fatal("expected missing work type name to fail")
 	}
-	if !called {
-		t.Fatal("expected submit validation to run")
+	if called {
+		t.Fatal("submit operation ran before stable-input validation")
 	}
-	if got := err.Error(); got != "--work-type-name is required" {
-		t.Fatalf("missing work type error = %q, want --work-type-name is required", got)
+	if got := err.Error(); !strings.Contains(got, `"--work-type-name" not set`) {
+		t.Fatalf("missing work type error = %q, want required flag diagnostic", got)
 	}
 }
 
@@ -148,11 +148,11 @@ func TestSubmitCommand_MissingNameReturnsLocalValidationError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing name to fail")
 	}
-	if !called {
-		t.Fatal("expected submit validation to run")
+	if called {
+		t.Fatal("submit operation ran before stable-input validation")
 	}
-	if got := err.Error(); got != "--name is required" {
-		t.Fatalf("missing name error = %q, want --name is required", got)
+	if got := err.Error(); !strings.Contains(got, `"--name" not set`) {
+		t.Fatalf("missing name error = %q, want required flag diagnostic", got)
 	}
 }
 
@@ -177,11 +177,11 @@ func TestSubmitCommand_MissingPayloadReturnsLocalValidationError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing payload to fail")
 	}
-	if !called {
-		t.Fatal("expected submit validation to run")
+	if called {
+		t.Fatal("submit operation ran before stable-input validation")
 	}
-	if got := err.Error(); got != "--payload is required" {
-		t.Fatalf("missing payload error = %q, want --payload is required", got)
+	if got := err.Error(); !strings.Contains(got, `"--payload" not set`) {
+		t.Fatalf("missing payload error = %q, want required flag diagnostic", got)
 	}
 }
 
@@ -352,34 +352,6 @@ func TestSubmitCommand_HelpMentionsBatchSubcommand(t *testing.T) {
 	}
 }
 
-func TestSubmitBatchCommand_InvokesSubmitBatchHandler(t *testing.T) {
-	originalSubmitBatch := submitBatch
-	defer func() {
-		submitBatch = originalSubmitBatch
-	}()
-
-	called := false
-	submitBatch = func(cfg submitcli.BatchConfig) error {
-		called = true
-		if cfg.DryRun {
-			t.Fatal("dry-run should default false")
-		}
-		return nil
-	}
-
-	root := newLegacyTestRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"submit", "batch", "batch.json"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute submit batch: %v", err)
-	}
-	if !called {
-		t.Fatal("expected submit batch handler to run")
-	}
-}
-
 // Run-command server and named-packaged-factory invocation tests (merged from
 // root_run_server_test.go for pkg-file-count).
 
@@ -414,7 +386,7 @@ func TestRunCommand_DefaultServerEnablesAutoPortAndLocalBind(t *testing.T) {
 	}
 }
 
-func TestRunCommand_ExplicitServerDerivesBindPortAndDisablesAutoPort(t *testing.T) {
+func TestRunCommand_ExplicitServerDerivesLoopbackBindAndEnablesFallback(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
@@ -440,21 +412,26 @@ func TestRunCommand_ExplicitServerDerivesBindPortAndDisablesAutoPort(t *testing.
 	if got.BindHost != "127.0.0.1" {
 		t.Fatalf("bind host = %q, want 127.0.0.1", got.BindHost)
 	}
-	if got.AutoPort {
-		t.Fatal("expected explicit --server to disable automatic port resolution")
+	if !got.AutoPort {
+		t.Fatal("expected explicit --server to enable ascending port fallback")
 	}
 }
 
 func TestRunCommand_NonLocalServerRejected(t *testing.T) {
+	var stderr bytes.Buffer
 	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
+	root.SetErr(&stderr)
 	root.SetArgs([]string{"run", "--server", "https://remote.example.com:7443"})
 
 	if execErr := root.Execute(); execErr == nil {
 		t.Fatal("expected non-local --server rejection")
 	} else if !strings.Contains(execErr.Error(), "not a local bind target") {
 		t.Fatalf("error = %v, want local bind guidance", execErr)
+	}
+	if got := stderr.String(); strings.Count(got, "\n") != 1 ||
+		!strings.Contains(got, `"code":"SERVER_BIND_FAILED"`) {
+		t.Fatalf("stderr = %q, want exactly one SERVER_BIND_FAILED ErrorResponse", got)
 	}
 }
 

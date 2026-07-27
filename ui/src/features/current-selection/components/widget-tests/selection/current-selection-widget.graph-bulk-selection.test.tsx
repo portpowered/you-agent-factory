@@ -1,3 +1,5 @@
+import "../../../../../testing/vitest-dom-capabilities.setup";
+
 import { screen, within } from "@testing-library/react";
 
 import type { CanonicalFactoryDefinition } from "../../../../../api/current-factory-definition";

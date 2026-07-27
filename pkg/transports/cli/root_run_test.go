@@ -6,10 +6,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -23,8 +26,10 @@ import (
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	modelcontract "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
@@ -36,6 +41,209 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
+
+func TestRunCanonicalNamedFlagRegistersFactoryNameCompletion(t *testing.T) {
+	var gotRequest cobracompletion.FactoryNamesRequest
+	options := CommandFactory{
+		homeDir: func() (string, error) { return "customer-home", nil },
+		resolveNamedFactoryRoots: func(home, workingDirectory string) (
+			interfaces.NamedFactoryRoots,
+			error,
+		) {
+			if home != "customer-home" || workingDirectory != "customer-repo" {
+				t.Fatalf("root inputs = (%q, %q)", home, workingDirectory)
+			}
+			return interfaces.NamedFactoryRoots{
+				Project: "project-root",
+				Global:  "global-root",
+			}, nil
+		},
+		completeFactoryNames: func(
+			_ context.Context,
+			request cobracompletion.FactoryNamesRequest,
+		) ([]cobra.Completion, cobra.ShellCompDirective) {
+			gotRequest = request
+			return []cobra.Completion{"alpha", "alpine"}, cobra.ShellCompDirectiveNoFileComp
+		},
+	}
+
+	commands, err := buildRunServerProductionCommands(
+		&cliGlobalOptions{},
+		&cliDiagnosticsOptions{},
+		&cliOperatorDefaultsOptions{},
+		options,
+	)
+	if err != nil {
+		t.Fatalf("buildRunServerProductionCommands() error = %v", err)
+	}
+	if commands.Run.Flags().Lookup(cobracompletion.SelectedFactoryFlagName) == nil {
+		t.Fatal("canonical --named flag is missing")
+	}
+	completion, exists := commands.Run.GetFlagCompletionFunc(
+		cobracompletion.SelectedFactoryFlagName,
+	)
+	if !exists {
+		t.Fatal("canonical --named flag has no completion callback")
+	}
+	commands.Run.SetContext(startupcli.WithWorkingDirectory(t.Context(), "customer-repo"))
+
+	got, directive := completion(commands.Run, nil, "al")
+	if !reflect.DeepEqual(got, []cobra.Completion{"alpha", "alpine"}) ||
+		directive != cobra.ShellCompDirectiveNoFileComp {
+		t.Fatalf("completion = (%#v, %v)", got, directive)
+	}
+	if gotRequest != (cobracompletion.FactoryNamesRequest{
+		ProjectRoot:   "project-root",
+		GlobalRoot:    "global-root",
+		EnteredPrefix: "al",
+	}) {
+		t.Fatalf("completion request = %#v", gotRequest)
+	}
+}
+
+func TestRunCanonicalNamedSelectionCompletesSignatureInputs(t *testing.T) {
+	var gotRequest cobracompletion.SelectedFactorySignatureRequest
+	options := CommandFactory{
+		homeDir: func() (string, error) { return "customer-home", nil },
+		resolveNamedFactoryRoots: func(home, workingDirectory string) (
+			interfaces.NamedFactoryRoots,
+			error,
+		) {
+			if home != "customer-home" || workingDirectory != "customer-repo" {
+				t.Fatalf("root inputs = (%q, %q)", home, workingDirectory)
+			}
+			return interfaces.NamedFactoryRoots{
+				Project: "project-root",
+				Global:  "global-root",
+			}, nil
+		},
+		completeSelectedFactorySignature: func(
+			_ context.Context,
+			request cobracompletion.SelectedFactorySignatureRequest,
+		) cobracompletion.SelectedFactorySignatureResult {
+			gotRequest = request
+			return cobracompletion.SelectedFactorySignatureResult{
+				Completions: []cobra.Completion{
+					cobra.CompletionWithDesc("--output-format", "output format"),
+				},
+				Directive: cobra.ShellCompDirectiveNoFileComp,
+			}
+		},
+	}
+
+	commands, err := buildRunServerProductionCommands(
+		&cliGlobalOptions{},
+		&cliDiagnosticsOptions{},
+		&cliOperatorDefaultsOptions{},
+		options,
+	)
+	if err != nil {
+		t.Fatalf("buildRunServerProductionCommands() error = %v", err)
+	}
+	commands.Run.SetContext(startupcli.WithWorkingDirectory(t.Context(), "customer-repo"))
+
+	got, directive := commands.Run.ValidArgsFunction(
+		commands.Run,
+		[]string{"--named", "alpha"},
+		"--out",
+	)
+	want := []cobra.Completion{
+		cobra.CompletionWithDesc("--output-format", "output format"),
+	}
+	if !reflect.DeepEqual(got, want) ||
+		directive != cobra.ShellCompDirectiveNoFileComp {
+		t.Fatalf("completion = (%#v, %v), want (%#v, no-file)", got, directive, want)
+	}
+	if gotRequest.ProjectRoot != "project-root" ||
+		gotRequest.GlobalRoot != "global-root" ||
+		gotRequest.FactoryName != "alpha" ||
+		gotRequest.Target != "flags" ||
+		gotRequest.EnteredPrefix != "--out" {
+		t.Fatalf("completion request = %#v", gotRequest)
+	}
+
+	var output bytes.Buffer
+	root := &cobra.Command{Use: "you"}
+	root.SetOut(&output)
+	root.SetErr(io.Discard)
+	root.SetContext(startupcli.WithWorkingDirectory(t.Context(), "customer-repo"))
+	root.AddCommand(commands.Run)
+	root.SetArgs([]string{"__complete", "run", "--named", "alpha", "--out"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute Cobra completion protocol: %v", err)
+	}
+	if !strings.Contains(output.String(), "--output-format\toutput format") ||
+		!strings.Contains(output.String(), ":4") {
+		t.Fatalf("Cobra completion output = %q", output.String())
+	}
+}
+
+func TestRunCompletionPreservesPositionalInputAfterFlagTerminator(t *testing.T) {
+	dynamicCalls := 0
+	options := CommandFactory{
+		completeFactoryNames: func(
+			context.Context,
+			cobracompletion.FactoryNamesRequest,
+		) ([]cobra.Completion, cobra.ShellCompDirective) {
+			dynamicCalls++
+			return []cobra.Completion{"dynamic-factory"}, cobra.ShellCompDirectiveNoFileComp
+		},
+		completeSelectedFactorySignature: func(
+			context.Context,
+			cobracompletion.SelectedFactorySignatureRequest,
+		) cobracompletion.SelectedFactorySignatureResult {
+			dynamicCalls++
+			return cobracompletion.SelectedFactorySignatureResult{
+				Completions: []cobra.Completion{"--dynamic-signature"},
+				Directive:   cobra.ShellCompDirectiveNoFileComp,
+			}
+		},
+	}
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "factory-looking positional input",
+			args: []string{"__complete", "run", "--", "--named", "@you/"},
+		},
+		{
+			name: "signature-looking positional input",
+			args: []string{
+				"__complete", "run", "--", "--named", "does-not-exist", "--m",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			commands, err := buildRunServerProductionCommands(
+				&cliGlobalOptions{},
+				&cliDiagnosticsOptions{},
+				&cliOperatorDefaultsOptions{},
+				options,
+			)
+			if err != nil {
+				t.Fatalf("buildRunServerProductionCommands() error = %v", err)
+			}
+			var output bytes.Buffer
+			root := &cobra.Command{Use: "you"}
+			root.SetOut(&output)
+			root.SetErr(io.Discard)
+			root.AddCommand(commands.Run)
+			root.SetArgs(test.args)
+			if err := root.Execute(); err != nil {
+				t.Fatalf("execute Cobra completion protocol: %v", err)
+			}
+			if strings.Contains(output.String(), "dynamic-") ||
+				!strings.Contains(output.String(), ":0") {
+				t.Fatalf("Cobra completion output = %q, want static default", output.String())
+			}
+		})
+	}
+	if dynamicCalls != 0 {
+		t.Fatalf("dynamic completion calls = %d, want zero after terminator", dynamicCalls)
+	}
+}
 
 // Legacy mutable delegates remain test-only while older command tests migrate
 // to CommandFactory. Production command construction has no mutable
@@ -67,6 +275,12 @@ var resumeSession = sessioncli.NewResume(rootTestHTTPProtocol())
 var listSessionDispatches = sessioncli.NewDispatches(rootTestHTTPProtocol())
 var createSession = sessioncli.NewCreate(rootTestHTTPProtocol())
 var deleteSession = sessioncli.NewDelete(rootTestHTTPProtocol())
+var rootTestSessionsCLI = func() sessioncli.Service {
+	return sessioncli.Bind(sessioncli.Operations{
+		List: listSessions, Show: showSession, Pause: pauseSession, Resume: resumeSession,
+		ListDispatches: listSessionDispatches, Create: createSession, Delete: deleteSession,
+	})
+}
 var queryFactory = factorycli.NewQuery(rootTestHTTPProtocol())
 
 type rootTestBatchPreparation struct{}
@@ -137,7 +351,15 @@ func (catalog rootNamedFactoryCatalogFake) ResolveNamedFactoryAcrossRoots(
 	return catalog.resolve(projectRoot, globalRoot, name)
 }
 
-var listFactories = factorycli.NewList(rootNamedFactoryCatalogFake{})
+var listFactories = factorycli.NewList(
+	func(
+		context.Context,
+		interfaces.ListEffectiveFactoriesRequest,
+	) (interfaces.ListEffectiveFactoriesResult, error) {
+		return interfaces.ListEffectiveFactoriesResult{}, nil
+	},
+	func(string) (string, error) { return "", fs.ErrNotExist },
+)
 var validateFactory = func(config factorycli.ValidateConfig) error {
 	return fmt.Errorf("Factory Definition validator is required")
 }
@@ -157,28 +379,9 @@ func (rootModelInvocationOperation) InvokeModel(context.Context, factorysessions
 }
 
 var rootModelsCLI = modelscli.New(rootTestHTTPProtocol(), rootModelInvocationOperation{})
-var listModels = rootModelsCLI.List
-var inspectModel = rootModelsCLI.Inspect
-var invokeModel = rootModelsCLI.Invoke
-var pullModel = rootModelsCLI.Pull
 
-type legacyModelsCLIService struct{}
-
-func (legacyModelsCLIService) List(cfg modelscli.ListConfig) error       { return listModels(cfg) }
-func (legacyModelsCLIService) Inspect(cfg modelscli.InspectConfig) error { return inspectModel(cfg) }
-func (legacyModelsCLIService) Invoke(cfg modelscli.InvokeConfig) error   { return invokeModel(cfg) }
-func (legacyModelsCLIService) Pull(cfg modelscli.PullConfig) error       { return pullModel(cfg) }
-
-func ShowSessionAccessor() func(sessioncli.ShowConfig) error         { return showSession }
-func SetShowSessionAccessor(fn func(sessioncli.ShowConfig) error)    { showSession = fn }
-func ListModelsAccessor() func(modelscli.ListConfig) error           { return listModels }
-func SetListModelsAccessor(fn func(modelscli.ListConfig) error)      { listModels = fn }
-func InspectModelAccessor() func(modelscli.InspectConfig) error      { return inspectModel }
-func SetInspectModelAccessor(fn func(modelscli.InspectConfig) error) { inspectModel = fn }
-func InvokeModelAccessor() func(modelscli.InvokeConfig) error        { return invokeModel }
-func SetInvokeModelAccessor(fn func(modelscli.InvokeConfig) error)   { invokeModel = fn }
-func PullModelAccessor() func(modelscli.PullConfig) error            { return pullModel }
-func SetPullModelAccessor(fn func(modelscli.PullConfig) error)       { pullModel = fn }
+func ShowSessionAccessor() func(sessioncli.ShowConfig) error      { return showSession }
+func SetShowSessionAccessor(fn func(sessioncli.ShowConfig) error) { showSession = fn }
 
 func newLegacyTestRootCommand() *cobra.Command {
 	return newLegacyTestRootCommandWithCatalog(rootNamedFactoryCatalogFake{})
@@ -186,7 +389,7 @@ func newLegacyTestRootCommand() *cobra.Command {
 
 func withTestInjectedPlatformRoles(factory CommandFactory) CommandFactory {
 	if factory.ModelsCLI == nil {
-		factory.ModelsCLI = legacyModelsCLIService{}
+		factory.ModelsCLI = rootModelsCLI
 	}
 	factory.prepareInvocationInput = rootInvocationInputScript{prepare: func(context.Context, work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error) {
 		return work.PreparedInvocationInput{}, nil
@@ -222,6 +425,16 @@ func withTestInjectedPlatformRoles(factory CommandFactory) CommandFactory {
 	}
 	factory.runDirectoryCreator = testRunDirectoryCreator{}
 	factory.browserOpener = func(context.Context, string) error { return nil }
+	if factory.completePackagedFactoryNames == nil {
+		factory.completePackagedFactoryNames = func(context.Context, string) ([]cobra.Completion, cobra.ShellCompDirective) {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+	}
+	if factory.InstallPackagedFactory == nil {
+		factory.InstallPackagedFactory = func(factorydefinitionscli.InstallPackagedFactoryConfig) error {
+			return errors.New("install packaged factory test operation is not configured")
+		}
+	}
 	return factory
 }
 
@@ -303,6 +516,114 @@ func TestResolveRunNamedFactorySelectionForwardsFailureToInjectedCandidatePaths(
 	}
 	if candidateCalls != 1 {
 		t.Fatalf("candidate resolver calls = %d, want 1", candidateCalls)
+	}
+}
+
+func TestRunScopedServerIntentIncludesInvocationAndSiteDashboard(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		cfg           runcli.RunConfig
+		wantDashboard bool
+	}{
+		{
+			name: "positional invocation with API",
+			cfg: runcli.RunConfig{
+				WithServer:               true,
+				Port:                     7437,
+				InvocationPositionalText: new(string),
+			},
+		},
+		{
+			name: "stdin invocation with site",
+			cfg: runcli.RunConfig{
+				WithServer:          true,
+				WithSite:            true,
+				Port:                7437,
+				InvocationStdinText: new(string),
+			},
+			wantDashboard: true,
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			var got startupcli.RunIntent
+			options := CommandFactory{
+				initializer: startupcli.Functions{
+					RunFunc: func(_ context.Context, intent startupcli.RunIntent, _ startupcli.RunSelection) error {
+						got = intent
+						return nil
+					},
+				},
+				openRunSelection: func(runcli.RunConfig) startupcli.RunSelection {
+					return testRunSelection{}
+				},
+			}
+			if err := delegateRunInitialization(t.Context(), test.cfg, false, options); err != nil {
+				t.Fatalf("delegateRunInitialization: %v", err)
+			}
+			if !got.APIEnabled || got.DashboardEnabled != test.wantDashboard {
+				t.Fatalf("RunIntent = %#v, want API=true dashboard=%t", got, test.wantDashboard)
+			}
+		})
+	}
+}
+
+func TestResolveRunNamedFactorySelectionHonorsCancellationWithoutSelection(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		cancelCatalog bool
+	}{
+		{name: "before lookup"},
+		{name: "during catalog lookup", cancelCatalog: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(startupcli.WithWorkingDirectory(context.Background(), "customer-repo"))
+			catalogCalls := 0
+			catalog := rootNamedFactoryCatalogFake{resolve: func(string, string, string) (*interfaces.NamedFactoryResolution, error) {
+				catalogCalls++
+				if test.cancelCatalog {
+					cancel()
+				}
+				return &interfaces.NamedFactoryResolution{FactoryDir: "selected-factory"}, nil
+			}}
+			if !test.cancelCatalog {
+				cancel()
+			}
+			cfg := &runcli.RunConfig{NamedFactoryName: "alpha"}
+
+			err := resolveRunNamedFactorySelection(
+				ctx,
+				cfg,
+				"customer-home",
+				catalog,
+				func(string, string) (interfaces.NamedFactoryRoots, error) {
+					return interfaces.NamedFactoryRoots{Project: "project", Global: "global"}, nil
+				},
+				func(string, string, string) (interfaces.NamedFactoryCandidatePaths, error) {
+					t.Fatal("candidate lookup must not run for a canceled successful catalog lookup")
+					return interfaces.NamedFactoryCandidatePaths{}, nil
+				},
+			)
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("error = %v, want context cancellation", err)
+			}
+			if cfg.Dir != "" || cfg.NamedFactoryResolution != nil {
+				t.Fatalf("canceled lookup returned partial selection: %#v", cfg)
+			}
+			wantCalls := 0
+			if test.cancelCatalog {
+				wantCalls = 1
+			}
+			if catalogCalls != wantCalls {
+				t.Fatalf("catalog calls = %d, want %d", catalogCalls, wantCalls)
+			}
+		})
 	}
 }
 
@@ -409,11 +730,8 @@ func newLegacyTestRootCommandWithCatalogDefaultsAndInvocation(
 	factory := withTestInjectedPlatformRoles(CommandFactory{
 		namedFactoryCatalog: catalog,
 		SubmitWork:          submitWork, SubmitBatch: submitBatch,
-		ListSessions: listSessions, ShowSession: showSession,
-		PauseSession: pauseSession, ResumeSession: resumeSession,
-		ListSessionDispatches: listSessionDispatches,
-		CreateSession:         createSession, DeleteSession: deleteSession,
-		ModelsCLI:            legacyModelsCLIService{},
+		SessionsCLI:          rootTestSessionsCLI(),
+		ModelsCLI:            rootModelsCLI,
 		FlattenFactoryConfig: flattenFactoryConfig,
 		ExpandFactoryConfig:  expandFactoryConfig, InitFactory: initFactory,
 		QueryFactory: queryFactory, ListFactories: listFactories,
@@ -503,7 +821,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestProductionRunSubmitFamilyCutoverEnabled(t *testing.T) {
-	root := (CommandFactory{ModelsCLI: legacyModelsCLIService{}}).NewCommand(nil, nil, nil)
+	root := (CommandFactory{ModelsCLI: rootModelsCLI}).NewCommand(nil, nil, nil)
 	for _, path := range [][]string{{"run"}, {"submit"}, {"submit", "batch"}} {
 		cmd, remaining, err := root.Find(path)
 		if err != nil {
@@ -1935,7 +2253,7 @@ func TestRootCommand_ExplicitEnvironmentIsIsolatedAndFlagsRetainPrecedence(t *te
 	) *cobra.Command {
 		factory := withTestInjectedPlatformRoles(CommandFactory{})
 		factory.resolveOperatorDefaults = expectOperatorDefaultsResolution(t, wantEnvironment, wantFlags, result, nil)
-		return factory.NewCommand(
+		command := factory.NewCommand(
 			func() (string, error) { return homeDir, nil },
 			func(name string) (string, bool) {
 				value, ok := environment[name]
@@ -1947,6 +2265,8 @@ func TestRootCommand_ExplicitEnvironmentIsIsolatedAndFlagsRetainPrecedence(t *te
 				},
 			},
 		)
+		command.SetContext(startupcli.WithWorkingDirectory(t.Context(), t.TempDir()))
+		return command
 	}
 
 	first := newCommand(

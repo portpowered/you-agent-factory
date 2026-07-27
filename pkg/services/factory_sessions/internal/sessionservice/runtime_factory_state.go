@@ -29,7 +29,11 @@ func (fs *SessionRuntime) SubmitWorkRequest(ctx context.Context, request work.Wo
 	var result work.WorkRequestSubmitResult
 	err := fs.sessionState.WithRuntimeRead(func(runtime *factorysessions.LiveRuntime) error {
 		var submitErr error
-		result, submitErr = runtime.Factory.SubmitWorkRequest(ctx, request)
+		legacyRuntime, ok := runtime.Factory.(factory.APIFactory)
+		if !ok {
+			return fmt.Errorf("legacy Factory Runtime submission is required")
+		}
+		result, submitErr = legacyRuntime.SubmitWorkRequest(ctx, request)
 		return submitErr
 	})
 	return result, err
@@ -45,19 +49,11 @@ func (fs *SessionRuntime) SubscribeFactoryEvents(ctx context.Context, reconnect 
 	if runtime == nil {
 		return nil, fmt.Errorf("factory runtime is not available")
 	}
-	return runtime.SubscribeFactoryEvents(ctx, reconnect, scope)
-}
-
-// WaitToComplete returns a channel that is closed when all tokens reach
-// terminal or failed places and no dispatches are in flight. Delegates to
-// the underlying factory's termination signal.
-func (fs *SessionRuntime) WaitToComplete() <-chan struct{} {
-	if runtime := fs.currentRuntimeService(); runtime != nil {
-		return runtime.WaitToComplete()
+	legacyRuntime, ok := runtime.(factory.APIFactory)
+	if !ok {
+		return nil, fmt.Errorf("legacy Factory Runtime event subscription is required")
 	}
-	done := make(chan struct{})
-	close(done)
-	return done
+	return legacyRuntime.SubscribeFactoryEvents(ctx, reconnect, scope)
 }
 
 // GetEngineStateSnapshot returns the factory boundary's aggregate
@@ -70,40 +66,112 @@ func (fs *SessionRuntime) GetEngineStateSnapshot(ctx context.Context) (*interfac
 	if runtime == nil {
 		return nil, fmt.Errorf("factory runtime is not available")
 	}
-	return runtime.GetEngineStateSnapshot(ctx)
+	legacyObservation, err := runtimebinding.LegacyObservationForService(runtime)
+	if err != nil {
+		return nil, err
+	}
+	return legacyObservation.GetEngineStateSnapshot(ctx)
 }
 
-// Pause pauses the current runtime instance.
-func (fs *SessionRuntime) Pause(ctx context.Context) error {
+// ControlPause routes root control to the current replaceable runtime.
+func (fs *SessionRuntime) ControlPause(ctx context.Context, req factory.PauseRequest) (factory.PauseResult, error) {
 	runtime := fs.currentRuntimeService()
 	if runtime == nil {
-		return fmt.Errorf("factory runtime is not available")
+		return factory.PauseResult{}, factory.ErrNotFound
 	}
-	if err := runtime.Pause(ctx); err != nil {
-		return fmt.Errorf("pause factory: %w", err)
-	}
-	return nil
+	return runtime.ControlPause(ctx, req)
 }
 
-// Resume resumes the current runtime instance and wakes buffered work.
-func (fs *SessionRuntime) Resume(ctx context.Context) error {
+// ControlResume routes root control to the current replaceable runtime.
+func (fs *SessionRuntime) ControlResume(ctx context.Context, req factory.ResumeRequest) (factory.ResumeResult, error) {
 	runtime := fs.currentRuntimeService()
 	if runtime == nil {
-		return fmt.Errorf("factory runtime is not available")
+		return factory.ResumeResult{}, factory.ErrNotFound
 	}
-	if err := runtime.Resume(ctx); err != nil {
-		return fmt.Errorf("resume factory: %w", err)
-	}
-	return nil
+	return runtime.ControlResume(ctx, req)
 }
 
-// GetFactoryEvents returns the canonical factory event history.
-func (fs *SessionRuntime) GetFactoryEvents(ctx context.Context) ([]interfaces.FactoryEvent, error) {
+// ControlTerminate routes root control to the current replaceable runtime.
+func (fs *SessionRuntime) ControlTerminate(ctx context.Context, req factory.TerminateRequest) (factory.TerminateResult, error) {
 	runtime := fs.currentRuntimeService()
 	if runtime == nil {
-		return nil, fmt.Errorf("factory runtime is not available")
+		return factory.TerminateResult{}, factory.ErrNotFound
 	}
-	return runtime.GetFactoryEvents(ctx)
+	return runtime.ControlTerminate(ctx, req)
+}
+
+// ControlWaitToComplete returns the current runtime's completion signal.
+func (fs *SessionRuntime) ControlWaitToComplete(req factory.WaitToCompleteRequest) factory.WaitToCompleteResult {
+	runtime := fs.currentRuntimeService()
+	if runtime != nil {
+		return runtime.ControlWaitToComplete(req)
+	}
+	done := make(chan struct{})
+	close(done)
+	return factory.WaitToCompleteResult{Done: done}
+}
+
+// ControlMoveWork routes root work relocation to the current replaceable runtime.
+func (fs *SessionRuntime) ControlMoveWork(ctx context.Context, req factory.MoveWorkRequest) (factory.MoveWorkResult, error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.MoveWorkResult{}, factory.ErrNotFound
+	}
+	return runtime.ControlMoveWork(ctx, req)
+}
+
+// Observe routes root observation to the current replaceable runtime.
+func (fs *SessionRuntime) Observe(ctx context.Context, req factory.ObserveRequest) (factory.ObserveResult, error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.ObserveResult{}, factory.ErrNotFound
+	}
+	return runtime.Observe(ctx, req)
+}
+
+// PlanDispatch routes root dispatch planning to the current replaceable runtime.
+func (fs *SessionRuntime) PlanDispatch(ctx context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.PlanDispatchResult{}, factory.ErrNotFound
+	}
+	return runtime.PlanDispatch(ctx, req)
+}
+
+// AcceptDispatchResult routes correlated worker results to the current runtime.
+func (fs *SessionRuntime) AcceptDispatchResult(ctx context.Context, req factory.AcceptDispatchResultRequest) (factory.AcceptDispatchResultResult, error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.AcceptDispatchResultResult{}, factory.ErrNotFound
+	}
+	return runtime.AcceptDispatchResult(ctx, req)
+}
+
+// CaptureCheckpoint routes checkpoint capture to the current replaceable runtime.
+func (fs *SessionRuntime) CaptureCheckpoint(ctx context.Context, req factory.CaptureCheckpointRequest) (factory.CaptureCheckpointResult, error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.CaptureCheckpointResult{}, factory.ErrNotFound
+	}
+	return runtime.CaptureCheckpoint(ctx, req)
+}
+
+// LoadCheckpoint routes checkpoint loading to the current replaceable runtime.
+func (fs *SessionRuntime) LoadCheckpoint(ctx context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.LoadCheckpointResult{}, factory.ErrNotFound
+	}
+	return runtime.LoadCheckpoint(ctx, req)
+}
+
+// RestoreCheckpoint routes checkpoint restoration to the current replaceable runtime.
+func (fs *SessionRuntime) RestoreCheckpoint(ctx context.Context, req factory.RestoreCheckpointRequest) (factory.RestoreCheckpointResult, error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.RestoreCheckpointResult{}, factory.ErrNotFound
+	}
+	return runtime.RestoreCheckpoint(ctx, req)
 }
 
 func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {
@@ -123,7 +191,11 @@ func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {
 	if target == nil {
 		return fmt.Errorf("factory runtime is not available")
 	}
-	if _, err := target.SubmitWorkRequest(ctx, request); err != nil {
+	legacyRuntime, ok := target.(factory.APIFactory)
+	if !ok {
+		return fmt.Errorf("legacy Factory Runtime submission is required")
+	}
+	if _, err := legacyRuntime.SubmitWorkRequest(ctx, request); err != nil {
 		return fmt.Errorf("submit initial work: %w", err)
 	}
 	fs.logger.Info("submitted initial work", zap.String("file", workFile))

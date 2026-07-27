@@ -58,11 +58,15 @@ var forbiddenProviderImplementationImports = []string{
 // subpackage is an implementation or composition seam and must stay behind the
 // root-built process harness. Keep this set aligned with the package-boundary
 // policy's publicExternalEffectContractImports.
+//
+// Providers Execution leaf is the durable provider-effect owner; Workers
+// inferencecontract remains migration debt until later Providers packets land.
 var providerPublicEffectContractImports = map[string]struct{}{
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty":                       {},
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":   {},
-	"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic":        {},
-	"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear": {},
+	"github.com/portpowered/infinite-you/pkg/services/providers/execution/inferencecontract": {},
+	"github.com/portpowered/infinite-you/pkg/services/workers/agypty":                        {},
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":    {},
+	"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic":         {},
+	"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear":  {},
 }
 
 var forbiddenCompositionCalls = map[string]struct{}{
@@ -100,15 +104,10 @@ var grandfatheredAggregateProviderTestFiles = map[string]struct{}{
 	"cli_timeout_cleanup_process_windows_test.go":        {},
 	"cli_timeout_cleanup_smoke_test.go":                  {},
 	"cli_timeout_companion_smoke_long_test.go":           {},
-	"cli_worktree_passthrough_test.go":                   {},
-	"codex_content_test.go":                              {},
-	"codex_worktree_workstation_test.go":                 {},
-	"cursor_provider_command_test.go":                    {},
 	"helpers_long_test.go":                               {},
 	"helpers_test.go":                                    {},
-	"mock_workers_agent_test.go":                         {},
-	"mock_workers_cli_http_stability_smoke_long_test.go": {},
-	"mock_workers_end_to_end_smoke_test.go":              {},
+	"mock_workers_agent_test.go":            {},
+	"mock_workers_end_to_end_smoke_test.go": {},
 	"mock_workers_script_test.go":                        {},
 	"mock_workers_service_runner_test.go":                {},
 	"packaged_script_runtime_test.go":                    {},

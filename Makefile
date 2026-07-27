@@ -4,7 +4,11 @@ BIN_DIR     := bin
 GO          ?= go
 INSTALL_DIR := $(or $(GOBIN),$(shell $(GO) env GOPATH)/bin)
 NPM         ?= npm
+ifeq ($(OS),Windows_NT)
+BUN_BIN     := $(shell where.exe bun >NUL 2>NUL && echo bun)
+else
 BUN_BIN     := $(shell command -v bun 2>/dev/null)
+endif
 BUN_INSTALL := $(BUN_BIN) install --frozen-lockfile
 BUN_PACKAGE_DIRS := ui/packages/components ui
 UI_SCRIPT   := $(if $(BUN_BIN),$(BUN_BIN) run,$(NPM) run)
@@ -19,7 +23,7 @@ STRESS_DEFAULT_PACKAGES := ./tests/stress/...
 RELEASE_DEFAULT_PACKAGES := ./tests/release/...
 MODEL_LONG_TEST_TIMEOUT ?= 20m
 PR_INFERENCE_APPROVAL_REGRESSION ?= TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio
-SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST := TestIntegrationSmoke_ScriptTimeoutCompanionRequeuesBeforeLaterCompletion
+SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST := TestProviderCancellationTerminatesCompanionProcesses
 SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT ?= 100
 SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT ?= 120s
 CRON_TIME_WORK_SMOKE_TEST := TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetriesDispatchesAndFiltersViews
@@ -68,6 +72,11 @@ GO_UNIT_COVERAGE_MANIFEST ?= docs/internal/baselines/go-unit-coverage-package-mi
 GO_FUNCTIONAL_COVERAGE_MANIFEST ?= docs/internal/baselines/go-functional-coverage-package-minimums.json
 GO_UNIT_COVERAGE_PROFILE ?=
 GO_FUNCTIONAL_COVERAGE_PROFILE ?=
+GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT ?=
+FUNCTIONAL_TEST_VIZ_DIR ?= .artifacts/functional-test-viz
+FUNCTIONAL_TEST_VIZ_PROFILE ?= $(FUNCTIONAL_TEST_VIZ_DIR)/coverage.out
+FUNCTIONAL_TEST_VIZ_JSON ?= $(FUNCTIONAL_TEST_VIZ_DIR)/coverage-summary.json
+FUNCTIONAL_TEST_VIZ_MARKDOWN ?= $(FUNCTIONAL_TEST_VIZ_DIR)/functional-tests.md
 BACKEND_SIZE_ROOT ?= .
 PACKAGE_MAINT_ROOT ?= .
 PACKAGE_FILE_COUNT_ROOT ?= .
@@ -78,12 +87,19 @@ BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependen
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
 COMPATIBILITY_ALIAS_CHECK_ROOT ?= .
 RETIRED_SURFACE_CHECK_ROOT ?= .
-LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure packaged-factory-source-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check deadcode
+LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure package-target-manifest-check packaged-factory-source-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode
 
 define run_verification_step
 	@printf '%s\n' "==> $(2) [make $(1)]"
 	@$(MAKE) $(1) || { status=$$?; printf '%s\n' "FAIL: $(2) [make $(1)] failed. Rerun with: make $(1)"; exit $$status; }
 endef
+
+ifeq ($(OS),Windows_NT)
+define run_verification_step
+	@echo Running $(2) [make $(1)]
+	@$(MAKE) $(1) || (echo FAIL: $(2) [make $(1)] failed. Rerun with: make $(1) & exit /b 1)
+endef
+endif
 
 define run_timed_step
 	@start=$$(date +%s); \
@@ -103,35 +119,37 @@ endef
 .PHONY: fmt vet deps deps-tidy clean init typecheck release lint
 
 .PHONY: test test-full test-unit test-unit-fresh test-lane-audit test-maintenance test-integration test-contract test-stress test-release
-.PHONY: test-functional test-functional-long test-backend-functional functional-boundary-check
-.PHONY: test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend
+.PHONY: test-functional test-functional-long test-backend-functional functional-boundary-check functional-test-viz
+.PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
 .PHONY: test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
 
 .PHONY: verify-fast verify-pr verify-pr-inference verify-extended verify-build verify-lint verify-api
-.PHONY: verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage
+.PHONY: verify-build-contracts verify-tests run-concurrent-ui-verification-lanes verify test-ui-coverage
 
 .PHONY: backend-dependency-graph
 
 .PHONY: generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire
 
-.PHONY: wire-smoke api-smoke api-package-pack-smoke packaged-factory-package-smoke packaged-factory-package-script-test packaged-factory-package-pack-check packaged-factory-package-candidate-dry-run packaged-factory-package-consumer-smoke model-provider-package-smoke model-provider-reference-input-smoke
+.PHONY: wire-smoke api-smoke api-package-pack-smoke api-package-verify packaged-factory-package-smoke packaged-factory-package-verify packaged-factory-package-script-test packaged-factory-package-pack-check packaged-factory-package-candidate-dry-run packaged-factory-package-consumer-smoke model-provider-package-smoke model-provider-package-verify model-provider-reference-input-smoke
+.PHONY: public-release-package-smoke
 .PHONY: contracts-validate contracts-generate contracts-check contracts-smoke
 
 .PHONY: cli-contract-smoke cli-manifest-generate cli-manifest-check
+.PHONY: fnd-12-behavior-baselines fnd-12-cli-behavior-baselines fnd-12-http-behavior-baselines fnd-12-mcp-behavior-baselines fnd-12-replay-behavior-baselines fnd-12-visualization-behavior-baselines
 
 .PHONY: mcp-contract-check mcp-contract-smoke mcp-discovery-generate mcp-discovery-check
 
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure packaged-factory-source-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check logging-boundary-check
+.PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure package-target-manifest-check packaged-factory-source-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check logging-boundary-check ownership-inventory-check
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
 .PHONY: compatibility-alias-check retired-surface-check readme-check deadcode dashboard-verify
 
 .PHONY: ci ci-typecheck ci-verify-build-contracts ci-verify-tests
 
-.PHONY: ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright
+.PHONY: ui-deps ui-lint ui-build ui-test ui-performance-test ui-integration-test ui-storybook-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright
 .PHONY: ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install
 .PHONY: ui-public-package-release ui-public-package-publish-prepare
 .PHONY: ui-storybook  ui-deadcode
@@ -139,6 +157,8 @@ endef
 
 default:
 	$(MAKE) generate-api
+	$(MAKE) ui-deps
+	$(MAKE) ui-build
 	$(MAKE) build
 	$(MAKE) test
 	$(MAKE) lint
@@ -184,9 +204,13 @@ api-smoke:
 	$(MAKE) provider-parity-smoke
 
 api-package-pack-smoke:
-	node --test scripts/api-package-contract.test.mjs scripts/api-package-pack.test.mjs scripts/api-package-candidate.test.mjs scripts/api-package-registry.test.mjs scripts/api-package-consumer.test.mjs scripts/api-package-pr-dry-run.test.mjs scripts/api-package-publish.test.mjs scripts/api-package-development-workflow.test.mjs
+	node --test scripts/package-export-validation.test.mjs scripts/api-package-contract.test.mjs scripts/api-package-pack.test.mjs scripts/api-package-candidate.test.mjs scripts/api-package-registry.test.mjs scripts/api-package-consumer.test.mjs scripts/api-package-pr-dry-run.test.mjs scripts/api-package-publish.test.mjs scripts/api-package-development-workflow.test.mjs
+
+api-package-verify: api-package-pack-smoke
 
 packaged-factory-package-smoke: packaged-factory-catalog-check packaged-factory-package-script-test
+
+packaged-factory-package-verify: packaged-factory-package-smoke
 
 packaged-factory-package-script-test:
 	node --test scripts/packaged-factories-package-pack.test.mjs scripts/packaged-factories-package-candidate.test.mjs scripts/packaged-factories-package-consumer.test.mjs scripts/packaged-factories-package-pr-dry-run.test.mjs scripts/packaged-factories-package-registry.test.mjs scripts/packaged-factories-package-publish.test.mjs scripts/packaged-factories-package-development-command.test.mjs
@@ -201,9 +225,14 @@ packaged-factory-package-candidate-dry-run: packaged-factory-catalog-check
 
 packaged-factory-package-consumer-smoke: packaged-factory-package-candidate-dry-run
 
+public-release-package-smoke:
+	node --test scripts/public-package-set.test.mjs scripts/public-release-package-publish.test.mjs scripts/public-release-package-candidate.test.mjs
+
 model-provider-package-smoke:
 	node --test scripts/model-provider-package.test.mjs
 	node scripts/model-provider-package.mjs smoke
+
+model-provider-package-verify: model-provider-package-smoke
 
 model-provider-reference-input-smoke:
 	cd ui && $(UI_SCRIPT) test:model-provider-reference-input
@@ -255,6 +284,36 @@ cli-contract-smoke:
 	$(GO) run ./cmd/clicontractsmoke -root .
 	$(GO) test ./cmd/clicontractsmoke ./pkg/transports/cli/clicontract -count=1 -timeout $(GO_TEST_TIMEOUT)
 
+# FND-12 captured public behavior baselines (see
+# docs/internal/baselines/fnd-12-public-behavior-baseline-suite-map.md).
+# Aggregator runs all five surface pairs; does not migrate packages or refresh
+# PR #1262 CLI-manifest baselines. Pair with `make verify-fast` and `make lint`.
+fnd-12-behavior-baselines:
+	$(MAKE) fnd-12-cli-behavior-baselines
+	$(MAKE) fnd-12-http-behavior-baselines
+	$(MAKE) fnd-12-mcp-behavior-baselines
+	$(MAKE) fnd-12-replay-behavior-baselines
+	$(MAKE) fnd-12-visualization-behavior-baselines
+
+# FND-12 captured public CLI success + typed-failure pair.
+# Does not refresh or re-own PR #1262 CLI-manifest baselines.
+fnd-12-cli-behavior-baselines:
+	$(GO) test ./pkg/transports/cli/baseline -run '^Test(RootHelpBaseline_MatchesFixture|FailureBaseline_QuietInvalidTopologyWritesStructuredInvocationFailure)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+fnd-12-http-behavior-baselines:
+	$(GO) test ./tests/functional/runtime_api -run '^TestGeneratedAPIIntegrationSmoke_(OpenAPIGeneratedServerAndLiveRuntimeStayAligned|SubmitWorkItemsRejectEmptyStructuredSubmission)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+fnd-12-mcp-behavior-baselines:
+	$(GO) test ./pkg/transports/mcp/server -run '^Test(ServeStdioUsesSDKProtocolAndRegistersCatalog|SDKProtocolErrors)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+# FND-12 captured public replay success + typed-failure pair.
+fnd-12-replay-behavior-baselines:
+	$(GO) test ./pkg/services/recordings/replay -run '^TestSideEffects_(InferReturnsRecordedProviderResponse|UnmatchedRequestFailsClearly)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+# FND-12 captured visualization activation success + typed-failure pair.
+fnd-12-visualization-behavior-baselines:
+	$(GO) test ./pkg/services/factory_visualization -run '^Test(ServiceProjectsRetainedAndLiveFactoryEvents|NewRejectsMissingDependencies)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+
 docs-reference-check:
 	$(GO) run ./cmd/markdown-linter docs/README.md docs/reference
 
@@ -304,6 +363,28 @@ test-functional:
 functional-boundary-check:
 	$(GO) run ./cmd/functionalboundarycheck
 
+# functional-test-viz runs the boundary check, then the required short functional
+# coverage lane exactly once (profile + gocoveragecheck -json-output), then the
+# FND-004 Markdown catalog generator. Artifacts land under
+# .artifacts/functional-test-viz/.
+#
+# Fail-closed composition: each recipe line must succeed before the next runs.
+# Boundary, suite, coverage-floor, metadata/inventory, or Markdown rendering
+# failures exit non-zero. The target never deletes the artifact root on failure,
+# so already-written diagnostics (for example coverage.out / coverage-summary.json
+# after a floor fail, or those files before a render fail) remain inspectable.
+# gocoveragecheck writes -json-output after a completed measurement even when a
+# floor fails; Make then stops before Markdown so the failure stays non-zero.
+functional-test-viz:
+	$(MAKE) functional-boundary-check
+	@mkdir -p $(FUNCTIONAL_TEST_VIZ_DIR)
+	GO_FUNCTIONAL_COVERAGE_PROFILE=$(FUNCTIONAL_TEST_VIZ_PROFILE) \
+		GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT=$(FUNCTIONAL_TEST_VIZ_JSON) \
+		$(MAKE) test-functional-coverage
+	$(GO) run ./cmd/functionaltestviz \
+		-coverage-summary $(FUNCTIONAL_TEST_VIZ_JSON) \
+		-output $(FUNCTIONAL_TEST_VIZ_MARKDOWN)
+
 test-stress:
 	$(GO) test -short $(STRESS_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
@@ -344,17 +425,19 @@ verify-extended:
 
 test-ui-coverage:
 	$(MAKE) ui-test-coverage
-	@if [ -z "$$UI_COVERAGE_SHARD" ] && [ -z "$$UI_COVERAGE_MERGE" ]; then $(MAKE) ui-replay-coverage-check; fi
-
-test-ui-coverage-merge:
-	$(MAKE) ui-test-coverage-merge
 	$(MAKE) ui-replay-coverage-check
 
 test-ui-browser-integration:
 	$(MAKE) ui-integration-test
 
+test-ui-storybook-integration:
+	$(MAKE) ui-storybook-integration-test
+
 test-ui-durable-session-real-backend:
 	$(MAKE) ui-durable-session-real-backend-integration-test
+
+test-ui-performance:
+	$(MAKE) ui-performance-test
 
 test-backend-coverage:
 	$(MAKE) test-unit-coverage
@@ -367,12 +450,13 @@ test-backend-functional:
 	$(MAKE) test-functional-coverage
 
 long-tests:
-	$(info Running opt-in long and specialty suites: managed runtime coverage + real local inference coverage)
+	$(info Running opt-in long and specialty suites: UI performance + managed runtime coverage + real local inference coverage)
+	$(call run_verification_step,test-ui-performance,UI Performance specialty lane)
 	$(call run_verification_step,long-tests-managed-runtime,Managed Runtime specialty lane)
 	$(call run_verification_step,long-tests-functional-runtime,Real Local Inference specialty lane)
 
 long-tests-managed-runtime:
-	$(GO) test ./pkg/services/models/local -run '^TestOmniVoiceLocalRuntime_' -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./pkg/services/models/internal/local -run '^TestOmniVoiceLocalRuntime_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 pr-inference-approval:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/runtime_api -run '$(PR_INFERENCE_APPROVAL_REGRESSION)' -count=1 -timeout $(MODEL_LONG_TEST_TIMEOUT)
@@ -387,11 +471,16 @@ test-coverage-go:
 test-unit-coverage:
 	$(GO) run ./cmd/gocoveragecheck -suite unit -min $(GO_UNIT_COVERAGE_MIN) -package-manifest $(GO_UNIT_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_UNIT_COVERAGE_PROFILE),-profile $(GO_UNIT_COVERAGE_PROFILE),)
 
+# test-functional-coverage always runs functional-boundary-check first so the
+# required CI Backend Functional Coverage lane (and any local/alias caller of
+# this target) cannot succeed without a successful boundary check. Boundary
+# failures exit non-zero before gocoveragecheck starts.
 test-functional-coverage:
-	$(GO) run ./cmd/gocoveragecheck -suite functional -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),)
+	$(MAKE) functional-boundary-check
+	$(GO) run ./cmd/gocoveragecheck -suite functional -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),)
 
 script-timeout-companion-smoke-100:
-	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/providers -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)
+	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/inference -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)
 
 cron-time-work-smoke:
 	$(GO) test ./tests/functional/runtime_api -run $(CRON_TIME_WORK_SMOKE_TEST) -count=$(CRON_TIME_WORK_SMOKE_COUNT) -timeout $(CRON_TIME_WORK_SMOKE_TIMEOUT)
@@ -445,6 +534,9 @@ pkg-boundary:
 pkg-structure:
 	$(GO) run ./cmd/pkgstructurecheck -root $(PACKAGE_STRUCTURE_ROOT)
 
+package-target-manifest-check:
+	$(GO) run ./cmd/packagetargetmanifestcheck -root .
+
 packaged-factory-source-check:
 	$(GO) run ./cmd/packagedfactorysourcecheck -root .
 
@@ -468,6 +560,9 @@ model-provider-package-check:
 
 ownership-boundary-check:
 	$(GO) run ./cmd/ownershipboundarycheck
+
+ownership-inventory-check:
+	$(GO) run ./cmd/ownershipinventorycheck
 
 durable-runtime-construction-check:
 	$(GO) run ./cmd/durableruntimeconstructioncheck -root .
@@ -510,20 +605,19 @@ verify-build-contracts:
 	$(MAKE) verify-lint
 	$(MAKE) verify-api
 
-run-sharded-ui-coverage:
-	./scripts/ci/run-sharded-ui-coverage.sh
-
 run-concurrent-ui-verification-lanes:
 	./scripts/ci/run-concurrent-ui-verification-lanes.sh
 
 verify-tests:
-	$(info Running required CI-equivalent test lanes: maintenance + integration + contract + release surface + built-CLI S24 acceptance + concurrent UI coverage/browser integration + independent backend unit and functional coverage)
+	$(info Running required CI-equivalent test lanes: maintenance + integration + contract + release surface + built-CLI S24 acceptance + concurrent UI coverage/browser integration + Storybook + UI backend integration + independent backend unit and functional coverage)
 	$(call run_verification_step,test-maintenance,Backend Maintenance lane)
 	$(call run_verification_step,test-integration,Backend Integration lane)
 	$(call run_verification_step,test-contract,Backend Contract lane)
 	$(call run_verification_step,release-surface-smoke,Release surface smoke lane)
 	$(call run_verification_step,test-built-cli-acceptance,Built-CLI S24 acceptance lane)
 	$(call run_verification_step,run-concurrent-ui-verification-lanes,Concurrent UI Coverage + UI Browser Integration lanes)
+	$(call run_verification_step,test-ui-storybook-integration,UI Storybook Integration lane)
+	$(call run_verification_step,test-ui-durable-session-real-backend,UI Backend Integration lane)
 	$(call run_verification_step,test-unit-coverage,Backend Unit Coverage lane)
 	$(call run_verification_step,test-functional-coverage,Backend Functional Coverage lane)
 
@@ -572,7 +666,6 @@ release-surface-smoke:
 
 ui-deps:
 	cd ui && $(UI_INSTALL)
-	cd ui && $(UI_SCRIPT) prepare:packaged-factories
 
 ui-verify-fresh-npm-install:
 	cd ui && $(NPM) run verify:fresh-npm-install
@@ -610,7 +703,7 @@ endif
 
 ui-build:
 ifeq ($(BUN_BIN),)
-	cd ui && $(NPM) exec tsc -b && $(NPM) exec vite build && node scripts/normalize-dist-output.mjs
+	cd ui && $(NPM) run build
 else
 	cd ui && $(UI_SCRIPT) build
 endif
@@ -618,12 +711,20 @@ endif
 ui-test:
 	cd ui && $(UI_SCRIPT) test:unit
 
+ui-component-test:
+	cd ui && $(UI_SCRIPT) test:component
+
+ui-performance-test:
+	cd ui && $(UI_SCRIPT) test:performance
+
 ui-integration-test:
 ifeq ($(BUN_BIN),)
 	cd ui && $(NPM) run test:integration
 else
 	cd ui && $(UI_SCRIPT) test:integration
 endif
+
+ui-storybook-integration-test:
 	$(MAKE) ui-storybook
 	$(MAKE) ui-test-storybook-browser-checks
 
@@ -636,9 +737,6 @@ endif
 
 ui-test-coverage:
 	cd ui && $(UI_SCRIPT) test:coverage
-
-ui-test-coverage-merge:
-	cd ui && UI_COVERAGE_MERGE=1 $(UI_SCRIPT) test:coverage
 
 ui-replay-coverage-check:
 ifeq ($(BUN_BIN),)

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
@@ -91,7 +92,8 @@ func (service *Service) OpenApplication(
 	if service == nil || service.resolveInputs == nil || service.openRuntime == nil || service.adaptRuntime == nil || service.planLifecycle == nil {
 		return roles.OpenedProcessApplication{}, errors.New("open Factory Session application: service is required")
 	}
-	inputs, err := service.resolveInputs(ctx, request.Runtime, request.Ports, logger)
+	ports, completion := gateCompletionOnRuntimeHost(request.Ports, request.Completion)
+	inputs, err := service.resolveInputs(ctx, request.Runtime, ports, logger)
 	if err != nil {
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application: %w", err)
 	}
@@ -110,6 +112,7 @@ func (service *Service) OpenApplication(
 		Runtime:    opened.Process,
 		Components: components,
 		Close:      opened.Resources.Close,
+		Completion: completion,
 	})
 	if err != nil {
 		err = closeOpenedRuntime(opened, err)
@@ -119,6 +122,34 @@ func (service *Service) OpenApplication(
 		Plan:        plan,
 		Diagnostics: opened.Resources.Diagnostics,
 	}, nil
+}
+
+func gateCompletionOnRuntimeHost(
+	ports roles.ApplicationOpeningPorts,
+	completion func(context.Context) error,
+) (roles.ApplicationOpeningPorts, func(context.Context) error) {
+	if completion == nil {
+		return ports, nil
+	}
+	ready := make(chan struct{})
+	observer := ports.RuntimeHostObserver
+	var publish sync.Once
+	ports.RuntimeHostObserver = func(binding factorysessions.RuntimeHostBinding) {
+		publish.Do(func() {
+			if observer != nil {
+				observer(binding)
+			}
+			close(ready)
+		})
+	}
+	return ports, func(ctx context.Context) error {
+		select {
+		case <-ready:
+			return completion(ctx)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 func closeOpenedRuntime(opened roles.OpenedApplicationRuntime, cause error) error {

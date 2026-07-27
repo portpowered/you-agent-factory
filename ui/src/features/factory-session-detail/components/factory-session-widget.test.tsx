@@ -1,3 +1,5 @@
+import "../../../testing/vitest-dom-capabilities.setup";
+
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

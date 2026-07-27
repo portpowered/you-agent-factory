@@ -861,67 +861,6 @@ func TestInferenceProgressPublishingCommandRunner_PublishesOrderedFragments(t *t
 	}
 }
 
-func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndLaterValidEventsInOrder(t *testing.T) {
-	scriptDir := t.TempDir()
-	scriptPath := filepath.Join(scriptDir, string(modelprovider.ProviderCursor))
-	writeProviderOutputFixture(t, scriptPath, []byte(
-		"{not json}\n"+
-			"{\"type\":\"mystery\"}\n"+
-			"{\"type\":\"assistant\",\"timestamp_ms\":1,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Plan \"}]},\"session_id\":\"cursor-session-123\"}\n"+
-			"{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"Plan done\",\"session_id\":\"cursor-session-123\"}\n",
-	), nil, 0)
-	t.Setenv("PATH", scriptDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	var publishedMu sync.Mutex
-	var published []InferenceProgressFragment
-	runner := NewInferenceProgressPublishingCommandRunnerWithRunner(testProviderExecRunner(t), func(fragment InferenceProgressFragment) {
-		publishedMu.Lock()
-		published = append(published, fragment)
-		publishedMu.Unlock()
-	}, nil)
-
-	result, err := runner.Run(context.Background(), CommandRequest{
-		Command:    string(modelprovider.ProviderCursor),
-		DispatchID: "dispatch-stream-cursor",
-	})
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-
-	publishedMu.Lock()
-	defer publishedMu.Unlock()
-	if len(published) != 4 {
-		t.Fatalf("published fragments = %#v, want 4 ordered fragments; result=%#v", published, result)
-	}
-	var diagnostics []InferenceProgressFragment
-	var drafts []factorysessions.ResponseEventDraft
-	for _, fragment := range published {
-		if fragment.CanonicalDraft == nil {
-			diagnostics = append(diagnostics, fragment)
-			continue
-		}
-		draft, ok := fragment.CanonicalDraft.(factorysessions.ResponseEventDraft)
-		if !ok {
-			t.Fatalf("canonical draft type = %T, want factorysessions.ResponseEventDraft", fragment.CanonicalDraft)
-		}
-		drafts = append(drafts, draft)
-	}
-	if len(diagnostics) != 2 || len(drafts) != 2 {
-		t.Fatalf("published fragments = %#v, want two diagnostics and two structured drafts", published)
-	}
-	assertInferenceProgressFragment(t, diagnostics[0], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored a malformed JSON record", nil)
-	assertInferenceProgressFragment(t, diagnostics[1], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored an unknown record type", nil)
-	for index, wantPhase := range []factorysessions.ResponseEventPhase{factorysessions.ResponseEventPhaseDelta, factorysessions.ResponseEventPhaseCompleted} {
-		draft := drafts[index]
-		if draft.Kind != factorysessions.ResponseEventKindMessage || draft.Phase != wantPhase || draft.DispatchID != "dispatch-stream-cursor" {
-			t.Fatalf("drafts[%d] = %#v, want MESSAGE/%s for dispatch", index, draft, wantPhase)
-		}
-		if draft.ProviderSessionRef != "cursor-session-123" || draft.Provenance.Provider != "cursor" {
-			t.Fatalf("drafts[%d] correlation = %#v, want Cursor session", index, draft)
-		}
-	}
-}
-
 func TestInferenceProgressPublishingCommandRunner_WithoutPublisherPreservesExecBehavior(t *testing.T) {
 	t.Parallel()
 	scriptPath := writeProviderOutputFixture(t, filepath.Join(t.TempDir(), "nostream"), []byte("stdout-fallback\n"), []byte("stderr-fallback\n"), 7)
@@ -951,38 +890,6 @@ func TestInferenceProgressPublishingCommandRunner_WithoutPublisherPreservesExecB
 	}
 	if !strings.Contains(string(result.Stderr), "stderr-fallback") {
 		t.Fatalf("stderr = %q, want stderr-fallback", result.Stderr)
-	}
-}
-
-func assertInferenceProgressFragment(
-	t *testing.T,
-	fragment InferenceProgressFragment,
-	wantDispatchID string,
-	wantKind string,
-	wantPayload string,
-	wantSession *workerexecution.ProviderSessionMetadata,
-) {
-	t.Helper()
-	if fragment.DispatchID != wantDispatchID {
-		t.Fatalf("dispatch = %q, want %q", fragment.DispatchID, wantDispatchID)
-	}
-	if fragment.Kind != wantKind {
-		t.Fatalf("kind = %q, want %q", fragment.Kind, wantKind)
-	}
-	if fragment.Payload != wantPayload {
-		t.Fatalf("payload = %q, want %q", fragment.Payload, wantPayload)
-	}
-	if wantSession == nil {
-		if fragment.ProviderSessionRef != nil {
-			t.Fatalf("provider session = %#v, want nil", fragment.ProviderSessionRef)
-		}
-		return
-	}
-	if fragment.ProviderSessionRef == nil {
-		t.Fatal("provider session = nil, want canonical session")
-	}
-	if *fragment.ProviderSessionRef != *wantSession {
-		t.Fatalf("provider session = %#v, want %#v", fragment.ProviderSessionRef, wantSession)
 	}
 }
 

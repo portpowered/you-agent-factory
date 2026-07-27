@@ -17,19 +17,28 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(dirname, "..");
 const originalArtifactDirectory =
   process.env.AGENT_FACTORY_BROWSER_ARTIFACT_DIR;
+const originalArtifactWorkerIsolation =
+  process.env.AGENT_FACTORY_BROWSER_ARTIFACT_WORKER_ISOLATION;
 
 afterEach(() => {
   if (originalArtifactDirectory === undefined) {
     delete process.env.AGENT_FACTORY_BROWSER_ARTIFACT_DIR;
-    return;
+  } else {
+    process.env.AGENT_FACTORY_BROWSER_ARTIFACT_DIR = originalArtifactDirectory;
   }
-  process.env.AGENT_FACTORY_BROWSER_ARTIFACT_DIR = originalArtifactDirectory;
+  if (originalArtifactWorkerIsolation === undefined) {
+    delete process.env.AGENT_FACTORY_BROWSER_ARTIFACT_WORKER_ISOLATION;
+  } else {
+    process.env.AGENT_FACTORY_BROWSER_ARTIFACT_WORKER_ISOLATION =
+      originalArtifactWorkerIsolation;
+  }
 });
 
 describe("browser artifact directory", () => {
   it("resolves workflow-provided repo artifact paths from the UI package root", () => {
     process.env.AGENT_FACTORY_BROWSER_ARTIFACT_DIR =
       "../.artifacts/ui-browser-integration/browser";
+    process.env.AGENT_FACTORY_BROWSER_ARTIFACT_WORKER_ISOLATION = "false";
 
     expect(browserArtifactDirectory()).toBe(
       path.resolve(
@@ -42,11 +51,34 @@ describe("browser artifact directory", () => {
     );
   });
 
+  it("isolates workflow artifacts by Vitest worker", () => {
+    process.env.AGENT_FACTORY_BROWSER_ARTIFACT_DIR =
+      "../.artifacts/ui-browser-integration/browser";
+    process.env.AGENT_FACTORY_BROWSER_ARTIFACT_WORKER_ISOLATION = "true";
+    const workerID =
+      process.env.VITEST_POOL_ID ??
+      process.env.VITEST_WORKER_ID ??
+      String(process.pid);
+
+    expect(browserArtifactDirectory()).toBe(
+      path.resolve(
+        packageRoot,
+        "..",
+        ".artifacts",
+        "ui-browser-integration",
+        "browser",
+        `worker-${workerID}`,
+      ),
+    );
+  });
+
   it("emits only bounded diagnostic counts in bounded artifact mode", async () => {
     const artifactDirectory = await mkdtemp(
       path.join(os.tmpdir(), "you-browser-artifacts-"),
     );
     process.env.AGENT_FACTORY_BROWSER_ARTIFACT_DIR = artifactDirectory;
+    process.env.AGENT_FACTORY_BROWSER_ARTIFACT_WORKER_ISOLATION = "true";
+    const isolatedArtifactDirectory = browserArtifactDirectory();
     let browserPage = null;
 
     try {
@@ -69,11 +101,14 @@ describe("browser artifact directory", () => {
       await browserPage.close();
       browserPage = null;
 
-      expect(await readdir(artifactDirectory)).toEqual([
+      expect(await readdir(isolatedArtifactDirectory)).toEqual([
         "bounded-artifacts.diagnostics.json",
       ]);
       const diagnostics = await readFile(
-        path.join(artifactDirectory, "bounded-artifacts.diagnostics.json"),
+        path.join(
+          isolatedArtifactDirectory,
+          "bounded-artifacts.diagnostics.json",
+        ),
         "utf8",
       );
       expect(diagnostics).not.toContain("sensitive-payload");

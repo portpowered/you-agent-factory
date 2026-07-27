@@ -1,14 +1,214 @@
 package run
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestResolveFactoryInvocationInputSchemaNamedAndFileSelectionsAreEquivalent(t *testing.T) {
+	t.Parallel()
+
+	fixtureSignature := interfaces.InvocationSignatureConfig{
+		Parameters: []interfaces.InvocationParameterConfig{{
+			Name:         "query",
+			ExternalName: "search",
+			Aliases:      []string{"q"},
+			DefaultValue: "all",
+			Bindings: []interfaces.InvocationParameterBindingConfig{{
+				Kind: work.InvocationParameterBindingKindNamed,
+			}},
+		}},
+	}
+	namedPath := filepath.Join("project", "factory", "named-fixture", interfaces.FactoryConfigFile)
+	filePath := filepath.Join("fixtures", "portable-factory.yaml")
+	selectedConfigs := map[string]*interfaces.FactoryConfig{
+		namedPath: {
+			Name:                "named-catalog-identity",
+			InvocationSignature: cloneInvocationSignatureFixture(fixtureSignature),
+		},
+		filePath: {
+			Name:                "portable-file-identity",
+			InvocationSignature: cloneInvocationSignatureFixture(fixtureSignature),
+		},
+	}
+	expectedNamed := interfaces.FactoryConfig{
+		Name:                selectedConfigs[namedPath].Name,
+		InvocationSignature: cloneInvocationSignatureFixture(*selectedConfigs[namedPath].InvocationSignature),
+	}
+	expectedFile := interfaces.FactoryConfig{
+		Name:                selectedConfigs[filePath].Name,
+		InvocationSignature: cloneInvocationSignatureFixture(*selectedConfigs[filePath].InvocationSignature),
+	}
+	loadedPaths := make([]string, 0, 2)
+	load := interfaces.FactoryConfigFileLoader(func(path string) (*interfaces.FactoryConfig, error) {
+		loadedPaths = append(loadedPaths, path)
+		return selectedConfigs[path], nil
+	})
+
+	manifest := runSchemaFixtureManifest()
+	named, namedDiagnostics, err := ResolveFactoryInvocationInputSchema(
+		context.Background(), manifest, "you.run", load, namedPath,
+	)
+	if err != nil {
+		t.Fatalf("named selection: %v", err)
+	}
+	file, fileDiagnostics, err := ResolveFactoryInvocationInputSchema(
+		context.Background(), manifest, "you.run", load, filePath,
+	)
+	if err != nil {
+		t.Fatalf("file selection: %v", err)
+	}
+	if !reflect.DeepEqual(named, file) || !reflect.DeepEqual(namedDiagnostics, fileDiagnostics) {
+		t.Fatalf("equivalent selections differ: named=%#v/%#v file=%#v/%#v", named, namedDiagnostics, file, fileDiagnostics)
+	}
+	if !reflect.DeepEqual(loadedPaths, []string{namedPath, filePath}) {
+		t.Fatalf("read-only loader paths = %#v", loadedPaths)
+	}
+	if !reflect.DeepEqual(*selectedConfigs[namedPath], expectedNamed) ||
+		!reflect.DeepEqual(*selectedConfigs[filePath], expectedFile) {
+		t.Fatalf("schema resolution mutated a selected Factory config")
+	}
+}
+
+func TestResolveFactoryInvocationInputSchemaHonorsCancellationWithoutPartialResult(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		cancelLoad bool
+	}{
+		{name: "before lookup"},
+		{name: "during lookup", cancelLoad: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			loadCalls := 0
+			load := interfaces.FactoryConfigFileLoader(func(string) (*interfaces.FactoryConfig, error) {
+				loadCalls++
+				if test.cancelLoad {
+					cancel()
+				}
+				return &interfaces.FactoryConfig{InvocationSignature: &interfaces.InvocationSignatureConfig{}}, nil
+			})
+			if !test.cancelLoad {
+				cancel()
+			}
+
+			schema, diagnostics, err := ResolveFactoryInvocationInputSchema(
+				ctx, runSchemaFixtureManifest(), "you.run", load, "fixture/factory.json",
+			)
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("error = %v, want context cancellation", err)
+			}
+			if !reflect.DeepEqual(schema, climanifest.EffectiveInputSchema{}) || diagnostics != nil {
+				t.Fatalf("canceled lookup returned partial result: schema=%#v diagnostics=%#v", schema, diagnostics)
+			}
+			wantCalls := 0
+			if test.cancelLoad {
+				wantCalls = 1
+			}
+			if loadCalls != wantCalls {
+				t.Fatalf("loader calls = %d, want %d", loadCalls, wantCalls)
+			}
+		})
+	}
+}
+
+func TestMapInvocationInputErrorPreservesWrappedStableSensitiveFailure(t *testing.T) {
+	t.Parallel()
+
+	const sensitiveValue = "credential-that-must-not-leak"
+	wrapped := fmt.Errorf("%w: %w", work.ErrInvalidInvocationInput, &work.ArgumentError{
+		Code:    work.ArgumentErrorCodeStringValidationMismatch,
+		Message: `parameter "token" value <redacted> is not one of the declared choices`,
+	})
+
+	err := MapInvocationInputError(wrapped)
+	if err == nil || !strings.Contains(err.Error(), string(work.ArgumentErrorCodeStringValidationMismatch)) {
+		t.Fatalf("error = %v, want stable validation code", err)
+	}
+	if strings.Contains(err.Error(), sensitiveValue) {
+		t.Fatalf("mapped error leaked sensitive value: %v", err)
+	}
+}
+
+func TestResolveFactoryInvocationInputSchemaNoSignatureNamedAndFileSelectionsAreEquivalent(t *testing.T) {
+	t.Parallel()
+
+	namedPath := filepath.Join("project", "factory", "legacy", interfaces.FactoryConfigFile)
+	filePath := filepath.Join("fixtures", "legacy-factory.yaml")
+	load := interfaces.FactoryConfigFileLoader(func(path string) (*interfaces.FactoryConfig, error) {
+		switch path {
+		case namedPath, filePath:
+			return &interfaces.FactoryConfig{Name: filepath.Base(filepath.Dir(path))}, nil
+		default:
+			return nil, errors.New("unexpected Factory path")
+		}
+	})
+
+	manifest := runSchemaFixtureManifest()
+	named, namedDiagnostics, err := ResolveFactoryInvocationInputSchema(
+		context.Background(), manifest, "you.run", load, namedPath,
+	)
+	if err != nil {
+		t.Fatalf("named selection: %v", err)
+	}
+	file, fileDiagnostics, err := ResolveFactoryInvocationInputSchema(
+		context.Background(), manifest, "you.run", load, filePath,
+	)
+	if err != nil {
+		t.Fatalf("file selection: %v", err)
+	}
+	if !reflect.DeepEqual(named, file) || !reflect.DeepEqual(namedDiagnostics, fileDiagnostics) {
+		t.Fatalf("no-signature selections differ: named=%#v/%#v file=%#v/%#v", named, namedDiagnostics, file, fileDiagnostics)
+	}
+	if named.FactoryInputMode != climanifest.EffectiveFactoryInputModeCompatibility {
+		t.Fatalf("FactoryInputMode = %q, want compatibility", named.FactoryInputMode)
+	}
+	if named.UnknownNamedArgumentPolicy != "" || len(named.FactoryParameters) != 0 {
+		t.Fatalf("no-signature selection synthesized signature facts: %#v", named)
+	}
+}
+
+func cloneInvocationSignatureFixture(signature interfaces.InvocationSignatureConfig) *interfaces.InvocationSignatureConfig {
+	cloned := signature
+	cloned.Parameters = append([]interfaces.InvocationParameterConfig(nil), signature.Parameters...)
+	for index := range cloned.Parameters {
+		cloned.Parameters[index].Aliases = append([]string(nil), signature.Parameters[index].Aliases...)
+		cloned.Parameters[index].Bindings = append(
+			[]interfaces.InvocationParameterBindingConfig(nil),
+			signature.Parameters[index].Bindings...,
+		)
+	}
+	return &cloned
+}
+
+func runSchemaFixtureManifest() climanifest.Manifest {
+	return climanifest.Manifest{Commands: map[string]climanifest.Command{
+		"you": {ID: "you", Name: "you"},
+		"you.run": {
+			ID:   "you.run",
+			Name: "run",
+			Flags: map[string]climanifest.Flag{
+				"factory": {ID: "you.run.flag.factory", Long: "factory"},
+				"named":   {ID: "you.run.flag.named", Long: "named"},
+			},
+		},
+	}}
+}
 
 func TestJavaScriptWorkflowPathRecognizesSupportedExtensions(t *testing.T) {
 	t.Parallel()
@@ -127,4 +327,30 @@ func TestObserveInvocationRejection_AmbiguousInputRecordsStructuredLogAndMetrics
 	if got := snapshotCleanInvocationMetrics(); got != (CleanInvocationMetricsSnapshot{Attempts: 1, AmbiguityRejected: 1}) {
 		t.Fatalf("metrics = %#v", got)
 	}
+}
+
+func TestResponseStreamOutputCancelOnWriteErrorCancelsInvocationContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	writeErr := errors.New("broken stdout pipe")
+	writer := responseStreamOutputCancelOnWriteError(errorWriter{err: writeErr}, cancel)
+	if _, err := writer.Write([]byte("record")); !errors.Is(err, writeErr) {
+		t.Fatalf("Write() error = %v, want %v", err, writeErr)
+	}
+	select {
+	case <-ctx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for invocation cancellation after stdout write failure")
+	}
+}
+
+type errorWriter struct {
+	err error
+}
+
+func (writer errorWriter) Write([]byte) (int, error) {
+	return 0, writer.err
 }

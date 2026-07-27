@@ -27,14 +27,26 @@ delegation to the target owner or part of an active removal lane.
 
 For services whose behavior depends on one Factory Session runtime, construct an
 inert process-scoped root through the service-local `wire` package and pass
-runtime-specific values through an owner-defined binding such as `ForRuntime`.
-Keep that binding on the canonical root `Service` and return the same public
-`Service` contract, as Models and Factory Sessions do; do not introduce a
-Wire-owned binder or return a private runtime-assembly contract. Owner-private
-runtime opening may unwrap its own bound implementation internally, but
-cross-service consumers receive only the root contract. Do not inject a
-callback that lets the runtime-opening consumer select or construct the
-concrete service.
+runtime-specific values through an owner-defined typed binding. Models uses
+`OpenRuntimeScope` on its canonical process-scoped `Service` and returns only an
+opaque `RuntimeScopeRef`; Factory Session selection must keep using the same
+Models root rather than receiving or constructing a second `Service`. Register
+each successfully opened scope with the opening transaction immediately,
+release later-opened resources before earlier scopes on failure, and transfer
+the same exactly-once reverse-order closer to the successful runtime product.
+Thread the opaque scope beside that root through downstream Worker and transport
+bindings, and attach it to typed Models requests at the final consumer. When
+live session state is not installed yet, snapshot Models scope configuration
+from the already-loaded Factory definition so startup-time catalog and
+invocation consumers observe the selected Factory without a lazy service view.
+When a scope lazily materializes owner-internal runtime capability, revalidate
+the scope while serializing cache insertion so a concurrent close cannot let a
+stale resolution reinsert capability after cleanup reports success. Prove that
+boundary with a deterministic concurrent operation-versus-close test.
+Use a cleanup context detached from request cancellation when closing an
+already-acquired owner scope. Do not introduce a Wire-owned binder, return a
+private peer runtime-assembly contract, or inject a callback that lets the
+runtime-opening consumer select or construct the concrete service.
 
 Keep the product-facing service root to its canonical `Service` interface plus
 detached value contracts. Construction-only roles belong in the service-local
@@ -42,6 +54,32 @@ detached value contracts. Construction-only roles belong in the service-local
 cross-service consumers should own the narrow interface they actually call.
 List/read projections must carry detached summaries rather than mutable
 session registries, response stores, or live-session implementation pointers.
+
+Parent-private nested services follow the same recursive shape under
+`pkg/services/<owner>/internal/services/<capability>`: keep exactly one
+capability `Service` interface at that root, construct it through the nested
+`wire` package, and place concrete behavior under `internal/service`. Runtime
+assembly must clone mutable opening options before passing them to per-role
+collaborators and return an empty root-owned result on any validation,
+resolution, rejection, or completeness failure so partial bindings never
+escape.
+
+Models asset source selection, cache inspection, verified preparation, and
+private local-runtime cache layout all belong to the single parent-private
+`pkg/services/models/internal/services/assets` service. Compatibility adapters
+receive that already-constructed service plus an opaque Models runtime scope;
+they must not reconstruct an asset puller or its filesystem/network effects.
+When a Factory Session runtime configuration is intentionally unavailable until
+assembly completes, resolve and memoize the immutable Models scope on first
+asset use, retrying a pre-assembly unavailable result instead of snapshotting a
+nil configuration permanently.
+
+When this recursive shape adds measured Go packages, register every package in
+both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+`docs/internal/baselines/go-functional-coverage-package-minimums.json` in
+import-path order. Record each lane's observed numeric floor for executable
+packages and the standard measurement exception for interface-only packages
+with no measurable statements, then verify both coverage lanes.
 
 Editable Factory persistence consumes a detached `FactorySnapshot` and the
 Factory-owned `FactoryVersion`; it removes version metadata before split-layout
@@ -348,6 +386,23 @@ is allowed only when the text explicitly describes internal implementation
 details or `pkg/orchestrators/petri` ownership. It should not be the primary wording for
 customer-facing Factory Session, Work, or event-stream behavior.
 
+The architecture checker encodes a Petri-public-surface prohibition in
+`cmd/pkgboundarycheck/petri_public_surface.go`: raw nets, markings, tokens,
+transitions/enabled-transition engine shapes, and engine snapshots are rejected
+outside `pkg/services/factory_runtime/internal/`. Authored Factory Definition
+`orchestrator.kind = PETRI` remains allowed as configuration. Focused fixtures
+in `petri_public_surface_test.go` cover vocabulary shapes and the required
+public-surface categories (public API, transport, integration contract, and
+functional test). The prohibition runs on the `make lint` package-boundary path;
+pre-existing live-tree debt is inventory-only in
+`petri-public-surface-baseline.json` with an exact deletion gate pointing at
+Runtime Petri-boundary retirement / IMP-RUN-01 (no new baseline growth).
+Each entry's count must match every live occurrence of that exact
+file/import/symbol edge; after creating or editing the inventory, run
+`make pkg-boundary` so an omitted edge or undercount cannot leave the base
+branch lint-broken. Correct a count only when history proves all occurrences
+predate the deletion gate; new references must be retired instead of baselined.
+
 ## Focused Verification
 
 For runtime-cleanup documentation changes, run a changed-docs vocabulary check
@@ -529,7 +584,15 @@ Factory Sessions-local Wire from explicit runtime host callbacks; construction
 must not open, start, stop, or inspect a runtime. The outer Factory Sessions
 service delegates live operations through this capability, while discovery and
 target selection remain with the identity owner and durable lifecycle remains
-with the durable-execution owner.
+with the durable-execution owner. Prove customer-boundary live open/list/get/control/close
+through `support.StartFunctionalAPIServer` / `root.BuildProcess` in
+`tests/functional/sessions/live_runtime_build_process_test.go`, and prove
+live_runtime ownership through Sessions-root composition tests in
+`pkg/services/factory_sessions/internal/sessionservice/live_runtime_composition_test.go`.
+Reverse-order partial-failure cleanup for scope/instance binding remains owned by
+`pkg/services/factory_sessions/internal/runtimeopening` and is evidenced in
+`models_bind_test.go` plus the Sessions packaging failure guard in
+`live_runtime_reverse_order_evidence_test.go`.
 
 Live Factory Session artifact projection follows that placement rule as well.
 `pkg/factory/sessions` normalizes checkpoint-derived and runtime artifacts into
@@ -629,7 +692,14 @@ behind that private contract, and expose execution to HTTP, invocation, and MCP
 runtime views through the outer Factory Sessions `Service`. Runtime composition
 may retain an exact mutation-recording callback while assembling the Factory
 Runtime, but consumers must not receive the raw durable engine as a parallel
-service boundary.
+service boundary. The nested durable_execution public surface (`durable_execution`
+package root + `durable_execution/wire`) exposes only the named `Service`,
+`wire.NewService`, and approved `NewDurable`/`NewStandalone` composition owners;
+it must not declare identity, live-runtime, invocation, response-stream, or
+runtime-opening constructors. Focused Sessions durable start/resume/control/
+inspect call sites route through the bound owner capability (`sessionservice`
+`s.durable` and `durableLifecycleHost`) rather than re-reading the host
+`DurableExecution()` accessor after construction.
 
 Canonical root Wire imports only the Factory Sessions root, its service-local
 `wire` package, and service-owned transport adapters. When Wire must compose a
@@ -651,6 +721,63 @@ live-session registry, should publish their narrow contract from the owning
 atomic removal of the root's consolidated interface-count baseline; removing
 root interfaces one at a time replaces the exact deletion-only finding instead
 of reducing it.
+
+When promoting a Factory Definitions `Service` alias into a root-declared
+interface, move `SessionHost` with it when `AttachFactoryDefinitions` closes
+over `Service`, point the local `service.New` constructor at the root types
+(not `contracts.*`), and replace the exact `service-root-interface-count`
+baseline target for that package. Characterization proof for the seam belongs
+in a root-package external test that implements `Service` using only
+`pkg/services/factory_definitions` imports.
+
+When publishing additive CTR-DEF catalog (or later) slices on that root
+`Service`, declare plain request/result value types beside the interface,
+keep catalog methods on the singular `Service` rather than elevating
+`NamedFactoryCatalog` as a peer-facing authority, and extend the same
+external fake-peer characterization test with representative success and
+distinct typed invalid-name vs missing outcomes (`ErrInvalidNamedFactoryName`
+vs `ErrNamedFactoryNotFound`). Authoring slices similarly stay on the
+singular `Service` with prepare/flatten/expand/create/replace request
+shapes that omit filesystem effects and mapping codecs; publish
+`ErrMalformedFactoryLayoutPayload` and `AtomicFactoryWriteFailure`
+(`ErrAtomicFactoryWriteFailed`, `PreviousPreserved`) instead of peer-facing
+`FactorySplitLayoutReplaceResult` restore callbacks. Compile slices stay on
+the singular `Service` via `CompileEffectiveFactorySource` returning a
+Definitions-owned `EffectiveFactorySource` value (not a separately published
+peer-facing loader); publish distinct `ErrInvalidAuthoredFactorySource` vs
+`ErrUnresolvedDefinitionReference`. Validate slices stay on the singular
+`Service` via `ValidateStructuralFactoryDefinition` and
+`ValidateEffectiveFactoryDefinition` returning Definitions-owned
+`ValidationResult` success shapes (not a peer-facing nested `Validator`
+interface); publish distinct `ErrInvalidFactoryDefinitionPayload` vs
+`FactoryDefinitionValidationFailure` (`ErrFactoryDefinitionValidationFailed`
+with blocking `ValidationTarget` findings and no Petri vocabulary). Snapshot
+slices stay on the singular `Service` via `CaptureFactorySnapshot`,
+`PrepareFactorySnapshotImport`, and `MaterializeFactorySnapshot` returning
+detached `FactorySnapshot` / `PortableFactorySnapshotFacts` (not
+snapshotcapture or bundled-asset implementation types); publish distinct
+`ErrInvalidFactorySnapshotPayload` vs `ErrUnsafeFactorySnapshotMaterialize`.
+Distribute slices stay on the singular `Service` via
+`ListBuiltInPackagedFactories`, `InstallPackagedFactory`, and
+`CreateFactoryScaffold` returning shared
+`DistributedFactoryDefinitionFacts` for install and scaffold (not
+packagedinstallation/scaffold implementation types or peer-facing
+`PackagedFactoryInstaller` / `ScaffoldInitializer` authorities); publish
+distinct `ErrUnknownPackagedFactoryIdentity` vs
+`ErrFactoryDistributeFailed`. Request shapes omit filesystem effects,
+output streams, and `PackagedDefinition` payload bytes.
+Prefer growing `service_contract.go` / `service_contract_test.go` while
+under the 1000-line maint limit. When characterization coverage forces a
+split (as with distribute + six-slice seal proof), add a focused sibling
+such as `service_contract_distribute_test.go` and ratchet
+`backend-package-file-count.json` for that unavoidable growth.
+Keep assignability stubs for not-yet-wired CTR-DEF slices on root
+`UnimplementedService` (with focused root tests covering typed outcomes
+and `AtomicFactoryWriteFailure` / `FactoryDefinitionValidationFailure`
+`Error`/`Unwrap`/`Is` paths) and embed that type from
+`definition.Service` rather than duplicating stub bodies in the
+definition package—otherwise package-coverage minima regress on both
+unit and functional lanes.
 
 Retire leaf compatibility packages that only re-export Factory Sessions root
 value or function contracts. Same-owner implementations should consume the root
@@ -727,3 +854,92 @@ result-owner values. The outer service/runtime-host compatibility adapter maps
 generated open input before calling the gateway and assembles generated open,
 list, detail, reconnect, terminal-result, and partial-result responses only
 after the domain call returns.
+
+## Factory Runtime root contract slices
+
+Cross-service Factory Runtime consumers depend on the singular root `Service`
+in `pkg/services/factory_runtime` (`interfaces.go`) plus root typed errors in
+`composition_contracts.go`. Do not publish a second peer-facing Runtime authority
+(hosting `Lifecycle`/`HostedInstance`, `Factory` run-loop, or
+`JavaScriptWorkflows`) for control, observation, dispatch-plan, or checkpoint
+slices. Prove each published slice with a colocated `factory_test`
+characterization that implements a fake `Service` using only the root package
+and approved peer contracts, without importing `factory_runtime/internal`.
+
+Plain control request/result vocabulary is consolidated in `work_move_errors.go`
+(`PauseRequest`/`PauseResult`, `ResumeRequest`/`ResumeResult`,
+`TerminateRequest`/`TerminateResult`, `WaitToCompleteRequest`/`WaitToCompleteResult`,
+`MoveWorkRequest`/`MoveWorkResult`). Peers call `Service` methods
+(`ControlPause`, `ControlResume`, `ControlTerminate`,
+`ControlWaitToComplete`, `ControlMoveWork`) and branch on root typed errors (`ErrNotRunning`, `ErrNotFound`,
+`ErrAlreadyStopped`, `ErrInvalidLifecycleTransition`) and root work-move
+errors (`ErrMoveWorkNotFound`, `ErrMoveWorkInFlightDispatch`,
+`ErrMoveWorkRequestConflict`). Concrete root methods must classify lifecycle
+state at the `Service` boundary so repeated pause/resume returns `NO_OP` and
+failures remain matchable with root sentinels. When a consumer-owned adapter
+retains a domain-specific error contract, map the root sentinel back at that
+adapter rather than leaking the consumer package's sentinel through `Service`.
+Do not route control through hosting `Lifecycle.Stop` as the peer authority for
+this slice.
+
+Plain observation request/result/value vocabulary lives in
+`projection_contracts.go` (`ObserveRequest`/`ObserveResult`,
+`Observation`, `ObservationProgress`, `ObservationDispatchSummary`,
+`ObservationResultView`, `ObservationResourceView`, `ObservationHealth`).
+Peers call `Service.Observe` and branch on
+`ErrNotRunning`, `ErrNotFound`, and `ErrInvalidObservationScope`. Do not treat
+legacy `GetEngineStateSnapshot` / `StateSnapshot` Petri-shaped aliases or
+JavaScript runtime-record types as the peer source of truth for this slice.
+`GetEngineStateSnapshot` remains only on the migration-era `APIFactory`
+interface; never embed `APIFactory` into the singular root `Service`. Adapters
+that still need legacy snapshots must request or explicitly assert
+`APIFactory`, while root-slice peer fakes implement `Service` without a legacy
+snapshot method.
+Concrete sanitized projection from legacy engine snapshots lives under
+`factory_runtime/internal/rootobservation` so raw `EngineStateSnapshot` types
+stay off the public Runtime package surface enforced by `make pkg-boundary`.
+Adding that new production package (any non-test `.go` under a new
+`pkg/services/...` directory) also requires regenerating
+`docs/internal/packaged-service-structure/package-target-manifest.json` with
+`go run ./cmd/packagetargetmanifestcheck -write-inventory` then
+`-write-owner-packages`, and adding the matching retain row to
+`docs/internal/baselines/ownership-inventory.json` (sorted by `packagePath`)
+so `ownershipinventorycheck` / Dev Package Prerequisites / `make lint` stay
+green.
+Migration adapter fakes that explicitly implement `APIFactory` should return
+`LegacyEngineObservation` (alias of `StateSnapshot`) rather than naming
+prohibited Petri public-surface symbols in non-internal packages.
+
+Plain dispatch-plan request/result vocabulary lives in
+`execution_contracts.go` (`PlanDispatchRequest`/`PlanDispatchResult`,
+`AcceptDispatchResultRequest`/`AcceptDispatchResultResult`,
+`DispatchPlanOutcome` including `DUPLICATE_IDEMPOTENT`, and
+`DispatchResultOutcome`). Peers call `Service` methods
+(`PlanDispatch`, `AcceptDispatchResult`) and branch on root typed errors
+(`ErrDuplicateDispatchIntent`, `ErrUnknownDispatchCorrelation`,
+`ErrInvalidDispatchResultBoundary`, plus `ErrNotRunning`/`ErrNotFound`). Do not
+expose Petri transition objects or Workers construction/implementation types,
+and do not require a separate public Dispatch Service for this slice.
+
+Plain checkpoint request/result/value vocabulary lives in
+`javascript_checkpoint_contract.go` (`CaptureCheckpointRequest`/`CaptureCheckpointResult`,
+`LoadCheckpointRequest`/`LoadCheckpointResult`,
+`RestoreCheckpointRequest`/`RestoreCheckpointResult`, `Checkpoint` with opaque
+`Payload` bytes, and `CheckpointOutcome`). Peers call `Service` methods
+(`CaptureCheckpoint`, `LoadCheckpoint`, `RestoreCheckpoint`)
+and branch on root typed errors (`ErrCheckpointNotFound`, `ErrCorruptCheckpoint`,
+`ErrIncompatibleCheckpoint`, plus `ErrNotRunning`/`ErrNotFound`). Do not expose
+Petri marking snapshots or JavaScript checkpoint strategy types as peer-facing
+vocabulary, and do not claim Recordings immutable history ownership from this
+slice.
+
+Sealed CTR-RUN root invariants for IMP-RUN unlock live in the root-only peer
+characterization in `javascript_child_contract_test.go`: one peer-shaped `Service`
+consumer reaches control, observation, dispatch-plan, and checkpoint slices
+through the singular root and asserts representative success plus typed
+failures using only the published root package (no `factory_runtime/internal`,
+Petri, or JavaScript strategy imports). Concrete `factoryImpl` entrypoints for
+those slices are consolidated in `runtime/worker_pool.go` (kept out of
+`runtime/factory.go` to preserve the backend-size file limit). Nested IMP-RUN
+moves, Wire/root, CLI-manifest, provider-conductor, Workers construction, and
+OpenAPI package-motion edits remain outside this seal.

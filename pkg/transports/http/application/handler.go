@@ -13,6 +13,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
 	mappingcomposition "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
+	"go.uber.org/zap"
 )
 
 // Handler is the complete inert HTTP binding operation constructed by Wire.
@@ -50,7 +52,12 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 	if handler == nil || handler.mappings == nil || handler.modelsContent == nil {
 		return nil, fmt.Errorf("bind HTTP handler: process-scoped handler is required")
 	}
-	modelsAdapter := modelshttp.NewAdapter(opened.Models, opened.Workers, handler.modelsContent)
+	modelsAdapter := modelshttp.NewAdapter(
+		opened.Models,
+		opened.Workers,
+		handler.modelsContent,
+		opened.ModelsScope,
+	)
 	modelsHandler := modelshttp.NewHandler(modelsAdapter, opened.Logger)
 	if modelsHandler == nil {
 		return nil, fmt.Errorf("bind HTTP handler: Models service, invoker, content preparation, and logger are required")
@@ -76,4 +83,26 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 	}, opened.Logger)
 	server := transporthttp.NewServer(sessionsHandler, modelsHandler, opened.ProviderSessions, opened.Logger)
 	return server.Handler(), nil
+}
+
+// BindDurableExecution binds the same generated API and embedded dashboard
+// server to a standalone JavaScript execution scope. Routes outside that
+// scope retain their normal not-configured behavior.
+func (handler *Handler) BindDurableExecution(
+	execution factorysessions.ExecutionService,
+	lifecycle factorysessionmapping.DurableLifecycleAPI,
+	logger *zap.Logger,
+) (http.Handler, error) {
+	if handler == nil || handler.sessionRequests == nil || execution == nil || lifecycle == nil {
+		return nil, fmt.Errorf("bind durable execution HTTP handler: process-scoped handler and execution are required")
+	}
+	durable := factorysessionmapping.NewDurableAPI(execution, lifecycle)
+	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
+		DurableExecution: durable, DurableLifecycle: durable,
+		DurableListing: durable, DurableProjection: durable,
+		DurableLister: execution, FactoryValidation: handler.validation,
+		ContentStaging: handler.contentStaging, RequestPreparation: handler.requestPreparation,
+		SessionRequests: handler.sessionRequests,
+	}, logger)
+	return transporthttp.NewServer(sessionsHandler, nil, nil, logger).Handler(), nil
 }

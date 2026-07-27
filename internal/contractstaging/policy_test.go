@@ -9,6 +9,7 @@ import (
 
 func TestAllowedArtifactsAreTheReviewedJoinedContracts(t *testing.T) {
 	want := []string{
+		"packages/api/generated/cli/command-manifest.schema.json",
 		"packages/api/generated/cli/commands.json",
 		"packages/api/generated/javascript/runtime-api.json",
 		"packages/api/generated/joined/contracts/common/deprecations.schema.json",

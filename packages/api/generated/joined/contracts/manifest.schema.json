@@ -424,7 +424,7 @@
       "type": "string"
     },
     "sourceCommit": {
-      "description": "The lowercase full-length Git SHA-1 or SHA-256 commit identifying the package source.",
+      "description": "Optional release provenance added while staging a publication candidate; development manifests intentionally omit commit-derived state.",
       "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
       "type": "string"
     }
@@ -433,7 +433,6 @@
     "formatVersion",
     "packageId",
     "packageVersion",
-    "sourceCommit",
     "familyFormatVersions",
     "exports"
   ],

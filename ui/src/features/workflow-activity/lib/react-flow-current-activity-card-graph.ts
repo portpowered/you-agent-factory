@@ -21,7 +21,7 @@ import type {
   PositionedPlaceNode,
   PositionedWorkstationNode,
 } from "../../flowchart/lib/layout";
-import type { CurrentActivityNode } from "../../flowchart/public";
+import type { CurrentActivityNode } from "../../flowchart/components/current-activity-nodes";
 import { findFactoryWorkstationByNodeId } from "./current-activity-factory-graph-layout";
 import { resolveFactoryGraphPlaceNode } from "./current-activity-factory-graph-node-ids";
 import type { GraphNodePosition } from "./layout/graph-node-positions";

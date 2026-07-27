@@ -1,7 +1,5 @@
-import {
-  CurrentSelectionBodyLayout,
-  SelectionDetailLayout,
-} from "../../../base/public";
+import { CurrentSelectionBodyLayout } from "../../../base/components/layout/current-selection-body-layout";
+import { SelectionDetailLayout } from "../../../base/components/layout/current-selection-detail-layout";
 import type { WorkstationDetailCardProps } from "../../lib/keys/detail-card-types";
 import { getWorkstationDetailMessages } from "../../messages/workstation-detail";
 import {

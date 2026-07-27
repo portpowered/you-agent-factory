@@ -13,6 +13,7 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
 
 func TestAgentExecutor_ModelOperationOutputUsesCanonicalWorkContent(t *testing.T) {
@@ -57,6 +58,91 @@ func TestAgentExecutor_ModelOperationOutputUsesCanonicalWorkContent(t *testing.T
 	if len(content) != 1 || content[0].Type != work.WorkContentPartTypeAudio || content[0].File != audioPath {
 		t.Fatalf("output = %#v, want canonical audio WorkContent", content)
 	}
+}
+
+func TestAgentExecutor_RetryableFailureResumesProviderSession(t *testing.T) {
+	const sessionID = "675f9238-5f05-456c-9a9f-f8fe486f49e4"
+	provider := &agentMockProvider{
+		errors: []error{
+			workerprovider.NewProviderErrorWithSession(
+				workerexecution.WorkFailureTypeInternalServerError,
+				"temporarily unavailable",
+				nil,
+				&workerexecution.ProviderSessionMetadata{
+					Provider: string(modelprovider.ProviderKiro),
+					Kind:     providerSessionKindSessionID,
+					ID:       sessionID,
+				},
+			),
+			nil,
+		},
+		responses: []workerexecution.InferenceResponse{
+			{},
+			{
+				Content: "Recovered. COMPLETE",
+				ProviderSession: &workerexecution.ProviderSessionMetadata{
+					Provider: string(modelprovider.ProviderKiro),
+					Kind:     providerSessionKindSessionID,
+					ID:       sessionID,
+				},
+			},
+		},
+	}
+	executor := NewAgentExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*workerconfig.FactoryWorkerConfig{
+				"worker-a": {Model: "kiro-auto", ModelProvider: string(modelprovider.ProviderKiro)},
+			},
+		},
+		provider,
+		nil,
+		time.Now,
+		deterministicRetryRandom,
+	)
+	executor.retryConfig.sleep = func(context.Context, time.Duration) error { return nil }
+	executor.retryConfig.jitter = func(time.Duration) (time.Duration, error) { return 0, nil }
+
+	result, err := executor.Execute(context.Background(), testAgentRequest(
+		work.WorkDispatch{
+			DispatchID:   "d-kiro-retry",
+			TransitionID: "t-1",
+			WorkerType:   "worker-a",
+		},
+		withAgentPrompts("sys", "msg"),
+	))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if provider.callCount != 2 {
+		t.Fatalf("provider call count = %d, want 2", provider.callCount)
+	}
+	if provider.lastReq.SessionID != sessionID {
+		t.Fatalf("retry SessionID = %q, want %q", provider.lastReq.SessionID, sessionID)
+	}
+	if !containsRunnerCapability(
+		provider.lastReq.RequiredOptionalCapabilities,
+		workerexecution.RunnerOptionalCapabilitySessionResume,
+	) {
+		t.Fatalf(
+			"retry capabilities = %#v, want session resume",
+			provider.lastReq.RequiredOptionalCapabilities,
+		)
+	}
+	if result.ProviderSession == nil || result.ProviderSession.ID != sessionID {
+		t.Fatalf("result Provider Session = %#v, want %q", result.ProviderSession, sessionID)
+	}
+}
+
+func containsRunnerCapability(
+	capabilities []workerexecution.RunnerOptionalCapability,
+	want workerexecution.RunnerOptionalCapability,
+) bool {
+	for _, capability := range capabilities {
+		if capability == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestInferenceRequestForExecutionRequest_ForwardsModelOperationContract(t *testing.T) {

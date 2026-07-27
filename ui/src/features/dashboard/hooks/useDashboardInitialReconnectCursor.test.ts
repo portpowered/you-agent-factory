@@ -1,7 +1,7 @@
-import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { useDashboardInitialReconnectCursor } from "./useDashboardInitialReconnectCursor";
+import { dashboardSessionKey } from "../lib/dashboard-session-key";
+import { resolveDashboardInitialReconnectCursor } from "./useDashboardInitialReconnectCursor";
 
 describe("useDashboardInitialReconnectCursor", () => {
   it("returns undefined after same-session refresh even when a checkpoint exists", () => {
@@ -11,23 +11,25 @@ describe("useDashboardInitialReconnectCursor", () => {
       selectedTick: 29,
     };
 
-    const { result, rerender } = renderHook(
-      ({ refreshToken }: { refreshToken: number }) =>
-        useDashboardInitialReconnectCursor({
-          persistedCheckpoint: checkpoint,
-          refreshToken,
-          sessionID: "~default",
-        }),
-      { initialProps: { refreshToken: 0 } },
-    );
+    const initial = resolveDashboardInitialReconnectCursor({
+      persistedCheckpoint: checkpoint,
+      previousSessionKey: null,
+      refreshToken: 0,
+      sessionID: "~default",
+    });
 
-    expect(result.current).toEqual({
+    expect(initial).toEqual({
       afterEventId: "factory-event/dispatch-completed/stale-cursor",
       afterSequence: 29,
     });
 
-    rerender({ refreshToken: 1 });
-
-    expect(result.current).toBeUndefined();
+    expect(
+      resolveDashboardInitialReconnectCursor({
+        persistedCheckpoint: checkpoint,
+        previousSessionKey: dashboardSessionKey("~default", 0),
+        refreshToken: 1,
+        sessionID: "~default",
+      }),
+    ).toBeUndefined();
   });
 });

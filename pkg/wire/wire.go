@@ -18,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
-	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	httpapplication "github.com/portpowered/infinite-you/pkg/transports/http/application"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
@@ -55,6 +54,8 @@ var servicesSet = wire.NewSet(
 	factoryruntime.NewSessionResultProjectionOperation,
 	provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,
+	provideOperatorSettingsProviderCatalog,
+	provideOperatorConfigDocumentService,
 	provideOperatorSettingsIDGenerator,
 	provideOperatorConfigDecoder,
 	provideOperatorConfigEncoder,
@@ -153,6 +154,7 @@ var servicesSet = wire.NewSet(
 	provideFactoryDefinitionNamedPathResolver,
 	provideFactoryDefinitionNamedFactoryCatalogFileSystem,
 	provideFactoryDefinitionPackagedInstallationFileSystem,
+	providePackagedFactoryInstallation,
 	provideFactoryDefinitionAuthoredReaderFileSystem,
 	provideFactoryDefinitionAuthoredWriterFileSystem,
 	provideFactoryDefinitionScaffoldFileSystem,
@@ -216,10 +218,16 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 	provideFactoryScaffoldCommandInitializer,
 	provideFactoryDefinitionPersistence,
 	provideNamedFactoryPersistenceOperation,
+	provideEffectiveFactoryCatalogDiscovery,
+	provideEffectiveFactoryDefinitionNormalizer,
+	provideEffectiveFactoryCatalogOperation,
+	provideEffectiveFactoryDefinitionsService,
 )
 
 var workerServiceSet = wire.NewSet(
 	provideWorkerInvocationFactory,
+	provideProviderFromCommandRunnerFactory,
+	provideWorkerInvocationWithProgressFactory,
 	provideWorkerProcessEnvironment,
 	provideWorkerCurrentWorkingDirectory,
 )
@@ -254,9 +262,15 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideModelsCLIService,
 	provideFlattenFactoryConfigOperation,
 	provideExpandFactoryConfigOperation,
-	provideInitSystemConfigOperation,
+	provideConfigureInitOperation,
+	provideInstallPackagedFactoryOperation,
+	provideInstallPackagedFactoryCLI,
 	provideQueryFactoryOperation,
+	provideCurrentFactoryPointerReader,
 	provideListFactoriesOperation,
+	provideFactoryNameCompletionOperation,
+	providePackagedFactoryNameCompletionOperation,
+	provideSelectedFactorySignatureCompletionOperation,
 	provideValidateFactoryOperation,
 	provideCreateFactoryFromFileOperation,
 	provideReplaceFactoryCurrentOperation,
@@ -282,8 +296,9 @@ var BundleSet = wire.NewSet(
 	workerServiceSet,
 	cliCommandOperationsSet,
 	providePackagedFactoryDefinitions,
+	providePackagedFactoryCatalog,
 	provideSystemInitializationService,
-	configinitcmd.NewInitializer,
+	provideSystemInitializationOperation,
 	provideRuntimeOpener,
 	provideApplicationRuntimeAdapter,
 	provideLifecycleRunnerFactory,
@@ -306,6 +321,7 @@ var BundleSet = wire.NewSet(
 	wire.Bind(new(factorysessionwire.StdioOpeningOperation), new(*factorysessionwire.StdioOpeningService)),
 	provideStdioApplicationOpener,
 	provideDirectJavaScriptSyncRunner,
+	provideDirectJavaScriptHostAdapter,
 	factorysessionwire.NewDirectJavaScriptRunOperation,
 	initializerapplication.NewInitializer,
 	factorysessionwire.NewExecutionServiceBuilder,

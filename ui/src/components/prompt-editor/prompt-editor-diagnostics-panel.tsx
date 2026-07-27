@@ -1,11 +1,7 @@
-import {
-  AlertPanel,
-  AlertPanelText,
-  Code,
-  CodePanel,
-  Label,
-  SurfacePanel,
-} from "../../components/ui";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
+import { Code, Label } from "@you-agent-factory/components/primitives";
+import { AlertPanel, AlertPanelText } from "../../components/ui/alert-panel";
+import { CodePanel } from "../../components/ui/code-panel";
 import { cn } from "../../lib/cn";
 import { formatSyntaxDiagnosticMessage } from "./prompt-editor-diagnostic-message";
 import type { PromptEditorDiagnostic } from "./prompt-editor-types";

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Label, Text } from "../../../components/ui";
+import { Label, Text } from "@you-agent-factory/components/primitives";
 import { cn } from "../../../lib/cn";
 import type { WorkContent } from "../lib/work-content-types";
 import {

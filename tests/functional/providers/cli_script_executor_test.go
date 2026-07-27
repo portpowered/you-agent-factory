@@ -34,6 +34,66 @@ func TestScriptExecutor_Failure(t *testing.T) {
 	server.Stop(t)
 }
 
+// TestScriptExecutor_CommandCancellationIsReported proves provider command
+// cancellation reaches the customer-visible execution result.
+func TestScriptExecutor_CommandCancellationIsReported(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
+
+	server, listed := runScriptFactory(t, dir, canceledCommandRunner{}, 5*time.Second)
+	assertSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
+	assertDispatchErrorContains(t, server.GetFactoryEvents(t), "execution cancelled: context canceled")
+	server.Stop(t)
+}
+
+// TestScriptExecutor_MissingCommandFailsStartup proves a missing provider
+// command fails explicitly before execution begins.
+func TestScriptExecutor_MissingCommandFailsStartup(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
+	agentsPath := filepath.Join(dir, "workers", "script-worker", "AGENTS.md")
+	if err := os.WriteFile(agentsPath, []byte("---\ntype: SCRIPT_WORKER\n---\n"), 0o644); err != nil {
+		t.Fatalf("write AGENTS.md: %v", err)
+	}
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--dir", dir, "--quiet", "--no-record",
+	})
+	home := t.TempDir()
+	inputs.Input.Env = append(inputs.Input.Env, "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = dir
+	err := support.BuildProcess(t, serviceedges.Edges{
+		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("unused"),
+	}).Execute(inputs.Input)
+	if err == nil ||
+		!strings.Contains(err.Error(), "construct script worker") ||
+		!strings.Contains(err.Error(), "misconfigured") {
+		t.Fatalf("Process.Execute() error = %v, want misconfigured script worker", err)
+	}
+}
+
+// TestScriptExecutor_InvalidWorkstationTemplateFailsBeforeCommand proves an
+// invalid workstation template cannot invoke the provider command.
+func TestScriptExecutor_InvalidWorkstationTemplateFailsBeforeCommand(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	writeFixtureFile(
+		t,
+		dir,
+		[]string{"workstations", "run-script", "AGENTS.md"},
+		"---\ntype: MODEL_WORKSTATION\n---\n{{",
+	)
+	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
+
+	runner := &captureCommandRunner{}
+	server, listed := runScriptFactory(t, dir, runner, 5*time.Second)
+	assertSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
+	if calls := runner.CallCount(); calls != 0 {
+		t.Fatalf("script command calls = %d, want none after template rejection", calls)
+	}
+	assertDispatchErrorContains(t, server.GetFactoryEvents(t), "prompt render failed")
+	server.Stop(t)
+}
+
 func TestScriptExecutor_PreservesTokenColor(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("original-payload"))

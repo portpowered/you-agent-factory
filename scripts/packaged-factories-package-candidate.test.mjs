@@ -44,6 +44,7 @@ function expectedInventory(contractManifest) {
 		factory.yaml.locator,
 	]);
 	return [
+		"factories/goal/factory.json",
 		"LICENSE.md",
 		"README.md",
 		"generated/README.md",

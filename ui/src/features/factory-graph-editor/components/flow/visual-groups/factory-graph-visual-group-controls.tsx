@@ -1,6 +1,6 @@
 import { useId } from "react";
 
-import { DashboardActionButton } from "../../../../../components/ui";
+import { DashboardActionButton } from "../../../../../components/ui/dashboard-action-button";
 import { cn } from "../../../../../lib/cn";
 import {
   FACTORY_LAYOUT_GROUP_COLOR_TOKENS,

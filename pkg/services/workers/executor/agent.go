@@ -60,7 +60,7 @@ func NewAgentExecutor(
 // and the shared runner execution contract.
 func NewAgentExecutorWithRunner(
 	runtimeConfig interfaces.RuntimeDefinitionLookup,
-	runner Runner,
+	runner workerexecution.Runner,
 	logger logging.Logger,
 	clock func() time.Time,
 	retryRandom platformrandom.Source,
@@ -379,6 +379,10 @@ func modelProviderForExecution(workerModelProvider string, selection workerexecu
 		if provider := modelProviderForRunnerID(selection.RunnerID); provider != "" {
 			return provider
 		}
+		if strings.TrimSpace(selection.RunnerID) != "" {
+			// Open / externally supplied conductor identities keep their canonical ID.
+			return selection.RunnerID
+		}
 	}
 	if workerModelProvider != "" {
 		if provider := modelProviderForRunnerID(workerModelProvider); provider != "" {
@@ -499,6 +503,13 @@ func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req workerexecution
 		if !decision.Retryable || retryCount >= ae.retryConfig.maxRetries {
 			return workerexecution.InferenceResponse{}, retryCount, providerErr
 		}
+		if session := providerErr.ProviderSession; session != nil && strings.TrimSpace(session.ID) != "" {
+			req.SessionID = strings.TrimSpace(session.ID)
+			req.RequiredOptionalCapabilities = appendRunnerCapabilityIfMissing(
+				req.RequiredOptionalCapabilities,
+				workerexecution.RunnerOptionalCapabilitySessionResume,
+			)
+		}
 
 		baseDelay := ae.retryConfig.initialBackoff << retryCount
 		jitter, jitterErr := ae.retryConfig.jitter(baseDelay)
@@ -523,12 +534,24 @@ func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req workerexecution
 	}
 }
 
+func appendRunnerCapabilityIfMissing(
+	capabilities []workerexecution.RunnerOptionalCapability,
+	capability workerexecution.RunnerOptionalCapability,
+) []workerexecution.RunnerOptionalCapability {
+	for _, existing := range capabilities {
+		if existing == capability {
+			return capabilities
+		}
+	}
+	return append(capabilities, capability)
+}
+
 type providerRunnerAdapter struct {
 	executor workerexecution.InvocationExecutor
 }
 
 type runnerProviderAdapter struct {
-	inner Runner
+	inner workerexecution.Runner
 }
 
 func (a runnerProviderAdapter) Infer(ctx context.Context, request workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
@@ -544,7 +567,7 @@ func (a runnerProviderAdapter) Infer(ctx context.Context, request workerexecutio
 
 // RunnerFromProvider adapts a legacy provider implementation onto the shared
 // runner execution contract.
-func RunnerFromProvider(provider providercontract.Provider) Runner {
+func RunnerFromProvider(provider providercontract.Provider) workerexecution.Runner {
 	return providerRunnerAdapter{executor: workerinvocation.NewExecutor(provider)}
 }
 

@@ -4,7 +4,7 @@ import { type ReactNode, useId } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { ImportFactoryValue } from "../../../api/session-factory";
-import { Heading } from "../../../components/ui";
+import { Heading } from "@you-agent-factory/components/primitives";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
 import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";

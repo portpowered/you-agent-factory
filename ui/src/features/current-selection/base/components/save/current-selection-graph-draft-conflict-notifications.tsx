@@ -7,7 +7,7 @@ import {
   GLOBAL_TOAST_DURATION_MS,
   type SaveNotificationDeliveryKey,
   shouldDeliverSaveNotification,
-} from "../../../../notifications/public";
+} from "../../../../notifications/lib/save-notification-delivery-policy";
 import type { FactoryDocumentSaveState } from "../../hooks/factory-document-save-types";
 import {
   CURRENT_SELECTION_GRAPH_DRAFT_CONFLICT_WARNING_KEY,

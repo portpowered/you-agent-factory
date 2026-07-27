@@ -22,16 +22,6 @@
       "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
     },
     {
-      "stableId": "cli/you.config.init",
-      "name": "you config init",
-      "interface": "cli",
-      "classification": "runnable",
-      "status": "missing",
-      "lane": "short",
-      "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
-    },
-    {
       "stableId": "cli/you.docs",
       "name": "you docs",
       "interface": "cli",
@@ -252,6 +242,16 @@
       ]
     },
     {
+      "stableId": "cli/you.server",
+      "name": "you server",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "The manifest-owned server command surface is present, but lifecycle behavior remains assigned to its dedicated PRD story and does not yet have qualifying customer-boundary functional evidence."
+    },
+    {
       "stableId": "cli/you.session",
       "name": "you session",
       "interface": "cli",
@@ -351,7 +351,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/smoke/cli_submit_batch_smoke_test.go::TestSubmitBatch_RealCLIUpsertsToRunningFactory",
+          "test": "tests/functional/transport/cli/commands/submit_wiring_test.go::TestCLISubmitBatchFile",
           "boundary": "cli"
         }
       ]
@@ -780,6 +780,16 @@
     {
       "stableId": "rest/listModels",
       "name": "listModels",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/listPackagedFactories",
+      "name": "listPackagedFactories",
       "interface": "rest",
       "classification": "operation",
       "status": "missing",

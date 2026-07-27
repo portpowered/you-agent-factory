@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import type { DashboardSnapshot } from "../../../../api/dashboard/types";
 import type { FactoryWorker } from "../../../../api/events/types";
@@ -20,7 +19,7 @@ export function resolveCurrentFactoryDocumentFromSnapshot(
   return factory as CurrentFactoryDocument;
 }
 
-export function useSelectedWorkerAndWorkTypeData(
+export function selectWorkerAndWorkTypeData(
   selection: DashboardSelection | null,
   snapshot: DashboardSnapshot | null | undefined,
 ) {
@@ -28,7 +27,7 @@ export function useSelectedWorkerAndWorkTypeData(
     selection?.kind === "worker" ? selection.workerName : null;
   const selectedWorkTypeName =
     selection?.kind === "work-type" ? selection.workTypeName : null;
-  const selectedWorkType = useMemo(() => {
+  const selectedWorkType = (() => {
     if (!snapshot || !selectedWorkTypeName) {
       return null;
     }
@@ -36,15 +35,15 @@ export function useSelectedWorkerAndWorkTypeData(
     return (
       findFactoryWorkTypeInSnapshot(snapshot, selectedWorkTypeName) ?? null
     );
-  }, [selectedWorkTypeName, snapshot]);
-  const selectedWorker = useMemo((): FactoryWorker | null => {
+  })();
+  const selectedWorker = ((): FactoryWorker | null => {
     if (!snapshot || !selectedWorkerName) {
       return null;
     }
 
     return findFactoryWorkerInSnapshot(snapshot, selectedWorkerName) ?? null;
-  }, [selectedWorkerName, snapshot]);
-  const selectedWorkerWorkstationNames = useMemo(() => {
+  })();
+  const selectedWorkerWorkstationNames = (() => {
     if (!snapshot || !selectedWorkerName) {
       return [];
     }
@@ -53,7 +52,7 @@ export function useSelectedWorkerAndWorkTypeData(
       snapshot,
       selectedWorkerName,
     );
-  }, [selectedWorkerName, snapshot]);
+  })();
 
   return {
     selectedWorker,

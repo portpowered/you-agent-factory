@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Code } from "../../../../../components/ui";
+import { Code } from "@you-agent-factory/components/primitives";
 import { cn } from "../../../../../lib/cn";
 
 export interface CurrentSelectionDetailItemProps {

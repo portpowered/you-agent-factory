@@ -26,6 +26,9 @@ import (
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )
 
+type workstationRuntimeToken = factoryruntime.RuntimeToken
+type workstationRuntimeTokenColor = factoryruntime.RuntimeTokenColor
+
 func TestWorkstationExecutorUsesInjectedProviderSelectionAuthority(t *testing.T) {
 	t.Parallel()
 	var gotWorkstation, gotFactory, gotWorker string
@@ -483,7 +486,6 @@ func TestWorkstationExecutor_RejectsInterpolatedProviderBeforeExecutionIO(t *tes
 	}{
 		{name: "malformed", resolved: "Not_A_Provider", want: "is invalid"},
 		{name: "unknown", resolved: "missing.provider", want: "is unknown"},
-		{name: "non-selectable", resolved: "agy", want: "is not selectable"},
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
@@ -917,7 +919,7 @@ func TestWorkstationExecutor_ResolvesRelativeWorkingDirectoryAgainstRuntimeConfi
 		TransitionID:    "t-relative",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens:     InputTokens(factoryruntime.RuntimeToken{ID: "tok-1", Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1"}}),
+		InputTokens:     InputTokens(workstationRuntimeToken{ID: "tok-1", Color: workstationRuntimeTokenColor{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -962,7 +964,7 @@ func TestWorkstationExecutor_ResolvesRelativeWorkingDirectoryAgainstRuntimeBaseD
 		TransitionID:    "t-relative-runtime-base",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens:     InputTokens(factoryruntime.RuntimeToken{ID: "tok-1", Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1"}}),
+		InputTokens:     InputTokens(workstationRuntimeToken{ID: "tok-1", Color: workstationRuntimeTokenColor{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

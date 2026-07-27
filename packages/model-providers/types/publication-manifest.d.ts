@@ -10,7 +10,7 @@ interface PublicationManifest {
 	readonly formatVersion: "1.0.0";
 	readonly packageId: "you-agent-factory.model-providers";
 	readonly packageVersion: string;
-	readonly sourceCommit: string;
+	readonly sourceCommit?: string;
 	readonly familyFormatVersions: Readonly<Record<"model-providers", "1.0.0">>;
 	readonly exports: Readonly<Record<string, PublicationExport>>;
 }

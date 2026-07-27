@@ -6,7 +6,7 @@ import {
   defaultScopedFactoryDocumentSaveRequest,
   seedScopedFactoryDocumentSaveTestSession,
 } from "../../../../testing/scoped-factory-document-save-test-helpers";
-import * as factoryDocumentSaveHooks from "../../../current-factory-definition/public";
+import * as factoryDocumentSaveHooks from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { useScopedFactoryDocumentSave } from "./useScopedFactoryDocumentSave";
 
 beforeEach(() => {

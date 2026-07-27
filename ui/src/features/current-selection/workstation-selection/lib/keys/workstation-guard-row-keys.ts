@@ -33,17 +33,37 @@ export function findRemovedWorkstationGuardIndex(
 export function useStableWorkstationGuardRowKeys(
   guards: WorkstationLevelGuard[],
 ): string[] {
-  const rowKeysRef = useRef<string[]>([]);
-  const nextKeyRef = useRef(0);
-  const previousGuardsRef = useRef(guards);
+  const stateRef = useRef<StableWorkstationGuardRowKeyState>({
+    nextKey: 0,
+    previousGuards: guards,
+    rowKeys: [],
+  });
+  stateRef.current = resolveStableWorkstationGuardRowKeys(
+    stateRef.current,
+    guards,
+  );
+  return stateRef.current.rowKeys;
+}
 
-  const previousGuards = previousGuardsRef.current;
+export interface StableWorkstationGuardRowKeyState {
+  nextKey: number;
+  previousGuards: WorkstationLevelGuard[];
+  rowKeys: string[];
+}
+
+export function resolveStableWorkstationGuardRowKeys(
+  previousState: StableWorkstationGuardRowKeyState,
+  guards: WorkstationLevelGuard[],
+): StableWorkstationGuardRowKeyState {
+  const rowKeys = [...previousState.rowKeys];
+  let nextKey = previousState.nextKey;
+  const previousGuards = previousState.previousGuards;
 
   if (guards.length > previousGuards.length) {
     const addedCount = guards.length - previousGuards.length;
     for (let index = 0; index < addedCount; index += 1) {
-      nextKeyRef.current += 1;
-      rowKeysRef.current.push(`workstation-guard-row-${nextKeyRef.current}`);
+      nextKey += 1;
+      rowKeys.push(`workstation-guard-row-${nextKey}`);
     }
   } else if (guards.length < previousGuards.length) {
     const removedIndex = findRemovedWorkstationGuardIndex(
@@ -51,17 +71,16 @@ export function useStableWorkstationGuardRowKeys(
       guards,
     );
     if (removedIndex >= 0) {
-      rowKeysRef.current.splice(removedIndex, 1);
+      rowKeys.splice(removedIndex, 1);
     } else {
-      rowKeysRef.current = rowKeysRef.current.slice(0, guards.length);
+      rowKeys.splice(guards.length);
     }
   }
 
-  while (rowKeysRef.current.length < guards.length) {
-    nextKeyRef.current += 1;
-    rowKeysRef.current.push(`workstation-guard-row-${nextKeyRef.current}`);
+  while (rowKeys.length < guards.length) {
+    nextKey += 1;
+    rowKeys.push(`workstation-guard-row-${nextKey}`);
   }
 
-  previousGuardsRef.current = guards;
-  return rowKeysRef.current;
+  return { nextKey, previousGuards: guards, rowKeys };
 }

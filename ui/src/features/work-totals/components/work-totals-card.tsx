@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { AgentBentoCard } from "../../bento/public";
+import { AgentBentoCard } from "../../bento/components/agent-bento";
 import { getWorkTotalsMessages } from "../messages/work-totals";
 import { WorkTotalStatCard } from "./work-total-stat-card";
 

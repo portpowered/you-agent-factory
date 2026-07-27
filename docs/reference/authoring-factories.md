@@ -269,6 +269,18 @@ without locating `factory.json` manually:
 you factory create my-team-review --from ./factory.json
 ```
 
+After changing the source definition, replace the same persisted Factory
+explicitly:
+
+```bash
+you factory update my-team-review --from ./factory.json
+```
+
+`create` refuses to overwrite an existing name; `update` requires that name to
+already exist. Both commands validate the source before replacing durable
+Factory files. Add `--set-current` only to `create` when the new project-local
+Factory should also become the selected Current Factory.
+
 By default persisted project factories live under `./factory`, and
 `you run --named <name>` resolves that project-local root before checking the
 global shared root at `~/.you-agent-factory/factories`.
@@ -305,7 +317,6 @@ result choices.
 `@you/review` accepts one required request input:
 
 ```bash
-you config init
 you run --named @you/review "Draft the release notes"
 ```
 
@@ -369,24 +380,28 @@ also surface `INVOCATION_BLOCKED` or `INVOCATION_NEEDS_HUMAN`. Run
 `you docs sessions` for the inspect-first recovery steps; the built-in does not
 add goal-specific inspect or resume commands.
 
-`you config init` installs the built-in into
-`~/.you-agent-factory/factories`; named invocations only read the
-project-local and global copies already on disk. That keeps the built-in
-editable: if you modify the installed
+Normal initializer startup materializes the built-in into
+`~/.you-agent-factory/factories` before a named runtime opens. That keeps the
+built-in editable: if you modify the installed
 `workers/*/AGENTS.md`, `workstations/*/AGENTS.md`, or other split-layout files,
 the next `you run --named @you/goal` invocation uses your edited version.
 
-Use `you factory list` to inspect one named-factory root at a time. The default
-command lists only the project-local `./factory` root; point `--dir` at the
-global root when you want to inspect shared built-ins and customer-wide named
-factories:
+Use `you factory list` to inspect the effective catalog. It merges the
+project-local `./factory` root, the global
+`~/.you-agent-factory/factories` root, and packaged built-ins. Project-local
+definitions override same-name global definitions, and global definitions
+override same-name built-ins. Use `--dir` to substitute another project-local
+root while retaining the global and packaged tiers:
 
 ```bash
 you factory list
-you factory list --dir ~/.you-agent-factory/factories
+you factory list --dir ./alternate-factories
 ```
 
-On upgrade, `you config init` moves valid factories from the retired
+Packaged-only Factories remain visible without being installed and show `-`
+for their Factory directory.
+
+On upgrade, normal initializer startup moves valid factories from the retired
 `~/.you-agent-factory/you-agent-factories` root into the canonical root. If a
 factory already exists in both locations, initialization preserves both copies
 and reports the conflict so you can compare them without losing customer edits.

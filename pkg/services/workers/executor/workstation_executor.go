@@ -721,23 +721,6 @@ func executionRequestInputTokens(request workerexecution.WorkstationExecutionReq
 	return cloneInputTokens(request.InputTokens)
 }
 
-func executionRequestContext(request workerexecution.WorkstationExecutionRequest) *workerexecution.Context {
-	if request.WorkingDirectory == "" && len(request.EnvVars) == 0 && request.ProjectID == "" && request.FactorySessionID == "" {
-		return nil
-	}
-
-	ctx := &workerexecution.Context{
-		ProjectID:     request.ProjectID,
-		SessionID:     request.FactorySessionID,
-		WorkDirectory: request.WorkingDirectory,
-		EnvVars:       cloneEnvVars(request.EnvVars),
-	}
-	if ctx.WorkDirectory == "" {
-		ctx.WorkDirectory = request.Worktree
-	}
-	return ctx
-}
-
 func (ctx resolvedWorkstationExecutionContext) factoryContext() *workerexecution.Context {
 	if ctx.WorkingDirectory == "" && ctx.Worktree == "" && len(ctx.EnvVars) == 0 && ctx.ProjectID == "" && ctx.SessionID == "" {
 		return nil

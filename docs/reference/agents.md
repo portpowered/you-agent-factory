@@ -8,7 +8,10 @@ doc-id: agent-factory/guides/agents
 
 Orient inside any you-agent-factory deployment: what to read first, how work
 enters the factory, and which `you docs` topic answers the next question. Run
-`you docs` with no topic to print the packaged topic index.
+bare `you` for generated command discovery and `you docs` with no topic for the
+packaged topic index. Bare `you` prints help successfully and does not load a
+Factory, write configuration, start a Factory Session, contact a provider, bind
+a listener, or open a browser.
 
 ## Read order
 
@@ -116,7 +119,8 @@ Before `you submit` or `you submit batch`, confirm a factory service is listenin
 
 1. **`you session list`** (primary) — calls `GET /factory-sessions` on the running host
    (default `http://localhost:7437`). Empty table means no open sessions; connection refused
-   means start the factory with `you`, `you run --continuously`, or `you run --dir <factory>`.
+   means start a listening service with `you server` or a server-enabled run such as
+   `you run --continuously --with-server`.
 2. **`you factory query`** — active factory definition for the selected session when you need
    the loaded factory name before `--session` on submit or work commands.
 3. **Deeper checks** — status API fields, dashboard URL, and continuous run modes: `you docs sessions`.
@@ -143,6 +147,7 @@ payload file your factory expects.
 
 | Command | Purpose | Factory must already be running? |
 |---------|---------|----------------------------------|
+| `you` | Print generated root help without loading or starting a Factory | No — command is side-effect-free discovery |
 | `you run --dir <factory>` | Start (or attach to) a local factory from a directory | No — command starts runtime |
 | `you run --work <batch.json>` | Submit batch JSON as part of **local startup** | No when combined with `--dir` startup |
 | `you submit` | Submit one work item (autonomous agent path) | Yes |

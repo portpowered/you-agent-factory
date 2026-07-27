@@ -6,19 +6,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@you-agent-factory/components/overlays";
+import { Button, Text } from "@you-agent-factory/components/primitives";
 import { useEffect, useId, useRef, useState } from "react";
 import type { ImportFactoryValue } from "../../../api/session-factory";
+import { AlertPanel, AlertPanelText } from "../../../components/ui/alert-panel";
 import {
-  AlertPanel,
-  AlertPanelText,
-  Button,
   FormDescription,
   FormError,
   FormField,
   FormLabel,
-  Input,
-  Text,
-} from "../../../components/ui";
+} from "../../../components/ui/form-field";
+import { Input } from "../../../components/ui/input";
 import type { CurrentFactoryExportFailure } from "../hooks/use-current-factory-export";
 import { downloadBlobAsFile } from "../lib/browser-download";
 import { buildFactoryExportFilename } from "../lib/build-factory-export-filename";
@@ -27,6 +25,7 @@ import { getExportDialogMessages } from "../messages/export-dialog";
 import { ExportFactoryDialogImageField } from "./export-factory-dialog-image-field";
 
 export interface ExportFactoryDialogProps {
+  effects?: ExportFactoryDialogEffects;
   factory: ImportFactoryValue | null;
   initialFactoryName: string;
   isPreparing?: boolean;
@@ -35,6 +34,16 @@ export interface ExportFactoryDialogProps {
   onClose: () => void;
   preparationFailure?: CurrentFactoryExportFailure | null;
 }
+
+export interface ExportFactoryDialogEffects {
+  downloadBlobAsFile: typeof downloadBlobAsFile;
+  writeFactoryExportPng: typeof writeFactoryExportPng;
+}
+
+const defaultExportFactoryDialogEffects: ExportFactoryDialogEffects = {
+  downloadBlobAsFile,
+  writeFactoryExportPng,
+};
 
 type ExportDialogState =
   | { status: "idle" }
@@ -65,6 +74,7 @@ interface ExportDialogFormState {
 }
 
 export function ExportFactoryDialog({
+  effects = defaultExportFactoryDialogEffects,
   factory,
   initialFactoryName,
   isPreparing = false,
@@ -76,6 +86,7 @@ export function ExportFactoryDialog({
   const messages = getExportDialogMessages(locale);
   const validationIdBase = useId();
   const formState = useExportFactoryDialogState({
+    effects,
     factory,
     initialFactoryName,
     isOpen,
@@ -247,6 +258,7 @@ function ExportFactoryDialogMessages({
 }
 
 function useExportFactoryDialogState({
+  effects,
   factory,
   initialFactoryName,
   isOpen,
@@ -256,6 +268,7 @@ function useExportFactoryDialogState({
   preparationFailure,
   validationIdBase,
 }: {
+  effects: ExportFactoryDialogEffects;
   factory: ImportFactoryValue | null;
   initialFactoryName: string;
   isOpen: boolean;
@@ -329,7 +342,7 @@ function useExportFactoryDialogState({
     exportAttemptRef.current = exportAttempt;
     setDialogState({ status: "exporting" });
 
-    const result = await writeFactoryExportPng({
+    const result = await effects.writeFactoryExportPng({
       factory: {
         ...factory,
         name: trimmedExportName,
@@ -351,7 +364,7 @@ function useExportFactoryDialogState({
     }
 
     const filename = buildFactoryExportFilename(trimmedExportName);
-    downloadBlobAsFile({
+    effects.downloadBlobAsFile({
       blob: result.blob,
       filename,
     });

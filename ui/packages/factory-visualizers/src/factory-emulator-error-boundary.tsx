@@ -1,4 +1,4 @@
-import { Button, Text } from "@you-agent-factory/components";
+import { Button, Text } from "@you-agent-factory/components/primitives";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
 import {

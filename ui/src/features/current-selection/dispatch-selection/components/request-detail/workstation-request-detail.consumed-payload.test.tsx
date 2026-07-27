@@ -1,3 +1,5 @@
+import "../../../../../testing/vitest-dom-capabilities.setup";
+
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
 import { workstationRequest } from "../../../base/components/detail-card/detail-card-test-helpers";

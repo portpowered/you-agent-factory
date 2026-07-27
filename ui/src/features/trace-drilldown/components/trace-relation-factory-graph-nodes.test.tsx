@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import type { NodeProps } from "@xyflow/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { WORK_RELATION_NODE_TYPES } from "../../graphs/public";
+import { WORK_RELATION_NODE_TYPES } from "../../graphs/components/work-relation-node";
 import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-flow";
 
 const RelationNode = WORK_RELATION_NODE_TYPES.workRelation;

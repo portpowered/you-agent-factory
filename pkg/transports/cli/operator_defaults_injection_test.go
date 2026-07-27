@@ -3,6 +3,7 @@ package cli
 import (
 	"testing"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
@@ -54,12 +55,12 @@ func TestResolveOperatorDefaultsDelegatesExactObservedLayers(t *testing.T) {
 
 func TestRootGlobalResolutionIsAvailableToAttachedCommandFamilies(t *testing.T) {
 	factory := withTestInjectedPlatformRoles(CommandFactory{
-		ModelsCLI: legacyModelsCLIService{},
+		ModelsCLI: rootModelsCLI,
 	})
 	root := factory.NewCommand(
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
-		nil,
+		startupcli.Functions{},
 	)
 	models, _, err := root.Find([]string{"models"})
 	if err != nil {
@@ -87,12 +88,12 @@ func TestRootGlobalResolutionIsAvailableToAttachedCommandFamilies(t *testing.T) 
 
 func TestRunCompatibilityParsingRefreshesResolvedGlobals(t *testing.T) {
 	factory := withTestInjectedPlatformRoles(CommandFactory{
-		ModelsCLI: legacyModelsCLIService{},
+		ModelsCLI: rootModelsCLI,
 	})
 	root := factory.NewCommand(
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
-		nil,
+		startupcli.Functions{},
 	)
 	run, _, err := root.Find([]string{"run"})
 	if err != nil {

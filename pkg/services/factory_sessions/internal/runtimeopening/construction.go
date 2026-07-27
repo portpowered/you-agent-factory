@@ -242,6 +242,7 @@ func NewDurableExecution(
 			DefaultModelProvider: defaultProvider,
 			DefaultModel:         operatorConfig.Defaults.WorkerModel,
 		},
+		sessionRequest.Host.MockWorkers,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("compose durable session persistence: %w", err)
@@ -260,6 +261,7 @@ func NewWorkerExecution(
 	providerOverride workerprovider.Provider,
 	state roles.CurrentRuntimeResolver,
 	modelService models.Service,
+	modelsScope models.RuntimeScopeRef,
 	contentMaterializer work.ContentMaterializer,
 	factory WorkersRuntimeFactory,
 ) (workers.RuntimeService, error) {
@@ -273,6 +275,7 @@ func NewWorkerExecution(
 	return factory(
 		state,
 		modelService,
+		modelsScope,
 		providerCommandRunner,
 		scriptCommandRunner,
 		ptyAllocator,

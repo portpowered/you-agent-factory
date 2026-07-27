@@ -131,16 +131,6 @@ function Verify-Checksum {
     }
 }
 
-function Invoke-ConfigInit {
-    param([string]$BinaryPath)
-
-    Write-InstallMessage "Initializing operator/system config and default factories."
-    & $BinaryPath config init
-    if ($LASTEXITCODE -ne 0) {
-        Fail-Install "failed to initialize operator/system config and default factories with '$BinaryName config init'; fix permissions or path issues and re-run that command"
-    }
-}
-
 function Install-Binary {
     param(
         [string]$SourcePath,
@@ -212,7 +202,6 @@ function Main {
         }
 
         Install-Binary $sourceBinaryPath $binaryPath
-        Invoke-ConfigInit $binaryPath
         Write-InstallMessage "Installed $BinaryName $tag to $binaryPath"
 
         if (Test-PathContainsDir $InstallDir) {

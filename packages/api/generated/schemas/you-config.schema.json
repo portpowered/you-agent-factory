@@ -43,6 +43,21 @@
         }
       }
     },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Runtime observability settings loaded from operator configuration before command-line overrides.",
+      "properties": {
+        "logging": {
+          "$ref": "#/$defs/runtimeArtifactSettings",
+          "description": "Structured runtime log storage settings. Omitted values use the documented production defaults."
+        },
+        "metrics": {
+          "$ref": "#/$defs/runtimeArtifactSettings",
+          "description": "Runtime metrics storage settings. Omitted values use the documented production defaults."
+        }
+      }
+    },
     "workerPresets": {
       "type": "array",
       "description": "Named worker model presets parsed from file only.",
@@ -62,6 +77,42 @@
     }
   },
   "$defs": {
+    "runtimeArtifactSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Rolling-file storage settings for one runtime observability artifact.",
+      "properties": {
+        "directory": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": ".*\\S.*",
+          "description": "Optional artifact root. Omission uses the runtime-owned directory below the operator home."
+        },
+        "maxSizeMB": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 100,
+          "description": "Maximum artifact file size in megabytes before rotation."
+        },
+        "maxBackups": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 20,
+          "description": "Maximum number of rotated artifact files to retain."
+        },
+        "maxAgeDays": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 30,
+          "description": "Maximum age in days for rotated artifact files."
+        },
+        "compress": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether rotated artifact files are gzip-compressed."
+        }
+      }
+    },
     "operatorWorkerModelProvider": {
       "type": "string",
       "pattern": "^[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*(?:AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI|agent|agy|anthropic|antigravity|claude|codex|cursor|cursor-agent|gemini|kiro|kiro-cli|openai|opencode|pi)[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$",
@@ -257,7 +308,7 @@
       "resolvedBy": "defaultpaths.OperatorConfigPath(homeDir)"
     },
     "sharedFileSplit": {
-      "summary": "operator_settings owns backendScopeID identity, defaults, and workerPresets behavior; its focused loaders share one service-owned config file",
+      "summary": "operator_settings owns backendScopeID identity, defaults, runtime observability settings, and workerPresets behavior; its focused loaders share one service-owned config file",
       "owners": [
         {
           "package": "operator_settings",
@@ -266,6 +317,19 @@
             "defaults",
             "defaults.workerModelProvider",
             "defaults.workerModel",
+            "runtime",
+            "runtime.logging",
+            "runtime.logging.directory",
+            "runtime.logging.maxSizeMB",
+            "runtime.logging.maxBackups",
+            "runtime.logging.maxAgeDays",
+            "runtime.logging.compress",
+            "runtime.metrics",
+            "runtime.metrics.directory",
+            "runtime.metrics.maxSizeMB",
+            "runtime.metrics.maxBackups",
+            "runtime.metrics.maxAgeDays",
+            "runtime.metrics.compress",
             "workerPresets",
             "workerPresets[].id",
             "workerPresets[].modelProvider",
@@ -281,7 +345,7 @@
         "policy": "settings and identity loading use the generated GlobalConfig model with json.Decoder.DisallowUnknownFields and reject unknown top-level keys, unknown nested keys, and trailing JSON values"
       }
     ],
-    "siblingPreservation": "persistBackendScopeID re-encodes the generated GlobalConfig contract and preserves decoded defaults and workerPresets",
+    "siblingPreservation": "persistBackendScopeID re-encodes the generated GlobalConfig contract and preserves decoded defaults, runtime observability settings, and workerPresets",
     "fields": {
       "backendScopeID": {
         "inventoryId": "backendScopeID",

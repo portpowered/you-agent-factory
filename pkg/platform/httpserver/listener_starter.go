@@ -24,11 +24,13 @@ func StarterWithListener(listener net.Listener) Starter {
 			return fmt.Errorf("process-owned API server listener is required")
 		}
 		if request.OnBound != nil {
+			host := request.Host
 			port := request.Port
 			if address, ok := listener.Addr().(*net.TCPAddr); ok {
+				host = address.IP.String()
 				port = address.Port
 			}
-			request.OnBound(Binding{Port: port})
+			request.OnBound(Binding{Host: host, Port: port})
 		}
 		return Serve(ctx, request.Handler, listener, request.Logger)
 	}

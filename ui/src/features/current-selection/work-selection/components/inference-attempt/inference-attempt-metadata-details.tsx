@@ -8,7 +8,7 @@ import {
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
 } from "../../../base/components/presentation/current-selection-locale";
-import { CurrentSelectionDescriptionList } from "../../../base/public";
+import { CurrentSelectionDescriptionList } from "../../../base/components/detail/current-selection-description-list";
 import { InferenceAttemptDetail } from "./inference-attempt-detail";
 
 export function InferenceAttemptMetadataDetails({

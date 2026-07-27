@@ -1,12 +1,15 @@
 package kiro
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
 )
 
 const (
@@ -37,6 +40,55 @@ type FailureResult struct {
 
 func ParseProviderFailure(input FailureInput) FailureResult {
 	return parseProviderFailure(input)
+}
+
+// TimeoutFailureResult returns the canonical Kiro timeout outcome used when
+// the command boundary reports deadline expiration without provider output.
+func TimeoutFailureResult() FailureResult {
+	return knownKiroFailure(workerexecution.WorkFailureTypeTimeout)
+}
+
+// ClassifyFailure translates Kiro subprocess outcomes into the bounded facts
+// consumed by the neutral conductor. Cancellation remains an invocation-level
+// concern and is propagated by Integration.Invoke before classification.
+func (*Adapter) ClassifyFailure(ctx context.Context, input adapter.FailureContext) adapter.FailureResult {
+	if !kiroFailureNeedsClassification(input) {
+		return adapter.FailureResult{}
+	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) ||
+		errors.Is(input.CommandError, context.DeadlineExceeded) {
+		return normalizedKiroFailureResult(TimeoutFailureResult(), input.CommandError)
+	}
+	parsed := ParseProviderFailure(FailureInput{
+		Stdout:   input.CommandResult.Stdout,
+		Stderr:   input.CommandResult.Stderr,
+		ExitCode: input.CommandResult.ExitCode,
+	})
+	return normalizedKiroFailureResult(parsed, errors.Join(
+		input.CommandError, input.DecodeError, input.FlushError, input.ParseError,
+	))
+}
+
+func kiroFailureNeedsClassification(input adapter.FailureContext) bool {
+	return input.CommandError != nil ||
+		input.CommandResult.ExitCode != 0 ||
+		input.DecodeError != nil ||
+		input.FlushError != nil ||
+		input.ParseError != nil
+}
+
+func normalizedKiroFailureResult(parsed FailureResult, cause error) adapter.FailureResult {
+	providerErr := workerexecution.NewProviderError(parsed.Reason, parsed.Message, cause)
+	decision := workerexecution.FailureDecisionFromMetadata(&workerexecution.WorkFailureMetadata{
+		Family: providerErr.Family,
+		Type:   providerErr.Type,
+	})
+	return adapter.FailureResult{Failure: &adapter.FailureFacts{
+		Family:  providerErr.Family,
+		Type:    providerErr.Type,
+		Message: providerErr.Message,
+		Retry:   adapter.RetryGuidance{Retryable: decision.Retryable},
+	}}
 }
 
 func tailForErrorScan(output []byte) string {
@@ -279,13 +331,34 @@ func unsafeKiroUnknownDetail(detail string) bool {
 	if strings.HasPrefix(detail, "{") || strings.HasPrefix(detail, "[") || strings.Contains(detail, "=") {
 		return true
 	}
+	if containsPrivatePath(lower) {
+		return true
+	}
 	return containsAny(lower,
 		"prompt", "transcript", "response draft", "model output", "user message",
 		"request body", "request payload", "input content", "output content",
 		"progress", "cleanup", "credential", "secret", "password",
 		"api key", "api_key", "access key", "authorization", "bearer ",
 		"access token", "refresh token", "session token", "environment", "env var",
+		"token:", "sk-", "ghp_", "github_pat_", "akia",
 	)
+}
+
+func containsPrivatePath(detail string) bool {
+	if containsAny(detail,
+		"/home/", "/users/", "/tmp/", "/var/tmp/", "/private/",
+		`:\users\`, `:\documents and settings\`, `\appdata\`,
+	) {
+		return true
+	}
+	for index := 0; index+2 < len(detail); index++ {
+		if detail[index] >= 'a' && detail[index] <= 'z' &&
+			detail[index+1] == ':' &&
+			(detail[index+2] == '\\' || detail[index+2] == '/') {
+			return true
+		}
+	}
+	return false
 }
 
 func truncateKiroFailureMessage(message string) string {

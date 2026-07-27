@@ -138,6 +138,31 @@ func (s *Server) GetFactoryResponseEventsBySessionId(
 	if !ok {
 		return
 	}
+
+	if isDurableExecutionSessionID(string(sessionID)) {
+		reader, ok := s.requireDurableSessionResponseEventsReader(w)
+		if !ok {
+			return
+		}
+		subscription, err := reader.SubscribeDurableFactoryResponseEvents(r.Context(), request)
+		if err != nil {
+			if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+				s.writeError(w, http.StatusNotFound, "factory response-event session not found", "RESPONSE_EVENT_SESSION_NOT_FOUND")
+				return
+			}
+			if errors.Is(err, apisurface.ErrFactoryResponseEventStreamExpired) {
+				s.writeError(w, http.StatusGone, "factory response-event stream expired", "RESPONSE_EVENT_STREAM_EXPIRED")
+				return
+			}
+			s.logger.Error("subscribe durable factory response events failed", zap.String("session_id", string(sessionID)), zap.Error(err))
+			s.writeError(w, http.StatusInternalServerError, "failed to subscribe to factory response events", "INTERNAL_ERROR")
+			return
+		}
+		defer subscription.Detach()
+		streamFactoryResponseEvents(w, r, flusher, subscription, string(sessionID), s.logger)
+		return
+	}
+
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
 		return
@@ -158,6 +183,17 @@ func (s *Server) GetFactoryResponseEventsBySessionId(
 	}
 	defer subscription.Detach()
 
+	streamFactoryResponseEvents(w, r, flusher, subscription, string(sessionID), s.logger)
+}
+
+func streamFactoryResponseEvents(
+	w http.ResponseWriter,
+	r *http.Request,
+	flusher http.Flusher,
+	subscription apisurface.FactoryResponseEventSubscription,
+	sessionID string,
+	logger *zap.Logger,
+) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -169,12 +205,12 @@ func (s *Server) GetFactoryResponseEventsBySessionId(
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, factorysessionexecution.ErrResponseEventSubscriptionClosed) {
 				return
 			}
-			s.logger.Error("read factory response events failed", zap.String("session_id", string(sessionID)), zap.Error(err))
+			logger.Error("read factory response events failed", zap.String("session_id", sessionID), zap.Error(err))
 			return
 		}
 		for _, event := range events {
 			if err := writeFactoryResponseEventSSE(w, event); err != nil {
-				s.logger.Debug("write factory response event failed", zap.String("session_id", string(sessionID)), zap.Error(err))
+				logger.Debug("write factory response event failed", zap.String("session_id", sessionID), zap.Error(err))
 				return
 			}
 			flusher.Flush()

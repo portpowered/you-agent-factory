@@ -5,156 +5,111 @@ import (
 	"io"
 	"strings"
 
-	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
-	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
-func newSubmitCommand(
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	operations CommandFactory,
-) *cobra.Command {
-	return newSubmitCommandWithHandlers(
-		globals, diagnostics, operations.SubmitWork, operations.SubmitBatch,
-	)
-}
-
-func newSubmitCommandWithHandlers(
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	submitHandler func(submitcli.SubmitConfig) error,
-	batchHandler func(submitcli.BatchConfig) error,
-) *cobra.Command {
-	cfg := submitcli.SubmitConfig{Server: globals.server}
-
-	cmd := &cobra.Command{
-		Use:   "submit",
-		Short: "Submit work to a running factory",
-		Long: "Submit work to a running you-agent-factory service.\n\n" +
-			"Unary submit (this command) posts one work item with --name, --work-type-name, and --payload. " +
-			"For multi-work FACTORY_REQUEST_BATCH ingress to an already-running session, use " +
-			cliBinaryName + " submit batch. See " + cliBinaryName + " submit batch --help and " +
-			cliBinaryName + " docs batch-inputs.\n\n" +
-			"By default unary submit targets the default compatibility session. " +
-			"Use --session to submit to one specific live factory session instead.",
-		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return executeSubmitCommand(cmd, &cfg, globals, diagnostics, submitHandler)
-		},
+func newRunServerFlagBindings() climanifestcobra.RunServerFlagBindings {
+	targets := map[string]any{}
+	stringInputs := []string{
+		"you.run.flag.work", "you.run.flag.dir", "you.run.flag.named",
+		"you.run.flag.factory", "you.run.flag.record", "you.run.flag.replay",
+		"you.run.flag.runtime-log-dir", "you.run.flag.runtime-metrics-dir",
+		"you.run.flag.with-mock-workers", "you.run.flag.output",
 	}
-
-	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().StringVar(&cfg.Name, "name", "", "authored request name for the submitted work (required)")
-	cmd.Flags().StringVar(&cfg.WorkTypeName, "work-type-name", "", "work type name to submit to (required)")
-	cmd.Flags().StringVar(&cfg.Payload, "payload", "", "path to payload file (.json or .md) (required)")
-	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
-	cmd.AddCommand(newSubmitBatchCommandWithHandler(globals, diagnostics, batchHandler))
-	return cmd
-}
-
-func executeSubmitCommand(
-	cmd *cobra.Command,
-	cfg *submitcli.SubmitConfig,
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	submitHandler func(submitcli.SubmitConfig) error,
-) error {
-	cfg.Context = cmd.Context()
-	cfg.Server = globals.server
-	cfg.JSON = globals.json
-	cfg.Output = cmd.OutOrStdout()
-	cfg.Diagnostics = diagnostics.writer(cmd)
-	cfg.Verbose = diagnostics.verboseEnabled()
-	cfg.Debug = diagnostics.debug
-	return submitHandler(*cfg)
-}
-
-func newSubmitBatchCommandWithHandler(
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	batchHandler func(submitcli.BatchConfig) error,
-) *cobra.Command {
-	cfg := submitcli.BatchConfig{Server: globals.server}
-
-	cmd := &cobra.Command{
-		Use:   "batch [path|-|<inline-json>]",
-		Short: "Upsert a FACTORY_REQUEST_BATCH to a running factory",
-		Long: "Upsert canonical FACTORY_REQUEST_BATCH JSON to a running you-agent-factory session.\n\n" +
-			"The document must use type FACTORY_REQUEST_BATCH with at least one works entry. " +
-			"See " + cliBinaryName + " docs batch-inputs for the batch schema, relation rules, and examples.\n\n" +
-			"Batch input modes (first match wins):\n" +
-			"  --file <path>   read batch JSON from path; use --file - to read stdin\n" +
-			"  <path>          read batch JSON from an existing filesystem path (primary form)\n" +
-			"  -               read batch JSON from stdin\n" +
-			"  <inline-json>   positional whose first non-whitespace byte is { is parsed as JSON\n" +
-			"  (no args)       when stdin is not a TTY, read the full piped document from stdin\n\n" +
-			"When both --file and a positional path are provided, --file wins.\n" +
-			"When a file path or --file is set, stdin is ignored.\n\n" +
-			"Inline JSON is convenient for small batches; shell argument length limits apply—use a file or pipe for large documents.\n\n" +
-			"Use --dry-run to parse and validate locally, print a summary, and perform no HTTP. " +
-			"Valid --dry-run exits 0 even when the factory is unreachable.\n\n" +
-			"By default the command targets the default compatibility session (~default). " +
-			"Use --session to upsert into one specific live factory session instead.\n\n" +
-			"Global flags (place before the subcommand): --server selects the factory API base URI; " +
-			"--json emits structured success output on stdout; --verbose and --debug emit concise " +
-			"request metadata on stderr without logging batch payload content.",
-		Example: "  # Upsert a batch file to the default session.\n" +
-			"  " + cliBinaryName + " submit batch ./factory/inputs/BATCH/my-batch.json\n\n" +
-			"  # Explicit file flag (wins over a positional path when both are set).\n" +
-			"  " + cliBinaryName + " submit batch --file ./batches/deploy.json\n\n" +
-			"  # Pipe batch JSON without a temp file.\n" +
-			"  cat batch.json | " + cliBinaryName + " submit batch\n\n" +
-			"  # Read batch JSON from stdin explicitly.\n" +
-			"  " + cliBinaryName + " submit batch - < batch.json\n\n" +
-			"  # Validate locally without contacting the server.\n" +
-			"  " + cliBinaryName + " submit batch --dry-run ./batch.json\n\n" +
-			"  # Target a non-default live session with structured output.\n" +
-			"  " + cliBinaryName + " --server http://localhost:9090 --json submit batch --session session-beta ./batch.json",
-		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return executeSubmitBatchCommand(cmd, args, &cfg, globals, diagnostics, batchHandler)
-		},
+	boolInputs := []string{
+		"you.run.flag.continuously", "you.run.flag.no-record",
+		"you.run.flag.runtime-log-compress", "you.run.flag.runtime-metrics-compress",
+		"you.run.flag.with-server", "you.run.flag.with-site", "you.run.flag.quiet",
+		"you.run.flag.skip-permissions",
 	}
-
-	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().StringVar(&cfg.FileFlag, "file", "", "read batch JSON from path; use - to read stdin (wins over a positional path)")
-	cmd.Flags().BoolVar(&cfg.DryRun, "dry-run", false, "validate input and print a summary without sending HTTP")
-	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
-	return cmd
+	intInputs := []string{
+		"you.run.flag.runtime-log-max-size-mb", "you.run.flag.runtime-log-max-backups",
+		"you.run.flag.runtime-log-max-age-days", "you.run.flag.runtime-metrics-max-size-mb",
+		"you.run.flag.runtime-metrics-max-backups", "you.run.flag.runtime-metrics-max-age-days",
+	}
+	for _, inputID := range stringInputs {
+		targets[inputID] = scalarTarget("")
+	}
+	for _, inputID := range boolInputs {
+		targets[inputID] = scalarTarget(false)
+	}
+	for _, inputID := range intInputs {
+		targets[inputID] = scalarTarget(0)
+	}
+	return climanifestcobra.RunServerFlagBindings{LocalTargets: targets}
 }
 
-func executeSubmitBatchCommand(
-	cmd *cobra.Command,
-	args []string,
-	cfg *submitcli.BatchConfig,
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	batchHandler func(submitcli.BatchConfig) error,
-) error {
-	cfg.Context = cmd.Context()
-	cfg.Server = globals.server
-	cfg.JSON = globals.json
-	cfg.Args = args
-	cfg.Stdin = cmd.InOrStdin()
-	cfg.StdinIsTTY = func() bool { return startupcli.StdinIsTTY(cmd.Context()) }
-	cfg.Output = cmd.OutOrStdout()
-	cfg.Verbose = diagnostics.verboseEnabled()
-	cfg.Debug = diagnostics.debug
-	return batchHandler(*cfg)
+func applyRunResolvedInputs(cfg runcli.RunConfig, values map[string]any) (runcli.RunConfig, error) {
+	stringFields := []struct {
+		id     string
+		target *string
+	}{
+		{"you.run.flag.work", &cfg.WorkFile},
+		{"you.run.flag.dir", &cfg.Dir},
+		{"you.run.flag.named", &cfg.NamedFactoryName},
+		{"you.run.flag.factory", &cfg.FactoryConfigPath},
+		{"you.run.flag.record", &cfg.RecordPath},
+		{"you.run.flag.replay", &cfg.ReplayPath},
+		{"you.run.flag.runtime-log-dir", &cfg.RuntimeLogDir},
+		{"you.run.flag.runtime-metrics-dir", &cfg.RuntimeMetricsDir},
+		{"you.run.flag.with-mock-workers", &cfg.MockWorkersConfigPath},
+		{"you.run.flag.output", &cfg.InvocationOutputMode},
+	}
+	boolFields := []struct {
+		id     string
+		target *bool
+	}{
+		{"you.run.flag.continuously", &cfg.Continuously},
+		{"you.run.flag.no-record", &cfg.DisableDefaultRecording},
+		{"you.run.flag.runtime-log-compress", &cfg.RuntimeLogConfig.Compress},
+		{"you.run.flag.runtime-metrics-compress", &cfg.RuntimeMetricsConfig.Compress},
+		{"you.run.flag.with-server", &cfg.WithServer},
+		{"you.run.flag.with-site", &cfg.WithSite},
+		{"you.run.flag.quiet", &cfg.SuppressDashboardRendering},
+	}
+	intFields := []struct {
+		id     string
+		target *int
+	}{
+		{"you.run.flag.runtime-log-max-size-mb", &cfg.RuntimeLogConfig.MaxSize},
+		{"you.run.flag.runtime-log-max-backups", &cfg.RuntimeLogConfig.MaxBackups},
+		{"you.run.flag.runtime-log-max-age-days", &cfg.RuntimeLogConfig.MaxAge},
+		{"you.run.flag.runtime-metrics-max-size-mb", &cfg.RuntimeMetricsConfig.MaxSize},
+		{"you.run.flag.runtime-metrics-max-backups", &cfg.RuntimeMetricsConfig.MaxBackups},
+		{"you.run.flag.runtime-metrics-max-age-days", &cfg.RuntimeMetricsConfig.MaxAge},
+	}
+	var err error
+	for _, field := range stringFields {
+		*field.target, err = commandInputValue[string](values, field.id)
+		if err != nil {
+			return cfg, err
+		}
+	}
+	for _, field := range boolFields {
+		*field.target, err = commandInputValue[bool](values, field.id)
+		if err != nil {
+			return cfg, err
+		}
+	}
+	for _, field := range intFields {
+		*field.target, err = commandInputValue[int](values, field.id)
+		if err != nil {
+			return cfg, err
+		}
+	}
+	return cfg, nil
 }
 
 func parseRunCommandArgs(cmd *cobra.Command, args []string) ([]string, error) {
 	remainder := make([]string, 0, len(args))
 	flagsByToken := indexRunCommandFlags(cmd)
+	flagArgs, positional, _ := runcli.SplitFlagTerminator(args)
 
-	for index := 0; index < len(args); index++ {
-		token := args[index]
-		if token == "--" {
-			remainder = append(remainder, args[index+1:]...)
-			break
-		}
+	for index := 0; index < len(flagArgs); index++ {
+		token := flagArgs[index]
 		if token == "-" || !strings.HasPrefix(token, "-") {
 			remainder = append(remainder, token)
 			continue
@@ -180,7 +135,7 @@ func parseRunCommandArgs(cmd *cobra.Command, args []string) ([]string, error) {
 			return nil, fmt.Errorf("flag %s is unavailable", lookupToken)
 		}
 
-		value, consumedNext, err := resolveRunFlagValue(flag, args, index, hasInlineValue, inlineValue)
+		value, consumedNext, err := resolveRunFlagValue(flag, flagArgs, index, hasInlineValue, inlineValue)
 		if err != nil {
 			return nil, err
 		}
@@ -193,6 +148,7 @@ func parseRunCommandArgs(cmd *cobra.Command, args []string) ([]string, error) {
 		}
 	}
 
+	remainder = append(remainder, positional...)
 	return remainder, nil
 }
 

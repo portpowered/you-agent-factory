@@ -1,3 +1,5 @@
+import "../../../../../testing/vitest-dom-capabilities.setup";
+
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CurrentFactoryDocument } from "../../../../../api/current-factory-definition";

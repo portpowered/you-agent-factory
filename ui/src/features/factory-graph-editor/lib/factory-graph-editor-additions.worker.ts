@@ -3,7 +3,7 @@ import {
   isModelProviderWorkerType,
   isPollerWorkerType,
   isScriptWorkerType,
-} from "../../current-factory-definition/public";
+} from "../../current-factory-definition/lib/worker-workstation-taxonomy";
 import type { FactoryGraphDraft } from "./draft/factory-graph-draft-types";
 import type {
   FactoryGraphAddEntityDraft,

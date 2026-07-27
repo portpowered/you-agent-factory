@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -26,6 +27,12 @@ type fakeCommandRunner struct {
 
 func (f *fakeCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	return platformprocess.CommandResult{Stdout: []byte(f.stdout), Stderr: []byte(f.stderr), ExitCode: f.exitCode}, nil
+}
+
+type canceledCommandRunner struct{}
+
+func (canceledCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, context.Canceled
 }
 
 type captureCommandRunner struct {
@@ -62,6 +69,12 @@ func (r *captureCommandRunner) LastEnv() []string {
 	copied := make([]string, len(r.envs[len(r.envs)-1]))
 	copy(copied, r.envs[len(r.envs)-1])
 	return copied
+}
+
+func (r *captureCommandRunner) CallCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.workDirs)
 }
 
 type timeoutThenSuccessCommandRunner struct {
@@ -321,4 +334,38 @@ func cursorMergedPrompt(systemPrompt, userMessage string) string {
 	default:
 		return "System instructions:\n" + systemPrompt + "\n\nUser request:\n" + userMessage
 	}
+}
+
+func assertCursorProviderCompleted(t *testing.T, listed factoryapi.ListWorkResponse) {
+	t.Helper()
+	assertSessionPlaces(t, listed, map[string]int{
+		"task:complete": 1, "task:init": 0, "task:failed": 0,
+	})
+}
+
+func assertSessionPlaces(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
+	t.Helper()
+	for placeID, want := range wants {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
+}
+
+func assertDispatchOutput(t *testing.T, events []factoryapi.FactoryEvent, want string) {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch response: %v", err)
+		}
+		if payload.Output == nil || *payload.Output != want {
+			t.Fatalf("dispatch output = %#v, want %q", payload.Output, want)
+		}
+		return
+	}
+	t.Fatalf("Factory Event history has no dispatch response: %#v", events)
 }

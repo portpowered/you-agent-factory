@@ -138,7 +138,7 @@ func TestResolveRunnerSelectionRejectsUnknownAndNonSelectableWithoutFallback(t *
 	t.Parallel()
 	providers := newBuiltInRegistry(t)
 
-	for _, identity := range []string{"unknown", "agy"} {
+	for _, identity := range []string{"unknown"} {
 		identity := identity
 		t.Run(identity, func(t *testing.T) {
 			t.Parallel()
@@ -173,6 +173,18 @@ func TestResolveRunnerSelectionUsesExternalIntegrationCanonicalIdentity(t *testi
 			"ResolveRunnerSelection(external) = %#v, want canonical registered integration",
 			selection,
 		)
+	}
+	if providers.UsesNativeRunner(selection.RunnerID) {
+		t.Fatal("UsesNativeRunner(external) = true, want conductor route")
+	}
+	if !providers.UsesNativeRunner(workers.RunnerIDCodex) {
+		t.Fatal("UsesNativeRunner(codex) = false, want native runner route")
+	}
+	if providers.UsesNativeRunner("gemini") {
+		t.Fatal("UsesNativeRunner(gemini) = true, want conductor route for migrated Gemini")
+	}
+	if providers.UsesNativeRunner("cursor") || providers.UsesNativeRunner(workers.RunnerIDCursorCLI) {
+		t.Fatal("UsesNativeRunner(cursor) = true, want conductor route for migrated Cursor")
 	}
 	if _, err := providers.Integration("customer"); err != nil {
 		t.Fatalf("Integration(external) error = %v", err)

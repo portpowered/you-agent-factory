@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	models "github.com/portpowered/infinite-you/pkg/services/models"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
@@ -64,6 +65,36 @@ func TestBuildProcessConstructionFailureDoesNotStartExternalLifecycle(t *testing
 	if apiStarts != 0 {
 		t.Fatalf("construction failure started API lifecycle %d times, want zero", apiStarts)
 	}
+}
+
+func TestBuildProcessComposesInertModelsRuntimeHost(t *testing.T) {
+	t.Parallel()
+
+	launcher := &rootRecordingModelHostLauncher{}
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{
+		ModelHostProcessLauncher: launcher,
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	if process == nil {
+		t.Fatal("BuildProcess() returned nil process")
+	}
+	if launcher.starts != 0 {
+		t.Fatalf("model host process starts during construction = %d, want 0", launcher.starts)
+	}
+}
+
+type rootRecordingModelHostLauncher struct {
+	starts int
+}
+
+func (launcher *rootRecordingModelHostLauncher) Start(
+	context.Context,
+	models.HostProcessStartSpec,
+) (models.HostManagedProcess, error) {
+	launcher.starts++
+	panic("model host process launcher called during inert construction")
 }
 
 func TestBuildProcessComposesDetachedExternalProviderWithBuiltInsInertly(t *testing.T) {
@@ -184,7 +215,6 @@ func TestBuildProcessRejectsUnknownAndNonSelectableFactoryProvidersWithoutFallba
 		want     string
 	}{
 		{name: "unknown", provider: "unknown.provider", want: `provider "unknown.provider" is unknown`},
-		{name: "not supported", provider: "agy", want: `provider "agy" is not selectable (not-supported)`},
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
@@ -314,7 +344,7 @@ func TestProcessInvalidArgumentsReturnsDiagnostic(t *testing.T) {
 	}
 }
 
-func TestProcessSequentialHomesControlConfigPaths(t *testing.T) {
+func TestProcessSequentialHomesKeepEffectiveListingReadOnly(t *testing.T) {
 	ambientHome := t.TempDir()
 	t.Setenv("HOME", ambientHome)
 	t.Setenv("USERPROFILE", ambientHome)
@@ -327,22 +357,20 @@ func TestProcessSequentialHomesControlConfigPaths(t *testing.T) {
 	for _, home := range homes {
 		var output bytes.Buffer
 		if err := process.Execute(Input{
-			Args: []string{"you", "config", "init", "--json"}, Env: homeEnvironment(home), Stdout: &output, Context: context.Background(), WorkingDirectory: home,
+			Args: []string{
+				"you", "--json", "factory", "list", "--dir",
+				filepath.Join(home, ".you-agent-factory", "factories"),
+			},
+			Env: homeEnvironment(home), Stdout: &output, Context: context.Background(), WorkingDirectory: home,
 		}); err != nil {
-			t.Fatalf("Process.Execute(config init, home %q) error = %v", home, err)
+			t.Fatalf("Process.Execute(factory list, home %q) error = %v", home, err)
 		}
-		var outcome struct {
-			HomeDir    string `json:"homeDir"`
-			ConfigPath string `json:"configPath"`
+		if output.Len() == 0 {
+			t.Fatalf("factory list output for supplied home %q is empty", home)
 		}
-		if err := json.Unmarshal(output.Bytes(), &outcome); err != nil {
-			t.Fatalf("decode config init output for supplied home %q: %v\noutput:\n%s", home, err, output.String())
-		}
-		if outcome.HomeDir != home {
-			t.Fatalf("config init homeDir = %q, want supplied home %q", outcome.HomeDir, home)
-		}
-		if _, err := os.Stat(outcome.ConfigPath); err != nil {
-			t.Fatalf("Stat(config for supplied home %q) error = %v", home, err)
+		configPath := filepath.Join(home, ".you-agent-factory", "config.json")
+		if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+			t.Fatalf("Stat(config for supplied home %q) error = %v, want not-exist", home, err)
 		}
 	}
 	ambientEntries, err := os.ReadDir(ambientHome)
@@ -414,28 +442,46 @@ func TestProcessConcurrentCommandsKeepInvocationStateIndependent(t *testing.T) {
 	}
 }
 
-func TestProcessSetupAndFactoryAuthoringCommandsThroughProductionComposition(t *testing.T) {
+func TestProcessFactoryListDiscoversPackagedFactoriesWithoutMaterialization(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	factoryDir := filepath.Join(t.TempDir(), "authored-factory")
 	process, err := BuildProcess(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
-	var initOutput bytes.Buffer
+	var listOutput bytes.Buffer
 	if err := process.Execute(Input{
-		Args:             []string{"you", "init", "--dir", factoryDir},
+		Args: []string{
+			"you", "--json", "factory", "list", "--dir",
+			filepath.Join(home, ".you-agent-factory", "factories"),
+		},
 		Env:              homeEnvironment(home),
-		Stdout:           &initOutput,
+		Stdout:           &listOutput,
 		Context:          context.Background(),
-		WorkingDirectory: filepath.Dir(factoryDir),
+		WorkingDirectory: t.TempDir(),
 	}); err != nil {
-		t.Fatalf("Process.Execute(init) error = %v", err)
+		t.Fatalf("Process.Execute(factory list) error = %v", err)
 	}
-	if !strings.Contains(initOutput.String(), "Initialized default factory directory structure") {
-		t.Fatalf("init output = %q", initOutput.String())
+
+	if !strings.Contains(listOutput.String(), `"factoryDirectory":"-"`) {
+		t.Fatalf("factory list output = %q, want unmaterialized packaged location", listOutput.String())
 	}
+	if entries, err := os.ReadDir(home); err != nil || len(entries) != 0 {
+		t.Fatalf("home entries after factory list = (%v, %v), want empty", entries, err)
+	}
+}
+
+func TestProcessNormalInitializationAndFactoryValidationThroughProductionComposition(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	factoryDir := filepath.Join(home, ".you-agent-factory", "factories", "@you", "goal")
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	runNormalInitialization(t, process, home)
 
 	var validateOutput bytes.Buffer
 	if err := process.Execute(Input{

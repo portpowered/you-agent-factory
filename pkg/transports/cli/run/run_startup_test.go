@@ -493,7 +493,7 @@ func TestRun_VerboseNamedFactoryDiagnosticsReportPrecedenceWithoutPayloadContent
 	}
 }
 
-func TestRun_StartupOutputSkipsDashboardOpenWhenOutputIsNonInteractive(t *testing.T) {
+func TestRun_StartupOpensDashboardWhenOutputIsNonInteractive(t *testing.T) {
 	originalBuilder := openTestRuntimeRunner
 	defer func() {
 		openTestRuntimeRunner = originalBuilder
@@ -508,19 +508,25 @@ func TestRun_StartupOutputSkipsDashboardOpenWhenOutputIsNonInteractive(t *testin
 		}, nil
 	}
 	var out bytes.Buffer
+	var openedURL string
 	err := Run(context.Background(), RunConfig{
 		Dir:           "factory",
 		Port:          7437,
 		OpenDashboard: true,
 		StartupOutput: &out,
+		BrowserOpener: func(_ context.Context, target string) error {
+			openedURL = target
+			return nil
+		},
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 
 	output := out.String()
-	if !strings.Contains(output, "Dashboard auto-open disabled; open http://localhost:7437/dashboard/ui") {
-		t.Fatalf("startup output = %q, want non-interactive fallback", output)
+	const wantURL = "http://localhost:7437/dashboard/ui"
+	if openedURL != wantURL || !strings.Contains(output, "Opening dashboard: "+wantURL) {
+		t.Fatalf("browser target = %q, startup output = %q, want non-interactive open", openedURL, output)
 	}
 }
 

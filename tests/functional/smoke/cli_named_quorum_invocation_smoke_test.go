@@ -21,14 +21,13 @@ func TestNamedQuorumRun_RealCLIAcceptsRoleFlagsAndReturnsOneMergeResult(t *testi
 	}
 	homeDir := t.TempDir()
 	binaryPath := buildYouCLIBinary(t)
-	initializeCLISystemConfig(t, binaryPath, homeDir)
 	port, err := reserveLocalTCPPort()
 	if err != nil {
 		t.Fatalf("reserve port: %v", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, binaryPath, "--json", "run", "--named", factorydefinitions.PackagedQuorumFactoryName, "--with-mock-workers", "--no-record", "--server", fmt.Sprintf("http://127.0.0.1:%d", port), "--quiet", writeQuorumMockWorkersConfig(t), "--branch-provider", "CLAUDE", "--branch-model", "claude-sonnet-4-20250514", "--merge-provider", "CODEX", "--merge-model", "gpt-5", "compare the two plans")
+	cmd := exec.CommandContext(ctx, binaryPath, "--json", "run", "--named", factorydefinitions.PackagedQuorumFactoryName, "--with-mock-workers", "--no-record", "--server", fmt.Sprintf("http://127.0.0.1:%d", port), writeQuorumMockWorkersConfig(t), "--branch-provider", "CLAUDE", "--branch-model", "claude-sonnet-4-20250514", "--merge-provider", "CODEX", "--merge-model", "gpt-5", "compare the two plans")
 	cmd.Dir = t.TempDir()
 	cmd.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	var stdout, stderr strings.Builder

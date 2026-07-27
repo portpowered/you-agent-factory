@@ -23,21 +23,23 @@ const (
 	baselineVersion = 1
 	baselineStage   = "packaged-structure"
 
-	ruleServiceInterfaceCount   = "service-root-interface-count"
-	ruleServiceExportedFunction = "service-root-exported-function"
-	ruleServiceUnexpectedDir    = "service-root-unexpected-directory"
-	ruleServiceContainerGoFile  = "service-container-go-file"
-	ruleFunctionalShallowFile         = "functional-test-missing-subsection"
-	ruleFunctionalUnclassifiedDomain  = "functional-test-unclassified-domain"
-	ruleRuntimeAPIFile                = "deprecated-runtime-api-file"
-	ruleRuntimeAPITest                = "deprecated-runtime-api-test"
+	ruleServiceInterfaceCount        = "service-root-interface-count"
+	ruleServiceExportedFunction      = "service-root-exported-function"
+	ruleServiceUnexpectedDir         = "service-root-unexpected-directory"
+	ruleServiceMissingInternal       = "service-root-missing-internal"
+	ruleServiceContainerGoFile       = "service-container-go-file"
+	ruleFunctionalShallowFile        = "functional-test-missing-subsection"
+	ruleFunctionalUnclassifiedDomain = "functional-test-unclassified-domain"
+	ruleRuntimeAPIFile               = "deprecated-runtime-api-file"
+	ruleRuntimeAPITest               = "deprecated-runtime-api-test"
 )
 
 var deletionGates = map[string]string{
 	ruleServiceInterfaceCount:        "reduce the service root to exactly one named interface and delete this exact entry",
 	ruleServiceExportedFunction:      "move the exported function behind the service interface or into internal implementation and delete this exact entry",
-	ruleServiceUnexpectedDir:         "move the package under wire, internal, transports/<protocol>, or services/<subservice> and delete this exact entry",
-	ruleServiceContainerGoFile:       "move the Go file into a named subservice below services and delete this exact entry",
+	ruleServiceUnexpectedDir:         "move the package under wire, internal, transports/<protocol>, or internal/services/<subservice> and delete this exact entry",
+	ruleServiceMissingInternal:       "add the subservice's private internal implementation directory and delete this exact entry",
+	ruleServiceContainerGoFile:       "move the Go file into a named subservice below internal/services and delete this exact entry",
 	ruleFunctionalShallowFile:        "move the functional source into tests/functional/<domain>/<subsection>/... and delete this exact entry",
 	ruleFunctionalUnclassifiedDomain: "move the functional source into tests/functional/<domain>/<subsection>/... and delete this exact entry",
 	ruleRuntimeAPIFile:               "move the runtime_api source to its durable domain/subsection owner and delete this exact entry",
@@ -46,7 +48,6 @@ var deletionGates = map[string]string{
 
 var allowedServiceRootDirectories = map[string]struct{}{
 	"internal":   {},
-	"services":   {},
 	"transports": {},
 	"wire":       {},
 }
@@ -61,6 +62,7 @@ var allowedFunctionalDomains = map[string]struct{}{
 	"work":              {},
 	"sessions":          {},
 	"factory":           {},
+	"providers":         {},
 	"provider_sessions": {},
 	"events":            {},
 	"models":            {},
@@ -174,7 +176,7 @@ func scanServices(repoRoot string) ([]finding, error) {
 			continue
 		}
 		root := filepath.Join(servicesRoot, entry.Name())
-		collected, scanErr := scanServiceRoot(repoRoot, root)
+		collected, scanErr := scanServiceRoot(repoRoot, root, false)
 		if scanErr != nil {
 			return nil, scanErr
 		}
@@ -183,7 +185,7 @@ func scanServices(repoRoot string) ([]finding, error) {
 	return findings, nil
 }
 
-func scanServiceRoot(repoRoot, serviceRoot string) ([]finding, error) {
+func scanServiceRoot(repoRoot, serviceRoot string, requireInternal bool) ([]finding, error) {
 	relativeRoot, err := relativePath(repoRoot, serviceRoot)
 	if err != nil {
 		return nil, err
@@ -194,11 +196,15 @@ func scanServiceRoot(repoRoot, serviceRoot string) ([]finding, error) {
 	}
 	var findings []finding
 	var interfaces []string
+	hasInternal := false
 	for _, entry := range entries {
 		path := filepath.Join(serviceRoot, entry.Name())
 		if entry.IsDir() {
 			if ignoredDirectory(entry.Name()) {
 				continue
+			}
+			if entry.Name() == "internal" {
+				hasInternal = true
 			}
 			if _, allowed := allowedServiceRootDirectories[entry.Name()]; !allowed {
 				childPath, relErr := relativePath(repoRoot, path)
@@ -227,22 +233,42 @@ func scanServiceRoot(repoRoot, serviceRoot string) ([]finding, error) {
 		}
 		findings = append(findings, finding{Rule: ruleServiceInterfaceCount, FilePath: relativeRoot, Target: target})
 	}
+	if requireInternal && !hasInternal {
+		internalPath := relativeRoot + "/internal"
+		findings = append(findings, finding{Rule: ruleServiceMissingInternal, FilePath: internalPath, Target: relativeRoot})
+	}
 
-	subservicesRoot := filepath.Join(serviceRoot, "services")
-	subentries, err := os.ReadDir(subservicesRoot)
+	// Public sibling services/ is non-canonical (flagged above as unexpected)
+	// but still walked so existing nested debt remains reviewable until deleted.
+	for _, container := range []string{
+		filepath.Join(serviceRoot, "services"),
+		filepath.Join(serviceRoot, "internal", "services"),
+	} {
+		collected, scanErr := scanSubserviceContainer(repoRoot, relativeRoot, container)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		findings = append(findings, collected...)
+	}
+	return findings, nil
+}
+
+func scanSubserviceContainer(repoRoot, relativeRoot, container string) ([]finding, error) {
+	subentries, err := os.ReadDir(container)
 	if errors.Is(err, os.ErrNotExist) {
-		return findings, nil
+		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read subservice container %s: %w", filepath.ToSlash(subservicesRoot), err)
+		return nil, fmt.Errorf("read subservice container %s: %w", filepath.ToSlash(container), err)
 	}
+	var findings []finding
 	for _, entry := range subentries {
-		path := filepath.Join(subservicesRoot, entry.Name())
+		path := filepath.Join(container, entry.Name())
 		if entry.IsDir() {
 			if ignoredDirectory(entry.Name()) {
 				continue
 			}
-			collected, scanErr := scanServiceRoot(repoRoot, path)
+			collected, scanErr := scanServiceRoot(repoRoot, path, true)
 			if scanErr != nil {
 				return nil, scanErr
 			}

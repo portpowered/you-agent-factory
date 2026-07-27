@@ -3,7 +3,7 @@ import { forwardRef } from "react";
 import {
   DashboardActionButton,
   type DashboardActionButtonProps,
-} from "../../../components/ui";
+} from "../../../components/ui/dashboard-action-button";
 import { cn } from "../../../lib/cn";
 
 const DASHBOARD_HEADER_ACTION_BUTTON_CLASS = "shrink-0";

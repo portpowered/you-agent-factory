@@ -7,9 +7,9 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
-
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { buildSessionScope } from "../../../api/session-scope";
+import { bunVi as vi } from "../../../testing/bun/vi-compat";
 import {
   resetDashboardSessionStore,
   useDashboardSessionStore,

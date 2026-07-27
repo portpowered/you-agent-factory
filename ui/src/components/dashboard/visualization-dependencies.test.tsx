@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react";
-
 import { Background, ReactFlow, ReactFlowProvider } from "@xyflow/react";
 import * as d3 from "d3";
 import { useMemo } from "react";
 import GridLayout from "react-grid-layout";
+import { bunVi as vi } from "../../testing/bun/vi-compat";
 
 import "@xyflow/react/dist/style.css";
 import "react-grid-layout/css/styles.css";

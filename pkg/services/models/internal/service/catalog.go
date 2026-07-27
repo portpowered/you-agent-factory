@@ -5,11 +5,35 @@ import (
 	"fmt"
 	"sort"
 
+	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/catalog"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
 )
+
+// Scoped catalog discovery is contract-only until the Models implementation
+// packet owns runtime-scope registration and lookup.
+func (s *Service) ListCatalog(
+	context.Context,
+	models.ListModelsRequest,
+) (models.ListModelsResult, error) {
+	return models.ListModelsResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *Service) GetCatalogModel(
+	context.Context,
+	models.GetModelRequest,
+) (models.GetModelResult, error) {
+	return models.GetModelResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *Service) GetModelReadiness(
+	context.Context,
+	models.GetModelReadinessRequest,
+) (models.GetModelReadinessResult, error) {
+	return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
+}
 
 // ListModels returns configured model summaries with managed-runtime readiness projection.
 func (s *Service) ListModels(ctx context.Context) (modelcatalog.List, error) {
@@ -45,6 +69,9 @@ func (s *Service) ListModels(ctx context.Context) (modelcatalog.List, error) {
 
 // GetModel returns inspect detail for one configured model with managed-runtime readiness projection.
 func (s *Service) GetModel(ctx context.Context, modelName string) (modelcatalog.Detail, error) {
+	if err := models.ValidateGetModelRequest(models.GetModelRequest{Name: modelName}); err != nil {
+		return modelcatalog.Detail{}, err
+	}
 	runtimeCfg := s.runtimeConfig()
 	if runtimeCfg == nil {
 		return modelcatalog.Detail{}, fmt.Errorf("factory service runtime is not available")

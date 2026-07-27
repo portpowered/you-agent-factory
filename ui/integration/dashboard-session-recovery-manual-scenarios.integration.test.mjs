@@ -1,17 +1,16 @@
 // @vitest-environment node
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe } from "vitest";
 
 import {
   browserScenarioTimeoutMs,
-  buildTimeoutMs,
   expectNoBrowserErrors,
   initialEditableFactoryDefinitionVersion,
-  openBrowserPage,
   openDashboardWithSeededCheckpoint,
+  readyTimeoutMs,
   resolvedDefaultFactorySessionID,
-  startBrowserPreview,
   startFactoryApiServer,
+  waitForDashboardWidgetPicker,
   waitForDurableCheckpoint,
 } from "./browser-test-harness.mjs";
 import {
@@ -24,23 +23,13 @@ import {
   resolvedFactorySessionID,
   seedTimelineCheckpoint,
 } from "./dashboard-session-recovery-manual-scenarios-harness.mjs";
+import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: manual recovery scenarios share one preview harness and IndexedDB helpers.
-describe.sequential("dashboard session recovery manual scenarios", () => {
-  let preview = null;
-
-  beforeAll(async () => {
-    preview = await startBrowserPreview();
-  }, buildTimeoutMs);
-
-  afterAll(async () => {
-    await preview?.stop();
-    preview = null;
-  });
-
+describe.concurrent("dashboard session recovery manual scenarios", () => {
   it(
     "preserves a valid reconnect cursor across a backend restart when identity still matches",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const identity = buildStreamIdentity();
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
@@ -64,15 +53,20 @@ describe.sequential("dashboard session recovery manual scenarios", () => {
             }),
         );
 
-        await waitForDurableCheckpoint("restart cursor reuse", async () => {
-          const urls = await network.readEventStreamURLs();
-          return urls.some((url) =>
-            eventStreamHasCursor(url, "manual-restart-event-5"),
-          );
-        });
+        await waitForDurableCheckpoint(
+          "restart cursor reuse",
+          async () => {
+            const urls = await network.readEventStreamURLs();
+            return urls.some((url) =>
+              eventStreamHasCursor(url, "manual-restart-event-5"),
+            );
+          },
+          readyTimeoutMs,
+        );
 
         await network.resetEventStreamURLs();
         await browserPage.page.reload({ waitUntil: "domcontentloaded" });
+        await waitForDashboardWidgetPicker(browserPage.page, readyTimeoutMs);
 
         await waitForDurableCheckpoint(
           "second restart cursor reuse",
@@ -82,6 +76,7 @@ describe.sequential("dashboard session recovery manual scenarios", () => {
               eventStreamHasCursor(url, "manual-restart-event-5"),
             );
           },
+          readyTimeoutMs,
         );
 
         const syncPreflightReads = network.captured.syncPreflightReads;
@@ -101,7 +96,7 @@ describe.sequential("dashboard session recovery manual scenarios", () => {
 
   it(
     "drops stream-derived state after a clean restart when stream generation changes",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const currentIdentity = buildStreamIdentity();
       const staleIdentity = buildStreamIdentity({
         streamGenerationID: "2026-01-01T00:00:00Z",
@@ -165,7 +160,7 @@ describe.sequential("dashboard session recovery manual scenarios", () => {
 
   it(
     "remaps ~default to a resolved factorySessionID without reusing an old cursor",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const remappedIdentity = buildStreamIdentity({
         streamGenerationID: initialEditableFactoryDefinitionVersion.physical,
       });
@@ -230,7 +225,7 @@ describe.sequential("dashboard session recovery manual scenarios", () => {
 
   it(
     "never sends a stale cursor after switching backend scope",
-    async () => {
+    async ({ expect, openBrowserPage, preview }) => {
       const localScopeIdentity = buildStreamIdentity({
         backendScopeID: "/local/factory::browser-integration",
       });

@@ -43,7 +43,7 @@ function StatusPanelProbe({
   );
 }
 
-vi.mock("../../bento/public", () => ({
+vi.mock("../../bento/components/dashboard-bento", () => ({
   DashboardBento: ({
     locale,
     workOutcomeStream,
@@ -67,15 +67,21 @@ vi.mock("../../bento/public", () => ({
   },
 }));
 
-vi.mock("../../header/public", () => ({
+vi.mock("../../header/components/dashboard-export-dialog", () => ({
   DashboardExportDialog: ({ locale }: { locale?: string }) => {
     const { locale: resolvedLocale } = useAppLocale(locale);
     return <div>Dashboard export dialog {resolvedLocale}</div>;
   },
+}));
+
+vi.mock("../../header/components/dashboard-header", () => ({
   DashboardHeader: ({ locale }: { locale?: string }) => {
     const { locale: resolvedLocale } = useAppLocale(locale);
     return <header>Dashboard header {resolvedLocale}</header>;
   },
+}));
+
+vi.mock("../../header/components/dashboard-status-panel", () => ({
   DashboardStatusPanel: ({
     actions,
     detail,

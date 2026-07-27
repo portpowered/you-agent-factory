@@ -392,21 +392,28 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 	skip := true
 	mocks := workers.NewEmptyMockWorkersConfig()
 	opening := provideRuntimeOpeningRequestFactory()(runcli.RunConfig{
-		Dir: "factory", ExecutionBaseDir: "execution", RunnerID: "runner",
-		HomeDir: "home", WorkFile: "work.json", Port: 8080, AutoPort: true,
+		Dir: "factory", FactoryConfigPath: "/tmp/factory.json",
+		ExecutionBaseDir: "execution", RunnerID: "runner",
+		HomeDir: "home", WorkFile: "work.json", BindHost: "127.0.0.1",
+		Port: 8080, AutoPort: true,
 		Continuously: true, Verbose: true, RecordPath: "record.json",
 		ReplayPath: "replay.json", Workflow: "flow", ModelCacheDir: "models",
 		InvocationSkipPermissionsOverride: &skip,
 	}, mocks, func(factorysessions.RuntimeHostBinding) {})
 	request := opening.Runtime
 
-	if request.FactoryDefinition.Directory != "factory" || request.FactoryDefinition.ExecutionBaseDir != "execution" {
+	if request.FactoryDefinition.Directory != "factory" ||
+		request.FactoryDefinition.SourcePath != "/tmp/factory.json" ||
+		request.FactoryDefinition.ExecutionBaseDir != "execution" {
 		t.Fatalf("Factory Definition request = %#v", request.FactoryDefinition)
 	}
 	if request.FactoryRuntime.Mode != factorydefinitions.RuntimeModeService || !request.FactoryRuntime.Verbose {
 		t.Fatalf("Factory Runtime request = %#v", request.FactoryRuntime)
 	}
-	if request.FactorySession.SystemConfigHome != "home" || request.FactorySession.Host.Port != 8080 || !request.FactorySession.Host.AutoPort {
+	if request.FactorySession.SystemConfigHome != "home" ||
+		request.FactorySession.Host.Host != "127.0.0.1" ||
+		request.FactorySession.Host.Port != 8080 ||
+		!request.FactorySession.Host.AutoPort {
 		t.Fatalf("Factory Session request = %#v", request.FactorySession)
 	}
 	if request.Workers.RunnerID != "runner" || request.Workers.MockWorkers != mocks || request.Workers.InvocationSkipPermissionsOverride != &skip {

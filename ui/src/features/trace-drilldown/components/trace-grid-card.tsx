@@ -19,12 +19,9 @@ import type {
   DashboardTrace,
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
-import {
-  Code,
-  DescriptionList,
-  ExpandablePanelTrigger,
-  Label,
-} from "../../../components/ui";
+import { DescriptionList } from "@you-agent-factory/components/data-display";
+import { Code, Label } from "@you-agent-factory/components/primitives";
+import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import {
   Collapsible,
   CollapsibleContent,
@@ -35,7 +32,7 @@ import {
   formatTypedWorkItemLabel,
 } from "../../../components/ui/formatters";
 import { Skeleton } from "../../../components/ui/skeleton";
-import { DashboardWidgetFrame } from "../../bento/public";
+import { DashboardWidgetFrame } from "../../bento/components/dashboard-widget-frame/dashboard-widget-frame";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { TraceRelationFlow } from "./trace-relation-flow";
 import { TraceWorkstationPath } from "./trace-workstation-path";

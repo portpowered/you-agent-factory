@@ -17,8 +17,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-const batchErrorBodyPreviewLimit = 200
-
 // BatchConfig holds parameters for the submit batch command.
 type BatchConfig struct {
 	Context     context.Context
@@ -157,7 +155,7 @@ func upsertBatchHTTP(cfg BatchConfig, req work.WorkRequest, body []byte, batchSo
 
 	if resp.StatusCode != http.StatusCreated {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit batch response endpointPath=%s status=%d durationMillis=%d", endpointPath, resp.StatusCode, response.Duration.Milliseconds())
-		respBody, err := io.ReadAll(resp.Body)
+		respBody, err := io.ReadAll(io.LimitReader(resp.Body, submitErrorBodyReadLimit))
 		if err != nil {
 			return fmt.Errorf("read response: %w", err)
 		}
@@ -178,16 +176,5 @@ func upsertBatchHTTP(cfg BatchConfig, req work.WorkRequest, body []byte, batchSo
 }
 
 func batchSubmissionHTTPError(statusCode int, body []byte) error {
-	var errResp factoryapi.ErrorResponse
-	if json.Unmarshal(body, &errResp) == nil && errResp.Message != "" {
-		return fmt.Errorf("batch submission failed (%d): %s", statusCode, errResp.Message)
-	}
-	preview := strings.TrimSpace(string(body))
-	if preview == "" {
-		return fmt.Errorf("batch submission failed (%d)", statusCode)
-	}
-	if len(preview) > batchErrorBodyPreviewLimit {
-		preview = preview[:batchErrorBodyPreviewLimit] + "..."
-	}
-	return fmt.Errorf("batch submission failed (%d): %s", statusCode, preview)
+	return submissionFailureError("batch submission", statusCode, body)
 }

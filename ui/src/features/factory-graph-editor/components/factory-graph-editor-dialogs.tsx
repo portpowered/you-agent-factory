@@ -10,7 +10,7 @@ import {
   PopoverTrigger,
 } from "@you-agent-factory/components/overlays";
 import type { ReactNode } from "react";
-import { Button } from "../../../components/ui";
+import { Button } from "../../../components/ui/button";
 import { FactoryGraphEditorMenuHeader } from "./menu/factory-graph-editor-menu-header";
 
 export function FactoryGraphEditorActionPopover({

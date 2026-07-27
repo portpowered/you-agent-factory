@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,6 +33,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorynamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation"
+	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution"
@@ -47,6 +49,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	httpapplication "github.com/portpowered/infinite-you/pkg/transports/http/application"
@@ -233,6 +236,32 @@ func provideOperatorSettingsCreateTemporaryFile(edges serviceedges.Edges) operat
 	}
 }
 
+func provideOperatorSettingsProviderCatalog(
+	providers *providerregistry.Registry,
+) operatorsettings.ProviderCatalog {
+	return func(value string) (string, bool) {
+		canonical, err := providers.CanonicalIdentity(value)
+		return canonical, err == nil
+	}
+}
+
+func provideOperatorConfigDocumentService(
+	files operatorsettings.FileSystem,
+	createTemp operatorsettings.CreateTemporaryFile,
+	providers operatorsettings.ProviderCatalog,
+	decode operatorsettings.ConfigDecoder,
+	encode operatorsettings.ConfigEncoder,
+) operatorsettings.ConfigDocumentService {
+	return operatorsettings.ConfigDocumentService{
+		Files:           files,
+		CreateTemp:      createTemp,
+		Providers:       providers,
+		Decoder:         decode,
+		Encoder:         encode,
+		PersistenceLock: &sync.Mutex{},
+	}
+}
+
 func provideOperatorSettingsIDGenerator(edges serviceedges.Edges) operatorsettings.IDGenerator {
 	if edges.OperatorSettingsIDGenerator != nil {
 		return edges.OperatorSettingsIDGenerator
@@ -299,7 +328,7 @@ func provideModelInvocationOperation(
 func provideSystemInitializationService(
 	persistence factorydefinitions.Persistence,
 	packagedInstallationFileSystem factorydefinitions.PackagedInstallationFileSystem,
-	packagedDefinitions []factorydefinitions.PackagedDefinition,
+	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	loadOperatorConfig operatorsettings.ConfigLoader,
 	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
 	inspectPath systeminitialization.InspectPath,
@@ -310,11 +339,20 @@ func provideSystemInitializationService(
 			Load:   loadOperatorConfig,
 			Ensure: ensureOperatorBackendScope,
 		},
+		packagedCatalog,
 		packagedinstallation.New(persistence, packagedInstallationFileSystem),
-		packagedDefinitions,
 		inspectPath,
 		migrationFiles,
 	)
+}
+
+func provideSystemInitializationOperation(
+	service systeminitialization.Service,
+) initializerapplication.SystemInitializationOperation {
+	return func(ctx context.Context, homeDir string) error {
+		_, err := service.Initialize(ctx, systeminitialization.Request{HomeDir: homeDir})
+		return err
+	}
 }
 
 func providePackagedFactoryDefinitions() ([]factorydefinitions.PackagedDefinition, error) {
@@ -323,6 +361,22 @@ func providePackagedFactoryDefinitions() ([]factorydefinitions.PackagedDefinitio
 		return nil, err
 	}
 	return catalog.All(), nil
+}
+
+func providePackagedFactoryCatalog(
+	definitions []factorydefinitions.PackagedDefinition,
+) (factorydefinitions.PackagedFactoryCatalogOperations, error) {
+	return factorydefinitionsservice.NewPackagedFactoryCatalog(definitions)
+}
+
+func providePackagedFactoryInstallation(
+	persistence factorydefinitions.Persistence,
+	fileSystem factorydefinitions.PackagedInstallationFileSystem,
+) factorydefinitions.PackagedFactoryInstallationOperations {
+	installer := packagedinstallation.New(persistence, fileSystem)
+	return factorydefinitions.PackagedFactoryInstallationOperations{
+		Install: installer.InstallPackagedFactory,
+	}
 }
 
 func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLoader) factorysessionwire.DurableExecutionFactory {
@@ -748,9 +802,10 @@ func provideRunSelectionFactory(
 	invocation factorysessionwire.InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
 	directJavaScript factorysessionwire.DirectJavaScriptRunOperation,
+	buildApplication initializer.RuntimeRunnerBuilder,
 ) (runcli.SelectionFactory, error) {
 	return runcli.NewSelectionFactory(
-		open, buildRunner, invocation, presentation, directJavaScript,
+		open, buildRunner, invocation, presentation, directJavaScript, buildApplication,
 	)
 }
 
@@ -800,4 +855,42 @@ func provideRuntimeOpener(factory *factorysessionwire.RuntimeOpeningFactory) fac
 
 func provideDirectJavaScriptSyncRunner() factorysessionwire.DirectJavaScriptSyncRunner {
 	return sessionexecutioncli.RunNormalizedSync
+}
+
+func provideDirectJavaScriptHostAdapter(
+	httpHandler *httpapplication.Handler,
+	start platformhttpserver.Starter,
+	newRunner lifecycle.RunnerFactory,
+) (factorysessionwire.DirectJavaScriptHostAdapter, error) {
+	if httpHandler == nil || start == nil || newRunner == nil {
+		return nil, errors.New("direct JavaScript HTTP handler, starter, and lifecycle runner are required")
+	}
+	return func(
+		execution factorysessionwire.OwnedExecutionService,
+		executionLifecycle factorysessionwire.DirectJavaScriptLifecycle,
+		request factorysessions.DirectJavaScriptRunRequest,
+	) (lifecycle.Component, error) {
+		if request.Host == nil {
+			return nil, errors.New("direct JavaScript host request is required")
+		}
+		handler, err := httpHandler.BindDurableExecution(
+			execution, executionLifecycle, request.Logger,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return newRunner(func(ctx context.Context) error {
+			return start(ctx, platformhttpserver.StartRequest{
+				Handler: handler, Host: request.Host.Host, Port: request.Host.Port,
+				AutoPort: request.Host.AutoPort, Logger: request.Logger,
+				OnBound: func(binding platformhttpserver.Binding) {
+					if request.RuntimeHostObserver != nil {
+						request.RuntimeHostObserver(factorysessions.RuntimeHostBinding{
+							Host: binding.Host, Port: binding.Port,
+						})
+					}
+				},
+			})
+		}), nil
+	}, nil
 }

@@ -12,13 +12,31 @@ import (
 	"strings"
 )
 
+const fullRunCommand = "make verify-pr"
+
 const (
-	classificationDocsOnly    = "docs-only"
-	classificationUIOnly      = "ui-only"
-	classificationBackendOnly = "backend-only"
-	classificationSharedRisk  = "shared-risk"
-	fullRunCommand            = "make verify-pr"
+	laneDocsReference            = "Docs Reference"
+	laneReadme                   = "README"
+	laneFrontend                 = "Frontend"
+	laneBackend                  = "Backend"
+	laneUIBackendIntegration     = "UI Backend Integration"
+	laneAPIPackage               = "API Package"
+	lanePackagedFactoriesPackage = "Packaged Factories Package"
+	laneModelProvidersPackage    = "Model Providers Package"
+	laneLocalInference           = "Local Inference"
 )
+
+var allLaneNames = []string{
+	laneDocsReference,
+	laneReadme,
+	laneFrontend,
+	laneBackend,
+	laneUIBackendIntegration,
+	laneAPIPackage,
+	lanePackagedFactoriesPackage,
+	laneModelProvidersPackage,
+	laneLocalInference,
+}
 
 var (
 	stdoutWriter io.Writer = os.Stdout
@@ -38,6 +56,7 @@ type classificationResult struct {
 	Areas          []string
 	ChangedPaths   []string
 	Reason         string
+	Lanes          map[string]lanePlan
 }
 
 type lanePlan struct {
@@ -69,16 +88,12 @@ func run(cfg config, stdout io.Writer, _ io.Writer) error {
 	if err != nil {
 		return err
 	}
-
 	result := classifyPaths(changedPaths)
 	writeStdoutSummary(stdout, result)
 	if err := writeGitHubOutput(result); err != nil {
 		return err
 	}
-	if err := writeGitHubStepSummary(result); err != nil {
-		return err
-	}
-	return nil
+	return writeGitHubStepSummary(result)
 }
 
 func resolveChangedPaths(cfg config) ([]string, error) {
@@ -94,9 +109,8 @@ func resolveChangedPaths(cfg config) ([]string, error) {
 	}
 }
 
-func gitChangedPaths(baseRef string, headRef string) ([]string, error) {
-	cmd := execCommand("git", "diff", "--name-only", "--diff-filter=ACDMR", baseRef, headRef)
-	output, err := cmd.Output()
+func gitChangedPaths(baseRef, headRef string) ([]string, error) {
+	output, err := execCommand("git", "diff", "--name-only", "--diff-filter=ACDMR", baseRef, headRef).Output()
 	if err != nil {
 		return nil, fmt.Errorf("read changed paths from git diff %s..%s: %w", baseRef, headRef, err)
 	}
@@ -109,15 +123,12 @@ func readChangedPathsFile(path string) ([]string, error) {
 		return nil, fmt.Errorf("open changed paths file %s: %w", filepath.ToSlash(path), err)
 	}
 	defer file.Close()
-
 	var paths []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		path := strings.TrimSpace(scanner.Text())
-		if path == "" {
-			continue
+		if path := strings.TrimSpace(scanner.Text()); path != "" {
+			paths = append(paths, filepath.ToSlash(path))
 		}
-		paths = append(paths, filepath.ToSlash(path))
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("read changed paths file %s: %w", filepath.ToSlash(path), err)
@@ -125,113 +136,116 @@ func readChangedPathsFile(path string) ([]string, error) {
 	return dedupeAndSortPaths(paths), nil
 }
 
-func parseChangedPaths(raw string) []string {
-	return dedupeAndSortPaths(strings.Fields(raw))
-}
+func parseChangedPaths(raw string) []string { return dedupeAndSortPaths(strings.Fields(raw)) }
 
 func dedupeAndSortPaths(paths []string) []string {
 	seen := make(map[string]struct{}, len(paths))
-	deduped := make([]string, 0, len(paths))
+	result := make([]string, 0, len(paths))
 	for _, path := range paths {
-		normalized := filepath.ToSlash(strings.TrimSpace(path))
-		if normalized == "" {
+		path = filepath.ToSlash(strings.TrimSpace(path))
+		if path == "" {
 			continue
 		}
-		if _, ok := seen[normalized]; ok {
-			continue
-		}
-		seen[normalized] = struct{}{}
-		deduped = append(deduped, normalized)
-	}
-	slices.Sort(deduped)
-	return deduped
-}
-
-func classifyPaths(paths []string) classificationResult {
-	if len(paths) == 0 {
-		return classificationResult{
-			Classification: classificationSharedRisk,
-			Areas:          []string{"shared-risk"},
-			ChangedPaths:   nil,
-			Reason:         "No changed files were detected, so the workflow falls back to the explicit shared-risk full verification path.",
+		if _, exists := seen[path]; !exists {
+			seen[path] = struct{}{}
+			result = append(result, path)
 		}
 	}
-
-	areasSeen := map[string]struct{}{}
-	for _, path := range paths {
-		areasSeen[classifyPath(path)] = struct{}{}
-	}
-
-	areas := mapsKeysSorted(areasSeen)
-	result := classificationResult{
-		Areas:        areas,
-		ChangedPaths: paths,
-	}
-
-	switch {
-	case len(areasSeen) == 1 && hasArea(areasSeen, "docs"):
-		result.Classification = classificationDocsOnly
-		result.Reason = "Only documentation-owned files changed, so later jobs can treat this pull request as documentation-only."
-	case onlyAreas(areasSeen, "docs", "ui") && hasArea(areasSeen, "ui"):
-		result.Classification = classificationUIOnly
-		result.Reason = "Only UI-owned files and optional documentation changed, so this pull request stays on the UI-only path."
-	case onlyAreas(areasSeen, "docs", "backend") && hasArea(areasSeen, "backend"):
-		result.Classification = classificationBackendOnly
-		result.Reason = "Only backend-owned files and optional documentation changed, so this pull request stays on the backend-only path."
-	default:
-		result.Classification = classificationSharedRisk
-		result.Reason = "The changed files cross product boundaries or touch explicit shared-risk surfaces such as workflows, contracts, generated API boundaries, or root build configuration, so the workflow keeps the full verification safety path."
-	}
+	slices.Sort(result)
 	return result
 }
 
-func classifyPath(path string) string {
-	if isSharedRiskPath(path) {
-		return "shared-risk"
+func classifyPaths(paths []string) classificationResult {
+	areas := map[string]bool{}
+	lanes := newLanePlans()
+	full := len(paths) == 0
+	for _, path := range paths {
+		area, selected := classifyPath(path)
+		areas[area] = true
+		if area == "unknown" || area == "ci-tooling" {
+			full = true
+		}
+		for _, lane := range selected {
+			plan := lanes[lane]
+			plan.ShouldRun = true
+			lanes[lane] = plan
+		}
 	}
-	if isDocumentationPath(path) {
-		return "docs"
+	if full {
+		for name, plan := range lanes {
+			plan.ShouldRun = true
+			lanes[name] = plan
+		}
 	}
-	if strings.HasPrefix(path, "ui/") {
-		return "ui"
+	areaNames := mapKeysSorted(areas)
+	classification := "none"
+	reason := "Only factory content changed, so no product verification lane is selected."
+	if full {
+		classification = "full"
+		reason = "A CI/tooling, unknown, or empty change set requires conservative full verification."
+	} else if len(areaNames) > 0 {
+		classification = strings.Join(areaNames, "+")
+		reason = "Selected the union of verification lanes owned by the changed paths."
 	}
-	if strings.HasPrefix(path, "pkg/") || strings.HasPrefix(path, "cmd/") || strings.HasPrefix(path, "tests/") {
-		return "backend"
+	for name, plan := range lanes {
+		if !plan.ShouldRun {
+			plan.Reason = "Skipped because no changed path selected this owned verification lane."
+			lanes[name] = plan
+		}
 	}
-	return "shared-risk"
+	return classificationResult{Classification: classification, Areas: areaNames, ChangedPaths: paths, Reason: reason, Lanes: lanes}
 }
 
-func isSharedRiskPath(path string) bool {
-	if strings.HasPrefix(path, ".github/workflows/") {
-		return true
-	}
-	if strings.HasPrefix(path, "api/") {
-		return true
-	}
-	if strings.HasPrefix(path, "pkg/transports/") {
-		return true
-	}
-
-	switch path {
-	case "Makefile", "go.mod", "go.sum":
-		return true
+func classifyPath(path string) (string, []string) {
+	switch {
+	case strings.HasPrefix(path, ".github/workflows/"), strings.HasPrefix(path, "scripts/ci/"), path == "Makefile", path == "go.mod", path == "go.sum":
+		return "ci-tooling", nil
+	case path == "README.md":
+		return "readme", []string{laneReadme}
+	case strings.HasPrefix(path, "docs/reference/"), path == "docs/README.md":
+		return "documentation-reference", []string{laneDocsReference}
+	case strings.HasPrefix(path, "docs/"):
+		return "documentation", nil
+	case strings.HasPrefix(path, "factory/"):
+		return "factory-content", nil
+	case strings.HasPrefix(path, "api/"), strings.HasPrefix(path, "contracts/"), strings.HasPrefix(path, "pkg/transports/http/"), strings.HasPrefix(path, "pkg/transports/mapping/"), strings.HasPrefix(path, "ui/src/api/generated/"):
+		return "api-contract", []string{laneFrontend, laneBackend, laneUIBackendIntegration, laneAPIPackage}
+	case strings.HasPrefix(path, "packages/api/"), strings.HasPrefix(path, "scripts/api-package"):
+		return "api-package", []string{laneAPIPackage, laneFrontend, laneBackend, laneUIBackendIntegration}
+	case strings.HasPrefix(path, "packages/packaged-factories/"), strings.HasPrefix(path, "scripts/packaged-factories"):
+		return "packaged-factories-package", []string{lanePackagedFactoriesPackage, laneBackend}
+	case strings.HasPrefix(path, "packages/model-providers/"), strings.HasPrefix(path, "scripts/model-provider"):
+		return "model-providers-package", []string{laneModelProvidersPackage, laneBackend}
+	case isLocalInferencePath(path):
+		return "local-inference", []string{laneBackend, laneLocalInference}
+	case strings.HasPrefix(path, "ui/"):
+		return "frontend", []string{laneFrontend}
+	case strings.HasPrefix(path, "pkg/"), strings.HasPrefix(path, "cmd/"), strings.HasPrefix(path, "internal/"), strings.HasPrefix(path, "tests/"):
+		return "backend", []string{laneBackend, laneUIBackendIntegration}
 	default:
-		return false
+		return "unknown", nil
 	}
 }
 
-func isDocumentationPath(path string) bool {
-	if strings.HasPrefix(path, "docs/") {
-		return true
-	}
-	if strings.Contains(path, "/") {
-		return false
-	}
-	ext := strings.ToLower(filepath.Ext(path))
-	return ext == ".md" || ext == ".mdx" || ext == ".txt"
+func isLocalInferencePath(path string) bool {
+	return strings.Contains(path, "/local/") || strings.Contains(path, "inference") || strings.Contains(path, "omnivoice") || strings.HasPrefix(path, ".github/workflows/long-local-inference")
 }
 
-func mapsKeysSorted(values map[string]struct{}) []string {
+func newLanePlans() map[string]lanePlan {
+	return map[string]lanePlan{
+		laneDocsReference:            {Name: laneDocsReference, Command: "make docs-reference-smoke"},
+		laneReadme:                   {Name: laneReadme, Command: "make readme-check"},
+		laneFrontend:                 {Name: laneFrontend, Command: "make typecheck ui-lint test-ui-coverage test-ui-browser-integration"},
+		laneBackend:                  {Name: laneBackend, Command: "make build test-backend-verification"},
+		laneUIBackendIntegration:     {Name: laneUIBackendIntegration, Command: "make ui-durable-session-real-backend-integration-test"},
+		laneAPIPackage:               {Name: laneAPIPackage, Command: "make api-package-verify"},
+		lanePackagedFactoriesPackage: {Name: lanePackagedFactoriesPackage, Command: "make packaged-factory-package-verify"},
+		laneModelProvidersPackage:    {Name: laneModelProvidersPackage, Command: "make model-provider-package-verify"},
+		laneLocalInference:           {Name: laneLocalInference, Command: "make verify-pr-inference"},
+	}
+}
+
+func mapKeysSorted(values map[string]bool) []string {
 	keys := make([]string, 0, len(values))
 	for key := range values {
 		keys = append(keys, key)
@@ -240,123 +254,11 @@ func mapsKeysSorted(values map[string]struct{}) []string {
 	return keys
 }
 
-func hasArea(areas map[string]struct{}, area string) bool {
-	_, ok := areas[area]
-	return ok
-}
-
-func onlyAreas(areas map[string]struct{}, allowed ...string) bool {
-	if len(areas) == 0 {
-		return false
-	}
-	allowedSet := make(map[string]struct{}, len(allowed))
-	for _, area := range allowed {
-		allowedSet[area] = struct{}{}
-	}
-	for area := range areas {
-		if _, ok := allowedSet[area]; !ok {
-			return false
-		}
-	}
-	return true
-}
-
 func writeStdoutSummary(stdout io.Writer, result classificationResult) {
-	fmt.Fprintf(stdout, "classification=%s\n", result.Classification)
-	fmt.Fprintf(stdout, "areas=%s\n", strings.Join(result.Areas, ","))
-	fmt.Fprintf(stdout, "changed_files=%d\n", len(result.ChangedPaths))
-	fmt.Fprintf(stdout, "reason=%s\n", result.Reason)
-	for _, plan := range lanePlans(result.Classification) {
+	fmt.Fprintf(stdout, "classification=%s\nareas=%s\nchanged_files=%d\nreason=%s\n", result.Classification, strings.Join(result.Areas, ","), len(result.ChangedPaths), result.Reason)
+	for _, name := range allLaneNames {
+		plan := result.Lanes[name]
 		fmt.Fprintf(stdout, "lane_%s=%t\n", githubOutputKey(plan.Name), plan.ShouldRun)
-	}
-}
-
-func lanePlans(classification string) []lanePlan {
-	switch classification {
-	case classificationDocsOnly:
-		return []lanePlan{
-			{
-				Name:      "UI Coverage",
-				Command:   "make run-sharded-ui-coverage",
-				ShouldRun: false,
-				Reason:    "Skipped because documentation-only changes do not require UI coverage.",
-			},
-			{
-				Name:      "UI Browser Integration",
-				Command:   "make ui-integration-test",
-				ShouldRun: false,
-				Reason:    "Skipped because documentation-only changes do not require UI browser integration.",
-			},
-			{
-				Name:      "Backend Verification",
-				Command:   "make test-backend-verification",
-				ShouldRun: false,
-				Reason:    "Skipped because documentation-only changes do not require backend verification.",
-			},
-		}
-	case classificationUIOnly:
-		return []lanePlan{
-			{
-				Name:      "UI Coverage",
-				Command:   "make run-sharded-ui-coverage",
-				ShouldRun: true,
-				Reason:    "Runs because UI-only changes still require the owned UI coverage lane.",
-			},
-			{
-				Name:      "UI Browser Integration",
-				Command:   "make ui-integration-test",
-				ShouldRun: true,
-				Reason:    "Runs because UI-only changes still require browser-backed UI verification.",
-			},
-			{
-				Name:      "Backend Verification",
-				Command:   "make test-backend-verification",
-				ShouldRun: false,
-				Reason:    "Skipped because UI-only changes do not require backend verification.",
-			},
-		}
-	case classificationBackendOnly:
-		return []lanePlan{
-			{
-				Name:      "UI Coverage",
-				Command:   "make run-sharded-ui-coverage",
-				ShouldRun: false,
-				Reason:    "Skipped because backend-only changes do not require UI coverage.",
-			},
-			{
-				Name:      "UI Browser Integration",
-				Command:   "make ui-integration-test",
-				ShouldRun: false,
-				Reason:    "Skipped because backend-only changes do not require UI browser integration.",
-			},
-			{
-				Name:      "Backend Verification",
-				Command:   "make test-backend-verification",
-				ShouldRun: true,
-				Reason:    "Runs because backend-only changes still require backend verification.",
-			},
-		}
-	default:
-		return []lanePlan{
-			{
-				Name:      "UI Coverage",
-				Command:   "make run-sharded-ui-coverage",
-				ShouldRun: true,
-				Reason:    "Runs because shared-risk changes stay on the full verification safety path.",
-			},
-			{
-				Name:      "UI Browser Integration",
-				Command:   "make ui-integration-test",
-				ShouldRun: true,
-				Reason:    "Runs because shared-risk changes stay on the full verification safety path.",
-			},
-			{
-				Name:      "Backend Verification",
-				Command:   "make test-backend-verification",
-				ShouldRun: true,
-				Reason:    "Runs because shared-risk changes stay on the full verification safety path.",
-			},
-		}
 	}
 }
 
@@ -365,86 +267,46 @@ func githubOutputKey(name string) string {
 }
 
 func writeGitHubOutput(result classificationResult) error {
-	outputPath := os.Getenv("GITHUB_OUTPUT")
-	if outputPath == "" {
+	path := os.Getenv("GITHUB_OUTPUT")
+	if path == "" {
 		return nil
 	}
-
-	lines := []string{
-		fmt.Sprintf("classification=%s", result.Classification),
-		fmt.Sprintf("docs_only=%t", result.Classification == classificationDocsOnly),
-		fmt.Sprintf("ui_only=%t", result.Classification == classificationUIOnly),
-		fmt.Sprintf("backend_only=%t", result.Classification == classificationBackendOnly),
-		fmt.Sprintf("shared_risk=%t", result.Classification == classificationSharedRisk),
-		fmt.Sprintf("full_run_required=%t", result.Classification == classificationSharedRisk),
-		fmt.Sprintf("full_run_command=%s", fullRunCommand),
-		fmt.Sprintf("areas=%s", strings.Join(result.Areas, ",")),
-		fmt.Sprintf("changed_files_count=%d", len(result.ChangedPaths)),
-		fmt.Sprintf("reason=%s", sanitizeGitHubValue(result.Reason)),
+	lines := []string{fmt.Sprintf("classification=%s", result.Classification), fmt.Sprintf("full_run_required=%t", result.Classification == "full"), fmt.Sprintf("full_run_command=%s", fullRunCommand), fmt.Sprintf("areas=%s", strings.Join(result.Areas, ",")), fmt.Sprintf("changed_files_count=%d", len(result.ChangedPaths)), fmt.Sprintf("reason=%s", sanitizeGitHubValue(result.Reason))}
+	for _, name := range allLaneNames {
+		plan := result.Lanes[name]
+		key := githubOutputKey(name)
+		lines = append(lines, fmt.Sprintf("run_%s=%t", key, plan.ShouldRun), fmt.Sprintf("%s_reason=%s", key, sanitizeGitHubValue(plan.Reason)), fmt.Sprintf("%s_command=%s", key, plan.Command))
 	}
-	for _, plan := range lanePlans(result.Classification) {
-		key := githubOutputKey(plan.Name)
-		lines = append(lines,
-			fmt.Sprintf("run_%s=%t", key, plan.ShouldRun),
-			fmt.Sprintf("%s_reason=%s", key, sanitizeGitHubValue(plan.Reason)),
-			fmt.Sprintf("%s_command=%s", key, plan.Command),
-		)
-	}
-	lines = append(lines, "")
-	return appendFile(outputPath, strings.Join(lines, "\n"), "write GitHub output")
+	return appendFile(path, strings.Join(append(lines, ""), "\n"), "write GitHub output")
 }
 
 func writeGitHubStepSummary(result classificationResult) error {
-	summaryPath := os.Getenv("GITHUB_STEP_SUMMARY")
-	if summaryPath == "" {
+	path := os.Getenv("GITHUB_STEP_SUMMARY")
+	if path == "" {
 		return nil
 	}
-
-	lines := []string{
-		"## Pull request impact classification",
-		"",
-		fmt.Sprintf("- Classification: `%s`", result.Classification),
-		fmt.Sprintf("- Areas touched: `%s`", strings.Join(result.Areas, ", ")),
-		fmt.Sprintf("- Changed files: `%d`", len(result.ChangedPaths)),
-		fmt.Sprintf("- Reason: %s", result.Reason),
-		fmt.Sprintf("- Full required rerun: `%s`", fullRunCommand),
-	}
-	lines = append(lines, "", "### Required lane routing")
-	for _, plan := range lanePlans(result.Classification) {
+	lines := []string{"## Pull request impact classification", "", fmt.Sprintf("- Classification: `%s`", result.Classification), fmt.Sprintf("- Areas touched: `%s`", strings.Join(result.Areas, ", ")), fmt.Sprintf("- Changed files: `%d`", len(result.ChangedPaths)), fmt.Sprintf("- Reason: %s", result.Reason), fmt.Sprintf("- Full required rerun: `%s`", fullRunCommand), "", "### Verification policy"}
+	for _, name := range allLaneNames {
+		plan := result.Lanes[name]
 		decision := "skip"
 		if plan.ShouldRun {
 			decision = "run"
 		}
-		lines = append(lines, fmt.Sprintf("- `%s`: `%s` via `%s`", plan.Name, decision, plan.Command))
-		lines = append(lines, fmt.Sprintf("  %s", plan.Reason))
+		lines = append(lines, fmt.Sprintf("- `%s`: `%s` via `%s`", plan.Name, decision, plan.Command), "  "+plan.Reason)
 	}
-	if len(result.ChangedPaths) > 0 {
-		lines = append(lines, "", "### Changed files")
-		limit := min(len(result.ChangedPaths), 20)
-		for _, path := range result.ChangedPaths[:limit] {
-			lines = append(lines, fmt.Sprintf("- `%s`", path))
-		}
-		if len(result.ChangedPaths) > limit {
-			lines = append(lines, fmt.Sprintf("- `%d` additional files omitted from the summary", len(result.ChangedPaths)-limit))
-		}
-	}
-	lines = append(lines, "")
-	return appendFile(summaryPath, strings.Join(lines, "\n"), "write GitHub step summary")
+	return appendFile(path, strings.Join(append(lines, ""), "\n"), "write GitHub step summary")
 }
 
-func appendFile(path string, content string, operation string) error {
+func appendFile(path, content, operation string) error {
 	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("%s %s: %w", operation, filepath.ToSlash(path), err)
 	}
 	defer file.Close()
-
 	if _, err := io.WriteString(file, content); err != nil {
 		return fmt.Errorf("%s %s: %w", operation, filepath.ToSlash(path), err)
 	}
 	return nil
 }
 
-func sanitizeGitHubValue(value string) string {
-	return strings.ReplaceAll(value, "\n", " ")
-}
+func sanitizeGitHubValue(value string) string { return strings.ReplaceAll(value, "\n", " ") }

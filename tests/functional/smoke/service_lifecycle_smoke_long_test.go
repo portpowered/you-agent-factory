@@ -114,6 +114,7 @@ func startFunctionalService(t *testing.T, dir string, extraArgs ...string) *func
 		"you", "run",
 		"--dir", dir,
 		"--continuously",
+		"--with-server",
 		"--server", "http://127.0.0.1:1",
 		"--with-mock-workers",
 		"--quiet",

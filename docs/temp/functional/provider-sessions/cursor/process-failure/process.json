@@ -1,0 +1,11 @@
+{
+  "argv": ["agent", "-p", "--model", "cursor-fixture-model", "--output-format", "stream-json", "--stream-partial-output"],
+  "provider": "cursor",
+  "model": "cursor-fixture-model",
+  "exitCode": 1,
+  "stdoutStream": true,
+  "stderrStream": false,
+  "workingDirectoryRole": "factory-root",
+  "timeoutCancelClass": "none",
+  "terminalErrorClass": "structured-auth-failure"
+}

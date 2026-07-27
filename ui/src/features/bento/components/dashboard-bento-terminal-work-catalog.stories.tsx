@@ -2,7 +2,7 @@ import { expect, userEvent, within } from "storybook/test";
 
 import "../../../styles.css";
 import { getTerminalWorkMessages } from "../../terminal-work/messages/terminal-work";
-import { TerminalWorkWidget } from "../../terminal-work/public";
+import { TerminalWorkWidget } from "../../terminal-work/components/terminal-work-widget";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/dashboardLayoutSchema";
 import {
   completedAttempt,

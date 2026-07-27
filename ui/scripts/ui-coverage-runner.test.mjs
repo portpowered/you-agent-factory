@@ -11,28 +11,21 @@ import { fileURLToPath } from "node:url";
 import { expect, test, vi } from "vitest";
 
 import {
-  buildMainCoveredShardPhase,
   buildUiCoveragePhases,
   cleanCoverageArtifacts,
   defaultCapturedStdoutMaxBuffer,
   defaultMainCoveredMaxWorkers,
-  defaultShardMainCoveredMaxWorkers,
-  defaultUiCoverageShardTotal,
   formatElapsedMs,
   formatPhaseElapsed,
   getMainCoveredMaxWorkers,
-  getUiCoverageShardTotal,
-  isolatedReactFlowCoverageFiles,
   mainCoveredPhaseName,
-  mainCoveredShardBlobPath,
-  parseUiCoverageMerge,
-  parseUiCoverageShard,
   parseVitestFileDurationsFromLog,
   phaseLogPrefix,
   rankSlowestTestFiles,
   runTimedPhase,
   runUiCoverage,
   uiCoveragePhases,
+  uiPerformanceTestPattern,
 } from "./ui-coverage-runner.mjs";
 import { formatSlowFileSummaryLines } from "./ui-test-cost-report.mjs";
 
@@ -51,28 +44,30 @@ test("formats stable elapsed output for comparable coverage phases", () => {
   );
 });
 
-test("keeps coverage phase names stable and explicit", () => {
+test("uses one covered pass followed by the standalone script-style check", () => {
   expect(uiCoveragePhases.map((phase) => phase.name)).toEqual([
     mainCoveredPhaseName,
-    "Isolated React Flow covered pass",
-    "Blob report merge pass",
     "Standalone script-style test",
   ]);
 });
 
-test("uses safe parallelism for the main covered pass only", () => {
-  const [mainCoveredPass, isolatedReactFlowPass] = buildUiCoveragePhases({
+test("uses configured parallelism for the monolithic Node covered pass", () => {
+  const [mainCoveredPass] = buildUiCoveragePhases({
     mainCoveredMaxWorkers: defaultMainCoveredMaxWorkers,
   });
 
   expect(mainCoveredPass.args).toContain(
     `--maxWorkers=${defaultMainCoveredMaxWorkers}`,
   );
-  expect(mainCoveredPass.args).not.toContain("--maxWorkers=1");
-  expect(isolatedReactFlowPass.args).toContain("--maxWorkers=1");
+  expect(mainCoveredPass.args).not.toEqual(
+    expect.arrayContaining([expect.stringMatching(/^--shard=/)]),
+  );
+  expect(mainCoveredPass.args).not.toEqual(
+    expect.arrayContaining([expect.stringMatching(/^--outputFile\.blob=/)]),
+  );
 });
 
-test("allows repo-owned coverage command to tune main covered pass workers", () => {
+test("allows the repo-owned coverage command to tune workers", () => {
   expect(
     getMainCoveredMaxWorkers({ UI_COVERAGE_MAIN_MAX_WORKERS: "50%" }),
   ).toBe("50%");
@@ -81,18 +76,20 @@ test("allows repo-owned coverage command to tune main covered pass workers", () 
   );
 });
 
-test("keeps browser-backed and standalone script-style tests outside the main covered pass", () => {
-  const [mainCoveredPass, , , standaloneScriptStyleTest] =
-    buildUiCoveragePhases({
-      mainCoveredMaxWorkers: defaultMainCoveredMaxWorkers,
-    });
+test("keeps browser, script-style, and performance tests outside unit coverage", () => {
+  const [mainCoveredPass, standaloneScriptStyleTest] = buildUiCoveragePhases();
 
   expect(mainCoveredPass.args).toEqual(
     expect.arrayContaining([
+      "--config=vitest.lanes.config.ts",
+      "--project=dashboard-unit",
+      "--coverage",
       "--exclude",
       "integration/*.integration.test.mjs",
       "--exclude",
       "scripts/dashboard-shell-storybook-responsive.test.mjs",
+      "--exclude",
+      uiPerformanceTestPattern,
     ]),
   );
   expect(standaloneScriptStyleTest.args).toEqual([
@@ -102,22 +99,9 @@ test("keeps browser-backed and standalone script-style tests outside the main co
   ]);
 });
 
-test("keeps the React Flow coverage files isolated from the main covered pass", () => {
-  const [mainCoveredPass, isolatedReactFlowPass] = buildUiCoveragePhases({
-    mainCoveredMaxWorkers: defaultMainCoveredMaxWorkers,
-  });
-
-  for (const reactFlowCoverageFile of isolatedReactFlowCoverageFiles) {
-    expect(mainCoveredPass.args).toEqual(
-      expect.arrayContaining(["--exclude", reactFlowCoverageFile]),
-    );
-    expect(isolatedReactFlowPass.args).toContain(reactFlowCoverageFile);
-  }
-  expect(isolatedReactFlowPass.args).toContain("--maxWorkers=1");
-});
-
-test("parses vitest default reporter file durations from a fixture log snippet", () => {
-  expect(parseVitestFileDurationsFromLog(fixtureLogSnippet)).toEqual([
+test("parses and ranks Vitest default-reporter file durations", () => {
+  const parsed = parseVitestFileDurationsFromLog(fixtureLogSnippet);
+  expect(parsed).toEqual([
     { durationMs: 3, path: "src/api/baseUrl.test.ts" },
     { durationMs: 26, path: "src/components/ui/formatters.test.ts" },
     { durationMs: 120_000, path: "src/App.test.tsx" },
@@ -127,15 +111,8 @@ test("parses vitest default reporter file durations from a fixture log snippet",
     },
     { durationMs: 116, path: "src/i18n/formatters.test.ts" },
   ]);
-});
 
-test("formats a bounded slow-file summary with stable labels", () => {
-  const slowFiles = rankSlowestTestFiles(
-    parseVitestFileDurationsFromLog(fixtureLogSnippet),
-    3,
-  );
-
-  expect(slowFiles).toEqual([
+  expect(rankSlowestTestFiles(parsed, 3)).toEqual([
     { durationMs: 120_000, path: "src/App.test.tsx" },
     {
       durationMs: 5000,
@@ -143,6 +120,14 @@ test("formats a bounded slow-file summary with stable labels", () => {
     },
     { durationMs: 116, path: "src/i18n/formatters.test.ts" },
   ]);
+});
+
+test("formats bounded slow-file summaries with stable categories", () => {
+  const slowFiles = rankSlowestTestFiles(
+    parseVitestFileDurationsFromLog(fixtureLogSnippet),
+    3,
+  );
+
   expect(
     formatSlowFileSummaryLines(slowFiles, {
       limit: 3,
@@ -157,139 +142,44 @@ test("formats a bounded slow-file summary with stable labels", () => {
   ]);
 });
 
-test("parses UI_COVERAGE_SHARD index/total pairs", () => {
-  expect(parseUiCoverageShard({ UI_COVERAGE_SHARD: "3/10" })).toEqual({
-    index: 3,
-    label: "3/10",
-    total: 10,
-  });
-  expect(parseUiCoverageShard({ UI_COVERAGE_SHARD: " 1/1 " })).toEqual({
-    index: 1,
-    label: "1/1",
-    total: 1,
-  });
-  expect(parseUiCoverageShard({})).toBeNull();
-});
-
-test("rejects invalid UI_COVERAGE_SHARD values", () => {
-  expect(() => parseUiCoverageShard({ UI_COVERAGE_SHARD: "shard-3" })).toThrow(
-    /expected format index\/total/,
-  );
-  expect(() => parseUiCoverageShard({ UI_COVERAGE_SHARD: "0/10" })).toThrow(
-    /index must be between 1 and 10/,
-  );
-  expect(() => parseUiCoverageShard({ UI_COVERAGE_SHARD: "11/10" })).toThrow(
-    /index must be between 1 and 10/,
-  );
-});
-
-test("builds shard main pass with vitest shard flag and unique blob output", () => {
-  const shard = { index: 3, label: "3/10", total: 10 };
-  const phase = buildMainCoveredShardPhase(shard);
-
-  expect(phase.name).toBe(`${mainCoveredPhaseName} (shard 3/10)`);
-  expect(phase.args).toContain("--shard=3/10");
-  expect(phase.args).toContain("--coverage.clean=true");
-  expect(phase.args).not.toContain("--coverage.clean=false");
-  expect(phase.args).toContain("--coverage.reportsDirectory=coverage/shard-3");
-  expect(phase.args).toContain(
-    `--outputFile.blob=${mainCoveredShardBlobPath(3)}`,
-  );
-  expect(phase.args).not.toContain(
-    "--outputFile.blob=.vitest-reports/main.json",
-  );
-  expect(phase.args).toContain(
-    `--maxWorkers=${defaultShardMainCoveredMaxWorkers}`,
-  );
-  expect(phase.args).toEqual(
-    expect.arrayContaining([
-      "--exclude",
-      "integration/*.integration.test.mjs",
-      "--exclude",
-      "scripts/dashboard-shell-storybook-responsive.test.mjs",
-      "--exclude",
-      "scripts/ui-coverage-runner.test.mjs",
-      "--exclude",
-      "scripts/ui-coverage-runner.shard-merge.test.mjs",
-      ...isolatedReactFlowCoverageFiles.flatMap((file) => ["--exclude", file]),
-    ]),
-  );
-});
-
-test("allows UI_COVERAGE_MAIN_MAX_WORKERS to override shard worker default", () => {
-  const shard = { index: 1, label: "1/10", total: 10 };
-  const phase = buildMainCoveredShardPhase(shard, {
-    env: { UI_COVERAGE_MAIN_MAX_WORKERS: "2" },
-  });
-
-  expect(phase.args).toContain("--maxWorkers=2");
-});
-
-test("parses UI_COVERAGE_MERGE truthy values", () => {
-  expect(parseUiCoverageMerge({ UI_COVERAGE_MERGE: "1" })).toBe(true);
-  expect(parseUiCoverageMerge({ UI_COVERAGE_MERGE: "true" })).toBe(true);
-  expect(parseUiCoverageMerge({})).toBe(false);
-  expect(parseUiCoverageMerge({ UI_COVERAGE_MERGE: "0" })).toBe(false);
-});
-
-test("defaults and validates UI_COVERAGE_SHARD_TOTAL for merge mode", () => {
-  expect(getUiCoverageShardTotal({})).toBe(defaultUiCoverageShardTotal);
-  expect(getUiCoverageShardTotal({ UI_COVERAGE_SHARD_TOTAL: "3" })).toBe(3);
-  expect(() =>
-    getUiCoverageShardTotal({ UI_COVERAGE_SHARD_TOTAL: "0" }),
-  ).toThrow(/positive integer/);
-});
-
-test("cleanCoverageArtifacts recreates coverage temp and blob report directories", () => {
-  const cwd = process.cwd();
+test("cleanCoverageArtifacts removes legacy shard artifacts and recreates coverage temp", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "ui-coverage-clean-"));
 
   try {
-    process.chdir(tempDir);
-    mkdirSync("coverage/old", { recursive: true });
-    mkdirSync(".vitest-reports/old", { recursive: true });
+    mkdirSync(join(tempDir, "coverage/shard-1"), { recursive: true });
+    mkdirSync(join(tempDir, ".vitest-reports"), { recursive: true });
+    mkdirSync(join(tempDir, ".vitest-report-timings"), { recursive: true });
 
-    cleanCoverageArtifacts();
+    cleanCoverageArtifacts(tempDir);
 
-    expect(existsSync("coverage/.tmp")).toBe(true);
-    expect(existsSync(".vitest-reports")).toBe(true);
+    expect(existsSync(join(tempDir, "coverage/.tmp"))).toBe(true);
+    expect(existsSync(join(tempDir, ".vitest-reports"))).toBe(false);
+    expect(existsSync(join(tempDir, ".vitest-report-timings"))).toBe(false);
   } finally {
-    process.chdir(cwd);
     rmSync(tempDir, { force: true, recursive: true });
   }
 });
 
-test("rejects setting UI_COVERAGE_SHARD and UI_COVERAGE_MERGE together", () => {
-  expect(() =>
-    runUiCoverage(uiCoveragePhases, {
-      env: { UI_COVERAGE_SHARD: "1/10", UI_COVERAGE_MERGE: "1" },
-      spawn: vi.fn(() => ({ status: 0 })),
-    }),
-  ).toThrow(/cannot both be set/);
-});
-
-test("runUiCoverage in shard mode runs only the shard main pass", () => {
+test("runUiCoverage executes the monolithic pass and standalone check", () => {
+  const rootDirectory = mkdtempSync(join(tmpdir(), "ui-coverage-run-"));
   const spawn = vi.fn(() => ({ status: 0, stdout: fixtureLogSnippet }));
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   const exit = vi.spyOn(process, "exit").mockImplementation(() => {});
 
-  runUiCoverage(uiCoveragePhases, {
-    env: { UI_COVERAGE_SHARD: "2/10" },
-    spawn,
-  });
+  runUiCoverage(uiCoveragePhases, { rootDirectory, spawn });
 
-  expect(spawn).toHaveBeenCalledTimes(1);
-  expect(spawn.mock.calls[0][1]).toContain("--shard=2/10");
-  expect(spawn.mock.calls[0][1]).toContain(
-    `--outputFile.blob=${mainCoveredShardBlobPath(2)}`,
+  expect(spawn).toHaveBeenCalledTimes(2);
+  expect(spawn.mock.calls[0][1]).not.toEqual(
+    expect.arrayContaining([expect.stringMatching(/^--shard=/)]),
   );
   expect(log).toHaveBeenCalledWith(
-    expect.stringContaining("Main covered Vitest pass (shard 2/10) elapsed:"),
+    expect.stringContaining("Main covered pass slowest test files"),
   );
   expect(exit).not.toHaveBeenCalled();
 
   log.mockRestore();
   exit.mockRestore();
+  rmSync(rootDirectory, { force: true, recursive: true });
 });
 
 test("emits elapsed output before returning a failing phase status", () => {
@@ -307,7 +197,6 @@ test("emits elapsed output before returning a failing phase status", () => {
   expect(log).toHaveBeenCalledWith(
     expect.stringContaining("Failing covered pass elapsed:"),
   );
-
   log.mockRestore();
 });
 
@@ -330,6 +219,5 @@ test("uses a larger buffer when capturing noisy Vitest output", () => {
     maxBuffer: defaultCapturedStdoutMaxBuffer,
     stdio: ["inherit", "pipe", "inherit"],
   });
-
   log.mockRestore();
 });

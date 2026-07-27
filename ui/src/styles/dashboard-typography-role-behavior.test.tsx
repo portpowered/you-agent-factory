@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { Code, Heading, Label, Text } from "../components/ui";
+import { Code, Heading, Label, Text } from "@you-agent-factory/components/primitives";
 import {
   DASHBOARD_EXTENDED_TYPOGRAPHY_ROLES,
   DASHBOARD_TYPOGRAPHY_CONTRACT,

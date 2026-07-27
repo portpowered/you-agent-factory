@@ -23,6 +23,7 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestCLIResumeSmoke_InterruptedJavaScriptFactorySessionResumesThroughSharedSessionCommands(t *testing.T) {
@@ -392,24 +393,18 @@ func startRootCLIResumeAPIServer(
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)
 	}
-	if err := process.Execute(root.Input{
-		Args:             []string{"you", "init", "--dir", projectRoot},
-		Env:              os.Environ(),
-		Context:          t.Context(),
-		WorkingDirectory: projectRoot,
-	}); err != nil {
-		t.Fatalf("initialize CLI resume fixture: %v", err)
-	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	homeDir := t.TempDir()
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	stdinIsTTY := true
 	runErr := make(chan error, 1)
 	go func() {
 		runErr <- process.Execute(root.Input{
 			Args: []string{
-				"you", "run", "--dir", projectRoot, "--continuously", "--quiet", "--no-record",
+				"you", "run", "--dir", projectRoot, "--continuously", "--with-server", "--quiet", "--no-record",
 			},
-			Env:              os.Environ(),
+			Env:              env,
 			Context:          ctx,
 			WorkingDirectory: projectRoot,
 			StdinIsTTY:       &stdinIsTTY,
@@ -675,7 +670,7 @@ func waitForDurableSessionStatusViaCLI(
 func setupCLIResumeSmokeWorkflowFixture(t *testing.T, fixtureName, workflowName string) string {
 	t.Helper()
 
-	projectRoot := t.TempDir()
+	projectRoot := support.ScaffoldSingleStepFactory(t, "cli-resume-smoke")
 	workflowDir := filepath.Join(projectRoot, ".claude", "workflows")
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)

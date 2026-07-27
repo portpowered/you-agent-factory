@@ -280,6 +280,7 @@ func buildBundle(
 				runtimeFactory.loggerFactory,
 			)
 		},
+		workerExecution,
 		dispatchCompleted,
 	)
 }

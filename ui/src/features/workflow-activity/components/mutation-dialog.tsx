@@ -1,13 +1,8 @@
 import { type ReactNode, useId } from "react";
-import {
-  AlertPanel,
-  AlertPanelText,
-  Button,
-  Heading,
-  Label,
-  SurfacePanel,
-  Text,
-} from "../../../components/ui";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
+import { Heading, Label, Text } from "@you-agent-factory/components/primitives";
+import { AlertPanel, AlertPanelText } from "../../../components/ui/alert-panel";
+import { Button } from "../../../components/ui/button";
 import { cn } from "../../../lib/cn";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
 

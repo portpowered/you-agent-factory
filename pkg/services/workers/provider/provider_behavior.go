@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"unicode/utf16"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -15,15 +14,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
-	cursorpkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor"
 
 	"sync"
 )
-
-// Cursor is commonly installed through a Windows command shim whose practical
-// command-line limit is lower than CreateProcess' documented maximum. Keep the
-// prompt below the observed 8 KiB boundary and materialize larger prompts.
-const cursorWindowsPromptArgumentLimit = 7 * 1024
 
 // ProviderBuildContext carries dispatch-scoped resources for provider argument building.
 type ProviderBuildContext struct {
@@ -32,7 +25,6 @@ type ProviderBuildContext struct {
 	operatingSystem     string
 	tempDir             string
 	temporaryFiles      platformfilesystem.TemporaryFileSystem
-	cleanup             []func()
 }
 
 type dispatchContentCache struct {
@@ -94,17 +86,8 @@ func (c *ProviderBuildContext) release() {
 	if c == nil {
 		return
 	}
-	for index := len(c.cleanup) - 1; index >= 0; index-- {
-		c.cleanup[index]()
-	}
 	if c.ContentCache != nil {
 		c.ContentCache.release()
-	}
-}
-
-func (c *ProviderBuildContext) registerCleanup(cleanup func()) {
-	if c != nil && cleanup != nil {
-		c.cleanup = append(c.cleanup, cleanup)
 	}
 }
 
@@ -124,20 +107,6 @@ type codexProviderBehavior struct {
 	logger logging.Logger
 }
 
-type geminiProviderBehavior struct {
-	sharedNonCodexProviderBehavior
-	logger logging.Logger
-}
-
-type kiroProviderBehavior struct {
-	logger logging.Logger
-}
-
-type cursorProviderBehavior struct {
-	sharedNonCodexProviderBehavior
-	logger logging.Logger
-}
-
 type openCodeProviderBehavior struct {
 	sharedNonCodexProviderBehavior
 	logger logging.Logger
@@ -152,12 +121,6 @@ func providerBehaviorFor(provider string, logger logging.Logger) providerBehavio
 	switch provider {
 	case string(modelprovider.ProviderCodex):
 		return codexProviderBehavior{logger: logger}
-	case string(modelprovider.ProviderGemini):
-		return geminiProviderBehavior{logger: logger}
-	case string(modelprovider.ProviderKiro):
-		return kiroProviderBehavior{logger: logger}
-	case string(modelprovider.ProviderCursor):
-		return cursorProviderBehavior{logger: logger}
 	case string(modelprovider.ProviderOpenCode):
 		return openCodeProviderBehavior{logger: logger}
 	case string(modelprovider.ProviderPi):
@@ -258,129 +221,6 @@ func BuildCodexStructuredCommand(
 	return behavior.BuildCommandRequest(req, args), cleanup, nil
 }
 
-func (b geminiProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
-	if err := validateGeminiOptionalCapabilities(req); err != nil {
-		return nil, err
-	}
-	args := []string{"--prompt", req.UserMessage}
-	if req.Model != "" {
-		args = append(args, "--model", req.Model)
-	}
-	if req.SessionID != "" {
-		args = append(args, "--resume", req.SessionID)
-	}
-	if skipPermissions {
-		args = append(args, "--approval-mode", "yolo", "--sandbox", "false")
-	}
-	return args, nil
-}
-
-func (b kiroProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
-	if err := validateKiroOptionalCapabilities(req); err != nil {
-		return nil, err
-	}
-	args := []string{"chat", "--no-interactive"}
-	if req.SessionID != "" {
-		args = append(args, "--resume-id", req.SessionID)
-	}
-	if skipPermissions {
-		args = append(args, "--trust-all-tools")
-	}
-	if prompt := buildKiroPrompt(req); prompt != "" {
-		args = append(args, prompt)
-	}
-	return args, nil
-}
-
-func (kiroProviderBehavior) BuildCommandRequest(req workerexecution.ProviderInferenceRequest, args []string) CommandRequest {
-	return buildBaseProviderCommandRequest(req, args)
-}
-
-// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
-func (b cursorProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, buildCtx *ProviderBuildContext) ([]string, error) {
-	if err := validateCursorOptionalCapabilities(req); err != nil {
-		return nil, err
-	}
-	var args []string
-	if skipPermissions {
-		args = append(args, "-f")
-	}
-	args = append(args, "-p")
-	if req.Model != "" {
-		args = append(args, "--model", req.Model)
-	}
-	if req.SessionID != "" {
-		args = append(args, "--resume", req.SessionID)
-	}
-	if req.WorkingDirectory != "" {
-		args = append(args, "--workspace", req.WorkingDirectory)
-	}
-
-	if req.Worktree != "" {
-		args = append(args, "--worktree", req.Worktree)
-	}
-
-	args = append(args, "--output-format", cursorpkg.CursorOutputFormatStreamJSON, "--stream-partial-output")
-
-	prompt := buildCursorPrompt(req)
-	operatingSystem := ""
-	if buildCtx != nil {
-		operatingSystem = strings.TrimSpace(buildCtx.operatingSystem)
-	}
-	promptUnits := len(utf16.Encode([]rune(prompt)))
-	if promptUnits > cursorWindowsPromptArgumentLimit && operatingSystem == "" {
-		return nil, fmt.Errorf("cursor provider operating system is required for a long prompt")
-	}
-	if operatingSystem == "windows" && promptUnits > cursorWindowsPromptArgumentLimit {
-		tempDir := req.WorkingDirectory
-		if tempDir == "" {
-			tempDir = "."
-		}
-		if buildCtx != nil && buildCtx.tempDir != "" {
-			tempDir = buildCtx.tempDir
-		}
-		promptFile, err := b.writeTempFile(buildCtx, tempDir, prompt)
-		if err != nil {
-			return nil, fmt.Errorf("failed to write temporary prompt file: %w", err)
-		}
-		buildCtx.registerCleanup(func() { _ = buildCtx.temporaryFiles.Remove(promptFile) })
-		prompt = "@" + promptFile
-	}
-	args = append(args, prompt)
-	return args, nil
-}
-
-func buildCursorPrompt(req workerexecution.ProviderInferenceRequest) string {
-	prompt := strings.TrimSpace(req.UserMessage)
-	if strings.TrimSpace(req.SystemPrompt) != "" {
-		prompt = buildKiroPrompt(req)
-	}
-	return prompt
-}
-
-func (b cursorProviderBehavior) writeTempFile(buildCtx *ProviderBuildContext, tempDir, prompt string) (string, error) {
-	if buildCtx == nil || buildCtx.temporaryFiles == nil {
-		return "", errors.New("cursor provider temporary filesystem is required")
-	}
-	f, err := buildCtx.temporaryFiles.CreateTemp(tempDir, "cursor_prompt_*.md")
-	if err != nil {
-		b.logger.Error("failed to create temporary prompt file", "error", err)
-		return "", err
-	}
-	path := f.Name()
-	if _, err = f.WriteString(prompt); err != nil {
-		b.logger.Error("failed to write to temporary prompt file", "error", err)
-		_ = f.Close()
-		_ = buildCtx.temporaryFiles.Remove(path)
-		return "", err
-	}
-	if err := f.Close(); err != nil {
-		_ = buildCtx.temporaryFiles.Remove(path)
-		return "", err
-	}
-	return path, nil
-}
-
 func (b openCodeProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
 	if err := validateOpenCodeOptionalCapabilities(req); err != nil {
 		return nil, err
@@ -422,25 +262,6 @@ func (b piProviderBehavior) BuildArgs(_ context.Context, req workerexecution.Pro
 	return args, nil
 }
 
-func validateGeminiOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {
-	unsupported := map[workerexecution.RunnerOptionalCapability]string{
-		workerexecution.RunnerOptionalCapabilityImageInput:       "image input is not supported by the gemini runner in v1",
-		workerexecution.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the gemini runner in v1",
-		workerexecution.RunnerOptionalCapabilitySessionResume:    "session resume is not supported by the gemini runner in v1",
-		workerexecution.RunnerOptionalCapabilityWorkingDirectory: "working directory is not supported by the gemini runner in v1",
-		workerexecution.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the gemini runner in v1",
-	}
-	for _, capability := range req.RequiredOptionalCapabilities {
-		if message, blocked := unsupported[capability]; blocked {
-			return errors.New(message)
-		}
-	}
-	if req.SessionID != "" {
-		return errors.New("session resume is not supported by the gemini runner in v1")
-	}
-	return nil
-}
-
 func validateCodexOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {
 	for _, capability := range req.RequiredOptionalCapabilities {
 		if capability == workerexecution.RunnerOptionalCapabilityWorktree {
@@ -449,35 +270,6 @@ func validateCodexOptionalCapabilities(req workerexecution.ProviderInferenceRequ
 	}
 	if req.Worktree != "" && req.WorkingDirectory == "" {
 		return errors.New("worktree selection is not supported by the codex runner in v1")
-	}
-	return nil
-}
-
-func validateKiroOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {
-	unsupported := map[workerexecution.RunnerOptionalCapability]string{
-		workerexecution.RunnerOptionalCapabilityImageInput:       "image input is not supported by the kiro runner in v1",
-		workerexecution.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the kiro runner in v1",
-		workerexecution.RunnerOptionalCapabilityWorkingDirectory: "working directory is not supported by the kiro runner in v1",
-		workerexecution.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the kiro runner in v1",
-	}
-	for _, capability := range req.RequiredOptionalCapabilities {
-		if message, blocked := unsupported[capability]; blocked {
-			return errors.New(message)
-		}
-	}
-	return nil
-}
-
-func validateCursorOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {
-	unsupported := map[workerexecution.RunnerOptionalCapability]string{
-		workerexecution.RunnerOptionalCapabilityImageInput:       "image input is not supported by the cursor-cli runner in v1",
-		workerexecution.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the cursor-cli runner in v1",
-		workerexecution.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the cursor-cli runner in v1",
-	}
-	for _, capability := range req.RequiredOptionalCapabilities {
-		if message, blocked := unsupported[capability]; blocked {
-			return errors.New(message)
-		}
 	}
 	return nil
 }
@@ -493,19 +285,6 @@ func validateOpenCodeOptionalCapabilities(req workerexecution.ProviderInferenceR
 		}
 	}
 	return nil
-}
-
-func buildKiroPrompt(req workerexecution.ProviderInferenceRequest) string {
-	systemPrompt := strings.TrimSpace(req.SystemPrompt)
-	userMessage := strings.TrimSpace(req.UserMessage)
-	switch {
-	case systemPrompt == "":
-		return userMessage
-	case userMessage == "":
-		return systemPrompt
-	default:
-		return "System instructions:\n" + systemPrompt + "\n\nUser request:\n" + userMessage
-	}
 }
 
 func buildBaseProviderCommandRequest(req workerexecution.ProviderInferenceRequest, args []string) CommandRequest {
@@ -653,19 +432,6 @@ func providerFailurePolicyForReason(reason workerexecution.WorkFailureType) prov
 			Family:   workerexecution.WorkFailureFamilyTerminal,
 			Decision: workerexecution.WorkFailureDecision{Terminal: true},
 		}
-	}
-}
-
-func providerFailureDecisionForFamily(family workerexecution.WorkFailureFamily) workerexecution.WorkFailureDecision {
-	switch family {
-	case workerexecution.WorkFailureFamilyRetryable:
-		return workerexecution.WorkFailureDecision{Retryable: true}
-	case workerexecution.WorkFailureFamilyThrottle:
-		return workerexecution.WorkFailureDecision{Retryable: true, TriggersThrottlePause: true}
-	case workerexecution.WorkFailureFamilyTerminal:
-		return workerexecution.WorkFailureDecision{Terminal: true}
-	default:
-		return workerexecution.WorkFailureDecision{Terminal: true}
 	}
 }
 

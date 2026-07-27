@@ -29,9 +29,15 @@ const dashboardSnapshotState = vi.hoisted(() => ({
 let restoreBrowserShims: (() => void) | undefined;
 let restoreScrollMetrics: (() => void) | undefined;
 
-vi.mock("../../header/public", () => ({
+vi.mock("../../header/components/dashboard-export-dialog", () => ({
   DashboardExportDialog: () => null,
+}));
+
+vi.mock("../../header/components/dashboard-header", () => ({
   DashboardHeader: () => <header>Dashboard header</header>,
+}));
+
+vi.mock("../../header/components/dashboard-status-panel", () => ({
   DashboardStatusPanel: ({ title }: { title: string }) => (
     <section>
       <h1>{title}</h1>
@@ -163,11 +169,11 @@ vi.mock(
   }),
 );
 
-vi.mock("../../import/public", () => ({
+vi.mock("../../import/components/dashboard-import-preview-dialog", () => ({
   DashboardImportPreviewDialog: () => null,
 }));
 
-vi.mock("../../current-selection/public", async () => {
+vi.mock("../../current-selection/components/widget/current-selection-widget", async () => {
   const { DashboardWidgetFrame } = await vi.importActual<
     typeof import("../../bento/components/dashboard-widget-frame/dashboard-widget-frame")
   >("../../bento/components/dashboard-widget-frame/dashboard-widget-frame");
@@ -189,7 +195,7 @@ vi.mock("../../current-selection/public", async () => {
   };
 });
 
-vi.mock("../../provider-session-detail/public", async () => {
+vi.mock("../../provider-session-detail/components/provider-session-widget", async () => {
   const { DashboardWidgetFrame } = await vi.importActual<
     typeof import("../../bento/components/dashboard-widget-frame/dashboard-widget-frame")
   >("../../bento/components/dashboard-widget-frame/dashboard-widget-frame");
@@ -211,7 +217,7 @@ vi.mock("../../provider-session-detail/public", async () => {
   };
 });
 
-vi.mock("../../submit-work/public", async () => {
+vi.mock("../../submit-work/components/submit-work-widget", async () => {
   const { DashboardWidgetFrame } = await vi.importActual<
     typeof import("../../bento/components/dashboard-widget-frame/dashboard-widget-frame")
   >("../../bento/components/dashboard-widget-frame/dashboard-widget-frame");
@@ -233,7 +239,7 @@ vi.mock("../../submit-work/public", async () => {
   };
 });
 
-vi.mock("../../terminal-work/public", async () => {
+vi.mock("../../terminal-work/components/terminal-work-widget", async () => {
   const { DashboardWidgetFrame } = await vi.importActual<
     typeof import("../../bento/components/dashboard-widget-frame/dashboard-widget-frame")
   >("../../bento/components/dashboard-widget-frame/dashboard-widget-frame");
@@ -255,7 +261,7 @@ vi.mock("../../terminal-work/public", async () => {
   };
 });
 
-vi.mock("../../trace-drilldown/public", async () => {
+vi.mock("../../trace-drilldown/components/trace-drilldown-widget", async () => {
   const { DashboardWidgetFrame } = await vi.importActual<
     typeof import("../../bento/components/dashboard-widget-frame/dashboard-widget-frame")
   >("../../bento/components/dashboard-widget-frame/dashboard-widget-frame");
@@ -277,7 +283,7 @@ vi.mock("../../trace-drilldown/public", async () => {
   };
 });
 
-vi.mock("../../work-outcome/public", async () => {
+vi.mock("../../work-outcome/components/work-outcome-widget", async () => {
   const { DashboardWidgetFrame } = await vi.importActual<
     typeof import("../../bento/components/dashboard-widget-frame/dashboard-widget-frame")
   >("../../bento/components/dashboard-widget-frame/dashboard-widget-frame");
@@ -299,7 +305,7 @@ vi.mock("../../work-outcome/public", async () => {
   };
 });
 
-vi.mock("../../work-totals/public", async () => {
+vi.mock("../../work-totals/components/work-totals-widget", async () => {
   const { DashboardWidgetFrame } = await vi.importActual<
     typeof import("../../bento/components/dashboard-widget-frame/dashboard-widget-frame")
   >("../../bento/components/dashboard-widget-frame/dashboard-widget-frame");
@@ -321,7 +327,7 @@ vi.mock("../../work-totals/public", async () => {
   };
 });
 
-vi.mock("../../workflow-activity/public", async () => {
+vi.mock("../../workflow-activity/components/workflow-activity-widget", async () => {
   const { DashboardWidgetFrame } = await vi.importActual<
     typeof import("../../bento/components/dashboard-widget-frame/dashboard-widget-frame")
   >("../../bento/components/dashboard-widget-frame/dashboard-widget-frame");

@@ -26,6 +26,7 @@ const functionalServerReadyTimeout = 5 * time.Second
 // exactly as it is for a real CLI invocation.
 type FunctionalAPIServerConfig struct {
 	FactoryDir                string
+	FactoryConfigPath         string
 	WorkingDirectory          string
 	UseMockWorkers            bool
 	MockWorkersConfig         *workers.MockWorkersConfig
@@ -127,7 +128,16 @@ func StartFunctionalAPIServiceModeServer(t *testing.T, factoryDir string, useMoc
 
 func functionalRunArgs(t *testing.T, cfg FunctionalAPIServerConfig) []string {
 	t.Helper()
-	args := []string{"--dir", cfg.FactoryDir, "--continuously", "--quiet"}
+	args := []string{
+		"--continuously",
+		"--with-server",
+		"--quiet",
+	}
+	if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
+		args = append(args, "--factory", cfg.FactoryConfigPath)
+	} else {
+		args = append(args, "--dir", cfg.FactoryDir)
+	}
 	if !containsFunctionalArgument(cfg.Args, "--record") {
 		args = append(args, "--no-record")
 	}
@@ -275,6 +285,84 @@ func GetFactoryEventsAt(t testing.TB, baseURL string) []factoryapi.FactoryEvent 
 			return collected
 		case <-deadline.C:
 			t.Fatalf("timed out reading factory event history")
+		}
+	}
+}
+
+// GetFactoryResponseEventsAt reads retained public Factory response events
+// until the active stream becomes quiet.
+func GetFactoryResponseEventsAt(
+	t testing.TB,
+	baseURL string,
+	sessionID string,
+) []factoryapi.FactoryResponseEvent {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), functionalServerReadyTimeout)
+	defer cancel()
+	endpoint := strings.TrimSuffix(baseURL, "/") +
+		"/factory-sessions/" + sessionID + "/response-events"
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatalf("build factory response events request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET factory response events: %v", err)
+	}
+	if response.StatusCode != http.StatusOK {
+		defer response.Body.Close()
+		t.Fatalf("GET factory response events status = %d", response.StatusCode)
+	}
+
+	events := make(chan factoryapi.FactoryResponseEvent, 32)
+	errs := make(chan error, 1)
+	go func() {
+		defer response.Body.Close()
+		scanner := bufio.NewScanner(response.Body)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if !strings.HasPrefix(line, "data:") {
+				continue
+			}
+			var event factoryapi.FactoryResponseEvent
+			if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
+				errs <- fmt.Errorf("decode factory response event: %w", err)
+				return
+			}
+			events <- event
+		}
+		if err := scanner.Err(); err != nil && !errors.Is(err, context.Canceled) {
+			errs <- err
+		}
+	}()
+
+	var collected []factoryapi.FactoryResponseEvent
+	deadline := time.NewTimer(functionalServerReadyTimeout)
+	defer deadline.Stop()
+	var quiet *time.Timer
+	var quietC <-chan time.Time
+	for {
+		select {
+		case event := <-events:
+			collected = append(collected, event)
+			if quiet == nil {
+				quiet = time.NewTimer(25 * time.Millisecond)
+			} else {
+				if !quiet.Stop() {
+					select {
+					case <-quiet.C:
+					default:
+					}
+				}
+				quiet.Reset(25 * time.Millisecond)
+			}
+			quietC = quiet.C
+		case err := <-errs:
+			t.Fatalf("read factory response events: %v", err)
+		case <-quietC:
+			return collected
+		case <-deadline.C:
+			t.Fatalf("timed out reading factory response-event history")
 		}
 	}
 }

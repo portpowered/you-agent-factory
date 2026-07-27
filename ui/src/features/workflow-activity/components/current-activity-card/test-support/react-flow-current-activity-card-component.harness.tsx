@@ -30,8 +30,6 @@ import { resetCurrentActivityGraphLayoutCacheForTests } from "../../../hooks/rea
 import type { CurrentActivitySelection } from "../../../lib/react-flow-current-activity-card-types";
 import { ReactFlowCurrentActivityCard } from "../../react-flow-current-activity-card";
 
-export const PADDING_CLASS_PATTERN = /(^|\s)p[trblxy]?-[^\s]+/;
-
 export interface RenderCurrentActivityOptions {
   activateFactory?: (
     input: FactoryImportConfirmInput,
@@ -69,57 +67,6 @@ export function currentFactoryDocumentFromSnapshot(
   };
 }
 
-export function dashboardSnapshotWithEditableFactory(): DashboardSnapshot {
-  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
-  snapshot.factory = structuredClone(baseFactoryDefinitionDocument);
-  return snapshot;
-}
-
-export function workerDenseSnapshot(): DashboardSnapshot {
-  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
-  snapshot.runtime.active_executions_by_dispatch_id = {
-    "dispatch-draft-active": {
-      dispatch_id: "dispatch-draft-active",
-      started_at: "2026-05-19T01:10:00Z",
-      transition_id: "draft-transition",
-      workstation_name: "draft",
-      workstation_node_id: "draft",
-    },
-  };
-  snapshot.runtime.active_dispatch_ids = ["dispatch-draft-active"];
-  snapshot.runtime.active_workstation_node_ids = ["draft"];
-  snapshot.runtime.active_throttle_pauses = [
-    {
-      affected_worker_types: ["stalled"],
-      lane_id: "provider:codex",
-      model: "gpt-5",
-      paused_until: "2026-05-19T01:15:00Z",
-      provider: "OPENAI",
-      recover_at: "2026-05-19T01:16:00Z",
-    },
-  ];
-  snapshot.runtime.workstation_requests_by_dispatch_id = {
-    "dispatch-review": {
-      counts: {
-        dispatched_count: 1,
-        errored_count: 1,
-        responded_count: 1,
-      },
-      dispatch_id: "dispatch-review",
-      request: {},
-      response: {
-        failure_message: "Provider request failed.",
-        outcome: "FAILED",
-      },
-      transition_id: "review-transition",
-      workstation_name: "review",
-      workstation_node_id: "review",
-      work_items: [],
-    },
-  };
-
-  return snapshot;
-}
 export function dashboardSnapshotWithActiveWorkItemCount(
   count: number,
 ): DashboardSnapshot {
@@ -273,54 +220,6 @@ export function renderWithQueryClient(view: ReactElement) {
   );
 }
 
-export function createFactoryImportValue(): FactoryPngImportValue {
-  return {
-    factory: {
-      name: "Dropped Factory",
-      workTypes: [],
-      workers: [],
-      workstations: [],
-    },
-    previewImageSrc: "blob:factory-preview",
-    revokePreviewImageSrc: vi.fn(),
-    schemaVersion: "portos.agent-factory.png.v1",
-  };
-}
-
-export function createImportController(
-  overrides: Partial<CurrentActivityImportController> = {},
-): CurrentActivityImportController {
-  return {
-    activateImport: vi.fn().mockResolvedValue(undefined),
-    activationState: { status: "idle" },
-    clearActivationError: vi.fn(),
-    clearError: vi.fn(),
-    closeImportPreview: vi.fn(),
-    dropState: { status: "idle" },
-    importPreviewState: { status: "idle" },
-    onDragEnter: vi.fn(),
-    onDragLeave: vi.fn(),
-    onDragOver: vi.fn(),
-    onDrop: vi.fn(),
-    ...overrides,
-  };
-}
-
-export function createFileDropTransfer(files: File[]): {
-  dataTransfer: {
-    dropEffect: string;
-    files: File[];
-    types: string[];
-  };
-} {
-  return {
-    dataTransfer: {
-      dropEffect: "none",
-      files,
-      types: ["Files"],
-    },
-  };
-}
 let restoreBrowserTestShims: (() => void) | null = null;
 
 export function registerCurrentActivityCardTestLifecycle(): void {
