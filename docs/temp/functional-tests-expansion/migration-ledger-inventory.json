@@ -7037,36 +7037,6 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/http/server/routing_test.go",
-      "package": "you-agent-factory/tests/functional/transport/http/server",
-      "scenario": "TestAPIRoutesEveryOpenAPIOperationToNon404Handler",
-      "lane": "short",
-      "destination": "tests/functional/transport/http/server/routing_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/http/server/routing_test.go",
-      "package": "you-agent-factory/tests/functional/transport/http/server",
-      "scenario": "TestAPIUnknownRouteReturnsStructuredNotFound",
-      "lane": "short",
-      "destination": "tests/functional/transport/http/server/routing_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/http/server/routing_test.go",
-      "package": "you-agent-factory/tests/functional/transport/http/server",
-      "scenario": "TestAPIWrongMethodReturnsDocumentedMethodError",
-      "lane": "short",
-      "destination": "tests/functional/transport/http/server/routing_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
     }
   ],
   "scanned_at_utc": "2026-07-28T00:00:00Z",
@@ -7074,7 +7044,7 @@
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 425,
+      "none": 422,
       "replay_contracts": 23,
       "runtime_api": 102,
       "smoke": 62,
@@ -7098,15 +7068,15 @@
       "sessionparity": 13,
       "sessions": 3,
       "smoke": 62,
-      "transport": 91,
+      "transport": 88,
       "work": 2,
       "workers": 69,
       "workflow": 30,
       "workstations": 33
     },
-    "customer_top_level_Test_scenarios": 687,
+    "customer_top_level_Test_scenarios": 684,
     "lane_functionallong": 95,
-    "lane_short": 592,
+    "lane_short": 589,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 13,
       "you-agent-factory/tests/functional/automations": 6,
@@ -7259,13 +7229,13 @@
   "completeness_audit": {
     "audited_at_utc": "2026-07-28T00:00:00Z",
     "story": "ft-wave1-cli-text-stream-004",
-    "live_customer_scenarios": 687,
-    "ledger_rows": 687,
+    "live_customer_scenarios": 684,
+    "ledger_rows": 684,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 592,
+    "lane_short": 589,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
