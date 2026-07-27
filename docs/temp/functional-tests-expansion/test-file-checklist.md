@@ -462,10 +462,11 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestEligibleWorkstationContentionChoosesOneDispatchOnly`.
   - `TestContentionMakesProgressAcrossRepeatedWork`.
 
-- [ ] `tests/functional/workstations/cron/clock_test.go`
+- [x] `tests/functional/workstations/cron/clock_test.go`
   - `TestCronFiresAtInjectedTimeWithoutWallClockSleep`.
   - `TestCronDoesNotDoubleFireForOneScheduleBoundary`.
   - `TestCronShutdownPreventsLaterSubmission`.
+  - `TestCronImplicitFailureRoutingMovesFailedCronWorkIntoFailedState`.
 
 - [x] `tests/functional/workstations/repeater/reject_accept_test.go`
   - `TestRepeater_YieldsBetweenIterations`.
