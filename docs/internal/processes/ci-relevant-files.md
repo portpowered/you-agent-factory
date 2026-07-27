@@ -163,8 +163,24 @@
   blocking `Provider.Infer` until public `inFlightDispatches` reaches the fan-out
   size, release children to assert declared input-order results and documented
   partial-failure shaping on `/factory-sessions/{id}/results?mode=final` and
-  `/dispatches` without wall-clock sleeps. Mock-worker replacement functional
-  coverage belongs in
+  `/dispatches` without wall-clock sleeps. Catalog metadata infers domain
+  `orchestration` and subsection `javascript/composition` from the path; every
+  top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
+  stays viz-compatible.
+  JavaScript per-child worker override functional coverage belongs in
+  `tests/functional/orchestration/javascript/workers/overrides_test.go`:
+  drive sync or async Factory Session execution through
+  `tests/functional/internal/support.StartFunctionalAPIServer` with
+  `WaitForServiceModeRuntime: true`, assert per-child `modelProvider`/`model`
+  selections on `/factory-sessions/{id}/dispatches` and injected
+  `edges.Edges.ProviderOverride` inference requests, prove partial
+  `workers.MockWorkersConfig` behavior with `UseMockWorkers: true` via
+  `javascript.executionMode` and public child results, and surface invalid
+  per-child overrides on durable session `failureDetail` with synchronous
+  inline workflows when override validation fails before dispatch. Catalog
+  metadata infers domain `orchestration` and subsection `javascript/workers`
+  from the path.
+  Mock-worker replacement functional coverage belongs in
   `tests/functional/workers/mock/replacement_test.go`: prove named-only
   `--with-mock-workers` replacement through
   `tests/functional/internal/support.StartFunctionalAPIServer` with
