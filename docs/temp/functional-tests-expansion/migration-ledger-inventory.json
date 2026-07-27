@@ -1111,9 +1111,9 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/cli/session/session_enumeration_test.go",
-      "package": "you-agent-factory/tests/functional/cli/session",
-      "scenario": "TestSessionCreateInitializesNewFactoryThroughSupportedAPI",
+      "source_path": "tests/functional/transport/cli/commands/session_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLISessionCreateListShowDelete",
       "lane": "short",
       "destination": "tests/functional/transport/cli/commands/session_wiring_test.go",
       "catch_all": "none",
@@ -1121,9 +1121,9 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/cli/session/session_enumeration_test.go",
-      "package": "you-agent-factory/tests/functional/cli/session",
-      "scenario": "TestSessionEnumeration",
+      "source_path": "tests/functional/transport/cli/commands/session_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLISessionPauseBuffersAndResumeDispatches",
       "lane": "short",
       "destination": "tests/functional/transport/cli/commands/session_wiring_test.go",
       "catch_all": "none",
@@ -1131,9 +1131,9 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/cli/session/session_enumeration_test.go",
-      "package": "you-agent-factory/tests/functional/cli/session",
-      "scenario": "TestSessionEnumerationJSON",
+      "source_path": "tests/functional/transport/cli/commands/session_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLISessionMissingIDReturnsNotFound",
       "lane": "short",
       "destination": "tests/functional/transport/cli/commands/session_wiring_test.go",
       "catch_all": "none",
@@ -6812,8 +6812,8 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T19:10:00Z",
-    "story": "ft-wave1-watcher-files-mergeability",
+    "audited_at_utc": "2026-07-27T18:20:00Z",
+    "story": "ft-wave1-cli-session-wiring-mergeability-rebase6",
     "live_customer_scenarios": 643,
     "ledger_rows": 643,
     "unmapped_scenarios": 0,

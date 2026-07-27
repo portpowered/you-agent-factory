@@ -1474,11 +1474,6 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/cli/session/session_enumeration_test.go",
-      "target": "cli"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/cli/session_resume/resume_non_regression_test.go",
       "target": "cli"
     },
