@@ -185,6 +185,15 @@ func (UnimplementedService) ListBuiltInPackagedFactories(
 	return ListBuiltInPackagedFactoriesResult{}, fmt.Errorf("packaged factory catalog collaborator is required")
 }
 
+// ResolveBuiltInPackagedFactory returns ErrUnknownPackagedFactoryIdentity until
+// nested packaged-catalog wiring lands.
+func (UnimplementedService) ResolveBuiltInPackagedFactory(
+	context.Context,
+	ResolveBuiltInPackagedFactoryRequest,
+) (ResolveBuiltInPackagedFactoryResult, error) {
+	return ResolveBuiltInPackagedFactoryResult{}, ErrUnknownPackagedFactoryIdentity
+}
+
 // InstallPackagedFactory returns ErrUnknownPackagedFactoryIdentity until nested
 // packaged installation wiring lands.
 func (UnimplementedService) InstallPackagedFactory(

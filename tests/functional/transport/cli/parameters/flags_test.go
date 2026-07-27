@@ -69,14 +69,14 @@ func TestCLIUnknownFlagFailsBeforeLifecycleStart(t *testing.T) {
 		},
 	})
 	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "init", "--dir", "legacy-factory",
+		"you", "init", "--legacy-scaffold", "legacy-factory",
 	})
 	inputs.WorkingDirectory = t.TempDir()
 
 	executeErr := process.Execute(inputs.Input)
-	if executeErr == nil || !strings.Contains(executeErr.Error(), "unknown flag: --dir") {
+	if executeErr == nil || !strings.Contains(executeErr.Error(), "unknown flag: --legacy-scaffold") {
 		t.Fatalf(
-			"removed init flag error = %v, want unknown flag: --dir; stdout=%q stderr=%q",
+			"unknown init flag error = %v, want unknown flag: --legacy-scaffold; stdout=%q stderr=%q",
 			executeErr,
 			inputs.Stdout(),
 			inputs.Stderr(),

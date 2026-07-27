@@ -168,13 +168,15 @@ type rootOnlyRuntime struct{ factoryruntime.Service }
 
 type testFactoryRuntime struct {
 	factoryruntime.Service
-	state      string
-	pauseCalls int
+	state           string
+	pauseCalls      int
+	resumeCalls     int
+	terminateCalls  int
 }
 
 func (f *testFactoryRuntime) Run(context.Context) error    { return nil }
 func (f *testFactoryRuntime) Pause(context.Context) error  { f.pauseCalls++; return nil }
-func (f *testFactoryRuntime) Resume(context.Context) error { return nil }
+func (f *testFactoryRuntime) Resume(context.Context) error { f.resumeCalls++; return nil }
 func (f *testFactoryRuntime) ControlPause(ctx context.Context, _ factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
 	err := f.Pause(ctx)
 	return factoryruntime.PauseResult{Outcome: factoryruntime.ControlOutcomeAccepted}, err
@@ -193,6 +195,7 @@ func (f *testFactoryRuntime) ControlMoveWork(context.Context, factoryruntime.Mov
 	return factoryruntime.MoveWorkResult{}, nil
 }
 func (f *testFactoryRuntime) Terminate(context.Context, factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error) {
+	f.terminateCalls++
 	return factoryruntime.TerminateResult{Outcome: factoryruntime.ControlOutcomeAccepted}, nil
 }
 func (f *testFactoryRuntime) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {

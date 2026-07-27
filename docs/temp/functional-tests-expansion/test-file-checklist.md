@@ -255,7 +255,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestProviderSnapshotOnlyEmitsCompletedSnapshotsOnly`.
   - `TestProviderFinalOnlyEmitsTerminalMessageOnly`.
 
-- [ ] `tests/functional/workers/inference/process_cleanup_test.go`
+- [x] `tests/functional/workers/inference/process_cleanup_test.go`
   - `TestProviderTimeoutTerminatesChildProcessTree` covers cleanup.
   - `TestProviderCancellationTerminatesCompanionProcesses` covers cancellation.
   - `TestProviderSuccessWaitsForProcessAndStreamClosure` covers normal cleanup.
@@ -549,6 +549,9 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIFactorySessionNotFoundUsesTypedError`.
   - `TestAPIMultipleFactorySessionsRemainIsolated`.
 
+- [ ] `tests/functional/sessions/live_runtime_build_process_test.go`
+  - `TestBuildProcessRoutesLiveOpenListControlAndCloseThroughFactorySessionsRoot`.
+
 - [ ] `tests/functional/sessions/controls/pause_resume_test.go`
   - `TestPausedFactorySessionBuffersSubmittedWork`.
   - `TestResumedFactorySessionDrainsBufferedWorkInOrder`.
@@ -791,6 +794,9 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [ ] `tests/functional/product/docs/contract_test.go`
   - `TestPackagedDocsIndexMatchesReferenceFiles`.
   - `TestDocsOutputContainsNoBrokenInternalLinks`.
+
+- [ ] `tests/functional/product/packaged_factory_portability/packaged_factory_portability_test.go`
+  - `TestPackagedFactoryInitMaterialization_InvokesOutsideRepositoryWithBootstrapParity`.
 
 - [ ] `tests/functional/product/dashboard/http_test.go`
   - `TestDashboardIndexStaticAssetsAndDeepLinksAreServed`.
