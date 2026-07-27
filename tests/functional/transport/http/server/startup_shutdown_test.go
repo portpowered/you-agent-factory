@@ -1,12 +1,18 @@
 package server_test
 
 import (
+	"context"
+	"errors"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -50,6 +56,147 @@ func TestAPIServerStartsOnConfiguredListenerAndServesStatus(t *testing.T) {
 	if status.RuntimeStatus == "" {
 		t.Fatal("GET /status returned empty runtimeStatus")
 	}
+}
+
+// TestAPIServerShutdownClosesListenerAndActiveStreams proves shutdown through the
+// public API server lifecycle closes the listener and terminates active public streams.
+func TestAPIServerShutdownClosesListenerAndActiveStreams(t *testing.T) {
+	dir := scaffoldConcurrentRequestsFactory(t)
+	blocking := newBlockingInvocationRunner()
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(t, &edges, blocking, nil)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     edges,
+	})
+
+	listenerURL := server.URL()
+	parsed, err := url.Parse(listenerURL)
+	if err != nil || parsed.Host == "" {
+		t.Fatalf("parse listener URL %q: %v", listenerURL, err)
+	}
+
+	session := getFactorySession(t, listenerURL, factorysessions.DefaultSessionID)
+	activeRequest := startActiveBlockingInvocation(t, listenerURL, session.Id, blocking)
+
+	statusResp, err := http.Get(listenerURL + "/status")
+	if err != nil {
+		t.Fatalf("GET %s/status before shutdown: %v", listenerURL, err)
+	}
+	_ = statusResp.Body.Close()
+	if statusResp.StatusCode != http.StatusOK {
+		t.Fatalf(
+			"GET %s/status before shutdown status = %d, want %d",
+			listenerURL,
+			statusResp.StatusCode,
+			http.StatusOK,
+		)
+	}
+
+	stopDone := stopFunctionalAPIServerAsync(t, server)
+	waitForListenerClosed(t, parsed.Host, listenerURL, 10*time.Second)
+	assertActiveRequestTerminatedAfterShutdown(t, activeRequest)
+
+	select {
+	case <-stopDone:
+	case <-time.After(10 * time.Second):
+		activeRequest.cancel()
+		t.Fatal("timed out waiting for API server shutdown to complete")
+	}
+}
+
+func stopFunctionalAPIServerAsync(t *testing.T, server *support.FunctionalAPIServer) <-chan struct{} {
+	t.Helper()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		server.Stop(t)
+	}()
+	return done
+}
+
+type activeBlockingInvocation struct {
+	cancel context.CancelFunc
+	done   chan error
+}
+
+func startActiveBlockingInvocation(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+	blocking *blockingInvocationRunner,
+) *activeBlockingInvocation {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	request := &activeBlockingInvocation{
+		cancel: cancel,
+		done:   make(chan error, 1),
+	}
+	go func() {
+		request.done <- postBlockingInvocation(ctx, baseURL, sessionID, blocking)
+	}()
+
+	select {
+	case <-blocking.started:
+	case <-time.After(5 * time.Second):
+		cancel()
+		t.Fatal("timed out waiting for active blocking invocation")
+	}
+
+	return request
+}
+
+func assertActiveRequestTerminatedAfterShutdown(t *testing.T, request *activeBlockingInvocation) {
+	t.Helper()
+
+	select {
+	case err := <-request.done:
+		if err == nil {
+			t.Fatal("active blocking invocation completed without error after shutdown")
+		}
+		if !errors.Is(err, context.Canceled) && !isClosedConnectionError(err) {
+			t.Fatalf("active blocking invocation after shutdown error = %v, want closed stream", err)
+		}
+	case <-time.After(5 * time.Second):
+		request.cancel()
+		t.Fatal("active blocking invocation remained open after shutdown")
+	}
+}
+
+func waitForListenerClosed(t *testing.T, listenerHost, listenerURL string, timeout time.Duration) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		client := &http.Client{Timeout: 500 * time.Millisecond}
+		response, err := client.Get(listenerURL + "/status")
+		if err == nil {
+			_ = response.Body.Close()
+		} else {
+			rebound, listenErr := net.Listen("tcp4", listenerHost)
+			if listenErr == nil {
+				_ = rebound.Close()
+				return
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("listener %s remained reachable after %s", listenerHost, timeout)
+}
+
+func isClosedConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "connection reset") ||
+		strings.Contains(message, "broken pipe") ||
+		strings.Contains(message, "use of closed network connection") ||
+		strings.Contains(message, "connection refused") ||
+		strings.Contains(message, "eof")
 }
 
 func reserveConfiguredLoopbackURL(t *testing.T) string {
