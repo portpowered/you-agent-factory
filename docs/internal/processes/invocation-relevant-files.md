@@ -427,7 +427,16 @@ primary-result behavior.
   `tests/functional/workers/inference/flags_test.go`; drive proofs through
   `support.RunFactoryToCompletionWithEdgesAndObservations` with
   `serviceedges.Edges{ProviderCommandRunner: ...}` and assert on provider-process
-  command args plus public Work outcomes only. Script execution-environment
+  command args plus public Work outcomes only. Provider stream fidelity
+  (full-stream truthful deltas and snapshots, partial-stream non-fabrication of
+  missing deltas, snapshot-only completed snapshots without deltas, and final-only
+  terminal messages without native-stream claims) belongs in
+  `tests/functional/workers/inference/stream_fidelity_test.go`; drive proofs
+  through `support.RunFactoryToCompletionWithEdgesAndResponseEvents` with
+  sanitized FND-006 provider-session goldens replayed via
+  `serviceedges.Edges{ProviderCommandRunner: ...}` (and OpenCode snapshot-only
+  executable-locator edges when required) and assert on public Factory response
+  events and Work outcomes only. Script execution-environment
   boundary proofs (declared env filtering, missing-executable public failure,
   resource-token template resolution, multi-input ordering, and worktree
   passthrough) belong in
