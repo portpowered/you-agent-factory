@@ -11,6 +11,8 @@ import (
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
 	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
+	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
+	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -35,6 +37,7 @@ type Service struct {
 	executionPolicy   factorydefinitions.WorkstationExecutionPolicyService
 	reconciler        reconciliation.Service
 	cron              cron.Service
+	filesystemWatchers filesystemwatchers.Service
 	schedulerMu       sync.Mutex
 	schedulerSources  map[automations.SourceIdentity]*schedulerSource
 }
@@ -64,6 +67,7 @@ func New(
 	}
 	service.reconciler = service.newSchedulerReconciler()
 	service.cron = cronwire.NewService()
+	service.filesystemWatchers = fswire.NewService()
 	return service
 }
 

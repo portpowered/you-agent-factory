@@ -67,6 +67,9 @@
     "pkg/services/automations/internal/services/cron",
     "pkg/services/automations/internal/services/cron/internal/service",
     "pkg/services/automations/internal/services/cron/wire",
+    "pkg/services/automations/internal/services/filesystem_watchers",
+    "pkg/services/automations/internal/services/filesystem_watchers/internal/service",
+    "pkg/services/automations/internal/services/filesystem_watchers/wire",
     "pkg/services/automations/internal/services/reconciliation",
     "pkg/services/automations/internal/services/reconciliation/internal/service",
     "pkg/services/automations/internal/services/reconciliation/wire",
@@ -121,7 +124,6 @@
     "pkg/services/factory_runtime/context",
     "pkg/services/factory_runtime/definitionmapping",
     "pkg/services/factory_runtime/engine",
-    "pkg/services/factory_runtime/ingest",
     "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
     "pkg/services/factory_runtime/internal/orchestrators/javascript/runtime",
     "pkg/services/factory_runtime/internal/orchestrators/javascript/source",
@@ -256,6 +258,7 @@
     "pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
     "pkg/services/provider_sessions/internal/services/cursor_reader/wire",
     "pkg/services/provider_sessions/service",
+    "pkg/services/provider_sessions/wire",
     "pkg/services/providers",
     "pkg/services/providers/internal/service",
     "pkg/services/providers/internal/services/catalog",
@@ -290,6 +293,9 @@
     "pkg/services/recordings/service",
     "pkg/services/system_initialization",
     "pkg/services/work",
+    "pkg/services/work/internal/services/state_access",
+    "pkg/services/work/internal/services/state_access/internal/service",
+    "pkg/services/work/internal/services/state_access/wire",
     "pkg/services/work/materialize",
     "pkg/services/work/service",
     "pkg/services/workers",
@@ -551,6 +557,21 @@
       "packagePath": "pkg/services/automations/internal/services/cron/wire",
       "disposition": "retain",
       "destination": "automations/internal/services/cron"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/filesystem_watchers",
+      "disposition": "retain",
+      "destination": "automations/internal/services/filesystem_watchers"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/filesystem_watchers/internal/service",
+      "disposition": "retain",
+      "destination": "automations/internal/services/filesystem_watchers"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/filesystem_watchers/wire",
+      "disposition": "retain",
+      "destination": "automations/internal/services/filesystem_watchers"
     },
     {
       "packagePath": "pkg/services/automations/internal/services/reconciliation",
@@ -819,11 +840,6 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/engine",
-      "disposition": "retain",
-      "destination": "factory_runtime"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/ingest",
       "disposition": "retain",
       "destination": "factory_runtime"
     },
@@ -1498,6 +1514,11 @@
       "destination": "provider_sessions"
     },
     {
+      "packagePath": "pkg/services/provider_sessions/wire",
+      "disposition": "retain",
+      "destination": "provider_sessions"
+    },
+    {
       "packagePath": "pkg/services/providers",
       "disposition": "retain",
       "destination": "providers"
@@ -1666,6 +1687,21 @@
       "packagePath": "pkg/services/work",
       "disposition": "retain",
       "destination": "work"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/state_access",
+      "disposition": "retain",
+      "destination": "work/internal/services/state_access"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/state_access/internal/service",
+      "disposition": "retain",
+      "destination": "work/internal/services/state_access"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/state_access/wire",
+      "disposition": "retain",
+      "destination": "work/internal/services/state_access"
     },
     {
       "packagePath": "pkg/services/work/materialize",

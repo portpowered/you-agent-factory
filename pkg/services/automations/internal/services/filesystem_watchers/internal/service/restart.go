@@ -1,0 +1,21 @@
+package service
+
+import (
+	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
+)
+
+func (s *service) NewWatcherWithResume(
+	req filesystemwatchers.RestartRequest,
+) (filesystemwatchers.Watcher, filesystemwatchers.WatcherFacts, error) {
+	facts, err := s.ResumeWatcherFacts(req.Identity, req.Authoritative, req.Resume)
+	if err != nil {
+		return nil, filesystemwatchers.WatcherFacts{}, err
+	}
+	handled, err := s.NewHandledIdentities(facts, req.Persist)
+	if err != nil {
+		return nil, filesystemwatchers.WatcherFacts{}, err
+	}
+	config := req.Config
+	config.HandledIdentities = handled
+	return s.NewWatcher(config), facts, nil
+}
