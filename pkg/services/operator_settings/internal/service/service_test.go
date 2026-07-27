@@ -6,12 +6,17 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	resolutionwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/wire"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
 func TestRootDelegatesResolveEffectiveToPrivateOwner(t *testing.T) {
 	t.Parallel()
 
-	resolutionService, err := resolutionwire.NewService()
+	providersRoot, err := providerswire.NewService()
+	if err != nil {
+		t.Fatalf("providerswire.NewService() = %v", err)
+	}
+	resolutionService, err := resolutionwire.NewService(providersRoot)
 	if err != nil {
 		t.Fatalf("resolutionwire.NewService() = %v", err)
 	}

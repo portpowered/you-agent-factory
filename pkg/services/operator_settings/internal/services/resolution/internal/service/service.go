@@ -6,15 +6,22 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	resolution "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
-type service struct{}
+type service struct {
+	providers providerQuery
+}
 
 var _ resolution.Service = (*service)(nil)
 
 // New constructs an inert effective-resolution owner.
-func New() (resolution.Service, error) {
-	return &service{}, nil
+func New(providersRoot providers.Service) (resolution.Service, error) {
+	providerQuery, err := newProvidersRootQuery(providersRoot)
+	if err != nil {
+		return nil, err
+	}
+	return &service{providers: providerQuery}, nil
 }
 
 func (s *service) ResolveEffective(
@@ -40,7 +47,7 @@ func (s *service) ResolveEffective(
 		invocationOverrides.WorkerModel,
 	)
 
-	resolvedProvider, err := resolveWorkerModelProvider(providerRaw, providerSource, request, invocationOverrides)
+	resolvedProvider, err := s.resolveWorkerModelProvider(providerRaw, providerSource, request, invocationOverrides)
 	if err != nil {
 		return operatorsettings.ResolveEffectiveResult{}, err
 	}
@@ -123,7 +130,7 @@ func winningLayerValue(
 	}
 }
 
-func resolveWorkerModelProvider(
+func (s *service) resolveWorkerModelProvider(
 	raw string,
 	winningSource operatorsettings.EffectiveLayerSource,
 	request operatorsettings.ResolveEffectiveRequest,
@@ -133,35 +140,19 @@ func resolveWorkerModelProvider(
 		return "", nil
 	}
 
-	canonical, ok := interfaces.CanonicalizeOperatorWorkerModelProviderInput(raw)
-	if !ok {
-		return "", operatorsettings.ResolutionFailure{
-			Kind:    operatorsettings.ResolutionFailureKindUnsupportedOverride,
-			Message: raw,
-			Field:   "workerModelProvider",
+	if interfaces.IsSymbolicWorkerModelProviderDefault(raw) {
+		concreteRaw := concreteProviderBelowSource(winningSource, request, invocationOverrides)
+		if concreteRaw == "" {
+			return "", operatorsettings.ResolutionFailure{
+				Kind:    operatorsettings.ResolutionFailureKindInvalidInput,
+				Message: "symbolic DEFAULT requires a concrete provider from file or environment",
+				Field:   "workerModelProvider",
+			}
 		}
-	}
-	if !interfaces.IsSymbolicWorkerModelProviderDefault(canonical) {
-		return canonical, nil
+		return s.providers.CanonicalizeConcreteProvider(concreteRaw)
 	}
 
-	concreteRaw := concreteProviderBelowSource(winningSource, request, invocationOverrides)
-	if concreteRaw == "" {
-		return "", operatorsettings.ResolutionFailure{
-			Kind:    operatorsettings.ResolutionFailureKindInvalidInput,
-			Message: "symbolic DEFAULT requires a concrete provider from file or environment",
-			Field:   "workerModelProvider",
-		}
-	}
-	concreteCanonical, ok := interfaces.CanonicalizeOperatorWorkerModelProviderInput(concreteRaw)
-	if !ok || interfaces.IsSymbolicWorkerModelProviderDefault(concreteCanonical) {
-		return "", operatorsettings.ResolutionFailure{
-			Kind:    operatorsettings.ResolutionFailureKindInvalidInput,
-			Message: "symbolic DEFAULT requires a concrete provider from file or environment",
-			Field:   "workerModelProvider",
-		}
-	}
-	return concreteCanonical, nil
+	return s.providers.CanonicalizeConcreteProvider(raw)
 }
 
 func concreteProviderBelowSource(

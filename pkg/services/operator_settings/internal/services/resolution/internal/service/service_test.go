@@ -1,20 +1,103 @@
 package service_test
 
 import (
+	"context"
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/internal/service"
 	resolution "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
 func newResolutionService(t *testing.T) resolution.Service {
-	service, err := internalservice.New()
+	t.Helper()
+	service, err := internalservice.New(mustProvidersRoot(t))
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
 	return service
+}
+
+func mustProvidersRoot(t *testing.T) providers.Service {
+	t.Helper()
+	root, err := providerswire.NewService()
+	if err != nil {
+		t.Fatalf("providerswire.NewService() = %v", err)
+	}
+	return root
+}
+
+type resolutionProvidersFake struct {
+	providers map[providers.ID]providers.Descriptor
+}
+
+var _ providers.Service = (*resolutionProvidersFake)(nil)
+
+func newResolutionProvidersFake(entries ...providers.Descriptor) *resolutionProvidersFake {
+	catalog := make(map[providers.ID]providers.Descriptor, len(entries))
+	for _, entry := range entries {
+		catalog[entry.ID] = entry.Clone()
+	}
+	return &resolutionProvidersFake{providers: catalog}
+}
+
+func (fake *resolutionProvidersFake) ListProviders(
+	_ context.Context,
+	_ providers.ListProvidersRequest,
+) (providers.ListProvidersResult, error) {
+	results := make([]providers.Descriptor, 0, len(fake.providers))
+	for _, descriptor := range fake.providers {
+		results = append(results, descriptor.Clone())
+	}
+	return providers.ListProvidersResult{Providers: results}, nil
+}
+
+func (fake *resolutionProvidersFake) GetProvider(
+	_ context.Context,
+	request providers.GetProviderRequest,
+) (providers.GetProviderResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.GetProviderResult{}, err
+	}
+	descriptor, ok := fake.lookup(request.ID)
+	if !ok {
+		return providers.GetProviderResult{}, providers.ErrUnknownProvider
+	}
+	if descriptor.Availability != providers.AvailabilitySelectable ||
+		descriptor.Readiness != providers.ReadinessReady {
+		return providers.GetProviderResult{}, providers.ErrProviderUnavailable
+	}
+	return providers.GetProviderResult{Provider: descriptor.Clone()}, nil
+}
+
+func (fake *resolutionProvidersFake) Execute(
+	_ context.Context,
+	_ providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, errors.New("not implemented")
+}
+
+func (fake *resolutionProvidersFake) lookup(id providers.ID) (providers.Descriptor, bool) {
+	if descriptor, ok := fake.providers[id]; ok {
+		return descriptor, true
+	}
+	normalized := strings.ToLower(strings.TrimSpace(id.String()))
+	for _, descriptor := range fake.providers {
+		if strings.ToLower(descriptor.ID.String()) == normalized {
+			return descriptor, true
+		}
+		for _, alias := range descriptor.Aliases {
+			if alias == normalized {
+				return descriptor, true
+			}
+		}
+	}
+	return providers.Descriptor{}, false
 }
 
 func TestResolveEffective_AppliesFlagPrecedence(t *testing.T) {
@@ -264,11 +347,79 @@ func TestResolveEffective_EquivalentInputsProduceIdenticalSelections(t *testing.
 func TestResolveEffective_ConstructionIsInert(t *testing.T) {
 	t.Parallel()
 
-	service, err := internalservice.New()
+	service, err := internalservice.New(mustProvidersRoot(t))
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
 	if service == nil {
 		t.Fatal("constructed resolution service is nil")
+	}
+}
+
+func TestResolveEffective_CanonicalizesProviderAliasThroughProvidersRoot(t *testing.T) {
+	t.Parallel()
+
+	service := newResolutionService(t)
+	resolved, err := service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		DocumentBaseline: operatorsettings.DocumentDefaults{
+			WorkerModelProvider: "cursor",
+			WorkerModel:         "file-model",
+		},
+		ConfigPath: "/tmp/config.json",
+	})
+	if err != nil {
+		t.Fatalf("ResolveEffective() = %v", err)
+	}
+	if resolved.Selection.WorkerModelProvider != "CURSOR" {
+		t.Fatalf("provider = %q, want CURSOR", resolved.Selection.WorkerModelProvider)
+	}
+}
+
+func TestResolveEffective_UnavailableProviderDoesNotMutateDocumentBaseline(t *testing.T) {
+	t.Parallel()
+
+	baseline := operatorsettings.DocumentDefaults{
+		WorkerModelProvider: "codex",
+		WorkerModel:         "file-model",
+	}
+	request := operatorsettings.ResolveEffectiveRequest{
+		DocumentBaseline: baseline,
+		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
+			WorkerModelProvider: "codex",
+		},
+		ConfigPath: "/tmp/config.json",
+	}
+
+	service, err := internalservice.New(newResolutionProvidersFake(providers.Descriptor{
+		ID:           providers.IDCodex,
+		Availability: providers.AvailabilitySelectable,
+		Readiness:    providers.ReadinessUnavailable,
+	}))
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	_, err = service.ResolveEffective(request)
+	if !errors.Is(err, operatorsettings.ErrResolutionConflict) {
+		t.Fatalf("ResolveEffective() error = %v, want ErrResolutionConflict", err)
+	}
+	if request.DocumentBaseline != baseline {
+		t.Fatalf("document baseline mutated: got %#v, want %#v", request.DocumentBaseline, baseline)
+	}
+}
+
+func TestResolveEffective_UnknownProviderSurfacesUnsupportedOverride(t *testing.T) {
+	t.Parallel()
+
+	service := newResolutionService(t)
+	_, err := service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		DocumentBaseline: operatorsettings.DocumentDefaults{
+			WorkerModelProvider: "not-a-real-provider",
+			WorkerModel:         "file-model",
+		},
+		ConfigPath: "/tmp/config.json",
+	})
+	if !errors.Is(err, operatorsettings.ErrResolutionUnsupportedOverride) {
+		t.Fatalf("ResolveEffective() error = %v, want ErrResolutionUnsupportedOverride", err)
 	}
 }
