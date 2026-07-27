@@ -30,6 +30,12 @@ return { artifactRef: artifactRef };`
 	structuredArtifactID            = "artifact-1"
 	structuredArtifactLabel         = "js-output-mapping-artifact-label"
 	structuredArtifactContentValue  = "js-output-mapping-artifact-content"
+
+	unsupportedReturnWorkflowFileName = "unsupported-return.workflow.js"
+	unsupportedReturnWorkflowSource   = `return function () {};`
+
+	unsupportedReturnValidationCode       = "workflow.result.unsupportedType"
+	unsupportedReturnValidationDiagnostic = "workflow result cannot include a function value"
 )
 
 var privateJavaScriptVMDiagnosticMarkers = []string{
@@ -130,6 +136,46 @@ func TestJavaScriptStructuredArtifactsMapToPublicResult(t *testing.T) {
 	)
 }
 
+// TestJavaScriptUnsupportedReturnValueFailsWithoutPrivateVMDetails proves an
+// unsupported JavaScript return value yields a non-success customer-visible
+// outcome with an actionable diagnostic and without private VM internals on
+// public Factory Session projection and Factory Event surfaces.
+func TestJavaScriptUnsupportedReturnValueFailsWithoutPrivateVMDetails(t *testing.T) {
+	t.Parallel()
+
+	dir := scaffoldUnsupportedReturnWorkflow(t)
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		UseMockWorkers:            true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	started := startUnsupportedReturnWorkflow(t, server.URL(), dir)
+	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("session status = %q, want FAILED", started.Status)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0 for unsupported return workflow", runner.CallCount())
+	}
+
+	assertUnsupportedReturnFailureResult(t, started.Result)
+
+	session := readUnsupportedReturnSession(t, server.URL(), started.SessionId)
+	assertUnsupportedReturnSessionFailure(t, session)
+
+	events := getFactoryEventsForSessionAt(t, server.URL(), started.SessionId)
+	assertUnsupportedReturnFactoryEvents(t, events)
+	assertNoPrivateJavaScriptVMDiagnostics(
+		t,
+		marshalFailureDetailForDiagnostics(t, started.Result.FailureDetail),
+		marshalFailureDetailForDiagnostics(t, session.FailureDetail),
+		marshalFactoryEventsForDiagnostics(t, events),
+	)
+}
+
 func scaffoldReturnValueMappingWorkflow(t *testing.T) string {
 	t.Helper()
 
@@ -177,6 +223,35 @@ func scaffoldStructuredArtifactWorkflow(t *testing.T) string {
 		0o600,
 	); err != nil {
 		t.Fatalf("write structured artifact workflow: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "mock-workers.json"),
+		[]byte(`{"mockWorkers":[]}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write mock-workers config: %v", err)
+	}
+	return dir
+}
+
+func scaffoldUnsupportedReturnWorkflow(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "javascript-output-mapping-unsupported-return",
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"sourceRef": unsupportedReturnWorkflowFileName,
+			},
+		},
+	})
+	if err := os.WriteFile(
+		filepath.Join(dir, unsupportedReturnWorkflowFileName),
+		[]byte(unsupportedReturnWorkflowSource),
+		0o600,
+	); err != nil {
+		t.Fatalf("write unsupported return workflow: %v", err)
 	}
 	if err := os.WriteFile(
 		filepath.Join(dir, "mock-workers.json"),
@@ -268,6 +343,46 @@ func startStructuredArtifactWorkflow(
 	return started
 }
 
+func startUnsupportedReturnWorkflow(
+	t *testing.T,
+	serverURL, dir string,
+) factoryapi.FactorySessionSyncExecutionResponse {
+	t.Helper()
+
+	workflowPath := filepath.Join(dir, unsupportedReturnWorkflowFileName)
+	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
+		RequestId: "javascript-unsupported-return-output-mapping",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
+			WorkflowFile: &workflowPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal unsupported return workflow request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build unsupported return workflow request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("start unsupported return workflow: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		var body bytes.Buffer
+		_, _ = body.ReadFrom(response.Body)
+		t.Fatalf("start unsupported return workflow status = %d: %s", response.StatusCode, body.String())
+	}
+	var started factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
+		t.Fatalf("decode unsupported return workflow response: %v", err)
+	}
+	return started
+}
+
 func readReturnValueFinalSessionResult(
 	t *testing.T,
 	serverURL, sessionID string,
@@ -329,6 +444,18 @@ func readStructuredArtifactDetail(
 }
 
 func readReturnValueMappingSession(
+	t *testing.T,
+	serverURL, sessionID string,
+) factoryapi.FactorySessionDurableReadModel {
+	t.Helper()
+
+	return support.GetJSON[factoryapi.FactorySessionDurableReadModel](
+		t,
+		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID,
+	)
+}
+
+func readUnsupportedReturnSession(
 	t *testing.T,
 	serverURL, sessionID string,
 ) factoryapi.FactorySessionDurableReadModel {
@@ -499,6 +626,110 @@ func assertStructuredArtifactFactoryEvents(
 	}
 }
 
+func assertUnsupportedReturnFailureResult(
+	t *testing.T,
+	result *factoryapi.FactorySessionResult,
+) {
+	t.Helper()
+
+	if result == nil {
+		t.Fatal("result = nil, want failed Factory Session result")
+	}
+	if result.SessionStatus == nil ||
+		*result.SessionStatus != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("result sessionStatus = %#v, want FAILED", result.SessionStatus)
+	}
+	if result.ResultStatus != factoryapi.FactorySessionResultStatusUnavailable {
+		t.Fatalf("result status = %q, want UNAVAILABLE on unsupported return", result.ResultStatus)
+	}
+	if result.PrimaryResult != nil {
+		t.Fatalf("primary result = %#v, want nil on unsupported return", result.PrimaryResult)
+	}
+	if result.FailureDetail != nil {
+		assertUnsupportedReturnFailureDetail(t, result.FailureDetail)
+	}
+}
+
+func assertUnsupportedReturnSessionFailure(
+	t *testing.T,
+	session factoryapi.FactorySessionDurableReadModel,
+) {
+	t.Helper()
+
+	if session.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("session status = %q, want FAILED", session.Status)
+	}
+	assertUnsupportedReturnFailureDetail(t, session.FailureDetail)
+}
+
+func assertUnsupportedReturnFailureDetail(
+	t *testing.T,
+	failureDetail *factoryapi.FailureDetail,
+) {
+	t.Helper()
+
+	if failureDetail == nil || strings.TrimSpace(failureDetail.Message) == "" {
+		t.Fatalf("failureDetail = %#v, want actionable public failure record", failureDetail)
+	}
+	message := failureDetail.Message
+	if !strings.Contains(message, unsupportedReturnValidationCode) {
+		t.Fatalf("failure message = %#v, want validation code %q", message, unsupportedReturnValidationCode)
+	}
+	if !strings.Contains(message, unsupportedReturnValidationDiagnostic) {
+		t.Fatalf(
+			"failure message = %#v, want unsupported return diagnostic %q",
+			message,
+			unsupportedReturnValidationDiagnostic,
+		)
+	}
+}
+
+func assertUnsupportedReturnFactoryEvents(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	if len(events) == 0 {
+		t.Fatal("factory events = empty, want at least one public Factory Event")
+	}
+
+	sawResultUpdated := false
+	sawSessionCompleted := false
+	for _, event := range events {
+		switch event.Type {
+		case factoryapi.FactoryEventTypeSessionResultUpdated:
+			payload, err := event.Payload.AsSessionResultUpdatedEventPayload()
+			if err != nil {
+				t.Fatalf("decode SESSION_RESULT_UPDATED payload: %v", err)
+			}
+			if payload.ResultStatus != factoryapi.FactoryEventSessionResultStatusUnavailable {
+				t.Fatalf("SESSION_RESULT_UPDATED resultStatus = %q, want UNAVAILABLE", payload.ResultStatus)
+			}
+			sawResultUpdated = true
+		case factoryapi.FactoryEventTypeSessionCompleted:
+			payload, err := event.Payload.AsSessionCompletedEventPayload()
+			if err != nil {
+				t.Fatalf("decode SESSION_COMPLETED payload: %v", err)
+			}
+			if payload.FinalStatus != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+				t.Fatalf("SESSION_COMPLETED finalStatus = %q, want FAILED", payload.FinalStatus)
+			}
+			if payload.ResultStatus == nil ||
+				*payload.ResultStatus != factoryapi.FactoryEventSessionResultStatusUnavailable {
+				t.Fatalf("SESSION_COMPLETED resultStatus = %#v, want UNAVAILABLE", payload.ResultStatus)
+			}
+			sawSessionCompleted = true
+		}
+	}
+	if !sawResultUpdated {
+		t.Fatalf("factory events = %#v, want SESSION_RESULT_UPDATED with UNAVAILABLE result", events)
+	}
+	if !sawSessionCompleted {
+		t.Fatalf("factory events = %#v, want SESSION_COMPLETED with FAILED final status", events)
+	}
+}
+
 func assertReturnValueMappingFactoryEvents(
 	t *testing.T,
 	events []factoryapi.FactoryEvent,
@@ -558,6 +789,19 @@ func marshalFactoryEventsForDiagnostics(t *testing.T, events []factoryapi.Factor
 	encoded, err := json.Marshal(events)
 	if err != nil {
 		t.Fatalf("marshal factory events for diagnostics: %v", err)
+	}
+	return string(encoded)
+}
+
+func marshalFailureDetailForDiagnostics(t *testing.T, failureDetail *factoryapi.FailureDetail) string {
+	t.Helper()
+
+	if failureDetail == nil {
+		return ""
+	}
+	encoded, err := json.Marshal(failureDetail)
+	if err != nil {
+		t.Fatalf("marshal failure detail for diagnostics: %v", err)
 	}
 	return string(encoded)
 }
