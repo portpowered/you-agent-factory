@@ -148,10 +148,20 @@
   use `pipeline(items, worker, next?)` with at least two stages so stage-two
   prompts depend on stage-one child output, and assert stage-output data flow
   on `result.primaryResult` and the Factory Session dispatch listing without
-  live provider execution. Catalog metadata infers domain `orchestration` and
-  subsection `javascript/composition` from the path; every top-level `Test*`
-  needs a customer-readable Go doc so `functionaltestmetadata` stays
-  viz-compatible.
+  live provider execution. JavaScript parallel composition functional coverage
+  belongs in
+  `tests/functional/orchestration/javascript/composition/parallel_test.go`:
+  drive async Factory Session execution through
+  `tests/functional/internal/support.StartFunctionalAPIServer` with
+  `WaitForServiceModeRuntime: true` and a controllable
+  `edges.Edges.ProviderOverride`, prove concurrent external child dispatch by
+  blocking `Provider.Infer` until public `inFlightDispatches` reaches the fan-out
+  size, release children to assert declared input-order results and documented
+  partial-failure shaping on `/factory-sessions/{id}/results?mode=final` and
+  `/dispatches` without wall-clock sleeps. Catalog metadata infers domain
+  `orchestration` and subsection `javascript/composition` from the path; every
+  top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
+  stays viz-compatible.
   Prove default
   `functional-test-viz` wiring (boundary first, single coverage with profile
   + JSON under `.artifacts/functional-test-viz/`, Markdown generator) with
