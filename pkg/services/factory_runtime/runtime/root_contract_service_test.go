@@ -140,40 +140,118 @@ func TestFactoryImpl_Observe_ProjectsSanitizedObservation(t *testing.T) {
 	requireRootErrIs(t, err, factory.ErrNotRunning, "Observe(unknown)")
 }
 
-func TestFactoryImpl_DispatchContracts_DoNotReportFalseSuccess(t *testing.T) {
+func TestFactoryImpl_DispatchContracts_UseCanonicalPlanningState(t *testing.T) {
 	impl := newRootContractTestFactory(t)
 	ctx := context.Background()
+	plan := factory.PlanDispatchRequest{
+		DispatchID:      "dispatch-1",
+		CorrelationID:   "corr-1",
+		WorkIDs:         []string{"work-1"},
+		WorkstationName: "t-process",
+		WorkerType:      "mock",
+		ReplayKey:       "t-process/trace-1/work-1",
+	}
 
 	impl.state = interfaces.FactoryStateRunning
-	_, err := impl.PlanDispatch(ctx, factory.PlanDispatchRequest{
-		DispatchID:    "dispatch-1",
-		CorrelationID: "corr-1",
-	})
-	requireRootErrIs(t, err, factory.ErrCapabilityUnavailable, "PlanDispatch(running)")
+	planned, err := impl.PlanDispatch(ctx, plan)
+	requireNoRootErr(t, err, "PlanDispatch(running)")
+	if planned.Outcome != factory.DispatchPlanOutcomeAccepted ||
+		planned.DispatchID != plan.DispatchID ||
+		planned.CorrelationID != plan.CorrelationID {
+		t.Fatalf("PlanDispatch(running) = %#v, want accepted canonical identities", planned)
+	}
+	duplicate, err := impl.PlanDispatch(ctx, plan)
+	requireNoRootErr(t, err, "PlanDispatch(duplicate)")
+	if duplicate.Outcome != factory.DispatchPlanOutcomeDuplicateIdempotent {
+		t.Fatalf("PlanDispatch(duplicate) outcome = %q, want DUPLICATE_IDEMPOTENT", duplicate.Outcome)
+	}
+	intent, ok := impl.dispatchPlan.Intent(plan.DispatchID)
+	if !ok || intent.Attempts != 1 {
+		t.Fatalf("dispatch intent = %#v, %t; want one Workers publication attempt", intent, ok)
+	}
+
 	_, err = impl.PlanDispatch(ctx, factory.PlanDispatchRequest{})
 	requireRootErrIs(t, err, factory.ErrInvalidDispatchResultBoundary, "PlanDispatch(invalid)")
 
-	_, err = impl.AcceptDispatchResult(ctx, factory.AcceptDispatchResultRequest{
+	retired, err := impl.AcceptDispatchResult(ctx, factory.AcceptDispatchResultRequest{
 		DispatchID:    "dispatch-1",
 		CorrelationID: "corr-1",
+		WorkID:        "work-1",
+		ResultOutcome: factory.DispatchResultOutcomeSuccess,
 	})
-	requireRootErrIs(t, err, factory.ErrCapabilityUnavailable, "AcceptDispatchResult(running)")
+	requireNoRootErr(t, err, "AcceptDispatchResult(running)")
+	if retired.Outcome != factory.DispatchPlanOutcomeRetired {
+		t.Fatalf("AcceptDispatchResult(running) outcome = %q, want RETIRED", retired.Outcome)
+	}
+	duplicateResult, err := impl.AcceptDispatchResult(ctx, factory.AcceptDispatchResultRequest{
+		DispatchID:    "dispatch-1",
+		CorrelationID: "corr-1",
+		WorkID:        "work-1",
+		ResultOutcome: factory.DispatchResultOutcomeSuccess,
+	})
+	requireNoRootErr(t, err, "AcceptDispatchResult(duplicate)")
+	if duplicateResult.Outcome != factory.DispatchPlanOutcomeDuplicateIdempotent {
+		t.Fatalf("AcceptDispatchResult(duplicate) outcome = %q, want DUPLICATE_IDEMPOTENT", duplicateResult.Outcome)
+	}
 	_, err = impl.AcceptDispatchResult(ctx, factory.AcceptDispatchResultRequest{})
 	requireRootErrIs(t, err, factory.ErrUnknownDispatchCorrelation, "AcceptDispatchResult(unknown)")
-	_, err = impl.AcceptDispatchResult(ctx, factory.AcceptDispatchResultRequest{DispatchID: "dispatch-1", CorrelationID: "corr-1", ResultOutcome: "INVALID"})
+	_, err = impl.AcceptDispatchResult(ctx, factory.AcceptDispatchResultRequest{
+		DispatchID: "dispatch-1", CorrelationID: "corr-1", WorkID: "work-1", ResultOutcome: "INVALID",
+	})
 	requireRootErrIs(t, err, factory.ErrInvalidDispatchResultBoundary, "AcceptDispatchResult(invalid)")
 
 	impl.state = interfaces.FactoryStateFailed
-	_, err = impl.PlanDispatch(ctx, factory.PlanDispatchRequest{DispatchID: "dispatch-2", CorrelationID: "corr-2"})
+	_, err = impl.PlanDispatch(ctx, plan)
 	requireRootErrIs(t, err, factory.ErrNotRunning, "PlanDispatch(failed)")
-	_, err = impl.AcceptDispatchResult(ctx, factory.AcceptDispatchResultRequest{DispatchID: "dispatch-2", CorrelationID: "corr-2"})
+	_, err = impl.AcceptDispatchResult(ctx, factory.AcceptDispatchResultRequest{
+		DispatchID: "dispatch-2", CorrelationID: "corr-2", WorkID: "work-2",
+		ResultOutcome: factory.DispatchResultOutcomeFailure,
+	})
 	requireRootErrIs(t, err, factory.ErrNotRunning, "AcceptDispatchResult(failed)")
 
 	impl.state = interfaces.FactoryState("unknown")
-	_, err = impl.PlanDispatch(ctx, factory.PlanDispatchRequest{DispatchID: "dispatch-3", CorrelationID: "corr-3"})
+	_, err = impl.PlanDispatch(ctx, plan)
 	requireRootErrIs(t, err, factory.ErrNotRunning, "PlanDispatch(unknown)")
-	_, err = impl.AcceptDispatchResult(ctx, factory.AcceptDispatchResultRequest{DispatchID: "dispatch-3", CorrelationID: "corr-3"})
+	_, err = impl.AcceptDispatchResult(ctx, factory.AcceptDispatchResultRequest{
+		DispatchID: "dispatch-3", CorrelationID: "corr-3", WorkID: "work-3",
+		ResultOutcome: factory.DispatchResultOutcomeCancelled,
+	})
 	requireRootErrIs(t, err, factory.ErrNotRunning, "AcceptDispatchResult(unknown)")
+}
+
+func TestFactoryImpl_PausedDispatchPlanPublishesOnlyAfterResume(t *testing.T) {
+	impl := newRootContractTestFactory(t)
+	ctx := context.Background()
+	impl.state = interfaces.FactoryStateRunning
+
+	if _, err := impl.ControlPause(ctx, factory.PauseRequest{}); err != nil {
+		t.Fatalf("ControlPause: %v", err)
+	}
+	plan := factory.PlanDispatchRequest{
+		DispatchID:      "dispatch-paused",
+		CorrelationID:   "corr-paused",
+		WorkIDs:         []string{"work-paused"},
+		WorkstationName: "t-process",
+		WorkerType:      "mock",
+		ReplayKey:       "t-process/trace-paused/work-paused",
+	}
+	accepted, err := impl.PlanDispatch(ctx, plan)
+	requireNoRootErr(t, err, "PlanDispatch(paused)")
+	if accepted.Outcome != factory.DispatchPlanOutcomeAccepted {
+		t.Fatalf("PlanDispatch(paused) outcome = %q, want ACCEPTED", accepted.Outcome)
+	}
+	intent, ok := impl.dispatchPlan.Intent(plan.DispatchID)
+	if !ok || intent.Attempts != 0 {
+		t.Fatalf("paused intent = %#v, %t; want accepted without publication", intent, ok)
+	}
+
+	if _, err := impl.ControlResume(ctx, factory.ResumeRequest{}); err != nil {
+		t.Fatalf("ControlResume: %v", err)
+	}
+	intent, ok = impl.dispatchPlan.Intent(plan.DispatchID)
+	if !ok || intent.Attempts != 1 {
+		t.Fatalf("resumed intent = %#v, %t; want one Workers publication", intent, ok)
+	}
 }
 
 func TestFactoryImpl_CheckpointContracts_DoNotReportFalseSuccess(t *testing.T) {

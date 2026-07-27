@@ -18,6 +18,8 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/engine"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
@@ -50,6 +52,7 @@ type factoryImpl struct {
 	logger       logging.Logger
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]
 	dispatchHook *workerPoolDispatchResultHook
+	dispatchPlan dispatchplanning.Service
 	eventHistory recordings.RuntimeLedger
 	state        interfaces.FactoryState
 	startedAt    time.Time
@@ -181,10 +184,13 @@ func New(
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
 	usePool := !cfg.inlineDispatch
-	pool, dispatchHook, dispatchHandler, dispatchResultHook := configureRuntimeDispatch(
+	pool, dispatchHook, dispatchResultHook, dispatchPlan := configureRuntimeDispatch(
 		cfg, effectiveLogger, resultBuffer, usePool,
 	)
-	impl := newFactoryImpl(cfg, nil, pool, effectiveLogger, resultBuffer, dispatchHook, effectiveEventHistory, usePool)
+	impl := newFactoryImpl(
+		cfg, nil, pool, effectiveLogger, resultBuffer, dispatchHook,
+		dispatchPlan, effectiveEventHistory, usePool,
+	)
 	var recordPetriMutations func([]interfaces.TokenMutationRecord) error
 	if cfg.petriMutationRecorder != nil {
 		recordPetriMutations = func(mutations []interfaces.TokenMutationRecord) error {
@@ -198,7 +204,7 @@ func New(
 		effectiveLogger,
 		cfg.clock,
 		cfg.workRequestIDs,
-		dispatchHandler,
+		nil,
 		dispatchResultHook,
 		sharedTransformer,
 		resultBuffer,
@@ -402,41 +408,56 @@ func configureRuntimeDispatch(
 ) (
 	dispatchPool,
 	*workerPoolDispatchResultHook,
-	func(work.WorkDispatch),
 	factory.DispatchResultHook,
+	dispatchplanning.Service,
 ) {
+	var delegate factory.DispatchResultHook
+	var pool dispatchPool
+	var poolHook *workerPoolDispatchResultHook
 	if !usePool {
-		return nil, nil, inlineDispatchHandler(cfg, resultBuffer), nil
+		delegate = newInlineDispatchResultHook(
+			cfg.net,
+			cfg.workerExecutors,
+			cfg.clock,
+			resultBuffer,
+		)
+	} else {
+		workersPool := newWorkerPool(logger, cfg.clock)
+		for typ, exec := range cfg.workerExecutors {
+			workersPool.Register(typ, exec)
+		}
+		pool = workersPool
+		poolHook = newWorkerPoolDispatchResultHook(
+			cfg.net,
+			workersPool,
+			cfg.workerExecutors,
+			logger,
+			defaultRuntimeBufferSize,
+			cfg.completionDeliveryPlanner,
+			cfg.clock,
+		)
+		delegate = poolHook
 	}
-
-	pool := newWorkerPool(logger, cfg.clock)
-	for typ, exec := range cfg.workerExecutors {
-		pool.Register(typ, exec)
-	}
-	dispatchHook := newWorkerPoolDispatchResultHook(
-		cfg.net,
-		pool,
-		cfg.workerExecutors,
-		logger,
-		defaultRuntimeBufferSize,
-		cfg.completionDeliveryPlanner,
-		cfg.clock,
+	planner := dispatchplanningwire.New(
+		func(ctx context.Context, request workers.WorkstationDispatchRequest) error {
+			return delegate.SubmitDispatch(ctx, request.Execution.Dispatch)
+		},
+		nil,
 	)
-	return pool, dispatchHook, nil, dispatchHook
+	return pool, poolHook, newDispatchPlanningResultHook(planner, delegate, cfg.net), planner
 }
 
-func inlineDispatchHandler(cfg *runtimeConfig, resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]) func(work.WorkDispatch) {
-	executors := cfg.workerExecutors
-	net := cfg.net
-	return func(d work.WorkDispatch) {
-		tr := net.Transitions[d.TransitionID]
-		workerType := dispatchRunnerKey(tr, d)
-		result := executeDispatchSynchronously(context.Background(), d, workerType, executors, cfg.clock)
-		resultBuffer.Write(context.Background(), result)
-	}
-}
-
-func newFactoryImpl(cfg *runtimeConfig, eng *engine.FactoryEngine, pool dispatchPool, logger logging.Logger, resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult], dispatchHook *workerPoolDispatchResultHook, eventHistory recordings.RuntimeLedger, usePool bool) *factoryImpl {
+func newFactoryImpl(
+	cfg *runtimeConfig,
+	eng *engine.FactoryEngine,
+	pool dispatchPool,
+	logger logging.Logger,
+	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult],
+	dispatchHook *workerPoolDispatchResultHook,
+	dispatchPlan dispatchplanning.Service,
+	eventHistory recordings.RuntimeLedger,
+	usePool bool,
+) *factoryImpl {
 	return &factoryImpl{
 		engine:               eng,
 		pool:                 pool,
@@ -445,6 +466,7 @@ func newFactoryImpl(cfg *runtimeConfig, eng *engine.FactoryEngine, pool dispatch
 		logger:               logger,
 		resultBuffer:         resultBuffer,
 		dispatchHook:         dispatchHook,
+		dispatchPlan:         dispatchPlan,
 		eventHistory:         eventHistory,
 		state:                interfaces.FactoryStateIdle,
 		clock:                cfg.clock,
@@ -597,10 +619,15 @@ func (f *factoryImpl) SubscribeFactoryEvents(ctx context.Context, reconnect *int
 }
 
 // Pause pauses the factory. Repeated calls while already paused are a no-op.
-func (f *factoryImpl) Pause(_ context.Context) error {
+func (f *factoryImpl) Pause(ctx context.Context) error {
 	_, previousState, err := f.applyPauseControl()
 	if err != nil {
 		return fmt.Errorf("pause factory: invalid state %s", previousState)
+	}
+	if f.dispatchPlan != nil {
+		if err := f.dispatchPlan.Pause(ctx); err != nil {
+			return fmt.Errorf("pause Factory Runtime dispatch outbox: %w", err)
+		}
 	}
 	return nil
 }
@@ -631,10 +658,15 @@ func (f *factoryImpl) applyPauseControl() (factory.ControlOutcome, interfaces.Fa
 }
 
 // Resume resumes a paused factory.
-func (f *factoryImpl) Resume(_ context.Context) error {
+func (f *factoryImpl) Resume(ctx context.Context) error {
 	_, previousState, err := f.applyResumeControl()
 	if err != nil {
 		return fmt.Errorf("resume factory: invalid state %s", previousState)
+	}
+	if f.dispatchPlan != nil {
+		if err := f.dispatchPlan.Resume(ctx); err != nil {
+			return fmt.Errorf("resume Factory Runtime dispatch outbox: %w", err)
+		}
 	}
 	return nil
 }

@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	ScriptIdentity     = "script"
-	InferenceIdentity  = "inference"
+	ScriptIdentity    = "script"
+	InferenceIdentity = "inference"
 )
 
 // Registration explicitly associates one canonical identity and metadata
@@ -57,8 +57,18 @@ type ScriptDependencies struct {
 
 // InferenceLocalInvoker is the Models-root local invocation edge required by
 // one Inference Runner registration.
-type InferenceLocalInvoker interface {
-	InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error)
+type InferenceLocalInvoker func(
+	context.Context,
+	models.LocalInvocationRequest,
+) (models.LocalInvocationResult, error)
+
+// InvokeLocal lets the focused function edge satisfy the private inference
+// implementation without publishing a second service-root interface.
+func (invoke InferenceLocalInvoker) InvokeLocal(
+	ctx context.Context,
+	request models.LocalInvocationRequest,
+) (models.LocalInvocationResult, error) {
+	return invoke(ctx, request)
 }
 
 // InferenceConfig is the private registry construction input for one configured

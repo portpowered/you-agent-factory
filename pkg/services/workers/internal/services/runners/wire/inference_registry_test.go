@@ -33,12 +33,13 @@ func TestNewInferenceRegistryIsInertAndResolvesDetachedMetadata(t *testing.T) {
 	}
 	config.Worker.Model = "mutated"
 	config.Resources[0].Name = "mutated"
-	dependencies.Models = &inferenceConformanceModels{
+	mutatedModels := &inferenceConformanceModels{
 		calls: &invokeCalls,
 		onInvoke: func() {
 			t.Fatal("mutated dependency was retained")
 		},
 	}
+	dependencies.Models = mutatedModels.InvokeLocal
 	assertInferenceEffectCalls(t, "construction", &invokeCalls, 0)
 
 	first, err := registry.Resolve(runners.ResolutionRequest{
@@ -236,11 +237,11 @@ func (delegate *inferenceConformanceDelegate) Execute(
 }
 
 func inferenceDependencies(
-	modelsEdge runners.InferenceLocalInvoker,
+	modelsEdge *inferenceConformanceModels,
 	delegate workers.Runner,
 ) runners.InferenceDependencies {
 	return runners.InferenceDependencies{
-		Models:   modelsEdge,
+		Models:   modelsEdge.InvokeLocal,
 		Delegate: delegate,
 	}
 }
@@ -269,12 +270,12 @@ func inferenceRequest() workers.RunnerExecutionRequest {
 		"nested": []any{"original"},
 	}
 	return workers.RunnerExecutionRequest{
-		RunnerID:           inference.Identity,
-		ModelOperation:     "transcribe",
-		WorkingDirectory:   "explicit-work-dir",
-		Worktree:           "worktree-fallback",
-		InputTokens:        []any{token},
-		EnvVars:            map[string]string{"RUNTIME": "original"},
+		RunnerID:         inference.Identity,
+		ModelOperation:   "transcribe",
+		WorkingDirectory: "explicit-work-dir",
+		Worktree:         "worktree-fallback",
+		InputTokens:      []any{token},
+		EnvVars:          map[string]string{"RUNTIME": "original"},
 		ModelBindings: []workers.ResolvedModelOperationBinding{{
 			Slot:   "audio",
 			Source: workers.ModelOperationBindingSourceInput,
