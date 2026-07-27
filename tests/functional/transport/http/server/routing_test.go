@@ -1,12 +1,16 @@
 package server_test
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractinventory"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -48,6 +52,58 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 
 	if len(inventory.Operations) == 0 {
 		t.Fatal("OpenAPI operation inventory is empty")
+	}
+}
+
+// TestAPIUnknownRouteReturnsStructuredNotFound proves requests to paths outside the
+// published OpenAPI surface return a structured not-found response at the public
+// HTTP contract boundary.
+func TestAPIUnknownRouteReturnsStructuredNotFound(t *testing.T) {
+	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+
+	unknownPath := "/functional-routing-unknown-route"
+	response, err := http.Get(server.URL() + unknownPath)
+	if err != nil {
+		t.Fatalf("GET %s: %v", unknownPath, err)
+	}
+	defer response.Body.Close()
+
+	assertStructuredNotFoundHTTPResponse(t, response)
+}
+
+func assertStructuredNotFoundHTTPResponse(t *testing.T, response *http.Response) {
+	t.Helper()
+
+	if response.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("status = %d, want %d: %s", response.StatusCode, http.StatusNotFound, strings.TrimSpace(string(body)))
+	}
+
+	contentType := response.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("Content-Type = %q, want application/json structured error body: %s", contentType, strings.TrimSpace(string(body)))
+	}
+
+	var errResp factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&errResp); err != nil {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("decode structured not-found response: %v\nbody: %s", err, strings.TrimSpace(string(body)))
+	}
+	if errResp.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("error family = %q, want %q", errResp.Family, factoryapi.ErrorFamilyNotFound)
+	}
+	if errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
+		t.Fatalf("error code = %q, want %q", errResp.Code, factoryapi.ErrorResponseCodeNOTFOUND)
+	}
+	if strings.TrimSpace(errResp.Message) == "" {
+		t.Fatal("error message is empty, want a customer-readable not-found message")
 	}
 }
 
