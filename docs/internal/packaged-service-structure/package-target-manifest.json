@@ -245,6 +245,9 @@
     "pkg/services/factory_visualization/internal/services/live_view_projection",
     "pkg/services/factory_visualization/internal/services/live_view_projection/internal/service",
     "pkg/services/factory_visualization/internal/services/live_view_projection/wire",
+    "pkg/services/factory_visualization/internal/services/response_event_presentation",
+    "pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service",
+    "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
     "pkg/services/models",
     "pkg/services/models/internal/artifacts",
     "pkg/services/models/internal/catalog",
@@ -1480,6 +1483,21 @@
       "packagePath": "pkg/services/factory_visualization/internal/services/live_view_projection/wire",
       "disposition": "retain",
       "destination": "factory_visualization/internal/services/live_view_projection"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/response_event_presentation"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/response_event_presentation"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/response_event_presentation"
     },
     {
       "packagePath": "pkg/services/models",
