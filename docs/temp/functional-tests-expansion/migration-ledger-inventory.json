@@ -6966,7 +6966,7 @@
   },
   "completeness_audit": {
     "audited_at_utc": "2026-07-27T21:10:00Z",
-    "story": "ft-wave1-js-output-mapping-mergeability-rebase",
+    "story": "ft-wave1-js-output-mapping-006",
     "live_customer_scenarios": 658,
     "ledger_rows": 658,
     "unmapped_scenarios": 0,
