@@ -82,6 +82,97 @@ func TestAPIJSONRequestsAndResponsesUseDocumentedContentType(t *testing.T) {
 	}
 }
 
+// TestAPIUnsupportedContentTypeReturns415 proves requests with an unsupported
+// Content-Type against JSON-bodied public endpoints return HTTP 415 Unsupported
+// Media Type at the public HTTP contract boundary instead of accepting the body
+// or returning an unrelated validation or routing failure.
+func TestAPIUnsupportedContentTypeReturns415(t *testing.T) {
+	operation := loadContentNegotiationOperation(t, "openFactorySession")
+	documentedRequestMediaType := documentedJSONRequestMediaType(t, operation)
+
+	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+
+	payload, err := json.Marshal(factoryapi.OpenFactorySessionRequest{FolderPath: dir})
+	if err != nil {
+		t.Fatalf("marshal open factory session request: %v", err)
+	}
+
+	endpoint := strings.TrimSuffix(server.URL(), "/") + "/factory-sessions"
+	request, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build POST %s: %v", endpoint, err)
+	}
+	request.Header.Set("Content-Type", "text/plain")
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+
+	assertUnsupportedMediaTypeHTTPResponse(t, response, documentedRequestMediaType)
+}
+
+func assertUnsupportedMediaTypeHTTPResponse(t *testing.T, response *http.Response, documentedJSONMediaType string) {
+	t.Helper()
+
+	if response.StatusCode != http.StatusUnsupportedMediaType {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf(
+			"status = %d, want %d for unsupported Content-Type against documented JSON media type %q: %s",
+			response.StatusCode,
+			http.StatusUnsupportedMediaType,
+			documentedJSONMediaType,
+			strings.TrimSpace(string(body)),
+		)
+	}
+	if response.StatusCode == http.StatusOK {
+		t.Fatal("unsupported Content-Type probe succeeded, want HTTP 415 rejection")
+	}
+	if response.StatusCode == http.StatusNotFound {
+		t.Fatal("unsupported Content-Type probe returned not-found, want HTTP 415 media-type rejection")
+	}
+	if response.StatusCode == http.StatusBadRequest {
+		t.Fatal("unsupported Content-Type probe returned bad-request, want HTTP 415 media-type rejection")
+	}
+	if response.StatusCode == http.StatusMethodNotAllowed {
+		t.Fatal("unsupported Content-Type probe returned method-not-allowed, want HTTP 415 media-type rejection")
+	}
+
+	contentType := response.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("Content-Type = %q, want application/json structured error body: %s", contentType, strings.TrimSpace(string(body)))
+	}
+
+	var errResp factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&errResp); err != nil {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("decode structured unsupported media type response: %v\nbody: %s", err, strings.TrimSpace(string(body)))
+	}
+	if errResp.Code == factoryapi.ErrorResponseCodeBADREQUEST {
+		t.Fatalf("error code = %q, want media-type rejection code distinct from bad-request validation", errResp.Code)
+	}
+	if errResp.Code == factoryapi.ErrorResponseCodeNOTFOUND {
+		t.Fatalf("error code = %q, want media-type rejection code distinct from not-found", errResp.Code)
+	}
+	if errResp.Code == factoryapi.ErrorResponseCodeMETHODNOTALLOWED {
+		t.Fatalf("error code = %q, want media-type rejection code distinct from method-not-allowed", errResp.Code)
+	}
+	if errResp.Code != "UNSUPPORTED_MEDIA_TYPE" {
+		t.Fatalf("error code = %q, want %q", errResp.Code, "UNSUPPORTED_MEDIA_TYPE")
+	}
+	if strings.TrimSpace(errResp.Message) == "" {
+		t.Fatal("error message is empty, want a customer-readable unsupported media type message")
+	}
+}
+
 func loadContentNegotiationOperation(t *testing.T, operationID string) contractinventory.Operation {
 	t.Helper()
 
