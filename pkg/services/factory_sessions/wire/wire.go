@@ -130,11 +130,17 @@ func NewDurableExecution(
 	workerSettings factoryruntime.JavaScriptWorkerSettings,
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
+	liveChildInvocation factorysessionexecution.LiveChildInvocationFactory,
+	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 ) (factorysessions.ExecutionService, error) {
+	responseStreams, err := responsestreamwire.NewService(generateResponseEventID)
+	if err != nil {
+		return nil, err
+	}
 	return durableexecutionwire.NewDurable(
 		projectRoot, persistencePolicy, stores, executor, clock, syncWaits,
 		checkpointSummaries, workflows, workerPresetIDs, workerSettings,
-		recordingWriter, generateSessionID,
+		recordingWriter, generateSessionID, liveChildInvocation, generateResponseEventID, responseStreams,
 	)
 }
 

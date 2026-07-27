@@ -7,6 +7,7 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	durableexecutionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -37,11 +38,14 @@ func NewDurable(
 	workerSettings factoryruntime.JavaScriptWorkerSettings,
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
+	liveChildInvocation factorysessionexecution.LiveChildInvocationFactory,
+	generateResponseEventID factorysessions.ResponseEventIDGenerator,
+	responseStreams responsestreamservice.Service,
 ) (durableexecution.Service, error) {
 	return durableexecutionservice.NewDurable(
 		projectRoot, persistencePolicy, stores, executor, clock, syncWaits,
 		checkpointSummaries, workflows, workerPresetIDs, workerSettings,
-		recordingWriter, generateSessionID,
+		recordingWriter, generateSessionID, liveChildInvocation, generateResponseEventID, responseStreams,
 	)
 }
 

@@ -400,7 +400,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestJavaScriptUnsupportedReturnValueFailsWithoutPrivateVMDetails` covers
     error safety.
 
-- [ ] `tests/functional/orchestration/javascript/contracts/response_events_test.go`
+- [x] `tests/functional/orchestration/javascript/contracts/response_events_test.go`
   - `TestJavaScriptChildProgressPublishesCanonicalResponseEvents` covers
     message/tool progress.
   - `TestJavaScriptTerminalResultFollowsFinalResponseEvent` covers ordering.

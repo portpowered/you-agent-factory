@@ -143,8 +143,8 @@
       "name": "TestCurrentFactoryActivationFixture_WatchedFileExecutionFollowsActivatedFactory"
     },
     {
-      "file": "cli/dynamic_workflows/dynamic_workflow_run_test.go",
-      "name": "TestRunJavaScriptFactoryResponseStreamPublishesCanonicalLifecycle"
+      "file": "cli/factory_run/events/events_test.go",
+      "name": "TestSuccessfulInvocationEmitsCanonicalNDJSON"
     },
     {
       "file": "cli/factory_run/output/failure_test.go",
