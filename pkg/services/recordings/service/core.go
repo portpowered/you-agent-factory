@@ -553,6 +553,7 @@ func NewServiceWithLifecycleEffects(
 	targetPlanner recordings.LiveRecordingTargetPlanner,
 	writer recordings.RecordingSnapshotWriter,
 	tickers recordings.RecordingFlushTickerFactory,
+	clocks ...recordings.RecordingClock,
 ) recordings.Service {
 	if ledger == nil || projection == nil {
 		return nil
@@ -564,6 +565,7 @@ func NewServiceWithLifecycleEffects(
 			targetPlanner,
 			writer,
 			tickers,
+			clocks...,
 		),
 		replayByKey: make(map[string]*factorydefinitions.ReplayArtifact),
 		replayPlans: make(map[recordings.ReplayPlanHandle]*neutralReplayPlan),

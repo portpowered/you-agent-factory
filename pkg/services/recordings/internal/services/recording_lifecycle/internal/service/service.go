@@ -2,6 +2,8 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -10,8 +12,6 @@ import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 )
-
-const finalFlushFailureCode = "final_flush_failed"
 
 type recordingSession struct {
 	artifact       recordings.RecordingArtifactReference
@@ -23,7 +23,9 @@ type recordingSession struct {
 	flushedVersion uint64
 	flushedThrough *recordings.CanonicalEventCursor
 	failures       []recordings.RecordingFailure
+	failureCauses  []error
 	finalizedAt    *time.Time
+	terminal       bool
 
 	flushMu      sync.Mutex
 	periodicStop chan struct{}
@@ -41,6 +43,7 @@ type Service struct {
 	targets         recordings.LiveRecordingTargetPlanner
 	writer          recordings.RecordingSnapshotWriter
 	tickers         recordings.RecordingFlushTickerFactory
+	clock           recordings.RecordingClock
 	byID            map[string]*recordingSession
 	nextRecordingID int
 }
@@ -52,13 +55,22 @@ func New(
 	targets recordings.LiveRecordingTargetPlanner,
 	writer recordings.RecordingSnapshotWriter,
 	tickers recordings.RecordingFlushTickerFactory,
+	clocks ...recordings.RecordingClock,
 ) *Service {
 	return &Service{
 		targets: targets,
 		writer:  writer,
 		tickers: tickers,
+		clock:   firstClock(clocks),
 		byID:    make(map[string]*recordingSession),
 	}
+}
+
+func firstClock(clocks []recordings.RecordingClock) recordings.RecordingClock {
+	if len(clocks) == 0 {
+		return nil
+	}
+	return clocks[0]
 }
 
 func (service *Service) StartRecording(
@@ -219,7 +231,7 @@ func (service *Service) RecordRecordingEvent(
 	if err != nil {
 		return recordings.RecordRecordingEventResult{}, err
 	}
-	if session.finalizedAt != nil {
+	if session.finalizing || session.terminal {
 		return recordings.RecordRecordingEventResult{}, recordings.ErrRecordingWriteRejected
 	}
 	if !validRecordingEvent(session, request.Event) {
@@ -241,14 +253,14 @@ func (service *Service) RecordRecordingError(
 	if err != nil {
 		return recordings.RecordRecordingErrorResult{}, err
 	}
-	if session.finalizedAt != nil {
+	if session.finalizing || session.terminal {
 		return recordings.RecordRecordingErrorResult{}, recordings.ErrRecordingWriteRejected
 	}
 	if strings.TrimSpace(request.Failure.Code) == "" ||
 		strings.TrimSpace(request.Failure.Message) == "" {
 		return recordings.RecordRecordingErrorResult{}, recordings.ErrInvalidRecordingFailure
 	}
-	session.failures = append(session.failures, request.Failure)
+	service.recordFailureLocked(session, request.Failure, request.Cause)
 	return recordings.RecordRecordingErrorResult{
 		Status: recordingStatus(request.RecordingID, session),
 	}, nil
@@ -261,7 +273,9 @@ func (service *Service) FlushRecording(
 	if err != nil {
 		return recordings.FlushRecordingResult{}, err
 	}
-	if err := service.flush(request.RecordingID, session); err != nil {
+	if err := service.flush(request.RecordingID, session, flushAttempt{
+		kind: flushActive,
+	}); err != nil {
 		return recordings.FlushRecordingResult{}, err
 	}
 	service.mu.Lock()
@@ -312,27 +326,37 @@ func (service *Service) FinishRecording(
 
 	finishedAt := request.FinishedAt.UTC()
 	service.mu.Lock()
-	session.finalizedAt = &finishedAt
-	session.version++
+	if request.FinishedAt.IsZero() {
+		cause := fmt.Errorf(
+			"%w: FinishedAt is required",
+			recordings.ErrInvalidRecordingTerminalMetadata,
+		)
+		service.recordFailureLocked(session, recordings.RecordingFailure{
+			Code:       terminalMetadataFailureCode,
+			Message:    "apply terminal metadata: FinishedAt is required",
+			RecordedAt: service.now(),
+		}, cause)
+	} else {
+		session.finalizedAt = &finishedAt
+		session.version++
+	}
 	service.mu.Unlock()
 
-	finalErr := service.flush(request.RecordingID, session)
+	_ = service.flush(request.RecordingID, session, flushAttempt{
+		kind:       flushFinal,
+		recordedAt: finishedAt,
+	})
 	service.mu.Lock()
-	if finalErr != nil {
-		session.failures = append(session.failures, recordings.RecordingFailure{
-			Code:       finalFlushFailureCode,
-			Message:    finalErr.Error(),
-			RecordedAt: finishedAt,
-		})
-	}
-	session.finalizeErr = finalErr
+	session.terminal = true
+	session.finalizeErr = errors.Join(session.failureCauses...)
 	close(session.finalizeDone)
 	status := recordingStatus(request.RecordingID, session)
+	finalizeErr := session.finalizeErr
 	service.mu.Unlock()
 
 	return recordings.FinishRecordingResult{
 		Status: status,
-	}, finalErr
+	}, finalizeErr
 }
 
 func stopPeriodic(session *recordingSession) {
@@ -421,4 +445,33 @@ func recordingStatus(
 		status.FinalizedAt = &finalizedAt
 	}
 	return status
+}
+
+func (service *Service) recordFailureLocked(
+	session *recordingSession,
+	failure recordings.RecordingFailure,
+	cause error,
+) {
+	failure.Code = strings.TrimSpace(failure.Code)
+	failure.Message = strings.TrimSpace(failure.Message)
+	if failure.RecordedAt.IsZero() {
+		failure.RecordedAt = service.now()
+	} else {
+		failure.RecordedAt = failure.RecordedAt.UTC()
+	}
+	if cause == nil {
+		cause = errors.New(failure.Code + ": " + failure.Message)
+	} else {
+		cause = fmt.Errorf("%s: %s: %w", failure.Code, failure.Message, cause)
+	}
+	session.failures = append(session.failures, failure)
+	session.failureCauses = append(session.failureCauses, cause)
+	session.version++
+}
+
+func (service *Service) now() time.Time {
+	if service != nil && service.clock != nil {
+		return service.clock.Now().UTC()
+	}
+	return time.Time{}
 }

@@ -1,6 +1,7 @@
 package wire
 
 import (
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -23,6 +24,7 @@ func provideRecordingsFactory(
 			targets,
 			writer,
 			tickers,
+			platformclock.Real{},
 		)
 	}
 }

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"time"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -48,19 +49,42 @@ func (service *Service) startPeriodic(
 			select {
 			case <-stop:
 				return
-			case _, open := <-ticker.Ticks:
+			case tick, open := <-ticker.Ticks:
 				if !open {
 					return
 				}
-				_ = service.flush(id, session)
+				_ = service.flush(id, session, flushAttempt{
+					kind:       flushPeriodic,
+					recordedAt: tick.UTC(),
+				})
 			}
 		}
 	}()
 }
 
+type flushKind string
+
+const (
+	flushActive   flushKind = "active"
+	flushPeriodic flushKind = "periodic"
+	flushFinal    flushKind = "final"
+
+	activeFlushFailureCode      = "active_flush_failed"
+	periodicFlushFailureCode    = "periodic_flush_failed"
+	finalFlushFailureCode       = "final_flush_failed"
+	snapshotEncodingFailureCode = "snapshot_encoding_failed"
+	terminalMetadataFailureCode = "terminal_metadata_failed"
+)
+
+type flushAttempt struct {
+	kind       flushKind
+	recordedAt time.Time
+}
+
 func (service *Service) flush(
 	id recordings.RecordingID,
 	session *recordingSession,
+	attempt flushAttempt,
 ) error {
 	session.flushMu.Lock()
 	defer session.flushMu.Unlock()
@@ -85,6 +109,13 @@ func (service *Service) flush(
 
 	if service.writer != nil {
 		if err := service.writer(target, snapshot); err != nil {
+			service.mu.Lock()
+			service.recordFailureLocked(session, recordings.RecordingFailure{
+				Code:       flushFailureCode(attempt.kind, err),
+				Message:    flushFailureMessage(attempt.kind, target, err),
+				RecordedAt: attempt.recordedAt,
+			}, err)
+			service.mu.Unlock()
 			return err
 		}
 	}
@@ -96,4 +127,22 @@ func (service *Service) flush(
 	}
 	service.mu.Unlock()
 	return nil
+}
+
+func flushFailureCode(kind flushKind, err error) string {
+	if errors.Is(err, recordings.ErrRecordingSnapshotEncoding) {
+		return snapshotEncodingFailureCode
+	}
+	switch kind {
+	case flushPeriodic:
+		return periodicFlushFailureCode
+	case flushFinal:
+		return finalFlushFailureCode
+	default:
+		return activeFlushFailureCode
+	}
+}
+
+func flushFailureMessage(kind flushKind, target string, err error) string {
+	return string(kind) + " flush recording target " + target + ": " + err.Error()
 }

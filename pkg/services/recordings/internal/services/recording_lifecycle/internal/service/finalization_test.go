@@ -62,11 +62,13 @@ func TestFinishRecordingAttemptsFinalFlushAfterEarlierFailure(t *testing.T) {
 	t.Parallel()
 
 	var writes int
+	periodicErr := errors.New("periodic write failed")
+	producerErr := errors.New("producer failed before close")
 	root := newActiveFlushRoot(
 		func(_ string, snapshot recordings.RecordingSnapshot) error {
 			writes++
 			if snapshot.Status.FinalizedAt == nil {
-				return errors.New("periodic write failed")
+				return periodicErr
 			}
 			return nil
 		},
@@ -81,6 +83,7 @@ func TestFinishRecordingAttemptsFinalFlushAfterEarlierFailure(t *testing.T) {
 		Failure: recordings.RecordingFailure{
 			Code: "producer_failed", Message: "producer failed before close",
 		},
+		Cause: producerErr,
 	}); err != nil {
 		t.Fatalf("RecordRecordingError: %v", err)
 	}
@@ -94,8 +97,8 @@ func TestFinishRecordingAttemptsFinalFlushAfterEarlierFailure(t *testing.T) {
 		RecordingID: recordingID,
 		FinishedAt:  time.Now().UTC(),
 	})
-	if err != nil {
-		t.Fatalf("FinishRecording final retry: %v", err)
+	if !errors.Is(err, producerErr) || !errors.Is(err, periodicErr) {
+		t.Fatalf("FinishRecording final retry error = %v, want accumulated causes", err)
 	}
 	if writes != 2 || finished.Status.FlushedThrough == nil ||
 		finished.Status.State != recordings.RecordingFailed {

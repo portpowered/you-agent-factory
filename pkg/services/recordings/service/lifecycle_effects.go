@@ -19,10 +19,15 @@ func NewRecordingSnapshotWriter(
 	return func(target string, snapshot recordings.RecordingSnapshot) error {
 		data, err := json.Marshal(snapshot)
 		if err != nil {
-			return fmt.Errorf("encode recording snapshot: %w", err)
+			return fmt.Errorf("%w: %w", recordings.ErrRecordingSnapshotEncoding, err)
 		}
 		if err := write(target, data); err != nil {
-			return fmt.Errorf("write recording snapshot %q: %w", target, err)
+			return fmt.Errorf(
+				"%w at %q: %w",
+				recordings.ErrRecordingSnapshotWrite,
+				target,
+				err,
+			)
 		}
 		return nil
 	}

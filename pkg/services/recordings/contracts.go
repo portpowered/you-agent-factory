@@ -73,6 +73,15 @@ var ErrInvalidRecordingEvent = errors.New("invalid recording event")
 // ErrInvalidRecordingFailure reports a malformed detached recording failure.
 var ErrInvalidRecordingFailure = errors.New("invalid recording failure")
 
+// ErrInvalidRecordingTerminalMetadata reports terminal facts that cannot be applied.
+var ErrInvalidRecordingTerminalMetadata = errors.New("invalid recording terminal metadata")
+
+// ErrRecordingSnapshotEncoding identifies snapshot encoding failure.
+var ErrRecordingSnapshotEncoding = errors.New("recording snapshot encoding failed")
+
+// ErrRecordingSnapshotWrite identifies snapshot persistence failure.
+var ErrRecordingSnapshotWrite = errors.New("recording snapshot write failed")
+
 // ErrRecordingWriteRejected reports that a write was rejected after the
 // recording finished.
 var ErrRecordingWriteRejected = errors.New("recording write rejected after finish")
@@ -395,10 +404,13 @@ type RecordRecordingEventResult struct {
 	Status RecordingStatusFacts
 }
 
-// RecordRecordingErrorRequest appends one detached failure fact.
+// RecordRecordingErrorRequest appends one detached failure fact. Cause is kept
+// only inside the lifecycle owner so the terminal error can preserve standard
+// error matching; it never crosses the detached status boundary.
 type RecordRecordingErrorRequest struct {
 	RecordingID RecordingID
 	Failure     RecordingFailure
+	Cause       error
 }
 
 // RecordRecordingErrorResult reports failed state with accumulated failures.
@@ -435,7 +447,8 @@ type FinishRecordingRequest struct {
 }
 
 // FinishRecordingResult reports finalized state, or failed terminal state when
-// the recording accumulated failures before finalization.
+// the recording accumulated failures. FinishRecording returns all underlying
+// causes in occurrence order while this result remains detached value data.
 type FinishRecordingResult struct {
 	Status RecordingStatusFacts
 }
