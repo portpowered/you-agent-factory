@@ -234,8 +234,9 @@ func runCurrentFactoryFailureCaseForCommand(
 	}
 }
 
-// TestServerReadinessGatesBrowserAndCancellationJoinsOwnedServer proves readiness ordering and joined shutdown.
-func TestServerReadinessGatesBrowserAndCancellationJoinsOwnedServer(t *testing.T) {
+// TestServerNonTTYReadinessGatesBrowserAndCancellationJoinsOwnedServer proves
+// that server-owned browser startup is independent of stdout TTY state.
+func TestServerNonTTYReadinessGatesBrowserAndCancellationJoinsOwnedServer(t *testing.T) {
 	for iteration := 0; iteration < 3; iteration++ {
 		t.Run(fmt.Sprintf("iteration-%d", iteration), func(t *testing.T) {
 			runServerLifecycleCase(t)
@@ -287,7 +288,7 @@ func runServerLifecycleCase(t *testing.T) {
 	}
 
 	stdout, stderr, executeErr := executeFactoryCommandWithContext(
-		t, process, workingDirectory, "server", true, ctx,
+		t, process, workingDirectory, "server", false, ctx,
 	)
 	if executeErr != nil && !errors.Is(executeErr, context.Canceled) {
 		t.Fatalf("Process.Execute(server) error = %v; stdout=%q stderr=%q", executeErr, stdout, stderr)

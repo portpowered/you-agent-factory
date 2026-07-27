@@ -188,6 +188,28 @@ func Open(
 		)
 	}
 
+	return openHostedRuntime(
+		ctx, cfg, logger, invocationRequest, recordPath, invocation, presentation,
+		prepareWorkTarget, mockWorkersConfig, invocationMode, requestedPort,
+		buildRunner, buildRuntimeRequest,
+	)
+}
+
+func openHostedRuntime(
+	ctx context.Context,
+	cfg RunConfig,
+	logger *zap.Logger,
+	invocationRequest *factoryapi.InvocationRequest,
+	recordPath resolvedRunRecordPath,
+	invocation InvocationOperation,
+	presentation factoryvisualization.ResponsePresentation,
+	prepareWorkTarget work.SingleWorkTargetPreparation,
+	mockWorkersConfig *workers.MockWorkersConfig,
+	invocationMode bool,
+	requestedPort int,
+	buildRunner RuntimeRunnerBuilder,
+	buildRuntimeRequest RuntimeOpeningRequestFactory,
+) (*Operation, error) {
 	if buildRunner == nil {
 		return nil, errors.New("construct local runtime: injected runtime runner builder is required")
 	}
@@ -621,7 +643,7 @@ func emitStartupMessages(
 
 	url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
 	fmt.Fprintf(cfg.StartupOutput, "Dashboard URL: %s\n", url)
-	if !cfg.OpenDashboard || !cfg.OutputIsTTY {
+	if !cfg.OpenDashboard {
 		fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open disabled; open %s\n", url)
 		return false
 	}
@@ -629,7 +651,7 @@ func emitStartupMessages(
 }
 
 func shouldOpenDashboard(cfg RunConfig) bool {
-	return cfg.OpenDashboard && (cfg.WithSite || cfg.OutputIsTTY)
+	return cfg.OpenDashboard
 }
 
 func reportRecordingPathOnShutdown(output io.Writer, recordPath resolvedRunRecordPath) {
