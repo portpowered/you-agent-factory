@@ -298,7 +298,7 @@ func TestMaterializeContentURL_SSRFRejected(t *testing.T) {
 	}
 }
 
-func TestDispatchCache_ReusesURLAndCleansUpOnRelease(t *testing.T) {
+func TestDispatchCache_ReusesLocalURLWithoutRefetch(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "img.png")
 	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
@@ -328,6 +328,83 @@ func TestDispatchCache_ReusesURLAndCleansUpOnRelease(t *testing.T) {
 		t.Fatalf("underlying file should remain: %v", err)
 	}
 
+	cache.Release()
+}
+
+func TestDispatchCache_ReusesRemoteURLWithoutRefetch(t *testing.T) {
+	requests := 0
+	body := []byte("cached-remote")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		_, _ = w.Write(body)
+	}))
+	defer server.Close()
+
+	opts := newMaterializeTestOptions()
+	opts.AllowPrivateURLs = true
+	opts.HTTPDoer = server.Client()
+
+	cache := service.NewDispatchCache()
+	p1, _, err := cache.MaterializeContentURL(context.Background(), server.URL, opts)
+	if err != nil {
+		t.Fatalf("first materialize: %v", err)
+	}
+	p2, _, err := cache.MaterializeContentURL(context.Background(), server.URL, opts)
+	if err != nil {
+		t.Fatalf("second materialize: %v", err)
+	}
+	if p1 != p2 {
+		t.Fatalf("paths differ: %q vs %q", p1, p2)
+	}
+	if requests != 1 {
+		t.Fatalf("remote fetch count = %d, want 1 cache hit without re-fetch", requests)
+	}
+	if _, err := os.Stat(p1); err != nil {
+		t.Fatalf("cached temp file should exist before release: %v", err)
+	}
+
+	cache.Release()
+	if _, err := os.Stat(p1); !os.IsNotExist(err) {
+		t.Fatalf("cached temp file should be removed after Release, stat err=%v", err)
+	}
+}
+
+func TestDispatchCache_CancelledMaterializationNotCached(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		_, _ = w.Write([]byte("cached-after-cancel"))
+	}))
+	defer server.Close()
+
+	opts := newMaterializeTestOptions()
+	opts.AllowPrivateURLs = true
+	opts.HTTPDoer = server.Client()
+
+	cache := service.NewDispatchCache()
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _, err := cache.MaterializeContentURL(cancelledCtx, server.URL, opts)
+	if err == nil {
+		t.Fatal("expected cancellation error")
+	}
+	if !strings.Contains(err.Error(), "canceled") {
+		t.Fatalf("error = %v, want explicit cancellation", err)
+	}
+	if requests != 0 {
+		t.Fatalf("cancelled materialization should not fetch, requests = %d", requests)
+	}
+
+	got, _, err := cache.MaterializeContentURL(context.Background(), server.URL, opts)
+	if err != nil {
+		t.Fatalf("materialize after cancellation failure: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("retry after cancellation should fetch once, requests = %d", requests)
+	}
+	if _, err := os.Stat(got); err != nil {
+		t.Fatalf("materialized temp file should exist: %v", err)
+	}
 	cache.Release()
 }
 
