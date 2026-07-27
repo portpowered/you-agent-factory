@@ -45,6 +45,29 @@ func TestCLIDocsListsPackagedTopics(t *testing.T) {
 	}
 }
 
+// TestCLIDocsEveryTopicRendersNonEmptyContent proves every topic named by the
+// packaged docs index renders non-empty content through the public CLI boundary
+// so discovery and retrieval stay consistent for customers.
+func TestCLIDocsEveryTopicRendersNonEmptyContent(t *testing.T) {
+	workingDir := isolatedWorkingDirectoryWithoutDocsTree(t)
+
+	index := executeDocsWiringCommand(t, workingDir, "docs")
+	topics := parsePackagedDocsIndexTopics(index)
+	if len(topics) == 0 {
+		t.Fatalf("docs index did not expose any discoverable packaged topics:\n%s", index)
+	}
+
+	for _, topic := range topics {
+		topic := topic
+		t.Run(topic, func(t *testing.T) {
+			output := executeDocsWiringCommand(t, workingDir, "docs", topic)
+			if strings.TrimSpace(output) == "" {
+				t.Fatalf("you docs %s stdout is empty", topic)
+			}
+		})
+	}
+}
+
 func isolatedWorkingDirectoryWithoutDocsTree(t *testing.T) string {
 	t.Helper()
 
