@@ -2321,8 +2321,8 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/providers/gemini/process_harness_test.go",
-      "package": "you-agent-factory/tests/functional/providers/gemini",
+      "source_path": "tests/functional/workers/inference/gemini/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/gemini",
       "scenario": "TestGeminiClassifierRejectsStructuredLabelThroughRootBuildProcess",
       "lane": "short",
       "destination": "tests/functional/workers/inference/gemini/golden_test.go",
@@ -2331,8 +2331,8 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/providers/gemini/process_harness_test.go",
-      "package": "you-agent-factory/tests/functional/providers/gemini",
+      "source_path": "tests/functional/workers/inference/gemini/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/gemini",
       "scenario": "TestGeminiCommandCancellationThroughRootBuildProcessIsCanonical",
       "lane": "short",
       "destination": "tests/functional/workers/inference/gemini/golden_test.go",
@@ -2341,8 +2341,8 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/providers/gemini/process_harness_test.go",
-      "package": "you-agent-factory/tests/functional/providers/gemini",
+      "source_path": "tests/functional/workers/inference/gemini/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/gemini",
       "scenario": "TestGeminiConductorPreservesConfiguredEnvironment",
       "lane": "short",
       "destination": "tests/functional/workers/inference/gemini/golden_test.go",
@@ -2351,8 +2351,8 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/providers/gemini/process_harness_test.go",
-      "package": "you-agent-factory/tests/functional/providers/gemini",
+      "source_path": "tests/functional/workers/inference/gemini/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/gemini",
       "scenario": "TestGeminiConductorPreservesConfiguredSkipPermissions",
       "lane": "short",
       "destination": "tests/functional/workers/inference/gemini/golden_test.go",
@@ -2361,8 +2361,8 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/providers/gemini/process_harness_test.go",
-      "package": "you-agent-factory/tests/functional/providers/gemini",
+      "source_path": "tests/functional/workers/inference/gemini/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/gemini",
       "scenario": "TestGeminiConductorSuccessThroughRootBuildProcess",
       "lane": "short",
       "destination": "tests/functional/workers/inference/gemini/golden_test.go",
@@ -2371,8 +2371,8 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/providers/gemini/process_harness_test.go",
-      "package": "you-agent-factory/tests/functional/providers/gemini",
+      "source_path": "tests/functional/workers/inference/gemini/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/gemini",
       "scenario": "TestGeminiNativeFailureThroughRootBuildProcessIsSafe",
       "lane": "short",
       "destination": "tests/functional/workers/inference/gemini/golden_test.go",
@@ -2381,8 +2381,8 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/providers/gemini/process_harness_test.go",
-      "package": "you-agent-factory/tests/functional/providers/gemini",
+      "source_path": "tests/functional/workers/inference/gemini/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/gemini",
       "scenario": "TestGeminiRejectsUnsupportedStructuredOutputBeforeProviderIO",
       "lane": "short",
       "destination": "tests/functional/workers/inference/gemini/golden_test.go",
@@ -2391,8 +2391,8 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/providers/gemini/process_harness_test.go",
-      "package": "you-agent-factory/tests/functional/providers/gemini",
+      "source_path": "tests/functional/workers/inference/gemini/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/gemini",
       "scenario": "TestGeminiRejectsUnsupportedWorkingDirectoryBeforeProviderIO",
       "lane": "short",
       "destination": "tests/functional/workers/inference/gemini/golden_test.go",
@@ -2401,8 +2401,8 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/providers/gemini/process_harness_test.go",
-      "package": "you-agent-factory/tests/functional/providers/gemini",
+      "source_path": "tests/functional/workers/inference/gemini/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/gemini",
       "scenario": "TestRootBuiltProcessExecutesThroughSharedSupport",
       "lane": "short",
       "destination": "tests/functional/workers/inference/gemini/golden_test.go",

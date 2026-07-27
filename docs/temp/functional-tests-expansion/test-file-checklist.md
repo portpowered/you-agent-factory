@@ -290,10 +290,19 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestOpenCodeGoldenFinalOnlyFallback`.
   - `TestOpenCodeGoldenStructuredFailureAndTimeout`.
 
-- [ ] `tests/functional/workers/inference/gemini/golden_test.go`
+- [x] `tests/functional/workers/inference/gemini/golden_test.go`
   - `TestGeminiGoldenTextSuccess`.
   - `TestGeminiGoldenRateLimitAndStructuredFailure`.
   - `TestGeminiGoldenTimeout`.
+  - `TestRootBuiltProcessExecutesThroughSharedSupport`.
+  - `TestGeminiConductorSuccessThroughRootBuildProcess`.
+  - `TestGeminiClassifierRejectsStructuredLabelThroughRootBuildProcess`.
+  - `TestGeminiConductorPreservesConfiguredEnvironment`.
+  - `TestGeminiConductorPreservesConfiguredSkipPermissions`.
+  - `TestGeminiRejectsUnsupportedStructuredOutputBeforeProviderIO`.
+  - `TestGeminiRejectsUnsupportedWorkingDirectoryBeforeProviderIO`.
+  - `TestGeminiNativeFailureThroughRootBuildProcessIsSafe`.
+  - `TestGeminiCommandCancellationThroughRootBuildProcessIsCanonical`.
 
 - [x] `tests/functional/workers/inference/kiro/golden_test.go`
   - `TestKiroGoldenTextSuccess`.
