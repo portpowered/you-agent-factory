@@ -131,10 +131,6 @@
       "name": "TestCurrentFactoryActivationFixture_WatchedFileExecutionFollowsActivatedFactory"
     },
     {
-      "file": "cli/factory_run/events/events_test.go",
-      "name": "TestSuccessfulInvocationEmitsCanonicalNDJSON"
-    },
-    {
       "file": "cli/factory_run/output/failure_test.go",
       "name": "TestInvocationFailureOutputContracts"
     },
@@ -449,10 +445,6 @@
     {
       "file": "operator_settings/configcore/operator_config_core_test.go",
       "name": "TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior"
-    },
-    {
-      "file": "orchestration/javascript/events/javascript_test.go",
-      "name": "TestJavaScriptInvocationEmitsCanonicalPhaseAndCheckpointEvents"
     },
     {
       "file": "providers/cli_script_executor_test.go",
