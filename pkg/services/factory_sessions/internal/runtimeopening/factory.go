@@ -43,7 +43,7 @@ type Factory struct {
 	workersRuntimeFactory           WorkersRuntimeFactory
 	workersRuntimeExecutorsFactory  factoryruntime.WorkersRuntimeExecutorsFactory
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory
-	workerHostedPollersFactory      WorkerHostedPollersFactory
+	automationHostedSourcesFactory AutomationHostedSourcesFactory
 	workersLocalRuntimeHooksFactory WorkersLocalRuntimeHooksFactory
 	factoryDefinitionsFactory       FactoryDefinitionsFactory
 	factoryScaffoldInitializer      factorysessions.FactoryScaffoldInitializer
@@ -97,7 +97,7 @@ func NewFactory(
 	workersRuntimeFactory WorkersRuntimeFactory,
 	workersRuntimeExecutorsFactory factoryruntime.WorkersRuntimeExecutorsFactory,
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
-	workerHostedPollersFactory WorkerHostedPollersFactory,
+	automationHostedSourcesFactory AutomationHostedSourcesFactory,
 	workersLocalRuntimeHooksFactory WorkersLocalRuntimeHooksFactory,
 	factoryDefinitionsFactory FactoryDefinitionsFactory,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
@@ -174,7 +174,7 @@ func NewFactory(
 		workersRuntimeFactory:           workersRuntimeFactory,
 		workersRuntimeExecutorsFactory:  workersRuntimeExecutorsFactory,
 		workersMockCommandRunnerFactory: workersMockCommandRunnerFactory,
-		workerHostedPollersFactory:      workerHostedPollersFactory,
+		automationHostedSourcesFactory: automationHostedSourcesFactory,
 		workersLocalRuntimeHooksFactory: workersLocalRuntimeHooksFactory,
 		factoryDefinitionsFactory:       factoryDefinitionsFactory,
 		factoryScaffoldInitializer:      factoryScaffoldInitializer,
@@ -229,7 +229,7 @@ func (f *Factory) openRuntime(
 		f.workersRuntimeFactory,
 		f.workersRuntimeExecutorsFactory,
 		f.workersMockCommandRunnerFactory,
-		f.workerHostedPollersFactory,
+		f.automationHostedSourcesFactory,
 		f.workersLocalRuntimeHooksFactory,
 		f.factoryDefinitionsFactory,
 		f.factoryScaffoldInitializer,

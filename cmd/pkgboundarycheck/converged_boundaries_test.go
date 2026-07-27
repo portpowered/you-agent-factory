@@ -60,8 +60,7 @@ func TestRunAllowsEdgeAggregatorToImportPublishedEffectContracts(t *testing.T) {
 		"github.com/portpowered/infinite-you/pkg/services/workers/agypty",
 		providersLeafEffectContractImport,
 		"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract",
-		"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic",
-		"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear",
+		"github.com/portpowered/infinite-you/pkg/services/automations",
 	} {
 		writeGoImportFile(
 			t,

@@ -774,6 +774,12 @@ response-stream output.
   (`~/.you-agent-factory/recordings/...`) belongs in `pkg/config/defaultpaths`;
   `pkg/services/operator_settings` and `pkg/transports/cli/run` should keep only precedence,
   filename, and reporting behavior around those defaults.
+- Effective operator-settings resolution belongs in the parent-private owner at
+  `pkg/services/operator_settings/internal/services/resolution`; the published
+  `operatorsettings.Service` root delegates `ResolveEffective` through
+  `internal/service` and `wire` only. Query the accepted `providers.Service` root
+  for provider identity canonicalization at resolve time; do not cache availability
+  in settings state or add Providers→Operator Settings imports.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore

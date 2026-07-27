@@ -1,7 +1,8 @@
-package hostedworkers
+package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -17,9 +18,9 @@ import (
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	hostedlinear "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	hostedlinear "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -303,7 +304,7 @@ func TestNewLinearPoller_RequiresExternalEffects(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name        string
-		clock       Clock
+		clock       clockwork.Clock
 		client      hostedlinear.HTTPDoer
 		resolver    hostedlinear.SecretResolver
 		checkpoints hostedlinear.CheckpointStore
@@ -324,6 +325,55 @@ func TestNewLinearPoller_RequiresExternalEffects(t *testing.T) {
 				t.Fatalf("NewLinearPoller() error = %v, want %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestStartLinearPoller_SecretResolutionFailureSkipsSubmitAndRestarts(t *testing.T) {
+	secretErr := errors.New("read secret file: missing")
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		t.Error("provider should not be called when secret resolution fails")
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	factoryDir := t.TempDir()
+	pollerCfg, runtimeCfg, workstation, worker := hostedLinearPollerFixtureForTest(t, factoryDir, server, nil)
+	pollerCfg.Logger = zap.New(logCore)
+	pollerCfg.Clock = clockwork.NewFakeClock()
+	pollerCfg.SecretResolver = func(context.Context, workers.HostedRuntimePaths, string) (string, error) {
+		return "", secretErr
+	}
+
+	var submitCalls atomic.Int32
+	ctx, cancel := context.WithCancel(context.Background())
+	var sidecars sync.WaitGroup
+	if err := startLinearPollerWithConfig(ctx, &sidecars, pollerCfg, runtimeCfg, workstation, worker, func(context.Context, work.WorkRequest) error {
+		submitCalls.Add(1)
+		return nil
+	}); err != nil {
+		t.Fatalf("StartLinearPoller() error = %v", err)
+	}
+
+	waitForObservedLogMessage(t, observedLogs, "hosted linear poller restarting", time.Second)
+	cancel()
+	sidecars.Wait()
+
+	if got := submitCalls.Load(); got != 0 {
+		t.Fatalf("submit calls = %d, want 0 when secret resolution fails", got)
+	}
+	if got := requestCount.Load(); got != 0 {
+		t.Fatalf("provider request count = %d, want 0 before secret resolution succeeds", got)
+	}
+	restartEntry := observedLogs.FilterMessage("hosted linear poller restarting").All()[0]
+	loggedErr := fieldString(restartEntry.ContextMap()["error"])
+	if !strings.Contains(loggedErr, "resolve hosted linear auth") {
+		t.Fatalf("logged restart error = %q, want secret-resolution failure", loggedErr)
+	}
+	if !strings.Contains(loggedErr, string(hostedlinear.ErrSecretResolution.Error())) {
+		t.Fatalf("logged restart error = %q, want typed secret-resolution fault", loggedErr)
 	}
 }
 
@@ -429,6 +479,139 @@ func TestStartLinearPoller_KeepsPollingOverTime(t *testing.T) {
 	}
 	if submittedWorkIDs[0] != "linear:issue-1" || submittedWorkIDs[1] != "linear:issue-2" {
 		t.Fatalf("submitted work IDs = %#v, want linear:issue-1 then linear:issue-2", submittedWorkIDs)
+	}
+}
+
+func TestRestartBackoff_ProgressesWithinBounds(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		attempt int
+		want    time.Duration
+	}{
+		{attempt: 1, want: restartBackoffMin},
+		{attempt: 2, want: 2 * restartBackoffMin},
+		{attempt: 3, want: 4 * restartBackoffMin},
+		{attempt: 4, want: 8 * restartBackoffMin},
+		{attempt: 5, want: restartBackoffMax},
+		{attempt: 6, want: restartBackoffMax},
+		{attempt: 10, want: restartBackoffMax},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(fmt.Sprintf("attempt_%d", tc.attempt), func(t *testing.T) {
+			t.Parallel()
+			if got := restartBackoff(tc.attempt); got != tc.want {
+				t.Fatalf("restartBackoff(%d) = %s, want %s", tc.attempt, got, tc.want)
+			}
+			if got := restartBackoff(tc.attempt); got < restartBackoffMin || got > restartBackoffMax {
+				t.Fatalf("restartBackoff(%d) = %s, want within [%s, %s]", tc.attempt, got, restartBackoffMin, restartBackoffMax)
+			}
+		})
+	}
+}
+
+func TestStartLinearPoller_StopsOnContextCancellationDuringBackoff(t *testing.T) {
+	fakeClock := clockwork.NewFakeClock()
+	var requestCount atomic.Int32
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"errors":[{"message":"temporary provider failure"}]}`))
+	}))
+	defer server.Close()
+
+	factoryDir := t.TempDir()
+	writeHostedLinearSecretForTest(t, factoryDir)
+
+	pollerCfg, runtimeCfg, poller, worker := hostedLinearPollerFixtureForTest(t, factoryDir, server, nil)
+	pollerCfg.Logger = zap.New(logCore)
+	pollerCfg.Clock = fakeClock
+
+	sidecarCtx, cancel := context.WithCancel(context.Background())
+	var sidecars sync.WaitGroup
+	if err := startLinearPollerWithConfig(sidecarCtx, &sidecars, pollerCfg, runtimeCfg, poller, worker, func(context.Context, work.WorkRequest) error {
+		return nil
+	}); err != nil {
+		t.Fatalf("StartLinearPoller() error = %v", err)
+	}
+
+	waitForObservedLogMessage(t, observedLogs, "hosted linear poller restarting", time.Second)
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	cancel()
+	sidecars.Wait()
+
+	stopped := observedLogs.FilterMessage("hosted linear poller stopped").All()
+	if len(stopped) != 1 {
+		t.Fatalf("hosted linear poller stopped log count = %d, want 1", len(stopped))
+	}
+	if got, ok := stopped[0].ContextMap()["reason"].(string); !ok || got != "context canceled" {
+		t.Fatalf("hosted linear poller stop reason = %#v, want context canceled", stopped[0].ContextMap()["reason"])
+	}
+	if got := requestCount.Load(); got != 1 {
+		t.Fatalf("provider request count = %d, want 1 poll cycle before backoff cancellation", got)
+	}
+	if observedLogs.FilterMessage("hosted linear poller restarting").Len() != 1 {
+		t.Fatalf("restart log count = %d, want 1 (no restart after backoff cancellation)", observedLogs.FilterMessage("hosted linear poller restarting").Len())
+	}
+}
+
+func TestStartLinearPoller_BackoffProgressesAfterRepeatedFailures(t *testing.T) {
+	fakeClock := clockwork.NewFakeClock()
+	var requestCount atomic.Int32
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"errors":[{"message":"temporary provider failure"}]}`))
+	}))
+	defer server.Close()
+
+	factoryDir := t.TempDir()
+	writeHostedLinearSecretForTest(t, factoryDir)
+
+	pollerCfg, runtimeCfg, poller, worker := hostedLinearPollerFixtureForTest(t, factoryDir, server, nil)
+	pollerCfg.Logger = zap.New(logCore)
+	pollerCfg.Clock = fakeClock
+
+	sidecarCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var sidecars sync.WaitGroup
+	if err := startLinearPollerWithConfig(sidecarCtx, &sidecars, pollerCfg, runtimeCfg, poller, worker, func(context.Context, work.WorkRequest) error {
+		return nil
+	}); err != nil {
+		t.Fatalf("StartLinearPoller() error = %v", err)
+	}
+	t.Cleanup(func() {
+		cancel()
+		sidecars.Wait()
+	})
+
+	wantBackoffs := []time.Duration{
+		restartBackoffMin,
+		2 * restartBackoffMin,
+		4 * restartBackoffMin,
+		8 * restartBackoffMin,
+		restartBackoffMax,
+	}
+	for attempt, wantBackoff := range wantBackoffs {
+		waitForObservedLogCount(t, observedLogs, "hosted linear poller restarting", attempt+1, time.Second)
+		restartEntry := observedLogs.FilterMessage("hosted linear poller restarting").All()[attempt]
+		if got := intField(restartEntry.ContextMap()["attempt"]); got != attempt+1 {
+			t.Fatalf("restart attempt[%d] = %d, want %d", attempt, got, attempt+1)
+		}
+		gotBackoff := durationField(restartEntry.ContextMap()["backoff"])
+		if gotBackoff != wantBackoff {
+			t.Fatalf("restart backoff[%d] = %s, want %s", attempt, gotBackoff, wantBackoff)
+		}
+		waitForFakeClockWaiters(t, fakeClock, 1)
+		fakeClock.Advance(wantBackoff)
+	}
+	if got := requestCount.Load(); got != int32(len(wantBackoffs)) {
+		t.Fatalf("provider request count = %d, want %d poll cycles across backoff progression", got, len(wantBackoffs))
 	}
 }
 
@@ -635,5 +818,33 @@ func fieldString(value any) string {
 		return typed.Error()
 	default:
 		return ""
+	}
+}
+
+func intField(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int32:
+		return int(typed)
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return 0
+	}
+}
+
+func durationField(value any) time.Duration {
+	switch typed := value.(type) {
+	case time.Duration:
+		return typed
+	case int64:
+		return time.Duration(typed)
+	case float64:
+		return time.Duration(typed)
+	default:
+		return 0
 	}
 }

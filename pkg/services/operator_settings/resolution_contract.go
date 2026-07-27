@@ -87,6 +87,7 @@ const (
 type EffectiveOverrideFacts struct {
 	WorkerModelProvider string
 	WorkerModel         string
+	WorkerPresetID      string
 }
 
 // Clone returns a detached override-facts copy.
@@ -97,6 +98,8 @@ func (facts EffectiveOverrideFacts) Clone() EffectiveOverrideFacts {
 // EffectiveSelection is the immutable effective operator default selection
 // peers consume from effective resolution without owning precedence rules.
 type EffectiveSelection struct {
+	BackendScopeID            string
+	WorkerPresets             []DocumentWorkerPreset
 	WorkerModelProvider       string
 	WorkerModel               string
 	WorkerModelProviderSource EffectiveLayerSource
@@ -106,7 +109,11 @@ type EffectiveSelection struct {
 
 // Clone returns a detached effective-selection copy.
 func (selection EffectiveSelection) Clone() EffectiveSelection {
-	return selection
+	cloned := selection
+	if selection.WorkerPresets != nil {
+		cloned.WorkerPresets = cloneDocumentWorkerPresets(selection.WorkerPresets)
+	}
+	return cloned
 }
 
 // ResolveEffectiveRequest asks for an effective selection from detached
@@ -114,6 +121,8 @@ func (selection EffectiveSelection) Clone() EffectiveSelection {
 // document; document mutation remains on document operations.
 type ResolveEffectiveRequest struct {
 	DocumentBaseline         DocumentDefaults
+	BackendScopeID           string
+	WorkerPresets            []DocumentWorkerPreset
 	ExpectedDocumentBaseline *DocumentDefaults
 	EnvironmentOverrides     EffectiveOverrideFacts
 	InvocationOverrides      EffectiveOverrideFacts
