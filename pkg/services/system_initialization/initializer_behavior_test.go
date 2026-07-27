@@ -299,9 +299,13 @@ func TestInit_PropagatesInjectedConfigInspectionFailure(t *testing.T) {
 }
 
 func TestInit_RejectsEmptyHomeDir(t *testing.T) {
-	if _, err := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).
-		Initialize(t.Context(), Request{HomeDir: "  "}); err == nil {
+	_, err := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).
+		Initialize(t.Context(), Request{HomeDir: "  "})
+	if err == nil {
 		t.Fatal("Initialize(empty home) error = nil")
+	}
+	if !errors.Is(err, ErrMissingHomeDir) {
+		t.Fatalf("Initialize(empty home) error = %v, want ErrMissingHomeDir", err)
 	}
 }
 

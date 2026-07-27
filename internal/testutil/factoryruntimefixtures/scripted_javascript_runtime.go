@@ -27,7 +27,10 @@ type ScriptedJavaScriptWorkflows struct {
 	CloneOutputMapFunc       func(map[string]any) map[string]any
 }
 
-var _ factoryruntime.JavaScriptWorkflows = ScriptedJavaScriptWorkflows{}
+var (
+	_ factoryruntime.JavaScriptWorkflows             = ScriptedJavaScriptWorkflows{}
+	_ factoryruntime.OrchestrationJavaScriptExecution = ScriptedJavaScriptWorkflows{}
+)
 
 func (s ScriptedJavaScriptWorkflows) PreviewWorkflow(ctx context.Context, input factoryruntime.WorkflowPreviewInput) (factoryruntime.WorkflowPreview, error) {
 	if s.PreviewWorkflowFunc == nil {
@@ -107,6 +110,21 @@ func (s ScriptedJavaScriptWorkflows) Validate(request factoryruntime.WorkflowVal
 		return factoryruntime.WorkflowValidationResult{}
 	}
 	return s.ValidateFunc(request)
+}
+
+func (s ScriptedJavaScriptWorkflows) RunJavaScript(
+	ctx context.Context,
+	request factoryruntime.JavaScriptRuntimeRequest,
+	hooks factoryruntime.JavaScriptRuntimeHooks,
+) (factoryruntime.JavaScriptRuntimeOutcome, error) {
+	return s.Run(ctx, request, hooks)
+}
+
+func (s ScriptedJavaScriptWorkflows) ResumeJavaScript(
+	summary factoryruntime.JavaScriptCompletedCheckpointSummary,
+	records []factoryruntime.JavaScriptRuntimeRecord,
+) factoryruntime.JavaScriptResumeContext {
+	return s.ResumeContext(summary, records)
 }
 
 func (s ScriptedJavaScriptWorkflows) Run(ctx context.Context, request factoryruntime.JavaScriptRuntimeRequest, hooks factoryruntime.JavaScriptRuntimeHooks) (factoryruntime.JavaScriptRuntimeOutcome, error) {

@@ -26,6 +26,9 @@ func TestInitializePreservesCanceledContext(t *testing.T) {
 	cancel()
 
 	result, err := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).Initialize(ctx, Request{HomeDir: t.TempDir()})
+	if !errors.Is(err, ErrInitializeCancelled) {
+		t.Fatalf("Initialize(canceled) error = %v, want ErrInitializeCancelled", err)
+	}
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Initialize(canceled) error = %v, want context.Canceled", err)
 	}

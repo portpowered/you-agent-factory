@@ -27,6 +27,7 @@ import (
 	factorycheckpointstore "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointstore"
 	factorycheckpointsummary "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointsummary"
 	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript"
+	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestrationowner"
 	factoryruntimeservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -391,8 +392,23 @@ func provideFactorySessionsService(
 	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks)
 }
 
+func provideOrchestrationJavaScriptExecution(
+	newID factoryruntime.IDGenerator,
+	workflows factoryruntime.JavaScriptWorkflows,
+) factoryruntime.OrchestrationJavaScriptExecution {
+	return factoryruntimeorchestrationowner.New(newID, workflows)
+}
+
+func provideOrchestrationCompilation(
+	newID factoryruntime.IDGenerator,
+	workflows factoryruntime.JavaScriptWorkflows,
+) factoryruntime.OrchestrationCompilation {
+	return factoryruntimeorchestrationowner.NewCompilation(newID, workflows, workflows)
+}
+
 func provideFactorySessionExecutionFactory(
 	workflows factoryruntime.JavaScriptWorkflows,
+	orchestration factoryruntime.OrchestrationJavaScriptExecution,
 	recordingWriter recordingartifacts.Writer,
 	stores factorysessionwire.RuntimePersistenceStoreFactory,
 	syncWaits factorysessionwire.SyncWaitScheduler,
@@ -434,6 +450,7 @@ func provideFactorySessionExecutionFactory(
 			syncWaits,
 			factorycheckpointsummary.New(),
 			workflows,
+			orchestration,
 			workerPresetIDs,
 			workerSettings,
 			recordingWriter,
@@ -446,6 +463,7 @@ func provideFactorySessionExecutionFactory(
 
 func provideStandaloneSessionExecutionFactory(
 	workflows factoryruntime.JavaScriptWorkflows,
+	orchestration factoryruntime.OrchestrationJavaScriptExecution,
 	recordingWriter recordingartifacts.Writer,
 	stores factorysessionwire.RuntimePersistenceStoreFactory,
 	syncWaits factorysessionwire.SyncWaitScheduler,
@@ -471,6 +489,7 @@ func provideStandaloneSessionExecutionFactory(
 			syncWaits,
 			factorycheckpointsummary.New(),
 			workflows,
+			orchestration,
 			recordingWriter,
 			sessionIDs,
 			fixtureFiles,

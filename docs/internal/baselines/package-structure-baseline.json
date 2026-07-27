@@ -24,11 +24,6 @@
     },
     {
       "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_cron_workstations_smoke_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_event_replay_smoke_test.go",
       "target": "tests/functional/runtime_api"
     },
@@ -286,21 +281,6 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_config_driven_submit_query_smoke_test.go",
       "target": "TestConfigDriven_RESTAPISubmitAndQuery"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_cron_workstations_smoke_test.go",
-      "target": "TestCronWorkstations_ServiceModeExpiryConsumesStaleTriggerWithTerminalOutputAndDefaultWindow"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_cron_workstations_smoke_test.go",
-      "target": "TestCronWorkstations_ServiceModeImplicitFailureRoutingMovesFailedCronWorkIntoFailedState"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_cron_workstations_smoke_test.go",
-      "target": "TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetriesDispatchesAndFiltersViews"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -811,6 +791,16 @@
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/acceptance/provider_outcomes_test.go",
       "target": "acceptance"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/automations/cron_root_composition_test.go",
+      "target": "automations"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/automations/doc.go",
+      "target": "automations"
     },
     {
       "rule": "functional-test-missing-subsection",
@@ -1589,6 +1579,11 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/workflow_source_reader.go",
+      "target": "NewWorkflowSourceReader"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_visualization/response_presentation.go",
       "target": "NewResponsePresentation"
     },
@@ -2310,7 +2305,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_visualization",
-      "target": "pkg/services/factory_visualization/response_presentation.go:Output,pkg/services/factory_visualization/response_presentation.go:ResponsePresentation,pkg/services/factory_visualization/service.go:Clock,pkg/services/factory_visualization/service.go:Sink,pkg/services/factory_visualization/service.go:Source"
+      "target": "pkg/services/factory_visualization/response_presentation.go:Output,pkg/services/factory_visualization/response_presentation.go:ResponsePresentation,pkg/services/factory_visualization/root_contract.go:Root,pkg/services/factory_visualization/service.go:Clock,pkg/services/factory_visualization/service.go:Sink,pkg/services/factory_visualization/service.go:Source"
     },
     {
       "rule": "service-root-interface-count",
@@ -2651,16 +2646,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/operator_settings/testdata",
       "target": "pkg/services/operator_settings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/provider_sessions/codex",
-      "target": "pkg/services/provider_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/provider_sessions/cursor",
-      "target": "pkg/services/provider_sessions"
     },
     {
       "rule": "service-root-unexpected-directory",

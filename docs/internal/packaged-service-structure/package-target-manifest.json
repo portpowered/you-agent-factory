@@ -140,8 +140,12 @@
     "pkg/services/factory_runtime/internal/services/instance_host",
     "pkg/services/factory_runtime/internal/services/instance_host/internal/service",
     "pkg/services/factory_runtime/internal/services/instance_host/wire",
+    "pkg/services/factory_runtime/internal/services/orchestration",
+    "pkg/services/factory_runtime/internal/services/orchestration/internal/service",
+    "pkg/services/factory_runtime/internal/services/orchestration/wire",
     "pkg/services/factory_runtime/javascript",
     "pkg/services/factory_runtime/metrics",
+    "pkg/services/factory_runtime/orchestrationowner",
     "pkg/services/factory_runtime/orchestratorcontract",
     "pkg/services/factory_runtime/replayhooks",
     "pkg/services/factory_runtime/runtime",
@@ -240,6 +244,9 @@
     "pkg/services/models/internal/services/catalog/wire",
     "pkg/services/models/internal/services/runtime_host",
     "pkg/services/models/internal/services/runtime_host/internal/service",
+    "pkg/services/models/internal/services/runtime_host/internal/services/leases",
+    "pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service",
+    "pkg/services/models/internal/services/runtime_host/internal/services/leases/wire",
     "pkg/services/models/internal/services/runtime_host/wire",
     "pkg/services/models/internal/services/runtime_scopes",
     "pkg/services/models/internal/services/runtime_scopes/internal/service",
@@ -258,6 +265,7 @@
     "pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
     "pkg/services/provider_sessions/internal/services/cursor_reader/wire",
     "pkg/services/provider_sessions/service",
+    "pkg/services/provider_sessions/wire",
     "pkg/services/providers",
     "pkg/services/providers/internal/service",
     "pkg/services/providers/internal/services/catalog",
@@ -921,12 +929,32 @@
       "destination": "factory_runtime/internal/services/instance_host"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/wire",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/javascript",
       "disposition": "move",
       "destination": "factory_runtime/internal/services/orchestration"
     },
     {
       "packagePath": "pkg/services/factory_runtime/metrics",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/orchestrationowner",
       "disposition": "retain",
       "destination": "factory_runtime"
     },
@@ -1421,6 +1449,21 @@
       "destination": "models/internal/services/runtime_host"
     },
     {
+      "packagePath": "pkg/services/models/internal/services/runtime_host/internal/services/leases",
+      "disposition": "retain",
+      "destination": "models/internal/services/runtime_host"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service",
+      "disposition": "retain",
+      "destination": "models/internal/services/runtime_host"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_host/internal/services/leases/wire",
+      "disposition": "retain",
+      "destination": "models/internal/services/runtime_host"
+    },
+    {
       "packagePath": "pkg/services/models/internal/services/runtime_host/wire",
       "disposition": "retain",
       "destination": "models/internal/services/runtime_host"
@@ -1511,6 +1554,11 @@
       "destination": "provider_sessions"
     },
     {
+      "packagePath": "pkg/services/provider_sessions/wire",
+      "disposition": "retain",
+      "destination": "provider_sessions"
+    },
+    {
       "packagePath": "pkg/services/providers",
       "disposition": "retain",
       "destination": "providers"
@@ -1553,7 +1601,7 @@
     {
       "packagePath": "pkg/services/providers/internal/testutil/execution",
       "disposition": "retain",
-      "destination": "providers/internal/services/execution"
+      "destination": "providers"
     },
     {
       "packagePath": "pkg/services/providers/wire",

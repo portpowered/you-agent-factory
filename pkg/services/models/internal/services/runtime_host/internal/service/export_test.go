@@ -6,6 +6,8 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
+	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 )
@@ -62,6 +64,7 @@ func NewWithHostTestConfig(
 	s := New(
 		scopes,
 		assets,
+		mustLeasesService(hostClock),
 		processLauncher,
 		hostHTTP,
 		hostClock,
@@ -77,6 +80,45 @@ func NewWithHostTestConfig(
 	if supervisorCfg.HealthChecker != nil {
 		s.supervisor.HealthChecker = supervisorCfg.HealthChecker
 	}
+	s.idleUnloadAfter, s.maxLoadedRuntimes = normalizeHostPolicy(
+		policyCfg.IdleUnloadAfter,
+		policyCfg.MaxLoadedRuntimes,
+	)
+	return s
+}
+
+// LeasesService returns the nested leases owner for focused integration tests.
+func LeasesService(s runtimehost.Service) hostleases.Service {
+	return s.(*service).leases
+}
+
+// NewWithLeasesFacts constructs a Runtime Host whose nested leases owner uses
+// the supplied slot facts and binds holder-aware cleanup to the host.
+func NewWithLeasesFacts(
+	scopes runtimescopes.Service,
+	assets scopedassets.Service,
+	processLauncher models.HostProcessLauncher,
+	hostHTTP models.HostHTTPDoer,
+	hostClock models.HostClock,
+	hostLogger models.HostDiagnosticLogger,
+	hostMetrics models.HostMetricsRecorder,
+	slotFacts hostleases.SlotFactsProvider,
+	policyCfg HostPolicyTestConfig,
+) runtimehost.Service {
+	leases, err := leaseswire.NewService(hostClock, slotFacts)
+	if err != nil {
+		panic(err)
+	}
+	s := New(
+		scopes,
+		assets,
+		leases,
+		processLauncher,
+		hostHTTP,
+		hostClock,
+		hostLogger,
+		hostMetrics,
+	).(*service)
 	s.idleUnloadAfter, s.maxLoadedRuntimes = normalizeHostPolicy(
 		policyCfg.IdleUnloadAfter,
 		policyCfg.MaxLoadedRuntimes,
@@ -107,4 +149,12 @@ func ReleaseSlotCapacity(
 // ShutdownHost stops all supervised runtimes owned by the host.
 func ShutdownHost(ctx context.Context, s runtimehost.Service) error {
 	return s.(*service).Shutdown(ctx)
+}
+
+func mustLeasesService(hostClock models.HostClock) hostleases.Service {
+	leases, err := leaseswire.NewService(hostClock, hostleases.UnconfiguredSlotFacts{})
+	if err != nil {
+		panic(err)
+	}
+	return leases
 }

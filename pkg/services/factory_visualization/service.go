@@ -80,7 +80,15 @@ type Service struct {
 
 	events []factorydefinitions.FactoryEvent
 	cursor *factorydefinitions.FactoryEventReconnectCursor
+
+	presentationSeq int
+	presentations   map[PresentationSessionID]*rootPresentationSession
 }
+
+var (
+	errAlreadyStarted = errors.New("start Factory visualization: already started")
+	errNotStarted     = errors.New("wait for Factory visualization: not started")
+)
 
 // New constructs an inert Factory visualization service.
 func New(
@@ -123,7 +131,7 @@ func (s *Service) Start(ctx context.Context) error {
 	s.mu.Lock()
 	if s.started {
 		s.mu.Unlock()
-		return errors.New("start Factory visualization: already started")
+		return errAlreadyStarted
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	stream, err := s.source.SubscribeFactoryEvents(
@@ -187,7 +195,7 @@ func (s *Service) Wait(ctx context.Context) error {
 	done := s.done
 	s.mu.Unlock()
 	if done == nil {
-		return errors.New("wait for Factory visualization: not started")
+		return errNotStarted
 	}
 	if ctx == nil {
 		ctx = context.Background()

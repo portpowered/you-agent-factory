@@ -212,3 +212,10 @@ func generatedAudioPath(audio factoryapi.WorkAudioContentPart) string {
 	}
 	return ""
 }
+
+func stringPointerValue[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
+}

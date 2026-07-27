@@ -17,29 +17,25 @@ func (role factoryStatusRuntimeRole) Observe(context.Context, factoryruntime.Obs
 }
 
 type factoryStatusSessionRole struct {
-	snapshot  *factoryruntime.LegacyEngineObservation
-	sessionID string
+	observation factoryruntime.Observation
+	sessionID   string
 }
 
-func (role *factoryStatusSessionRole) GetEngineStateSnapshotForSession(_ context.Context, sessionID string) (*factoryruntime.LegacyEngineObservation, error) {
+func (role *factoryStatusSessionRole) ObserveForSession(_ context.Context, sessionID string, _ factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
 	role.sessionID = sessionID
-	return role.snapshot, nil
+	return factoryruntime.ObserveResult{Observation: role.observation}, nil
 }
 
-type recordingFactoryStatusProjector struct {
-	seen *factoryruntime.LegacyEngineObservation
-	want factoryruntime.FactoryStatus
-}
-
-func (projector *recordingFactoryStatusProjector) ProjectFactoryStatus(snapshot *factoryruntime.LegacyEngineObservation) factoryruntime.FactoryStatus {
-	projector.seen = snapshot
-	return projector.want
-}
-
-func TestFactoryStatusAPIRoutesCurrentAndSessionSnapshotsThroughInjectedOwnerProjection(t *testing.T) {
-	scoped := &factoryruntime.LegacyEngineObservation{FactoryState: "SCOPED"}
-	sessions := &factoryStatusSessionRole{snapshot: scoped}
-	projector := &recordingFactoryStatusProjector{want: factoryruntime.FactoryStatus{FactoryState: "DETACHED"}}
+func TestFactoryStatusAPIRoutesCurrentAndSessionObservationsThroughNeutralProjection(t *testing.T) {
+	scopedObservation := factoryruntime.Observation{
+		Status: factoryruntime.ObservationStatusActive,
+		Progress: factoryruntime.ObservationProgress{
+			TotalWorkCount: 2,
+			WorkCategories: factoryruntime.ObservationWorkCategories{Processing: 1, Terminal: 1},
+		},
+		Health: factoryruntime.ObservationHealth{FactoryState: "SCOPED"},
+	}
+	sessions := &factoryStatusSessionRole{observation: scopedObservation}
 	api := newFactoryStatusAPI(factoryStatusRuntimeRole{observation: factoryruntime.Observation{
 		Status: factoryruntime.ObservationStatusActive,
 		Progress: factoryruntime.ObservationProgress{
@@ -52,7 +48,7 @@ func TestFactoryStatusAPIRoutesCurrentAndSessionSnapshotsThroughInjectedOwnerPro
 		Health: factoryruntime.ObservationHealth{
 			FactoryState: "CURRENT", LifecycleControlStatus: "RUNNING",
 		},
-	}}, sessions, projector)
+	}}, sessions)
 
 	got, err := api.ProjectFactoryStatus(context.Background(), "")
 	if err != nil || got.FactoryState != "CURRENT" || got.RuntimeStatus != "ACTIVE" ||
@@ -61,7 +57,7 @@ func TestFactoryStatusAPIRoutesCurrentAndSessionSnapshotsThroughInjectedOwnerPro
 		t.Fatalf("current status = (%#v, %v), want root observation projection", got, err)
 	}
 	got, err = api.ProjectFactoryStatus(context.Background(), "session-beta")
-	if err != nil || got.FactoryState != "DETACHED" || projector.seen != scoped || sessions.sessionID != "session-beta" {
-		t.Fatalf("scoped status = (%#v, %v), projected snapshot = %p, session = %q", got, err, projector.seen, sessions.sessionID)
+	if err != nil || got.FactoryState != "SCOPED" || got.TotalTokens != 2 || sessions.sessionID != "session-beta" {
+		t.Fatalf("scoped status = (%#v, %v), session = %q", got, err, sessions.sessionID)
 	}
 }
