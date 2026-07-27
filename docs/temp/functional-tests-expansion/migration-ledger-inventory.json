@@ -2091,9 +2091,9 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
-      "package": "you-agent-factory/tests/functional/providers",
-      "scenario": "TestTemplateTests_ScriptExecutorDropsResourceTokensFromArgTemplates",
+      "source_path": "tests/functional/workers/script/environment_long_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
+      "scenario": "TestScriptWorkerDropsResourceTokensFromArgTemplates",
       "lane": "functionallong",
       "destination": "tests/functional/workers/script/environment_test.go",
       "catch_all": "none",
@@ -2101,10 +2101,60 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
-      "package": "you-agent-factory/tests/functional/providers",
-      "scenario": "TestTemplateTests_ScriptExecutorOrdersMultipleInputsByWorkstationConfigWithResources",
+      "source_path": "tests/functional/workers/script/environment_long_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
+      "scenario": "TestScriptWorkerOrdersMultipleInputsByWorkstationConfigWithResources",
       "lane": "functionallong",
+      "destination": "tests/functional/workers/script/environment_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/script/environment_long_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
+      "scenario": "TestScriptWorkstationDropsResourceTokensFromPromptTemplates",
+      "lane": "functionallong",
+      "destination": "tests/functional/workers/script/environment_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/script/environment_long_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
+      "scenario": "TestScriptWorkstationOrdersMultipleInputsByWorkstationConfigWithResources",
+      "lane": "functionallong",
+      "destination": "tests/functional/workers/script/environment_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/script/environment_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
+      "scenario": "TestScriptWorkerMissingExecutableFailsActionably",
+      "lane": "short",
+      "destination": "tests/functional/workers/script/environment_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/script/environment_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
+      "scenario": "TestScriptWorkerReceivesDeclaredEnvironmentOnly",
+      "lane": "short",
+      "destination": "tests/functional/workers/script/environment_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/script/environment_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
+      "scenario": "TestScriptWorkerWorktreePassthrough",
+      "lane": "short",
       "destination": "tests/functional/workers/script/environment_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
@@ -2121,21 +2171,51 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
-      "package": "you-agent-factory/tests/functional/providers",
-      "scenario": "TestTemplateTests_ScriptWrapDropsResourceTokensFromWorkstationTemplates",
-      "lane": "functionallong",
-      "destination": "tests/functional/workers/script/environment_test.go",
+      "source_path": "tests/functional/orchestration/javascript/composition/pipeline_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
+      "scenario": "TestJavaScriptPipelinePassesStageOutputToNextStage",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/composition/pipeline_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
-      "package": "you-agent-factory/tests/functional/providers",
-      "scenario": "TestTemplateTests_ScriptWrapOrdersMultipleInputsByWorkstationConfigWithResources",
-      "lane": "functionallong",
-      "destination": "tests/functional/workers/script/environment_test.go",
+      "source_path": "tests/functional/orchestration/javascript/composition/pipeline_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
+      "scenario": "TestJavaScriptPipelineStopsAfterStageFailure",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/composition/pipeline_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/opencode/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/opencode",
+      "scenario": "TestOpenCodeGoldenFinalOnlyFallback",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/opencode/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/opencode/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/opencode",
+      "scenario": "TestOpenCodeGoldenStructuredFailureAndTimeout",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/opencode/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/opencode/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/opencode",
+      "scenario": "TestOpenCodeGoldenStructuredSnapshotSuccess",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/opencode/golden_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -2178,16 +2258,6 @@
       "destination": "tests/functional/workers/inference/process_cleanup_test.go",
       "catch_all": "none",
       "specialty_targets": "script-timeout-companion-smoke-100",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/providers/cli_worktree_passthrough_test.go",
-      "package": "you-agent-factory/tests/functional/providers",
-      "scenario": "TestWorktreePassthrough",
-      "lane": "short",
-      "destination": "tests/functional/workers/script/environment_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
       "deletion_only_batch": "n/a"
     },
     {
@@ -6189,7 +6259,7 @@
   },
   "completeness_audit": {
     "audited_at_utc": "2026-07-27T15:35:00Z",
-    "story": "ft-wave1-cli-submit-wiring-mergeability",
+    "story": "ft-wave1-script-environment-mergeability",
     "live_customer_scenarios": 583,
     "ledger_rows": 583,
     "unmapped_scenarios": 0,

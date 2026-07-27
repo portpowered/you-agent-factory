@@ -226,7 +226,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestScriptWorkerNonZeroExitMapsToFailedOutcome`.
   - `TestScriptWorkerCancellationTerminatesChildProcess`.
 
-- [ ] `tests/functional/workers/script/environment_test.go`
+- [x] `tests/functional/workers/script/environment_test.go`
   - `TestScriptWorkerReceivesDeclaredEnvironmentOnly`.
   - `TestScriptWorkerMissingExecutableFailsActionably`.
 

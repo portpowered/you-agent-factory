@@ -520,11 +520,7 @@
     },
     {
       "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptExecutorDropsResourceTokensFromArgTemplates"
-    },
-    {
-      "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptExecutorOrdersMultipleInputsByWorkstationConfigWithResources"
+      "name": "TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates"
     },
     {
       "file": "providers/cli_template_resolution_long_test.go",
@@ -532,11 +528,7 @@
     },
     {
       "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptWrapDropsResourceTokensFromWorkstationTemplates"
-    },
-    {
-      "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptWrapOrdersMultipleInputsByWorkstationConfigWithResources"
+      "name": "TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates"
     },
     {
       "file": "providers/cli_timeout_cleanup_smoke_test.go",
@@ -1485,6 +1477,26 @@
     {
       "file": "smoke/verify_fast_command_smoke_test.go",
       "name": "TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers"
+    },
+    {
+      "file": "sessions/cli/resolved_session_family_test.go",
+      "name": "TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch"
+    },
+    {
+      "file": "sessions/cli/resolved_session_family_test.go",
+      "name": "TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition"
+    },
+    {
+      "file": "transport/submit/submit_test.go",
+      "name": "TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure"
+    },
+    {
+      "file": "transport/submit/submit_test.go",
+      "name": "TestSubmitFamilyExecutesThroughRootBuiltProcess"
+    },
+    {
+      "file": "work/cli/resolved_work_family_test.go",
+      "name": "TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs"
     },
     {
       "file": "work/visualization/dependency_graph_test.go",
