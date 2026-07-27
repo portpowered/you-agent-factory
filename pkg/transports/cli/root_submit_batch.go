@@ -6,9 +6,102 @@ import (
 	"strings"
 
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
+
+func newRunServerFlagBindings() climanifestcobra.RunServerFlagBindings {
+	targets := map[string]any{}
+	stringInputs := []string{
+		"you.run.flag.work", "you.run.flag.dir", "you.run.flag.named",
+		"you.run.flag.factory", "you.run.flag.record", "you.run.flag.replay",
+		"you.run.flag.runtime-log-dir", "you.run.flag.runtime-metrics-dir",
+		"you.run.flag.with-mock-workers", "you.run.flag.output",
+	}
+	boolInputs := []string{
+		"you.run.flag.continuously", "you.run.flag.no-record",
+		"you.run.flag.runtime-log-compress", "you.run.flag.runtime-metrics-compress",
+		"you.run.flag.with-server", "you.run.flag.with-site", "you.run.flag.quiet",
+		"you.run.flag.skip-permissions",
+	}
+	intInputs := []string{
+		"you.run.flag.runtime-log-max-size-mb", "you.run.flag.runtime-log-max-backups",
+		"you.run.flag.runtime-log-max-age-days", "you.run.flag.runtime-metrics-max-size-mb",
+		"you.run.flag.runtime-metrics-max-backups", "you.run.flag.runtime-metrics-max-age-days",
+	}
+	for _, inputID := range stringInputs {
+		targets[inputID] = scalarTarget("")
+	}
+	for _, inputID := range boolInputs {
+		targets[inputID] = scalarTarget(false)
+	}
+	for _, inputID := range intInputs {
+		targets[inputID] = scalarTarget(0)
+	}
+	return climanifestcobra.RunServerFlagBindings{LocalTargets: targets}
+}
+
+func applyRunResolvedInputs(cfg runcli.RunConfig, values map[string]any) (runcli.RunConfig, error) {
+	stringFields := []struct {
+		id     string
+		target *string
+	}{
+		{"you.run.flag.work", &cfg.WorkFile},
+		{"you.run.flag.dir", &cfg.Dir},
+		{"you.run.flag.named", &cfg.NamedFactoryName},
+		{"you.run.flag.factory", &cfg.FactoryConfigPath},
+		{"you.run.flag.record", &cfg.RecordPath},
+		{"you.run.flag.replay", &cfg.ReplayPath},
+		{"you.run.flag.runtime-log-dir", &cfg.RuntimeLogDir},
+		{"you.run.flag.runtime-metrics-dir", &cfg.RuntimeMetricsDir},
+		{"you.run.flag.with-mock-workers", &cfg.MockWorkersConfigPath},
+		{"you.run.flag.output", &cfg.InvocationOutputMode},
+	}
+	boolFields := []struct {
+		id     string
+		target *bool
+	}{
+		{"you.run.flag.continuously", &cfg.Continuously},
+		{"you.run.flag.no-record", &cfg.DisableDefaultRecording},
+		{"you.run.flag.runtime-log-compress", &cfg.RuntimeLogConfig.Compress},
+		{"you.run.flag.runtime-metrics-compress", &cfg.RuntimeMetricsConfig.Compress},
+		{"you.run.flag.with-server", &cfg.WithServer},
+		{"you.run.flag.with-site", &cfg.WithSite},
+		{"you.run.flag.quiet", &cfg.SuppressDashboardRendering},
+	}
+	intFields := []struct {
+		id     string
+		target *int
+	}{
+		{"you.run.flag.runtime-log-max-size-mb", &cfg.RuntimeLogConfig.MaxSize},
+		{"you.run.flag.runtime-log-max-backups", &cfg.RuntimeLogConfig.MaxBackups},
+		{"you.run.flag.runtime-log-max-age-days", &cfg.RuntimeLogConfig.MaxAge},
+		{"you.run.flag.runtime-metrics-max-size-mb", &cfg.RuntimeMetricsConfig.MaxSize},
+		{"you.run.flag.runtime-metrics-max-backups", &cfg.RuntimeMetricsConfig.MaxBackups},
+		{"you.run.flag.runtime-metrics-max-age-days", &cfg.RuntimeMetricsConfig.MaxAge},
+	}
+	var err error
+	for _, field := range stringFields {
+		*field.target, err = commandInputValue[string](values, field.id)
+		if err != nil {
+			return cfg, err
+		}
+	}
+	for _, field := range boolFields {
+		*field.target, err = commandInputValue[bool](values, field.id)
+		if err != nil {
+			return cfg, err
+		}
+	}
+	for _, field := range intFields {
+		*field.target, err = commandInputValue[int](values, field.id)
+		if err != nil {
+			return cfg, err
+		}
+	}
+	return cfg, nil
+}
 
 func parseRunCommandArgs(cmd *cobra.Command, args []string) ([]string, error) {
 	remainder := make([]string, 0, len(args))

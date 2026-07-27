@@ -7,7 +7,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
-	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/spf13/cobra"
 )
 
@@ -20,12 +19,10 @@ type RunServerFamilyComponents struct {
 	Server *cobra.Command
 }
 
-// RunServerFlagBindings supplies explicit storage for generated local flags.
-// Inherited flags remain owned by the shared root command.
+// RunServerFlagBindings supplies parser-only scalar storage keyed by stable
+// manifest input ID. Handlers build typed transport configs per invocation.
 type RunServerFlagBindings struct {
-	Run                 *runcli.RunConfig
-	RunInvocationOutput *string
-	RunLocalTargets     map[string]any
+	LocalTargets map[string]any
 }
 
 // NewRunServerFamilyComponents builds the detached run/server family from
@@ -164,57 +161,25 @@ func registerRunServerLocalFlags(
 		}
 		if flag.Long == "port" {
 			registerDeprecatedPortFlag(cmd, &deprecatedPort)
+			annotateStableInput(cmd, flag)
 			if err := applyFlagContract(cmd.Flags().Lookup(flag.Long), flag); err != nil {
 				return err
 			}
 			continue
 		}
-		target, err := runServerLocalBindingTarget(record.ID, flag.Long, bindings)
+		target, err := flagBindingTarget(flag.ID, bindings.LocalTargets)
 		if err != nil {
 			return err
 		}
 		if err := registerFlag(cmd.Flags(), flag, target, flag.Usage); err != nil {
 			return fmt.Errorf("register local flag %q: %w", flag.Long, err)
 		}
+		annotateStableInput(cmd, flag)
 		if err := applyFlagContract(cmd.Flags().Lookup(flag.Long), flag); err != nil {
 			return fmt.Errorf("apply local flag %q contract: %w", flag.Long, err)
 		}
 	}
 	return nil
-}
-
-func runServerLocalBindingTarget(
-	commandID, flagName string,
-	bindings RunServerFlagBindings,
-) (flagTarget, error) {
-	switch commandID {
-	case "you.run":
-		return runLocalBindingTarget(flagName, bindings.RunLocalTargets)
-	case "you.server":
-		return flagTarget{}, fmt.Errorf("unsupported server local flag %q", flagName)
-	default:
-		return flagTarget{}, fmt.Errorf("unsupported run/server command %q", commandID)
-	}
-}
-
-func runLocalBindingTarget(
-	flagName string,
-	targets map[string]any,
-) (flagTarget, error) {
-	target, ok := targets[flagName]
-	if !ok {
-		return flagTarget{}, fmt.Errorf("unsupported run local flag %q", flagName)
-	}
-	switch typed := target.(type) {
-	case *bool:
-		return flagTarget{boolValue: typed}, nil
-	case *string:
-		return flagTarget{stringValue: typed}, nil
-	case *int:
-		return flagTarget{intValue: typed}, nil
-	default:
-		return flagTarget{}, fmt.Errorf("run local flag %q has unsupported binding target", flagName)
-	}
 }
 
 func runServerManifestRecords(
@@ -253,18 +218,8 @@ func validateRunServerManifest(manifest climanifest.Manifest) error {
 }
 
 func validateRunServerBindings(bindings RunServerFlagBindings) error {
-	required := []struct {
-		name string
-		set  bool
-	}{
-		{name: "Run", set: bindings.Run != nil},
-		{name: "RunInvocationOutput", set: bindings.RunInvocationOutput != nil},
-		{name: "RunLocalTargets", set: bindings.RunLocalTargets != nil},
-	}
-	for _, binding := range required {
-		if !binding.set {
-			return fmt.Errorf("build run/server family command: bindings.%s is required", binding.name)
-		}
+	if len(bindings.LocalTargets) == 0 {
+		return fmt.Errorf("build run/server family command: bindings.LocalTargets is required")
 	}
 	return nil
 }

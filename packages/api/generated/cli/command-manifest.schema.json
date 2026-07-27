@@ -1,0 +1,1329 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/contracts/cli/command-manifest.schema.json",
+  "title": "You CLI command manifest",
+  "description": "Authored CLI command metadata, inputs, relationships, execution metadata, and handler bindings for one command tree.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "rootPath",
+    "commands"
+  ],
+  "properties": {
+    "formatVersion": {
+      "description": "The explicitly supported version of this command-manifest format.",
+      "const": "1.0.0"
+    },
+    "rootPath": {
+      "description": "The space-delimited command path of the manifest root command.",
+      "type": "string",
+      "minLength": 1
+    },
+    "commands": {
+      "description": "Command records keyed by stable command identifiers. Object keys make duplicate command IDs structurally unrepresentable.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/command"
+      }
+    }
+  },
+  "$defs": {
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "path",
+        "aliases",
+        "documentation",
+        "lifecycle",
+        "visibility",
+        "runnable",
+        "usage"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "name": {
+          "description": "The final command segment name exposed to users.",
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "description": "The full space-delimited command path from the manifest root.",
+          "type": "string",
+          "minLength": 1
+        },
+        "aliases": {
+          "description": "Alternate spellings accepted for the final command segment.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "groupId": {
+          "description": "Optional Cobra command-group identifier for help grouping.",
+          "type": "string"
+        },
+        "documentation": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+        },
+        "lifecycle": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        },
+        "visibility": {
+          "description": "Whether the command is shown in default help output.",
+          "enum": [
+            "visible",
+            "hidden"
+          ]
+        },
+        "runnable": {
+          "description": "Whether the command exposes a runnable handler.",
+          "type": "boolean"
+        },
+        "completeness": {
+          "description": "Marks records whose parsing and execution metadata is complete enough to serve as an authoritative generation source.",
+          "enum": [
+            "authoritative"
+          ]
+        },
+        "suggestion": {
+          "$ref": "#/$defs/suggestion"
+        },
+        "usage": {
+          "$ref": "#/$defs/usage"
+        },
+        "arguments": {
+          "description": "Positional argument records keyed by stable argument identifiers. Object keys make duplicate argument IDs structurally unrepresentable.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/argument"
+          }
+        },
+        "flags": {
+          "description": "Flag records keyed by stable flag identifiers. Object keys make duplicate flag IDs structurally unrepresentable.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/flag"
+          }
+        },
+        "sourceBindings": {
+          "description": "Environment, operator-configuration, and stdin routes keyed by stable binding identity.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/sourceBinding"
+          }
+        },
+        "handlerBindings": {
+          "description": "Handler routes keyed by stable binding identity.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/handlerBinding"
+          }
+        },
+        "relationships": {
+          "description": "Parse-constraint relationship records keyed by stable relationship identifiers. Object keys make duplicate relationship IDs structurally unrepresentable.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/relationship"
+          }
+        },
+        "precedence": {
+          "$ref": "#/$defs/precedence"
+        },
+        "channels": {
+          "$ref": "#/$defs/channels"
+        },
+        "outputs": {
+          "description": "Declared command output records keyed by stable output identifiers. Object keys make duplicate output IDs structurally unrepresentable.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/output"
+          }
+        },
+        "errors": {
+          "description": "Manifest-declared symbolic ErrorResponse codes keyed by stable error identity.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/symbolicError"
+          }
+        },
+        "exits": {
+          "description": "Declared exit-code records keyed by stable exit identifiers. Object keys make duplicate exit IDs structurally unrepresentable.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/exit"
+          }
+        },
+        "sideEffects": {
+          "description": "Declared side-effect records keyed by stable side-effect identifiers. Object keys make duplicate side-effect IDs structurally unrepresentable.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/sideEffect"
+          }
+        },
+        "constraints": {
+          "$ref": "#/$defs/constraints"
+        },
+        "handler": {
+          "$ref": "#/$defs/handler"
+        },
+        "rootLifecycle": {
+          "$ref": "#/$defs/rootLifecycle"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "completeness": {
+                "const": "authoritative"
+              }
+            },
+            "required": [
+              "completeness"
+            ]
+          },
+          "then": {
+            "required": [
+              "precedence",
+              "channels",
+              "constraints"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "completeness": {
+                "const": "authoritative"
+              },
+              "runnable": {
+                "const": true
+              }
+            },
+            "required": [
+              "completeness",
+              "runnable"
+            ]
+          },
+          "then": {
+            "required": [
+              "precedence",
+              "channels",
+              "outputs",
+              "exits",
+              "sideEffects",
+              "constraints",
+              "handler"
+            ],
+            "properties": {
+              "outputs": {
+                "minProperties": 1
+              },
+              "exits": {
+                "minProperties": 1
+              },
+              "sideEffects": {
+                "minProperties": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "argument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "position",
+        "kind",
+        "valueType",
+        "required",
+        "minCardinality",
+        "maxCardinality",
+        "variadic",
+        "enum",
+        "pattern",
+        "completion",
+        "doubleDash"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "name": {
+          "description": "The positional argument name rendered in usage templates.",
+          "type": "string",
+          "minLength": 1
+        },
+        "position": {
+          "description": "Zero-based positional index within the command argument list.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "How the argument is consumed during parsing.",
+          "enum": [
+            "positional"
+          ]
+        },
+        "valueType": {
+          "description": "The scalar or repeated value kind accepted by this positional input.",
+          "enum": [
+            "bool",
+            "string",
+            "int",
+            "int64",
+            "stringArray"
+          ]
+        },
+        "scope": {
+          "description": "The command-local scope of this positional input. Positional arguments are never persistent or inherited.",
+          "enum": [
+            "local"
+          ]
+        },
+        "required": {
+          "description": "Whether the argument must receive at least one value before invocation proceeds.",
+          "type": "boolean"
+        },
+        "minCardinality": {
+          "description": "Minimum number of values accepted for this argument.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxCardinality": {
+          "description": "Maximum number of values accepted for this argument. Use -1 for unbounded variadic overflow.",
+          "type": "integer",
+          "minimum": -1
+        },
+        "variadic": {
+          "description": "Whether the argument consumes all remaining positional values.",
+          "type": "boolean"
+        },
+        "defaultValue": {
+          "$ref": "#/$defs/inputValue"
+        },
+        "enum": {
+          "description": "Closed set of accepted values when the argument is restricted to enumerated strings.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "pattern": {
+          "description": "Optional regular expression restricting accepted string values.",
+          "type": "string"
+        },
+        "completion": {
+          "description": "How shell completion values are sourced for this argument.",
+          "enum": [
+            "none",
+            "static",
+            "dynamic"
+          ]
+        },
+        "channels": {
+          "description": "Input channels that may supply values for this argument.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "cli",
+              "env",
+              "config",
+              "stdin"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "acceptedSources": {
+          "description": "Canonical sources permitted to supply this input.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "cli",
+              "stdin",
+              "environment",
+              "operator-config",
+              "manifest-default",
+              "factory-signature-default"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "handlerBindingId": {
+          "description": "Stable handler binding that receives the resolved input value.",
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "visibility": {
+          "enum": [
+            "visible",
+            "hidden"
+          ]
+        },
+        "lifecycle": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        },
+        "doubleDash": {
+          "description": "How a bare -- token is interpreted relative to this command's positional arguments.",
+          "enum": [
+            "none",
+            "terminates-flags"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "required": [
+                "channels"
+              ]
+            },
+            {
+              "required": [
+                "scope",
+                "acceptedSources",
+                "handlerBindingId",
+                "visibility",
+                "lifecycle"
+              ],
+              "not": {
+                "required": [
+                  "channels"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "if": {
+            "properties": {
+              "required": {
+                "const": true
+              }
+            },
+            "required": [
+              "required"
+            ]
+          },
+          "then": {
+            "properties": {
+              "minCardinality": {
+                "minimum": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "variadic": {
+                "const": true
+              }
+            },
+            "required": [
+              "variadic"
+            ]
+          },
+          "then": {
+            "properties": {
+              "maxCardinality": {
+                "const": -1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "variadic": {
+                "const": false
+              }
+            },
+            "required": [
+              "variadic"
+            ]
+          },
+          "then": {
+            "not": {
+              "properties": {
+                "maxCardinality": {
+                  "const": -1
+                }
+              },
+              "required": [
+                "maxCardinality"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "rootLifecycle": {
+      "description": "Root discovery behavior and stable ownership boundaries. This is declarative metadata; command handlers and Initializer retain executable lifecycle policy.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "noArguments",
+        "helpOutput",
+        "exitCode",
+        "sideEffects",
+        "ownership"
+      ],
+      "properties": {
+        "noArguments": {
+          "const": "help"
+        },
+        "helpOutput": {
+          "const": "stdout"
+        },
+        "exitCode": {
+          "const": 0
+        },
+        "sideEffects": {
+          "const": "none"
+        },
+        "ownership": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "help",
+            "init",
+            "run",
+            "server"
+          ],
+          "properties": {
+            "help": {
+              "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+            },
+            "init": {
+              "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+            },
+            "run": {
+              "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+            },
+            "server": {
+              "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+            }
+          }
+        }
+      }
+    },
+    "flag": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "long",
+        "shorthand",
+        "aliases",
+        "scope",
+        "valueType",
+        "required",
+        "repeatable",
+        "normalization",
+        "completion",
+        "visibility",
+        "lifecycle"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "kind": {
+          "description": "The transport-neutral input category.",
+          "enum": [
+            "named"
+          ]
+        },
+        "long": {
+          "description": "The primary long flag name without leading dashes.",
+          "type": "string",
+          "minLength": 1
+        },
+        "shorthand": {
+          "description": "Optional single-character shorthand. Use an empty string when no shorthand is exposed.",
+          "type": "string",
+          "maxLength": 1
+        },
+        "aliases": {
+          "description": "Alternate long flag spellings accepted for this flag.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "scope": {
+          "description": "Whether the flag is local to one command, persistent on a subtree, or inherited from an ancestor.",
+          "enum": [
+            "local",
+            "persistent",
+            "inherited"
+          ]
+        },
+        "inheritedFromInputId": {
+          "description": "Stable ID of the persistent ancestor input represented by an inherited flag.",
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "valueType": {
+          "description": "The scalar or collection type accepted for one flag value.",
+          "enum": [
+            "bool",
+            "string",
+            "int",
+            "int64",
+            "stringArray"
+          ]
+        },
+        "enum": {
+          "description": "Closed set of accepted serialized values when the flag is restricted to enumerated choices.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "required": {
+          "description": "Whether the flag must be supplied before invocation proceeds.",
+          "type": "boolean"
+        },
+        "minCardinality": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxCardinality": {
+          "description": "Maximum accepted values, or -1 when unbounded.",
+          "type": "integer",
+          "minimum": -1
+        },
+        "defaultValue": {
+          "$ref": "#/$defs/inputValue"
+        },
+        "noOptionDefaultValue": {
+          "description": "Typed value used when a named input is present without an option value.",
+          "$ref": "#/$defs/inputValue"
+        },
+        "default": {
+          "description": "Serialized default value for the flag when it is omitted.",
+          "type": "string"
+        },
+        "changedDefault": {
+          "description": "Whether the effective default differs from the originally authored default.",
+          "type": "boolean"
+        },
+        "noOptionDefault": {
+          "description": "Serialized value applied when a boolean or string flag is present without an explicit option value. Use an empty string when no-option defaults are unsupported.",
+          "type": "string"
+        },
+        "repeatable": {
+          "description": "Whether the flag may be supplied multiple times on one invocation line.",
+          "type": "boolean"
+        },
+        "normalization": {
+          "description": "Optional value normalization applied after parsing. Use an empty string when no normalization is configured.",
+          "type": "string",
+          "enum": [
+            "",
+            "lowercase",
+            "trim",
+            "lowercase-trim"
+          ]
+        },
+        "completion": {
+          "description": "How shell completion values are sourced for this flag.",
+          "enum": [
+            "none",
+            "static",
+            "dynamic"
+          ]
+        },
+        "binding": {
+          "description": "Optional binding target for this flag. Use an empty string when the flag is not bound to another input surface.",
+          "type": "string"
+        },
+        "acceptedSources": {
+          "description": "Canonical sources permitted to supply this input.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "cli",
+              "stdin",
+              "environment",
+              "operator-config",
+              "manifest-default",
+              "factory-signature-default"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "handlerBindingId": {
+          "description": "Stable handler binding that receives the resolved input value.",
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "usage": {
+          "description": "Canonical help text for the flag.",
+          "type": "string",
+          "minLength": 1
+        },
+        "sensitivity": {
+          "description": "Whether observations may expose the resolved value.",
+          "enum": [
+            "public",
+            "sensitive"
+          ]
+        },
+        "visibility": {
+          "description": "Whether the flag is shown in default help output.",
+          "enum": [
+            "visible",
+            "hidden"
+          ]
+        },
+        "lifecycle": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "required": [
+                "default",
+                "changedDefault",
+                "noOptionDefault",
+                "binding"
+              ]
+            },
+            {
+              "required": [
+                "kind",
+                "minCardinality",
+                "maxCardinality",
+                "acceptedSources",
+                "handlerBindingId"
+              ],
+              "not": {
+                "anyOf": [
+                  { "required": ["default"] },
+                  { "required": ["changedDefault"] },
+                  { "required": ["noOptionDefault"] },
+                  { "required": ["binding"] }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "if": {
+            "properties": {
+              "scope": {
+                "const": "inherited"
+              }
+            },
+            "required": [
+              "scope"
+            ]
+          },
+          "then": {
+            "required": [
+              "inheritedFromInputId"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "inheritedFromInputId"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "noOptionDefault": {
+                "minLength": 1
+              }
+            },
+            "required": [
+              "noOptionDefault"
+            ]
+          },
+          "then": {
+            "properties": {
+              "valueType": {
+                "enum": [
+                  "bool",
+                  "string"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "valueType": {
+                "const": "bool"
+              },
+              "noOptionDefault": {
+                "minLength": 1
+              }
+            },
+            "required": [
+              "valueType",
+              "noOptionDefault"
+            ]
+          },
+          "then": {
+            "properties": {
+              "noOptionDefault": {
+                "enum": [
+                  "true",
+                  "false"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "repeatable": {
+                "const": true
+              }
+            },
+            "required": [
+              "repeatable"
+            ]
+          },
+          "then": {
+            "properties": {
+              "valueType": {
+                "const": "stringArray"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "inputValue": {
+      "description": "An explicitly typed scalar or repeated input value. The member name preserves the authored value kind without serialized reinterpretation.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "boolean": {
+          "type": "boolean"
+        },
+        "string": {
+          "type": "string"
+        },
+        "int": {
+          "type": "integer"
+        },
+        "int64": {
+          "type": "integer",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "stringArray": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "sourceBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source", "inputId"],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "source": {
+          "enum": ["stdin", "environment", "operator-config"]
+        },
+        "externalKey": {
+          "description": "Environment variable or operator-configuration key consumed by this binding.",
+          "type": "string",
+          "minLength": 1
+        },
+        "inputId": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"source": {"const": "stdin"}}, "required": ["source"]},
+          "then": {"not": {"required": ["externalKey"]}},
+          "else": {"required": ["externalKey"]}
+        }
+      ]
+    },
+    "handlerBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "inputId"],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "inputId": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        }
+      }
+    },
+    "participantRef": {
+      "description": "Stable reference to one flag or argument participant in a relationship group.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "description": "Whether the participant is a flag or positional argument on the same command.",
+          "enum": [
+            "flag",
+            "argument"
+          ]
+        },
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        }
+      }
+    },
+    "relationship": {
+      "description": "A deterministic input-constraint record. Group participants are unordered. Dependency and conditional records create directed edges from when to each participant. Equivalent same-kind records are duplicates; required-together contradicts exclusion over the same set, and a directed edge contradicts exclusion of its endpoints. Directed relationship edges must be acyclic.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "participants"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "kind": {
+          "description": "The parse-constraint relationship expressed by this record.",
+          "enum": [
+            "mutually-exclusive",
+            "required-together",
+            "at-least-one",
+            "dependency",
+            "conditional",
+            "conflict"
+          ]
+        },
+        "participants": {
+          "description": "Participant references constrained by this relationship. Group relationship participants are an unordered set. Dependency and conditional participants are targets of the input named by when.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/participantRef"
+          }
+        },
+        "when": {
+          "description": "Trigger participant for dependency and conditional relationships.",
+          "$ref": "#/$defs/participantRef"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "mutually-exclusive",
+                  "required-together",
+                  "at-least-one",
+                  "conflict"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "when"
+              ]
+            },
+            "properties": {
+              "participants": {
+                "minItems": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "dependency",
+                  "conditional"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "when"
+            ],
+            "properties": {
+              "participants": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "suggestion": {
+      "description": "Shell-completion and argument-suggestion metadata for one command.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minimumDistance": {
+          "description": "Minimum Levenshtein distance accepted when matching misspelled subcommands.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "disableDefaultCmd": {
+          "description": "Whether the default help subcommand suggestion is suppressed.",
+          "type": "boolean"
+        },
+        "validArgs": {
+          "description": "Static positional values accepted by the command when no dynamic completion is configured.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "usage": {
+      "description": "Invocation-line and example metadata rendered in help output.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "line"
+      ],
+      "properties": {
+        "line": {
+          "description": "The canonical usage template for the command.",
+          "type": "string",
+          "minLength": 1
+        },
+        "example": {
+          "description": "Optional multi-line example block rendered after the usage line.",
+          "type": "string"
+        }
+      }
+    },
+    "precedence": {
+      "description": "Canonical source resolution policy. Explicit named flags and positional arguments share the cli tier; selected-Factory defaults are the lowest tier.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "order",
+        "withinTier",
+        "acrossTiers",
+        "multipleBindings"
+      ],
+      "properties": {
+        "order": {
+          "description": "Input sources from highest to lowest precedence. Semantic validation requires this exact order.",
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "cli",
+              "stdin",
+              "environment",
+              "operator-config",
+              "manifest-default",
+              "factory-signature-default"
+            ]
+          }
+        },
+        "withinTier": {
+          "description": "Tie behavior for observations from one binding in invocation order.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["scalar", "repeated"],
+          "properties": {
+            "scalar": { "const": "last" },
+            "repeated": { "const": "append" }
+          }
+        },
+        "acrossTiers": {
+          "description": "A value from the highest populated tier replaces values from all lower tiers, including for repeated inputs.",
+          "const": "replace"
+        },
+        "multipleBindings": {
+          "description": "Multiple bindings in the same tier targeting one input are ambiguous and rejected.",
+          "const": "reject"
+        }
+      }
+    },
+    "channels": {
+      "description": "Invocation input and output channels exposed by one command.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input",
+        "output"
+      ],
+      "properties": {
+        "input": {
+          "description": "Input channels that may supply values for this command.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "cli",
+              "env",
+              "config",
+              "stdin"
+            ]
+          }
+        },
+        "output": {
+          "description": "Output channels that may receive values from this command.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "stdout",
+              "stderr",
+              "file"
+            ]
+          }
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "channel",
+        "format"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "channel": {
+          "description": "The output channel that carries this payload.",
+          "enum": [
+            "stdout",
+            "stderr",
+            "file"
+          ]
+        },
+        "format": {
+          "description": "The serialized payload format emitted on the channel.",
+          "enum": [
+            "text",
+            "json",
+            "yaml",
+            "binary"
+          ]
+        }
+      }
+    },
+    "exit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "code",
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "code": {
+          "description": "Process exit code returned for this outcome.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "kind": {
+          "description": "Semantic classification of the exit outcome.",
+          "enum": [
+            "success",
+            "failure",
+            "usage",
+            "cancel"
+          ]
+        }
+      }
+    },
+    "symbolicError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "code"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "code": {
+          "description": "Stable ErrorResponse code emitted for this failure.",
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        }
+      }
+    },
+    "sideEffect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "kind": {
+          "description": "The external surface touched by this side effect.",
+          "enum": [
+            "filesystem",
+            "network",
+            "process",
+            "config"
+          ]
+        }
+      }
+    },
+    "constraints": {
+      "description": "Runtime and platform constraints governing command execution.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime",
+        "platforms"
+      ],
+      "properties": {
+        "runtime": {
+          "description": "Supported runtime environments for this command.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "local",
+              "hosted",
+              "container"
+            ]
+          }
+        },
+        "platforms": {
+          "description": "Supported host platforms for this command.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "linux",
+              "darwin",
+              "windows"
+            ]
+          }
+        }
+      }
+    },
+    "handler": {
+      "description": "Stable handler identity and optional OpenAPI operation binding for one runnable command.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "operationId": {
+          "description": "Optional OpenAPI operationId bound to this handler.",
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+        }
+      }
+    }
+  }
+}

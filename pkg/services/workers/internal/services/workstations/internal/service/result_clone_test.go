@@ -55,8 +55,12 @@ func mutableWorkResultFixture() workers.WorkResult {
 				Type: work.WorkContentPartTypeJSON,
 				JSON: json.RawMessage(`{"answer":42}`),
 				Metadata: map[string]any{
-					"nested": map[string]any{"status": "original"},
-					"steps":  []any{"first", map[string]any{"name": "second"}},
+					"nested":     map[string]any{"status": "original"},
+					"steps":      []any{"first", map[string]any{"name": "second"}},
+					"labels":     map[string]string{"owner": "original"},
+					"categories": []string{"original"},
+					"raw":        json.RawMessage(`{"status":"original"}`),
+					"bytes":      []byte("original"),
 				},
 			}},
 			Tags: map[string]string{"owner": "original"},
@@ -99,6 +103,10 @@ func mutateWorkResult(result *workers.WorkResult, value string) {
 	item.Content[0].JSON[0] = '!'
 	item.Content[0].Metadata["nested"].(map[string]any)["status"] = value
 	item.Content[0].Metadata["steps"].([]any)[1].(map[string]any)["name"] = value
+	item.Content[0].Metadata["labels"].(map[string]string)["owner"] = value
+	item.Content[0].Metadata["categories"].([]string)[0] = value
+	item.Content[0].Metadata["raw"].(json.RawMessage)[0] = '!'
+	item.Content[0].Metadata["bytes"].([]byte)[0] = '!'
 	item.Tags["owner"] = value
 	result.FailureMetadata.Type = workers.WorkFailureTypeAuthFailure
 	result.ProviderSession.ID = value

@@ -87,6 +87,30 @@ func applyFlagContract(flag *pflag.Flag, contract climanifest.Flag) error {
 	return nil
 }
 
+func annotateStableInput(cmd *cobra.Command, contract climanifest.Flag) {
+	if cmd.Annotations == nil {
+		cmd.Annotations = make(map[string]string)
+	}
+	cmd.Annotations[genericInputAnnotationPrefix+contract.ID] = contract.Long
+}
+
+func flagBindingTarget(inputID string, targets map[string]any) (flagTarget, error) {
+	target, ok := targets[inputID]
+	if !ok {
+		return flagTarget{}, fmt.Errorf("stable input %q has no binding target", inputID)
+	}
+	switch typed := target.(type) {
+	case *bool:
+		return flagTarget{boolValue: typed}, nil
+	case *string:
+		return flagTarget{stringValue: typed}, nil
+	case *int:
+		return flagTarget{intValue: typed}, nil
+	default:
+		return flagTarget{}, fmt.Errorf("stable input %q has unsupported binding target %T", inputID, target)
+	}
+}
+
 func sortedFlags(flags map[string]climanifest.Flag) []climanifest.Flag {
 	if len(flags) == 0 {
 		return nil

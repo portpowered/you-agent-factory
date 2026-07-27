@@ -1,7 +1,6 @@
 package climanifestcobra_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
@@ -10,7 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
 )
 
@@ -114,7 +112,7 @@ func TestNewWorkFamilyCommandRegistersContractedFlagsAndArgs(t *testing.T) {
 	assertWorkVisualizeContractedFlags(t, work)
 }
 
-func TestNewWorkFamilyCommandAppliesBindingFlagUsages(t *testing.T) {
+func TestNewWorkFamilyCommandAppliesManifestFlagUsages(t *testing.T) {
 	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
 		ListRunE:      noopRunE,
 		ShowRunE:      noopRunE,
@@ -124,12 +122,23 @@ func TestNewWorkFamilyCommandAppliesBindingFlagUsages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWorkRegistry() error = %v", err)
 	}
-	bindings := testWorkBindings()
-	bindings.FlagUsages = map[string]string{
-		"session": "custom session help for parity",
-		"format":  "custom visualize format help",
-	}
-	work, err := climanifestcobra.NewWorkFamilyCommand(registry, bindings)
+	manifest := mustWorkFamilyManifest(t)
+	listRecord := manifest.Commands["you.work.list"]
+	listFlag := listRecord.Flags["you.work.list.flag.session"]
+	listFlag.Usage = "custom session help from manifest"
+	listRecord.Flags[listFlag.ID] = listFlag
+	manifest.Commands[listRecord.ID] = listRecord
+	visualizeRecord := manifest.Commands["you.work.visualize"]
+	formatFlag := visualizeRecord.Flags["you.work.visualize.flag.format"]
+	formatFlag.Usage = "custom visualize format help from manifest"
+	visualizeRecord.Flags[formatFlag.ID] = formatFlag
+	manifest.Commands[visualizeRecord.ID] = visualizeRecord
+
+	work, err := climanifestcobra.NewWorkFamilyCommandFromManifest(
+		manifest,
+		registry,
+		testWorkBindings(),
+	)
 	if err != nil {
 		t.Fatalf("NewWorkFamilyCommand() error = %v", err)
 	}
@@ -137,15 +146,15 @@ func TestNewWorkFamilyCommandAppliesBindingFlagUsages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindCommandByPath(work list) error = %v", err)
 	}
-	if got := list.Flags().Lookup("session").Usage; got != "custom session help for parity" {
-		t.Fatalf("session flag usage = %q, want custom binding usage", got)
+	if got := list.Flags().Lookup("session").Usage; got != "custom session help from manifest" {
+		t.Fatalf("session flag usage = %q, want custom manifest usage", got)
 	}
 	visualize, err := findCommandByPath(work, "work visualize")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(work visualize) error = %v", err)
 	}
-	if got := visualize.Flags().Lookup("format").Usage; got != "custom visualize format help" {
-		t.Fatalf("format flag usage = %q, want custom binding usage", got)
+	if got := visualize.Flags().Lookup("format").Usage; got != "custom visualize format help from manifest" {
+		t.Fatalf("format flag usage = %q, want custom manifest usage", got)
 	}
 }
 
@@ -341,17 +350,24 @@ func mustWorkFamilyTree(t *testing.T) (*cobra.Command, *commandregistry.Registry
 }
 
 func testWorkBindings() climanifestcobra.WorkFamilyBindings {
-	listCfg := workcli.ListConfig{Context: context.Background()}
-	showCfg := workcli.ShowConfig{Context: context.Background()}
-	moveCfg := workcli.MoveConfig{Context: context.Background()}
-	format := "mermaid"
-	return climanifestcobra.WorkFamilyBindings{
-		ListConfig:      &listCfg,
-		ShowConfig:      &showCfg,
-		MoveConfig:      &moveCfg,
-		VisualizeFormat: &format,
-	}
+	return climanifestcobra.WorkFamilyBindings{LocalTargets: map[string]any{
+		"you.work.list.flag.state-name":     testScalarTarget(""),
+		"you.work.list.flag.state-type":     testScalarTarget(""),
+		"you.work.list.flag.name":           testScalarTarget(""),
+		"you.work.list.flag.work-type-name": testScalarTarget(""),
+		"you.work.list.flag.trace-id":       testScalarTarget(""),
+		"you.work.list.flag.sort-by":        testScalarTarget(""),
+		"you.work.list.flag.max-results":    testScalarTarget(0),
+		"you.work.list.flag.next-token":     testScalarTarget(""),
+		"you.work.list.flag.session":        testScalarTarget(""),
+		"you.work.show.flag.session":        testScalarTarget(""),
+		"you.work.move.flag.session":        testScalarTarget(""),
+		"you.work.move.flag.request-id":     testScalarTarget(""),
+		"you.work.visualize.flag.format":    testScalarTarget("mermaid"),
+	}}
 }
+
+func testScalarTarget[T bool | string | int](value T) *T { return &value }
 
 func workPathForID(commandID string) string {
 	switch commandID {

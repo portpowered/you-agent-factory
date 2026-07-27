@@ -1476,18 +1476,6 @@
     },
     {
       "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestShardedUICoverageScriptSmoke_CleansStaleVitestReportBlobsBeforeShards"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestShardedUICoverageScriptSmoke_FailureReportsExactShardRerun"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestShardedUICoverageScriptSmoke_RunsAllShardsThenMerge"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
       "name": "TestUICoverageCommandSmoke_RunsPackageCoverageThenReplayCheck"
     },
     {

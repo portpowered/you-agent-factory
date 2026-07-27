@@ -10,6 +10,7 @@ export const REVIEWED_PACK_FILES = Object.freeze([
 	"generated/manifest.json",
 	"generated/openapi/openapi.yaml",
 	"generated/cli/commands.json",
+	"generated/cli/command-manifest.schema.json",
 	"generated/mcp/tools.json",
 	"generated/schemas/you-config.schema.json",
 	"generated/schemas/factory.schema.json",

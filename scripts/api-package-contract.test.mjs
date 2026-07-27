@@ -15,6 +15,8 @@ const expectedExports = {
 	"./manifest": "./generated/manifest.json",
 	"./openapi": "./generated/openapi/openapi.yaml",
 	"./cli": "./generated/cli/commands.json",
+	"./schemas/cli-command-manifest":
+		"./generated/cli/command-manifest.schema.json",
 	"./mcp": "./generated/mcp/tools.json",
 	"./schemas/you-config": "./generated/schemas/you-config.schema.json",
 	"./schemas/factory": "./generated/schemas/factory.schema.json",

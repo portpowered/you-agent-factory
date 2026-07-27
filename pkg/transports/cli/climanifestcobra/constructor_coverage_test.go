@@ -13,7 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
-	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/spf13/cobra"
 )
 
@@ -865,9 +864,9 @@ func TestNewRunServerFamilyComponentsRejectsMissingAndOutOfFamilyBindings(t *tes
 		t.Fatal("nil registry = nil, want error")
 	}
 	registry := mustRunServerRegistry(t)
-	bindings.Run = nil
+	bindings.LocalTargets = nil
 	if _, err := climanifestcobra.NewRunServerFamilyComponents(registry, bindings); err == nil {
-		t.Fatal("missing run binding = nil, want error")
+		t.Fatal("missing run/server local targets = nil, want error")
 	}
 
 	manifest, err := generated.RunSubmitFamilyManifest()
@@ -913,33 +912,31 @@ func mustRunServerRegistry(t *testing.T) *commandregistry.Registry {
 }
 
 func testRunServerBindings() climanifestcobra.RunServerFlagBindings {
-	runConfig := &runcli.RunConfig{}
-	output := ""
-	skipPermissions := false
-	return climanifestcobra.RunServerFlagBindings{
-		Run:                 runConfig,
-		RunInvocationOutput: &output,
-		RunLocalTargets: map[string]any{
-			"continuously": &runConfig.Continuously, "work": &runConfig.WorkFile,
-			"dir": &runConfig.Dir, "named": &runConfig.NamedFactoryName,
-			"factory": &runConfig.FactoryConfigPath, "record": &runConfig.RecordPath,
-			"no-record": &runConfig.DisableDefaultRecording, "replay": &runConfig.ReplayPath,
-			"runtime-log-dir":              &runConfig.RuntimeLogDir,
-			"runtime-log-max-size-mb":      &runConfig.RuntimeLogConfig.MaxSize,
-			"runtime-log-max-backups":      &runConfig.RuntimeLogConfig.MaxBackups,
-			"runtime-log-max-age-days":     &runConfig.RuntimeLogConfig.MaxAge,
-			"runtime-log-compress":         &runConfig.RuntimeLogConfig.Compress,
-			"runtime-metrics-dir":          &runConfig.RuntimeMetricsDir,
-			"runtime-metrics-max-size-mb":  &runConfig.RuntimeMetricsConfig.MaxSize,
-			"runtime-metrics-max-backups":  &runConfig.RuntimeMetricsConfig.MaxBackups,
-			"runtime-metrics-max-age-days": &runConfig.RuntimeMetricsConfig.MaxAge,
-			"runtime-metrics-compress":     &runConfig.RuntimeMetricsConfig.Compress,
-			"with-mock-workers":            &runConfig.MockWorkersConfigPath,
-			"with-server":                  &runConfig.WithServer, "with-site": &runConfig.WithSite,
-			"quiet": &runConfig.SuppressDashboardRendering, "output": &output,
-			"skip-permissions": &skipPermissions,
-		},
+	targets := map[string]any{}
+	for _, inputID := range []string{
+		"you.run.flag.work", "you.run.flag.dir", "you.run.flag.named",
+		"you.run.flag.factory", "you.run.flag.record", "you.run.flag.replay",
+		"you.run.flag.runtime-log-dir", "you.run.flag.runtime-metrics-dir",
+		"you.run.flag.with-mock-workers", "you.run.flag.output",
+	} {
+		targets[inputID] = testScalarTarget("")
 	}
+	for _, inputID := range []string{
+		"you.run.flag.continuously", "you.run.flag.no-record",
+		"you.run.flag.runtime-log-compress", "you.run.flag.runtime-metrics-compress",
+		"you.run.flag.with-server", "you.run.flag.with-site", "you.run.flag.quiet",
+		"you.run.flag.skip-permissions",
+	} {
+		targets[inputID] = testScalarTarget(false)
+	}
+	for _, inputID := range []string{
+		"you.run.flag.runtime-log-max-size-mb", "you.run.flag.runtime-log-max-backups",
+		"you.run.flag.runtime-log-max-age-days", "you.run.flag.runtime-metrics-max-size-mb",
+		"you.run.flag.runtime-metrics-max-backups", "you.run.flag.runtime-metrics-max-age-days",
+	} {
+		targets[inputID] = testScalarTarget(0)
+	}
+	return climanifestcobra.RunServerFlagBindings{LocalTargets: targets}
 }
 
 func replaceFlagSpelling(args []string, spelling string) []string {

@@ -23,14 +23,23 @@ async function openStory(browser, contextOptions) {
 async function emptyPanePoint(page) {
   const point = await page.locator(".react-flow__pane").evaluate((pane) => {
     const bounds = pane.getBoundingClientRect();
+    const candidates = [];
     for (let y = bounds.top + 80; y < bounds.bottom - 20; y += 40) {
       for (let x = bounds.left + 20; x < bounds.right - 20; x += 40) {
         if (document.elementFromPoint(x, y) === pane) {
-          return { x, y };
+          candidates.push({ x, y });
         }
       }
     }
-    return null;
+    const centerX = bounds.left + bounds.width / 2;
+    const centerY = bounds.top + bounds.height / 2;
+    return (
+      candidates.sort(
+        (left, right) =>
+          Math.hypot(left.x - centerX, left.y - centerY) -
+          Math.hypot(right.x - centerX, right.y - centerY),
+      )[0] ?? null
+    );
   });
 
   if (!point) {
@@ -50,6 +59,20 @@ async function viewportZoom(page) {
     const matrix = new DOMMatrix(getComputedStyle(viewport).transform);
     return matrix.a;
   });
+}
+
+async function waitForAnimationFrame(page) {
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => resolve())),
+  );
+}
+
+async function dispatchTouchMove(client, page, touchPoints) {
+  await client.send("Input.dispatchTouchEvent", {
+    touchPoints,
+    type: "touchMove",
+  });
+  await waitForAnimationFrame(page);
 }
 
 async function verifyTouchGestures(browser) {
@@ -107,10 +130,16 @@ async function verifyTouchGestures(browser) {
       touchPoints: [{ id: 1, x: point.x, y: point.y }],
       type: "touchStart",
     });
-    await client.send("Input.dispatchTouchEvent", {
-      touchPoints: [{ id: 1, x: point.x + 50, y: point.y + 40 }],
-      type: "touchMove",
-    });
+    await waitForAnimationFrame(page);
+    for (let step = 1; step <= 4; step += 1) {
+      await dispatchTouchMove(client, page, [
+        {
+          id: 1,
+          x: point.x + (50 * step) / 4,
+          y: point.y + (40 * step) / 4,
+        },
+      ]);
+    }
     await client.send("Input.dispatchTouchEvent", {
       touchPoints: [],
       type: "touchEnd",
@@ -130,13 +159,13 @@ async function verifyTouchGestures(browser) {
       ],
       type: "touchStart",
     });
-    await client.send("Input.dispatchTouchEvent", {
-      touchPoints: [
-        { id: 2, x: point.x, y: point.y },
-        { id: 3, x: point.x + 80, y: point.y },
-      ],
-      type: "touchMove",
-    });
+    await waitForAnimationFrame(page);
+    for (let step = 1; step <= 4; step += 1) {
+      await dispatchTouchMove(client, page, [
+        { id: 2, x: point.x + 20 - (20 * step) / 4, y: point.y },
+        { id: 3, x: point.x + 60 + (20 * step) / 4, y: point.y },
+      ]);
+    }
     await client.send("Input.dispatchTouchEvent", {
       touchPoints: [],
       type: "touchEnd",

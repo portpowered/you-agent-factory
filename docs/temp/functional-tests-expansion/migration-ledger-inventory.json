@@ -187,6 +187,26 @@
   ],
   "rows": [
     {
+      "source_path": "tests/functional/cli/root_discovery/root_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/cli/root_discovery",
+      "scenario": "TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/process/help_and_version_test.go",
+      "catch_all": "none",
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/acceptance/harness_smoke_test.go",
+      "package": "you-agent-factory/tests/functional/acceptance",
+      "scenario": "TestBuiltCLI_ConfigAndFactoryAuthoringUseAcceptedInputs",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/factory_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/acceptance/harness_smoke_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestBuiltCLI_HelpPrintsUsageAndExitsSuccessfully",
@@ -1169,6 +1189,16 @@
     {
       "source_path": "tests/functional/cli/root_discovery/root_discovery_test.go",
       "package": "you-agent-factory/tests/functional/cli/root_discovery",
+      "scenario": "TestRemovedInitInputFailsBeforeConfigurationMutation",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/flags_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/cli/root_discovery/root_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/cli/root_discovery",
       "scenario": "TestRunScopedSiteMissingCurrentFactoryFailsBeforeProductActivation",
       "lane": "short",
       "destination": "tests/functional/transport/cli/process/help_and_version_test.go",
@@ -1199,7 +1229,7 @@
     {
       "source_path": "tests/functional/cli/root_discovery/root_discovery_test.go",
       "package": "you-agent-factory/tests/functional/cli/root_discovery",
-      "scenario": "TestServerReadinessGatesBrowserAndCancellationJoinsOwnedServer",
+      "scenario": "TestServerNonTTYReadinessGatesBrowserAndCancellationJoinsOwnedServer",
       "lane": "short",
       "destination": "tests/functional/transport/cli/process/help_and_version_test.go",
       "catch_all": "none",
@@ -1899,6 +1929,16 @@
     {
       "source_path": "tests/functional/providers/cli_script_executor_test.go",
       "package": "you-agent-factory/tests/functional/providers",
+      "scenario": "TestScriptExecutor_CommandCancellationIsReported",
+      "lane": "short",
+      "destination": "tests/functional/workers/script/execution_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/cli_script_executor_test.go",
+      "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestScriptExecutor_Failure",
       "lane": "short",
       "destination": "tests/functional/workers/script/execution_test.go",
@@ -1910,6 +1950,26 @@
       "source_path": "tests/functional/providers/cli_script_executor_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestScriptExecutor_FailureRoutesToFailedPlace",
+      "lane": "short",
+      "destination": "tests/functional/workers/script/execution_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/cli_script_executor_test.go",
+      "package": "you-agent-factory/tests/functional/providers",
+      "scenario": "TestScriptExecutor_InvalidWorkstationTemplateFailsBeforeCommand",
+      "lane": "short",
+      "destination": "tests/functional/workers/script/execution_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/cli_script_executor_test.go",
+      "package": "you-agent-factory/tests/functional/providers",
+      "scenario": "TestScriptExecutor_MissingCommandFailsStartup",
       "lane": "short",
       "destination": "tests/functional/workers/script/execution_test.go",
       "catch_all": "none",
@@ -2272,6 +2332,46 @@
       "scenario": "TestRootBuiltProcessExecutesThroughSharedSupport",
       "lane": "short",
       "destination": "tests/functional/workers/inference/gemini/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/kiro/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/kiro",
+      "scenario": "TestKiroConductorResumeThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/kiro/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/kiro/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/kiro",
+      "scenario": "TestKiroConductorSuccessThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/kiro/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/kiro/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/kiro",
+      "scenario": "TestKiroNativeFailureThroughRootBuildProcessIsSafe",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/kiro/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/kiro/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/kiro",
+      "scenario": "TestKiroRejectsUnsupportedWorkingDirectoryBeforeProviderIO",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/kiro/golden_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -4659,36 +4759,6 @@
     {
       "source_path": "tests/functional/smoke/verify_fast_command_smoke_test.go",
       "package": "you-agent-factory/tests/functional/smoke",
-      "scenario": "TestShardedUICoverageScriptSmoke_CleansStaleVitestReportBlobsBeforeShards",
-      "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
-      "catch_all": "smoke",
-      "specialty_targets": "none",
-      "deletion_only_batch": "smoke-delete-13-wrong-layer"
-    },
-    {
-      "source_path": "tests/functional/smoke/verify_fast_command_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/smoke",
-      "scenario": "TestShardedUICoverageScriptSmoke_FailureReportsExactShardRerun",
-      "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
-      "catch_all": "smoke",
-      "specialty_targets": "none",
-      "deletion_only_batch": "smoke-delete-13-wrong-layer"
-    },
-    {
-      "source_path": "tests/functional/smoke/verify_fast_command_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/smoke",
-      "scenario": "TestShardedUICoverageScriptSmoke_RunsAllShardsThenMerge",
-      "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
-      "catch_all": "smoke",
-      "specialty_targets": "none",
-      "deletion_only_batch": "smoke-delete-13-wrong-layer"
-    },
-    {
-      "source_path": "tests/functional/smoke/verify_fast_command_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestUICoverageCommandSmoke_RunsPackageCoverageThenReplayCheck",
       "lane": "short",
       "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
@@ -4897,9 +4967,49 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/transport/run_scoped_server/run_scoped_server_test.go",
+      "package": "you-agent-factory/tests/functional/transport/run_scoped_server",
+      "scenario": "TestRunScopedServerRejectsRemoteBindTargetAtCLIBoundary",
+      "lane": "short",
+      "destination": "tests/functional/transport/http/server/startup_shutdown_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/run_scoped_server/run_scoped_server_test.go",
+      "package": "you-agent-factory/tests/functional/transport/run_scoped_server",
+      "scenario": "TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary",
+      "lane": "short",
+      "destination": "tests/functional/transport/http/server/startup_shutdown_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/run_scoped_server/run_scoped_server_test.go",
+      "package": "you-agent-factory/tests/functional/transport/run_scoped_server",
+      "scenario": "TestRunScopedServerUsesProductionListenerAndReportsFallback",
+      "lane": "short",
+      "destination": "tests/functional/transport/http/server/startup_shutdown_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/transport/server_binding/server_binding_test.go",
       "package": "you-agent-factory/tests/functional/transport/server_binding",
       "scenario": "TestBuiltExecutableFallsBackFromOccupiedLoopbackPortAndReportsActualURL",
+      "lane": "short",
+      "destination": "tests/functional/transport/http/server/startup_shutdown_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/server_binding/server_binding_test.go",
+      "package": "you-agent-factory/tests/functional/transport/server_binding",
+      "scenario": "TestBuiltExecutableServerInterruptExits130AndReleasesListener",
       "lane": "short",
       "destination": "tests/functional/transport/http/server/startup_shutdown_test.go",
       "catch_all": "none",
@@ -5657,45 +5767,45 @@
       "deletion_only_batch": "workflow-delete-05-workstations-repeater"
     }
   ],
-  "scanned_at_utc": "2026-07-24T02:17:19Z",
+  "scanned_at_utc": "2026-07-27T05:22:30Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 27,
       "guards_batch": 28,
-      "none": 195,
+      "none": 209,
       "replay_contracts": 24,
       "runtime_api": 108,
-      "smoke": 94,
+      "smoke": 91,
       "workflow": 71
     },
     "by_top_level_package": {
-      "acceptance": 13,
+      "acceptance": 14,
       "bootstrap_portability": 27,
-      "cli": 71,
+      "cli": 73,
       "factory": 4,
       "guards_batch": 28,
       "models": 5,
       "observability": 9,
       "operator_settings": 1,
       "product": 10,
-      "providers": 55,
+      "providers": 62,
       "replay_contracts": 24,
       "runtime_api": 108,
       "sessionparity": 13,
-      "smoke": 94,
-      "transport": 11,
+      "smoke": 91,
+      "transport": 15,
       "work": 1,
       "workers": 2,
       "workflow": 71
     },
-    "customer_top_level_Test_scenarios": 547,
-    "files_with_customer_Test": 185,
-    "functional_test_go_files": 224,
+    "customer_top_level_Test_scenarios": 558,
+    "files_with_customer_Test": 186,
+    "functional_test_go_files": 225,
     "helper_only_non_customer_files": 34,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 122,
-    "lane_short": 425
+    "lane_short": 436
   },
   "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. Non-catch-all rows mapped by FND-007-006; catch-all rows mapped by FND-007-003…005.",
   "runtime_api_mapping": {

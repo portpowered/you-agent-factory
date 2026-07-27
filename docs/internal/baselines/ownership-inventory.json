@@ -1478,7 +1478,7 @@
       "fromOwner": "transports",
       "toOwner": "factory_sessions",
       "class": "protocol_composition",
-      "evidence": "pkg/transports/cli/climanifestcobra -\u003e pkg/services/factory_sessions/transports/cli/session"
+      "evidence": "pkg/transports/cli/commandregistry -\u003e pkg/services/factory_sessions/transports/cli/session"
     },
     {
       "fromOwner": "transports",

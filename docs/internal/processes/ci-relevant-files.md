@@ -344,6 +344,9 @@ Wave 0 functional-tests-expansion planning authority lives under
   `normalizedFields`, and relative file pointers for request/process/stdout/
   stderr plus the three expected outputs. Diagnostics must name the case id and
   failing field or rule; pointer resolution must stay inside the case directory.
+  Reject slash-root pointers with `path.IsAbs` as well as native paths with
+  `filepath.IsAbs`, because Windows does not classify `/tmp/...` as an absolute
+  native path even though the portable manifest contract must reject it.
 - Provider-session golden sanitization (`ValidateProviderSessionCaseSanitization`
   / `ValidateProviderSessionFixtureContent`) rejects unsanitized fixture material
   with named categories: `credential`, `host-path`, `private-repo-url`,

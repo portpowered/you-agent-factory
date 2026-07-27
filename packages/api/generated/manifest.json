@@ -1,7 +1,37 @@
 {
   "exports": {
+    "generated.cli.command-manifest": {
+      "artifactHash": "6223f77257033566d5d4998babd8ebfdb8b986e534e5aa355b6dd96f645ccd1f",
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Published generated.cli.command-manifest contract as raw JSON or YAML data.",
+            "id": "generated.cli.command-manifest.description"
+          },
+          "title": {
+            "canonicalEnglish": "Published generated.cli.command-manifest contract",
+            "id": "generated.cli.command-manifest.title"
+          }
+        },
+        "examples": [
+          "generated/cli/command-manifest.schema.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "generated.cli.command-manifest",
+        "sourceHash": "6223f77257033566d5d4998babd8ebfdb8b986e534e5aa355b6dd96f645ccd1f",
+        "visibility": "public"
+      },
+      "family": "cli",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "generated.cli.command-manifest",
+        "since": "0.0.0",
+        "state": "active"
+      },
+      "path": "generated/cli/command-manifest.schema.json"
+    },
     "generated.cli.commands": {
-      "artifactHash": "7ffc979f91eb898e92c701d79b9824dfa76cc4921ba42905d52f860d15619da9",
+      "artifactHash": "e3b420102685756e1674c7783a8a98eb9c2206cbcf5acfd9954ce57427b07f69",
       "documentation": {
         "documentation": {
           "description": {
@@ -18,7 +48,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.cli.commands",
-        "sourceHash": "7ffc979f91eb898e92c701d79b9824dfa76cc4921ba42905d52f860d15619da9",
+        "sourceHash": "e3b420102685756e1674c7783a8a98eb9c2206cbcf5acfd9954ce57427b07f69",
         "visibility": "public"
       },
       "family": "cli",

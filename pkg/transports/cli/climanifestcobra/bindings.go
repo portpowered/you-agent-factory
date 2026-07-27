@@ -75,6 +75,25 @@ type GenericBindings struct {
 	GuardUnknownSubcommands bool
 }
 
+
+// InputChanged reports whether the CLI explicitly supplied a manifest input.
+// Callers identify the input only by stable ID; public flag spellings remain
+// private to the generated Cobra projection.
+func InputChanged(cmd *cobra.Command, inputID string) (bool, error) {
+	if cmd == nil {
+		return false, fmt.Errorf("read generic command input state: command is required")
+	}
+	longName, ok := cmd.Annotations[genericInputAnnotationPrefix+inputID]
+	if !ok {
+		return false, fmt.Errorf("read generic command input state %q: input is unavailable", inputID)
+	}
+	flag := lookupCommandFlag(cmd, longName)
+	if flag == nil {
+		return false, fmt.Errorf("read generic command input state %q: projected flag is unavailable", inputID)
+	}
+	return flag.Changed, nil
+}
+
 type persistentInputResolver struct {
 	definitions    []resolvedinput.Definition
 	defaults       []resolvedinput.Candidate

@@ -425,9 +425,10 @@ primary-result behavior.
 - Canonical metadata for `you.run`, `you.submit`, and `you.submit.batch` lives
   in `contracts/cli/commands.json`. Keep positional cardinality, stdin channels,
   source precedence, conflicts, no-option defaults, output modes, effects, and
-  stable handler/OpenAPI bindings aligned with the handwritten constructors in
+  stable handler/OpenAPI bindings aligned with the typed execution adapters in
   `pkg/transports/cli/root_work.go` and
-  `pkg/transports/cli/root_submit_batch.go`.
+  `pkg/transports/cli/root_submit_batch.go`. Local flag help also belongs in
+  the manifest; do not construct or scrape a secondary Cobra tree to supply it.
 - `pkg/transports/cli/climanifest/run_submit_validation.go` rejects incomplete
   or contradictory family records before generation. Update its focused
   validation cases whenever the supported family contract changes.
@@ -667,12 +668,13 @@ response-stream output.
   (`~/.you-agent-factory/recordings/...`) belongs in `pkg/config/defaultpaths`;
   `pkg/services/operator_settings` and `pkg/transports/cli/run` should keep only precedence,
   filename, and reporting behavior around those defaults.
-- When global named-factory guidance changes, update the handwritten CLI help in
-  `pkg/transports/cli/root_factory.go` and `root_work.go`, the authored
-  `contracts/cli/commands.json` records, and `docs/reference/authoring-factories.md`
-  plus `config.md`. Run `make cli-manifest-generate` and
-  `make contracts-generate` for derived CLI artifacts, then update intentional
-  CLI baselines and run `make docs-reference-smoke`.
+- When global named-factory guidance changes, update its authored
+  `contracts/cli/commands.json` records and the task-oriented guidance in
+  `docs/reference/authoring-factories.md` plus `config.md`; do not restore
+  handwritten command help in `root_factory.go` or `root_work.go`. Run
+  `make cli-manifest-generate` and `make contracts-generate` for the executable
+  and packaged projections, then update intentional CLI baselines and run
+  `make docs-reference-smoke`.
 - Persisted local `backendScopeID` values live in the same
   `~/.you-agent-factory/config.json` system config file. Keep load/generate/persist
   logic in `pkg/services/operator_settings`, inject the generated-model codec from
@@ -1009,7 +1011,16 @@ response-stream output.
   lives in `pkg/transports/cli/climanifestcobra` (`NewRepresentativeFamilyCommand`,
   `NewRepresentativeFamilyComponents`, `NewRepresentativeFamilyCommandFromManifest`)
   and builds only `you` → `you session` → `you session show` from embedded generated
-  metadata plus registry-attached handwritten handlers.
+  metadata plus registry-attached handwritten handlers. The generated work-family
+  constructor lives in the same package (`NewWorkFamilyCommand`,
+  `NewWorkFamilyComponents`, `NewWorkFamilyCommandFromManifest`) and builds
+  `you work` → `you work list|show|move|visualize` from embedded generated metadata
+  plus registry-attached handwritten handlers. Production root construction is
+  generated-only through `newRootCommandWithGeneratedRepresentativeFamily`;
+  deprecated handwritten command trees and constructor-parity interfaces have
+  been removed. Session, work, and submit local flag help is projected directly
+  from each manifest flag's `usage`; transport binding structs carry typed
+  values and operations, not presentation fallbacks.
 - The canonical detached Work-family seam is
   `climanifestcobra.NewResolvedWorkCommand`; focused execution can use
   `NewResolvedWorkCommandTree` or
@@ -1029,15 +1040,12 @@ response-stream output.
   `climanifestcobra.NewResolvedWorkCommand` plus a
   `commandregistry.ResolvedWorkHandlers` value built from the four resolved
   adapters; run root-level CLI parity and `root.BuildProcess` tests; then delete
-  `newWorkFamilyBindings`, `workFamilyFlagUsages`, the legacy Work registry and
-  live-binding constructor path (`WorkFamilyBindings`, `WorkFamilyComponents`,
-  `NewWorkFamilyCommand*`, and `NewWorkFamilyComponents*`), and any superseded
-  handwritten Work constructors. Do not perform only part of this deletion
-  before the root swap because the current production command still consumes
-  those compatibility symbols.
-- Production root construction is generated-only through
-  `newRootCommandWithGeneratedRepresentativeFamily`; deprecated handwritten
-  command trees and constructor-parity interfaces have been removed.
+  `newWorkFamilyBindings`, the legacy Work registry and live-binding constructor
+  path (`WorkFamilyBindings`, `WorkFamilyComponents`, `NewWorkFamilyCommand*`,
+  and `NewWorkFamilyComponents*`), and any superseded handwritten Work
+  constructors. Do not perform only part of this deletion before the root swap
+  because the current production command still consumes those compatibility
+  symbols.
 - Whole-production CLI closure is checked by `pkg/transports/cli/clicontract`
   and exposed through `cmd/clicontractsmoke` / `make cli-contract-smoke`.
   The same behavioral smoke is part of `make cli-manifest-check` and compares
@@ -1813,6 +1821,11 @@ response-stream output.
 - `docs/reference/config.md` and `docs/reference/sessions.md` are the packaged
   `you docs` reference topics for invocation input sources, return policy, and
   the session-scoped invocation API.
+- `docs/reference/agents.md` owns root discovery and the submitter-facing
+  liveness decision: bare `you` is successful side-effect-free help, while a
+  service intended for later `you submit` calls must start through `you server`
+  or a server-enabled run. Do not describe an ordinary serverless `you run` as
+  a listening submission target.
 - Dashboard current-factory decoding for signature-backed invocation widgets
   lives in `ui/src/api/factory-definition/api.ts` and
   `ui/src/api/current-factory-definition/api.test.ts`; keep exact
@@ -1861,6 +1874,27 @@ response-stream output.
   executable/manifest parity tests under `pkg/transports/cli/baseline` and
   `climanifestcobra` protect that seam. Keep source scanning out of the
   behavioral Go test suite.
+- Keep `retired-surface-check` focused on non-test production boundaries. For
+  manifest-owned root, session, work, submit, run, server, and Factory-authoring
+  families, it rejects handwritten `cobra.Command` presentation metadata,
+  direct Cobra/pflag public-input registration, and the retired CLI-shape
+  mirrors/functions. Generic projectors under `climanifestcobra` may register
+  parser storage only from manifest records. Test the lint diagnostic with
+  synthetic source fixtures; prove customer behavior separately through
+  `root.BuildProcess`, built-executable, and semantic contract tests.
+- Generated command-family handlers should translate invocation-local values
+  addressed by stable manifest input ID into a fresh typed transport config for
+  each execution. Do not retain shared config pointers as parser storage across
+  `application.Process.Execute` calls. When compatibility behavior depends on
+  whether a projected flag was explicitly supplied, use
+  `climanifestcobra.InputChanged` with the stable input ID so public spellings
+  remain private to the generated Cobra projection. Prove omitted and explicit
+  values on repeated executions through `root.BuildProcess`.
+- Retained family constructors that cannot yet use the generic command-tree
+  projector should bind Cobra only to scalar parser storage keyed by stable
+  input ID. Annotate those flags for `climanifestcobra.InputValues`, then map
+  the typed snapshot into a fresh domain-facing transport config in the handler;
+  never bind generated flags directly into a reusable request/config struct.
 - Raw JavaScript `you run --factory workflow.js` owns a standalone durable
   execution service rather than a Factory Runtime. When hosting that run, bind
   the same execution service to the generated HTTP/dashboard transport, gate
@@ -1877,11 +1911,14 @@ response-stream output.
   (Examples, Long text, or related inventory fields), refresh
   `contracts/testdata/baseline/cli-commands.json` with
   `UPDATE_CLI_BASELINES=1 go test ./pkg/transports/cli/commandidentity -run TestWriteProductionInventoryBaseline`,
-  then restage the packaged projection with `make contracts-generate` /
-  `make contracts-check` so `packages/api/generated/cli/commands.json` and the
-  package manifest stay byte-aligned. Prove with
-  `TestWalk_ProductionInventoryMatchesCommittedBaseline`. Do not hand-edit the
-  staged package copy out of band.
+  and prove it with `TestWalk_ProductionInventoryMatchesCommittedBaseline`.
+  That executable observation is evidence, not a publication source. The
+  package-facing CLI contract and its schema are byte-identical generated
+  projections of `contracts/cli/commands.json` and
+  `contracts/cli/command-manifest.schema.json`; refresh them with
+  `make contracts-generate` / `make contracts-check` and keep semantic parity
+  against generated families plus the `root.BuildProcess` observation in
+  `pkg/transports/cli/clicontract`. Do not hand-edit staged package copies.
 - After residual baseline/coverage fixes on a completed docs/models/mcp
   cutover, re-prove preserved public behavior with
   `make cli-manifest-check`, `make cli-contract-smoke`, focused

@@ -594,7 +594,7 @@ func assertSharedRunnerRequest(t *testing.T, runner *capturingCommandRunner, wan
 	if got.ProjectID != "analytics-platform" {
 		t.Fatalf("canonical dispatch project ID = %q, want analytics-platform", got.ProjectID)
 	}
-	commandTokens := CommandRequestInputTokens(got)
+	commandTokens := cloneInputTokens(got.InputTokens)
 	if len(commandTokens) != 1 || commandTokens[0].ID != "token-script" || commandTokens[0].Color.WorkID != "work-script" {
 		t.Fatalf("canonical dispatch input tokens = %#v", commandTokens)
 	}

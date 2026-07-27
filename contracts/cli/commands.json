@@ -1013,7 +1013,7 @@
           }
         },
         "examples": [
-          "you factory config expand"
+          "you factory config expand ./factory.json"
         ],
         "formatVersion": "1.0.0",
         "itemId": "you.factory.config.expand",
@@ -1302,7 +1302,7 @@
           }
         },
         "examples": [
-          "you factory config flatten"
+          "you factory config flatten ./factory"
         ],
         "formatVersion": "1.0.0",
         "itemId": "you.factory.config.flatten",
@@ -4543,6 +4543,7 @@
           "required": true,
           "scope": "local",
           "shorthand": "",
+          "usage": "folder path to open as a live factory session",
           "valueType": "string",
           "visibility": "visible"
         },
@@ -4566,6 +4567,7 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
+          "usage": "write the default init scaffold at --dir and open a live session",
           "valueType": "bool",
           "visibility": "visible"
         },
@@ -4613,6 +4615,7 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
+          "usage": "HTTP server port",
           "valueType": "int",
           "visibility": "visible"
         },
@@ -4660,6 +4663,7 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
+          "usage": "target kind when disambiguating runnable factories (default or named)",
           "valueType": "string",
           "visibility": "visible"
         },
@@ -4683,6 +4687,7 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
+          "usage": "named target when --target-kind is named",
           "valueType": "string",
           "visibility": "visible"
         },
@@ -4706,6 +4711,7 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
+          "usage": "validate the folder and optional target without creating a live session",
           "valueType": "bool",
           "visibility": "visible"
         },
@@ -5005,6 +5011,7 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
+          "usage": "HTTP server port",
           "valueType": "int",
           "visibility": "visible"
         },
@@ -5309,6 +5316,7 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
+          "usage": "filter by exact Dispatch phase",
           "valueType": "string",
           "visibility": "visible"
         },
@@ -5332,6 +5340,7 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
+          "usage": "deprecated; use --server",
           "valueType": "int",
           "visibility": "hidden"
         },
@@ -5379,6 +5388,7 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
+          "usage": "filter by canonical Dispatch status",
           "valueType": "string",
           "visibility": "visible"
         },
@@ -5660,6 +5670,7 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
+          "usage": "HTTP server port",
           "valueType": "int",
           "visibility": "visible"
         },
@@ -5683,6 +5694,7 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
+          "usage": "session list scope: live, persisted, or all",
           "valueType": "string",
           "visibility": "visible"
         },
@@ -5989,6 +6001,7 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
+          "usage": "deprecated; use --server",
           "valueType": "int",
           "visibility": "hidden"
         },
@@ -6295,6 +6308,7 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
+          "usage": "deprecated; use --server",
           "valueType": "int",
           "visibility": "hidden"
         },
@@ -6600,6 +6614,7 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
+          "usage": "deprecated; use --server",
           "valueType": "int",
           "visibility": "hidden"
         },
@@ -7080,6 +7095,7 @@
         "you.work.list.flag.state-name": {
           "id": "you.work.list.flag.state-name",
           "long": "state-name",
+          "usage": "filter by current state name",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -7103,6 +7119,7 @@
         "you.work.list.flag.state-type": {
           "id": "you.work.list.flag.state-type",
           "long": "state-type",
+          "usage": "filter by current state type (INITIAL, PROCESSING, TERMINAL, FAILED)",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -7126,6 +7143,7 @@
         "you.work.list.flag.name": {
           "id": "you.work.list.flag.name",
           "long": "name",
+          "usage": "filter by case-insensitive substring of work name (applied before pagination)",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -7149,6 +7167,7 @@
         "you.work.list.flag.work-type-name": {
           "id": "you.work.list.flag.work-type-name",
           "long": "work-type-name",
+          "usage": "filter by exact workTypeName (applied before pagination)",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -7172,6 +7191,7 @@
         "you.work.list.flag.trace-id": {
           "id": "you.work.list.flag.trace-id",
           "long": "trace-id",
+          "usage": "filter by exact traceId or currentChainingTraceId (applied before pagination)",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -7195,6 +7215,7 @@
         "you.work.list.flag.sort-by": {
           "id": "you.work.list.flag.sort-by",
           "long": "sort-by",
+          "usage": "sort returned work by field (state.type)",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -7218,6 +7239,7 @@
         "you.work.list.flag.max-results": {
           "id": "you.work.list.flag.max-results",
           "long": "max-results",
+          "usage": "maximum work items to return per page after server-side filters",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -7241,6 +7263,7 @@
         "you.work.list.flag.next-token": {
           "id": "you.work.list.flag.next-token",
           "long": "next-token",
+          "usage": "pagination cursor returned by a previous work list response",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -7264,6 +7287,7 @@
         "you.work.list.flag.port": {
           "id": "you.work.list.flag.port",
           "long": "port",
+          "usage": "deprecated; use --server",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -7287,6 +7311,7 @@
         "you.work.list.flag.session": {
           "id": "you.work.list.flag.session",
           "long": "session",
+          "usage": "target one live factory session; omit to use the default compatibility session",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -7591,6 +7616,7 @@
         "you.work.show.flag.port": {
           "id": "you.work.show.flag.port",
           "long": "port",
+          "usage": "deprecated; use --server",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -7614,6 +7640,7 @@
         "you.work.show.flag.session": {
           "id": "you.work.show.flag.session",
           "long": "session",
+          "usage": "target one live factory session; omit to use the default compatibility session",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -7936,6 +7963,7 @@
         "you.work.move.flag.port": {
           "id": "you.work.move.flag.port",
           "long": "port",
+          "usage": "deprecated; use --server",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -7959,6 +7987,7 @@
         "you.work.move.flag.request-id": {
           "id": "you.work.move.flag.request-id",
           "long": "request-id",
+          "usage": "optional client idempotency key for operator moves",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -7982,6 +8011,7 @@
         "you.work.move.flag.session": {
           "id": "you.work.move.flag.session",
           "long": "session",
+          "usage": "target one live factory session; omit to use the default compatibility session",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -8286,6 +8316,7 @@
         "you.work.visualize.flag.format": {
           "id": "you.work.visualize.flag.format",
           "long": "format",
+          "usage": "output format: mermaid or markdown-mermaid",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -8309,6 +8340,7 @@
         "you.work.visualize.flag.port": {
           "id": "you.work.visualize.flag.port",
           "long": "port",
+          "usage": "deprecated; use --server",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -11883,6 +11915,7 @@
           "you.submit.flag.name": {
             "id": "you.submit.flag.name",
             "long": "name",
+            "usage": "authored request name for the submitted work (required)",
             "shorthand": "",
             "aliases": [],
             "scope": "local",
@@ -11907,6 +11940,7 @@
           "you.submit.flag.payload": {
             "id": "you.submit.flag.payload",
             "long": "payload",
+            "usage": "path to payload file (.json or .md) (required)",
             "shorthand": "",
             "aliases": [],
             "scope": "local",
@@ -11931,6 +11965,7 @@
           "you.submit.flag.port": {
             "id": "you.submit.flag.port",
             "long": "port",
+            "usage": "deprecated; use --server",
             "shorthand": "",
             "aliases": [],
             "scope": "local",
@@ -11979,6 +12014,7 @@
           "you.submit.flag.session": {
             "id": "you.submit.flag.session",
             "long": "session",
+            "usage": "target one live factory session; omit to use the default compatibility session",
             "shorthand": "",
             "aliases": [],
             "scope": "local",
@@ -12027,6 +12063,7 @@
           "you.submit.flag.work-type-name": {
             "id": "you.submit.flag.work-type-name",
             "long": "work-type-name",
+            "usage": "work type name to submit to (required)",
             "shorthand": "",
             "aliases": [],
             "scope": "local",
@@ -12263,6 +12300,7 @@
           "you.submit.batch.flag.dry-run": {
             "id": "you.submit.batch.flag.dry-run",
             "long": "dry-run",
+            "usage": "validate input and print a summary without sending HTTP",
             "shorthand": "",
             "aliases": [],
             "scope": "local",
@@ -12287,6 +12325,7 @@
           "you.submit.batch.flag.file": {
             "id": "you.submit.batch.flag.file",
             "long": "file",
+            "usage": "read batch JSON from path; use - to read stdin (wins over a positional path)",
             "shorthand": "",
             "aliases": [],
             "scope": "local",
@@ -12335,6 +12374,7 @@
           "you.submit.batch.flag.port": {
             "id": "you.submit.batch.flag.port",
             "long": "port",
+            "usage": "deprecated; use --server",
             "shorthand": "",
             "aliases": [],
             "scope": "local",
@@ -12383,6 +12423,7 @@
           "you.submit.batch.flag.session": {
             "id": "you.submit.batch.flag.session",
             "long": "session",
+            "usage": "target one live factory session; omit to use the default compatibility session",
             "shorthand": "",
             "aliases": [],
             "scope": "local",

@@ -29,6 +29,9 @@ func TestGeneratedManifestAndConfigurationSchemasEnforceTheirPromisedContracts(t
 	manifestSchema := compileArtifactSchema(t, artifacts["packages/api/generated/joined/contracts/manifest.schema.json"])
 	assertArtifactValid(t, manifestSchema, artifacts["packages/api/generated/manifest.json"], true)
 
+	cliSchema := compileCLIArtifactSchema(t, artifacts)
+	assertArtifactValid(t, cliSchema, artifacts["packages/api/generated/cli/commands.json"], true)
+
 	cases := []struct {
 		path    string
 		valid   string
@@ -41,7 +44,7 @@ func TestGeneratedManifestAndConfigurationSchemasEnforceTheirPromisedContracts(t
 		},
 		{
 			path:    "packages/api/generated/schemas/factory.schema.json",
-			valid:   `{"name":"example"}`,
+			valid:   `{"name":"example","invocationSignature":{"parameters":[]}}`,
 			invalid: `{}`,
 		},
 		{
@@ -57,6 +60,43 @@ func TestGeneratedManifestAndConfigurationSchemasEnforceTheirPromisedContracts(t
 			assertArtifactValid(t, schema, []byte(test.invalid), false)
 		})
 	}
+}
+
+func compileCLIArtifactSchema(t *testing.T, artifacts map[string][]byte) *jsonschema.Schema {
+	t.Helper()
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	resources := []struct {
+		id   string
+		path string
+	}{
+		{
+			id:   "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json",
+			path: "packages/api/generated/joined/contracts/common/documentation.schema.json",
+		},
+		{
+			id:   "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json",
+			path: "packages/api/generated/joined/contracts/common/deprecations.schema.json",
+		},
+		{
+			id:   "https://schemas.portpowered.com/you/contracts/cli/command-manifest.schema.json",
+			path: "packages/api/generated/cli/command-manifest.schema.json",
+		},
+	}
+	for _, resource := range resources {
+		var document any
+		if err := json.Unmarshal(artifacts[resource.path], &document); err != nil {
+			t.Fatalf("decode %s: %v", resource.path, err)
+		}
+		if err := compiler.AddResource(resource.id, document); err != nil {
+			t.Fatalf("add %s: %v", resource.path, err)
+		}
+	}
+	schema, err := compiler.Compile(resources[len(resources)-1].id)
+	if err != nil {
+		t.Fatalf("compile published CLI schema: %v", err)
+	}
+	return schema
 }
 
 func compileArtifactSchema(t *testing.T, payload []byte) *jsonschema.Schema {
