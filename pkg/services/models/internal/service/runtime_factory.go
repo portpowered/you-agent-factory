@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -29,6 +30,8 @@ type Root struct {
 	runtimeTempFile localmodels.CreateTempFile
 	runtimeScopes   runtimescopes.Service
 	assets          scopedassets.Service
+	runtimeMu       sync.RWMutex
+	runtimeByScope  map[models.RuntimeScopeRef]models.Service
 	catalog         modelcatalog.Service
 	process         models.ProcessDependencies
 }
@@ -98,7 +101,8 @@ func NewRoot(
 		runtimeRunner: runtimeRunner, runtimeHTTP: runtimeHTTP,
 		runtimeInspect: runtimeInspect, runtimeTempDir: runtimeTempDir, runtimeTempFile: runtimeTempFile,
 		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
-		process: process,
+		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
+		process:        process,
 	}, nil
 }
 
@@ -123,6 +127,13 @@ func (o *Root) ForRuntime(binding models.RuntimeBinding) (models.Service, error)
 	if err != nil {
 		return nil, err
 	}
+	return o.runtimeForBindingWithAssets(binding, assets)
+}
+
+func (o *Root) runtimeForBindingWithAssets(
+	binding models.RuntimeBinding,
+	assets localmodels.AssetPuller,
+) (models.Service, error) {
 	localRuntime, err := localmodels.NewOmniVoiceRuntime(
 		o.runtimeRunner, o.runtimeHTTP, o.runtimeInspect, o.runtimeTempDir, o.runtimeTempFile,
 	)
@@ -148,13 +159,14 @@ func (o *Root) OpenRuntimeScope(
 		return models.OpenRuntimeScopeResult{}, err
 	}
 	config := request.Config.Clone()
-	ref, err := o.runtimeScopes.Open(models.RuntimeBinding{
+	binding := models.RuntimeBinding{
 		CacheDirectory: config.CacheDirectory,
 		RuntimeConfig: func() *models.RuntimeConfig {
 			runtimeConfig := config.Runtime
 			return &runtimeConfig
 		},
-	})
+	}
+	ref, err := o.runtimeScopes.Open(binding)
 	if err != nil {
 		return models.OpenRuntimeScopeResult{}, err
 	}
@@ -182,6 +194,9 @@ func (o *Root) CloseRuntimeScope(
 	if err != nil {
 		return models.CloseRuntimeScopeResult{}, runtimeScopeError(err)
 	}
+	o.runtimeMu.Lock()
+	delete(o.runtimeByScope, request.Scope)
+	o.runtimeMu.Unlock()
 	return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
 }
 
@@ -236,6 +251,20 @@ func (o *Root) PrepareModelAssets(
 		return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
 	}
 	return o.assets.PrepareModelAssets(ctx, request)
+}
+
+func (o *Root) PullModelForScope(
+	ctx context.Context,
+	request models.PullModelRequest,
+) (models.PullResult, error) {
+	if err := models.ValidatePullModelRequest(request); err != nil {
+		return models.PullResult{}, err
+	}
+	runtime, err := o.scopedRuntime(request.Scope)
+	if err != nil {
+		return models.PullResult{}, err
+	}
+	return runtime.PullModel(ctx, request.Name)
 }
 
 func (o *Root) InspectModelAssets(
@@ -335,8 +364,63 @@ func (o *Root) ReleaseLease(context.Context, models.ReleaseLeaseRequest) error {
 	return missingDependencyError("Models runtime binding")
 }
 
-func (o *Root) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
-	return models.LocalInvocationResult{}, missingDependencyError("Models runtime binding")
+func (o *Root) InvokeLocal(
+	ctx context.Context,
+	request models.LocalInvocationRequest,
+) (models.LocalInvocationResult, error) {
+	runtime, err := o.scopedRuntime(request.Scope)
+	if err != nil {
+		return models.LocalInvocationResult{}, err
+	}
+	return runtime.InvokeLocal(ctx, request)
+}
+
+func (o *Root) scopedRuntime(scope models.RuntimeScopeRef) (models.Service, error) {
+	return o.scopedRuntimeWithBuilder(scope, func(binding models.RuntimeBinding) (models.Service, error) {
+		assets, err := localmodels.NewScopedAssetPuller(o.assets, scope)
+		if err != nil {
+			return nil, err
+		}
+		return o.runtimeForBindingWithAssets(binding, assets)
+	})
+}
+
+func (o *Root) scopedRuntimeWithBuilder(
+	scope models.RuntimeScopeRef,
+	builder func(models.RuntimeBinding) (models.Service, error),
+) (models.Service, error) {
+	if o == nil || o.runtimeScopes == nil {
+		return nil, models.ErrUnsupportedOperation
+	}
+	if scope.IsZero() {
+		return nil, models.ErrRuntimeScopeInvalid
+	}
+	binding, err := o.runtimeScopes.Resolve(runtimescopes.Reference(scope.String()))
+	if err != nil {
+		return nil, runtimeScopeError(err)
+	}
+	o.runtimeMu.RLock()
+	runtime := o.runtimeByScope[scope]
+	o.runtimeMu.RUnlock()
+	if runtime != nil {
+		return runtime, nil
+	}
+	runtime, err = builder(binding)
+	if err != nil {
+		return nil, err
+	}
+	o.runtimeMu.Lock()
+	if _, err := o.runtimeScopes.Resolve(runtimescopes.Reference(scope.String())); err != nil {
+		o.runtimeMu.Unlock()
+		return nil, runtimeScopeError(err)
+	}
+	if existing := o.runtimeByScope[scope]; existing != nil {
+		runtime = existing
+	} else {
+		o.runtimeByScope[scope] = runtime
+	}
+	o.runtimeMu.Unlock()
+	return runtime, nil
 }
 
 func newRuntimeWithHostEdges(
@@ -448,6 +532,16 @@ func (s *runtimeService) PrepareModelAssets(
 	models.PrepareModelAssetsRequest,
 ) (models.PrepareModelAssetsResult, error) {
 	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *runtimeService) PullModelForScope(
+	ctx context.Context,
+	request models.PullModelRequest,
+) (models.PullResult, error) {
+	if err := models.ValidatePullModelRequest(request); err != nil {
+		return models.PullResult{}, err
+	}
+	return s.PullModel(ctx, request.Name)
 }
 
 func (s *runtimeService) InspectModelAssets(

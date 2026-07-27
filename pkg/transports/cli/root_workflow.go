@@ -19,15 +19,9 @@ func newSessionHandlerRegistry(
 		return nil, err
 	}
 	return commandregistry.NewSessionResolvedRegistry(manifest, commandregistry.SessionResolvedServices{
-		CreateSession:  options.CreateSession,
-		DeleteSession:  options.DeleteSession,
-		ListSessions:   options.ListSessions,
-		ShowSession:    options.ShowSession,
-		ListDispatches: options.ListSessionDispatches,
-		PauseSession:   options.PauseSession,
-		ResumeSession:  options.ResumeSession,
-		PrepareList:    sessionListPrepare(options),
-		Diagnostics:    diagnostics.writer,
+		Sessions:    options.SessionsCLI,
+		PrepareList: sessionListPrepare(options),
+		Diagnostics: diagnostics.writer,
 	})
 }
 

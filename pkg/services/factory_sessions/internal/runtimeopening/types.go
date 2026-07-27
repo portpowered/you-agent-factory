@@ -5,7 +5,6 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	"github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -27,7 +26,7 @@ func assembleRuntimeProducts(
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	workService work.Service,
 	workerService workers.Service,
-	modelService models.Service,
+	modelsBind modelsRuntimeBind,
 	providerSessions providersessions.Service,
 	startup factoryruntime.HostedInstance,
 	lifecycle roles.LifecycleRuntime,
@@ -37,11 +36,12 @@ func assembleRuntimeProducts(
 	directory string,
 	runtimeInstanceID string,
 	backendScopeID string,
+	closeResources func() error,
 ) runtimeProducts {
 	workerPrompts, _ := workerService.(workers.PromptTemplates)
 	inputResolver, _ := sessionInvocation.(roles.InvocationInputResolver)
 	resources := roles.RuntimeResources{
-		Logger: startup.RuntimeLogger(), Close: startup.CloseArtifacts,
+		Logger: startup.RuntimeLogger(), Close: closeResources,
 		Diagnostics: startup.RuntimeDiagnostics(),
 	}
 	resources.Directory = directory
@@ -51,7 +51,8 @@ func assembleRuntimeProducts(
 		FactoryRuntime: factoryRuntime, FactoryDefinitions: factoryDefinitions,
 		WorkflowPreview: workflowPreview,
 		FactorySessions: factorySessionGateway, SessionInvocation: sessionInvocation,
-		SessionExecution: factorySessionGateway, Work: workService, Models: modelService,
+		SessionExecution: factorySessionGateway, Work: workService,
+		Models: modelsBind.Root, ModelsScope: modelsBind.Scope,
 		Workers: workerService, ProviderSessions: providerSessions,
 		WorkerPrompts: workerPrompts, Logger: resources.Logger,
 	}
@@ -67,7 +68,7 @@ func assembleRuntimeProducts(
 			Workers: workerService, Sessions: factorySessionGateway,
 			Invoker: sessionInvocation, InputResolver: inputResolver,
 			Execution: factorySessionGateway, Lifecycle: lifecycle,
-			CloseArtifacts: startup.CloseArtifacts,
+			CloseArtifacts: closeResources,
 		},
 		execution: roles.OpenedExecutionRuntime{
 			Execution: factorySessionGateway, WorkflowPreview: workflowPreview,

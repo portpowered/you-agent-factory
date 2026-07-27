@@ -248,6 +248,23 @@ func (fake *peerRootServiceFake) BindRecording(
 	}, nil
 }
 
+func (fake *peerRootServiceFake) StartRecording(
+	request recordings.StartRecordingRequest,
+) (recordings.StartRecordingResult, error) {
+	if !request.Enabled {
+		return recordings.StartRecordingResult{}, nil
+	}
+	bound, err := fake.BindRecording(recordings.BindRecordingRequest{
+		RecordingID: request.RecordingID,
+		Artifact:    request.Target.Artifact,
+		Scope:       request.Scope,
+	})
+	if err != nil {
+		return recordings.StartRecordingResult{}, err
+	}
+	return recordings.StartRecordingResult{Enabled: true, Status: bound.Status}, nil
+}
+
 func (fake *peerRootServiceFake) RecordRecordingEvent(
 	request recordings.RecordRecordingEventRequest,
 ) (recordings.RecordRecordingEventResult, error) {
@@ -299,6 +316,18 @@ func (fake *peerRootServiceFake) FlushRecording(
 		session.flushedThrough = &cursor
 	}
 	return recordings.FlushRecordingResult{
+		Status: peerRecordingStatus(request.RecordingID, session),
+	}, nil
+}
+
+func (fake *peerRootServiceFake) StopRecording(
+	request recordings.StopRecordingRequest,
+) (recordings.StopRecordingResult, error) {
+	session, err := fake.recordingSession(request.RecordingID)
+	if err != nil {
+		return recordings.StopRecordingResult{}, err
+	}
+	return recordings.StopRecordingResult{
 		Status: peerRecordingStatus(request.RecordingID, session),
 	}, nil
 }

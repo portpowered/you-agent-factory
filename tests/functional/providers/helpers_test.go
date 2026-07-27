@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -333,4 +334,38 @@ func cursorMergedPrompt(systemPrompt, userMessage string) string {
 	default:
 		return "System instructions:\n" + systemPrompt + "\n\nUser request:\n" + userMessage
 	}
+}
+
+func assertCursorProviderCompleted(t *testing.T, listed factoryapi.ListWorkResponse) {
+	t.Helper()
+	assertSessionPlaces(t, listed, map[string]int{
+		"task:complete": 1, "task:init": 0, "task:failed": 0,
+	})
+}
+
+func assertSessionPlaces(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
+	t.Helper()
+	for placeID, want := range wants {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
+}
+
+func assertDispatchOutput(t *testing.T, events []factoryapi.FactoryEvent, want string) {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch response: %v", err)
+		}
+		if payload.Output == nil || *payload.Output != want {
+			t.Fatalf("dispatch output = %#v, want %q", payload.Output, want)
+		}
+		return
+	}
+	t.Fatalf("Factory Event history has no dispatch response: %#v", events)
 }

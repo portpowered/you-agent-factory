@@ -169,11 +169,6 @@
     },
     {
       "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_throttle_failure_regression_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_unified_event_log_smoke_test.go",
       "target": "tests/functional/runtime_api"
     },
@@ -459,11 +454,6 @@
     },
     {
       "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_ootb_experience_smoke_long_test.go",
-      "target": "TestOOTBExperience_APIStatusStaysQueryableAcrossCompletion"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_packaged_deep_research_invocation_test.go",
       "target": "TestSessionInvocationAPI_PackagedDeepResearchUsesMaterializedFactorySource"
     },
@@ -606,11 +596,6 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_submit_runtime_work_trace_shaping_smoke_test.go",
       "target": "TestSubmitRuntimeWork_EmitsCanonicalTraceAwareBatchEvent"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_throttle_failure_regression_test.go",
-      "target": "TestRetryableThrottleFailureWithoutGuardUsesDefaultRetryLimitAndFailsWork"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -1034,26 +1019,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/providers/cli_worktree_passthrough_test.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/providers/codex_content_test.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/providers/codex_worktree_workstation_test.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/providers/cursor_provider_command_test.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/providers/doc.go",
       "target": "providers"
     },
@@ -1294,11 +1259,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_submit_batch_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/cli_work_move_smoke_test.go",
       "target": "smoke"
     },
@@ -1379,16 +1339,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/stateless_collector_long_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/stateless_execution_long_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/stateless_loaded_config_smoke_long_test.go",
       "target": "smoke"
     },
@@ -1396,11 +1346,6 @@
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/verify_fast_command_smoke_test.go",
       "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/batch_ideation_pipeline_test.go",
-      "target": "workflow"
     },
     {
       "rule": "functional-test-missing-subsection",
@@ -1425,11 +1370,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/dispatcher_lifecycle_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/dispatcher_workflow_long_test.go",
       "target": "workflow"
     },
     {
@@ -1545,16 +1485,6 @@
     {
       "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/cli/dynamic_workflows/dynamic_workflow_run_test.go",
-      "target": "cli"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/cli/factory_run/events/events_test.go",
-      "target": "cli"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/cli/factory_run/events/javascript_test.go",
       "target": "cli"
     },
     {
@@ -1816,6 +1746,41 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_visualization/service.go",
       "target": "New"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/assets_contract.go",
+      "target": "ValidatePullModelRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/catalog_contract.go",
+      "target": "ValidateGetModelRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/host_contract.go",
+      "target": "ValidateAcquireLeaseRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/host_contract.go",
+      "target": "ValidateInspectRuntimeRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/host_contract.go",
+      "target": "ValidateReleaseLeaseRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/local_execution_contract.go",
+      "target": "ValidateLocalInvocationRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/runtime_config_contract.go",
+      "target": "ValidateRuntimeBinding"
     },
     {
       "rule": "service-root-exported-function",
@@ -2513,41 +2478,6 @@
       "target": "pkg/services/models/host_diagnostics_contract.go:HostDiagnosticLogger,pkg/services/models/host_diagnostics_contract.go:HostMetricsRecorder,pkg/services/models/invocation_artifacts.go:InvocationArtifactExporter,pkg/services/models/invocation_artifacts.go:InvocationArtifactFileSystem,pkg/services/models/managed_runtime_contract.go:InvocationReadinessError,pkg/services/models/runtime_construction_contract.go:AssetHTTPDoer,pkg/services/models/runtime_construction_contract.go:HostClock,pkg/services/models/runtime_construction_contract.go:HostHTTPDoer,pkg/services/models/runtime_construction_contract.go:HostManagedProcess,pkg/services/models/runtime_construction_contract.go:HostProcessLauncher,pkg/services/models/runtime_construction_contract.go:HostTimer,pkg/services/models/runtime_construction_contract.go:RuntimeHTTPDoer,pkg/services/models/runtime_construction_contract.go:RuntimeTempFile,pkg/services/models/service_contract.go:PullMetricsRecorder,pkg/services/models/service_contract.go:Service"
     },
     {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/assets_contract.go",
-      "target": "ValidatePullModelRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/catalog_contract.go",
-      "target": "ValidateGetModelRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/host_contract.go",
-      "target": "ValidateInspectRuntimeRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/host_contract.go",
-      "target": "ValidateAcquireLeaseRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/host_contract.go",
-      "target": "ValidateReleaseLeaseRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/local_execution_contract.go",
-      "target": "ValidateLocalInvocationRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/runtime_config_contract.go",
-      "target": "ValidateRuntimeBinding"
-    },
-    {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/operator_settings",
       "target": "pkg/services/operator_settings/dependencies.go:FileSystem,pkg/services/operator_settings/dependencies.go:TemporaryFile"
@@ -3047,5 +2977,6 @@
       "filePath": "pkg/services/workers/worktree",
       "target": "pkg/services/workers"
     }
-  ]
+  ],
+  "violations": []
 }

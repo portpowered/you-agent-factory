@@ -116,6 +116,13 @@ func (*runtimeScopePeerService) PullModel(context.Context, string) (models.PullR
 	return models.PullResult{}, models.ErrUnsupportedOperation
 }
 
+func (s *runtimeScopePeerService) PullModelForScope(
+	ctx context.Context,
+	request models.PullModelRequest,
+) (models.PullResult, error) {
+	return s.PullModel(ctx, request.Name)
+}
+
 func (*runtimeScopePeerService) InspectRuntime(context.Context, string) (models.Runtime, error) {
 	return models.Runtime{}, models.ErrUnsupported
 }
@@ -284,6 +291,13 @@ func TestRuntimeScope_ReferenceCarriesAcrossScopeBoundRequests(t *testing.T) {
 }
 
 type unsupportedRuntimeScopePeer struct{}
+
+func (unsupportedRuntimeScopePeer) PullModelForScope(
+	context.Context,
+	models.PullModelRequest,
+) (models.PullResult, error) {
+	return models.PullResult{}, models.ErrUnsupportedOperation
+}
 
 func (unsupportedRuntimeScopePeer) OpenRuntimeScope(
 	context.Context,

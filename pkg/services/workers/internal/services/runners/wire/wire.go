@@ -59,6 +59,7 @@ func NewInferenceRegistry(
 				[]models.LocalResource(nil),
 				config.Resources...,
 			),
+			Scope: config.Scope,
 		},
 		inference.Dependencies{
 			Models:   dependencies.Models,
@@ -77,7 +78,8 @@ func NewInferenceRegistry(
 // that projects managed-runtime invocation ahead of the supplied delegate.
 func NewInferenceCompositionRunner(
 	inner workers.Runner,
-	modelsService runners.InferenceLocalInvoker,
+	modelsService inference.LocalInvoker,
+	modelsScope models.RuntimeScopeRef,
 	worker *interfaces.FactoryWorkerConfig,
 	resources []interfaces.ResourceConfig,
 ) workers.Runner {
@@ -88,6 +90,7 @@ func NewInferenceCompositionRunner(
 		runners.InferenceConfig{
 			Worker:    inference.WorkerFromFactory(worker),
 			Resources: inference.ResourcesFromFactory(resources),
+			Scope:     modelsScope,
 		},
 		runners.InferenceDependencies{
 			Models:   modelsService,

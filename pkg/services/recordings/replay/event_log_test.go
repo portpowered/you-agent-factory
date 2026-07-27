@@ -933,6 +933,51 @@ func TestRecorder_StopJoinsPeriodicFlushLoop(t *testing.T) {
 	recorder.Stop()
 }
 
+type countingReplayStorage struct {
+	writes int
+	data   []byte
+}
+
+func (storage *countingReplayStorage) WriteFile(_ string, data []byte) error {
+	storage.writes++
+	storage.data = append([]byte(nil), data...)
+	return nil
+}
+
+func (storage *countingReplayStorage) ReadFile(string) ([]byte, error) {
+	return append([]byte(nil), storage.data...), nil
+}
+
+func TestRecorder_FinalizeOwnsOneTerminalSequence(t *testing.T) {
+	t.Parallel()
+
+	storage := &countingReplayStorage{}
+	artifact := testReplayArtifact(t)
+	recorder, err := NewRecorder(storage, "recording:finalize", artifact, time.Hour)
+	if err != nil {
+		t.Fatalf("NewRecorder: %v", err)
+	}
+	recorder.Start(context.Background())
+	finishedAt := time.Date(2026, 7, 27, 19, 15, 0, 0, time.UTC)
+
+	if err := recorder.Finalize(finishedAt); err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if err := recorder.Finalize(finishedAt.Add(time.Hour)); err != nil {
+		t.Fatalf("repeated Finalize: %v", err)
+	}
+
+	if storage.writes != 1 || len(storage.data) == 0 {
+		t.Fatalf("terminal writes = %d (%d bytes), want one", storage.writes, len(storage.data))
+	}
+	if artifact.WallClock == nil || !artifact.WallClock.FinishedAt.Equal(finishedAt) {
+		t.Fatalf("finished metadata = %#v, want %s", artifact.WallClock, finishedAt)
+	}
+	if got := replayEventIndexByID(artifact.Events, replayRunFinishedEventID); got < 0 {
+		t.Fatalf("terminal event index = %d, want appended event", got)
+	}
+}
+
 func loadReplayArtifactForTest(t *testing.T, path string) *interfaces.ReplayArtifact {
 	t.Helper()
 	loaded, err := Load(testReplayStorage(), path, testFactorySnapshotDecoder)

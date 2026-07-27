@@ -283,6 +283,12 @@ func (testModelsService) GetModel(context.Context, string) (models.Detail, error
 func (testModelsService) PullModel(context.Context, string) (models.PullResult, error) {
 	return models.PullResult{}, nil
 }
+func (testModelsService) PullModelForScope(
+	context.Context,
+	models.PullModelRequest,
+) (models.PullResult, error) {
+	return models.PullResult{}, nil
+}
 func (testModelsService) InspectRuntime(context.Context, string) (models.Runtime, error) {
 	return models.Runtime{}, nil
 }

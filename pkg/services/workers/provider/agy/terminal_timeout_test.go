@@ -144,8 +144,8 @@ func assertTimeoutErrorDraft(t *testing.T, errorDraft factorysessions.ResponseEv
 	if err := factorysessions.ValidateResponseEventDraft(errorDraft); err != nil {
 		t.Fatalf("timeout error draft invalid: %v", err)
 	}
-	if errorDraft.Kind != factorysessions.ResponseEventKindError || errorDraft.Phase != factorysessions.ResponseEventPhaseUpdated {
-		t.Fatalf("timeout error draft = %#v, want ERROR/UPDATED", errorDraft)
+	if errorDraft.Kind != factorysessions.ResponseEventKindError || errorDraft.Phase != factorysessions.ResponseEventPhaseFailed {
+		t.Fatalf("timeout error draft = %#v, want ERROR/FAILED", errorDraft)
 	}
 	if errorDraft.Provenance.NativeEventType != "session_timeout" {
 		t.Fatalf("timeout error native type = %q, want session_timeout", errorDraft.Provenance.NativeEventType)

@@ -101,14 +101,24 @@ func (i *Integration) Invoke(
 		CommandError:  runErr,
 	})
 	if classified.Failure != nil {
+		if err := writeKiroFailureProgress(ctx, writer, request.InvocationID(), *classified.Failure); err != nil {
+			return err
+		}
 		return writer.Close(ctx, inference.FailedCompletion(
 			failureFromKiroFacts(*classified.Failure, resultSession),
 		))
 	}
 	if runErr != nil {
+		facts := adapter.FailureFacts{
+			Type:    workerexecution.WorkFailureTypeUnknown,
+			Message: "Kiro invocation failed.",
+		}
+		if err := writeKiroFailureProgress(ctx, writer, request.InvocationID(), facts); err != nil {
+			return err
+		}
 		return writer.Close(ctx, inference.FailedCompletion(inference.NewFailure(inference.FailureInput{
 			Kind:    inference.FailureUnknown,
-			Message: "Kiro invocation failed.",
+			Message: facts.Message,
 		})))
 	}
 
@@ -169,6 +179,39 @@ func kiroRequestFromInvocation(request inference.InvocationRequest) workerexecut
 		providerRequest.SessionID = session.ID()
 	}
 	return providerRequest
+}
+
+func writeKiroFailureProgress(
+	ctx context.Context,
+	writer inference.ResponseWriter,
+	runID string,
+	facts adapter.FailureFacts,
+) error {
+	payload, err := json.Marshal(workerexecution.ErrorPayload{
+		Code:      string(facts.Type),
+		Message:   facts.Message,
+		Retryable: facts.Retry.Retryable,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal Kiro failure payload: %w", err)
+	}
+	event, err := inference.NewEventDraft(inference.EventDraftInput{
+		RunID:   runID,
+		Kind:    workerexecution.KindError,
+		Phase:   workerexecution.PhaseFailed,
+		Payload: payload,
+		Provenance: workerexecution.Provenance{
+			Delivery:        workerexecution.DeliverySynthesized,
+			Fidelity:        workerexecution.FidelityLifecycleOnly,
+			NativeEventType: "provider_failure",
+			Provider:        providerIdentity,
+			Representation:  workerexecution.RepresentationNotification,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	return writer.WriteEvent(ctx, event)
 }
 
 func writeFinalOnlyProgress(

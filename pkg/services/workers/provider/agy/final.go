@@ -76,7 +76,7 @@ func timeoutTerminalFailureDrafts(input adapter.FinalParseContext, terminal *ter
 func timeoutErrorDraft(input adapter.FinalParseContext, terminal *terminalError) responseevents.Draft {
 	return responseevents.Draft{
 		RunID: input.RunID, DispatchID: input.DispatchID,
-		Kind: responseevents.KindError, Phase: responseevents.PhaseUpdated,
+		Kind: responseevents.KindError, Phase: responseevents.PhaseFailed,
 		Provenance: responseevents.Provenance{
 			Provider: string(modelprovider.ProviderAgy), NativeEventType: "session_timeout",
 			Delivery: responseevents.DeliverySynthesized, Representation: responseevents.RepresentationNotification,

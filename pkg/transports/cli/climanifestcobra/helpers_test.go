@@ -65,11 +65,10 @@ func TestSessionResolvedLifecyclePreservesTargetingOutputAndDiagnostics(t *testi
 				}
 				return sessionTestResponse(http.StatusOK, test.response), nil
 			})
-			services := commandregistry.SessionResolvedServices{
-				PauseSession:  sessioncli.NewPause(protocol),
-				ResumeSession: sessioncli.NewResume(protocol),
-				Diagnostics:   func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() },
-			}
+			services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+				Pause:  sessioncli.NewPause(protocol),
+				Resume: sessioncli.NewResume(protocol),
+			}, nil, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 			stdout, stderr, err := executeResolvedSessionWithOutput(t, services, test.args...)
 			if err != nil {
 				t.Fatalf("Execute(%v) error = %v", test.args, err)
@@ -88,16 +87,16 @@ func TestSessionResolvedLifecyclePreservesTargetingOutputAndDiagnostics(t *testi
 
 func TestSessionResolvedLifecycleRejectsCardinalityAndPreservesFailures(t *testing.T) {
 	calls := 0
-	services := commandregistry.SessionResolvedServices{
-		PauseSession: func(sessioncli.LifecycleControlConfig) error {
+	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+		Pause: func(sessioncli.LifecycleControlConfig) error {
 			calls++
 			return nil
 		},
-		ResumeSession: func(sessioncli.LifecycleControlConfig) error {
+		Resume: func(sessioncli.LifecycleControlConfig) error {
 			calls++
 			return nil
 		},
-	}
+	}, nil, nil)
 	for _, operation := range []string{"pause", "resume"} {
 		stdout, _, err := executeResolvedSessionWithOutput(
 			t, services, "session", operation, "session-alpha", "session-beta",
@@ -122,16 +121,16 @@ func TestSessionResolvedLifecycleRejectsCardinalityAndPreservesFailures(t *testi
 	}{
 		{
 			name: "pause failure", args: []string{"session", "pause", "session-alpha"},
-			services: commandregistry.SessionResolvedServices{
-				PauseSession: func(sessioncli.LifecycleControlConfig) error { return operationFailure },
-			},
+			services: commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+				Pause: func(sessioncli.LifecycleControlConfig) error { return operationFailure },
+			}, nil, nil),
 			want: operationFailure,
 		},
 		{
 			name: "resume cancellation", args: []string{"session", "resume", "dur-sess-review-001"},
-			services: commandregistry.SessionResolvedServices{
-				ResumeSession: func(sessioncli.LifecycleControlConfig) error { return context.Canceled },
-			},
+			services: commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+				Resume: func(sessioncli.LifecycleControlConfig) error { return context.Canceled },
+			}, nil, nil),
 			want: context.Canceled,
 		},
 	} {

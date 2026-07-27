@@ -2,12 +2,14 @@ package replay
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 const (
@@ -33,6 +35,18 @@ type Recorder struct {
 	done     chan struct{}
 	version  int64
 	flushed  int64
+
+	finalizeOnce sync.Once
+	finalizeErr  error
+}
+
+// BindRecordingService rejects use of the legacy replay recorder as a
+// production lifecycle authority.
+func (*Recorder) BindRecordingService(
+	recordings.Service,
+	recordings.CanonicalEventScope,
+) error {
+	return fmt.Errorf("legacy replay recorder cannot bind the Recordings root")
 }
 
 // NewRecorder constructs a recorder for an existing artifact shell.
@@ -188,6 +202,20 @@ func (r *Recorder) Err() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.flushErr
+}
+
+// Finalize owns the terminal recording sequence so runtime callers cannot
+// accidentally reorder stop, terminal metadata, and the final flush.
+func (r *Recorder) Finalize(finishedAt time.Time) error {
+	if r == nil {
+		return nil
+	}
+	r.finalizeOnce.Do(func() {
+		r.Stop()
+		r.Finish(finishedAt)
+		r.finalizeErr = errors.Join(r.Flush(), r.Err())
+	})
+	return r.finalizeErr
 }
 
 func (r *Recorder) flushLoop(ctx context.Context, interval time.Duration) {

@@ -1,0 +1,1 @@
+{"error":{"status":"INVALID_ARGUMENT","message":"The selected response schema is invalid."}}

@@ -123,7 +123,13 @@ func (p *assetPuller) ResolveModelCache(ctx context.Context, _ *models.RuntimeCo
 	}, nil
 }
 
-func (p *assetPuller) InspectRuntimeCache(ctx context.Context, _ *models.RuntimeConfig, modelName string) (RuntimeCacheInspection, error) {
+func (p *assetPuller) InspectRuntimeCache(ctx context.Context, runtimeCfg *models.RuntimeConfig, modelName string) (RuntimeCacheInspection, error) {
+	if runtimeCfg == nil {
+		return RuntimeCacheInspection{}, fmt.Errorf("runtime config is not available")
+	}
+	if modelScopedResource(runtimeCfg, modelName) == nil {
+		return RuntimeCacheInspection{}, nil
+	}
 	scope, err := p.currentScope()
 	if err != nil {
 		return RuntimeCacheInspection{}, err

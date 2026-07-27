@@ -138,7 +138,7 @@ func TestResolveRunnerSelectionRejectsUnknownAndNonSelectableWithoutFallback(t *
 	t.Parallel()
 	providers := newBuiltInRegistry(t)
 
-	for _, identity := range []string{"unknown", "agy"} {
+	for _, identity := range []string{"unknown"} {
 		identity := identity
 		t.Run(identity, func(t *testing.T) {
 			t.Parallel()

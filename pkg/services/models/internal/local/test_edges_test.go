@@ -82,3 +82,24 @@ func TestNewScopedAssetPullerRequiresServiceAndScope(t *testing.T) {
 		t.Fatal("NewScopedAssetPuller returned nil")
 	}
 }
+
+func TestScopedAssetPullerSkipsCacheInspectionWithoutLocalModelResource(t *testing.T) {
+	t.Parallel()
+
+	runtimeConfig := mustLoadedCatalogConfig(t, catalogFactoryConfig(false))
+	puller, err := newAssetPullerForTest(t, t.TempDir(), runtimeConfig)
+	if err != nil {
+		t.Fatalf("newAssetPullerForTest: %v", err)
+	}
+	inspection, err := puller.InspectRuntimeCache(
+		t.Context(),
+		runtimeConfig,
+		"OMNIVOICE_Q4_K_M",
+	)
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	if inspection.Supported || inspection.Installed || inspection.CachePath != "" {
+		t.Fatalf("InspectRuntimeCache = %#v, want unsupported empty facts", inspection)
+	}
+}
