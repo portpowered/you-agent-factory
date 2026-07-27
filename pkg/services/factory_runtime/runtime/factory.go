@@ -46,13 +46,13 @@ type TickableFactory interface {
 // factoryImpl is the concrete Factory implementation.
 type factoryImpl struct {
 	engine       *engine.FactoryEngine
-	pool         dispatchPool
 	cfg          *runtimeConfig
 	topology     *state.Net
 	logger       logging.Logger
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]
-	dispatchHook *workerPoolDispatchResultHook
+	dispatchFlow *dispatchPlanningResultHook
 	dispatchPlan dispatchplanning.Service
+	workers      *runtimeWorkersBoundary
 	eventHistory recordings.RuntimeLedger
 	state        interfaces.FactoryState
 	startedAt    time.Time
@@ -63,7 +63,6 @@ type factoryImpl struct {
 	completeCh           chan struct{}
 	completeOnce         sync.Once
 	runCancel            context.CancelFunc
-	usePool              bool
 	operatorMoveRequests map[string]appliedOperatorMove
 	resumeDrainPending   bool
 }
@@ -77,6 +76,7 @@ type runtimeConfig struct {
 	net                       *state.Net
 	scheduler                 scheduler.Scheduler
 	workerExecutors           map[string]workers.WorkerExecutor
+	workerService             workstationExecutionBoundary
 	runtimeConfig             interfaces.RuntimeDefinitionLookup
 	workflowContext           *factory_context.FactoryContext
 	runtimeMode               interfaces.RuntimeMode
@@ -111,6 +111,7 @@ func New(
 	net *state.Net,
 	runtimeScheduler scheduler.Scheduler,
 	workerExecutors map[string]workers.WorkerExecutor,
+	workerService workstationExecutionBoundary,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	workflowContext *factory_context.FactoryContext,
 	runtimeMode interfaces.RuntimeMode,
@@ -148,6 +149,9 @@ func New(
 	if newID == nil {
 		return nil, fmt.Errorf("a Factory Runtime ID generator is required")
 	}
+	if workerService == nil {
+		return nil, fmt.Errorf("a canonical Workers workstation service is required")
+	}
 	if runtimeMode == "" {
 		runtimeMode = interfaces.RuntimeModeBatch
 	}
@@ -155,6 +159,7 @@ func New(
 		net:                       net,
 		scheduler:                 runtimeScheduler,
 		workerExecutors:           workerExecutors,
+		workerService:             workerService,
 		runtimeConfig:             runtimeDefinitions,
 		workflowContext:           workflowContext,
 		runtimeMode:               runtimeMode,
@@ -183,13 +188,12 @@ func New(
 	marking := buildRuntimeMarking(cfg)
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
-	usePool := !cfg.inlineDispatch
-	pool, dispatchHook, dispatchResultHook, dispatchPlan := configureRuntimeDispatch(
-		cfg, effectiveLogger, resultBuffer, usePool,
+	dispatchResultHook, dispatchPlan, workersBoundary := configureRuntimeDispatch(
+		cfg, resultBuffer,
 	)
 	impl := newFactoryImpl(
-		cfg, nil, pool, effectiveLogger, resultBuffer, dispatchHook,
-		dispatchPlan, effectiveEventHistory, usePool,
+		cfg, nil, effectiveLogger, resultBuffer,
+		dispatchResultHook, dispatchPlan, workersBoundary, effectiveEventHistory,
 	)
 	var recordPetriMutations func([]interfaces.TokenMutationRecord) error
 	if cfg.petriMutationRecorder != nil {
@@ -402,76 +406,58 @@ func (f *factoryImpl) recordSessionLifecycleResume() {
 
 func configureRuntimeDispatch(
 	cfg *runtimeConfig,
-	logger logging.Logger,
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult],
-	usePool bool,
 ) (
-	dispatchPool,
-	*workerPoolDispatchResultHook,
-	factory.DispatchResultHook,
+	*dispatchPlanningResultHook,
 	dispatchplanning.Service,
+	*runtimeWorkersBoundary,
 ) {
-	var delegate factory.DispatchResultHook
-	var pool dispatchPool
-	var poolHook *workerPoolDispatchResultHook
-	if !usePool {
-		delegate = newInlineDispatchResultHook(
-			cfg.net,
-			cfg.workerExecutors,
-			cfg.clock,
-			resultBuffer,
-		)
-	} else {
-		workersPool := newWorkerPool(logger, cfg.clock)
-		for typ, exec := range cfg.workerExecutors {
-			workersPool.Register(typ, exec)
-		}
-		pool = workersPool
-		poolHook = newWorkerPoolDispatchResultHook(
-			cfg.net,
-			workersPool,
-			cfg.workerExecutors,
-			logger,
-			defaultRuntimeBufferSize,
-			cfg.completionDeliveryPlanner,
-			cfg.clock,
-		)
-		delegate = poolHook
-	}
+	workersBoundary := newRuntimeWorkersBoundary(
+		cfg.workerService,
+		cfg.net,
+		cfg.workerExecutors,
+		!cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil,
+	)
+	var resultHook *dispatchPlanningResultHook
 	planner := dispatchplanningwire.New(
 		func(ctx context.Context, request workers.WorkstationDispatchRequest) error {
-			return delegate.SubmitDispatch(ctx, request.Execution.Dispatch)
+			return workersBoundary.Publish(ctx, request, resultHook.acceptWorkersResult)
 		},
-		nil,
+		workersBoundary.Cancel,
 	)
-	return pool, poolHook, newDispatchPlanningResultHook(planner, delegate, cfg.net), planner
+	resultHook = newCanonicalDispatchPlanningResultHook(
+		planner,
+		cfg.net,
+		resultBuffer,
+		cfg.completionDeliveryPlanner,
+		sessionIDFromFactoryConfig(cfg),
+	)
+	return resultHook, planner, workersBoundary
 }
 
 func newFactoryImpl(
 	cfg *runtimeConfig,
 	eng *engine.FactoryEngine,
-	pool dispatchPool,
 	logger logging.Logger,
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult],
-	dispatchHook *workerPoolDispatchResultHook,
+	dispatchFlow *dispatchPlanningResultHook,
 	dispatchPlan dispatchplanning.Service,
+	workersBoundary *runtimeWorkersBoundary,
 	eventHistory recordings.RuntimeLedger,
-	usePool bool,
 ) *factoryImpl {
 	return &factoryImpl{
 		engine:               eng,
-		pool:                 pool,
 		cfg:                  cfg,
 		topology:             cfg.net,
 		logger:               logger,
 		resultBuffer:         resultBuffer,
-		dispatchHook:         dispatchHook,
+		dispatchFlow:         dispatchFlow,
 		dispatchPlan:         dispatchPlan,
+		workers:              workersBoundary,
 		eventHistory:         eventHistory,
 		state:                interfaces.FactoryStateIdle,
 		clock:                cfg.clock,
 		completeCh:           make(chan struct{}),
-		usePool:              usePool,
 		operatorMoveRequests: make(map[string]appliedOperatorMove),
 	}
 }
@@ -502,45 +488,42 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 		f.mu.Unlock()
 	}()
 
-	if f.usePool {
-		f.pool.Start()
-		f.dispatchHook.Start(engCtx)
-	}
-
 	// The engine's Run returns when shouldTerminate is true (from
 	// TerminationCheck) or context is cancelled. No doneCh select needed.
-	err := f.engine.Run(engCtx)
+	runErr := f.engine.Run(engCtx)
+	stopReason := dispatchplanning.RuntimeStopReasonTerminated
+	if errors.Is(runErr, context.Canceled) || ctx.Err() != nil {
+		stopReason = dispatchplanning.RuntimeStopReasonCancelled
+	}
+	stopErr := f.stopDispatchRuntime(ctx, stopReason)
 
 	f.mu.Lock()
 	previousState = f.state
 	nextState := interfaces.FactoryStateCompleted
-	if err == nil || errors.Is(err, context.Canceled) {
+	if (runErr == nil || errors.Is(runErr, context.Canceled)) && stopErr == nil {
 		f.state = interfaces.FactoryStateCompleted
 		f.logger.Info("factory run completed")
 	} else {
 		f.state = interfaces.FactoryStateFailed
 		nextState = interfaces.FactoryStateFailed
-		f.logger.Info("factory run completed with error", "error", err)
+		f.logger.Info("factory run completed with error", "error", errors.Join(runErr, stopErr))
 	}
 	f.mu.Unlock()
 	f.recordStateChange(previousState, nextState, "run stopped")
 	runStopReason := ""
-	if err != nil && !errors.Is(err, context.Canceled) {
-		runStopReason = err.Error()
+	finalErr := errors.Join(runErr, stopErr)
+	if finalErr != nil && !(errors.Is(runErr, context.Canceled) && stopErr == nil) {
+		runStopReason = finalErr.Error()
 	}
 	tick := f.engine.GetRuntimeStateSnapshot().TickCount
 	completedAt := f.clock.Now()
 	f.eventHistory.RecordRunResponse(tick, nextState, runStopReason, completedAt)
 	recordSessionLifecycleCompletionFromFactory(f, tick, nextState, runStopReason, completedAt)
 
-	if f.usePool {
-		f.pool.Stop()
-	}
-
-	if errors.Is(err, context.Canceled) {
+	if errors.Is(runErr, context.Canceled) && stopErr == nil {
 		return nil
 	}
-	return err
+	return finalErr
 }
 
 // SubmitWorkRequest injects a canonical work request batch idempotently.

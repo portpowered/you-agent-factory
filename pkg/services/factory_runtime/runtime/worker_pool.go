@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/rootobservation"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -22,6 +24,159 @@ type dispatchPool interface {
 	ResultCh() <-chan workerexecution.WorkResult
 	Start()
 	Stop()
+}
+
+// workstationExecutionBoundary is the exact canonical Workers role used by
+// one Factory Runtime. Runtime plans identities and observes results; Workers
+// owns route admission, capacity, executor invocation, and cancellation.
+type workstationExecutionBoundary interface {
+	StartWorkstationPool(context.Context, workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error)
+	StopWorkstationPool(context.Context) (workers.WorkstationPoolStopResult, error)
+	DispatchWorkstation(context.Context, workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error)
+	CancelWorkstationDispatch(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
+}
+
+type runtimeWorkersBoundary struct {
+	service  workstationExecutionBoundary
+	bindings []workers.AssembledRuntimeBinding
+	async    bool
+	started  bool
+	stopped  bool
+	mu       sync.Mutex
+}
+
+type workerExecutorRequestAdapter struct {
+	executors map[string]workers.WorkerExecutor
+}
+
+func (a workerExecutorRequestAdapter) Execute(
+	ctx context.Context,
+	request workers.WorkstationExecutionRequest,
+) (result workerexecution.WorkResult, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			result = workerexecution.WorkResult{
+				DispatchID: request.Dispatch.DispatchID, TransitionID: request.Dispatch.TransitionID,
+				Outcome: workerexecution.OutcomeFailed,
+				Error:   fmt.Sprintf("executor panic: %v", recovered),
+			}
+			err = nil
+		}
+	}()
+	workerType := request.WorkerType
+	if workerType == "" {
+		workerType = request.Dispatch.WorkerType
+	}
+	executor := a.executors[workerType]
+	if executor == nil {
+		return workerexecution.WorkResult{}, fmt.Errorf(
+			"no executor registered for worker type %q",
+			workerType,
+		)
+	}
+	return executor.Execute(ctx, request.Dispatch)
+}
+
+func newRuntimeWorkersBoundary(
+	service workstationExecutionBoundary,
+	net *state.Net,
+	executors map[string]workers.WorkerExecutor,
+	async bool,
+) *runtimeWorkersBoundary {
+	routes := make(map[string]struct{})
+	if net != nil {
+		for id, transition := range net.Transitions {
+			routes[id] = struct{}{}
+			if transition != nil && transition.Name != "" {
+				routes[transition.Name] = struct{}{}
+			}
+		}
+	}
+	names := make([]string, 0, len(routes))
+	for name := range routes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	adapter := workerExecutorRequestAdapter{executors: executors}
+	bindings := make([]workers.AssembledRuntimeBinding, 0, len(names))
+	for _, name := range names {
+		bindings = append(bindings, workers.AssembledRuntimeBinding{
+			RoleName: name,
+			RoleKind: workers.RuntimeBuildRoleKindWorkstation,
+			Executor: adapter,
+		})
+	}
+	return &runtimeWorkersBoundary{
+		service: service, bindings: bindings, async: async,
+	}
+}
+
+func (b *runtimeWorkersBoundary) Start(ctx context.Context) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.started {
+		return nil
+	}
+	if b.stopped {
+		return workers.ErrWorkstationPoolStopped
+	}
+	if b.service == nil {
+		return workers.ErrWorkstationPoolUnavailable
+	}
+	if _, err := b.service.StartWorkstationPool(
+		ctx,
+		workers.WorkstationPoolStartRequest{
+			Bindings: append([]workers.AssembledRuntimeBinding(nil), b.bindings...),
+		},
+	); err != nil {
+		return err
+	}
+	b.started = true
+	return nil
+}
+
+func (b *runtimeWorkersBoundary) Publish(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	accept func(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchResult, error),
+) error {
+	if err := b.Start(ctx); err != nil {
+		return err
+	}
+	execute := func() {
+		result, err := b.service.DispatchWorkstation(context.WithoutCancel(ctx), request)
+		accept(context.Background(), request, result, err)
+	}
+	if b.async {
+		go execute()
+		return nil
+	}
+	execute()
+	return nil
+}
+
+func (b *runtimeWorkersBoundary) Cancel(
+	ctx context.Context,
+	request workers.WorkstationDispatchCancelRequest,
+) (workers.WorkstationDispatchCancelResult, error) {
+	if b.service == nil {
+		return workers.WorkstationDispatchCancelResult{}, workers.ErrWorkstationPoolUnavailable
+	}
+	return b.service.CancelWorkstationDispatch(ctx, request)
+}
+
+func (b *runtimeWorkersBoundary) Stop(ctx context.Context) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.stopped || !b.started {
+		b.stopped = true
+		return nil
+	}
+	_, err := b.service.StopWorkstationPool(ctx)
+	if err == nil {
+		b.stopped = true
+	}
+	return err
 }
 
 func (f *factoryImpl) ControlPause(ctx context.Context, _ factory.PauseRequest) (factory.PauseResult, error) {
@@ -50,7 +205,7 @@ func (f *factoryImpl) ControlResume(ctx context.Context, _ factory.ResumeRequest
 	return factory.ResumeResult{Outcome: outcome}, nil
 }
 
-func (f *factoryImpl) ControlTerminate(_ context.Context, req factory.TerminateRequest) (factory.TerminateResult, error) {
+func (f *factoryImpl) ControlTerminate(ctx context.Context, req factory.TerminateRequest) (factory.TerminateResult, error) {
 	f.mu.Lock()
 	state := f.state
 	switch state {
@@ -64,14 +219,35 @@ func (f *factoryImpl) ControlTerminate(_ context.Context, req factory.TerminateR
 		f.recordStateChange(state, interfaces.FactoryStateCompleted, req.Reason)
 		if cancel != nil {
 			cancel()
-		} else {
+		}
+		stopErr := f.stopDispatchRuntime(ctx, dispatchplanning.RuntimeStopReasonTerminated)
+		if cancel == nil {
 			f.completeOnce.Do(func() { close(f.completeCh) })
 		}
-		return factory.TerminateResult{Outcome: factory.ControlOutcomeAccepted}, nil
+		return factory.TerminateResult{Outcome: factory.ControlOutcomeAccepted}, stopErr
 	default:
 		f.mu.Unlock()
 		return factory.TerminateResult{}, factory.ErrNotRunning
 	}
+}
+
+func (f *factoryImpl) stopDispatchRuntime(
+	ctx context.Context,
+	reason dispatchplanning.RuntimeStopReason,
+) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	var stopErr error
+	if f.dispatchPlan != nil {
+		stopErr = f.dispatchPlan.Stop(stopCtx, reason)
+	}
+	if f.workers != nil {
+		stopErr = errors.Join(stopErr, f.workers.Stop(stopCtx))
+	}
+	return stopErr
 }
 
 func (f *factoryImpl) ControlWaitToComplete(_ factory.WaitToCompleteRequest) factory.WaitToCompleteResult {
@@ -171,7 +347,7 @@ func (f *factoryImpl) AcceptDispatchResult(
 	ctx context.Context,
 	req factory.AcceptDispatchResultRequest,
 ) (factory.AcceptDispatchResultResult, error) {
-	if err := f.requireActiveDispatchRuntime(); err != nil {
+	if err := f.requireDispatchResultRuntime(); err != nil {
 		return factory.AcceptDispatchResultResult{}, err
 	}
 	if f.dispatchPlan == nil {
@@ -187,12 +363,10 @@ func (f *factoryImpl) AcceptDispatchResult(
 	if err != nil {
 		return factory.AcceptDispatchResultResult{}, err
 	}
-	retired, err := f.dispatchPlan.Retire(ctx, dispatchplanning.TerminalResult{
-		DispatchID:    req.DispatchID,
-		CorrelationID: req.CorrelationID,
-		WorkID:        req.WorkID,
-		Outcome:       outcome,
-	})
+	if f.dispatchFlow == nil {
+		return factory.AcceptDispatchResultResult{}, factory.ErrCapabilityUnavailable
+	}
+	retired, err := f.dispatchFlow.acceptRootResult(ctx, req, outcome)
 	if err != nil {
 		return factory.AcceptDispatchResultResult{}, mapDispatchPlanningError(err)
 	}
@@ -201,6 +375,19 @@ func (f *factoryImpl) AcceptDispatchResult(
 		DispatchID:    retired.DispatchID,
 		CorrelationID: retired.CorrelationID,
 	}, nil
+}
+
+func (f *factoryImpl) requireDispatchResultRuntime() error {
+	f.mu.RLock()
+	state := f.state
+	f.mu.RUnlock()
+	switch state {
+	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle,
+		interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
+		return nil
+	default:
+		return factory.ErrNotRunning
+	}
 }
 
 func (f *factoryImpl) requireActiveDispatchRuntime() error {
