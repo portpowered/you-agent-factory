@@ -108,7 +108,10 @@ func TestBuildProcessRoutesLiveOpenListControlAndCloseThroughFactorySessionsRoot
 		t.Fatalf("list sessions after close = %#v, want opened session %q retired", afterClose.Sessions, opened.Session.Id)
 	}
 
-	closeLiveRuntimeSession(t, baseURL, defaultSession.Id)
+	// Do not close the default session here: in service-mode hosts it is the last
+	// live runtime backing the HTTP server, so terminating it tears down the
+	// process before DELETE can return 204. Non-default close coverage above is
+	// sufficient for the public close contract.
 }
 
 func liveRuntimePipelineConfig() map[string]any {

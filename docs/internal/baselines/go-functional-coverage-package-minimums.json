@@ -133,6 +133,18 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/internal/service",
+      "minimum": 42.44
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation",
       "exception": {
         "kind": "measurement",
@@ -395,10 +407,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/engine",
       "minimum": 74.54
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/ingest",
-      "minimum": 58.51
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
@@ -1353,12 +1361,30 @@
       "minimum": 75.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/internal/service",
+      "minimum": 73.50
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire",
+      "minimum": 76.90
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/materialize",
       "minimum": 13.48
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
-      "minimum": 37.29
+      "minimum": 7.37
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/wire",
