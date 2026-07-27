@@ -139,8 +139,8 @@ func TestStreamParser_EmitsResultSubtypeDiagnosticsForFailureAndCancel(t *testin
 	if len(fragments) != 2 {
 		t.Fatalf("fragment count = %d, want 2", len(fragments))
 	}
-	assertStreamFragment(t, fragments[0], StreamFragmentKindProgress, "Cursor result error: provider unavailable", "cursor-session-321")
-	assertStreamFragment(t, fragments[1], StreamFragmentKindProgress, "Cursor result canceled: user canceled request", "cursor-session-654")
+	assertStreamFragment(t, fragments[0], StreamFragmentKindProgress, "Cursor reported a failed result: "+cursorServerFailureMessage, "cursor-session-321")
+	assertStreamFragment(t, fragments[1], StreamFragmentKindProgress, "Cursor reported a failed result: "+cursorUnknownFailureMessage, "cursor-session-654")
 }
 
 func TestStreamParser_DoesNotEmitErrorFlaggedSuccessResultAsResponse(t *testing.T) {
@@ -157,7 +157,7 @@ func TestStreamParser_DoesNotEmitErrorFlaggedSuccessResultAsResponse(t *testing.
 	if len(fragments) != 1 {
 		t.Fatalf("fragments = %#v, want one failure diagnostic", fragments)
 	}
-	assertStreamFragment(t, fragments[0], StreamFragmentKindProgress, "Cursor result success: Request timed out", "cursor-session-error")
+	assertStreamFragment(t, fragments[0], StreamFragmentKindProgress, "Cursor reported a failed result: "+cursorTimeoutFailureMessage, "cursor-session-error")
 }
 
 func TestStreamParser_EmitsCompletionDiagnosticWhenResultDoesNotExtendEarlierDelta(t *testing.T) {

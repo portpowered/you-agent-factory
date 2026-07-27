@@ -103,11 +103,17 @@ func (i *Integration) Invoke(
 	if err := publication.err(); err != nil {
 		return err
 	}
-	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return ctx.Err()
+	if errors.Is(ctx.Err(), context.Canceled) && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return context.Canceled
+	}
+	if errors.Is(result.CommandError, context.Canceled) &&
+		!errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return result.CommandError
 	}
 	if result.Failure != nil {
-		return writer.Close(ctx, inference.FailedCompletion(cursorInferenceFailure(*result.Failure)))
+		return writer.Close(ctx, inference.FailedCompletion(
+			cursorInferenceFailureForResult(*result.Failure, result),
+		))
 	}
 	if executeErr != nil {
 		return writer.Close(ctx, inference.FailedCompletion(inference.NewFailure(inference.FailureInput{
@@ -236,6 +242,32 @@ func cursorInferenceFailure(facts adapter.FailureFacts) inference.Failure {
 	})
 }
 
+func cursorInferenceFailureForResult(
+	facts adapter.FailureFacts,
+	result adapter.ExecuteResult,
+) inference.Failure {
+	failure := cursorInferenceFailure(facts)
+	if facts.Type != workerexecution.WorkFailureTypeUnknown ||
+		result.ParseError == nil ||
+		result.CommandError != nil ||
+		result.Command.ExitCode != 0 {
+		return failure
+	}
+	var parseFailure *ParseFailure
+	if !errors.As(result.ParseError, &parseFailure) {
+		return failure
+	}
+	if _, canonical := parseFailure.CanonicalResult(); canonical {
+		return failure
+	}
+	return inference.NewFailure(inference.FailureInput{
+		Kind:            inference.FailureMalformedOutput,
+		Message:         facts.Message,
+		Retryable:       false,
+		ProviderSession: cursorInferenceSession(facts.ProviderSession),
+	})
+}
+
 func cursorInferenceFailureKind(failureType workerexecution.WorkFailureType) inference.FailureKind {
 	switch failureType {
 	case workerexecution.WorkFailureTypeTimeout:
@@ -343,15 +375,22 @@ func (*Adapter) Capabilities(context.Context, adapter.CapabilityContext) (adapte
 	}}, nil
 }
 
-func (a *Adapter) ClassifyFailure(_ context.Context, input adapter.FailureContext) adapter.FailureResult {
+func (a *Adapter) ClassifyFailure(ctx context.Context, input adapter.FailureContext) adapter.FailureResult {
 	if input.CommandError == nil && input.CommandResult.ExitCode == 0 &&
 		input.DecodeError == nil && input.FlushError == nil && input.ParseError == nil {
 		return adapter.FailureResult{}
 	}
-	failure := ParseProviderFailure(FailureInput{
-		Stdout: input.CommandResult.Stdout, Stderr: input.CommandResult.Stderr,
-		ExitCode: input.CommandResult.ExitCode, FallbackReason: workerexecution.WorkFailureTypeUnknown,
-	})
+	failure := FailureResult{
+		Reason:  workerexecution.WorkFailureTypeTimeout,
+		Message: cursorTimeoutFailureMessage,
+	}
+	if !errors.Is(ctx.Err(), context.DeadlineExceeded) &&
+		!errors.Is(input.CommandError, context.DeadlineExceeded) {
+		failure = ParseProviderFailure(FailureInput{
+			Stdout: input.CommandResult.Stdout, Stderr: input.CommandResult.Stderr,
+			ExitCode: input.CommandResult.ExitCode, FallbackReason: workerexecution.WorkFailureTypeUnknown,
+		})
+	}
 	if failure.ProviderSession == nil {
 		failure.ProviderSession = latestCursorProviderSession(
 			string(modelprovider.ProviderCursor),

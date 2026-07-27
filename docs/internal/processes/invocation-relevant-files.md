@@ -1221,7 +1221,15 @@ response-stream output.
   `codex_failure_internal_cause_test.go`. Invocation error code compatibility
   coverage lives in `provider_invocation_error_compatibility_test.go` and should
   lock stable `WorkFailureType` / `FailureDetail.Reason` values across corpus
-  normalization and Codex reporting-path agreement probes. A streaming decoder must hold
+  normalization and Codex reporting-path agreement probes.
+  Provider-owned failure classifiers may inspect bounded native stdout/stderr
+  to select a stable category, but customer-visible messages and terminal
+  drafts must come from category-specific product guidance rather than native
+  excerpts. Keep the original command surfaces only in internal diagnostics,
+  give context or command-boundary deadlines timeout precedence, and propagate
+  cancellation to the inference protocol so its validating writer creates the
+  single canonical canceled completion.
+  A streaming decoder must hold
   terminal `ERROR` drafts until the shared executor flushes it with the process
   outcome; discard a native failure when cancellation, deadline, or exit 124 wins.
   When multiple typed terminal records arrive, the held canonical draft and

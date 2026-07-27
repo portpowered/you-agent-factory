@@ -333,7 +333,7 @@ func TestScriptWrapProvider_Infer_CursorErrorFlaggedSuccessPublishesOnlyCanonica
 	if !ok {
 		t.Fatalf("error = %T, want *ProviderError", err)
 	}
-	if providerErr.Type != workerexecution.WorkFailureTypeTimeout || providerErr.Message != "Request timed out" {
+	if providerErr.Type != workerexecution.WorkFailureTypeTimeout || providerErr.Message != "Cursor request timed out." {
 		t.Fatalf("provider error = %#v, want canonical timeout", providerErr)
 	}
 
@@ -379,7 +379,7 @@ func TestScriptWrapProvider_Infer_CursorZeroExitTerminalFailureCarriesCanonicalR
 	if !ok {
 		t.Fatalf("error = %T, want *ProviderError", err)
 	}
-	if providerErr.Type != workerexecution.WorkFailureTypeTimeout || providerErr.Message != "Cursor terminal request timed out" {
+	if providerErr.Type != workerexecution.WorkFailureTypeTimeout || providerErr.Message != "Cursor request timed out." {
 		t.Fatalf("provider error = %#v, want canonical terminal timeout", providerErr)
 	}
 	if providerErr.ProviderSession == nil || providerErr.ProviderSession.ID != "cursor-final-session" {
@@ -567,8 +567,8 @@ func TestScriptWrapProvider_Infer_CursorMalformedJSONReturnsProviderError(t *tes
 	if providerErr.Type != workerexecution.WorkFailureTypeUnknown {
 		t.Fatalf("error type = %q, want unknown", providerErr.Type)
 	}
-	if providerErr.Message != string(stderr) || strings.Contains(providerErr.Message, privateMalformedContent) {
-		t.Fatalf("provider message = %q, want safe unknown stderr result", providerErr.Message)
+	if providerErr.Message != "Cursor reported an unsuccessful result." || strings.Contains(providerErr.Message, privateMalformedContent) {
+		t.Fatalf("provider message = %q, want canonical unknown guidance", providerErr.Message)
 	}
 	if providerErr.Cause == nil {
 		t.Fatal("parse failure cause = nil, want original JSON parse cause")
@@ -608,7 +608,8 @@ func TestScriptWrapProvider_Infer_CursorParseFailureUsesStderrParserResult(t *te
 	if !ok {
 		t.Fatalf("error = %T, want *ProviderError", err)
 	}
-	if providerErr.Type != workerexecution.WorkFailureTypeAuthFailure || providerErr.Message != string(stderr) {
+	if providerErr.Type != workerexecution.WorkFailureTypeAuthFailure ||
+		providerErr.Message != "Cursor authentication failed. Sign in again or check the configured credentials." {
 		t.Fatalf("provider error = %#v, want canonical stderr authentication result", providerErr)
 	}
 	if providerErr.Cause == nil {
@@ -643,7 +644,7 @@ func TestScriptWrapProvider_Infer_CursorExitFailurePreservesBoundedDiagnosticsEx
 	if providerErr.Type != workerexecution.WorkFailureTypeInternalServerError {
 		t.Fatalf("error type = %q, want internal_server_error", providerErr.Type)
 	}
-	if providerErr.Message != "ERROR: unexpected status 500 from cursor upstream" {
+	if providerErr.Message != "Cursor encountered a temporary server error." {
 		t.Fatalf("error message = %q", providerErr.Message)
 	}
 	assertCursorFailureExcerpts(t, providerErr.Diagnostics, string(stdout), string(stderr))
@@ -683,7 +684,7 @@ func TestScriptWrapProvider_Infer_CursorExitFailurePublishesTerminalFailureMarke
 	if published[0].DispatchID != "dispatch-cursor-failure" {
 		t.Fatalf("dispatch id = %q, want dispatch-cursor-failure", published[0].DispatchID)
 	}
-	if published[0].Payload != "ERROR: unexpected status 500 from cursor upstream" {
+	if published[0].Payload != "Cursor encountered a temporary server error." {
 		t.Fatalf("failure payload = %q, want normalized provider error message", published[0].Payload)
 	}
 }

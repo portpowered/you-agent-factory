@@ -692,8 +692,8 @@ func TestNormalizeProviderExitFailure_CursorCommandLineTooLongHasExplicitType(t 
 		t.Fatalf("Type = %q, want %q", providerErr.Type, workerexecution.WorkFailureTypeCommandLineTooLong)
 	} else if providerErr.Family != workerexecution.WorkFailureFamilyTerminal {
 		t.Fatalf("Family = %q, want terminal", providerErr.Family)
-	} else if providerErr.Message != "The command line is too long." {
-		t.Fatalf("Message = %q, want bounded Cursor diagnostic", providerErr.Message)
+	} else if providerErr.Message != "Cursor could not start because the rendered command exceeded the operating system command-line limit." {
+		t.Fatalf("Message = %q, want canonical Cursor guidance", providerErr.Message)
 	}
 }
 

@@ -369,11 +369,8 @@ func streamToolCallName(event map[string]any) string {
 }
 
 func streamResultDiagnostic(subtype, resultText string) string {
-	message := fmt.Sprintf("Cursor result %s", subtype)
-	if strings.TrimSpace(resultText) == "" {
-		return message
-	}
-	return message + ": " + boundedTrimmedText(resultText, PublishedDiagnosticLimit)
+	reason := classifyTerminalFailure(subtype, resultText)
+	return "Cursor reported a failed result: " + cursorFailureGuidance(reason)
 }
 
 func stringField(values map[string]any, key string) string {

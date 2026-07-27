@@ -120,7 +120,7 @@ func TestParseInferenceResult_StreamJSONUsesLastTerminalResult(t *testing.T) {
 	if parsed != nil {
 		t.Fatalf("parsed result = %#v, want no successful response", parsed)
 	}
-	if failure == nil || failure.Type != workerexecution.WorkFailureTypeThrottled || failure.Message != "Cursor capacity is busy" {
+	if failure == nil || failure.Type != workerexecution.WorkFailureTypeThrottled || failure.Message != cursorThrottleFailureMessage {
 		t.Fatalf("failure = %#v, want final throttling result", failure)
 	}
 	if failure.ProviderSession == nil || failure.ProviderSession.ID != "final-session" {
@@ -218,11 +218,11 @@ func TestParseInferenceResult_ErrorSubtype(t *testing.T) {
 	if err.Type != workerexecution.WorkFailureTypeUnknown {
 		t.Fatalf("error type = %q, want unknown", err.Type)
 	}
-	if !strings.Contains(err.Message, "...") {
-		t.Fatalf("error message = %q, want bounded result preview", err.Message)
-	}
 	if strings.Contains(err.Message, oversizedResult) {
 		t.Fatalf("error message = %q, should not include full oversized result", err.Message)
+	}
+	if err.Message != cursorUnknownFailureMessage {
+		t.Fatalf("error message = %q, want canonical unknown guidance", err.Message)
 	}
 }
 
@@ -600,6 +600,230 @@ func TestIntegrationConcurrentInvocationsKeepPublicationAndClosureIsolated(t *te
 			t.Fatal(err)
 		}
 	}
+}
+
+type cursorIntegrationFailureCase struct {
+	name        string
+	stdout      string
+	stderr      string
+	exitCode    int
+	commandErr  error
+	wantKind    inference.FailureKind
+	wantMessage string
+	wantRetry   bool
+	rejected    []string
+}
+
+func TestIntegrationNormalizesCursorFailureCategoriesWithoutNativeDetail(t *testing.T) {
+	t.Parallel()
+
+	cases := []cursorIntegrationFailureCase{
+		{
+			name: "authentication", stdout: cursorFailureRecord(
+				"authentication_error", "Authorization: Bearer customer-token", "cursor-auth",
+			),
+			exitCode: 1, wantKind: inference.FailureAuthentication,
+			wantMessage: cursorAuthFailureMessage,
+			rejected:    []string{"Authorization", "customer-token"},
+		},
+		{
+			name: "invalid request", stdout: cursorFailureRecord(
+				"invalid_request_error", "private prompt selected unsupported model", "cursor-invalid",
+			),
+			exitCode: 1, wantKind: inference.FailureInvalidRequest,
+			wantMessage: cursorBadRequestFailureMessage,
+			rejected:    []string{"private prompt", "unsupported model"},
+		},
+		{
+			name: "throttled", stdout: cursorFailureRecord(
+				"rate_limit_error", "capacity response included full transcript", "cursor-throttle",
+			),
+			stderr: "authentication failed", exitCode: 1,
+			wantKind: inference.FailureThrottled, wantMessage: cursorThrottleFailureMessage,
+			wantRetry: true, rejected: []string{"full transcript", "authentication failed"},
+		},
+		{
+			name: "temporary service", stdout: cursorFailureRecord(
+				"api_error", "provider unavailable at /Users/alice/private/project", "cursor-service",
+			),
+			exitCode: 1, wantKind: inference.FailureUnknown,
+			wantMessage: cursorServerFailureMessage, wantRetry: true,
+			rejected: []string{"/Users/alice", "private"},
+		},
+		{
+			name: "structured timeout", stdout: cursorFailureRecord(
+				"error", "deadline exceeded while sending user prompt", "cursor-timeout",
+			),
+			exitCode: 1, wantKind: inference.FailureTimeout,
+			wantMessage: cursorTimeoutFailureMessage, wantRetry: true,
+			rejected: []string{"user prompt", "deadline exceeded"},
+		},
+	}
+
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			assertCursorIntegrationFailure(t, testCase)
+		})
+	}
+}
+
+func TestIntegrationNormalizesMalformedUnknownAndCommandDeadlineFailures(t *testing.T) {
+	t.Parallel()
+
+	cases := []cursorIntegrationFailureCase{
+		{
+			name:     "malformed output",
+			stdout:   `{"type":"assistant","message":{"content":[{"type":"text","text":"private transcript /Users/alice/key"}]}`,
+			wantKind: inference.FailureMalformedOutput, wantMessage: cursorUnknownFailureMessage,
+			rejected: []string{"private transcript", "/Users/alice"},
+		},
+		{
+			name:     "unknown nonzero exit",
+			stderr:   "tool payload: password=hunter2 at /home/alice/private",
+			exitCode: 17, wantKind: inference.FailureUnknown,
+			wantMessage: cursorUnknownFailureMessage,
+			rejected:    []string{"hunter2", "/home/alice", "tool payload"},
+		},
+		{
+			name:       "command deadline",
+			commandErr: context.DeadlineExceeded,
+			wantKind:   inference.FailureTimeout, wantMessage: cursorTimeoutFailureMessage,
+			wantRetry: true,
+		},
+		{
+			name: "timeout exit code", exitCode: 124,
+			wantKind: inference.FailureTimeout, wantMessage: cursorTimeoutFailureMessage,
+			wantRetry: true,
+		},
+	}
+
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			assertCursorIntegrationFailure(t, testCase)
+		})
+	}
+}
+
+func TestIntegrationPropagatesCancellationForProtocolNormalization(t *testing.T) {
+	t.Parallel()
+
+	writer := &cursorIntegrationWriter{}
+	err := inference.ExecuteInvocation(
+		context.Background(),
+		NewIntegration(IntegrationDependencies{
+			CommandRunner:   &cursorIntegrationRunner{err: context.Canceled},
+			OperatingSystem: "linux",
+		}),
+		cursorFailureInvocation("inv-cursor-canceled"),
+		writer,
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ExecuteInvocation() error = %v, want context.Canceled", err)
+	}
+	if writer.closeCalls != 1 || writer.writeAfterClose != 0 {
+		t.Fatalf("writer closes=%d writes-after-close=%d, want 1 and 0", writer.closeCalls, writer.writeAfterClose)
+	}
+	failure := writer.completion.Failure()
+	if failure == nil || failure.Kind() != inference.FailureCanceled ||
+		failure.Message() != "provider invocation was canceled" || failure.Retryable() {
+		t.Fatalf("failure = %#v, want canonical non-retryable cancellation", failure)
+	}
+}
+
+func TestIntegrationContextDeadlineWinsOverCommandCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 0)
+	defer cancel()
+	writer := &cursorIntegrationWriter{}
+	err := inference.ExecuteInvocation(
+		ctx,
+		NewIntegration(IntegrationDependencies{
+			CommandRunner:   &cursorIntegrationRunner{err: context.Canceled},
+			OperatingSystem: "linux",
+		}),
+		cursorFailureInvocation("inv-cursor-deadline"),
+		writer,
+	)
+	if err != nil {
+		t.Fatalf("ExecuteInvocation() error = %v", err)
+	}
+	failure := writer.completion.Failure()
+	if writer.closeCalls != 1 || failure == nil ||
+		failure.Kind() != inference.FailureTimeout ||
+		failure.Message() != cursorTimeoutFailureMessage ||
+		!failure.Retryable() {
+		t.Fatalf(
+			"completion=%#v closes=%d, want one canonical retryable timeout",
+			writer.completion,
+			writer.closeCalls,
+		)
+	}
+}
+
+func assertCursorIntegrationFailure(t *testing.T, want cursorIntegrationFailureCase) {
+	t.Helper()
+	stdout := []byte(want.stdout)
+	writer := &cursorIntegrationWriter{}
+	err := inference.ExecuteInvocation(
+		context.Background(),
+		NewIntegration(IntegrationDependencies{
+			CommandRunner: &cursorIntegrationRunner{
+				chunks: [][]byte{stdout},
+				result: workerprocess.CommandResult{
+					Stdout: stdout, Stderr: []byte(want.stderr), ExitCode: want.exitCode,
+				},
+				err: want.commandErr,
+			},
+			OperatingSystem: "linux",
+		}),
+		cursorFailureInvocation("inv-cursor-"+strings.ReplaceAll(want.name, " ", "-")),
+		writer,
+	)
+	if err != nil {
+		t.Fatalf("ExecuteInvocation() error = %v", err)
+	}
+	if writer.closeCalls != 1 || writer.writeAfterClose != 0 ||
+		writer.completion.Response() != nil {
+		t.Fatalf(
+			"completion=%#v closes=%d writes-after-close=%d, want one failed close",
+			writer.completion, writer.closeCalls, writer.writeAfterClose,
+		)
+	}
+	failure := writer.completion.Failure()
+	if failure == nil || failure.Kind() != want.wantKind ||
+		failure.Message() != want.wantMessage || failure.Retryable() != want.wantRetry {
+		t.Fatalf(
+			"failure=%#v, want kind=%q message=%q retryable=%v",
+			failure, want.wantKind, want.wantMessage, want.wantRetry,
+		)
+	}
+	visible := failure.Message()
+	for _, event := range writer.events {
+		visible += string(event.Draft().Payload)
+	}
+	for _, rejected := range want.rejected {
+		if strings.Contains(visible, rejected) {
+			t.Fatalf("customer-visible output leaked %q: %q", rejected, visible)
+		}
+	}
+}
+
+func cursorFailureRecord(subtype, result, sessionID string) string {
+	return `{"type":"result","subtype":"` + subtype +
+		`","is_error":true,"result":"` + result +
+		`","session_id":"` + sessionID + `"}`
+}
+
+func cursorFailureInvocation(id string) inference.InvocationRequest {
+	return inference.NewInvocationRequest(inference.InvocationInput{
+		InvocationID: id,
+		UserMessage:  "private customer prompt",
+	})
 }
 
 type cursorIntegrationRunner struct {

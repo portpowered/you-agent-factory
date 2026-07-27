@@ -701,14 +701,14 @@ func providerOwnedCursorAndCodexFailureTestCases() []exitFailureInferenceTestCas
 			name:        "CursorUsesItsOwnErrorExtraction",
 			provider:    string(modelprovider.ProviderCursor),
 			result:      CommandResult{ExitCode: 1, Stderr: []byte("noise before\nERROR: unexpected status 500 from cursor upstream")},
-			wantMessage: "ERROR: unexpected status 500 from cursor upstream",
+			wantMessage: "Cursor encountered a temporary server error.",
 			wantType:    workerexecution.WorkFailureTypeInternalServerError,
 		},
 		{
 			name:        "CursorDoesNotInheritCodexHighDemandClassification",
 			provider:    string(modelprovider.ProviderCursor),
 			result:      CommandResult{ExitCode: 1, Stderr: []byte(codexHighDemandTemporaryErrorsNeedle)},
-			wantMessage: codexHighDemandTemporaryErrorsNeedle,
+			wantMessage: "Cursor reported an unsuccessful result.",
 			wantType:    workerexecution.WorkFailureTypeUnknown,
 		},
 		{
