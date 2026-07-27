@@ -179,6 +179,30 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/internal/service",
+      "exception": {
+        "kind": "measurement",
+        "justification": "Script-poller supervision evidence currently runs through the Automations root service package until IMP-AUTO-03 story 006 relocates focused functional coverage.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "Focused script-poller functional evidence runs in the packaged owner package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/service",
       "minimum": 62.80
     },

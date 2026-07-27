@@ -449,10 +449,15 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAutomationsCronActivatesThroughRuntimeLifecycle`.
   - `TestAutomationsCronJitterProducesStableSubmissionTiming`.
   - `TestAutomationsCronSkipsMalformedWorkstationAndFiresValid`.
+- [x] `tests/functional/automations/filesystem_watcher_root_composition_test.go`
+  - `TestBuildProcessRemainsFilesystemWatcherInertBeforeRuntimeLifecycle`.
+  - `TestAutomationsFilesystemWatcherPreseedsThroughRuntimeLifecycle`.
 
 - [x] `tests/functional/automations/filesystem_watcher_root_composition_test.go`
   - `TestBuildProcessRemainsFilesystemWatcherInertBeforeRuntimeLifecycle`.
   - `TestAutomationsFilesystemWatcherPreseedsThroughRuntimeLifecycle`.
+- [x] `tests/functional/automations/hosted_sources_root_composition_test.go`
+  - `TestBuildProcessRemainsHostedSourcesInertBeforeRuntimeLifecycle`.
 
 - [x] `tests/functional/automations/hosted_sources_root_composition_test.go`
   - `TestBuildProcessRemainsHostedSourcesInertBeforeRuntimeLifecycle`.
@@ -493,6 +498,9 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPollerCreatesWorkFromExternalItems`.
   - `TestPollerEmptyResultCreatesNoWork`.
   - `TestPollerRecoverableFailureRetriesWithoutDuplicates`.
+
+- [x] `tests/functional/workstations/poller/build_process_test.go`
+  - `TestScriptPollerAutomationRemainsInertThroughRootBuildProcessConstruction`.
 
 - [x] `tests/functional/workstations/watcher/files_test.go`
   - `TestWatcherSingleFileCompletesOneWork` verifies one watched seed file
@@ -563,6 +571,9 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIOpenListGetAndCloseFactorySession`.
   - `TestAPIFactorySessionNotFoundUsesTypedError`.
   - `TestAPIMultipleFactorySessionsRemainIsolated`.
+
+- [ ] `tests/functional/sessions/live_runtime_build_process_test.go`
+  - `TestBuildProcessRoutesLiveOpenListControlAndCloseThroughFactorySessionsRoot`.
 
 - [ ] `tests/functional/sessions/controls/pause_resume_test.go`
   - `TestPausedFactorySessionBuffersSubmittedWork`.
@@ -820,6 +831,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [ ] `tests/functional/product/docs/contract_test.go`
   - `TestPackagedDocsIndexMatchesReferenceFiles`.
   - `TestDocsOutputContainsNoBrokenInternalLinks`.
+
+- [x] `tests/functional/product/packaged_factory_guard_failure/packaged_factory_guard_failure_test.go`
+  - `TestInitUnknownPackagedFactoryFailsClosedWithCatalogInventory`.
+
+- [ ] `tests/functional/product/packaged_factory_portability/packaged_factory_portability_test.go`
+  - `TestPackagedFactoryInitMaterialization_InvokesOutsideRepositoryWithBootstrapParity`.
 
 - [ ] `tests/functional/product/dashboard/http_test.go`
   - `TestDashboardIndexStaticAssetsAndDeepLinksAreServed`.
