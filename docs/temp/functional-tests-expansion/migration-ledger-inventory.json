@@ -5149,6 +5149,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/transport/cli/parameters/environment_precedence_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIEnvironmentOverridesGlobalConfig",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/environment_precedence_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/environment_precedence_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIExplicitFlagOverridesEnvironmentDefault",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/environment_precedence_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/environment_precedence_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIUnsetEnvironmentFallsBackWithoutFabricatingValue",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/environment_precedence_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/transport/cli/parameters/flags_test.go",
       "package": "you-agent-factory/tests/functional/transport/cli/parameters",
       "scenario": "TestCLIFlagAfterPositionalValueUsesDocumentedParsing",
@@ -6864,7 +6894,7 @@
     "by_catch_all": {
       "bootstrap_portability": 21,
       "guards_batch": 27,
-      "none": 332,
+      "none": 400,
       "replay_contracts": 23,
       "runtime_api": 105,
       "smoke": 84,
@@ -6879,7 +6909,7 @@
       "models": 5,
       "observability": 9,
       "operator_settings": 1,
-      "orchestration": 35,
+      "orchestration": 48,
       "product": 10,
       "providers": 46,
       "replay_contracts": 24,
