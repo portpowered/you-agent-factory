@@ -41,6 +41,19 @@ func (h *liveRuntimeEffectHost) StopLiveSession(sessionID string) error {
 	return h.openTestHost.StopLiveSession(sessionID)
 }
 
+func (h *liveRuntimeEffectHost) RequireSession(sessionID string) (*livesession.LiveSession, error) {
+	if h.requireSessionE != nil {
+		return nil, h.requireSessionE
+	}
+	if len(h.sessions) > 0 {
+		if session := h.sessions[sessionID]; session != nil {
+			return session, nil
+		}
+		return nil, factorysessions.ErrNotFound
+	}
+	return h.openTestHost.RequireSession(sessionID)
+}
+
 func (h *liveRuntimeEffectHost) SessionFactory(_ string) (factoryruntime.Service, error) {
 	if h.factory == nil {
 		h.factory = &gatewayLifecycleFactory{factoryState: string(interfaces.FactoryStateRunning)}
