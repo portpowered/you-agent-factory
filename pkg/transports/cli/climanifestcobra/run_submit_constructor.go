@@ -16,6 +16,7 @@ import (
 // attached only beneath Submit; Run and Submit remain ready for root fan-in.
 type RunSubmitFamilyComponents struct {
 	Run         *cobra.Command
+	Server      *cobra.Command
 	Submit      *cobra.Command
 	SubmitBatch *cobra.Command
 }
@@ -25,9 +26,10 @@ type RunSubmitFamilyComponents struct {
 type RunSubmitFlagBindings struct {
 	Run                 *runcli.RunConfig
 	RunInvocationOutput *string
+	RunLocalTargets     map[string]any
 	Submit              *submitcli.SubmitConfig
 	SubmitBatch         *submitcli.BatchConfig
-	FlagUsages          map[string]string
+	LegacyFlagUsages    map[string]string
 }
 
 // NewRunSubmitFamilyComponents builds the detached family from generated
@@ -62,7 +64,7 @@ func NewRunSubmitFamilyComponentsFromManifest(
 		return RunSubmitFamilyComponents{}, fmt.Errorf("build run/submit family command: %w", err)
 	}
 
-	runRecord, submitRecord, batchRecord, err := runSubmitManifestRecords(manifest)
+	runRecord, serverRecord, submitRecord, batchRecord, err := runSubmitManifestRecords(manifest)
 	if err != nil {
 		return RunSubmitFamilyComponents{}, err
 	}
@@ -72,6 +74,11 @@ func NewRunSubmitFamilyComponentsFromManifest(
 	}
 	run.DisableFlagParsing = true
 	run.SilenceErrors = true
+	server, err := buildRunnableRunSubmitCommand(serverRecord, registry, bindings)
+	if err != nil {
+		return RunSubmitFamilyComponents{}, err
+	}
+	server.SilenceErrors = true
 	submit, err := buildRunnableRunSubmitCommand(submitRecord, registry, bindings)
 	if err != nil {
 		return RunSubmitFamilyComponents{}, err
@@ -81,7 +88,7 @@ func NewRunSubmitFamilyComponentsFromManifest(
 		return RunSubmitFamilyComponents{}, err
 	}
 	submit.AddCommand(batch)
-	return RunSubmitFamilyComponents{Run: run, Submit: submit, SubmitBatch: batch}, nil
+	return RunSubmitFamilyComponents{Run: run, Server: server, Submit: submit, SubmitBatch: batch}, nil
 }
 
 func buildRunnableRunSubmitCommand(
@@ -105,10 +112,25 @@ func buildRunnableRunSubmitCommand(
 	if err := registerRunSubmitLocalFlags(cmd, record, bindings); err != nil {
 		return nil, fmt.Errorf("build run/submit family command: %w", err)
 	}
+	relationships, err := planStandaloneCommandRelationships(record)
+	if err != nil {
+		return nil, fmt.Errorf("build run/submit family command: %w", err)
+	}
+	if err := projectCobraFlagGroupAnnotations(cmd, record.ID, relationships); err != nil {
+		return nil, fmt.Errorf("build run/submit family command: %w", err)
+	}
 	if err := registry.AttachHandlers(cmd, record.ID); err != nil {
 		return nil, fmt.Errorf("build run/submit family command: %w", err)
 	}
 	return cmd, nil
+}
+
+func planStandaloneCommandRelationships(record climanifest.Command) ([]plannedRelationship, error) {
+	arguments := make([]climanifest.Argument, 0, len(record.Arguments))
+	for _, argument := range record.Arguments {
+		arguments = append(arguments, argument)
+	}
+	return planRelationships([]plannedCommand{{record: record, arguments: arguments}}, 0)
 }
 
 func buildRunSubmitCommandFromRecord(record climanifest.Command) (*cobra.Command, error) {
@@ -134,7 +156,6 @@ func registerRunSubmitLocalFlags(
 	bindings RunSubmitFlagBindings,
 ) error {
 	var deprecatedPort int
-	var skipPermissions bool
 	for _, flag := range sortedFlags(record.Flags) {
 		if flag.Scope != "local" {
 			continue
@@ -146,11 +167,15 @@ func registerRunSubmitLocalFlags(
 			}
 			continue
 		}
-		target, err := runSubmitLocalBindingTarget(record.ID, flag.Long, bindings, &skipPermissions)
+		target, err := runSubmitLocalBindingTarget(record.ID, flag.Long, bindings)
 		if err != nil {
 			return err
 		}
-		if err := registerFlag(cmd.Flags(), flag, target, bindings.FlagUsages[flag.Long]); err != nil {
+		usage := flag.Usage
+		if usage == "" {
+			usage = bindings.LegacyFlagUsages[flag.Long]
+		}
+		if err := registerFlag(cmd.Flags(), flag, target, usage); err != nil {
 			return fmt.Errorf("register local flag %q: %w", flag.Long, err)
 		}
 		if err := applyFlagContract(cmd.Flags().Lookup(flag.Long), flag); err != nil {
@@ -167,11 +192,12 @@ func registerRunSubmitLocalFlags(
 func runSubmitLocalBindingTarget(
 	commandID, flagName string,
 	bindings RunSubmitFlagBindings,
-	skipPermissions *bool,
 ) (flagTarget, error) {
 	switch commandID {
 	case "you.run":
-		return runLocalBindingTarget(flagName, bindings.Run, bindings.RunInvocationOutput, skipPermissions)
+		return runLocalBindingTarget(flagName, bindings.RunLocalTargets)
+	case "you.server":
+		return flagTarget{}, fmt.Errorf("unsupported server local flag %q", flagName)
 	case "you.submit":
 		return submitLocalBindingTarget(flagName, bindings.Submit)
 	case "you.submit.batch":
@@ -183,89 +209,21 @@ func runSubmitLocalBindingTarget(
 
 func runLocalBindingTarget(
 	flagName string,
-	cfg *runcli.RunConfig,
-	invocationOutput *string,
-	skipPermissions *bool,
+	targets map[string]any,
 ) (flagTarget, error) {
-	if target, ok := runExecutionLocalBindingTarget(flagName, cfg); ok {
-		return target, nil
+	target, ok := targets[flagName]
+	if !ok {
+		return flagTarget{}, fmt.Errorf("unsupported run local flag %q", flagName)
 	}
-	if target, ok := runRuntimeLocalBindingTarget(flagName, cfg); ok {
-		return target, nil
-	}
-	if target, ok := runInvocationLocalBindingTarget(flagName, cfg, invocationOutput, skipPermissions); ok {
-		return target, nil
-	}
-	return flagTarget{}, fmt.Errorf("unsupported run local flag %q", flagName)
-}
-
-func runExecutionLocalBindingTarget(flagName string, cfg *runcli.RunConfig) (flagTarget, bool) {
-	switch flagName {
-	case "continuously":
-		return flagTarget{boolValue: &cfg.Continuously}, true
-	case "work":
-		return flagTarget{stringValue: &cfg.WorkFile}, true
-	case "dir":
-		return flagTarget{stringValue: &cfg.Dir}, true
-	case "named":
-		return flagTarget{stringValue: &cfg.NamedFactoryName}, true
-	case "factory":
-		return flagTarget{stringValue: &cfg.FactoryConfigPath}, true
-	case "record":
-		return flagTarget{stringValue: &cfg.RecordPath}, true
-	case "no-record":
-		return flagTarget{boolValue: &cfg.DisableDefaultRecording}, true
-	case "replay":
-		return flagTarget{stringValue: &cfg.ReplayPath}, true
+	switch typed := target.(type) {
+	case *bool:
+		return flagTarget{boolValue: typed}, nil
+	case *string:
+		return flagTarget{stringValue: typed}, nil
+	case *int:
+		return flagTarget{intValue: typed}, nil
 	default:
-		return flagTarget{}, false
-	}
-}
-
-func runRuntimeLocalBindingTarget(flagName string, cfg *runcli.RunConfig) (flagTarget, bool) {
-	switch flagName {
-	case "runtime-log-dir":
-		return flagTarget{stringValue: &cfg.RuntimeLogDir}, true
-	case "runtime-log-max-size-mb":
-		return flagTarget{intValue: &cfg.RuntimeLogConfig.MaxSize}, true
-	case "runtime-log-max-backups":
-		return flagTarget{intValue: &cfg.RuntimeLogConfig.MaxBackups}, true
-	case "runtime-log-max-age-days":
-		return flagTarget{intValue: &cfg.RuntimeLogConfig.MaxAge}, true
-	case "runtime-log-compress":
-		return flagTarget{boolValue: &cfg.RuntimeLogConfig.Compress}, true
-	case "runtime-metrics-dir":
-		return flagTarget{stringValue: &cfg.RuntimeMetricsDir}, true
-	case "runtime-metrics-max-size-mb":
-		return flagTarget{intValue: &cfg.RuntimeMetricsConfig.MaxSize}, true
-	case "runtime-metrics-max-backups":
-		return flagTarget{intValue: &cfg.RuntimeMetricsConfig.MaxBackups}, true
-	case "runtime-metrics-max-age-days":
-		return flagTarget{intValue: &cfg.RuntimeMetricsConfig.MaxAge}, true
-	case "runtime-metrics-compress":
-		return flagTarget{boolValue: &cfg.RuntimeMetricsConfig.Compress}, true
-	default:
-		return flagTarget{}, false
-	}
-}
-
-func runInvocationLocalBindingTarget(
-	flagName string,
-	cfg *runcli.RunConfig,
-	invocationOutput *string,
-	skipPermissions *bool,
-) (flagTarget, bool) {
-	switch flagName {
-	case "with-mock-workers":
-		return flagTarget{stringValue: &cfg.MockWorkersConfigPath}, true
-	case "quiet":
-		return flagTarget{boolValue: &cfg.SuppressDashboardRendering}, true
-	case "output":
-		return flagTarget{stringValue: invocationOutput}, true
-	case "skip-permissions":
-		return flagTarget{boolValue: skipPermissions}, true
-	default:
-		return flagTarget{}, false
+		return flagTarget{}, fmt.Errorf("run local flag %q has unsupported binding target", flagName)
 	}
 }
 
@@ -297,20 +255,24 @@ func submitBatchLocalBindingTarget(flagName string, cfg *submitcli.BatchConfig) 
 	}
 }
 
-func runSubmitManifestRecords(manifest climanifest.Manifest) (run, submit, batch climanifest.Command, err error) {
+func runSubmitManifestRecords(manifest climanifest.Manifest) (run, server, submit, batch climanifest.Command, err error) {
 	run, err = manifest.CommandByID("you.run")
 	if err != nil {
-		return run, submit, batch, fmt.Errorf("build run/submit family command: %w", err)
+		return run, server, submit, batch, fmt.Errorf("build run/submit family command: %w", err)
+	}
+	server, err = manifest.CommandByID("you.server")
+	if err != nil {
+		return run, server, submit, batch, fmt.Errorf("build run/submit family command: %w", err)
 	}
 	submit, err = manifest.CommandByID("you.submit")
 	if err != nil {
-		return run, submit, batch, fmt.Errorf("build run/submit family command: %w", err)
+		return run, server, submit, batch, fmt.Errorf("build run/submit family command: %w", err)
 	}
 	batch, err = manifest.CommandByID("you.submit.batch")
 	if err != nil {
-		return run, submit, batch, fmt.Errorf("build run/submit family command: %w", err)
+		return run, server, submit, batch, fmt.Errorf("build run/submit family command: %w", err)
 	}
-	return run, submit, batch, nil
+	return run, server, submit, batch, nil
 }
 
 func validateRunSubmitManifest(manifest climanifest.Manifest) error {
@@ -341,6 +303,7 @@ func validateRunSubmitBindings(bindings RunSubmitFlagBindings) error {
 	}{
 		{name: "Run", set: bindings.Run != nil},
 		{name: "RunInvocationOutput", set: bindings.RunInvocationOutput != nil},
+		{name: "RunLocalTargets", set: bindings.RunLocalTargets != nil},
 		{name: "Submit", set: bindings.Submit != nil},
 		{name: "SubmitBatch", set: bindings.SubmitBatch != nil},
 	}

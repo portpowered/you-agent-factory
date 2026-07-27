@@ -76,6 +76,7 @@ func runFactoryToCompletion(
 		"you", "run",
 		"--dir", dir,
 		"--continuously",
+		"--with-server",
 		"--server", "http://127.0.0.1:1",
 		"--quiet",
 		"--no-record",

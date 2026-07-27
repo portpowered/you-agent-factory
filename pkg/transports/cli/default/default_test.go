@@ -22,3 +22,12 @@ func TestRunConfigsPreserveExplicitAndOutOfBoxModes(t *testing.T) {
 		t.Fatalf("OOTBRunConfig() = %+v", outOfBox)
 	}
 }
+
+func TestServerRunConfigUsesOwnedNonBootstrappingLifecycle(t *testing.T) {
+	defaults := runcli.RunConfig{}
+	server := ServerRunConfig(defaults)
+	if server.Dir != FactoryDir || server.Port != FactoryPort || !server.AutoPort ||
+		!server.Continuously || server.Bootstrap || !server.OpenDashboard {
+		t.Fatalf("ServerRunConfig() = %+v", server)
+	}
+}

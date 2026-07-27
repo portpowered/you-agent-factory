@@ -6,15 +6,24 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"strings"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const (
-	InvocationErrorCodeFailed    = "RUN_INVOCATION_FAILED"
-	InvocationErrorCodeCancelled = "RUN_INVOCATION_CANCELLED"
-	InvocationErrorCodeTimeout   = "RUN_INVOCATION_TIMEOUT"
+	InvocationErrorCodeFailed       = "RUN_INVOCATION_FAILED"
+	InvocationErrorCodeCancelled    = "RUN_INVOCATION_CANCELLED"
+	InvocationErrorCodeTimeout      = "RUN_INVOCATION_TIMEOUT"
+	CurrentFactoryNotFoundCode      = "CURRENT_FACTORY_NOT_FOUND"
+	CurrentFactoryInvalidCode       = "CURRENT_FACTORY_INVALID"
+	InvocationOutputConflictCode    = "INVOCATION_OUTPUT_CONFLICT"
+	InvocationOutputUnsupportedCode = "INVOCATION_OUTPUT_UNSUPPORTED"
+	ServerBindFailedCode            = "SERVER_BIND_FAILED"
 )
 
 type InvocationError struct {
@@ -75,10 +84,45 @@ func newInvocationErrorResponse(code, message string) factoryapi.ErrorResponse {
 	if code == "" {
 		code = InvocationErrorCodeFailed
 	}
+	family := factoryapi.ErrorFamilyInternalServerError
+	switch code {
+	case CurrentFactoryNotFoundCode:
+		family = factoryapi.ErrorFamilyNotFound
+	case CurrentFactoryInvalidCode, InvocationOutputConflictCode, InvocationOutputUnsupportedCode:
+		family = factoryapi.ErrorFamilyBadRequest
+	}
 	return factoryapi.ErrorResponse{
 		Code:    factoryapi.ErrorResponseCode(code),
-		Family:  factoryapi.ErrorFamilyInternalServerError,
+		Family:  family,
 		Message: strings.TrimSpace(message),
+	}
+}
+
+// MapCurrentFactoryFailure classifies failures from the exact Current Factory
+// selection before they cross the public run-command error boundary.
+func MapCurrentFactoryFailure(err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := invocationErrorResponse(err); ok {
+		return err
+	}
+	code := CurrentFactoryInvalidCode
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, factorydefinitions.ErrFactoryLayoutNotFound) {
+		code = CurrentFactoryNotFoundCode
+	}
+	return &InvocationError{Code: code, Message: strings.TrimSpace(err.Error()), Cause: err}
+}
+
+// MapServerFailure classifies terminal listener binding failures at the CLI
+// boundary while preserving all other errors for their owning mapper.
+func MapServerFailure(err error) error {
+	if err == nil ||
+		(!platformhttpserver.IsBindError(err) && !cliserver.IsLocalBindError(err)) {
+		return err
+	}
+	return &InvocationError{
+		Code: ServerBindFailedCode, Message: strings.TrimSpace(err.Error()), Cause: err,
 	}
 }
 
@@ -125,10 +169,26 @@ func normalizeInvocationOutputMode(raw string) (string, error) {
 	case InvocationOutputResponseStream:
 		return InvocationOutputResponseStream, nil
 	default:
-		return "", fmt.Errorf(
-			"unsupported --output value %q; supported values are primary (default) and response-stream",
-			trimmed,
-		)
+		return "", &InvocationError{
+			Code: InvocationOutputUnsupportedCode,
+			Message: fmt.Sprintf(
+				"unsupported --output value %q; supported values are primary (default) and response-stream",
+				trimmed,
+			),
+		}
+	}
+}
+
+// ValidateInvocationOutputSelection rejects competing public stdout selectors.
+// JSON plus response-stream is one accepted JSON-stream selection; quiet cannot
+// be combined with either global JSON or an explicit --output selection.
+func ValidateInvocationOutputSelection(quiet, jsonOutput, explicitOutput bool) error {
+	if !quiet || (!jsonOutput && !explicitOutput) {
+		return nil
+	}
+	return &InvocationError{
+		Code:    InvocationOutputConflictCode,
+		Message: "--quiet cannot be used with --json or --output",
 	}
 }
 
@@ -142,13 +202,13 @@ func validateInvocationOutputMode(cfg RunConfig, invocationMode bool) error {
 	}
 	if cfg.Continuously {
 		return &InvocationError{
-			Code:    "INVOCATION_OUTPUT_UNSUPPORTED",
+			Code:    InvocationOutputUnsupportedCode,
 			Message: "response-stream output is not supported with --continuously",
 		}
 	}
 	if !invocationMode {
 		return &InvocationError{
-			Code:    "INVOCATION_OUTPUT_UNSUPPORTED",
+			Code:    InvocationOutputUnsupportedCode,
 			Message: "response-stream output requires a one-shot factory invocation such as you run --named or you run --factory with positional text or piped stdin",
 		}
 	}

@@ -600,12 +600,15 @@ for agent-run diagnostics.
 
 ## Dashboard
 
-When the service was started via `you` or `you run` without `--quiet`, open:
+When the service was started with `you server` or `you run --with-site`, open
+the dashboard URL reported after readiness. The preferred default is:
 
 **`http://localhost:7437/dashboard/ui`**
 
-Use the same host and port as the API unless you passed `--server` or `--port` on
-the process that bound the listener. The dashboard shows live session selection,
+Use the actual host and port reported by the process. Global `--server` selects
+the preferred loopback endpoint; a collision advances to the next available
+port. Ordinary `you run` and `you run --with-server` do not open a browser, and
+bare `you` prints help without starting a service. The dashboard shows live session selection,
 work position, factory activity, and Factory Session lifecycle control status
 alongside CLI inspection. Paused and running lifecycle copy in the session
 lifecycle banner is derived from canonical API status and replayed
@@ -630,7 +633,9 @@ you --server http://localhost:9090 --json work list
 | `you session list` / `create` / `delete` | `--port` (default `7437`) | Session id is a subcommand argument on `create` / `delete` |
 | `you session show`, `you session pause`, `you session resume` | Global `--server` | Session UUID is an optional subcommand argument; omission accepts the `~default` compatibility selector |
 | `you factory query`, `you submit`, `you work …` | Global `--server` | `--session` on submit, batch submit, and work commands |
-| `you run` | Binds locally to host/port from `--server` | N/A — starts or attaches runtime |
+| `you server` | Binds the Current Factory continuously to the loopback host/port preferred by `--server` | N/A — starts a runtime |
+| `you run --with-server` / `--with-site` | Binds only for the run lifetime to the loopback host/port preferred by `--server` | N/A — starts a runtime |
+| Ordinary `you run` | Does not bind an HTTP listener | N/A — starts a runtime |
 
 When `--session` is omitted on submit and work commands, the CLI accepts the
 `~default` compatibility selector. A list row's `SESSION ID` may itself remain
@@ -657,13 +662,16 @@ still-running service:
 
 | How you start | Stays running for later `you submit` / `POST /factory-sessions/{session_id}/work`? |
 |---------------|------------------------------------------------------|
-| `you` (no args) | Yes — continuous mode; watches default inputs and keeps the service up. |
-| `you run --continuously` | Yes — processes work until you stop the process. |
-| `you run` (batch, no `--continuously`) | No — exits when the factory goes idle; restart before later CLI or API submissions. |
+| `you` (no args) | No — prints root help and performs no runtime or listener activation. |
+| `you server` | Yes — serves the exact Current Factory until cancellation. |
+| `you run --continuously --with-server` or `--with-site` | Yes — processes work and serves until cancellation. |
+| `you run --continuously` without a server flag | No HTTP service — the local runtime remains alive until cancellation. |
+| One-shot `you run --with-server` or `--with-site` | Only for the run lifetime — the listener is joined before the command returns. |
+| Ordinary one-shot `you run` | No — starts no listener and exits when the factory becomes idle or invocation completes. |
 
-For steady operator loops (check running → submit → verify), prefer `you` or
-`you run --continuously`. See `you docs agents` for the full operator loop and
-pre-submit checklist.
+For steady operator loops (check running → submit → verify), prefer `you server`
+or `you run --continuously --with-server`. See `you docs agents` for the full
+operator loop and pre-submit checklist.
 
 ## Event stream lifecycle and reconnect
 

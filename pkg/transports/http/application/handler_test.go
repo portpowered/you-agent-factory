@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -44,6 +45,9 @@ type invocationRole struct {
 }
 type executionRole struct {
 	factorysessions.ExecutionService
+}
+type durableLifecycleRole struct {
+	factorysessionmapping.DurableLifecycleAPI
 }
 type workRole struct{ work.Service }
 type modelRole struct{ models.Service }
@@ -135,6 +139,55 @@ func TestNewHandlerRejectsMissingStableOperations(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if handler, err := construct(); err == nil || handler != nil {
 				t.Fatalf("NewHandler = (%T, %v), want missing dependency error", handler, err)
+			}
+		})
+	}
+}
+
+func TestHandlerBindsStandaloneDurableExecution(t *testing.T) {
+	t.Parallel()
+
+	mappings, err := mappingcomposition.NewHTTPBinder(statusProjectorRole{}, &contentPreparationRole{})
+	if err != nil {
+		t.Fatalf("NewHTTPBinder: %v", err)
+	}
+	handler, err := NewHandler(
+		mappings,
+		&contentPreparationRole{},
+		&validationRole{},
+		&contentStagingRole{},
+		&workRequestPreparationRole{},
+		&requestPreparationRole{},
+	)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+	bound, err := handler.BindDurableExecution(
+		&executionRole{},
+		&durableLifecycleRole{},
+		zap.NewNop(),
+	)
+	if err != nil || bound == nil {
+		t.Fatalf("BindDurableExecution = (%T, %v), want handler", bound, err)
+	}
+}
+
+func TestHandlerRejectsIncompleteDurableExecutionBinding(t *testing.T) {
+	t.Parallel()
+
+	valid := &Handler{sessionRequests: &requestPreparationRole{}}
+	execution := &executionRole{}
+	lifecycle := &durableLifecycleRole{}
+	for name, bind := range map[string]func() (http.Handler, error){
+		"handler": func() (http.Handler, error) {
+			return (*Handler)(nil).BindDurableExecution(execution, lifecycle, zap.NewNop())
+		},
+		"execution": func() (http.Handler, error) { return valid.BindDurableExecution(nil, lifecycle, zap.NewNop()) },
+		"lifecycle": func() (http.Handler, error) { return valid.BindDurableExecution(execution, nil, zap.NewNop()) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			if bound, err := bind(); err == nil || bound != nil {
+				t.Fatalf("BindDurableExecution = (%T, %v), want missing dependency error", bound, err)
 			}
 		})
 	}

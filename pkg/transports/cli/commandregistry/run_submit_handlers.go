@@ -13,6 +13,7 @@ import (
 // runnable command in the run/submit family.
 type RunSubmitHandlers struct {
 	Run         CommandHandlers
+	Server      CommandHandlers
 	Submit      CommandHandlers
 	SubmitBatch CommandHandlers
 }
@@ -68,6 +69,7 @@ func NewRunSubmitRegistry(handlers RunSubmitHandlers) (*Registry, error) {
 		handlers  CommandHandlers
 	}{
 		{commandID: "you.run", handlers: handlers.Run},
+		{commandID: "you.server", handlers: handlers.Server},
 		{commandID: "you.submit", handlers: handlers.Submit},
 		{commandID: "you.submit.batch", handlers: handlers.SubmitBatch},
 	}

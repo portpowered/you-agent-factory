@@ -446,6 +446,7 @@ func TestNamedFactoryRun_RealCLIResolvesGlobalFactoryFromUnrelatedWorkingDirecto
 		"--named", "alpha",
 		"--with-mock-workers",
 		"--no-record",
+		"--with-server",
 		"--server", baseURL,
 		"--continuously",
 		"--quiet",

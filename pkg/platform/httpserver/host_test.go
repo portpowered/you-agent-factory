@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -83,7 +84,7 @@ func TestNewStarterAutoPortReportsSelectedFallback(t *testing.T) {
 	listener := failingListener{err: errors.New("done")}
 	starter, err := NewStarter(func(_ string, address string) (net.Listener, error) {
 		requests = append(requests, address)
-		if address == ":8123" {
+		if address == "localhost:8123" {
 			return nil, busyErr
 		}
 		return listener, nil
@@ -99,8 +100,84 @@ func TestNewStarterAutoPortReportsSelectedFallback(t *testing.T) {
 	if err == nil || bound.Port != 8124 {
 		t.Fatalf("starter = (bound=%+v, err=%v), want port 8124 and terminal serve error", bound, err)
 	}
-	if got, want := requests, []string{":8123", ":8124"}; fmt.Sprint(got) != fmt.Sprint(want) {
+	if got, want := requests, []string{"localhost:8123", "localhost:8124"}; fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("listener addresses = %v, want %v", got, want)
+	}
+}
+
+func TestNewStarterBindsOnlyRequestedLoopbackHost(t *testing.T) {
+	t.Parallel()
+
+	listener := failingListener{err: errors.New("done")}
+	var address string
+	starter, err := NewStarter(func(_ string, candidate string) (net.Listener, error) {
+		address = candidate
+		return listener, nil
+	})
+	if err != nil {
+		t.Fatalf("NewStarter: %v", err)
+	}
+	var bound Binding
+	err = starter(t.Context(), StartRequest{
+		Handler: http.NotFoundHandler(), Host: "127.0.0.1", Port: 8123,
+		Logger: zap.NewNop(), OnBound: func(value Binding) { bound = value },
+	})
+	if err == nil {
+		t.Fatal("starter error = nil, want terminal serve error")
+	}
+	if address != "127.0.0.1:8123" {
+		t.Fatalf("listener address = %q, want exact IPv4 loopback", address)
+	}
+	if bound.Host != "127.0.0.1" || bound.Port != 8123 {
+		t.Fatalf("binding = %+v, want requested loopback endpoint", bound)
+	}
+}
+
+func TestNewStarterRejectsNonLoopbackHostBeforeListenerEffect(t *testing.T) {
+	t.Parallel()
+
+	var calls int
+	starter, err := NewStarter(func(string, string) (net.Listener, error) {
+		calls++
+		return nil, errors.New("unexpected listener call")
+	})
+	if err != nil {
+		t.Fatalf("NewStarter: %v", err)
+	}
+	err = starter(t.Context(), StartRequest{
+		Handler: http.NotFoundHandler(), Host: "0.0.0.0", Port: 8123,
+		Logger: zap.NewNop(),
+	})
+	if !IsBindError(err) {
+		t.Fatalf("starter error = %v, want BindError", err)
+	}
+	if calls != 0 {
+		t.Fatalf("listener calls = %d, want none for non-loopback host", calls)
+	}
+}
+
+func TestNewStarterAutoPortTriesThrough65535WithoutWrapping(t *testing.T) {
+	t.Parallel()
+
+	busyErr := errors.New("busy")
+	var requests []string
+	starter, err := NewStarter(func(_ string, address string) (net.Listener, error) {
+		requests = append(requests, address)
+		return nil, busyErr
+	})
+	if err != nil {
+		t.Fatalf("NewStarter: %v", err)
+	}
+	err = starter(t.Context(), StartRequest{
+		Handler: http.NotFoundHandler(), Host: "::1", Port: 65534,
+		AutoPort: true, Logger: zap.NewNop(),
+	})
+	if !IsBindError(err) {
+		t.Fatalf("starter error = %v, want BindError", err)
+	}
+	want := []string{"[::1]:65534", "[::1]:65535"}
+	if fmt.Sprint(requests) != fmt.Sprint(want) {
+		t.Fatalf("listener addresses = %v, want %v", requests, want)
 	}
 }
 
@@ -132,6 +209,60 @@ func TestServeValidatesRequiredInputs(t *testing.T) {
 				t.Fatalf("Serve error = %v, want %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestStarterWithListenerReportsBindingServesAndRejectsReuse(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	starter := StarterWithListener(listener)
+	ctx, cancel := context.WithCancel(t.Context())
+	exit := make(chan error, 1)
+	var bound Binding
+	go func() {
+		exit <- starter(ctx, StartRequest{
+			Handler: http.NotFoundHandler(),
+			OnBound: func(value Binding) { bound = value },
+		})
+	}()
+	address := listener.Addr().(*net.TCPAddr)
+	for bound.Port == 0 {
+		select {
+		case err := <-exit:
+			t.Fatalf("starter exited before binding: %v", err)
+		case <-time.After(time.Millisecond):
+		}
+	}
+	if bound.Host != address.IP.String() || bound.Port != address.Port {
+		t.Fatalf("binding = %+v, want %s:%d", bound, address.IP, address.Port)
+	}
+	cancel()
+	if err := receiveBefore(t, exit); err != nil {
+		t.Fatalf("starter cancellation: %v", err)
+	}
+	if err := starter(t.Context(), StartRequest{Handler: http.NotFoundHandler()}); err == nil ||
+		err.Error() != "process-owned API server listener was already used" {
+		t.Fatalf("second starter call error = %v, want reuse rejection", err)
+	}
+}
+
+func TestStarterWithListenerRejectsNilListenerAndBindErrorFormatsCause(t *testing.T) {
+	starter := StarterWithListener(nil)
+	err := starter(t.Context(), StartRequest{Handler: http.NotFoundHandler()})
+	if err == nil || err.Error() != "process-owned API server listener is required" {
+		t.Fatalf("nil listener error = %v", err)
+	}
+
+	cause := errors.New("ports exhausted")
+	bindErr := &BindError{Host: "localhost", PreferredPort: 65535, Cause: cause}
+	if !strings.Contains(bindErr.Error(), "localhost") || !errors.Is(bindErr, cause) {
+		t.Fatalf("BindError = %q, unwrap=%v", bindErr.Error(), bindErr.Unwrap())
+	}
+	var nilBindErr *BindError
+	if nilBindErr.Error() != "" || nilBindErr.Unwrap() != nil {
+		t.Fatalf("nil BindError = (%q, %v), want empty and nil", nilBindErr.Error(), nilBindErr.Unwrap())
 	}
 }
 

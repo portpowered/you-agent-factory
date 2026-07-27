@@ -103,7 +103,6 @@ func TestNamedGoalInvocationParity_NamedFactoryCLIAndAPIShareSuccessOutcome(t *t
 		"--with-mock-workers",
 		"--no-record",
 		"--server", baseURL,
-		"--quiet",
 		mockWorkersPath,
 		goalText,
 	)
@@ -229,7 +228,6 @@ func TestNamedGoalInvocationParity_SourceConflictRejectedBeforeInvocation(t *tes
 		"--with-mock-workers",
 		"--no-record",
 		"--server", baseURL,
-		"--quiet",
 		mockWorkersPath,
 		"from positional",
 	)
@@ -399,7 +397,6 @@ func runPackagedGoalInvocationCLIJSON(
 		"--with-mock-workers",
 		"--no-record",
 		"--server", baseURL,
-		"--quiet",
 		mockWorkersPath,
 	}
 	cmdArgs = append(cmdArgs, args...)

@@ -498,7 +498,7 @@ func assertFactoryResponseEventContentBlockDiscriminator(t *testing.T, schemas m
 
 func loadRepresentativeResponseEventFixture(t *testing.T, name string) map[string]any {
 	t.Helper()
-	path := filepath.FromSlash("../../../services/factory_sessions/responseevents/testdata/fixtures/" + name + ".json")
+	path := filepath.FromSlash("../../../services/factory_sessions/internal/responseevents/testdata/fixtures/" + name + ".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read representative response-event fixture %s: %v", name, err)
@@ -965,7 +965,7 @@ func assertGeneratedFactoryResponseEventPayloadDecodes(t *testing.T, event facto
 
 func readRepresentativeResponseEventFixtureBytes(t *testing.T, name string) []byte {
 	t.Helper()
-	path := filepath.FromSlash("../../../services/factory_sessions/responseevents/testdata/fixtures/" + name + ".json")
+	path := filepath.FromSlash("../../../services/factory_sessions/internal/responseevents/testdata/fixtures/" + name + ".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read representative response-event fixture %s: %v", name, err)

@@ -3,9 +3,11 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
@@ -307,6 +309,7 @@ func NewRootCommandFromSubcommands(root *cobra.Command, subcommands RootSubcomma
 type b12ProductionFamilies struct {
 	MCP    *cobra.Command
 	Run    *cobra.Command
+	Server *cobra.Command
 	Submit *cobra.Command
 }
 
@@ -324,6 +327,7 @@ func newB12ProductionFamilies(
 	return b12ProductionFamilies{
 		MCP:    mcpCommand,
 		Run:    runSubmit.Run,
+		Server: runSubmit.Server,
 		Submit: runSubmit.Submit,
 	}, nil
 }
@@ -345,6 +349,7 @@ func productionRootSubcommands(
 		b12.MCP,
 		modelsCmd,
 		b12.Run,
+		b12.Server,
 		b12.Submit,
 		productionWorkCommand(globals, diagnostics, options),
 	}
@@ -352,6 +357,7 @@ func productionRootSubcommands(
 
 type runSubmitProductionCommands struct {
 	Run    *cobra.Command
+	Server *cobra.Command
 	Submit *cobra.Command
 }
 
@@ -392,7 +398,9 @@ func buildRunSubmitProductionCommands(
 	if err := registerSelectedFactorySignatureCompletion(components.Run, options); err != nil {
 		return runSubmitProductionCommands{}, err
 	}
-	return runSubmitProductionCommands{Run: components.Run, Submit: components.Submit}, nil
+	return runSubmitProductionCommands{
+		Run: components.Run, Server: components.Server, Submit: components.Submit,
+	}, nil
 }
 
 func registerSelectedFactoryNameCompletion(run *cobra.Command, options CommandFactory) error {
@@ -434,27 +442,6 @@ func selectedFactoryCompletionRootsResolver(options CommandFactory) cobracomplet
 	}
 }
 
-func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions CommandFactory) *cobra.Command {
-	cfg := defaultcmd.ExplicitRunConfig(rootOptions.runDefaults)
-	var invocationOutputMode string
-	cmd := &cobra.Command{
-		Use:                "run",
-		Short:              "Load workflow and run the factory engine",
-		DisableFlagParsing: true,
-		SilenceErrors:      true,
-		Long:               runCommandLongHelp(),
-		Example:            runCommandExamples(),
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			return rejectDeprecatedPortFlag(cmd, args)
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return executeRunCommand(cmd, args, &cfg, globals, diagnostics, operatorDefaults, rootOptions)
-		},
-	}
-	registerRunCommandFlags(cmd, &cfg, &invocationOutputMode)
-	return cmd
-}
-
 func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig, globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions CommandFactory) error {
 	promptArgs, resolvedConfig, err := resolveRunCommandInvocationInput(cmd, args, cfg)
 	if err != nil {
@@ -462,15 +449,36 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 		return err
 	}
 	if err := applyRunCommandInvocationOutputMode(cmd, &resolvedConfig); err != nil {
+		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
+		return err
+	}
+	if err := runcli.ValidateInvocationOutputSelection(
+		resolvedConfig.SuppressDashboardRendering,
+		globals.json,
+		cmd.Flags().Changed("output"),
+	); err != nil {
+		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
 		return err
 	}
 	if helpRequested(cmd) {
 		return writeRunCommandHelp(cmd, &resolvedConfig, rootOptions)
 	}
+	currentFactorySelected := runUsesCurrentFactory(cmd)
+	if currentFactorySelected {
+		if err := selectCurrentFactoryFromWorkingDirectory(cmd, &resolvedConfig); err != nil {
+			mapped := runcli.MapCurrentFactoryFailure(err)
+			_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), mapped, globals.json)
+			return mapped
+		}
+	}
 	basePolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
 	err = runFactoryWithOptions(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy, rootOptions, false)
 	if err != nil {
 		err = factoryload.MaybeFormatOperatorError(err, resolvedConfig.Dir)
+		err = runcli.MapServerFailure(err)
+		if currentFactorySelected {
+			err = runcli.MapCurrentFactoryFailure(err)
+		}
 		if len(promptArgs) > 0 {
 			err = runcli.MapInvocationFailure(err)
 		}
@@ -487,6 +495,36 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 		}
 	}
 	return err
+}
+
+func applyRunScopedServerMode(cfg runcli.RunConfig) runcli.RunConfig {
+	if cfg.WithSite {
+		cfg.WithServer = true
+		cfg.OpenDashboard = true
+	}
+	return cfg
+}
+
+func runUsesCurrentFactory(cmd *cobra.Command) bool {
+	return cmd != nil &&
+		!cmd.Flags().Changed("dir") &&
+		!cmd.Flags().Changed("factory") &&
+		!cmd.Flags().Changed("named") &&
+		!cmd.Flags().Changed("replay")
+}
+
+func selectCurrentFactoryFromWorkingDirectory(cmd *cobra.Command, cfg *runcli.RunConfig) error {
+	if cmd == nil || cfg == nil {
+		return fmt.Errorf("select Current Factory: run command and config are required")
+	}
+	workingDirectory := strings.TrimSpace(startupcli.WorkingDirectory(cmd.Context()))
+	if workingDirectory == "" {
+		return fmt.Errorf("select Current Factory: process working directory is required")
+	}
+	factoryDir := filepath.Join(workingDirectory, defaultcmd.FactoryDir)
+	cfg.Dir = factoryDir
+	cfg.FactoryConfigPath = filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	return nil
 }
 
 func applyRunCommandInvocationOutputMode(cmd *cobra.Command, cfg *runcli.RunConfig) error {
@@ -563,76 +601,6 @@ func writeRunCommandHelp(cmd *cobra.Command, cfg *runcli.RunConfig, rootOptions 
 	return cmd.Help()
 }
 
-func registerRunCommandFlags(cmd *cobra.Command, cfg *runcli.RunConfig, invocationOutputMode *string) {
-	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().BoolVar(&cfg.Continuously, "continuously", false, "keep the factory alive while idle until cancelled")
-	cmd.Flags().StringVar(&cfg.WorkFile, "work", "", "path to initial FACTORY_REQUEST_BATCH JSON file to submit")
-	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory base directory")
-	cmd.Flags().StringVar(&cfg.NamedFactoryName, "named", "", "canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories; built-ins materialize there on first use and remain editable")
-	cmd.Flags().StringVar(&cfg.FactoryConfigPath, "factory", "", "path to a JSON or YAML Factory file, or an unambiguous Factory directory, for portable one-shot runs; use positional text or piped stdin for the invocation input")
-	cmd.Flags().StringVar(&cfg.RecordPath, "record", "", "path to write a replay artifact for this run; replay artifacts are sensitive, and default live runs record automatically unless --no-record is used")
-	cmd.Flags().BoolVar(&cfg.DisableDefaultRecording, "no-record", false, "disable the default replay artifact for this invocation")
-	cmd.Flags().StringVar(&cfg.ReplayPath, "replay", "", "path to replay an existing sensitive replay artifact")
-	cmd.Flags().StringVar(&cfg.RuntimeLogDir, "runtime-log-dir", "", "root directory for structured runtime log files grouped by UTC start date (default: ~/.you-agent-factory/logs)")
-	cmd.Flags().IntVar(&cfg.RuntimeLogConfig.MaxSize, "runtime-log-max-size-mb", cfg.RuntimeLogConfig.MaxSize, "rotate each runtime log file after this many megabytes")
-	cmd.Flags().IntVar(&cfg.RuntimeLogConfig.MaxBackups, "runtime-log-max-backups", cfg.RuntimeLogConfig.MaxBackups, "maximum rotated runtime log files to retain")
-	cmd.Flags().IntVar(&cfg.RuntimeLogConfig.MaxAge, "runtime-log-max-age-days", cfg.RuntimeLogConfig.MaxAge, "maximum days to retain rotated runtime log files")
-	cmd.Flags().BoolVar(&cfg.RuntimeLogConfig.Compress, "runtime-log-compress", false, "compress rotated runtime log files")
-	cmd.Flags().StringVar(&cfg.RuntimeMetricsDir, "runtime-metrics-dir", "", "root directory for structured runtime metrics JSONL files grouped by UTC start date (default: ~/.you-agent-factory/metrics)")
-	cmd.Flags().IntVar(&cfg.RuntimeMetricsConfig.MaxSize, "runtime-metrics-max-size-mb", cfg.RuntimeMetricsConfig.MaxSize, "rotate each runtime metrics file after this many megabytes")
-	cmd.Flags().IntVar(&cfg.RuntimeMetricsConfig.MaxBackups, "runtime-metrics-max-backups", cfg.RuntimeMetricsConfig.MaxBackups, "maximum rotated runtime metrics files to retain")
-	cmd.Flags().IntVar(&cfg.RuntimeMetricsConfig.MaxAge, "runtime-metrics-max-age-days", cfg.RuntimeMetricsConfig.MaxAge, "maximum days to retain rotated runtime metrics files")
-	cmd.Flags().BoolVar(&cfg.RuntimeMetricsConfig.Compress, "runtime-metrics-compress", false, "compress rotated runtime metrics files")
-	cmd.Flags().StringVar(&cfg.MockWorkersConfigPath, "with-mock-workers", "", "enable mock-worker execution with an optional mock-workers JSON config path")
-	cmd.Flags().Lookup("with-mock-workers").NoOptDefVal = defaultMockWorkersConfigPathSentinel
-	cmd.Flags().BoolVar(&cfg.SuppressDashboardRendering, "quiet", false, "suppress dashboard output for quiet or CI-oriented runs")
-	cmd.Flags().StringVar(invocationOutputMode, "output", "", "invocation stdout mode: primary (default) or response-stream for canonical Factory Events on supported live or replayed one-shot factory runs")
-	var skipPermissions bool
-	cmd.Flags().BoolVar(&skipPermissions, "skip-permissions", false, "request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration")
-}
-
-func runCommandLongHelp() string {
-	return "Load workflow and run the factory engine.\n\n" +
-		"For the quickest local setup, run " + cliBinaryName + " run --work ./docs/examples/startup-work.json. " +
-		"That default flow bootstraps ./factory, watches factory/inputs/task/default, " +
-		"keeps the runtime alive, and reports the first available dashboard URL, preferring http://localhost:7437/dashboard/ui. " +
-		"Default execution uses batch mode and exits after idle completion. " +
-		"Normal live runs record by default unless you pass --no-record. " +
-		"Replay artifacts are sensitive and can contain prompts, payloads, stdout, stderr, and diagnostic metadata. " +
-		"Use global --default-worker-model-provider and --default-worker-model to set operator-level model defaults for omitted model-worker fields. " +
-		"Use --continuously to keep the factory alive while idle until you cancel it. " +
-		"Use --with-mock-workers with an optional JSON config path to test workflows with deterministic mock worker outcomes. " +
-		"Use --quiet to suppress dashboard output for scripted or CI-oriented runs. " +
-		"Use --skip-permissions to request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration. " +
-		"Use --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/factories. " +
-		"Built-ins such as @you/tts and @you/goal materialize lazily into that global root on first use and stay editable on disk for later runs. " +
-		"Use --factory with a JSON or YAML Factory file, or an unambiguous Factory directory, to run a portable Factory without guessing --dir. " +
-		"Supported run factory selectors are --dir, --named, and --factory. " +
-		"Selected factories can define custom invocation arguments; run " + cliBinaryName + " run --named <factory> --help or " + cliBinaryName + " run --factory <factory.yaml> --help to inspect signature-backed usage while keeping existing run-level flags available. " +
-		"In factory invocation mode, provide either trailing positional text or piped stdin text; supplying both is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. " +
-		"Named-Factory selection and materialization live in " + cliBinaryName + " docs authoring-factories; invocation inputs and output modes live in " + cliBinaryName + " docs run and " + cliBinaryName + " docs sessions. " +
-		"Model readiness, direct TTS invocation, and audio or JSON result choices live in " + cliBinaryName + " docs models. " +
-		"Supported one-shot factory invocations use primary-result-only stdout by default; use --output response-stream to render ordered canonical Factory Events for live or replayed invocations; unsupported run shapes fall back to primary-result-only output or return INVOCATION_OUTPUT_UNSUPPORTED. " +
-		"Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root. " +
-		"Runtime metrics are a separate structured JSONL operational channel with their own rolling files and do not replace runtime logs. " +
-		"Environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures."
-}
-
-func runCommandExamples() string {
-	return "  # Start the current Factory with explicit Work.\n" +
-		"  " + cliBinaryName + " run --work ./docs/examples/startup-work.json\n\n" +
-		"  # Run an existing factory once in explicit batch mode.\n" +
-		"  " + cliBinaryName + " run --dir factory --work ./docs/examples/startup-work.json\n\n" +
-		"  # Run a persisted named factory from any working directory.\n" +
-		"  " + cliBinaryName + " run --named @you/tts --output primary \"Read the release summary.\"\n\n" +
-		"  # Run a portable JSON or YAML Factory with a one-shot prompt (see handlingBehavior DEFAULT).\n" +
-		"  " + cliBinaryName + " run --factory ./factory.yaml \"Fix the lint issues\"\n\n" +
-		"  # Pipe invocation input via stdin (default primary-result stdout).\n" +
-		"  echo \"Ship the login bugfix\" | " + cliBinaryName + " run --named @you/goal\n\n" +
-		"  # Opt into ordered canonical Factory Event progress instead of primary-result-only stdout.\n" +
-		"  " + cliBinaryName + " run --named @you/goal --output response-stream \"Ship the login bugfix\""
-}
-
 func newRunSubmitHandlerRegistry(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
@@ -651,6 +619,14 @@ func newRunSubmitHandlerRegistry(
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return executeRunCommand(
 					cmd, args, &runCfg, globals, diagnostics, operatorDefaults, rootOptions,
+				)
+			},
+		},
+		Server: commandregistry.CommandHandlers{
+			PreRunE: rejectDeprecatedPortFlag,
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				return executeServerCommand(
+					cmd, globals, diagnostics, operatorDefaults, rootOptions,
 				)
 			},
 		},
@@ -673,22 +649,20 @@ func newRunSubmitHandlerRegistry(
 	return registry, climanifestcobra.RunSubmitFlagBindings{
 		Run:                 &runCfg,
 		RunInvocationOutput: &invocationOutputMode,
+		RunLocalTargets:     runLocalTargets(&runCfg, &invocationOutputMode),
 		Submit:              &submitCfg,
 		SubmitBatch:         &batchCfg,
-		FlagUsages:          runSubmitFlagUsages(globals, diagnostics, operatorDefaults, rootOptions),
+		LegacyFlagUsages:    submitFlagUsages(globals, diagnostics, rootOptions),
 	}, nil
 }
 
-func runSubmitFlagUsages(
+func submitFlagUsages(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
-	operatorDefaults *cliOperatorDefaultsOptions,
 	rootOptions CommandFactory,
 ) map[string]string {
-	run := newRunCommand(globals, diagnostics, operatorDefaults, rootOptions)
 	submit := newSubmitCommand(globals, diagnostics, rootOptions)
-	commands := []*cobra.Command{run, submit}
-	commands = append(commands, submit.Commands()...)
+	commands := append([]*cobra.Command{submit}, submit.Commands()...)
 	usages := make(map[string]string)
 	for _, cmd := range commands {
 		cmd.LocalNonPersistentFlags().VisitAll(func(flag *pflag.Flag) {
@@ -698,6 +672,29 @@ func runSubmitFlagUsages(
 		})
 	}
 	return usages
+}
+
+func runLocalTargets(cfg *runcli.RunConfig, invocationOutput *string) map[string]any {
+	var skipPermissions bool
+	return map[string]any{
+		"continuously": &cfg.Continuously, "work": &cfg.WorkFile, "dir": &cfg.Dir,
+		"named": &cfg.NamedFactoryName, "factory": &cfg.FactoryConfigPath,
+		"record": &cfg.RecordPath, "no-record": &cfg.DisableDefaultRecording,
+		"replay": &cfg.ReplayPath, "runtime-log-dir": &cfg.RuntimeLogDir,
+		"runtime-log-max-size-mb":      &cfg.RuntimeLogConfig.MaxSize,
+		"runtime-log-max-backups":      &cfg.RuntimeLogConfig.MaxBackups,
+		"runtime-log-max-age-days":     &cfg.RuntimeLogConfig.MaxAge,
+		"runtime-log-compress":         &cfg.RuntimeLogConfig.Compress,
+		"runtime-metrics-dir":          &cfg.RuntimeMetricsDir,
+		"runtime-metrics-max-size-mb":  &cfg.RuntimeMetricsConfig.MaxSize,
+		"runtime-metrics-max-backups":  &cfg.RuntimeMetricsConfig.MaxBackups,
+		"runtime-metrics-max-age-days": &cfg.RuntimeMetricsConfig.MaxAge,
+		"runtime-metrics-compress":     &cfg.RuntimeMetricsConfig.Compress,
+		"with-mock-workers":            &cfg.MockWorkersConfigPath,
+		"with-server":                  &cfg.WithServer, "with-site": &cfg.WithSite,
+		"quiet": &cfg.SuppressDashboardRendering, "output": invocationOutput,
+		"skip-permissions": &skipPermissions,
+	}
 }
 
 func productionWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, injected ...CommandFactory) *cobra.Command {

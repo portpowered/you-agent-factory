@@ -16,13 +16,14 @@ func TestNewRunSubmitRegistryAttachesCompleteHandwrittenLifecycles(t *testing.T)
 	}
 	registry, err := commandregistry.NewRunSubmitRegistry(commandregistry.RunSubmitHandlers{
 		Run:         commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
+		Server:      commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
 		Submit:      commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
 		SubmitBatch: commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
 	})
 	if err != nil {
 		t.Fatalf("NewRunSubmitRegistry() error = %v", err)
 	}
-	for _, commandID := range []string{"you.run", "you.submit", "you.submit.batch"} {
+	for _, commandID := range []string{"you.run", "you.server", "you.submit", "you.submit.batch"} {
 		cmd := &cobra.Command{Use: commandID}
 		if err := registry.AttachHandlers(cmd, commandID); err != nil {
 			t.Fatalf("AttachHandlers(%s) error = %v", commandID, err)
@@ -34,14 +35,15 @@ func TestNewRunSubmitRegistryAttachesCompleteHandwrittenLifecycles(t *testing.T)
 			t.Fatalf("%s PreRunE error = %v", commandID, err)
 		}
 	}
-	if preRuns != 3 {
-		t.Fatalf("PreRunE calls = %d, want 3", preRuns)
+	if preRuns != 4 {
+		t.Fatalf("PreRunE calls = %d, want 4", preRuns)
 	}
 }
 
 func TestNewRunSubmitRegistryRejectsMissingHandler(t *testing.T) {
 	_, err := commandregistry.NewRunSubmitRegistry(commandregistry.RunSubmitHandlers{
 		Run:         commandregistry.CommandHandlers{RunE: noopRunE},
+		Server:      commandregistry.CommandHandlers{RunE: noopRunE},
 		Submit:      commandregistry.CommandHandlers{RunE: noopRunE},
 		SubmitBatch: commandregistry.CommandHandlers{},
 	})
@@ -53,6 +55,7 @@ func TestNewRunSubmitRegistryRejectsMissingHandler(t *testing.T) {
 func TestNewRunSubmitRegistryRejectsMissingPreRunHandler(t *testing.T) {
 	_, err := commandregistry.NewRunSubmitRegistry(commandregistry.RunSubmitHandlers{
 		Run:         commandregistry.CommandHandlers{RunE: noopRunE},
+		Server:      commandregistry.CommandHandlers{PreRunE: noopRunE, RunE: noopRunE},
 		Submit:      commandregistry.CommandHandlers{PreRunE: noopRunE, RunE: noopRunE},
 		SubmitBatch: commandregistry.CommandHandlers{PreRunE: noopRunE, RunE: noopRunE},
 	})
@@ -68,6 +71,7 @@ func TestVerifyRunSubmitRunnableCoverageRejectsOutOfFamilyHandler(t *testing.T) 
 	}
 	registry, err := commandregistry.NewRunSubmitRegistry(commandregistry.RunSubmitHandlers{
 		Run:         commandregistry.CommandHandlers{PreRunE: noopRunE, RunE: noopRunE},
+		Server:      commandregistry.CommandHandlers{PreRunE: noopRunE, RunE: noopRunE},
 		Submit:      commandregistry.CommandHandlers{PreRunE: noopRunE, RunE: noopRunE},
 		SubmitBatch: commandregistry.CommandHandlers{PreRunE: noopRunE, RunE: noopRunE},
 	})

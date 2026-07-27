@@ -457,8 +457,12 @@ func TestCommandManifestSchemaProductionModelsFamily(t *testing.T) {
 	if !ok {
 		t.Fatal("you.models.invoke missing --operation flag")
 	}
-	if got, _ := operation["default"].(string); got != "TTS" {
-		t.Fatalf("you.models.invoke --operation default = %q, want TTS", got)
+	defaultValue, ok := operation["defaultValue"].(map[string]any)
+	if !ok {
+		t.Fatal("you.models.invoke --operation missing typed defaultValue")
+	}
+	if got, _ := defaultValue["string"].(string); got != "TTS" {
+		t.Fatalf("you.models.invoke --operation defaultValue.string = %q, want TTS", got)
 	}
 }
 

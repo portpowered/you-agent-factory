@@ -5,7 +5,7 @@ default-worker-model-provider			default worker model provider for model workers 
 dir		factory	factory base directory
 factory			path to a JSON or YAML Factory file, or an unambiguous Factory directory, for portable one-shot runs; use positional text or piped stdin for the invocation input
 json		false	emit structured JSON on stdout for supported commands; diagnostics remain on stderr
-named			canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories; built-ins materialize there on first use and remain editable
+named	a		canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories; built-ins materialize there on first use and remain editable
 no-record		false	disable the default replay artifact for this invocation
 output			invocation stdout mode: primary (default) or response-stream for canonical Factory Events on supported live or replayed one-shot factory runs
 port		0	deprecated; use --server
@@ -22,8 +22,10 @@ runtime-metrics-dir			root directory for structured runtime metrics JSONL files 
 runtime-metrics-max-age-days		30	maximum days to retain rotated runtime metrics files
 runtime-metrics-max-backups		20	maximum rotated runtime metrics files to retain
 runtime-metrics-max-size-mb		100	rotate each runtime metrics file after this many megabytes
-server		http://localhost:7437	factory API base URI (http:// or https://); HTTP client commands target this URI and you run binds locally to its host and port
+server		http://localhost:7437	factory API base URI (http:// or https://); HTTP client commands target this URI, while you server and server-enabled runs bind its loopback host and port
 skip-permissions		false	request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration
 verbose	v	false	emit concise command diagnostics to stderr
 with-mock-workers			enable mock-worker execution with an optional mock-workers JSON config path
+with-server		false	serve the Current Factory API for the lifetime of this run without opening a browser
+with-site		false	serve the embedded dashboard and open it once after listener readiness
 work			path to initial FACTORY_REQUEST_BATCH JSON file to submit

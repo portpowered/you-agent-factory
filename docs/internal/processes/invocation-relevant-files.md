@@ -114,6 +114,34 @@ primary-result behavior.
   runtime-host, provider, and browser edges, plus a compiled-binary malformed
   config case; do not substitute source-shape assertions for observable help
   output and zero effect calls.
+- Implicit Current Factory execution must derive the exact
+  `<invocation working directory>/factory/factory.json` path from the
+  invocation-local process context and carry it as the Factory Definition
+  `SourcePath`. Do not pass only the relative `factory` directory through the
+  current-pointer resolver: that can depend on the host process directory or
+  redirect through `.current-factory`. Keep API/dashboard activation separate
+  from terminal presentation so a server-disabled batch run can still emit its
+  canonical final view.
+- Current Factory server activation uses that same exact source selection but
+  a distinct non-bootstrapping continuous configuration. Treat the HTTP
+  starter's bound callback as an internal synchronization signal: publish the
+  runtime-host binding to CLI presentation and browser effects only after
+  `CompleteStartup` succeeds, so startup failure cannot report false readiness
+  or open a browser. Cancellation must join the starter before reverse-order
+  Factory Session cleanup returns.
+- Local run/server hosting carries the CLI-validated loopback host through the
+  Factory Sessions host request into `platform/httpserver`; never reduce it to
+  a port-only `:<port>` listener. Automatic collision fallback tries every
+  higher port monotonically through `65535`, publishes the actual host and port
+  from the successful binding, and exposes terminal binding exhaustion as a
+  typed platform failure that the CLI maps to `SERVER_BIND_FAILED`.
+- A one-shot run that owns an API listener must express its terminal
+  invocation as part of the Factory Sessions lifecycle plan. Start the runtime,
+  workers, and transport first; gate the terminal operation on the published
+  ready binding; then let either transport failure or terminal completion
+  cancel and join the other side before reverse-order cleanup. Keep the hosted
+  runtime alive in service mode during that transaction without changing the
+  customer-visible one-shot run mode.
 - Root/global CLI inputs have one writable definition path:
   `contracts/cli/commands.json`. `climanifestcobra` generically projects those
   records into Cobra and resolved inputs; `make cli-manifest-check` compares
@@ -128,6 +156,13 @@ primary-result behavior.
   generic validator rejects the invocation. Keep the relationship as the sole
   validation authority and prove the resolved handler or operation is not
   invoked for the conflicting input.
+- Run output selectors are validated immediately after the command's custom
+  manifest-backed flag parser and before Current Factory selection or
+  Initializer activation. Because `you run` deliberately owns that parsing
+  compatibility boundary, map output conflicts and unsupported values to their
+  manifest-declared `ErrorResponse` there; JSON plus `response-stream` is the
+  accepted JSON-stream mode, while quiet conflicts with global JSON and every
+  explicit `--output` selection.
 - An inherited generic flag reuses its ancestor's persistent Cobra record, so
   its projected metadata must match the declaration after normalizing only the
   stable input ID, scope, inheritance reference, and lifecycle item ID.
@@ -1531,6 +1566,11 @@ response-stream output.
   invocation stdout that suppresses operator chatter, and named-goal batch
   stdout that stays primary-result-only. Reuse helpers from
   `cli_factory_prompt_run_smoke_test.go` when extending these regressions.
+- `cmd/factory` owns the operating-system interrupt boundary for the CLI.
+  Derive the reusable process context with `signal.NotifyContext`, stop the
+  signal subscription on return, and classify wrapped `context.Canceled` as the
+  manifest-declared exit 130. This lets continuous runs unwind through the
+  canonical Initializer lifecycle instead of being terminated outside it.
 - `pkg/factory/packages/tts/` owns packaged TTS invocation metadata shaping
   helpers used when `INFERENCE_RUN` (or legacy `MODEL_INVOKE`) work completes on the `execute-tts` workstation.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk
@@ -1735,6 +1775,20 @@ response-stream output.
   relationships against the authored manifest. Generated commands with no
   declared arguments must install `cobra.NoArgs`; leaving `Args` unset makes
   grouped commands appear variadic to the observable input inventory.
+- For manifest-authoritative `you run` / `you server` construction, keep local
+  flag help in `contracts/cli/commands.json` and bind stable flag names through
+  an explicit target map assembled beside the handler config. Do not recreate a
+  hidden Cobra command to harvest help strings or add flag-name switches in the
+  family constructor; the `retired-surface-check` static-policy lint plus
+  executable/manifest parity tests under `pkg/transports/cli/baseline` and
+  `climanifestcobra` protect that seam. Keep source scanning out of the
+  behavioral Go test suite.
+- Raw JavaScript `you run --factory workflow.js` owns a standalone durable
+  execution service rather than a Factory Runtime. When hosting that run, bind
+  the same execution service to the generated HTTP/dashboard transport, gate
+  the terminal sync operation on listener readiness, and place transport,
+  completion, and execution cleanup in one Factory Sessions lifecycle plan.
+  Do not open a second execution scope merely to serve the API.
 - When a migrated command starts projecting authored Examples into Cobra help,
   refresh the matching intentional help fixture under
   `pkg/transports/cli/baseline/testdata/` (for docs:

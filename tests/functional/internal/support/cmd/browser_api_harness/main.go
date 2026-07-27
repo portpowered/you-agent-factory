@@ -77,6 +77,7 @@ func main() {
 				"you", "run",
 				"--dir", cfg.factoryDir,
 				"--continuously",
+				"--with-server",
 				"--server", fmt.Sprintf("http://127.0.0.1:%d", cfg.apiPort),
 				"--with-mock-workers",
 				"--quiet",

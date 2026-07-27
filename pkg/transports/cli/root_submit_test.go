@@ -414,7 +414,7 @@ func TestRunCommand_DefaultServerEnablesAutoPortAndLocalBind(t *testing.T) {
 	}
 }
 
-func TestRunCommand_ExplicitServerDerivesBindPortAndDisablesAutoPort(t *testing.T) {
+func TestRunCommand_ExplicitServerDerivesLoopbackBindAndEnablesFallback(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
@@ -440,21 +440,26 @@ func TestRunCommand_ExplicitServerDerivesBindPortAndDisablesAutoPort(t *testing.
 	if got.BindHost != "127.0.0.1" {
 		t.Fatalf("bind host = %q, want 127.0.0.1", got.BindHost)
 	}
-	if got.AutoPort {
-		t.Fatal("expected explicit --server to disable automatic port resolution")
+	if !got.AutoPort {
+		t.Fatal("expected explicit --server to enable ascending port fallback")
 	}
 }
 
 func TestRunCommand_NonLocalServerRejected(t *testing.T) {
+	var stderr bytes.Buffer
 	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
+	root.SetErr(&stderr)
 	root.SetArgs([]string{"run", "--server", "https://remote.example.com:7443"})
 
 	if execErr := root.Execute(); execErr == nil {
 		t.Fatal("expected non-local --server rejection")
 	} else if !strings.Contains(execErr.Error(), "not a local bind target") {
 		t.Fatalf("error = %v, want local bind guidance", execErr)
+	}
+	if got := stderr.String(); strings.Count(got, "\n") != 1 ||
+		!strings.Contains(got, `"code":"SERVER_BIND_FAILED"`) {
+		t.Fatalf("stderr = %q, want exactly one SERVER_BIND_FAILED ErrorResponse", got)
 	}
 }
 

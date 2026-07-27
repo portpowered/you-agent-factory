@@ -431,7 +431,6 @@ func runNamedGoalRoutingInvocationCLIJSON(
 		"--with-mock-workers",
 		"--no-record",
 		"--server", baseURL,
-		"--quiet",
 		mockWorkersPath,
 		goalText,
 	)

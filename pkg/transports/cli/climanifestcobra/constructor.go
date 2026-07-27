@@ -55,9 +55,10 @@ func registerFlag(flagSet *pflag.FlagSet, contract climanifest.Flag, target flag
 			return fmt.Errorf("missing string binding for flag %q", contract.Long)
 		}
 		if contract.Shorthand != "" {
-			return fmt.Errorf("string flag %q does not support shorthand in generated constructor", contract.Long)
+			flagSet.StringVarP(target.stringValue, contract.Long, contract.Shorthand, contract.Default, usage)
+		} else {
+			flagSet.StringVar(target.stringValue, contract.Long, contract.Default, usage)
 		}
-		flagSet.StringVar(target.stringValue, contract.Long, contract.Default, usage)
 	case "int":
 		if target.intValue == nil {
 			return fmt.Errorf("missing int binding for flag %q", contract.Long)

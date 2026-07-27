@@ -206,7 +206,6 @@ func namedGoalJSONRunArgs(session *builtcliacceptance.Session, mockWorkersPath, 
 		"--named", goal.PackagedFactoryName,
 		"--with-mock-workers",
 		"--no-record",
-		"--quiet",
 		mockWorkersPath,
 		goalText,
 	)
@@ -225,7 +224,6 @@ func namedSubagentJSONRunArgs(
 		"--named", factorydefinitions.PackagedSubagentFactoryName,
 		"--with-mock-workers",
 		"--no-record",
-		"--quiet",
 		mockWorkersPath,
 		requestText,
 	)

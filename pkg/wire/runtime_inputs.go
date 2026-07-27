@@ -54,6 +54,7 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 		request := &factorysessions.RuntimeOpeningRequest{
 			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
 				Directory:        cfg.Dir,
+				SourcePath:       cfg.FactoryConfigPath,
 				ExecutionBaseDir: cfg.ExecutionBaseDir,
 			},
 			FactoryRuntime: factoryruntime.RuntimeOpeningRequest{
@@ -78,6 +79,7 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 					RuntimeMode: mode,
 					WorkFile:    cfg.WorkFile,
 					MockWorkers: mockWorkers != nil,
+					Host:        cfg.BindHost,
 					Port:        cfg.Port,
 					AutoPort:    cfg.AutoPort,
 				},

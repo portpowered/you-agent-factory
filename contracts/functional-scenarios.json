@@ -242,6 +242,16 @@
       ]
     },
     {
+      "stableId": "cli/you.server",
+      "name": "you server",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "The manifest-owned server command surface is present, but lifecycle behavior remains assigned to its dedicated PRD story and does not yet have qualifying customer-boundary functional evidence."
+    },
+    {
       "stableId": "cli/you.session",
       "name": "you session",
       "interface": "cli",

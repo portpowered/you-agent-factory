@@ -24,6 +24,12 @@ func ScanAllViolations(repoRoot string, cli CLIInventory, docs DocsRegistry, map
 	}
 	violations = append(violations, sourceViolations...)
 
+	manifestAuthorityViolations, err := ScanCLIManifestAuthoritySourceViolations(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	violations = append(violations, manifestAuthorityViolations...)
+
 	sort.SliceStable(violations, func(i, j int) bool {
 		left := violations[i]
 		right := violations[j]

@@ -19,6 +19,7 @@ const (
 	shellFileName    = "shell-config.json"
 )
 
+// TestGeneratedCompletionScriptsReachBuiltExecutable proves generated completion works against the shipped command tree.
 func TestGeneratedCompletionScriptsReachBuiltExecutable(t *testing.T) {
 	repositoryRoot := findRepositoryRoot(t)
 	binaryDir := t.TempDir()

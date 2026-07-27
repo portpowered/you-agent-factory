@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
@@ -142,6 +143,41 @@ func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
 	}
 	if len(order) != 4 || order[0] != "resolve" || order[1] != "open" || order[2] != "bind" || order[3] != "plan" {
 		t.Fatalf("operation order = %v, want [resolve open bind plan]", order)
+	}
+}
+
+func TestCompletionWaitsForRuntimeHostReadinessAndPublishesOnce(t *testing.T) {
+	var observerCalls, completionCalls atomic.Int32
+	ports, completion := gateCompletionOnRuntimeHost(
+		roles.ApplicationOpeningPorts{
+			RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
+				observerCalls.Add(1)
+			},
+		},
+		func(context.Context) error {
+			completionCalls.Add(1)
+			return nil
+		},
+	)
+	if ports.RuntimeHostObserver == nil || completion == nil {
+		t.Fatal("readiness gate omitted observer or completion")
+	}
+	result := make(chan error, 1)
+	go func() { result <- completion(t.Context()) }()
+	if completionCalls.Load() != 0 {
+		t.Fatal("completion ran before runtime host readiness")
+	}
+	ports.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: 7437})
+	ports.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: 7438})
+	if err := <-result; err != nil {
+		t.Fatalf("completion: %v", err)
+	}
+	if completionCalls.Load() != 1 || observerCalls.Load() != 1 {
+		t.Fatalf(
+			"calls = completion:%d observer:%d, want one each",
+			completionCalls.Load(),
+			observerCalls.Load(),
+		)
 	}
 }
 

@@ -375,6 +375,7 @@ func newMCPCommand(options CommandFactory) (*cobra.Command, error) {
 }
 
 func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy, rootOptions CommandFactory, defaultInvocation bool) error {
+	cfg = applyRunScopedServerMode(cfg)
 	logger, err := policy.BuildLogger(rootOptions.buildTerminalLogger)
 	if err != nil {
 		return err
@@ -455,12 +456,11 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 }
 
 func delegateRunInitialization(ctx context.Context, cfg runcli.RunConfig, defaultInvocation bool, options CommandFactory) error {
-	invocationOnly := cfg.CleanInvocation || cfg.PreparedInvocationInput != nil || cfg.InvocationPositionalText != nil || cfg.InvocationStdinText != nil || cfg.InvocationNormalizedArguments != nil
 	intent := startupcli.RunIntent{
 		DefaultInvocation:     defaultInvocation,
 		Continuous:            cfg.Continuously,
-		APIEnabled:            cfg.Port > 0 && !invocationOnly,
-		DashboardEnabled:      cfg.Port > 0 && !cfg.SuppressDashboardRendering && !invocationOnly,
+		APIEnabled:            (defaultInvocation || cfg.WithServer) && cfg.Port > 0,
+		DashboardEnabled:      (defaultInvocation || cfg.WithSite) && cfg.Port > 0,
 		WorkerSidecarsEnabled: true,
 	}
 	if options.openRunSelection == nil {
@@ -663,11 +663,7 @@ func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.Run
 	}
 	cfg.BindHost = target.Host
 	cfg.Port = target.Port
-	if cmd.Root().PersistentFlags().Changed("server") {
-		cfg.AutoPort = false
-	} else {
-		cfg.AutoPort = true
-	}
+	cfg.AutoPort = true
 	return nil
 }
 

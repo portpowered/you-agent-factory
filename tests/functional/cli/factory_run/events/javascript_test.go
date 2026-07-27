@@ -1,11 +1,14 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -44,6 +47,39 @@ func TestJavaScriptInvocationEmitsCanonicalPhaseAndCheckpointEvents(t *testing.T
 	}
 
 	assertJavaScriptLifecycle(t, lifecycle)
+}
+
+// TestJavaScriptInvocationWithServerJoinsListenerAfterTerminalResult proves hosted JavaScript cleanup at the CLI boundary.
+func TestJavaScriptInvocationWithServerJoinsListenerAfterTerminalResult(t *testing.T) {
+	var starts, stops, browsers atomic.Int32
+	stdout := runJavaScriptResponseStreamWithOptions(
+		t,
+		serviceedges.Edges{
+			APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+				starts.Add(1)
+				request.OnBound(platformhttpserver.Binding{Port: request.Port})
+				<-ctx.Done()
+				stops.Add(1)
+				return ctx.Err()
+			},
+			BrowserOpener: func(context.Context, string) error {
+				browsers.Add(1)
+				return nil
+			},
+		},
+		"--with-server",
+	)
+	if stdout == "" {
+		t.Fatal("JavaScript run omitted its canonical terminal response")
+	}
+	if starts.Load() != 1 || stops.Load() != 1 || browsers.Load() != 0 {
+		t.Fatalf(
+			"JavaScript server lifecycle = starts:%d stops:%d browsers:%d",
+			starts.Load(),
+			stops.Load(),
+			browsers.Load(),
+		)
+	}
 }
 
 func assertJavaScriptLifecycle(t *testing.T, events []factorydefinitions.FactoryEvent) {
@@ -89,6 +125,14 @@ func assertJavaScriptLifecycle(t *testing.T, events []factorydefinitions.Factory
 }
 
 func runJavaScriptResponseStream(t *testing.T) string {
+	return runJavaScriptResponseStreamWithOptions(t, serviceedges.Edges{})
+}
+
+func runJavaScriptResponseStreamWithOptions(
+	t *testing.T,
+	edges serviceedges.Edges,
+	extraArgs ...string,
+) string {
 	t.Helper()
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "javascript-response-stream",
@@ -116,13 +160,19 @@ func runJavaScriptResponseStream(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(dir, "mock-workers.json"), []byte(`{"mockWorkers":[]}`), 0o600); err != nil {
 		t.Fatalf("write mock-workers config: %v", err)
 	}
-	inputs := support.FakeInputs(t.Context(), []string{
+	args := []string{
 		"you", "--json", "run", "--factory", filepath.Join(dir, "factory.json"), "--output", "response-stream",
-		"--no-record", "--with-mock-workers", filepath.Join(dir, "mock-workers.json"), "hello",
-	})
+		"--no-record", "--with-mock-workers", filepath.Join(dir, "mock-workers.json"),
+	}
+	args = append(args, extraArgs...)
+	args = append(args, "hello")
+	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.WorkingDirectory = dir
+	home := t.TempDir()
+	inputs.Input.Env = append(inputs.Input.Env, "HOME="+home, "USERPROFILE="+home)
 	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	if err := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner}).Execute(inputs.Input); err != nil {
+	edges.ProviderCommandRunner = runner
+	if err := support.BuildProcess(t, edges).Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 	if inputs.Stderr() != "" {

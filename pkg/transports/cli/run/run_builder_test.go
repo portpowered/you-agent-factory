@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
@@ -229,6 +231,89 @@ type testDashboardRenderingRunner struct {
 	initializer.LocalRuntimeRunner
 	sink  factoryvisualization.Sink
 	input factoryvisualization.View
+}
+
+type runFuncRunner func(context.Context) error
+
+func (run runFuncRunner) Run(ctx context.Context) error { return run(ctx) }
+
+func TestOpenRunScopedServerAttachesInvocationCompletionAndKeepsOneShotResult(t *testing.T) {
+	prompt := "ship it"
+	var output strings.Builder
+	var opening factorysessions.ApplicationOpeningRequest
+	runnerCalls := 0
+	invocationCalls := 0
+	operation, err := Open(
+		t.Context(),
+		RunConfig{
+			Dir:                      "factory",
+			FactoryConfigPath:        "factory/factory.json",
+			InvocationPositionalText: &prompt,
+			WithServer:               true,
+			Port:                     7437,
+			DisableDefaultRecording:  true,
+			Output:                   &output,
+		},
+		func(
+			_ context.Context,
+			request factorysessions.ApplicationOpeningRequest,
+			_ *zap.Logger,
+			_ factoryvisualization.Sink,
+		) (initializer.LocalRuntimeRunner, error) {
+			opening = request
+			return runFuncRunner(func(context.Context) error {
+				runnerCalls++
+				return nil
+			}), nil
+		},
+		testInvocationOperation{invokeFactory: func(
+			context.Context,
+			factorysessions.InvocationTarget,
+			factorysessions.InvocationRequest,
+			factorysessions.FactoryEventConsumer,
+		) (factorysessions.FactoryInvocationOutcome, error) {
+			invocationCalls++
+			return factorysessions.FactoryInvocationOutcome{
+				Result: interfaces.FactoryInvocationResult{
+					Status: interfaces.InvocationTerminalStatusCompleted,
+					PrimaryResult: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeText,
+						Text: "done",
+					}},
+				},
+			}, nil
+		}},
+		nil,
+		prepareSingleWorkTargetForTest,
+		testMockWorkersConfigLoader,
+		testRuntimeOpeningRequestFactory,
+	)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if opening.Runtime.FactoryRuntime.Mode != interfaces.RuntimeModeService {
+		t.Fatalf("hosted runtime mode = %q, want service until terminal completion", opening.Runtime.FactoryRuntime.Mode)
+	}
+	if opening.Completion == nil || opening.Ports.RuntimeHostObserver == nil {
+		t.Fatal("run-scoped server omitted readiness-gated terminal completion")
+	}
+
+	if invocationCalls != 0 {
+		t.Fatal("invocation started while opening the hosted lifecycle")
+	}
+	opening.Ports.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: 7437})
+	if err := opening.Completion(t.Context()); err != nil {
+		t.Fatalf("completion: %v", err)
+	}
+	if invocationCalls != 1 || output.String() != "done" {
+		t.Fatalf("invocation calls = %d, output = %q", invocationCalls, output.String())
+	}
+	if err := operation.Run(t.Context()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if runnerCalls != 1 {
+		t.Fatalf("owned lifecycle runner calls = %d, want 1", runnerCalls)
+	}
 }
 
 func (r testDashboardRenderingRunner) Run(ctx context.Context) error {
