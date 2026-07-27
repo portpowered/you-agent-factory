@@ -230,7 +230,7 @@ func normalizeProviderFailure(
 	}
 	normalized := workers.NewProviderError(
 		failureType,
-		boundedFailureMessage(failure.Message),
+		boundedFailureMessage(canonicalAgentFailureMessage(failureType, failure.Message)),
 		errors.Join(interruption, cause),
 	)
 	normalized.ProviderSession = workers.CloneProviderSessionMetadata(
@@ -271,6 +271,25 @@ func failureTypeForProviderKind(
 }
 
 const failureMessageRuneLimit = 512
+
+const (
+	agentTimeoutFailureMessage = "provider invocation timed out"
+)
+
+func canonicalAgentFailureMessage(
+	failureType workers.WorkFailureType,
+	providerMessage string,
+) string {
+	switch failureType {
+	case workers.WorkFailureTypeTimeout:
+		return agentTimeoutFailureMessage
+	case workers.WorkFailureTypeUnknown:
+		if strings.TrimSpace(providerMessage) == "" {
+			return "provider invocation failed"
+		}
+	}
+	return providerMessage
+}
 
 func boundedFailureMessage(message string) string {
 	message = strings.TrimSpace(message)

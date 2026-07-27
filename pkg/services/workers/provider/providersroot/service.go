@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -109,9 +110,10 @@ func (s *Service) providerInstance() (inferencecontract.Provider, error) {
 }
 
 func inferenceRequest(request providers.ExecuteRequest) workers.ProviderInferenceRequest {
+	providerID := request.Provider.String()
 	infer := workers.ProviderInferenceRequest{
 		Dispatch: workDispatch(request.AttemptID),
-		ModelProvider: request.Provider.String(),
+		ModelProvider: modelProviderForProviderIdentity(providerID),
 		SystemPrompt:  request.SystemPrompt,
 		UserMessage:   request.UserMessage,
 		OutputSchema:  request.OutputSchema,
@@ -122,6 +124,27 @@ func inferenceRequest(request providers.ExecuteRequest) workers.ProviderInferenc
 		infer.SessionID = request.ResumeSession.ID
 	}
 	return infer
+}
+
+func modelProviderForProviderIdentity(providerID string) string {
+	switch workers.NormalizeRunnerID(providerID) {
+	case workers.RunnerIDCodex:
+		return string(modelprovider.ProviderCodex)
+	case string(modelprovider.ProviderClaude):
+		return string(modelprovider.ProviderClaude)
+	case workers.RunnerIDGemini:
+		return string(modelprovider.ProviderGemini)
+	case workers.RunnerIDKiro:
+		return string(modelprovider.ProviderKiro)
+	case "cursor", workers.RunnerIDCursorCLI:
+		return string(modelprovider.ProviderCursor)
+	case workers.RunnerIDOpenCode:
+		return string(modelprovider.ProviderOpenCode)
+	case workers.RunnerIDPi:
+		return string(modelprovider.ProviderPi)
+	default:
+		return providerID
+	}
 }
 
 func workDispatch(dispatchID string) work.WorkDispatch {
