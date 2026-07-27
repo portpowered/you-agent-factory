@@ -908,7 +908,10 @@ and registering measured packages in both
 `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
 `docs/internal/baselines/go-functional-coverage-package-minimums.json` so
 `ownershipinventorycheck` / Dev Package Prerequisites / `make lint` stay
-green.
+green. When rebasing orchestration ownership onto main that already landed a
+sibling Runtime owner such as `instance_host`, keep both destination package
+rows in the shared manifest, ownership inventory, and coverage minimum files
+instead of choosing one side of the conflict.
 Migration adapter fakes that explicitly implement `APIFactory` should return
 `LegacyEngineObservation` (alias of `StateSnapshot`) rather than naming
 prohibited Petri public-surface symbols in non-internal packages.
