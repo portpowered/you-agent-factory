@@ -2,7 +2,6 @@ package claude
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -124,7 +123,7 @@ func toolEvent(
 		ToolCallID:    itemID,
 		ToolName:      progress.Metadata["tool_name"],
 		Status:        strings.TrimPrefix(phase, "tool."),
-		ResultSummary: json.RawMessage(fmt.Sprintf("%q", progress.Detail)),
+		ResultSummary: toolResultSummary(progress.Detail),
 	})
 	if err != nil {
 		return inference.EventDraft{}, false
@@ -147,4 +146,16 @@ func toolEvent(
 		return inference.EventDraft{}, false
 	}
 	return event, true
+}
+
+func toolResultSummary(detail string) json.RawMessage {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return nil
+	}
+	encoded, err := json.Marshal(map[string]string{"detail": detail})
+	if err != nil {
+		return nil
+	}
+	return encoded
 }

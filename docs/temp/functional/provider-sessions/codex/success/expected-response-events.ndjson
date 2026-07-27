@@ -1,1 +1,3 @@
-{"status":"completed","type":"stream_completed"}
+{"itemId":"tool_fixture_1","toolName":"docs/lookup","type":"tool.started"}
+{"itemId":"tool_fixture_1","toolName":"docs/lookup","type":"tool.completed"}
+{"finishReason":"stop","itemId":"codex-message","text":"Codex fixture answer COMPLETE","type":"message.completed"}

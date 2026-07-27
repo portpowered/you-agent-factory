@@ -30,7 +30,7 @@ const (
 	realWorkType          = "real-task"
 	mockedWorkID          = "named-mock-replacement-mocked-work"
 	realWorkID            = "named-mock-replacement-real-work"
-	injectedProviderOutput = "injected-real-worker-output COMPLETE"
+	injectedProviderOutput = `{"type":"item.completed","item":{"id":"message-final","type":"agent_message","text":"injected-real-worker-output COMPLETE"}}` + "\n"
 
 	rejectWorkerName         = "reject-worker"
 	rejectWorkstationName    = "reject-process"
