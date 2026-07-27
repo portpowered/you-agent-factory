@@ -10,6 +10,7 @@ import (
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
+	inferenceartifacts "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/internal/artifacts"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/internal/service"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
@@ -24,6 +25,7 @@ func NewService(
 	catalog modelcatalog.Service,
 	runtimeHost runtimehost.Service,
 	invocationRuntime inference.InvocationRuntime,
+	fileSystem models.InvocationArtifactFileSystem,
 	clock func() time.Time,
 ) (inference.Service, error) {
 	if scopes == nil {
@@ -62,12 +64,17 @@ func NewService(
 			models.ErrInvalidInferenceDependencies,
 		)
 	}
+	artifactRegistrar, err := inferenceartifacts.NewRegistrar(fileSystem)
+	if err != nil {
+		return nil, err
+	}
 	return internalservice.New(
 		scopes,
 		assets,
 		catalog,
 		runtimeHost,
 		invocationRuntime,
+		artifactRegistrar,
 		clock,
 		nil,
 	), nil

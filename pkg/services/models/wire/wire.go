@@ -127,6 +127,7 @@ func NewService(
 		catalogService,
 		runtimeHost,
 		inference.InputEchoInvocationRuntime{},
+		inference.InertArtifactFileSystem{},
 		now,
 	)
 	if err != nil {

@@ -102,8 +102,12 @@ func (s *service) finishCompletedInvocation(
 	ctx context.Context,
 	request models.InvokeModelRequest,
 	invocation models.ModelInvocationRef,
-	content []models.InferenceContent,
+	runtimeResult inference.InvocationRuntimeResult,
 ) (models.InvokeModelResult, error) {
+	artifacts, err := s.registerInvocationArtifacts(runtimeResult.Artifacts)
+	if err != nil {
+		return s.finishFailedInvocation(ctx, request, invocation, err)
+	}
 	result := models.InvokeModelResult{
 		Invocation:       invocation,
 		Scope:            request.Scope,
@@ -111,12 +115,33 @@ func (s *service) finishCompletedInvocation(
 		ModelName:        request.ModelName,
 		Operation:        request.Operation,
 		Status:           models.ModelInvocationStatusCompleted,
-		Content:          append([]models.InferenceContent(nil), content...),
+		Content:          append([]models.InferenceContent(nil), runtimeResult.Content...),
+		Artifacts:        artifacts,
 		LeaseDisposition: models.InvocationLeaseReleased,
 	}.Clone()
 	s.putInvocation(invocation, result)
 	s.releaseInvocationLease(ctx, request)
 	return result, nil
+}
+
+func (s *service) registerInvocationArtifacts(
+	sources []inference.InvocationArtifactSource,
+) ([]models.InferenceArtifact, error) {
+	if len(sources) == 0 {
+		return nil, nil
+	}
+	if s == nil || s.artifacts == nil {
+		return nil, models.ErrUnavailable
+	}
+	artifacts := make([]models.InferenceArtifact, 0, len(sources))
+	for _, source := range sources {
+		artifact, err := s.artifacts.Register(source)
+		if err != nil {
+			return nil, err
+		}
+		artifacts = append(artifacts, artifact)
+	}
+	return artifacts, nil
 }
 
 func classifyInvokeCancellationError(err error) error {
@@ -140,6 +165,9 @@ func classifyInvokeRuntimeError(ctx context.Context, err error) error {
 		return err
 	}
 	if errors.Is(err, models.ErrInferenceCancelled) {
+		return err
+	}
+	if errors.Is(err, models.ErrInferenceArtifactInvalid) {
 		return err
 	}
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {

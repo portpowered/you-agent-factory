@@ -8,10 +8,11 @@ import (
 )
 
 // InvocationRuntime executes one validated scoped model operation under accepted
-// lease capacity. Implementations must return detached content facts without
-// exposing runtime handles, endpoints, processes, or filesystem paths.
+// lease capacity. Implementations must return detached content and artifact
+// source facts without exposing runtime handles, endpoints, processes, or
+// filesystem paths to peers.
 type InvocationRuntime interface {
-	Invoke(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, error)
+	Invoke(context.Context, InvocationRuntimeRequest) (InvocationRuntimeResult, error)
 }
 
 // Service owns scoped invoke and cancellation behind the singular Models root.

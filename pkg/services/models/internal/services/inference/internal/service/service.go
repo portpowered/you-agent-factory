@@ -10,6 +10,7 @@ import (
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
+	inferenceartifacts "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/internal/artifacts"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
@@ -20,9 +21,12 @@ type service struct {
 	catalog     modelcatalog.Service
 	runtimeHost runtimehost.Service
 	runtime     inference.InvocationRuntime
+	artifacts   *inferenceartifacts.Registrar
 	clock       func() time.Time
 	executionDeadline func() time.Duration
 
+	hostMu     sync.Mutex
+	hostSlots  map[hostSlotKey]*hostSlotEntry
 	mu             sync.Mutex
 	nextInvocation int
 	invocations    map[models.ModelInvocationRef]models.InvokeModelResult
@@ -39,6 +43,7 @@ func New(
 	catalog modelcatalog.Service,
 	runtimeHost runtimehost.Service,
 	runtime inference.InvocationRuntime,
+	artifacts *inferenceartifacts.Registrar,
 	clock func() time.Time,
 	executionDeadline func() time.Duration,
 ) inference.Service {
@@ -51,8 +56,10 @@ func New(
 		catalog:           catalog,
 		runtimeHost:       runtimeHost,
 		runtime:           runtime,
+		artifacts:         artifacts,
 		clock:             clock,
 		executionDeadline: executionDeadline,
+		hostSlots:         make(map[hostSlotKey]*hostSlotEntry),
 		invocations:       make(map[models.ModelInvocationRef]models.InvokeModelResult),
 	}
 }
@@ -96,6 +103,11 @@ func (s *service) InvokeModelWithLease(
 		return models.InvokeModelResult{}, err
 	}
 
+	hostSlot, err := s.acquireHostSlot(validationCtx, request)
+	if err != nil {
+		return models.InvokeModelResult{}, err
+	}
+
 	if s.runtime == nil {
 		return models.InvokeModelResult{}, models.ErrUnavailable
 	}
@@ -115,7 +127,10 @@ func (s *service) InvokeModelWithLease(
 	invokeCtx, cancelDeadline := s.invokeWithDeadline(ctx)
 	defer cancelDeadline()
 
-	content, err := s.runtime.Invoke(invokeCtx, request)
+	runtimeResult, err := s.runtime.Invoke(invokeCtx, inference.InvocationRuntimeRequest{
+		Request:  request,
+		HostSlot: hostSlot,
+	})
 	if isInvocationInFlight(err) {
 		return accepted.Clone(), nil
 	}
@@ -123,7 +138,7 @@ func (s *service) InvokeModelWithLease(
 		return s.finishFailedInvocation(invokeCtx, request, invocation, err)
 	}
 
-	return s.finishCompletedInvocation(ctx, request, invocation, content)
+	return s.finishCompletedInvocation(ctx, request, invocation, runtimeResult)
 }
 
 func (s *service) ensureModelAssetsAvailable(

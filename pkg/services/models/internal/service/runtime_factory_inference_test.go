@@ -107,7 +107,15 @@ func TestInferenceWireConstructionIsInert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
-	inference, err := inferencewire.NewService(scopes, assets, catalog, runtimeHost, inference.InputEchoInvocationRuntime{}, clock.Now)
+	inference, err := inferencewire.NewService(
+		scopes,
+		assets,
+		catalog,
+		runtimeHost,
+		inference.InputEchoInvocationRuntime{},
+		inference.InertArtifactFileSystem{},
+		clock.Now,
+	)
 	if err != nil {
 		t.Fatalf("construct Inference: %v", err)
 	}

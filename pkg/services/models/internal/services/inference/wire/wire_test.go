@@ -34,6 +34,7 @@ func TestNewServiceRequiresInferenceDependencies(t *testing.T) {
 		catalog         modelcatalog.Service
 		runtimeHost     runtimehost.Service
 		invocationRuntime inference.InvocationRuntime
+		fileSystem      models.InvocationArtifactFileSystem
 		clock           func() time.Time
 		wantContains    string
 		wantInvalidDeps bool
@@ -41,35 +42,46 @@ func TestNewServiceRequiresInferenceDependencies(t *testing.T) {
 		{
 			name: "valid", scopes: scopes, assets: assets, catalog: catalog,
 			runtimeHost: runtimeHost, invocationRuntime: inference.InputEchoInvocationRuntime{},
-			clock: clock.Now,
+			fileSystem: inference.InertArtifactFileSystem{}, clock: clock.Now,
 		},
 		{
 			name: "scopes", assets: assets, catalog: catalog, runtimeHost: runtimeHost,
-			invocationRuntime: inference.InputEchoInvocationRuntime{}, clock: clock.Now,
+			invocationRuntime: inference.InputEchoInvocationRuntime{},
+			fileSystem: inference.InertArtifactFileSystem{}, clock: clock.Now,
 			wantContains: "Runtime Scopes", wantInvalidDeps: true,
 		},
 		{
 			name: "assets", scopes: scopes, catalog: catalog, runtimeHost: runtimeHost,
-			invocationRuntime: inference.InputEchoInvocationRuntime{}, clock: clock.Now,
+			invocationRuntime: inference.InputEchoInvocationRuntime{},
+			fileSystem: inference.InertArtifactFileSystem{}, clock: clock.Now,
 			wantContains: "Assets", wantInvalidDeps: true,
 		},
 		{
 			name: "catalog", scopes: scopes, assets: assets, runtimeHost: runtimeHost,
-			invocationRuntime: inference.InputEchoInvocationRuntime{}, clock: clock.Now,
+			invocationRuntime: inference.InputEchoInvocationRuntime{},
+			fileSystem: inference.InertArtifactFileSystem{}, clock: clock.Now,
 			wantContains: "Catalog", wantInvalidDeps: true,
 		},
 		{
 			name: "runtime host", scopes: scopes, assets: assets, catalog: catalog,
-			invocationRuntime: inference.InputEchoInvocationRuntime{}, clock: clock.Now,
+			invocationRuntime: inference.InputEchoInvocationRuntime{},
+			fileSystem: inference.InertArtifactFileSystem{}, clock: clock.Now,
 			wantContains: "Runtime Host", wantInvalidDeps: true,
 		},
 		{
 			name: "invocation runtime", scopes: scopes, assets: assets, catalog: catalog, runtimeHost: runtimeHost,
-			clock: clock.Now, wantContains: "invocation runtime", wantInvalidDeps: true,
+			fileSystem: inference.InertArtifactFileSystem{}, clock: clock.Now,
+			wantContains: "invocation runtime", wantInvalidDeps: true,
+		},
+		{
+			name: "filesystem", scopes: scopes, assets: assets, catalog: catalog, runtimeHost: runtimeHost,
+			invocationRuntime: inference.InputEchoInvocationRuntime{}, clock: clock.Now,
+			wantContains: "filesystem", wantInvalidDeps: true,
 		},
 		{
 			name: "clock", scopes: scopes, assets: assets, catalog: catalog, runtimeHost: runtimeHost,
 			invocationRuntime: inference.InputEchoInvocationRuntime{},
+			fileSystem: inference.InertArtifactFileSystem{},
 			wantContains: "clock", wantInvalidDeps: true,
 		},
 	}
@@ -81,6 +93,7 @@ func TestNewServiceRequiresInferenceDependencies(t *testing.T) {
 				test.catalog,
 				test.runtimeHost,
 				test.invocationRuntime,
+				test.fileSystem,
 				test.clock,
 			)
 			if test.wantInvalidDeps {
