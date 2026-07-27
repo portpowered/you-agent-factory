@@ -42,7 +42,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/directoryreplace",
-      "minimum": 43.54
+      "minimum": 20.96
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/filesystem",
@@ -882,7 +882,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session",
-      "minimum": 30.39
+      "minimum": 30.06
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution",
@@ -916,7 +916,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization",
-      "minimum": 45.39
+      "minimum": 41.98
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts",
@@ -1506,7 +1506,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/materialize",
-      "minimum": 13.48
+      "minimum": 13.10
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/service",

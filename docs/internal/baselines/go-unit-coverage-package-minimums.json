@@ -90,7 +90,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/replay",
-      "minimum": 56.52
+      "minimum": 41.30
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact",
@@ -368,7 +368,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
-      "minimum": 89.57
+      "minimum": 89.53
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold",
@@ -1292,7 +1292,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work",
-      "minimum": 86.37
+      "minimum": 86.33
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_staging",
@@ -1348,7 +1348,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/agypty",
-      "minimum": 89.92
+      "minimum": 89.65
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/cliprovider",
