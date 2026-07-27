@@ -8,8 +8,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
+	instancehostwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/replayhooks"
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service/host"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
@@ -187,7 +188,7 @@ func (a *Assembly) Assemble(
 			"default runtime instance is required",
 		)
 	}
-	lifecycle, err := factoryhost.NewLifecycleService(clock)
+	lifecycle, err := instancehostwire.New(instancehost.Dependencies{Clock: clock})
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}

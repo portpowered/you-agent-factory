@@ -389,7 +389,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### JavaScript contracts, policy, and durability
 
-- [ ] `tests/functional/orchestration/javascript/contracts/input_mapping_test.go`
+- [x] `tests/functional/orchestration/javascript/contracts/input_mapping_test.go`
   - `TestJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs`
     covers typed request mapping.
   - `TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch` covers error.
