@@ -2,10 +2,13 @@
 //
 // Peer-facing root contract (source of truth for published slices):
 //   - Service — singular cross-service seam
-//   - SessionRef, InspectRequest/InspectResult, ProjectRequest/ProjectResult
+//   - InspectRequest/InspectResult and ProjectRequest/ProjectResult using the
+//     canonical providers.SessionRef identity
 //   - Detail and related normalized transcript/parse/usage value types
 //   - typed errors (ErrUnsupportedProvider, ErrUnsupportedKind,
-//     ErrInvalidIdentifier, ErrSessionNotFound, ErrAmbiguousSessionFile, LookupError)
+//     ErrInvalidIdentifier, ErrSessionNotFound, ErrAmbiguousSessionFile,
+//     ErrSessionOutsideRoot, ErrSessionSourceNotRegularFile,
+//     ErrSessionStorageUnavailable, LookupError)
 //
 // Construction/process-edge ports (FileSystem, home/OS resolution, Codex/Cursor
 // walk/symlink/SQL helpers) exist so Wire and owner constructors can assemble a

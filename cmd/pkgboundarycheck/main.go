@@ -160,7 +160,6 @@ var convergedServiceSubpackageRoots = map[string]string{
 	"pkg/services/factory_definitions/editable":                 "factory_definitions",
 	"pkg/services/factory_definitions/packages":                 "factory_definitions",
 	"pkg/services/factory_definitions/scaffold":                 "factory_definitions",
-	"pkg/services/provider_sessions/codex":                      "provider_sessions",
 	"pkg/services/provider_sessions/cursor":                     "provider_sessions",
 	"pkg/services/recordings/events":                            "recordings",
 	"pkg/services/recordings/projections/dashboard":             "recordings",
