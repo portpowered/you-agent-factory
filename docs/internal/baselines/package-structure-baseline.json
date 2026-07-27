@@ -454,11 +454,6 @@
     },
     {
       "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_ootb_experience_smoke_long_test.go",
-      "target": "TestOOTBExperience_APIStatusStaysQueryableAcrossCompletion"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_packaged_deep_research_invocation_test.go",
       "target": "TestSessionInvocationAPI_PackagedDeepResearchUsesMaterializedFactorySource"
     },
