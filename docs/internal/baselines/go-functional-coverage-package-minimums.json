@@ -1117,6 +1117,10 @@
       "minimum": 87.87
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical",
+      "minimum": 19.67
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query",
       "exception": {
         "kind": "measurement",
@@ -1175,6 +1179,24 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/internal/service",
+      "minimum": 1.66
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire",
+      "minimum": 100.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/projections",

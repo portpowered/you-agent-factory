@@ -7,6 +7,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/replay"
 )
 
@@ -46,7 +47,7 @@ func NewReplayRecordingSnapshotWriter(
 	return func(target string, snapshot recordings.RecordingSnapshot) error {
 		events := make([]factorydefinitions.FactoryEvent, len(snapshot.Events))
 		for index, event := range snapshot.Events {
-			events[index] = factoryEventFromCanonical(event)
+			events[index] = canonical.FactoryEventFromCanonical(event)
 		}
 		recordedAt := time.Time{}
 		if len(events) > 0 {
