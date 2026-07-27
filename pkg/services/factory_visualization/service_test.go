@@ -403,7 +403,7 @@ func assertServicePresentationTypedFailures(t *testing.T, root Root, service *Se
 	writer := newGatedPresentationWriter()
 	blockedSession.mu.Lock()
 	_ = blockedSession.output.CloseAndDrain()
-	blockedSession.output = newBestEffortOutput(writer)
+	blockedSession.output = openBestEffortOutput(writer)
 	blockedSession.closed = false
 	blockedSession.finalized = false
 	blockedSession.mu.Unlock()
@@ -419,7 +419,7 @@ func assertServicePresentationTypedFailures(t *testing.T, root Root, service *Se
 	}
 	waitForPresentationWriteAttempt(t, writer)
 
-	for i := 0; i < defaultProgressQueueCapacity; i++ {
+	for i := 0; i < DefaultProgressQueueCapacity; i++ {
 		if _, err := root.PresentProgress(context.Background(), PresentProgressRequest{
 			SessionID: blocked.SessionID,
 			Records:   []ProgressRecord{{Payload: []byte("x")}},
