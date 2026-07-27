@@ -1,4 +1,4 @@
-package codex
+package service
 
 import (
 	"bufio"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 var safeProviderSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
@@ -60,7 +61,7 @@ func LoadDetails(files providersessions.FileSystem, walkDirectory providersessio
 	return providersessions.Detail{
 		ProviderSession: providersessions.Ref{
 			Provider: providersessions.ProviderCodex,
-			Kind:     providersessions.SessionIDKind,
+			Kind:     providers.SessionIDKind,
 			ID:       normalizedID,
 		},
 		Source: providersessions.SourceMetadata{

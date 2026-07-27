@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 // Service is the singular Provider Sessions root contract for cross-service
@@ -48,28 +50,17 @@ type Service interface {
 	Project(ProjectRequest) (ProjectResult, error)
 }
 
-// SessionRef is the detached typed provider-session identity in the
-// providers.SessionRef vocabulary (provider + kind + id). Until CTR-PROV
-// publishes the canonical Providers type, this Provider Sessions-owned value is
-// the peer identity accepted by additive root slices. It does not carry
-// Providers catalog/execution or Workers selection-policy fields.
-type SessionRef struct {
-	Provider Provider
-	Kind     string
-	ID       string
-}
-
 // InspectRequest asks the root Service to validate and inspect one detached
 // SessionRef without requiring filesystem/SQL/OS effect ports from the caller.
 type InspectRequest struct {
-	Session SessionRef
+	Session providers.SessionRef
 }
 
 // InspectResult is the detached success outcome for typed SessionRef
 // validation/inspection. Normalized transcript/detail projection is published
 // as the additive Project companion slice on the same root Service.
 type InspectResult struct {
-	Session SessionRef
+	Session providers.SessionRef
 	Source  SourceMetadata
 }
 
@@ -77,16 +68,20 @@ type InspectResult struct {
 // projection for one detached SessionRef without requiring filesystem/SQL/OS
 // effect ports from the caller.
 type ProjectRequest struct {
-	Session SessionRef
+	Session providers.SessionRef
 }
 
 // ProjectResult is the detached Detail-shaped projection peers consume for
 // transcript, reasoning, tool/function-call, parse, and usage facts through
 // Provider Sessions root contracts only.
 type ProjectResult struct {
-	Session SessionRef
+	Session providers.SessionRef
 	Detail  Detail
 }
+
+// SessionRef remains as a source-compatible alias while Providers owns the
+// canonical identity and all root request/result fields use that exact type.
+type SessionRef = providers.SessionRef
 
 type Provider string
 
@@ -94,7 +89,7 @@ const (
 	ProviderCodex  Provider = "codex"
 	ProviderCursor Provider = "cursor"
 
-	SessionIDKind = "session_id"
+	SessionIDKind = providers.SessionIDKind
 )
 
 type Detail struct {

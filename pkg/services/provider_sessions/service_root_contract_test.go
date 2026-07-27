@@ -6,12 +6,13 @@ import (
 	"time"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 // rootServiceFake is a peer-shaped Provider Sessions root Service that uses
-// only Provider Sessions root contracts. It never imports Codex/Cursor reader
-// packages, filesystem/SQL/OS effect ports, Providers catalog/execution types,
-// or Workers selection-policy types.
+// only Provider Sessions and canonical Providers identity contracts. It never
+// imports Codex/Cursor reader packages, filesystem/SQL/OS effect ports,
+// Providers catalog/execution services, or Workers selection-policy types.
 type rootServiceFake struct {
 	detail    providersessions.Detail
 	detailErr error
@@ -181,7 +182,7 @@ func TestRootService_Characterization_TypedFailures(t *testing.T) {
 func TestRootService_Inspect_Characterization_TypedSessionRefSuccess(t *testing.T) {
 	modifiedAt := time.Date(2026, 7, 24, 3, 0, 0, 0, time.UTC)
 	ref := providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "session-inspect-1",
 	}
@@ -214,7 +215,7 @@ func TestRootService_Inspect_Characterization_TypedSessionRefSuccess(t *testing.
 
 func TestRootService_Inspect_Characterization_TypedFailures(t *testing.T) {
 	ref := providersessions.SessionRef{
-		Provider: providersessions.ProviderCursor,
+		Provider: providers.IDCursor,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "missing-session",
 	}
@@ -285,7 +286,7 @@ func newProjectSuccessFixture() projectSuccessFixture {
 	outputTokens := 7
 	totalTokens := 18
 	ref := providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "session-project-1",
 	}
@@ -298,7 +299,7 @@ func newProjectSuccessFixture() projectSuccessFixture {
 		outputTokens:  outputTokens,
 		totalTokens:   totalTokens,
 		detail: providersessions.Detail{
-			ProviderSession: providersessions.Ref{Provider: ref.Provider, Kind: ref.Kind, ID: ref.ID},
+			ProviderSession: providersessions.Ref{Provider: providersessions.Provider(ref.Provider), Kind: ref.Kind, ID: ref.ID},
 			Source: providersessions.SourceMetadata{
 				ModifiedAt:   &modifiedAt,
 				RelativePath: "2026/07/24/rollout-session-project-1.jsonl",
@@ -413,7 +414,7 @@ func TestRootService_Project_Characterization_NormalizedDetailSuccess(t *testing
 		t.Fatalf("ProjectResult.Session = %#v, want %#v", result.Session, fx.ref)
 	}
 	detail := result.Detail
-	if detail.ProviderSession.Provider != fx.ref.Provider ||
+	if detail.ProviderSession.Provider != providersessions.Provider(fx.ref.Provider) ||
 		detail.ProviderSession.Kind != fx.ref.Kind ||
 		detail.ProviderSession.ID != fx.ref.ID {
 		t.Fatalf("Detail.ProviderSession = %#v", detail.ProviderSession)
@@ -424,7 +425,7 @@ func TestRootService_Project_Characterization_NormalizedDetailSuccess(t *testing
 
 func TestRootService_Project_Characterization_TypedFailures(t *testing.T) {
 	ref := providersessions.SessionRef{
-		Provider: providersessions.ProviderCursor,
+		Provider: providers.IDCursor,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "missing-project-session",
 	}
@@ -483,7 +484,7 @@ func sealRootFake(ref providersessions.SessionRef, assistantText string, inputTo
 		project: providersessions.ProjectResult{
 			Session: ref,
 			Detail: providersessions.Detail{
-				ProviderSession: providersessions.Ref{Provider: ref.Provider, Kind: ref.Kind, ID: ref.ID},
+				ProviderSession: providersessions.Ref{Provider: providersessions.Provider(ref.Provider), Kind: ref.Kind, ID: ref.ID},
 				Source: providersessions.SourceMetadata{
 					ModifiedAt:   &modifiedAt,
 					RelativePath: "2026/07/24/rollout-session-seal-1.jsonl",
@@ -550,7 +551,7 @@ func TestRootService_Seal_PublishedSlicesOnSingularRoot(t *testing.T) {
 	assistantText := "sealed assistant reply"
 	inputTokens := 5
 	ref := providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "session-seal-1",
 	}

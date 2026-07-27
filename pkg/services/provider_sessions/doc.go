@@ -2,7 +2,8 @@
 //
 // Peer-facing root contract (source of truth for published slices):
 //   - Service — singular cross-service seam
-//   - SessionRef, InspectRequest/InspectResult, ProjectRequest/ProjectResult
+//   - InspectRequest/InspectResult and ProjectRequest/ProjectResult using the
+//     canonical providers.SessionRef identity
 //   - Detail and related normalized transcript/parse/usage value types
 //   - typed errors (ErrUnsupportedProvider, ErrUnsupportedKind,
 //     ErrInvalidIdentifier, ErrSessionNotFound, ErrAmbiguousSessionFile, LookupError)
