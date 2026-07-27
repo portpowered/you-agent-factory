@@ -77,6 +77,33 @@ func TestAPIUnknownRouteReturnsStructuredNotFound(t *testing.T) {
 	assertStructuredNotFoundHTTPResponse(t, response)
 }
 
+// TestAPIWrongMethodReturnsDocumentedMethodError proves wrong HTTP methods on known
+// OpenAPI routes return the documented method-error response at the public HTTP
+// contract boundary instead of a not-found outcome that would hide the mismatch.
+func TestAPIWrongMethodReturnsDocumentedMethodError(t *testing.T) {
+	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+
+	knownPath := "/status"
+	request, err := http.NewRequest(http.MethodPost, server.URL()+knownPath, nil)
+	if err != nil {
+		t.Fatalf("build POST %s: %v", knownPath, err)
+	}
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST %s: %v", knownPath, err)
+	}
+	defer response.Body.Close()
+
+	assertStructuredMethodNotAllowedHTTPResponse(t, response)
+}
+
 func assertStructuredNotFoundHTTPResponse(t *testing.T, response *http.Response) {
 	t.Helper()
 
@@ -104,6 +131,45 @@ func assertStructuredNotFoundHTTPResponse(t *testing.T, response *http.Response)
 	}
 	if strings.TrimSpace(errResp.Message) == "" {
 		t.Fatal("error message is empty, want a customer-readable not-found message")
+	}
+}
+
+func assertStructuredMethodNotAllowedHTTPResponse(t *testing.T, response *http.Response) {
+	t.Helper()
+
+	if response.StatusCode != http.StatusMethodNotAllowed {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("status = %d, want %d: %s", response.StatusCode, http.StatusMethodNotAllowed, strings.TrimSpace(string(body)))
+	}
+	if response.StatusCode == http.StatusNotFound {
+		t.Fatal("wrong-method probe returned not-found, want documented method-error status")
+	}
+
+	contentType := response.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("Content-Type = %q, want application/json structured error body: %s", contentType, strings.TrimSpace(string(body)))
+	}
+
+	var errResp factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&errResp); err != nil {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("decode structured method-error response: %v\nbody: %s", err, strings.TrimSpace(string(body)))
+	}
+	if errResp.Family == factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("error family = %q, want method-error family distinct from not-found", errResp.Family)
+	}
+	if errResp.Code == factoryapi.ErrorResponseCodeNOTFOUND {
+		t.Fatalf("error code = %q, want method-error code distinct from not-found", errResp.Code)
+	}
+	if errResp.Family != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("error family = %q, want %q", errResp.Family, factoryapi.ErrorFamilyBadRequest)
+	}
+	if errResp.Code != "METHOD_NOT_ALLOWED" {
+		t.Fatalf("error code = %q, want %q", errResp.Code, "METHOD_NOT_ALLOWED")
+	}
+	if strings.TrimSpace(errResp.Message) == "" {
+		t.Fatal("error message is empty, want a customer-readable method-error message")
 	}
 }
 

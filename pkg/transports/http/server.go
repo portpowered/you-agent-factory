@@ -63,6 +63,7 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) buildRouter() *mux.Router {
 	r := mux.NewRouter()
 	r.NotFoundHandler = http.HandlerFunc(s.handleUnknownRoute)
+	r.MethodNotAllowedHandler = http.HandlerFunc(s.handleDisallowedMethod)
 	r.HandleFunc("/dashboard/ui", s.handleDashboardUI).Methods("GET")
 	r.PathPrefix("/dashboard/ui/").HandlerFunc(s.handleDashboardUI).Methods("GET")
 	factoryapi.HandlerWithOptions(s, factoryapi.GorillaServerOptions{
@@ -74,6 +75,10 @@ func (s *Server) buildRouter() *mux.Router {
 
 func (s *Server) handleUnknownRoute(w http.ResponseWriter, _ *http.Request) {
 	s.writeError(w, http.StatusNotFound, "route not found", "NOT_FOUND")
+}
+
+func (s *Server) handleDisallowedMethod(w http.ResponseWriter, _ *http.Request) {
+	s.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "METHOD_NOT_ALLOWED")
 }
 
 func (s *Server) handleGeneratedParameterError(w http.ResponseWriter, _ *http.Request, err error) {

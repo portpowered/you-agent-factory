@@ -13,3 +13,11 @@ func TestUnknownRouteReturnsStructuredNotFound(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "route not found")
 }
+
+func TestWrongMethodReturnsDocumentedMethodError(t *testing.T) {
+	srv := newFactoryDefinitionTestServer(nil, nil)
+	req := httptest.NewRequest(http.MethodPost, "/status", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	assertJSONError(t, rec, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "method not allowed")
+}
