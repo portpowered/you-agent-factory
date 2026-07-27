@@ -26,13 +26,15 @@ func TestSessionCommandCompositionUsesTypedSessionsCLIAdapter(t *testing.T) {
 
 	called := false
 	factory := NewCommandFactory(CommandOperations{
-		ShowSession: func(cfg session.ShowConfig) error {
-			called = true
-			if cfg.SessionID != "session-beta" {
-				t.Fatalf("SessionID = %q, want session-beta", cfg.SessionID)
-			}
-			return nil
-		},
+		SessionsCLI: session.Bind(session.Operations{
+			Show: func(cfg session.ShowConfig) error {
+				called = true
+				if cfg.SessionID != "session-beta" {
+					t.Fatalf("SessionID = %q, want session-beta", cfg.SessionID)
+				}
+				return nil
+			},
+		}),
 	})
 	if factory.SessionsCLI == nil {
 		t.Fatal("SessionsCLI adapter is missing from composed factory")
@@ -59,14 +61,16 @@ func TestSessionCreatePreservesBehaviorThroughProductionComposition(t *testing.T
 		"--validate-only", "--target-kind", "named", "--target-name", "alpha",
 	}
 	runSessionCompositionCases(t, args, errors.New("session operation failed"), func(result error) CommandOperations {
-		return CommandOperations{CreateSession: func(cfg session.CreateConfig) error {
-			if cfg.Server != "https://factory.example" || cfg.Dir != "/workspace/fleet" ||
-				!cfg.ValidateOnly || cfg.TargetKind != "named" || cfg.TargetName != "alpha" ||
-				!cfg.JSON || !cfg.Verbose {
-				t.Fatalf("create config = %#v", cfg)
-			}
-			return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
-		}}
+		return CommandOperations{SessionsCLI: session.Bind(session.Operations{
+			Create: func(cfg session.CreateConfig) error {
+				if cfg.Server != "https://factory.example" || cfg.Dir != "/workspace/fleet" ||
+					!cfg.ValidateOnly || cfg.TargetKind != "named" || cfg.TargetName != "alpha" ||
+					!cfg.JSON || !cfg.Verbose {
+					t.Fatalf("create config = %#v", cfg)
+				}
+				return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+			},
+		})}
 	})
 }
 
@@ -75,12 +79,14 @@ func TestSessionDeletePreservesBehaviorThroughProductionComposition(t *testing.T
 
 	args := []string{"--verbose", "--json", "session", "delete", "session-beta", "--port", "9444"}
 	runSessionCompositionCases(t, args, errors.New("session operation failed"), func(result error) CommandOperations {
-		return CommandOperations{DeleteSession: func(cfg session.DeleteConfig) error {
-			if cfg.SessionID != "session-beta" || cfg.Port != 9444 || !cfg.JSON || !cfg.Verbose {
-				t.Fatalf("delete config = %#v", cfg)
-			}
-			return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
-		}}
+		return CommandOperations{SessionsCLI: session.Bind(session.Operations{
+			Delete: func(cfg session.DeleteConfig) error {
+				if cfg.SessionID != "session-beta" || cfg.Port != 9444 || !cfg.JSON || !cfg.Verbose {
+					t.Fatalf("delete config = %#v", cfg)
+				}
+				return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+			},
+		})}
 	})
 }
 
@@ -92,13 +98,15 @@ func TestSessionListPreservesBehaviorThroughProductionComposition(t *testing.T) 
 		"session", "list", "--scope", "live",
 	}
 	runSessionCompositionCases(t, args, errors.New("session operation failed"), func(result error) CommandOperations {
-		return CommandOperations{ListSessions: func(cfg session.ListConfig) error {
-			if cfg.Context == nil || cfg.Server != "https://factory.example" ||
-				cfg.Scope != "live" || !cfg.JSON || !cfg.Verbose {
-				t.Fatalf("list config = %#v", cfg)
-			}
-			return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
-		}}
+		return CommandOperations{SessionsCLI: session.Bind(session.Operations{
+			List: func(cfg session.ListConfig) error {
+				if cfg.Context == nil || cfg.Server != "https://factory.example" ||
+					cfg.Scope != "live" || !cfg.JSON || !cfg.Verbose {
+					t.Fatalf("list config = %#v", cfg)
+				}
+				return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+			},
+		})}
 	})
 }
 
@@ -110,13 +118,15 @@ func TestSessionShowPreservesBehaviorThroughProductionComposition(t *testing.T) 
 		"session", "show", "session-beta",
 	}
 	runSessionCompositionCases(t, args, context.Canceled, func(result error) CommandOperations {
-		return CommandOperations{ShowSession: func(cfg session.ShowConfig) error {
-			if cfg.Context == nil || cfg.Server != "https://factory.example" ||
-				cfg.SessionID != "session-beta" || !cfg.JSON || !cfg.Verbose {
-				t.Fatalf("show config = %#v", cfg)
-			}
-			return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
-		}}
+		return CommandOperations{SessionsCLI: session.Bind(session.Operations{
+			Show: func(cfg session.ShowConfig) error {
+				if cfg.Context == nil || cfg.Server != "https://factory.example" ||
+					cfg.SessionID != "session-beta" || !cfg.JSON || !cfg.Verbose {
+					t.Fatalf("show config = %#v", cfg)
+				}
+				return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+			},
+		})}
 	})
 }
 
@@ -129,14 +139,16 @@ func TestSessionDispatchesPreservesBehaviorThroughProductionComposition(t *testi
 		"--phase", "review", "--status", "COMPLETED",
 	}
 	runSessionCompositionCases(t, args, errors.New("session operation failed"), func(result error) CommandOperations {
-		return CommandOperations{ListSessionDispatches: func(cfg session.DispatchesConfig) error {
-			if cfg.Context == nil || cfg.Server != "https://factory.example" ||
-				cfg.SessionID != "dur-sess-review-001" || cfg.Phase != "review" ||
-				cfg.Status != "COMPLETED" || !cfg.JSON || !cfg.Verbose {
-				t.Fatalf("dispatches config = %#v", cfg)
-			}
-			return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
-		}}
+		return CommandOperations{SessionsCLI: session.Bind(session.Operations{
+			ListDispatches: func(cfg session.DispatchesConfig) error {
+				if cfg.Context == nil || cfg.Server != "https://factory.example" ||
+					cfg.SessionID != "dur-sess-review-001" || cfg.Phase != "review" ||
+					cfg.Status != "COMPLETED" || !cfg.JSON || !cfg.Verbose {
+					t.Fatalf("dispatches config = %#v", cfg)
+				}
+				return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+			},
+		})}
 	})
 }
 
@@ -148,13 +160,15 @@ func TestSessionPausePreservesBehaviorThroughProductionComposition(t *testing.T)
 		"session", "pause",
 	}
 	runSessionCompositionCases(t, args, errors.New("session lifecycle operation failed"), func(result error) CommandOperations {
-		return CommandOperations{PauseSession: func(cfg session.LifecycleControlConfig) error {
-			if cfg.Context == nil || cfg.Server != "https://factory.example" ||
-				cfg.SessionID != "" || !cfg.JSON || !cfg.Verbose {
-				t.Fatalf("pause config = %#v", cfg)
-			}
-			return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
-		}}
+		return CommandOperations{SessionsCLI: session.Bind(session.Operations{
+			Pause: func(cfg session.LifecycleControlConfig) error {
+				if cfg.Context == nil || cfg.Server != "https://factory.example" ||
+					cfg.SessionID != "" || !cfg.JSON || !cfg.Verbose {
+					t.Fatalf("pause config = %#v", cfg)
+				}
+				return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+			},
+		})}
 	})
 }
 
@@ -166,13 +180,15 @@ func TestSessionResumePreservesBehaviorThroughProductionComposition(t *testing.T
 		"session", "resume", "session-beta",
 	}
 	runSessionCompositionCases(t, args, context.Canceled, func(result error) CommandOperations {
-		return CommandOperations{ResumeSession: func(cfg session.LifecycleControlConfig) error {
-			if cfg.Context == nil || cfg.Server != "https://factory.example" ||
-				cfg.SessionID != "session-beta" || !cfg.JSON || !cfg.Verbose {
-				t.Fatalf("resume config = %#v", cfg)
-			}
-			return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
-		}}
+		return CommandOperations{SessionsCLI: session.Bind(session.Operations{
+			Resume: func(cfg session.LifecycleControlConfig) error {
+				if cfg.Context == nil || cfg.Server != "https://factory.example" ||
+					cfg.SessionID != "session-beta" || !cfg.JSON || !cfg.Verbose {
+					t.Fatalf("resume config = %#v", cfg)
+				}
+				return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+			},
+		})}
 	})
 }
 

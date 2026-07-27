@@ -101,29 +101,11 @@ func provideSubmitBatchOperation(
 ) cli.SubmitBatchOperation {
 	return submitcli.NewSubmitBatch(transport.Protocol, prepare)
 }
-func provideListSessionsOperation(
+func provideSessionsCLIService(
 	transport standardCLIHTTPProtocol,
 	prepare factorysessionwire.RequestPreparation,
-) cli.ListSessionsOperation {
-	return sessioncli.NewList(transport.Protocol, prepare)
-}
-func provideShowSessionOperation(transport standardCLIHTTPProtocol) cli.ShowSessionOperation {
-	return sessioncli.NewShow(transport.Protocol)
-}
-func providePauseSessionOperation(transport standardCLIHTTPProtocol) cli.PauseSessionOperation {
-	return sessioncli.NewPause(transport.Protocol)
-}
-func provideResumeSessionOperation(transport standardCLIHTTPProtocol) cli.ResumeSessionOperation {
-	return sessioncli.NewResume(transport.Protocol)
-}
-func provideListSessionDispatchesOperation(transport standardCLIHTTPProtocol) cli.ListSessionDispatchesOperation {
-	return sessioncli.NewDispatches(transport.Protocol)
-}
-func provideCreateSessionOperation(transport standardCLIHTTPProtocol) cli.CreateSessionOperation {
-	return sessioncli.NewCreate(transport.Protocol)
-}
-func provideDeleteSessionOperation(transport standardCLIHTTPProtocol) cli.DeleteSessionOperation {
-	return sessioncli.NewDelete(transport.Protocol)
+) sessioncli.Service {
+	return sessioncli.New(transport.Protocol, prepare)
 }
 func provideModelsCLIService(
 	transport standardCLIHTTPProtocol,
