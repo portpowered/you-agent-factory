@@ -119,6 +119,79 @@ func TestAPIUnsupportedContentTypeReturns415(t *testing.T) {
 	assertUnsupportedMediaTypeHTTPResponse(t, response, documentedRequestMediaType)
 }
 
+// TestAPIMalformedJSONReturnsStructured400 proves requests with the documented JSON
+// content type and a malformed body return a structured HTTP 400 at the public HTTP
+// contract boundary instead of an unsupported media type rejection or an unstructured
+// error response.
+func TestAPIMalformedJSONReturnsStructured400(t *testing.T) {
+	operation := loadContentNegotiationOperation(t, "openFactorySession")
+	requestMediaType := documentedJSONRequestMediaType(t, operation)
+
+	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+
+	endpoint := strings.TrimSuffix(server.URL(), "/") + "/factory-sessions"
+	request, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader([]byte(`{"folderPath":`)))
+	if err != nil {
+		t.Fatalf("build POST %s: %v", endpoint, err)
+	}
+	request.Header.Set("Content-Type", requestMediaType)
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+
+	assertMalformedJSONHTTPResponse(t, response)
+}
+
+func assertMalformedJSONHTTPResponse(t *testing.T, response *http.Response) {
+	t.Helper()
+
+	if response.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf(
+			"status = %d, want %d for malformed JSON body with documented application/json Content-Type: %s",
+			response.StatusCode,
+			http.StatusBadRequest,
+			strings.TrimSpace(string(body)),
+		)
+	}
+	if response.StatusCode == http.StatusUnsupportedMediaType {
+		t.Fatal("malformed JSON probe returned unsupported media type, want HTTP 400 bad request")
+	}
+
+	contentType := response.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("Content-Type = %q, want application/json structured error body: %s", contentType, strings.TrimSpace(string(body)))
+	}
+
+	var errResp factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&errResp); err != nil {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("decode structured malformed JSON response: %v\nbody: %s", err, strings.TrimSpace(string(body)))
+	}
+	if errResp.Code == "UNSUPPORTED_MEDIA_TYPE" {
+		t.Fatalf("error code = %q, want bad-request code distinct from unsupported media type", errResp.Code)
+	}
+	if errResp.Code != factoryapi.ErrorResponseCodeBADREQUEST {
+		t.Fatalf("error code = %q, want %q", errResp.Code, factoryapi.ErrorResponseCodeBADREQUEST)
+	}
+	if errResp.Family != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("error family = %q, want %q", errResp.Family, factoryapi.ErrorFamilyBadRequest)
+	}
+	if strings.TrimSpace(errResp.Message) == "" {
+		t.Fatal("error message is empty, want a customer-readable malformed JSON message")
+	}
+}
+
 func assertUnsupportedMediaTypeHTTPResponse(t *testing.T, response *http.Response, documentedJSONMediaType string) {
 	t.Helper()
 
