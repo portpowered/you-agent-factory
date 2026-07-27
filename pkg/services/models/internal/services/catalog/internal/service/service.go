@@ -101,7 +101,7 @@ func (s *service) GetModelReadiness(
 	}
 	return models.GetModelReadinessResult{
 		ModelName: detail.Name,
-		Readiness: stableRuntime(readiness),
+		Readiness: stableReadiness(detail, readiness),
 	}, nil
 }
 
@@ -180,6 +180,31 @@ func stableRuntime(runtime models.Runtime) models.Runtime {
 	runtime = runtime.Clone()
 	sortOperations(runtime.SupportedOperations)
 	return runtime
+}
+
+func stableReadiness(detail models.Detail, current models.Runtime) models.Runtime {
+	current = current.Clone()
+	current.Identity = detail.Name
+	if current.Locality == "" {
+		current.Locality = detail.ProviderLocality
+	}
+	current.SupportedOperations = detail.ManagedRuntime.Clone().SupportedOperations
+	current.Diagnostics = mergeDiagnostics(
+		detail.ManagedRuntime.Diagnostics,
+		current.Diagnostics,
+	)
+	return stableRuntime(current)
+}
+
+func mergeDiagnostics(base, current map[string]string) map[string]string {
+	merged := make(map[string]string, len(base)+len(current))
+	for key, value := range base {
+		merged[key] = value
+	}
+	for key, value := range current {
+		merged[key] = value
+	}
+	return merged
 }
 
 func stableSummary(summary models.Summary) models.Summary {
