@@ -255,20 +255,43 @@ type SessionResolvedHandler struct {
 	services SessionResolvedServices
 }
 
+// SessionResolvedHandlers supplies typed handlers for every runnable Session
+// command. Generic manifest projection maps them through stable handler IDs.
+type SessionResolvedHandlers struct {
+	Create     ResolvedRunE
+	Delete     ResolvedRunE
+	List       ResolvedRunE
+	Show       ResolvedRunE
+	Dispatches ResolvedRunE
+	Pause      ResolvedRunE
+	Resume     ResolvedRunE
+}
+
+// BindSessionResolvedHandlers adapts the injected Factory Session operations
+// into invocation-local stable-input handlers.
+func BindSessionResolvedHandlers(services SessionResolvedServices) SessionResolvedHandlers {
+	handler := &SessionResolvedHandler{services: services}
+	return SessionResolvedHandlers{
+		Create: handler.Create, Delete: handler.Delete, List: handler.List,
+		Show: handler.Show, Dispatches: handler.Dispatches,
+		Pause: handler.Pause, Resume: handler.Resume,
+	}
+}
+
 // NewSessionResolvedRegistry binds all session leaves by manifest handler ID.
 func NewSessionResolvedRegistry(
 	manifest climanifest.Manifest,
 	services SessionResolvedServices,
 ) (*Registry, error) {
-	handler := &SessionResolvedHandler{services: services}
+	handlers := BindSessionResolvedHandlers(services)
 	bindings := map[string]ResolvedRunE{
-		"you.session.create":     handler.Create,
-		"you.session.delete":     handler.Delete,
-		"you.session.list":       handler.List,
-		"you.session.show":       handler.Show,
-		"you.session.dispatches": handler.Dispatches,
-		"you.session.pause":      handler.Pause,
-		"you.session.resume":     handler.Resume,
+		"you.session.create":     handlers.Create,
+		"you.session.delete":     handlers.Delete,
+		"you.session.list":       handlers.List,
+		"you.session.show":       handlers.Show,
+		"you.session.dispatches": handlers.Dispatches,
+		"you.session.pause":      handlers.Pause,
+		"you.session.resume":     handlers.Resume,
 	}
 	registry := NewRegistry()
 	for commandID, binding := range bindings {
