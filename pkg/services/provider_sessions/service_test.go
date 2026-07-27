@@ -14,6 +14,7 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	providercursor "github.com/portpowered/infinite-you/pkg/services/provider_sessions/cursor"
 	providersessionsservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 func TestDetailsLoadsCodexSessionThroughService(t *testing.T) {
@@ -33,7 +34,7 @@ func TestInspectLoadsTypedSessionRefThroughService(t *testing.T) {
 	root := writeCodexSessionFixture(t, "session-inspect-1")
 	svc := newServiceForRoots(t, root, "")
 	ref := providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "session-inspect-1",
 	}
@@ -50,10 +51,31 @@ func TestInspectLoadsTypedSessionRefThroughService(t *testing.T) {
 	}
 }
 
+func TestInspectLoadsCanonicalCursorProvidersRefThroughService(t *testing.T) {
+	root, sessionID := writeCursorSessionFixture(t)
+	svc := newServiceForRoots(t, t.TempDir(), root)
+	ref := providers.SessionRef{
+		Provider: providers.IDCursor,
+		Kind:     providers.SessionIDKind,
+		ID:       sessionID,
+	}
+
+	result, err := svc.Inspect(providersessions.InspectRequest{Session: ref})
+	if err != nil {
+		t.Fatalf("Inspect: %v", err)
+	}
+	if result.Session != ref {
+		t.Fatalf("InspectResult.Session = %#v, want %#v", result.Session, ref)
+	}
+	if result.Source.RelativePath != filepath.ToSlash(filepath.Join("workspace", sessionID, "store.db")) {
+		t.Fatalf("InspectResult.Source = %#v", result.Source)
+	}
+}
+
 func TestInspectRejectsInvalidIdentifierAndPropagatesTypedFailures(t *testing.T) {
 	svc := newServiceForRoots(t, t.TempDir(), "")
 	if _, err := svc.Inspect(providersessions.InspectRequest{Session: providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "   ",
 	}}); !errors.Is(err, providersessions.ErrInvalidIdentifier) {
@@ -67,7 +89,7 @@ func TestInspectRejectsInvalidIdentifierAndPropagatesTypedFailures(t *testing.T)
 		t.Fatalf("provider err = %v, want ErrUnsupportedProvider", err)
 	}
 	if _, err := svc.Inspect(providersessions.InspectRequest{Session: providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     "path",
 		ID:       "session-1",
 	}}); !errors.Is(err, providersessions.ErrUnsupportedKind) {
@@ -79,7 +101,7 @@ func TestProjectLoadsNormalizedDetailThroughService(t *testing.T) {
 	root := writeCodexSessionFixture(t, "session-project-1")
 	svc := newServiceForRoots(t, root, "")
 	ref := providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "session-project-1",
 	}
@@ -100,14 +122,14 @@ func TestProjectLoadsNormalizedDetailThroughService(t *testing.T) {
 func TestProjectRejectsInvalidIdentifierAndPropagatesTypedFailures(t *testing.T) {
 	svc := newServiceForRoots(t, t.TempDir(), "")
 	if _, err := svc.Project(providersessions.ProjectRequest{Session: providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "",
 	}}); !errors.Is(err, providersessions.ErrInvalidIdentifier) {
 		t.Fatalf("empty id err = %v, want ErrInvalidIdentifier", err)
 	}
 	if _, err := svc.Project(providersessions.ProjectRequest{Session: providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "missing-session",
 	}}); !errors.Is(err, providersessions.ErrSessionNotFound) {
@@ -274,7 +296,7 @@ func TestNewConstructsServiceWithValidDependencies(t *testing.T) {
 		t.Fatal("New returned nil Service")
 	}
 	if _, err := svc.Inspect(providersessions.InspectRequest{Session: providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "missing-from-default-root",
 	}}); !errors.Is(err, providersessions.ErrSessionNotFound) {
@@ -310,6 +332,30 @@ func writeCodexSessionFixture(t *testing.T, sessionID string) string {
 		t.Fatalf("write session fixture: %v", err)
 	}
 	return root
+}
+
+func writeCursorSessionFixture(t *testing.T) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	sessionID := "cursor-root-inspect"
+	path := filepath.Join(root, "workspace", sessionID, "store.db")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir Cursor fixture: %v", err)
+	}
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open Cursor fixture: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err := db.Exec(`
+CREATE TABLE blobs (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+INSERT INTO blobs (key, value) VALUES ('bubble-1', '{"bubbleId":"bubble-1","text":"hello","timestamp":1000,"type":1}');
+INSERT INTO meta (key, value) VALUES ('0', '{"agentId":"cursor-root-inspect","createdAt":1000}');
+`); err != nil {
+		t.Fatalf("create Cursor fixture: %v", err)
+	}
+	return root, sessionID
 }
 
 func newServiceForRoots(t *testing.T, codexRoot, cursorRoot string) providersessions.Service {

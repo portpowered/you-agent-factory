@@ -1,0 +1,104 @@
+package service
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/cursor"
+	cursorreader "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+)
+
+type reader struct {
+	files           providersessions.FileSystem
+	walkDirectory   providersessions.CursorWalkDirectory
+	resolveSymlinks providersessions.CursorResolveSymlinks
+	openDatabase    providersessions.CursorOpenSQLDatabase
+	root            cursor.AgentStorageRoot
+}
+
+var _ cursorreader.Service = (*reader)(nil)
+
+// New constructs an inert Cursor reader from the exact storage effects it uses.
+func New(
+	files providersessions.FileSystem,
+	walkDirectory providersessions.CursorWalkDirectory,
+	resolveSymlinks providersessions.CursorResolveSymlinks,
+	openDatabase providersessions.CursorOpenSQLDatabase,
+	root string,
+) (cursorreader.Service, error) {
+	switch {
+	case files == nil:
+		return nil, fmt.Errorf("Cursor reader filesystem is required")
+	case walkDirectory == nil:
+		return nil, fmt.Errorf("Cursor reader directory walker is required")
+	case resolveSymlinks == nil:
+		return nil, fmt.Errorf("Cursor reader symlink resolver is required")
+	case openDatabase == nil:
+		return nil, fmt.Errorf("Cursor reader database opener is required")
+	}
+	return &reader{
+		files:           files,
+		walkDirectory:   walkDirectory,
+		resolveSymlinks: resolveSymlinks,
+		openDatabase:    openDatabase,
+		root:            cursor.AgentStorageRoot(root),
+	}, nil
+}
+
+// DefaultStorageRoot returns the configured platform's Cursor storage root
+// without exposing Cursor-native root types to the Provider Sessions root.
+func DefaultStorageRoot(
+	resolveHome providersessions.ResolveHomeDirectory,
+	files providersessions.FileSystem,
+	operatingSystem providersessions.OperatingSystem,
+) (string, error) {
+	root, err := cursor.DefaultAgentStorageRoot(resolveHome, files, operatingSystem)
+	return string(root), err
+}
+
+// Read validates the canonical Providers reference before performing storage
+// discovery, then returns only normalized Provider Sessions detail.
+func (r *reader) Read(ref providers.SessionRef) (providersessions.Detail, error) {
+	if ref.Provider != providers.IDCursor {
+		return providersessions.Detail{}, providersessions.ErrUnsupportedProvider
+	}
+	if strings.TrimSpace(ref.Kind) != providers.SessionIDKind {
+		return providersessions.Detail{}, providersessions.ErrUnsupportedKind
+	}
+	if strings.TrimSpace(ref.ID) == "" {
+		return providersessions.Detail{}, providersessions.ErrInvalidIdentifier
+	}
+
+	detail, err := cursor.LoadDetails(
+		r.files,
+		r.walkDirectory,
+		r.resolveSymlinks,
+		r.openDatabase,
+		r.root,
+		ref.ID,
+	)
+	if err == nil {
+		return detail, nil
+	}
+	return providersessions.Detail{}, &providersessions.LookupError{
+		Provider: providersessions.ProviderCursor,
+		Root:     string(r.root),
+		Err:      normalizeDiscoveryError(err),
+	}
+}
+
+func normalizeDiscoveryError(err error) error {
+	switch {
+	case errors.Is(err, providersessions.ErrInvalidIdentifier):
+		return providersessions.ErrInvalidIdentifier
+	case errors.Is(err, providersessions.ErrSessionNotFound):
+		return providersessions.ErrSessionNotFound
+	case errors.Is(err, providersessions.ErrAmbiguousSessionFile):
+		return providersessions.ErrAmbiguousSessionFile
+	default:
+		return err
+	}
+}

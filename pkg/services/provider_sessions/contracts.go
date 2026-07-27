@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 // Service is the singular Provider Sessions root contract for cross-service
@@ -48,16 +50,9 @@ type Service interface {
 	Project(ProjectRequest) (ProjectResult, error)
 }
 
-// SessionRef is the detached typed provider-session identity in the
-// providers.SessionRef vocabulary (provider + kind + id). Until CTR-PROV
-// publishes the canonical Providers type, this Provider Sessions-owned value is
-// the peer identity accepted by additive root slices. It does not carry
-// Providers catalog/execution or Workers selection-policy fields.
-type SessionRef struct {
-	Provider Provider
-	Kind     string
-	ID       string
-}
+// SessionRef is an alias for the Providers-owned canonical provider-session
+// identity. Provider Sessions does not publish a second identity type.
+type SessionRef = providers.SessionRef
 
 // InspectRequest asks the root Service to validate and inspect one detached
 // SessionRef without requiring filesystem/SQL/OS effect ports from the caller.
