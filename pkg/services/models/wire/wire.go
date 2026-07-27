@@ -16,6 +16,7 @@ import (
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
+	assetswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire"
 	catalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
@@ -80,6 +81,17 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
+	assetService, err := assetswire.NewService(
+		runtimeScopes,
+		assetPlatform,
+		assetStat,
+		assetHome,
+		assetReadFile,
+		assetReadDir,
+	)
+	if err != nil {
+		return nil, err
+	}
 	catalogService, err := catalogwire.NewService(runtimeScopes, newCatalogReadinessQuery(catalogReadinessEdges{
 		platform: localmodels.HostPlatform(assetPlatform), client: assetHTTP, endpoints: defaultEndpoints,
 		mkdirAll: modelassets.MakeDirectories(assetMkdirAll), stat: modelassets.InspectPath(assetStat),
@@ -101,7 +113,7 @@ func NewService(
 		launcher, hostHTTP, clock,
 		runtimeRunner, runtimeHTTP, localmodels.InspectFile(runtimeInspect),
 		localmodels.TempDirectory(runtimeTempDir), createTempFile,
-		runtimeScopes, catalogService,
+		runtimeScopes, catalogService, assetService,
 		models.ProcessDependencies{
 			Logger: logger, Clock: now, PullMetrics: pullMetrics,
 			HostLogger: hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,

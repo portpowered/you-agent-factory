@@ -215,6 +215,9 @@
     "pkg/services/models/internal/local",
     "pkg/services/models/internal/managedruntime",
     "pkg/services/models/internal/service",
+    "pkg/services/models/internal/services/assets",
+    "pkg/services/models/internal/services/assets/internal/service",
+    "pkg/services/models/internal/services/assets/wire",
     "pkg/services/models/internal/services/catalog",
     "pkg/services/models/internal/services/catalog/internal/service",
     "pkg/services/models/internal/services/catalog/wire",
@@ -258,6 +261,7 @@
     "pkg/services/workers/executor/agentrun",
     "pkg/services/workers/interface",
     "pkg/services/workers/internal/services/runners",
+    "pkg/services/workers/internal/services/runners/internal/inference",
     "pkg/services/workers/internal/services/runners/internal/script",
     "pkg/services/workers/internal/services/runners/internal/service",
     "pkg/services/workers/internal/services/runners/internal/testkit",
@@ -1247,6 +1251,21 @@
       "destination": "models"
     },
     {
+      "packagePath": "pkg/services/models/internal/services/assets",
+      "disposition": "retain",
+      "destination": "models/internal/services/assets"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/assets/internal/service",
+      "disposition": "retain",
+      "destination": "models/internal/services/assets"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/assets/wire",
+      "disposition": "retain",
+      "destination": "models/internal/services/assets"
+    },
+    {
       "packagePath": "pkg/services/models/internal/services/catalog",
       "disposition": "retain",
       "destination": "models/internal/services/catalog"
@@ -1458,6 +1477,11 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",
+      "disposition": "retain",
+      "destination": "workers/internal/services/runners"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/inference",
       "disposition": "retain",
       "destination": "workers/internal/services/runners"
     },

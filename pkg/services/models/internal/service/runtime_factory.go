@@ -12,6 +12,7 @@ import (
 	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
+	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	"go.uber.org/zap"
@@ -42,6 +43,7 @@ type Root struct {
 	runtimeTempDir  localmodels.TempDirectory
 	runtimeTempFile localmodels.CreateTempFile
 	runtimeScopes   runtimescopes.Service
+	assets          scopedassets.Service
 	catalog         modelcatalog.Service
 	process         models.ProcessDependencies
 }
@@ -73,6 +75,7 @@ func NewRoot(
 	runtimeTempFile localmodels.CreateTempFile,
 	runtimeScopes runtimescopes.Service,
 	catalogService modelcatalog.Service,
+	assetService scopedassets.Service,
 	processDependencies ...models.ProcessDependencies,
 ) (*Root, error) {
 	if strings.TrimSpace(assetPlatform.OperatingSystem) == "" || strings.TrimSpace(assetPlatform.Architecture) == "" {
@@ -119,6 +122,9 @@ func NewRoot(
 	if catalogService == nil {
 		return nil, missingDependencyError("Models Catalog service")
 	}
+	if assetService == nil {
+		return nil, missingDependencyError("Models Assets service")
+	}
 	process := models.ProcessDependencies{}
 	if len(processDependencies) > 0 {
 		process = processDependencies[0]
@@ -137,7 +143,7 @@ func NewRoot(
 		processLauncher: processLauncher, hostHTTP: hostHTTP, hostClock: hostClock,
 		runtimeRunner: runtimeRunner, runtimeHTTP: runtimeHTTP,
 		runtimeInspect: runtimeInspect, runtimeTempDir: runtimeTempDir, runtimeTempFile: runtimeTempFile,
-		runtimeScopes: runtimeScopes, catalog: catalogService,
+		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
 		process: process,
 	}, nil
 }
@@ -271,10 +277,13 @@ func (o *Root) PrepareModelAssets(
 }
 
 func (o *Root) InspectModelAssets(
-	context.Context,
-	models.InspectModelAssetsRequest,
+	ctx context.Context,
+	request models.InspectModelAssetsRequest,
 ) (models.InspectModelAssetsResult, error) {
-	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.assets == nil {
+		return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
+	}
+	return o.assets.InspectModelAssets(ctx, request)
 }
 
 func (o *Root) RemoveModelAssets(

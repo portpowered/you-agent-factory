@@ -31,7 +31,7 @@ func TestNewRootRejectsMissingHostPlatform(t *testing.T) {
 			nil, modelassets.Endpoints{},
 			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 			nil, nil, nil, nil, nil, nil, nil, nil,
-			nil, nil,
+			nil, nil, nil,
 		)
 		if opener != nil || !errors.Is(err, ErrInvalidDependencies) || !strings.Contains(err.Error(), "model asset host platform") {
 			t.Fatalf("NewRoot(%#v) = (%#v, %v), want missing host-platform dependency", platform, opener, err)

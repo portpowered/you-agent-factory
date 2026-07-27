@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -134,6 +135,67 @@ func TestProductionCompositionReportsCurrentScopedReadinessWithCompatibilityPari
 		t.Fatalf("InspectRuntime after cache transition: %v", err)
 	}
 	assertReadinessParity(t, current.Readiness, compatibility)
+}
+
+func TestProductionCompositionInspectsScopedAssetsThroughModelsRoot(t *testing.T) {
+	t.Parallel()
+
+	service := newProductionTestService(t)
+	cacheDirectory := t.TempDir()
+	config := models.RuntimeConfig{
+		Resources: []models.RuntimeResource{{
+			Name:     "omnivoice-cache",
+			Type:     models.RuntimeResourceTypeModel,
+			Model:    "OMNIVOICE_Q4_K_M",
+			Provider: "MODELSCOPE",
+		}},
+	}
+	opened, err := service.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{
+		Config: models.RuntimeScopeConfig{CacheDirectory: cacheDirectory, Runtime: config},
+	})
+	if err != nil {
+		t.Fatalf("OpenRuntimeScope: %v", err)
+	}
+
+	root := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M")
+	revisionDirectory := filepath.Join(root, "rev-root")
+	if err := os.MkdirAll(revisionDirectory, 0o755); err != nil {
+		t.Fatalf("create revision directory: %v", err)
+	}
+	files := []string{"omnivoice-base-Q4_K_M.gguf", "omnivoice-tokenizer-Q4_K_M.gguf"}
+	for _, name := range files {
+		if err := os.WriteFile(filepath.Join(revisionDirectory, name), []byte("asset"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"modelName": "OMNIVOICE_Q4_K_M",
+		"revision":  "rev-root",
+		"files": []map[string]any{
+			{"path": files[0], "sha256": "aaa"},
+			{"path": files[1], "sha256": "bbb"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".managed-cache.json"), metadata, 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+
+	result, err := service.InspectModelAssets(context.Background(), models.InspectModelAssetsRequest{
+		Scope: opened.Scope,
+		Name:  "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("InspectModelAssets: %v", err)
+	}
+	if result.Asset.Readiness != models.AssetReadinessAvailable ||
+		result.Asset.Source.Provider != "MANAGED_MIRROR" ||
+		result.Asset.Revision != "rev-root" ||
+		len(result.Asset.Artifacts) != 2 {
+		t.Fatalf("InspectModelAssets = %#v", result)
+	}
 }
 
 func newProductionTestService(t *testing.T) models.Service {
