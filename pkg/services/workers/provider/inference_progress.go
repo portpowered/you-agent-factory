@@ -215,19 +215,19 @@ func (p *ScriptWrapProvider) executeAgy(
 	duration := p.providerNow().Sub(started)
 	diagnostics := commandDiagnostics(result.Request, result.Command, duration, result.Outcome == adapter.CommandOutcomeCanceled)
 	if result.Failure != nil {
-		providerErr := providerErrorFromAdapterFailure(result.Failure, executeErr, diagnostics)
+		providerErr := agyProviderErrorWithSession(req, providerErrorFromAdapterFailure(result.Failure, executeErr, diagnostics))
 		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result.Command, duration)...)
 		p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
 		return workerexecution.InferenceResponse{}, providerErr
 	}
 	if executeErr != nil {
 		if orchestrated := agyadapter.ClassifyOrchestrationError(executeErr); orchestrated.Failure != nil {
-			providerErr := providerErrorFromAdapterFailure(orchestrated.Failure, executeErr, diagnostics)
+			providerErr := agyProviderErrorWithSession(req, providerErrorFromAdapterFailure(orchestrated.Failure, executeErr, diagnostics))
 			logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result.Command, duration)...)
 			p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
 			return workerexecution.InferenceResponse{}, providerErr
 		}
-		providerErr := normalizeProviderExecutionError(req.ModelProvider, result.Command, executeErr, result.Response.ProviderSession, diagnostics)
+		providerErr := agyProviderErrorWithSession(req, normalizeProviderExecutionError(req.ModelProvider, result.Command, executeErr, result.Response.ProviderSession, diagnostics))
 		p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
 		return workerexecution.InferenceResponse{}, providerErr
 	}
@@ -255,6 +255,14 @@ func agyEffectiveProviderSession(
 		session.ID = sessionID
 	}
 	return session
+}
+
+func agyProviderErrorWithSession(req workerexecution.ProviderInferenceRequest, err *ProviderError) *ProviderError {
+	if err == nil {
+		return nil
+	}
+	err.ProviderSession = agyEffectiveProviderSession(req, err.ProviderSession)
+	return err
 }
 
 func (p *ScriptWrapProvider) agyRequestValidationError(req workerexecution.ProviderInferenceRequest, err error) *ProviderError {
