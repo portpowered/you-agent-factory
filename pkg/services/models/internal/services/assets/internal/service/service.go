@@ -130,6 +130,89 @@ func (s *service) InspectModelAssets(
 	return result, nil
 }
 
+func (s *service) ResolveRuntimeCache(
+	ctx context.Context,
+	request models.InspectModelAssetsRequest,
+) (assets.RuntimeCacheLayout, error) {
+	if err := request.Validate(); err != nil {
+		return assets.RuntimeCacheLayout{}, err
+	}
+	scope, err := s.resolveScope(ctx, request.Scope)
+	if err != nil {
+		return assets.RuntimeCacheLayout{}, err
+	}
+	spec, source, err := s.resolveSource(scope.Runtime, request.Name)
+	if err != nil {
+		return assets.RuntimeCacheLayout{}, err
+	}
+	snapshot, available, err := s.inspectCache(ctx, scope.CacheDirectory, spec, source)
+	if err != nil {
+		return assets.RuntimeCacheLayout{}, err
+	}
+	if !available {
+		return assets.RuntimeCacheLayout{}, fmt.Errorf(
+			"%w: required assets missing for %s", models.ErrNotAvailable, spec.modelName,
+		)
+	}
+	root, err := s.modelCacheRoot(scope.CacheDirectory, spec.modelName)
+	if err != nil {
+		return assets.RuntimeCacheLayout{}, err
+	}
+	cachePath := filepath.Join(root, snapshot.Revision)
+	files := make([]string, 0, len(snapshot.Artifacts))
+	for _, artifact := range snapshot.Artifacts {
+		files = append(files, filepath.Join(cachePath, filepath.FromSlash(artifact.Name)))
+	}
+	return assets.RuntimeCacheLayout{
+		ModelName: snapshot.ModelName,
+		CachePath: cachePath,
+		Revision:  snapshot.Revision,
+		Files:     files,
+	}, nil
+}
+
+func (s *service) InspectRuntimeCache(
+	ctx context.Context,
+	request models.InspectModelAssetsRequest,
+) (assets.RuntimeCacheInspection, error) {
+	if err := request.Validate(); err != nil {
+		return assets.RuntimeCacheInspection{}, err
+	}
+	scope, err := s.resolveScope(ctx, request.Scope)
+	if err != nil {
+		return assets.RuntimeCacheInspection{}, err
+	}
+	spec, source, err := s.resolveSource(scope.Runtime, request.Name)
+	if errors.Is(err, models.ErrAssetSourceUnsupported) {
+		return assets.RuntimeCacheInspection{}, nil
+	}
+	if err != nil {
+		return assets.RuntimeCacheInspection{}, err
+	}
+	snapshot, available, err := s.inspectCache(ctx, scope.CacheDirectory, spec, source)
+	if err != nil {
+		return assets.RuntimeCacheInspection{}, err
+	}
+	result := assets.RuntimeCacheInspection{
+		Supported:     true,
+		Installed:     available,
+		Revision:      snapshot.Revision,
+		MissingAssets: append([]string(nil), spec.requiredArtifacts...),
+	}
+	if snapshot.Revision != "" {
+		root, rootErr := s.modelCacheRoot(scope.CacheDirectory, spec.modelName)
+		if rootErr != nil {
+			return assets.RuntimeCacheInspection{}, rootErr
+		}
+		result.CachePath = filepath.Join(root, snapshot.Revision)
+	}
+	if available {
+		result.InstalledFileCount = len(snapshot.Artifacts)
+		result.MissingAssets = nil
+	}
+	return result, nil
+}
+
 func (s *service) resolveScope(
 	ctx context.Context,
 	ref models.RuntimeScopeRef,

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -83,8 +82,8 @@ func (*leaseTestHost) Unload(context.Context, *modelRuntimeConfig, string) error
 
 type leaseTestAssets struct{}
 
-func (leaseTestAssets) PullModel(context.Context, *modelRuntimeConfig, string) (modelassets.PullResult, error) {
-	return modelassets.PullResult{}, nil
+func (leaseTestAssets) PullModel(context.Context, *modelRuntimeConfig, string) (models.PullResult, error) {
+	return models.PullResult{}, nil
 }
 func (leaseTestAssets) EnsureModelAvailable(context.Context, *modelRuntimeConfig, *modelRuntimeWorker) error {
 	return nil

@@ -801,10 +801,6 @@
       "minimum": 12.50
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/assets",
-      "minimum": 2.16
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/catalog",
       "exception": {
         "kind": "measurement",

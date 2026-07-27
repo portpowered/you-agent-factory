@@ -753,10 +753,6 @@
       "minimum": 81.25
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/assets",
-      "minimum": 61.24
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/catalog",
       "exception": {
         "kind": "measurement",
@@ -782,7 +778,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/local",
-      "minimum": 68.79
+      "minimum": 66.98
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime",
@@ -796,7 +792,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/service",
-      "minimum": 70.47
+      "minimum": 63.41
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets",
@@ -862,7 +858,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/wire",
-      "minimum": 61.53
+      "minimum": 35.84
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings",

@@ -84,6 +84,47 @@ func TestInspectModelAssetsDiscoversCompleteLocalRevisionWithoutMetadata(t *test
 	}
 }
 
+func TestRuntimeCacheCompatibilityFactsComeFromScopedAssetsService(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "runtime-cache-compatibility")
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	service := newTestService(scopes, nil)
+	request := models.InspectModelAssetsRequest{
+		Scope: ref,
+		Name:  "OMNIVOICE_Q4_K_M",
+	}
+
+	layout, err := service.ResolveRuntimeCache(context.Background(), request)
+	if err != nil {
+		t.Fatalf("ResolveRuntimeCache: %v", err)
+	}
+	if layout.ModelName != "OMNIVOICE_Q4_K_M" ||
+		layout.Revision != "rev-test" ||
+		len(layout.Files) != 2 {
+		t.Fatalf("ResolveRuntimeCache = %#v", layout)
+	}
+	for _, path := range layout.Files {
+		if filepath.Dir(path) != layout.CachePath {
+			t.Fatalf("runtime cache file %q is outside cache path %q", path, layout.CachePath)
+		}
+	}
+
+	inspection, err := service.InspectRuntimeCache(context.Background(), request)
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	if !inspection.Supported ||
+		!inspection.Installed ||
+		inspection.Revision != "rev-test" ||
+		inspection.InstalledFileCount != 2 ||
+		len(inspection.MissingAssets) != 0 {
+		t.Fatalf("InspectRuntimeCache = %#v", inspection)
+	}
+}
+
 func TestInspectModelAssetsVerifiesMetadataBackedCache(t *testing.T) {
 	t.Parallel()
 

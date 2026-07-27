@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
+	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 )
 
 // HostPlatform identifies the operating-system and architecture pair used to
@@ -19,63 +20,98 @@ type HostPlatform struct {
 
 // AssetPuller resolves managed local model assets and pull outcomes.
 type AssetPuller interface {
-	PullModel(ctx context.Context, runtimeCfg *models.RuntimeConfig, modelName string) (assets.PullResult, error)
+	PullModel(ctx context.Context, runtimeCfg *models.RuntimeConfig, modelName string) (models.PullResult, error)
 	EnsureModelAvailable(ctx context.Context, runtimeCfg *models.RuntimeConfig, worker *models.RuntimeWorker) error
 	ResolveModelCache(ctx context.Context, runtimeCfg *models.RuntimeConfig, worker *models.RuntimeWorker) (CacheLayout, error)
 	InspectRuntimeCache(ctx context.Context, runtimeCfg *models.RuntimeConfig, modelName string) (RuntimeCacheInspection, error)
 }
 
 type assetPuller struct {
-	inner *assets.Puller
+	inner        assets.Service
+	resolveScope func() (models.RuntimeScopeRef, error)
+	scopeMu      sync.Mutex
+	scope        models.RuntimeScopeRef
 }
 
-// NewAssetPuller constructs the local adapter around an asset puller
-// whose exact network and source boundaries come from composition.
-func NewAssetPuller(
-	cacheDir string,
-	hostPlatform HostPlatform,
-	client assets.HTTPDoer,
-	endpoints assets.Endpoints,
-	makeDirectories assets.MakeDirectories,
-	inspectPath assets.InspectPath,
-	resolveHome assets.ResolveHomeDirectory,
-	writeFile assets.WriteFile,
-	renamePath assets.RenamePath,
-	removePath assets.RemovePath,
-	readFile assets.ReadFile,
-	readDirectory assets.ReadDirectory,
-	createFile assets.CreateFile,
-	openFile assets.OpenFile,
+// NewScopedAssetPuller adapts the already-constructed Models Assets service to
+// the existing local runtime without constructing another puller or effect
+// bundle for a selected Factory.
+func NewScopedAssetPuller(inner assets.Service, scope models.RuntimeScopeRef) (AssetPuller, error) {
+	if inner == nil {
+		return nil, fmt.Errorf("construct local model asset adapter: Models Assets service is required")
+	}
+	if scope.IsZero() {
+		return nil, fmt.Errorf("construct local model asset adapter: runtime scope is required")
+	}
+	return &assetPuller{
+		inner: inner,
+		resolveScope: func() (models.RuntimeScopeRef, error) {
+			return scope, nil
+		},
+	}, nil
+}
+
+// NewDeferredScopedAssetPuller creates a compatibility adapter whose immutable
+// runtime scope is opened on first use. Factory Session assembly can therefore
+// retain its existing deferred runtime-config lookup without snapshotting it
+// before the runtime exists.
+func NewDeferredScopedAssetPuller(
+	inner assets.Service,
+	resolveScope func() (models.RuntimeScopeRef, error),
 ) (AssetPuller, error) {
-	operatingSystem := strings.TrimSpace(hostPlatform.OperatingSystem)
-	if operatingSystem == "" {
-		return nil, fmt.Errorf("construct local model asset puller: host operating system is required")
+	if inner == nil {
+		return nil, fmt.Errorf("construct local model asset adapter: Models Assets service is required")
 	}
-	architecture := strings.TrimSpace(hostPlatform.Architecture)
-	if architecture == "" {
-		return nil, fmt.Errorf("construct local model asset puller: host architecture is required")
+	if resolveScope == nil {
+		return nil, fmt.Errorf("construct local model asset adapter: runtime scope resolver is required")
 	}
-	inner, err := assets.NewPuller(
-		cacheDir, operatingSystem, architecture, client, endpoints,
-		makeDirectories, inspectPath, resolveHome, writeFile, renamePath,
-		removePath, readFile, readDirectory, createFile, openFile,
-	)
+	return &assetPuller{inner: inner, resolveScope: resolveScope}, nil
+}
+
+func (p *assetPuller) PullModel(ctx context.Context, _ *models.RuntimeConfig, modelName string) (models.PullResult, error) {
+	scope, err := p.currentScope()
 	if err != nil {
-		return nil, err
+		return models.PullResult{}, err
 	}
-	return assetPuller{inner: inner}, nil
+	result, err := p.inner.PrepareModelAssets(ctx, models.PrepareModelAssetsRequest{
+		Scope: scope,
+		Name:  modelName,
+	})
+	projected := pullResultFromAssets(result)
+	if err != nil {
+		projected.ManagedPullOutcome = ""
+		projected.ReadinessState = "FAILED"
+		projected.LifecycleState = "NOT_INSTALLED"
+		return projected, err
+	}
+	layout, layoutErr := p.inner.ResolveRuntimeCache(ctx, models.InspectModelAssetsRequest{
+		Scope: scope,
+		Name:  modelName,
+	})
+	if layoutErr != nil {
+		return projected, layoutErr
+	}
+	projected.CachePath = layout.CachePath
+	return projected, nil
 }
 
-func (p assetPuller) PullModel(ctx context.Context, runtimeCfg *models.RuntimeConfig, modelName string) (assets.PullResult, error) {
-	return p.inner.PullModel(ctx, runtimeCfg, modelName)
+func (p *assetPuller) EnsureModelAvailable(ctx context.Context, runtimeCfg *models.RuntimeConfig, worker *models.RuntimeWorker) error {
+	_, err := p.ResolveModelCache(ctx, runtimeCfg, worker)
+	return err
 }
 
-func (p assetPuller) EnsureModelAvailable(ctx context.Context, runtimeCfg *models.RuntimeConfig, worker *models.RuntimeWorker) error {
-	return p.inner.EnsureModelAvailable(ctx, runtimeCfg, worker)
-}
-
-func (p assetPuller) ResolveModelCache(ctx context.Context, runtimeCfg *models.RuntimeConfig, worker *models.RuntimeWorker) (CacheLayout, error) {
-	layout, err := p.inner.ResolveModelCache(ctx, runtimeCfg, worker)
+func (p *assetPuller) ResolveModelCache(ctx context.Context, _ *models.RuntimeConfig, worker *models.RuntimeWorker) (CacheLayout, error) {
+	if worker == nil || strings.TrimSpace(worker.ModelLocality) != models.RuntimeModelLocalityLocal {
+		return CacheLayout{}, nil
+	}
+	scope, err := p.currentScope()
+	if err != nil {
+		return CacheLayout{}, err
+	}
+	layout, err := p.inner.ResolveRuntimeCache(ctx, models.InspectModelAssetsRequest{
+		Scope: scope,
+		Name:  worker.Model,
+	})
 	if err != nil {
 		return CacheLayout{}, err
 	}
@@ -87,8 +123,15 @@ func (p assetPuller) ResolveModelCache(ctx context.Context, runtimeCfg *models.R
 	}, nil
 }
 
-func (p assetPuller) InspectRuntimeCache(ctx context.Context, runtimeCfg *models.RuntimeConfig, modelName string) (RuntimeCacheInspection, error) {
-	inspection, err := p.inner.InspectRuntimeCache(ctx, runtimeCfg, modelName)
+func (p *assetPuller) InspectRuntimeCache(ctx context.Context, _ *models.RuntimeConfig, modelName string) (RuntimeCacheInspection, error) {
+	scope, err := p.currentScope()
+	if err != nil {
+		return RuntimeCacheInspection{}, err
+	}
+	inspection, err := p.inner.InspectRuntimeCache(ctx, models.InspectModelAssetsRequest{
+		Scope: scope,
+		Name:  modelName,
+	})
 	if err != nil {
 		return RuntimeCacheInspection{}, err
 	}
@@ -101,4 +144,51 @@ func (p assetPuller) InspectRuntimeCache(ctx context.Context, runtimeCfg *models
 		MissingAssets:      inspection.MissingAssets,
 		PartialArtifacts:   inspection.PartialArtifacts,
 	}, nil
+}
+
+func (p *assetPuller) currentScope() (models.RuntimeScopeRef, error) {
+	if p == nil || p.resolveScope == nil {
+		return models.RuntimeScopeRef{}, fmt.Errorf("Models runtime scope is unavailable")
+	}
+	p.scopeMu.Lock()
+	defer p.scopeMu.Unlock()
+	if !p.scope.IsZero() {
+		return p.scope, nil
+	}
+	scope, err := p.resolveScope()
+	if err != nil {
+		return models.RuntimeScopeRef{}, err
+	}
+	if scope.IsZero() {
+		return models.RuntimeScopeRef{}, fmt.Errorf("Models runtime scope is unavailable")
+	}
+	p.scope = scope
+	return scope, nil
+}
+
+func pullResultFromAssets(result models.PrepareModelAssetsResult) models.PullResult {
+	files := make([]models.DownloadedFile, 0, len(result.Asset.Artifacts))
+	for _, artifact := range result.Asset.Artifacts {
+		files = append(files, models.DownloadedFile{
+			Path: artifact.Name, Bytes: artifact.Bytes, SHA256: artifact.SHA256,
+		})
+	}
+	outcome := "PULLED"
+	managedOutcome := "INSTALLED_SUCCESSFULLY"
+	if result.Outcome == models.AssetPreparationAlreadyAvailable {
+		outcome = "ALREADY_PRESENT"
+		managedOutcome = "ALREADY_READY"
+	}
+	return models.PullResult{
+		ModelName:          result.Asset.ModelName,
+		ProviderLocality:   models.RuntimeModelLocalityLocal,
+		Outcome:            outcome,
+		Revision:           result.Asset.Revision,
+		DownloadedFiles:    files,
+		ManagedPullOutcome: managedOutcome,
+		ReadinessState:     "READY",
+		LifecycleState:     "INSTALLED",
+		SourceKind:         result.Asset.Source.Provider,
+		SourceID:           result.Asset.Source.Reference,
+	}
 }

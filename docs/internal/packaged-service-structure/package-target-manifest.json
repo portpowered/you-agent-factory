@@ -208,7 +208,6 @@
     "pkg/services/factory_visualization/internal/contracts",
     "pkg/services/models",
     "pkg/services/models/internal/artifacts",
-    "pkg/services/models/internal/assets",
     "pkg/services/models/internal/catalog",
     "pkg/services/models/internal/host",
     "pkg/services/models/internal/inference",
@@ -1214,11 +1213,6 @@
       "packagePath": "pkg/services/models/internal/artifacts",
       "disposition": "retain",
       "destination": "models"
-    },
-    {
-      "packagePath": "pkg/services/models/internal/assets",
-      "disposition": "move",
-      "destination": "models/internal/services/assets"
     },
     {
       "packagePath": "pkg/services/models/internal/catalog",

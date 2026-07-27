@@ -189,9 +189,6 @@ pkg/services/factory_sessions/transports/cli/sessionexecution/run.go: unreachabl
 pkg/services/factory_sessions/transports/cli/sessionexecution/run.go: unreachable func: writeResultFailureHuman
 pkg/services/factory_sessions/transports/mcp/inventory_boundary.go: unreachable func: VerifyProjectedMCPBoundaryInventories
 pkg/services/factory_sessions/transports/mcp/registry_test.go: unreachable func: writeWorkflow
-pkg/services/models/internal/assets/runtime_config_test.go: unreachable func: projectTestModelsOperationSlots
-pkg/services/models/internal/assets/runtime_config_test.go: unreachable func: projectTestModelsOperations
-pkg/services/models/internal/assets/runtime_config_test.go: unreachable func: projectTestModelsResources
 pkg/services/models/internal/host/contract.go: unreachable func: cloneOperations
 pkg/services/models/transports/cli/non_ready_invoke_test.go: unreachable func: nonReadyLocalModelFactoryConfig
 pkg/services/provider_sessions/codex/detail.go: unreachable func: ParseSummary

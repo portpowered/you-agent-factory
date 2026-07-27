@@ -3318,12 +3318,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/models/internal/assets",
-      "disposition": "retain",
-      "destination": "models",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/models/internal/catalog",
       "disposition": "retain",
       "destination": "models",

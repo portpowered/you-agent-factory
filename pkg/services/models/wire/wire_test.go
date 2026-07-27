@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -265,6 +266,94 @@ func TestProductionCompositionPreparesAssetsThroughModelsRoot(t *testing.T) {
 		result.Asset.Integrity != models.AssetIntegrityVerified ||
 		result.Asset.Revision != "root-prepared" {
 		t.Fatalf("PrepareModelAssets result = %#v", result)
+	}
+}
+
+func TestProductionRuntimeCompatibilityPullUsesScopedAssetsService(t *testing.T) {
+	t.Parallel()
+
+	baseBody := []byte("runtime-root-base")
+	tokenizerBody := []byte("runtime-root-tokenizer")
+	baseChecksum := fmt.Sprintf("%x", sha256.Sum256(baseBody))
+	tokenizerChecksum := fmt.Sprintf("%x", sha256.Sum256(tokenizerBody))
+	var requestCount atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requestCount.Add(1)
+		switch request.URL.Path {
+		case "/models/Serveurperso/OmniVoice-GGUF":
+			_ = json.NewEncoder(writer).Encode(map[string]any{
+				"sha": "runtime-root",
+				"siblings": []map[string]any{
+					{
+						"rfilename": "omnivoice-base-Q4_K_M.gguf",
+						"lfs":       map[string]any{"oid": baseChecksum, "size": len(baseBody)},
+					},
+					{
+						"rfilename": "omnivoice-tokenizer-Q4_K_M.gguf",
+						"lfs":       map[string]any{"oid": tokenizerChecksum, "size": len(tokenizerBody)},
+					},
+				},
+			})
+		case "/Serveurperso/OmniVoice-GGUF/resolve/runtime-root/omnivoice-base-Q4_K_M.gguf":
+			_, _ = writer.Write(baseBody)
+		case "/Serveurperso/OmniVoice-GGUF/resolve/runtime-root/omnivoice-tokenizer-Q4_K_M.gguf":
+			_, _ = writer.Write(tokenizerBody)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	service := newProductionTestServiceWithAssetSource(
+		t,
+		server.Client(),
+		models.RuntimeAssetEndpoints{BaseURL: server.URL, APIBaseURL: server.URL},
+	)
+	runtimeConfig := models.RuntimeConfig{
+		Workers: []models.RuntimeWorker{{
+			Name:          "voice",
+			Type:          models.RuntimeWorkerTypeModel,
+			Model:         "OMNIVOICE_Q4_K_M",
+			ModelLocality: models.RuntimeModelLocalityLocal,
+			Operations:    []models.RuntimeOperation{{Name: "TTS"}},
+		}},
+		Resources: []models.RuntimeResource{{
+			Name: "voice-assets", Type: models.RuntimeResourceTypeModel,
+			Model: "OMNIVOICE_Q4_K_M", Backend: "GGUF", LoadPolicy: "ON_DEMAND",
+		}},
+	}
+	bound, err := service.ForRuntime(models.RuntimeBinding{
+		CacheDirectory: t.TempDir(),
+		RuntimeConfig:  func() *models.RuntimeConfig { return &runtimeConfig },
+	})
+	if err != nil {
+		t.Fatalf("ForRuntime: %v", err)
+	}
+
+	prepared, err := bound.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("PullModel prepared: %v", err)
+	}
+	if prepared.ManagedPullOutcome != "INSTALLED_SUCCESSFULLY" ||
+		prepared.Revision != "runtime-root" ||
+		len(prepared.DownloadedFiles) != 2 {
+		t.Fatalf("prepared PullModel = %#v", prepared)
+	}
+	firstRequestCount := requestCount.Load()
+
+	cached, err := bound.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("PullModel cache hit: %v", err)
+	}
+	if cached.ManagedPullOutcome != "ALREADY_READY" ||
+		cached.Outcome != "ALREADY_PRESENT" ||
+		requestCount.Load() != firstRequestCount {
+		t.Fatalf(
+			"cached PullModel = %#v requests %d, want offline cache hit after %d",
+			cached,
+			requestCount.Load(),
+			firstRequestCount,
+		)
 	}
 }
 
