@@ -1,0 +1,5 @@
+{
+  "prompt": "Process the golden structured failure task.",
+  "model": "gemini-pro",
+  "session_id": "ses_fixture_agy_structured_failure"
+}

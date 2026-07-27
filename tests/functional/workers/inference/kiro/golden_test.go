@@ -26,7 +26,7 @@ const (
 // TestKiroGoldenTextSuccess replays a sanitized Kiro text-success transcript through
 // the customer process boundary and proves successful text output with matching
 // public Provider Session, response-event, and invocation-result metadata.
-//golden: docs/temp/functional/provider-sessions/kiro/text-success/manifest.json
+// golden: docs/temp/functional/provider-sessions/kiro/text-success/manifest.json
 func TestKiroGoldenTextSuccess(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
 	caseDir := filepath.Join(
@@ -114,24 +114,18 @@ func TestKiroGoldenTextSuccess(t *testing.T) {
 	}
 
 	observed := support.ProviderSessionObservedGoldens{
-		ProviderSession:   observeKiroProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ProviderSession:  observeKiroProviderSessionGolden(inferencePayload, loaded.Manifest),
 		ResponseEvents:   observeKiroResponseEventGoldens(responseEvents),
 		InvocationResult: observeKiroInvocationResultGolden(inferencePayload, dispatchOutput),
 	}
-	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
-		var updated *support.ProviderSessionGoldensUpdatedError
-		if errors.As(err, &updated) {
-			t.Fatalf("%v", err)
-		}
-		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
-	}
+	compareKiroGoldens(t, loaded, observed)
 }
 
 // TestKiroGoldenAuthAndStructuredFailure replays sanitized Kiro auth-failure
 // and structured-failure transcripts through the customer process boundary and
 // proves those public failure classes remain distinct without leaking private detail.
-//golden: docs/temp/functional/provider-sessions/kiro/auth-failure/manifest.json
-//golden: docs/temp/functional/provider-sessions/kiro/structured-failure/manifest.json
+// golden: docs/temp/functional/provider-sessions/kiro/auth-failure/manifest.json
+// golden: docs/temp/functional/provider-sessions/kiro/structured-failure/manifest.json
 func TestKiroGoldenAuthAndStructuredFailure(t *testing.T) {
 	t.Run("auth-failure", func(t *testing.T) {
 		runKiroFailureGoldenCase(
@@ -166,7 +160,7 @@ func TestKiroGoldenAuthAndStructuredFailure(t *testing.T) {
 // customer process boundary and proves a public timeout outcome distinct from
 // successful text completion, with matching Provider Session, response-event,
 // and invocation-result metadata.
-//golden: docs/temp/functional/provider-sessions/kiro/timeout/manifest.json
+// golden: docs/temp/functional/provider-sessions/kiro/timeout/manifest.json
 func TestKiroGoldenTimeout(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
 	caseDir := filepath.Join(
@@ -261,17 +255,11 @@ func TestKiroGoldenTimeout(t *testing.T) {
 	assertKiroGoldenDispatchDoesNotTreatTimeoutStdoutAsSuccess(t, events)
 
 	observed := support.ProviderSessionObservedGoldens{
-		ProviderSession:   observeKiroProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ProviderSession:  observeKiroProviderSessionGolden(inferencePayload, loaded.Manifest),
 		ResponseEvents:   observeKiroResponseEventGoldens(responseEvents),
 		InvocationResult: observeKiroFailedInvocationResultGolden(inferencePayload),
 	}
-	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
-		var updated *support.ProviderSessionGoldensUpdatedError
-		if errors.As(err, &updated) {
-			t.Fatalf("%v", err)
-		}
-		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
-	}
+	compareKiroGoldens(t, loaded, observed)
 }
 
 func assertKiroGoldenDispatchDoesNotTreatTimeoutStdoutAsSuccess(
@@ -315,12 +303,7 @@ func runKiroFailureGoldenCase(
 	if err != nil {
 		t.Fatalf("LoadProviderSessionCase: %v", err)
 	}
-	if loaded.Manifest.ID != manifestID {
-		t.Fatalf("manifest.ID = %q, want %s", loaded.Manifest.ID, manifestID)
-	}
-	if loaded.Manifest.FidelityClass != fidelityClass {
-		t.Fatalf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, fidelityClass)
-	}
+	assertKiroGoldenManifest(t, loaded.Manifest, manifestID, fidelityClass)
 
 	var request struct {
 		Model     string `json:"model"`
@@ -393,16 +376,42 @@ func runKiroFailureGoldenCase(
 	assertKiroFailureDoesNotLeakSensitiveOutput(t, events, responseEvents, forbiddenNeedles)
 
 	observed := support.ProviderSessionObservedGoldens{
-		ProviderSession:   observeKiroProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ProviderSession:  observeKiroProviderSessionGolden(inferencePayload, loaded.Manifest),
 		ResponseEvents:   observeKiroResponseEventGoldens(responseEvents),
 		InvocationResult: observeKiroFailedInvocationResultGolden(inferencePayload),
 	}
+	compareKiroGoldens(t, loaded, observed)
+}
+
+func compareKiroGoldens(
+	t *testing.T,
+	loaded support.ProviderSessionCase,
+	observed support.ProviderSessionObservedGoldens,
+) {
+	t.Helper()
+
 	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
 		var updated *support.ProviderSessionGoldensUpdatedError
 		if errors.As(err, &updated) {
 			t.Fatalf("%v", err)
 		}
 		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
+	}
+}
+
+func assertKiroGoldenManifest(
+	t *testing.T,
+	manifest support.ProviderSessionGoldenManifest,
+	wantID string,
+	wantFidelityClass string,
+) {
+	t.Helper()
+
+	if manifest.ID != wantID {
+		t.Fatalf("manifest.ID = %q, want %s", manifest.ID, wantID)
+	}
+	if manifest.FidelityClass != wantFidelityClass {
+		t.Fatalf("manifest.fidelityClass = %q, want %q", manifest.FidelityClass, wantFidelityClass)
 	}
 }
 

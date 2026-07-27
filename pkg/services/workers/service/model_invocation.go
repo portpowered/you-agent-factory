@@ -105,8 +105,9 @@ func (s *Service) InvokeModel(
 	}
 	failureContext.WorkerName = workerDef.Name
 	failureContext.ModelName = workerDef.Model
-	managed, readinessErr := s.ensureInvocationReady(ctx, runtimeCfg, workerDef.Model)
-	s.recordManagedRuntimeInvocationReadiness(modelName, managed, readinessErr)
+	readinessErr := s.ensureAndRecordInvocationReady(
+		ctx, runtimeCfg, workerDef.Model, request.Operation,
+	)
 	if readinessErr != nil {
 		return modelinference.Result{}, classifyModelInvocationError(readinessErr, failureContext)
 	}
@@ -227,10 +228,22 @@ func modelInvocationBindings(
 	return result
 }
 
+func (s *Service) ensureAndRecordInvocationReady(
+	ctx context.Context,
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	modelName string,
+	operation string,
+) error {
+	managed, err := s.ensureInvocationReady(ctx, runtimeCfg, modelName, operation)
+	s.recordManagedRuntimeInvocationReadiness(modelName, managed, err)
+	return err
+}
+
 func (s *Service) ensureInvocationReady(
 	ctx context.Context,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	modelName string,
+	operation string,
 ) (modelinference.Runtime, error) {
 	if runtimeCfg == nil {
 		return modelinference.Runtime{}, fmt.Errorf("runtime config is not available")
@@ -238,7 +251,15 @@ func (s *Service) ensureInvocationReady(
 	if s == nil || s.models == nil {
 		return modelinference.Runtime{}, fmt.Errorf("Models service is not available")
 	}
-	return s.models.InspectRuntime(ctx, modelName)
+	if s.modelsScope.IsZero() {
+		return s.models.InspectRuntime(ctx, modelName)
+	}
+	readiness, err := s.models.GetModelReadiness(ctx, modelinference.GetModelReadinessRequest{
+		Scope:     s.modelsScope,
+		Name:      modelName,
+		Operation: operation,
+	})
+	return readiness.Readiness, err
 }
 
 func directModelInvocationWorkstationRequest(

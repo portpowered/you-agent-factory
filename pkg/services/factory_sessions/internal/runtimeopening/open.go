@@ -3,6 +3,7 @@ package runtimeopening
 import (
 	"context"
 	"fmt"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -70,7 +71,7 @@ func openRuntime(
 	resolveHome factorysessions.HomeDirectoryResolver,
 	replayFiles fileeffects.ReplayRecordingReader,
 	providerIdentities factorysessions.ProviderIdentityResolver,
-) (runtimeProducts, error) {
+) (products runtimeProducts, err error) {
 	if request == nil {
 		return runtimeProducts{}, fmt.Errorf("runtime opening request is required")
 	}
@@ -134,6 +135,20 @@ func openRuntime(
 	if runtimeRecorderFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings runtime recorder factory is required")
 	}
+	var runtimeRecording recordings.RuntimeRecorder
+	sessionRecorderFactory := func(
+		flushInterval time.Duration,
+		loaded factorydefinitions.LoadedFactorySource,
+		now func() time.Time,
+		recordPath string,
+	) (recordings.RuntimeRecorder, error) {
+		recorder, err := runtimeRecorderFactory(flushInterval, loaded, now, recordPath)
+		if err != nil || recorder == nil {
+			return recorder, err
+		}
+		runtimeRecording = recorder
+		return recorder, nil
+	}
 	if durableExecutionFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: durable execution operation is required")
 	}
@@ -165,25 +180,28 @@ func openRuntime(
 	}
 	currentRuntimeConfig := func() *models.RuntimeConfig {
 		runtime := runtimeService.CurrentRuntime()
-		if runtime == nil {
-			return nil
+		if runtime != nil {
+			return ProjectModelsRuntimeConfig(runtime.RuntimeConfig)
 		}
-		return ProjectModelsRuntimeConfig(runtime.RuntimeConfig)
+		return ProjectModelsRuntimeConfig(load.LoadedFactoryCfg)
 	}
-	if modelService == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Models service is required")
-	}
-	modelDomain, err := modelService.ForRuntime(models.RuntimeBinding{
-		CacheDirectory: configured.Models.CacheDirectory,
-		RuntimeConfig:  currentRuntimeConfig,
-	})
+	modelsBind, err := bindModelsRuntimeScope(
+		ctx,
+		modelService,
+		configured.Models.CacheDirectory,
+		currentRuntimeConfig,
+	)
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	if modelDomain == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Models service returned nil runtime view")
-	}
-	selectedModels := modelDomain
+	cleanup := &runtimeOpeningCleanup{}
+	cleanup.OwnModelsScope(context.WithoutCancel(ctx), modelsBind)
+	defer func() {
+		if err != nil {
+			err = cleanup.Unwind(err)
+		}
+	}()
+	selectedModels := modelsBind.Root
 	if contentMaterializer == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work content materializer is required")
 	}
@@ -202,7 +220,7 @@ func openRuntime(
 		nil,
 		edges.ProviderOverride,
 		runtimeService,
-		selectedModels, contentMaterializer,
+		selectedModels, modelsBind.Scope, contentMaterializer,
 		workersRuntimeFactory,
 	)
 	if err != nil {
@@ -277,7 +295,7 @@ func openRuntime(
 			mutationOwner.RecordPetriTokenMutations,
 			recordingProjections.ReconstructFactoryWorldState,
 			newRuntimeLedger,
-			runtimeRecorderFactory,
+			sessionRecorderFactory,
 			initialFactorySnapshotFactory,
 			configured.Definition.Directory,
 			root.FactoryRootDir,
@@ -292,6 +310,7 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+	cleanup.Add(startupRuntime.CloseArtifacts)
 	sessionRuntime, service4, invocationDomain, definitionHost, err := runtimeService.Complete(
 		root.FactoryRootDir,
 		clock,
@@ -347,6 +366,19 @@ func openRuntime(
 	if recordingService == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings factory returned nil service")
 	}
+	if runtimeRecording != nil {
+		if err := runtimeRecording.BindRecordingService(
+			recordingService,
+			recordings.CanonicalEventScope{
+				FactorySessionID: factorysessions.DefaultSessionID,
+			},
+		); err != nil {
+			return runtimeProducts{}, fmt.Errorf(
+				"construct runtime scope: bind runtime recording: %w",
+				err,
+			)
+		}
+	}
 	if processRuntimeFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions process runtime factory is required")
 	}
@@ -377,7 +409,7 @@ func openRuntime(
 		workflowPreview,
 		workDomain,
 		serviceService,
-		selectedModels,
+		modelsBind,
 		providerSessions,
 		startupRuntime,
 		sessionRuntime,
@@ -387,6 +419,7 @@ func openRuntime(
 		configured.Definition.Directory,
 		configured.Runtime.RuntimeInstanceID,
 		configured.Session.BackendScopeID,
+		cleanup.Close,
 	)
 	return opened, nil
 }

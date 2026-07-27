@@ -167,7 +167,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v24 := provideRecordingsFactory(liveRecordingTargetPlanner, storage)
 	v25 := provideRuntimeLedgerFactory()
 	v26 := provideLoadedFactorySnapshotCapturer()
-	runtimeRecorderFactory := provideRuntimeRecorderFactory(storage, v26)
+	runtimeRecorderFactory := provideRuntimeRecorderFactory(v26)
 	v27 := provideReplayClockFactory()
 	replayExecutionFactory := provideReplayExecutionFactory()
 	decisionEnvelopeService := provideDecisionEnvelopeService()

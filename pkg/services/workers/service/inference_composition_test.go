@@ -32,7 +32,11 @@ func TestResolveInferenceRunnerDelegatesWhenModelsDeclines(t *testing.T) {
 		ModelLocality: models.RuntimeModelLocalityLocal,
 	}
 
-	runner := resolveInferenceRunner(inner, modelsEdge, factoryCfg, workerCfg)
+	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:scope-1")
+	if err != nil {
+		t.Fatalf("parse Models scope: %v", err)
+	}
+	runner := resolveInferenceRunner(inner, modelsEdge, scope, factoryCfg, workerCfg)
 	request := workers.RunnerExecutionRequest{
 		RunnerID:       workers.RunnerIDCodex,
 		ModelOperation: "transcribe",
@@ -63,6 +67,9 @@ func TestResolveInferenceRunnerDelegatesWhenModelsDeclines(t *testing.T) {
 	if got := modelsEdge.request.Resources[0].Name; got != "gpu" {
 		t.Fatalf("Models resource name = %q, want gpu", got)
 	}
+	if modelsEdge.request.Scope != scope {
+		t.Fatalf("Models scope = %q, want %q", modelsEdge.request.Scope, scope)
+	}
 }
 
 func TestResolveInferenceRunnerReturnsHandledModelsContent(t *testing.T) {
@@ -75,6 +82,7 @@ func TestResolveInferenceRunnerReturnsHandledModelsContent(t *testing.T) {
 	runner := resolveInferenceRunner(
 		inner,
 		modelsEdge,
+		models.RuntimeScopeRef{},
 		&interfaces.FactoryConfig{},
 		&interfaces.FactoryWorkerConfig{
 			Name:          "whisper-worker",
@@ -106,7 +114,13 @@ func TestResolveInferenceRunnerSkipsCompositionWhenDependenciesMissing(t *testin
 	inner := &compositionDelegateRunner{
 		result: workers.RunnerExecutionResult{Content: "native"},
 	}
-	runner := resolveInferenceRunner(inner, nil, &interfaces.FactoryConfig{}, &interfaces.FactoryWorkerConfig{Name: "worker"})
+	runner := resolveInferenceRunner(
+		inner,
+		nil,
+		models.RuntimeScopeRef{},
+		&interfaces.FactoryConfig{},
+		&interfaces.FactoryWorkerConfig{Name: "worker"},
+	)
 	if runner != inner {
 		t.Fatal("resolveInferenceRunner() replaced runner without Models service")
 	}

@@ -21,6 +21,16 @@ func normalizeValidationFailure(request providers.ExecuteRequest) error {
 	}, request)
 }
 
+func normalizeContextFailure(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+) error {
+	if err := ctx.Err(); err != nil {
+		return normalizeAttemptFailure(ctx, err, request)
+	}
+	return nil
+}
+
 func normalizeAttemptFailure(
 	ctx context.Context,
 	attemptErr error,

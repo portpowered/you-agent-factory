@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "gemini",
+    "--prompt",
+    "Process the golden text success task.",
+    "--model",
+    "gemini-2.5-flash"
+  ],
+  "provider": "gemini",
+  "model": "gemini-2.5-flash",
+  "exitCode": 0,
+  "stdoutStream": true,
+  "stderrStream": false,
+  "workingDirectoryRole": "factory-root",
+  "timeoutCancelClass": "none",
+  "terminalErrorClass": "none"
+}

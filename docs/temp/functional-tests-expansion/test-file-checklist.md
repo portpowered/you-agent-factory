@@ -212,7 +212,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot`.
   - `TestMCPStdioFixtureAndRuntimePathsReachInitializer`.
 
-- [ ] `tests/functional/transport/mcp/protocol/errors_test.go`
+- [x] `tests/functional/transport/mcp/protocol/errors_test.go`
   - `TestMCPMalformedParametersReturnInvalidParams`.
   - `TestMCPMissingFactorySessionReturnsCanonicalNotFound`.
   - `TestMCPServerShutdownClosesStdioCleanly`.
@@ -260,10 +260,15 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Inference workers — golden-backed provider variants
 
-- [ ] `tests/functional/workers/inference/codex/golden_success_test.go`
+- [x] `tests/functional/workers/inference/codex/golden_success_test.go`
   - `TestCodexGoldenTextAndToolSuccess` replays `codex/message-tool-success`.
   - `TestCodexGoldenDerivesProviderSessionAndResponseEvents` compares all public
     metadata goldens.
+
+- [x] `tests/functional/workers/inference/codex/worktree_workstation_test.go`
+  - `TestCodexWorktreeWorkstationDispatch_MaterializesCheckoutAndOmitsCLIWorktreeFlag`
+    proves named worktree checkout materialization and omits the CLI `--worktree`
+    flag.
 
 - [ ] `tests/functional/workers/inference/codex/golden_failure_test.go`
   - `TestCodexGoldenStructuredFailure` replays a non-zero structured failure.
@@ -290,10 +295,19 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestOpenCodeGoldenFinalOnlyFallback`.
   - `TestOpenCodeGoldenStructuredFailureAndTimeout`.
 
-- [ ] `tests/functional/workers/inference/gemini/golden_test.go`
+- [x] `tests/functional/workers/inference/gemini/golden_test.go`
   - `TestGeminiGoldenTextSuccess`.
   - `TestGeminiGoldenRateLimitAndStructuredFailure`.
   - `TestGeminiGoldenTimeout`.
+  - `TestRootBuiltProcessExecutesThroughSharedSupport`.
+  - `TestGeminiConductorSuccessThroughRootBuildProcess`.
+  - `TestGeminiClassifierRejectsStructuredLabelThroughRootBuildProcess`.
+  - `TestGeminiConductorPreservesConfiguredEnvironment`.
+  - `TestGeminiConductorPreservesConfiguredSkipPermissions`.
+  - `TestGeminiRejectsUnsupportedStructuredOutputBeforeProviderIO`.
+  - `TestGeminiRejectsUnsupportedWorkingDirectoryBeforeProviderIO`.
+  - `TestGeminiNativeFailureThroughRootBuildProcessIsSafe`.
+  - `TestGeminiCommandCancellationThroughRootBuildProcessIsCanonical`.
 
 - [x] `tests/functional/workers/inference/kiro/golden_test.go`
   - `TestKiroGoldenTextSuccess`.
@@ -305,7 +319,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPiGoldenStructuredFailure`.
   - `TestPiGoldenTimeout`.
 
-- [ ] `tests/functional/workers/inference/agy/golden_test.go`
+- [x] `tests/functional/workers/inference/agy/golden_test.go`
   - `TestAgyGoldenFinalOnlySuccess`.
   - `TestAgyGoldenStructuredFailure`.
   - `TestAgyGoldenTimeout`.
@@ -359,6 +373,8 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     external calls without sleeps.
   - `TestJavaScriptParallelPreservesDeclaredResultOrdering` covers determinism.
   - `TestJavaScriptParallelPartialFailureUsesDocumentedPolicy` covers error.
+
+- [x] `tests/functional/orchestration/javascript/events/javascript_test.go`
 
 - [ ] `tests/functional/orchestration/javascript/composition/for_each_test.go`
   - `TestJavaScriptForEachDispatchesEveryInputOnce` covers cardinality.
@@ -426,7 +442,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestExecutionWorkstationDispatchesEligibleWorkOnce`.
   - `TestExecutionWorkstationFailureProjectsPublicFailedState`.
 
-- [ ] `tests/functional/workstations/execution/contention_test.go`
+- [x] `tests/functional/workstations/execution/contention_test.go`
   - `TestEligibleWorkstationContentionChoosesOneDispatchOnly`.
   - `TestContentionMakesProgressAcrossRepeatedWork`.
 

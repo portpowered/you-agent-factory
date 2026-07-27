@@ -81,6 +81,10 @@ func (adapter *streamingAdapter) attempt(
 		<-ctx.Done()
 		return providers.ExecuteResult{}, ctx.Err()
 	}
+	if adapter.plan.ReturnSuccessAfterContext {
+		<-ctx.Done()
+		return adapter.plan.Result, nil
+	}
 	return adapter.plan.Result, adapter.plan.Failure
 }
 
@@ -139,6 +143,10 @@ func newFinalOnlyAdapter(plan executiontest.Plan) executiontest.Adapter {
 		if plan.WaitForContext {
 			<-ctx.Done()
 			return providers.ExecuteResult{}, ctx.Err()
+		}
+		if plan.ReturnSuccessAfterContext {
+			<-ctx.Done()
+			return plan.Result, nil
 		}
 		return plan.Result, plan.Failure
 	}

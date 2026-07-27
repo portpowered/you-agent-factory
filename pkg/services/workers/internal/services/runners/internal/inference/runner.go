@@ -19,6 +19,7 @@ const Identity = "inference"
 type Config struct {
 	Worker    models.LocalWorker
 	Resources []models.LocalResource
+	Scope     models.RuntimeScopeRef
 }
 
 // LocalInvoker is the Models-root local invocation edge required by one Runner.
@@ -35,6 +36,7 @@ type Dependencies struct {
 type runner struct {
 	worker    models.LocalWorker
 	resources []models.LocalResource
+	scope     models.RuntimeScopeRef
 	models    LocalInvoker
 	delegate  workers.Runner
 }
@@ -53,6 +55,7 @@ func New(config Config, dependencies Dependencies) (workers.Runner, error) {
 	return &runner{
 		worker:    worker,
 		resources: snapshotResources(config.Resources),
+		scope:     config.Scope,
 		models:    dependencies.Models,
 		delegate:  dependencies.Delegate,
 	}, nil
@@ -100,6 +103,7 @@ func (r *runner) localInvocationRequest(
 	request workers.RunnerExecutionRequest,
 ) models.LocalInvocationRequest {
 	return models.LocalInvocationRequest{
+		Scope:            r.scope,
 		Holder:           invocationHolder(request),
 		Worker:           r.worker,
 		Resources:        r.resources,

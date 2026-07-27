@@ -51,7 +51,7 @@
         "toolOutputDeltas": false,
         "usage": false
       },
-      "technicalSupportLevel": "not-supported"
+      "technicalSupportLevel": "experimental"
     },
     {
       "aliases": [],

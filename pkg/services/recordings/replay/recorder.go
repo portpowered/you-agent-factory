@@ -9,6 +9,7 @@ import (
 
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 const (
@@ -37,6 +38,15 @@ type Recorder struct {
 
 	finalizeOnce sync.Once
 	finalizeErr  error
+}
+
+// BindRecordingService rejects use of the legacy replay recorder as a
+// production lifecycle authority.
+func (*Recorder) BindRecordingService(
+	recordings.Service,
+	recordings.CanonicalEventScope,
+) error {
+	return fmt.Errorf("legacy replay recorder cannot bind the Recordings root")
 }
 
 // NewRecorder constructs a recorder for an existing artifact shell.

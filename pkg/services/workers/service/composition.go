@@ -36,6 +36,7 @@ import (
 func NewRuntime(
 	sessions CurrentRuntimeResolver,
 	modelService models.Service,
+	modelsScope models.RuntimeScopeRef,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
 	allocator agypty.PTYAllocator,
@@ -97,6 +98,7 @@ func NewRuntime(
 	if err != nil {
 		return nil, err
 	}
+	runtimeService.modelsScope = modelsScope
 	assembly, err := newRuntimeAssembly(nil)
 	if err != nil {
 		return nil, err
@@ -112,6 +114,7 @@ func NewRuntime(
 func NewRuntimeWithSelection(
 	sessions CurrentRuntimeResolver,
 	modelService models.Service,
+	modelsScope models.RuntimeScopeRef,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
 	allocator agypty.PTYAllocator,
@@ -143,7 +146,7 @@ func NewRuntimeWithSelection(
 	providerRegistry *providerregistry.Registry,
 ) (workers.RuntimeService, error) {
 	runtimeService, err := NewRuntime(
-		sessions, modelService, providerCommandRunner, scriptCommandRunner,
+		sessions, modelService, modelsScope, providerCommandRunner, scriptCommandRunner,
 		allocator, logger, verbose, factoryRunnerID, invocationSkipPermissionsOverride,
 		providerOverride, now, processEnvironment, currentWorkingDirectory, contentMaterializer, interpolation, executionPolicy,
 		factoryDocs, resolveSymlinks, executableLocator, executableInspector, executableFiles, operatingSystem,
@@ -339,15 +342,19 @@ func LocalRuntimeHooks() models.LocalRuntimeHooks {
 func resolveInferenceRunner(
 	inner workers.Runner,
 	modelsService models.Service,
+	modelsScope models.RuntimeScopeRef,
 	factoryCfg *factorydefinitions.FactoryConfig,
 	workerCfg *factorydefinitions.FactoryWorkerConfig,
 ) workers.Runner {
 	if factoryCfg == nil {
-		return runnerswire.NewInferenceCompositionRunner(inner, modelsService, workerCfg, nil)
+		return runnerswire.NewInferenceCompositionRunner(
+			inner, modelsService, modelsScope, workerCfg, nil,
+		)
 	}
 	return runnerswire.NewInferenceCompositionRunner(
 		inner,
 		modelsService,
+		modelsScope,
 		workerCfg,
 		factoryCfg.Resources,
 	)

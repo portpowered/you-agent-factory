@@ -288,7 +288,11 @@ primary-result behavior.
   classification, then deterministic final-parse/flush/decode/native precedence.
   It returns only bounded detached Providers diagnostics and never forwards a
   native error message or error type to peers. Adapter-owned finalization and
-  cleanup must complete before the synchronous attempt returns.
+  cleanup must complete before the synchronous attempt returns. Reject an
+  already terminated context before Catalog or adapter I/O, and recheck context
+  termination on every Execution exit so Catalog failures and nominal adapter
+  success racing with cancellation still become the typed Providers timeout or
+  cancellation terminal outcome.
   Invoke implementations
   through `ExecuteInvocation` so provider-authored drafts are validated for
   provenance, invocation and item correlation, lifecycle ordering, terminal
@@ -1975,7 +1979,8 @@ response-stream output.
   cutover, re-prove preserved public behavior with
   `make cli-manifest-check`, `make cli-contract-smoke`, focused
   docs/models/mcp unit + `tests/functional/transport/docs`,
-  `tests/functional/transport/mcp_serve`, `tests/functional/models/model_list`, and
+  `tests/functional/transport/mcp/protocol`, `tests/functional/transport/mcp_serve`,
+  `tests/functional/models/model_list`, and
   `tests/functional/smoke -run TestDocsCommandSmoke_` evidence, then the
   `make verify-fast` constituents (`make typecheck`, `make mcp-contract-check`,
   `make ui-test`, `make test`) plus `make lint`. New residual functional sources

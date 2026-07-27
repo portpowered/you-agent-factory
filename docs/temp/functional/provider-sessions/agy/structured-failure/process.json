@@ -1,0 +1,11 @@
+{
+  "argv": ["agy", "chat", "--headless", "--model", "gemini-pro"],
+  "provider": "agy",
+  "model": "gemini-pro",
+  "exitCode": 1,
+  "stdoutStream": false,
+  "stderrStream": false,
+  "workingDirectoryRole": "factory-root",
+  "timeoutCancelClass": "none",
+  "terminalErrorClass": "structured-auth-failure"
+}

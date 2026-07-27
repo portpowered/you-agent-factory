@@ -799,4 +799,3 @@ func (fileSystem failingOperatorSettingsFileSystem) Rename(string, string) error
 	fileSystem.calls.Add(1)
 	return fs.ErrPermission
 }
-
