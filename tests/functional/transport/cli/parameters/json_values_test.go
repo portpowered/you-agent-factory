@@ -304,21 +304,25 @@ func scaffoldJSONNullAndEmptyInvocationFactory(t *testing.T) string {
 				},
 				map[string]any{
 					"name":     "nullable",
+					"typeHint": work.InvocationParameterTypeHintJSON,
 					"required": true,
 					"bindings": []any{map[string]any{"kind": "NAMED"}},
 				},
 				map[string]any{
 					"name":     "emptyString",
+					"typeHint": work.InvocationParameterTypeHintJSON,
 					"required": true,
 					"bindings": []any{map[string]any{"kind": "NAMED"}},
 				},
 				map[string]any{
 					"name":     "emptyObject",
+					"typeHint": work.InvocationParameterTypeHintJSON,
 					"required": true,
 					"bindings": []any{map[string]any{"kind": "NAMED"}},
 				},
 				map[string]any{
 					"name":     "emptyArray",
+					"typeHint": work.InvocationParameterTypeHintJSON,
 					"required": true,
 					"bindings": []any{map[string]any{"kind": "NAMED"}},
 				},
@@ -358,11 +362,13 @@ func scaffoldJSONInvocationFactory(t *testing.T) string {
 				},
 				map[string]any{
 					"name":     "metadata",
+					"typeHint": work.InvocationParameterTypeHintJSON,
 					"required": true,
 					"bindings": []any{map[string]any{"kind": "NAMED"}},
 				},
 				map[string]any{
 					"name":     "items",
+					"typeHint": work.InvocationParameterTypeHintJSON,
 					"required": true,
 					"bindings": []any{map[string]any{"kind": "NAMED"}},
 				},
