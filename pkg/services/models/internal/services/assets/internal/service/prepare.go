@@ -82,6 +82,15 @@ func (s *service) PrepareModelAssets(
 	if err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
+	if snapshot, available, inspectErr := s.inspectManifestCache(
+		ctx, scope.CacheDirectory, spec, source, manifest,
+	); inspectErr != nil {
+		return models.PrepareModelAssetsResult{Asset: snapshot.Clone()}, inspectErr
+	} else if available {
+		return models.PrepareModelAssetsResult{
+			Asset: snapshot.Clone(), Outcome: models.AssetPreparationAlreadyAvailable,
+		}, nil
+	}
 	snapshot, err := s.publishManifest(ctx, scope.CacheDirectory, spec, source, manifest)
 	if err != nil {
 		return models.PrepareModelAssetsResult{Asset: snapshot.Clone()}, err
@@ -89,6 +98,51 @@ func (s *service) PrepareModelAssets(
 	return models.PrepareModelAssetsResult{
 		Asset: snapshot.Clone(), Outcome: models.AssetPreparationPrepared,
 	}, nil
+}
+
+// inspectManifestCache reconciles complete caches written by the retired
+// puller whose local metadata may not contain every current integrity fact.
+// The upstream manifest supplies those facts, allowing a verified cache hit
+// without downloading or rewriting already-published asset files.
+func (s *service) inspectManifestCache(
+	ctx context.Context,
+	cacheDirectory string,
+	spec assetSpec,
+	source models.SourceMetadata,
+	manifest remoteManifest,
+) (models.AssetSnapshot, bool, error) {
+	root, err := s.modelCacheRoot(cacheDirectory, spec.modelName)
+	if err != nil {
+		return missingSnapshot(spec.modelName, source), false, err
+	}
+	artifacts := make([]models.AssetArtifact, 0, len(manifest.files))
+	for _, remote := range manifest.files {
+		if err := assetContextError(ctx); err != nil {
+			return unavailableSnapshot(
+				spec.modelName, source, manifest.revision, artifacts,
+			), false, err
+		}
+		artifact, verifyErr := s.verifyCachedFile(
+			ctx,
+			filepath.Join(root, manifest.revision, filepath.FromSlash(remote.path)),
+			metadataFile{Path: remote.path, Bytes: remote.bytes, SHA256: remote.sha256},
+		)
+		if errors.Is(verifyErr, os.ErrNotExist) {
+			return unavailableSnapshot(
+				spec.modelName, source, manifest.revision, artifacts,
+			), false, nil
+		}
+		if verifyErr != nil {
+			diagnostics := append(artifacts, artifact)
+			return failedSnapshot(
+				spec.modelName, source, manifest.revision, diagnostics,
+			), false, verifyErr
+		}
+		artifacts = append(artifacts, artifact)
+	}
+	snapshot := availableSnapshot(spec.modelName, source, manifest.revision, artifacts)
+	snapshot.Integrity = models.AssetIntegrityVerified
+	return snapshot, true, nil
 }
 
 func (s *service) inspectVerifiedCache(

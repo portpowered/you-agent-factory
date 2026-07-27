@@ -57,6 +57,98 @@ func TestPrepareModelAssetsReusesVerifiedCacheWithoutSourceOrMutation(t *testing
 	}
 }
 
+func TestPrepareModelAssetsReconcilesCompleteLegacyCacheWithoutAssetDownload(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	baseBody := []byte("legacy cached base")
+	tokenizerBody := []byte("legacy cached tokenizer")
+	revision := "legacy-revision"
+	root := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M")
+	revisionDirectory := filepath.Join(root, revision)
+	if err := os.MkdirAll(revisionDirectory, 0o755); err != nil {
+		t.Fatalf("create legacy cache: %v", err)
+	}
+	for name, body := range map[string][]byte{
+		"omnivoice-base-Q4_K_M.gguf":      baseBody,
+		"omnivoice-tokenizer-Q4_K_M.gguf": tokenizerBody,
+	} {
+		if err := os.WriteFile(filepath.Join(revisionDirectory, name), body, 0o644); err != nil {
+			t.Fatalf("write legacy cache asset %s: %v", name, err)
+		}
+	}
+	staleMetadata, err := json.Marshal(cacheMetadata{
+		ModelName: "OMNIVOICE_Q4_K_M",
+		Revision:  revision,
+		Files: []metadataFile{{
+			Path: "omnivoice-base-Q4_K_M.gguf",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal stale legacy metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, metadataFileName), staleMetadata, 0o644); err != nil {
+		t.Fatalf("write stale legacy metadata: %v", err)
+	}
+
+	var manifestRequests atomic.Int32
+	var assetRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/models/Serveurperso/OmniVoice-GGUF" {
+			assetRequests.Add(1)
+			http.Error(writer, "assets must not be downloaded", http.StatusInternalServerError)
+			return
+		}
+		manifestRequests.Add(1)
+		_ = json.NewEncoder(writer).Encode(map[string]any{
+			"sha": revision,
+			"siblings": []map[string]any{
+				{
+					"rfilename": "omnivoice-base-Q4_K_M.gguf",
+					"lfs": map[string]any{
+						"oid": sha256String(baseBody), "size": len(baseBody),
+					},
+				},
+				{
+					"rfilename": "omnivoice-tokenizer-Q4_K_M.gguf",
+					"lfs": map[string]any{
+						"oid": sha256String(tokenizerBody), "size": len(tokenizerBody),
+					},
+				},
+			},
+		})
+	}))
+	t.Cleanup(server.Close)
+
+	scopes := newScopes(t, "prepare-legacy-cache")
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	var mutations atomic.Int32
+	service := newPreparationTestService(
+		scopes,
+		server.Client(),
+		models.RuntimeAssetEndpoints{BaseURL: server.URL, APIBaseURL: server.URL},
+		&mutations,
+	)
+	result, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("PrepareModelAssets: %v", err)
+	}
+	if result.Outcome != models.AssetPreparationAlreadyAvailable ||
+		result.Asset.Integrity != models.AssetIntegrityVerified ||
+		result.Asset.Revision != revision ||
+		len(result.Asset.Artifacts) != 2 {
+		t.Fatalf("legacy cache result = %#v, want verified cache hit", result)
+	}
+	if manifestRequests.Load() != 1 || assetRequests.Load() != 0 || mutations.Load() != 0 {
+		t.Fatalf(
+			"legacy cache effects: manifest=%d asset=%d mutation=%d, want 1/0/0",
+			manifestRequests.Load(), assetRequests.Load(), mutations.Load(),
+		)
+	}
+}
+
 func TestPrepareModelAssetsPublishesVerifiedPullThenReturnsCacheHit(t *testing.T) {
 	t.Parallel()
 
