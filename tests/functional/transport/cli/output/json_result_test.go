@@ -1,13 +1,17 @@
 package output_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -109,6 +113,72 @@ func TestCLIJSONContainsNoPrivateRuntimeFields(t *testing.T) {
 		assertPublicSingleJSONInvocationPayload(t, stdout, "stdout")
 		assertPublicSingleJSONErrorPayload(t, stderr, "stderr")
 	})
+}
+
+// TestCLIJSONOutputSelectionFailsBeforeProductActivation proves invalid CLI
+// output selectors fail before product activation with one stderr ErrorResponse
+// and no product side effects.
+func TestCLIJSONOutputSelectionFailsBeforeProductActivation(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		wantCode factoryapi.ErrorResponseCode
+	}{
+		{
+			name:     "quiet and global JSON",
+			args:     []string{"you", "--json", "run", "--quiet"},
+			wantCode: runcli.InvocationOutputConflictCode,
+		},
+		{
+			name:     "quiet and explicit output",
+			args:     []string{"you", "run", "--quiet", "--output", "primary"},
+			wantCode: runcli.InvocationOutputConflictCode,
+		},
+		{
+			name:     "unsupported explicit output",
+			args:     []string{"you", "run", "--output", "provider-chunks"},
+			wantCode: runcli.InvocationOutputUnsupportedCode,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var effects atomic.Int32
+			edges := serviceedges.Edges{
+				APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
+					effects.Add(1)
+					return nil
+				},
+				BrowserOpener: func(context.Context, string) error {
+					effects.Add(1)
+					return nil
+				},
+				RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
+					effects.Add(1)
+				},
+				FactorySessionIDGenerator: func() string {
+					effects.Add(1)
+					return "unexpected-session"
+				},
+			}
+			inputs := support.FakeInputs(t.Context(), test.args)
+			inputs.Input.WorkingDirectory = t.TempDir()
+
+			err := support.BuildProcess(t, edges).Execute(inputs.Input)
+			if err == nil {
+				t.Fatal("Process.Execute error = nil, want output-selection failure")
+			}
+			if inputs.Stdout() != "" {
+				t.Fatalf("stdout = %q, want empty", inputs.Stdout())
+			}
+			response := decodeSingleJSONErrorResponse(t, inputs.Stderr())
+			if response.Code != test.wantCode || response.Family != factoryapi.ErrorFamilyBadRequest {
+				t.Fatalf("ErrorResponse = %#v, want code %s", response, test.wantCode)
+			}
+			if effects.Load() != 0 {
+				t.Fatalf("product effects = %d, want 0", effects.Load())
+			}
+		})
+	}
 }
 
 func runGoalSingleJSON(t *testing.T) string {

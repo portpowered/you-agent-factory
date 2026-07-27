@@ -190,9 +190,18 @@
   configured mock rejection with stable public `WorkOutcomeFailed` /
   `WorkFailureTypeUnknown` dispatch responses without live provider credentials
   or leaking configured reject stdout/stderr on customer-visible surfaces.
-  Catalog metadata infers domain `workers` and subsection `mock` from the path;
-  every top-level `Test*` needs a customer-readable Go doc so
-  `functionaltestmetadata` stays viz-compatible.
+  Catalog metadata infers domain `workers` and subsection `mock` from the path.
+  CLI single-JSON result functional coverage belongs in
+  `tests/functional/transport/cli/output/json_result_test.go`: invoke
+  `support.BuildProcess(t, serviceedges.Edges{}).Execute` with global `--json`
+  and without `--output response-stream`, decode stdout through generated
+  `factoryapi.InvocationResponse`, prove stderr `factoryapi.ErrorResponse` on
+  failures, and assert private-runtime key exclusion at the public CLI boundary.
+  Output-selection conflicts use instrumented `edges.Edges` to prove zero
+  product side effects before activation. Catalog metadata infers domain
+  `transport` and subsection `cli/output` from the path. Every top-level `Test*`
+  needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
   Prove default
   `functional-test-viz` wiring (boundary first, single coverage with profile
   + JSON under `.artifacts/functional-test-viz/`, Markdown generator) with
