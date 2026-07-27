@@ -326,7 +326,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Mock workers
 
-- [ ] `tests/functional/workers/mock/replacement_test.go`
+- [x] `tests/functional/workers/mock/replacement_test.go`
   - `TestMockWorkersReplaceOnlyNamedChildren`.
   - `TestUnknownWorkerOverrideFailsActionably`.
   - `TestMockWorkerFailureReturnsStablePublicFailure`.
