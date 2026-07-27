@@ -4,13 +4,11 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	workertaxonomy "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -22,60 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	geminipkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 )
-
-type cursorTemporaryFileSystemFake struct {
-	file      *cursorTemporaryFileFake
-	createErr error
-	events    []string
-}
-
-func (f *cursorTemporaryFileSystemFake) CreateTemp(dir, pattern string) (platformfilesystem.TemporaryFile, error) {
-	f.events = append(f.events, "create:"+dir+":"+pattern)
-	if f.createErr != nil {
-		return nil, f.createErr
-	}
-	if f.file == nil {
-		f.file = &cursorTemporaryFileFake{name: filepath.Join(dir, "cursor_prompt_deterministic.md"), owner: f}
-	}
-	return f.file, nil
-}
-
-func (f *cursorTemporaryFileSystemFake) Remove(path string) error {
-	f.events = append(f.events, "remove:"+path)
-	return nil
-}
-
-type cursorTemporaryFileFake struct {
-	name     string
-	content  strings.Builder
-	writeErr error
-	closeErr error
-	owner    *cursorTemporaryFileSystemFake
-}
-
-func (f *cursorTemporaryFileFake) Name() string { return f.name }
-func (f *cursorTemporaryFileFake) WriteString(value string) (int, error) {
-	f.owner.events = append(f.owner.events, "write")
-	if f.writeErr != nil {
-		return 0, f.writeErr
-	}
-	return f.content.WriteString(value)
-}
-func (f *cursorTemporaryFileFake) Close() error {
-	f.owner.events = append(f.owner.events, "close")
-	return f.closeErr
-}
-
-type cursorLifecycleRunner struct {
-	events *[]string
-	result CommandResult
-	err    error
-}
-
-func (r cursorLifecycleRunner) Run(context.Context, CommandRequest) (CommandResult, error) {
-	*r.events = append(*r.events, "run")
-	return r.result, r.err
-}
 
 func TestClaudeProviderBehavior_BuildArgs(t *testing.T) {
 	t.Parallel()
@@ -270,251 +214,6 @@ func TestCodexProviderBehavior_BuildArgs_MaterializesLocalFileURLWithoutCopy(t *
 	assertStringSlicesEqual(t, want, args)
 }
 
-func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
-	t.Parallel()
-	testCases := []struct {
-		name            string
-		req             workerexecution.ProviderInferenceRequest
-		skipPermissions bool
-		want            []string
-	}{
-		{
-			name: "BasicPrompt",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderCursor),
-				UserMessage:   "summarize the workspace",
-			},
-			want: []string{"-p", "--output-format", "stream-json", "--stream-partial-output", "summarize the workspace"},
-		},
-		{
-			name: "WithModelSessionAndForce",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderCursor),
-				Model:         "gpt-5",
-				SessionID:     "cursor-session-123",
-				UserMessage:   "run the tests",
-			},
-			skipPermissions: true,
-			want:            []string{"-f", "-p", "--model", "gpt-5", "--resume", "cursor-session-123", "--output-format", "stream-json", "--stream-partial-output", "run the tests"},
-		},
-		{
-			name: "WithWorkspace",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider:    string(modelprovider.ProviderCursor),
-				WorkingDirectory: "/tmp/project",
-				UserMessage:      "inspect the repo",
-			},
-			want: []string{"-p", "--workspace", "/tmp/project", "--output-format", "stream-json", "--stream-partial-output", "inspect the repo"},
-		},
-	}
-
-	behavior := cursorProviderBehavior{logger: logging.NoopLogger{}}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			args, err := behavior.BuildArgs(context.Background(), tc.req, tc.skipPermissions, nil)
-			if err != nil {
-				t.Fatalf("BuildArgs returned error: %v", err)
-			}
-			assertStringSlicesEqual(t, tc.want, args)
-		})
-	}
-}
-
-func TestCursorProviderBehavior_BuildArgs_WindowsLongPromptUsesArgumentFile(t *testing.T) {
-	t.Parallel()
-	tempDir := `C:\deterministic-temp`
-	temporaryFiles := &cursorTemporaryFileSystemFake{}
-	buildCtx := &ProviderBuildContext{operatingSystem: "windows", tempDir: tempDir, temporaryFiles: temporaryFiles}
-	prompt := strings.Repeat("long cursor instruction ", cursorWindowsPromptArgumentLimit)
-	req := workerexecution.ProviderInferenceRequest{
-		ModelProvider:    string(modelprovider.ProviderCursor),
-		SystemPrompt:     "system guidance",
-		UserMessage:      prompt,
-		Model:            "composer-2.5",
-		SessionID:        "cursor-session-123",
-		WorkingDirectory: `C:\workspace`,
-		Worktree:         "feature-worktree",
-	}
-
-	args, err := (cursorProviderBehavior{logger: logging.NoopLogger{}}).BuildArgs(context.Background(), req, true, buildCtx)
-	if err != nil {
-		t.Fatalf("BuildArgs returned error: %v", err)
-	}
-	wantPrefix := []string{"-f", "-p", "--model", "composer-2.5", "--resume", "cursor-session-123", "--workspace", `C:\workspace`, "--worktree", "feature-worktree", "--output-format", "stream-json", "--stream-partial-output"}
-	if len(args) != len(wantPrefix)+1 {
-		t.Fatalf("args = %#v, want prefix plus prompt-file argument", args)
-	}
-	assertStringSlicesEqual(t, wantPrefix, args[:len(wantPrefix)])
-	promptArg := args[len(args)-1]
-	if !strings.HasPrefix(promptArg, "@") {
-		t.Fatalf("prompt argument = %q, want @file reference", promptArg)
-	}
-	promptPath := strings.TrimPrefix(promptArg, "@")
-	wantPrompt := buildCombinedPrompt(req)
-	if gotPrompt := temporaryFiles.file.content.String(); gotPrompt != wantPrompt {
-		t.Fatalf("prompt file content differs: got %d bytes, want %d", len(gotPrompt), len(wantPrompt))
-	}
-	buildCtx.release()
-	wantEvents := []string{
-		"create:" + tempDir + ":cursor_prompt_*.md",
-		"write",
-		"close",
-		"remove:" + promptPath,
-	}
-	assertStringSlicesEqual(t, wantEvents, temporaryFiles.events)
-	if promptPath != filepath.Join(tempDir, "cursor_prompt_deterministic.md") {
-		t.Fatalf("prompt path = %q, want injected temporary-file path", promptPath)
-	}
-}
-
-func TestCursorProviderBehavior_BuildArgs_LongPromptFailsClosedWithoutTemporaryFileSystem(t *testing.T) {
-	t.Parallel()
-	_, err := (cursorProviderBehavior{logger: logging.NoopLogger{}}).BuildArgs(
-		t.Context(),
-		workerexecution.ProviderInferenceRequest{
-			ModelProvider: string(modelprovider.ProviderCursor),
-			UserMessage:   strings.Repeat("x", cursorWindowsPromptArgumentLimit+1),
-		},
-		false,
-		&ProviderBuildContext{operatingSystem: "windows", tempDir: `C:\temp`},
-	)
-	if err == nil || !strings.Contains(err.Error(), "temporary filesystem is required") {
-		t.Fatalf("BuildArgs error = %v, want missing injected temporary filesystem", err)
-	}
-}
-
-func TestCursorProviderBehavior_BuildArgs_PreservesTemporaryFileCreationDiagnostic(t *testing.T) {
-	t.Parallel()
-	createErr := errors.New("temporary volume unavailable")
-	temporaryFiles := &cursorTemporaryFileSystemFake{createErr: createErr}
-	_, err := (cursorProviderBehavior{logger: logging.NoopLogger{}}).BuildArgs(
-		t.Context(),
-		workerexecution.ProviderInferenceRequest{ModelProvider: string(modelprovider.ProviderCursor), UserMessage: strings.Repeat("x", cursorWindowsPromptArgumentLimit+1)},
-		false,
-		&ProviderBuildContext{operatingSystem: "windows", tempDir: `C:\temp`, temporaryFiles: temporaryFiles},
-	)
-	if !errors.Is(err, createErr) || !strings.Contains(err.Error(), "failed to write temporary prompt file") {
-		t.Fatalf("BuildArgs error = %v, want wrapped injected creation diagnostic", err)
-	}
-	assertStringSlicesEqual(t, []string{"create:C:\\temp:cursor_prompt_*.md"}, temporaryFiles.events)
-}
-
-func TestCursorProviderBehavior_BuildArgs_RemovesPartialTemporaryFileAfterWriteOrCloseFailure(t *testing.T) {
-	t.Parallel()
-	for _, testCase := range []struct {
-		name     string
-		writeErr error
-		closeErr error
-		want     []string
-	}{
-		{
-			name: "write failure", writeErr: errors.New("write failed"),
-			want: []string{"create:C:\\temp:cursor_prompt_*.md", "write", "close", "remove:" + filepath.Join(`C:\temp`, "cursor_prompt_deterministic.md")},
-		},
-		{
-			name: "close failure", closeErr: errors.New("close failed"),
-			want: []string{"create:C:\\temp:cursor_prompt_*.md", "write", "close", "remove:" + filepath.Join(`C:\temp`, "cursor_prompt_deterministic.md")},
-		},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			temporaryFiles := &cursorTemporaryFileSystemFake{}
-			temporaryFiles.file = &cursorTemporaryFileFake{
-				name: filepath.Join(`C:\temp`, "cursor_prompt_deterministic.md"), writeErr: testCase.writeErr,
-				closeErr: testCase.closeErr, owner: temporaryFiles,
-			}
-			_, err := (cursorProviderBehavior{logger: logging.NoopLogger{}}).BuildArgs(
-				t.Context(),
-				workerexecution.ProviderInferenceRequest{ModelProvider: string(modelprovider.ProviderCursor), UserMessage: strings.Repeat("x", cursorWindowsPromptArgumentLimit+1)},
-				false,
-				&ProviderBuildContext{operatingSystem: "windows", tempDir: `C:\temp`, temporaryFiles: temporaryFiles},
-			)
-			if err == nil {
-				t.Fatal("BuildArgs error = nil, want injected temporary-file failure")
-			}
-			assertStringSlicesEqual(t, testCase.want, temporaryFiles.events)
-		})
-	}
-}
-
-func TestScriptWrapProvider_CursorLongPromptCleansRequestFileAfterCommandFailure(t *testing.T) {
-	t.Parallel()
-	temporaryFiles := &cursorTemporaryFileSystemFake{}
-	runner := cursorLifecycleRunner{events: &temporaryFiles.events, err: errors.New("command failed")}
-	provider := NewScriptWrapProviderWithDependencies(false, nil, runner, nil, nil, nil, "", nil, nil)
-	provider.operatingSystem = "windows"
-	provider.temporaryFiles = temporaryFiles
-
-	_, err := provider.Infer(t.Context(), workerexecution.ProviderInferenceRequest{
-		ModelProvider:    string(modelprovider.ProviderCursor),
-		WorkingDirectory: `C:\workspace`,
-		UserMessage:      strings.Repeat("x", cursorWindowsPromptArgumentLimit+1),
-	})
-	if err == nil || err.Error() != "provider error: unknown" {
-		t.Fatalf("Infer error = %v, want existing normalized provider diagnostic", err)
-	}
-	wantPath := filepath.Join(`C:\workspace`, "cursor_prompt_deterministic.md")
-	wantEvents := []string{
-		"create:C:\\workspace:cursor_prompt_*.md", "write", "close", "run", "remove:" + wantPath,
-	}
-	assertStringSlicesEqual(t, wantEvents, temporaryFiles.events)
-}
-
-func TestCursorProviderBehavior_BuildArgs_DoesNotWrapShortOrNonWindowsPrompts(t *testing.T) {
-	t.Parallel()
-	testCases := []struct {
-		name            string
-		operatingSystem string
-		prompt          string
-	}{
-		{name: "ShortWindowsPrompt", operatingSystem: "windows", prompt: "inspect the repository"},
-		{name: "LongLinuxPrompt", operatingSystem: "linux", prompt: strings.Repeat("x", cursorWindowsPromptArgumentLimit+1)},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			args, err := (cursorProviderBehavior{logger: logging.NoopLogger{}}).BuildArgs(context.Background(), workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderCursor), UserMessage: tc.prompt,
-			}, false, &ProviderBuildContext{operatingSystem: tc.operatingSystem, tempDir: t.TempDir()})
-			if err != nil {
-				t.Fatalf("BuildArgs returned error: %v", err)
-			}
-			if got := args[len(args)-1]; got != tc.prompt {
-				t.Fatalf("prompt argument = %q, want positional prompt", got)
-			}
-		})
-	}
-}
-
-func TestCursorProviderBehavior_BuildArgs_LongPromptRequiresOperatingSystem(t *testing.T) {
-	t.Parallel()
-	_, err := (cursorProviderBehavior{logger: logging.NoopLogger{}}).BuildArgs(
-		context.Background(),
-		workerexecution.ProviderInferenceRequest{
-			ModelProvider: string(modelprovider.ProviderCursor),
-			UserMessage:   strings.Repeat("x", cursorWindowsPromptArgumentLimit+1),
-		},
-		false,
-		&ProviderBuildContext{},
-	)
-	if err == nil || !strings.Contains(err.Error(), "operating system is required") {
-		t.Fatalf("BuildArgs error = %v, want missing operating-system decision", err)
-	}
-}
-
-func TestCursorProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
-	t.Parallel()
-	behavior := cursorProviderBehavior{logger: logging.NoopLogger{}}
-	_, err := behavior.BuildArgs(context.Background(), workerexecution.ProviderInferenceRequest{
-		ModelProvider: string(modelprovider.ProviderCursor),
-		UserMessage:   "summarize the workspace",
-		RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{
-			workerexecution.RunnerOptionalCapabilityStructuredOutput,
-		},
-	}, false, nil)
-	if err == nil || err.Error() != "structured output is not supported by the cursor-cli runner in v1" {
-		t.Fatalf("BuildArgs error = %v, want structured output rejection", err)
-	}
-}
-
 func TestOpenCodeProviderBehavior_BuildArgs(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -695,39 +394,6 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 	}
 }
 
-func providerOwnedCursorAndCodexFailureTestCases() []exitFailureInferenceTestCase {
-	return []exitFailureInferenceTestCase{
-		{
-			name:        "CursorUsesItsOwnErrorExtraction",
-			provider:    string(modelprovider.ProviderCursor),
-			result:      CommandResult{ExitCode: 1, Stderr: []byte("noise before\nERROR: unexpected status 500 from cursor upstream")},
-			wantMessage: "Cursor encountered a temporary server error.",
-			wantType:    workerexecution.WorkFailureTypeInternalServerError,
-		},
-		{
-			name:        "CursorDoesNotInheritCodexHighDemandClassification",
-			provider:    string(modelprovider.ProviderCursor),
-			result:      CommandResult{ExitCode: 1, Stderr: []byte(codexHighDemandTemporaryErrorsNeedle)},
-			wantMessage: "Cursor reported an unsuccessful result.",
-			wantType:    workerexecution.WorkFailureTypeUnknown,
-		},
-		{
-			name:        "CodexUsesItsOwnSafeServerResult",
-			provider:    string(modelprovider.ProviderCodex),
-			result:      CommandResult{ExitCode: 1, Stderr: []byte("noise before\nERROR: unexpected status 500 from codex upstream")},
-			wantMessage: codexServerFailureMessage,
-			wantType:    workerexecution.WorkFailureTypeInternalServerError,
-		},
-		{
-			name:        "UnsupportedProviderDoesNotFallBackToCodexParser",
-			provider:    "custom-provider",
-			result:      CommandResult{ExitCode: 1, Stderr: []byte(codexHighDemandTemporaryErrorsNeedle)},
-			wantMessage: codexHighDemandTemporaryErrorsNeedle,
-			wantType:    workerexecution.WorkFailureTypeUnknown,
-		},
-	}
-}
-
 func TestWorkDiagnosticsForInferenceRequest_IncludesOpenCodeAgentWhenConfigured(t *testing.T) {
 	t.Parallel()
 	diagnostics := workDiagnosticsForInferenceRequest(workerexecution.ProviderInferenceRequest{
@@ -810,21 +476,6 @@ func s14SkipPermissionsProviderCases() []s14ProviderCase {
 			},
 		},
 		{
-			provider:     modelprovider.ProviderCursor,
-			unsafeMarker: "-f",
-			unsafeReq: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderCursor),
-				UserMessage:   "run the tests",
-			},
-			safeReq: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderCursor),
-				UserMessage:   "run the tests",
-			},
-			unsafeArgCheck: func(args []string) bool {
-				return len(args) > 0 && args[0] == "-f"
-			},
-		},
-		{
 			provider:     modelprovider.ProviderOpenCode,
 			unsafeMarker: "--dangerously-skip-permissions",
 			unsafeReq: workerexecution.ProviderInferenceRequest{
@@ -849,11 +500,6 @@ func s14ResolveSafeArgCheck(tc *s14ProviderCase) {
 	marker := tc.unsafeMarker
 	tc.safeArgCheck = func(args []string) bool {
 		return !strings.Contains(strings.Join(args, " "), marker)
-	}
-	if tc.provider == modelprovider.ProviderCursor {
-		tc.safeArgCheck = func(args []string) bool {
-			return len(args) == 0 || args[0] != "-f"
-		}
 	}
 }
 

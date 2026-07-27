@@ -156,6 +156,12 @@ func (p *cursorPublication) write(draft workerexecution.Draft) {
 	if p.first != nil {
 		return
 	}
+	// Cursor's system/init record announces the resumable provider session; it
+	// is not a lifecycle that Cursor later terminates. The authoritative
+	// provider-session reference is carried by the completion instead.
+	if draft.Kind == workerexecution.KindSession {
+		return
+	}
 	event, err := cursorInferenceEvent(draft)
 	if err == nil {
 		err = p.writer.WriteEvent(p.ctx, event)

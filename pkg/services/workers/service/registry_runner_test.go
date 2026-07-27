@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
+	cursorpkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
@@ -370,6 +371,58 @@ func TestConductorInvocationRunnerRoutesMigratedGeminiThroughConductor(t *testin
 	}
 	if providers.UsesNativeRunner("gemini") {
 		t.Fatal("UsesNativeRunner(gemini) = true, want conductor route")
+	}
+}
+
+func TestConductorInvocationRunnerRoutesMigratedCursorThroughConductor(t *testing.T) {
+	t.Parallel()
+
+	commandRunner := &builtInConductorCommandRunner{
+		result: workers.CommandResult{
+			Stdout: cursorpkg.SuccessStdoutJSON("cursor via conductor", "cursor-session-123"),
+		},
+	}
+	registrations, err := providerregistry.BuiltInRegistrations(
+		providerregistry.BuiltInDependencies{
+			CommandRunner:   commandRunner,
+			OperatingSystem: "linux",
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuiltInRegistrations() error = %v", err)
+	}
+	providers, err := providerregistry.New(registrations...)
+	if err != nil {
+		t.Fatalf("registry.New() error = %v", err)
+	}
+	native := &conductorRouteRecordingRunner{}
+	runner := conductorInvocationRunner{
+		next:      native,
+		conductor: conductor.New(providers),
+		providers: providers,
+	}
+
+	result, err := runner.Execute(context.Background(), workers.RunnerExecutionRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-cursor-conductor"},
+		RunnerID:      workers.RunnerIDCursorCLI,
+		ModelProvider: workers.RunnerIDCursorCLI,
+		Model:         "cursor-model",
+		UserMessage:   "hello cursor",
+	})
+	if err != nil {
+		t.Fatalf("Execute(cursor) error = %v", err)
+	}
+	if result.Content != "cursor via conductor" {
+		t.Fatalf("Execute(cursor) content = %q, want cursor via conductor", result.Content)
+	}
+	if native.calls != 0 {
+		t.Fatalf("native runner calls = %d, want 0 for migrated Cursor", native.calls)
+	}
+	if commandRunner.calls != 1 || commandRunner.request.Command != "agent" {
+		t.Fatalf("Cursor command calls = %d request = %#v", commandRunner.calls, commandRunner.request)
+	}
+	if providers.UsesNativeRunner("cursor") || providers.UsesNativeRunner("agent") {
+		t.Fatal("UsesNativeRunner(cursor) = true, want conductor route")
 	}
 }
 

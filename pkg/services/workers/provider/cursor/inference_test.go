@@ -351,13 +351,12 @@ func assertCursorIntegrationEvents(t *testing.T, writer *cursorIntegrationWriter
 	if writer.closeCalls != 1 || writer.writeAfterClose != 0 {
 		t.Fatalf("writer close calls = %d, writes after close = %d; want 1 and 0", writer.closeCalls, writer.writeAfterClose)
 	}
-	if len(writer.events) != 7 {
-		t.Fatalf("events = %#v, want run boundaries around session, assistant, tool lifecycle, and terminal snapshot", writer.events)
+	if len(writer.events) != 6 {
+		t.Fatalf("events = %#v, want run boundaries around assistant, tool lifecycle, and terminal snapshot", writer.events)
 	}
 	wantKinds := []workerexecution.Kind{
-		workerexecution.KindRun, workerexecution.KindSession, workerexecution.KindMessage,
-		workerexecution.KindTool, workerexecution.KindTool, workerexecution.KindMessage,
-		workerexecution.KindRun,
+		workerexecution.KindRun, workerexecution.KindMessage, workerexecution.KindTool,
+		workerexecution.KindTool, workerexecution.KindMessage, workerexecution.KindRun,
 	}
 	for index, event := range writer.events {
 		draft := event.Draft()

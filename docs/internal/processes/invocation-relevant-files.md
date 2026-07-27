@@ -1785,3 +1785,9 @@ response-stream output.
   mount as well as any intentional standalone development path. Prove new routes
   with a built-preview browser test that navigates the hosted path directly;
   component tests that inject a pathname do not verify production routing.
+- Registry-migrated provider integrations receive subprocess and filesystem
+  effects through `pkg/wire` when built-in registrations are constructed.
+  Preserve optional subprocess capabilities when adapting those effects:
+  expose Workers `RunStreaming` only when the injected Platform runner actually
+  implements streaming, so buffered functional overrides continue through the
+  same registry route without a false streaming capability.

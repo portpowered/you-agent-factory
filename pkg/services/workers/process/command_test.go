@@ -21,6 +21,20 @@ func (r *recordingEffect) Run(_ context.Context, request platformprocess.Command
 	return platformprocess.CommandResult{Stdout: []byte("ok")}, nil
 }
 
+type streamingRecordingEffect struct {
+	recordingEffect
+}
+
+func (r *streamingRecordingEffect) RunStreaming(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+	observe platformprocess.OutputChunkObserver,
+) (platformprocess.CommandResult, error) {
+	result, err := r.Run(ctx, request)
+	observe(platformprocess.OutputStreamStdout, result.Stdout)
+	return result, err
+}
+
 func TestAdaptCommandRunnerProjectsOnlySubprocessEffectFields(t *testing.T) {
 	effect := &recordingEffect{}
 	runner := AdaptCommandRunner(effect)
@@ -40,6 +54,21 @@ func TestAdaptCommandRunnerProjectsOnlySubprocessEffectFields(t *testing.T) {
 		string(effect.request.Stdin) != string(want.Stdin) || len(effect.request.Args) != len(want.Args) ||
 		len(effect.request.Env) != len(want.Env) {
 		t.Fatalf("effect request = %#v, want %#v", effect.request, want)
+	}
+}
+
+func TestAdaptCommandRunnerPreservesOnlyImplementedStreamingCapability(t *testing.T) {
+	streamingMethod := func(runner CommandRunner) bool {
+		_, ok := runner.(interface {
+			RunStreaming(context.Context, CommandRequest, OutputChunkObserver) (CommandResult, error)
+		})
+		return ok
+	}
+	if streamingMethod(AdaptCommandRunner(&recordingEffect{})) {
+		t.Fatal("non-streaming platform effect unexpectedly exposes workers streaming")
+	}
+	if !streamingMethod(AdaptCommandRunner(&streamingRecordingEffect{})) {
+		t.Fatal("streaming platform effect does not expose workers streaming")
 	}
 }
 

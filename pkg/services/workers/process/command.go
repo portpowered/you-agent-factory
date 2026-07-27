@@ -45,7 +45,13 @@ type ExecCommandRunner struct {
 // AdaptCommandRunner projects a low-level subprocess effect into the
 // Workers-owned command boundary.
 func AdaptCommandRunner(runner platformprocess.CommandRunner) CommandRunner {
-	return ExecCommandRunner{Runner: runner}
+	adapted := ExecCommandRunner{Runner: runner}
+	if _, ok := runner.(interface {
+		RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
+	}); ok {
+		return StreamingAdaptedCommandRunner{ExecCommandRunner: adapted}
+	}
+	return adapted
 }
 
 func (r ExecCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
@@ -96,7 +102,13 @@ func (r StreamingExecCommandRunner) Run(ctx context.Context, req CommandRequest)
 
 // RunStreaming forwards incremental output through the injected Platform
 // command capability when available.
-func (r ExecCommandRunner) RunStreaming(ctx context.Context, req CommandRequest, observer OutputChunkObserver) (CommandResult, error) {
+// StreamingAdaptedCommandRunner preserves the optional streaming capability
+// only when the injected platform effect actually implements it.
+type StreamingAdaptedCommandRunner struct {
+	ExecCommandRunner
+}
+
+func (r StreamingAdaptedCommandRunner) RunStreaming(ctx context.Context, req CommandRequest, observer OutputChunkObserver) (CommandResult, error) {
 	if r.Runner == nil {
 		return CommandResult{}, errors.New("workers process command runner is required")
 	}
@@ -178,6 +190,16 @@ func execCommandRunnerWithLogger(runner CommandRunner, logger logging.Logger) Co
 			typed.Logger = logger
 		}
 		return typed
+	case StreamingAdaptedCommandRunner:
+		if typed.Logger == nil {
+			typed.Logger = logger
+		}
+		return typed
+	case *StreamingAdaptedCommandRunner:
+		if typed != nil && typed.Logger == nil {
+			typed.Logger = logger
+		}
+		return typed
 	default:
 		return runner
 	}
@@ -192,5 +214,6 @@ func commandResult(result platformprocess.CommandResult) CommandResult {
 }
 
 var _ CommandRunner = ExecCommandRunner{}
+var _ CommandRunner = StreamingAdaptedCommandRunner{}
 var _ CommandRunner = StreamingExecCommandRunner{}
 var _ CommandRunner = (*LoggingCommandRunner)(nil)

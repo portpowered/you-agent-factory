@@ -5,12 +5,17 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor"
+	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )
 
 const privateCursorToken = "cursor-fixture-secret"
@@ -217,4 +222,155 @@ func TestBuildCommandWiresAgentEnvironmentAndDispatchMetadata(t *testing.T) {
 			t.Fatalf("command env = %#v, want %q", built.Request.Env, want)
 		}
 	}
+}
+
+func TestBuiltInRegistrySelectsCursorThroughNeutralConductor(t *testing.T) {
+	t.Parallel()
+
+	runner := &registryCursorRunner{
+		result: workerprocess.CommandResult{
+			Stdout: cursorpkg.SuccessStdoutJSON("cursor conductor answer", "cursor-session-123"),
+		},
+	}
+	registrations, err := registry.BuiltInRegistrations(registry.BuiltInDependencies{
+		CommandRunner:   runner,
+		OperatingSystem: "linux",
+	})
+	if err != nil {
+		t.Fatalf("BuiltInRegistrations() error = %v", err)
+	}
+	providers, err := registry.New(registrations...)
+	if err != nil {
+		t.Fatalf("registry.New() error = %v", err)
+	}
+	assertRegistrySelectsCursor(t, providers, "cursor")
+	assertRegistrySelectsCursor(t, providers, "agent")
+	if providers.UsesNativeRunner("cursor") || providers.UsesNativeRunner("agent") {
+		t.Fatal("Cursor retained the provider-native runner route")
+	}
+
+	writer := &registryCursorWriter{}
+	err = conductor.New(providers).Invoke(
+		context.Background(),
+		"agent",
+		inference.NewInvocationRequest(inference.InvocationInput{
+			InvocationID: "dispatch-cursor-registry",
+			UserMessage:  "review through the registry",
+		}),
+		writer,
+	)
+	if err != nil {
+		t.Fatalf("conductor.Invoke(agent) error = %v", err)
+	}
+	if runner.calls != 1 || runner.request.Command != "agent" {
+		t.Fatalf("runner calls = %d request = %#v", runner.calls, runner.request)
+	}
+	if writer.closeCalls != 1 || writer.completion.Failure() != nil {
+		t.Fatalf("writer closes = %d completion = %#v", writer.closeCalls, writer.completion)
+	}
+	response := writer.completion.Response()
+	if response == nil || response.Content() != "cursor conductor answer" {
+		t.Fatalf("completion response = %#v", response)
+	}
+}
+
+func assertRegistrySelectsCursor(t *testing.T, providers *registry.Registry, identity string) {
+	t.Helper()
+	entry, err := providers.Lookup(identity)
+	if err != nil {
+		t.Fatalf("Lookup(%q) error = %v", identity, err)
+	}
+	if entry.Identity() != "cursor" {
+		t.Fatalf("Lookup(%q) identity = %q, want cursor", identity, entry.Identity())
+	}
+	integration, err := providers.Integration(identity)
+	if err != nil {
+		t.Fatalf("Integration(%q) error = %v", identity, err)
+	}
+	if integration.Identity() != "cursor" {
+		t.Fatalf("Integration(%q) identity = %q, want cursor", identity, integration.Identity())
+	}
+}
+
+func TestRegistrySelectedCursorRejectsUnsupportedCapabilityBeforeCommandIO(t *testing.T) {
+	t.Parallel()
+
+	runner := &registryCursorRunner{}
+	registrations, err := registry.BuiltInRegistrations(registry.BuiltInDependencies{
+		CommandRunner:   runner,
+		OperatingSystem: "windows",
+	})
+	if err != nil {
+		t.Fatalf("BuiltInRegistrations() error = %v", err)
+	}
+	providers, err := registry.New(registrations...)
+	if err != nil {
+		t.Fatalf("registry.New() error = %v", err)
+	}
+	writer := &registryCursorWriter{}
+	err = conductor.New(providers).Invoke(
+		context.Background(),
+		"agent",
+		inference.NewInvocationRequest(inference.InvocationInput{
+			InvocationID: "dispatch-cursor-unsupported",
+			UserMessage:  strings.Repeat("private prompt ", cursorpkg.CursorWindowsPromptArgumentLimit),
+			Required:     inference.NewCapabilitySet(inference.CapabilityImageInput),
+		}),
+		writer,
+	)
+	if err == nil {
+		t.Fatal("conductor.Invoke(cursor-agent) error = nil")
+	}
+	if runner.calls != 0 {
+		t.Fatalf("runner calls = %d, want 0", runner.calls)
+	}
+	if writer.closeCalls != 0 {
+		t.Fatalf("writer closes = %d, want preflight rejection before writer I/O", writer.closeCalls)
+	}
+}
+
+type registryCursorRunner struct {
+	mu      sync.Mutex
+	calls   int
+	request workerprocess.CommandRequest
+	result  workerprocess.CommandResult
+}
+
+func (r *registryCursorRunner) Run(
+	_ context.Context,
+	request workerprocess.CommandRequest,
+) (workerprocess.CommandResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls++
+	r.request = request
+	return r.result, nil
+}
+
+func (r *registryCursorRunner) RunStreaming(
+	ctx context.Context,
+	request workerprocess.CommandRequest,
+	observe workerprocess.OutputChunkObserver,
+) (workerprocess.CommandResult, error) {
+	result, err := r.Run(ctx, request)
+	observe(workerprocess.OutputStreamStdout, result.Stdout)
+	return result, err
+}
+
+type registryCursorWriter struct {
+	mu         sync.Mutex
+	closeCalls int
+	completion inference.Completion
+}
+
+func (*registryCursorWriter) WriteEvent(context.Context, inference.EventDraft) error {
+	return nil
+}
+
+func (w *registryCursorWriter) Close(_ context.Context, completion inference.Completion) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.closeCalls++
+	w.completion = completion
+	return nil
 }
