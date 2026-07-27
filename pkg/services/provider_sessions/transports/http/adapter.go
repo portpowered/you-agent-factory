@@ -2,6 +2,10 @@
 // Provider Sessions root contract. Request decoding, representation mapping,
 // service invocation, error mapping, and response encoding for owned Provider
 // Sessions HTTP operations remain here with the owning service.
+//
+// HTTP-PSES owns getProviderSessionDetails only. Root Inspect and Project slices
+// stay peer APIs without adapter-owned HTTP mapping in this packet; see
+// OwnedHTTPOperationIDs.
 package http
 
 import (

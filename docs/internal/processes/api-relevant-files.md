@@ -23,7 +23,10 @@ Use this map when changing the public REST contract.
   top-level `pkg/transports/http` server still hosts the generated route until
   PSS-I02 fan-in; the owner-local adapter consumes `providersessions.Service`
   (or a fake root in tests) and must not import
-  `pkg/services/provider_sessions/internal/**`.
+  `pkg/services/provider_sessions/internal/**`. HTTP-PSES owns
+  `getProviderSessionDetails` only (`OwnedHTTPOperationIDs`); root Inspect and
+  Project slices remain peer APIs without adapter-owned HTTP mapping in this
+  packet, so do not author new shared OpenAPI Provider Sessions routes here.
 - Shared filesystem documents represented in OpenAPI should decode and encode
   through the generated model in a focused `pkg/transports/mapping` package,
   then map into domain-owned values. Inject that codec into the service
