@@ -231,6 +231,9 @@
     "pkg/services/factory_sessions/wire/contracts",
     "pkg/services/factory_visualization",
     "pkg/services/factory_visualization/internal/contracts",
+    "pkg/services/factory_visualization/internal/services/activation_lifecycle",
+    "pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service",
+    "pkg/services/factory_visualization/internal/services/activation_lifecycle/wire",
     "pkg/services/models",
     "pkg/services/models/internal/artifacts",
     "pkg/services/models/internal/catalog",
@@ -1387,6 +1390,21 @@
       "packagePath": "pkg/services/factory_visualization/internal/contracts",
       "disposition": "retain",
       "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/activation_lifecycle"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/activation_lifecycle"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle/wire",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/activation_lifecycle"
     },
     {
       "packagePath": "pkg/services/models",
