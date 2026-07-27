@@ -1,0 +1,5 @@
+{
+  "id": "claude-golden-tool-session",
+  "kind": "session_id",
+  "provider": "claude"
+}

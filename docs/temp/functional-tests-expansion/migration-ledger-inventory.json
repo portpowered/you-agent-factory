@@ -5201,6 +5201,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/orchestration/javascript/composition/agent_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
+      "scenario": "TestJavaScriptAgentFailureReturnsStableFailureRecord",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/composition/agent_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/composition/agent_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
+      "scenario": "TestJavaScriptAgentReturnsUnaryResult",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/composition/agent_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/orchestration/javascript/composition/pipeline_test.go",
       "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
       "scenario": "TestJavaScriptPipelinePassesStageOutputToNextStage",
@@ -5891,6 +5911,26 @@
       "deletion_only_batch": "workflow-delete-05-workstations-repeater"
     },
     {
+      "source_path": "tests/functional/workers/inference/claude/golden_success_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/claude",
+      "scenario": "TestClaudeGoldenFullStreamTextSuccess",
+      "lane": "functionallong",
+      "destination": "tests/functional/workers/inference/claude/golden_success_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/claude/golden_success_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/claude",
+      "scenario": "TestClaudeGoldenToolLifecycleAndSessionIdentity",
+      "lane": "functionallong",
+      "destination": "tests/functional/workers/inference/claude/golden_success_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/workers/inference/codex/golden_success_test.go",
       "package": "you-agent-factory/tests/functional/workers/inference/codex",
       "scenario": "TestCodexGoldenDerivesProviderSessionAndResponseEvents",
@@ -6053,14 +6093,14 @@
       "you-agent-factory/tests/functional/workstations/execution": 2,
       "you-agent-factory/tests/functional/workstations/poller": 3
     },
-    "customer_top_level_Test_scenarios": 578,
+    "customer_top_level_Test_scenarios": 582,
     "files_with_customer_Test": 201,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
-    "lane_functionallong": 115,
-    "lane_short": 463
+    "lane_functionallong": 117,
+    "lane_short": 465
   },
   "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. Non-catch-all rows mapped by FND-007-006; catch-all rows mapped by FND-007-003\u2026005.",
   "runtime_api_mapping": {
@@ -6133,16 +6173,16 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T14:35:00Z",
+    "audited_at_utc": "2026-07-27T14:45:00Z",
     "story": "ft-wave1-codex-golden-success-mergeability",
-    "live_customer_scenarios": 578,
-    "ledger_rows": 578,
+    "live_customer_scenarios": 582,
+    "ledger_rows": 582,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 463,
-    "lane_functionallong": 115,
+    "lane_short": 465,
+    "lane_functionallong": 117,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
     "validator": "go run ./cmd/migrationledgercheck"

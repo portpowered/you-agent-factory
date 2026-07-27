@@ -140,11 +140,16 @@
   `functional-boundary-check` stays unavoidable through the nested
   `test-functional-coverage` call, and the lane uploads Markdown, coverage
   JSON, profile, and command log on success and failure.
-  JavaScript pipeline composition functional coverage belongs in
-  `tests/functional/orchestration/javascript/composition/pipeline_test.go`:
+  JavaScript agent composition functional coverage belongs in
+  `tests/functional/orchestration/javascript/composition/agent_test.go`:
   drive sync Factory Session execution through
   `tests/functional/internal/support.StartFunctionalAPIServer` with
   `UseMockWorkers: true` and a recording `edges.Edges.ProviderCommandRunner`,
+  assert unary child results on `result.primaryResult`, and prove stable
+  `FAILED` dispatch records via the `fail:` fake-child prompt prefix without
+  live provider execution. JavaScript pipeline composition functional coverage
+  belongs in
+  `tests/functional/orchestration/javascript/composition/pipeline_test.go`:
   use `pipeline(items, worker, next?)` with at least two stages so stage-two
   prompts depend on stage-one child output, and assert stage-output data flow
   on `result.primaryResult` and the Factory Session dispatch listing without
