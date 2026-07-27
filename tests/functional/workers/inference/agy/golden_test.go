@@ -23,8 +23,9 @@ import (
 )
 
 const (
-	agyFinalOnlySuccessGoldenCase   = "final-only-success"
-	agyStructuredFailureGoldenCase  = "structured-failure"
+	agyFinalOnlySuccessGoldenCase  = "final-only-success"
+	agyStructuredFailureGoldenCase = "structured-failure"
+	agyTimeoutGoldenCase           = "timeout"
 )
 
 // TestAgyGoldenFinalOnlySuccess replays a sanitized Agy final-only-success
@@ -147,6 +148,21 @@ func TestAgyGoldenStructuredFailure(t *testing.T) {
 	)
 }
 
+// TestAgyGoldenTimeout replays a sanitized Agy timeout transcript through the
+// customer process boundary and proves a public timeout outcome distinct from
+// structured auth failure or silent success.
+//golden: docs/temp/functional/provider-sessions/agy/timeout/manifest.json
+func TestAgyGoldenTimeout(t *testing.T) {
+	runAgyFailureGoldenCase(
+		t,
+		agyTimeoutGoldenCase,
+		"agy-timeout",
+		support.ProviderSessionFidelityFinalOnly,
+		factoryapi.WorkFailureTypeTimeout,
+		factoryapi.WorkFailureTypeAuthFailure,
+	)
+}
+
 func runAgyFailureGoldenCase(
 	t *testing.T,
 	caseName string,
@@ -220,7 +236,11 @@ func runAgyFailureGoldenCase(
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
 	}
-	if ptyHost.callCount() != 1 {
+	if wantReason == factoryapi.WorkFailureTypeTimeout {
+		if ptyHost.callCount() < 2 {
+			t.Fatalf("agy PTY host starts = %d, want retryable timeout attempts", ptyHost.callCount())
+		}
+	} else if ptyHost.callCount() != 1 {
 		t.Fatalf("agy PTY host starts = %d, want one invocation", ptyHost.callCount())
 	}
 
