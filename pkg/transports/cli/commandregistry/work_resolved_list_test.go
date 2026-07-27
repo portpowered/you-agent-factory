@@ -942,6 +942,41 @@ func assertResolvedListResponse(
 	}
 }
 
+func resolvedTestInputsWithout(
+	t *testing.T,
+	values []resolvedTestValue,
+	omitted string,
+) resolvedinput.Inputs {
+	t.Helper()
+	filtered := make([]resolvedTestValue, 0, len(values)-1)
+	for _, value := range values {
+		if value.id != omitted {
+			filtered = append(filtered, value)
+		}
+	}
+	return resolvedTestInputs(t, filtered...)
+}
+
+func TestResolvedWorkAdaptersRequireServices(t *testing.T) {
+	tests := []struct {
+		name    string
+		handler commandregistry.ResolvedWorkRunE
+	}{
+		{"list", commandregistry.ResolvedListRunE(commandregistry.ResolvedListBinding{})},
+		{"show", commandregistry.ResolvedShowRunE(commandregistry.ResolvedShowBinding{})},
+		{"move", commandregistry.ResolvedMoveRunE(commandregistry.ResolvedMoveBinding{})},
+		{"visualize", commandregistry.ResolvedVisualizeRunE(commandregistry.ResolvedVisualizeBinding{})},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := test.handler(&cobra.Command{}, resolvedinput.Inputs{}, resolvedinput.Inputs{})
+			if err == nil || !strings.Contains(err.Error(), "service is required") {
+				t.Fatalf("handler error = %v, want required service error", err)
+			}
+		})
+	}
+}
+
 type fixedHTTPClock struct{}
 
 func (fixedHTTPClock) Now() time.Time { return time.Unix(1, 0) }

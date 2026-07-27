@@ -912,6 +912,64 @@ func assertResolvedMoveJSONAndDiagnostics(
 	}
 }
 
+func TestResolvedWorkAdaptersReportEveryMissingStableInput(t *testing.T) {
+	stringInput := func(id string) resolvedTestValue {
+		return resolvedTestValue{id: id, source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("value")}
+	}
+	local := []resolvedTestValue{
+		stringInput("you.work.list.flag.state-name"), stringInput("you.work.list.flag.state-type"),
+		stringInput("you.work.list.flag.name"), stringInput("you.work.list.flag.work-type-name"),
+		stringInput("you.work.list.flag.trace-id"), stringInput("you.work.list.flag.sort-by"),
+		{id: "you.work.list.flag.max-results", source: resolvedinput.SourceCLIFlag, value: resolvedinput.IntValue(1)},
+		stringInput("you.work.list.flag.next-token"), stringInput("you.work.list.flag.session"),
+		stringInput("you.work.show.arg.0"), stringInput("you.work.show.flag.session"),
+		stringInput("you.work.move.arg.0"), stringInput("you.work.move.arg.1"),
+		stringInput("you.work.move.flag.session"), stringInput("you.work.move.flag.request-id"),
+		stringInput("you.work.visualize.arg.0"), stringInput("you.work.visualize.flag.format"),
+	}
+	globals := []resolvedTestValue{
+		stringInput("you.flag.server"),
+		{id: "you.flag.json", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)},
+		{id: "you.flag.verbose", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)},
+		{id: "you.flag.debug", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)},
+	}
+	noList := func(workcli.ListConfig) error { return nil }
+	noShow := func(workcli.ShowConfig) error { return nil }
+	noMove := func(workcli.MoveConfig) error { return nil }
+	noVisualize := func(workcli.VisualizeConfig) error { return nil }
+	tests := []struct {
+		name    string
+		handler commandregistry.ResolvedWorkRunE
+		missing []string
+	}{
+		{"list", commandregistry.ResolvedListRunE(commandregistry.ResolvedListBinding{ListWork: noList}),
+			[]string{"you.work.list.flag.state-name", "you.work.list.flag.state-type", "you.work.list.flag.name", "you.work.list.flag.work-type-name", "you.work.list.flag.trace-id", "you.work.list.flag.sort-by", "you.work.list.flag.max-results", "you.work.list.flag.next-token", "you.work.list.flag.session"}},
+		{"show", commandregistry.ResolvedShowRunE(commandregistry.ResolvedShowBinding{ShowWork: noShow}),
+			[]string{"you.work.show.arg.0", "you.work.show.flag.session"}},
+		{"move", commandregistry.ResolvedMoveRunE(commandregistry.ResolvedMoveBinding{MoveWork: noMove}),
+			[]string{"you.work.move.arg.0", "you.work.move.arg.1", "you.work.move.flag.session", "you.work.move.flag.request-id"}},
+		{"visualize", commandregistry.ResolvedVisualizeRunE(commandregistry.ResolvedVisualizeBinding{VisualizeWork: noVisualize}),
+			[]string{"you.work.visualize.arg.0", "you.work.visualize.flag.format"}},
+	}
+	for _, test := range tests {
+		missingInputs := test.missing
+		if test.name != "visualize" {
+			missingInputs = append(missingInputs, "you.flag.server", "you.flag.json", "you.flag.verbose", "you.flag.debug")
+		}
+		for _, missing := range missingInputs {
+			t.Run(test.name+"/"+missing, func(t *testing.T) {
+				inputs := resolvedTestInputsWithout(t, local, missing)
+				inherited := resolvedTestInputsWithout(t, globals, missing)
+				err := test.handler(&cobra.Command{}, inputs, inherited)
+				var accessErr *resolvedinput.AccessError
+				if !errors.As(err, &accessErr) || accessErr.InputID != missing {
+					t.Fatalf("handler error = %v, want missing stable input %q", err, missing)
+				}
+			})
+		}
+	}
+}
+
 func TestVerifyWorkRunnableCoverageAcceptsCompleteRegistry(t *testing.T) {
 	manifest, err := cligenerated.WorkFamilyManifest()
 	if err != nil {
