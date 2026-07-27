@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
@@ -32,7 +33,7 @@ func (s *Service) StartScriptPoller(
 		runtimeCfg,
 		workstation,
 		workerDef,
-		scriptpollers.ScriptPollerSupervision{},
+		s.scriptPollerSupervision(workstation),
 		submitter,
 	)
 }
@@ -55,9 +56,18 @@ func (s *Service) RunScriptPoller(
 		runtimeCfg,
 		workstation,
 		workerDef,
-		scriptpollers.ScriptPollerSupervision{},
+		s.scriptPollerSupervision(workstation),
 		submitter,
 	)
+}
+
+func (s *Service) scriptPollerSupervision(
+	workstation interfaces.FactoryWorkstationConfig,
+) scriptpollers.ScriptPollerSupervision {
+	if s == nil {
+		return scriptpollers.ScriptPollerSupervision{}
+	}
+	return scriptpollers.SupervisionFor(strings.TrimSpace(s.workflowID), workstation.Name)
 }
 
 // ScriptPollerCommandRequest builds the command invocation for a script poller worker.

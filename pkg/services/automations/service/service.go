@@ -156,6 +156,9 @@ func (s *Service) GetCursor(
 	ctx context.Context,
 	request automations.GetCursorRequest,
 ) (automations.GetCursorResult, error) {
+	if s != nil && s.scriptPollers != nil && scriptpollers.IsScriptPollerInstanceID(request.InstanceID) {
+		return s.scriptPollers.GetCursor(ctx, request)
+	}
 	return s.reconciler.GetCursor(ctx, request)
 }
 
