@@ -2891,6 +2891,11 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/worktree",
       "target": "pkg/services/workers"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/recordings/internal/services/artifacts_export",
+      "target": "pkg/services/recordings/internal/services/artifacts_export/service.go:PortableArtifactPublication,pkg/services/recordings/internal/services/artifacts_export/service.go:Service,pkg/services/recordings/internal/services/artifacts_export/service.go:SnapshotSource"
     }
   ],
   "violations": [

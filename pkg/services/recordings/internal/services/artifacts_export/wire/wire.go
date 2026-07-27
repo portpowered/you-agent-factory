@@ -15,8 +15,3 @@ func NewService(
 	return artifactsexportservice.New(snapshots, publication)
 }
 
-// NewOSPublication constructs the default host publication effect for portable
-// artifact export and read.
-func NewOSPublication() (artifactsexport.PortableArtifactPublication, error) {
-	return artifactsexportservice.NewOSPublication()
-}

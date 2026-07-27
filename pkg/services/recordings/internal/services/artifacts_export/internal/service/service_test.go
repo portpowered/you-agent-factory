@@ -13,6 +13,7 @@ import (
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	artifactsexportservice "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/internal/service"
+	artifactsexportwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 )
 
@@ -236,7 +237,7 @@ func TestExportPortableArtifactPublishesCompleteReadableArtifact(t *testing.T) {
 		Payload:    "{}",
 	}
 	destination := filepath.Join(t.TempDir(), "public-export.json")
-	publication, err := artifactsexportservice.NewOSPublication()
+	publication, err := artifactsexportwire.NewOSPublication()
 	if err != nil {
 		t.Fatalf("NewOSPublication: %v", err)
 	}
@@ -287,7 +288,7 @@ func TestReadPortableArtifactRejectsMissingRecordingAndHandle(t *testing.T) {
 			FinalizedAt: &finalizedAt,
 		},
 	}
-	publication, err := artifactsexportservice.NewOSPublication()
+	publication, err := artifactsexportwire.NewOSPublication()
 	if err != nil {
 		t.Fatalf("NewOSPublication: %v", err)
 	}
@@ -327,7 +328,7 @@ func TestReadPortableArtifactRejectsForeignHandle(t *testing.T) {
 		Payload:    `{"public":true}`,
 	}
 	destination := filepath.Join(t.TempDir(), "foreign-read.json")
-	publication, err := artifactsexportservice.NewOSPublication()
+	publication, err := artifactsexportwire.NewOSPublication()
 	if err != nil {
 		t.Fatalf("NewOSPublication: %v", err)
 	}
@@ -394,7 +395,7 @@ func TestReadPortableArtifactErrorsOmitPrivatePaths(t *testing.T) {
 			FinalizedAt: &finalizedAt,
 		},
 	}
-	publication, err := artifactsexportservice.NewOSPublication()
+	publication, err := artifactsexportwire.NewOSPublication()
 	if err != nil {
 		t.Fatalf("NewOSPublication: %v", err)
 	}
@@ -429,7 +430,7 @@ func TestExportPortableArtifactRejectsPreCancelledContext(t *testing.T) {
 
 	finalizedAt := time.Unix(1_700_000_000, 0).UTC()
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-cancel-export"}
-	publication, err := artifactsexportservice.NewOSPublication()
+	publication, err := artifactsexportwire.NewOSPublication()
 	if err != nil {
 		t.Fatalf("NewOSPublication: %v", err)
 	}
@@ -538,7 +539,7 @@ func TestReadPortableArtifactRejectsPreCancelledContext(t *testing.T) {
 
 	finalizedAt := time.Unix(1_700_000_000, 0).UTC()
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-cancel-read"}
-	publication, err := artifactsexportservice.NewOSPublication()
+	publication, err := artifactsexportwire.NewOSPublication()
 	if err != nil {
 		t.Fatalf("NewOSPublication: %v", err)
 	}
@@ -585,7 +586,7 @@ func TestReadPortableArtifactCancellationDuringReadDoesNotReturnPartialArtifact(
 		Payload:    "{}",
 	}
 	destination := filepath.Join(t.TempDir(), "public-read.json")
-	publication, err := artifactsexportservice.NewOSPublication()
+	publication, err := artifactsexportwire.NewOSPublication()
 	if err != nil {
 		t.Fatalf("NewOSPublication: %v", err)
 	}

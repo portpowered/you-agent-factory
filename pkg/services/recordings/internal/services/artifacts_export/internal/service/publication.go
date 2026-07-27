@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"os"
 	"path/filepath"
 )
 
@@ -57,19 +56,6 @@ func NewPublication(
 			readFile:            readFile,
 		},
 	}, nil
-}
-
-// NewOSPublication constructs a publisher using host operating-system effects.
-func NewOSPublication() (*Publication, error) {
-	return NewPublication(
-		os.MkdirAll,
-		func(dir, pattern string) (PublicationTemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		os.Remove,
-		os.Rename,
-		os.ReadFile,
-	)
 }
 
 func (publication *Publication) Publish(ctx context.Context, destination string, payload []byte) error {

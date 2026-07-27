@@ -39,6 +39,7 @@ func TestLifecycleRuntimeRecorderUsesComposedRootForBindingFailuresAndFinalizati
 		nil,
 		writer,
 		nil,
+		nil,
 		runtimeRecorderTestClock{now: startedAt},
 	)
 	recorder := newLifecycleRecorderForTest(t, startedAt, "recording.json")
@@ -105,6 +106,7 @@ func TestReplayRecordingSnapshotWriterPreservesReplayCompatibility(t *testing.T)
 		NewProjectionService(),
 		nil,
 		NewReplayRecordingSnapshotWriter(storage.WriteFile),
+		nil,
 		nil,
 		runtimeRecorderTestClock{now: startedAt},
 	)

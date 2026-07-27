@@ -546,6 +546,7 @@ func NewService(
 		firstTargetPlanner(targets),
 		nil,
 		nil,
+		nil,
 	)
 }
 
@@ -566,6 +567,7 @@ func NewServiceWithLifecycleEffects(
 	targetPlanner recordings.LiveRecordingTargetPlanner,
 	writer recordings.RecordingSnapshotWriter,
 	tickers recordings.RecordingFlushTickerFactory,
+	publication artifactsexport.PortableArtifactPublication,
 	clocks ...recordings.RecordingClock,
 ) recordings.Service {
 	if ledger == nil || projection == nil {
@@ -577,7 +579,13 @@ func NewServiceWithLifecycleEffects(
 		tickers,
 		clocks...,
 	)
-	publication, _ := artifactsexportwire.NewOSPublication()
+	if publication == nil {
+		var err error
+		publication, err = NewPortableArtifactPublication()
+		if err != nil {
+			return nil
+		}
+	}
 	return &combinedService{
 		Ledger:            ledger,
 		ProjectionService: projection,

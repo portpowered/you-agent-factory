@@ -253,12 +253,12 @@
     "pkg/services/recordings/events",
     "pkg/services/recordings/events/kinds",
     "pkg/services/recordings/events/snapshot",
-    "pkg/services/recordings/internal/services/projection_query",
-    "pkg/services/recordings/internal/services/projection_query/internal/service",
-    "pkg/services/recordings/internal/services/projection_query/wire",
     "pkg/services/recordings/internal/services/artifacts_export",
     "pkg/services/recordings/internal/services/artifacts_export/internal/service",
     "pkg/services/recordings/internal/services/artifacts_export/wire",
+    "pkg/services/recordings/internal/services/projection_query",
+    "pkg/services/recordings/internal/services/projection_query/internal/service",
+    "pkg/services/recordings/internal/services/projection_query/wire",
     "pkg/services/recordings/internal/services/recording_lifecycle",
     "pkg/services/recordings/internal/services/recording_lifecycle/internal/service",
     "pkg/services/recordings/internal/services/recording_lifecycle/wire",
@@ -1461,21 +1461,6 @@
       "destination": "recordings/internal/services/canonical_ledger"
     },
     {
-      "packagePath": "pkg/services/recordings/internal/services/projection_query",
-      "disposition": "retain",
-      "destination": "recordings/internal/services/projection_query"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/projection_query/internal/service",
-      "disposition": "retain",
-      "destination": "recordings/internal/services/projection_query"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/projection_query/wire",
-      "disposition": "retain",
-      "destination": "recordings/internal/services/projection_query"
-    },
-    {
       "packagePath": "pkg/services/recordings/internal/services/artifacts_export",
       "disposition": "retain",
       "destination": "recordings/internal/services/artifacts_export"
@@ -1489,6 +1474,21 @@
       "packagePath": "pkg/services/recordings/internal/services/artifacts_export/wire",
       "disposition": "retain",
       "destination": "recordings/internal/services/artifacts_export"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/projection_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/internal/service",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/projection_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/wire",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/projection_query"
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/recording_lifecycle",
