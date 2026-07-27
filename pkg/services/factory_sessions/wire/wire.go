@@ -1,6 +1,9 @@
 // Package wire is the Factory Sessions service composition boundary.
-// Application Wire uses these providers without importing the service's
-// concrete implementation package.
+//
+// Wire performs construction only, returns the singular factorysessions.Service
+// root interface, and starts no lifecycle components. Parent-private identity
+// and response-stream owner wiring stays inside the owner service assembly path;
+// peers depend on Service rather than owner internals or construction ports.
 package wire
 
 import (
@@ -40,8 +43,11 @@ func NewWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector {
 	}
 }
 
-// NewService constructs the inert, process-scoped Factory Sessions service.
-// Runtime-specific values are supplied later through Service.ForRuntime.
+// NewService constructs an inert Factory Sessions root from construction and
+// process-edge ports. It composes the accepted root through parent-private
+// identity and response-stream owner construction without publishing owner types
+// on the returned peer surface. Missing required construction ports fail with a
+// deterministic construction error and a nil service.
 func NewService(
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
