@@ -64,6 +64,7 @@ type Factory struct {
 	resolveClock                    factoryruntime.ClockResolver
 	newSessionLogger                factoryruntime.SessionLoggerFactory
 	adaptWorkerCommandRunner        WorkerCommandRunnerAdapter
+	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory
 	processRuntimeFactory           roles.ProcessRuntimeFactory
 	ensureOperatorBackendScope      operatorsettings.BackendScopeEnsurer
 	generateRuntimeInstanceID       factorysessions.RuntimeInstanceIDGenerator
@@ -112,6 +113,7 @@ func NewFactory(
 	resolveClock factoryruntime.ClockResolver,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
 	adaptWorkerCommandRunner WorkerCommandRunnerAdapter,
+	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
 	processRuntimeFactory roles.ProcessRuntimeFactory,
 	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
@@ -192,8 +194,9 @@ func NewFactory(
 		captureLoadedFactorySnapshot:    captureLoadedFactorySnapshot,
 		resolveClock:                    resolveClock,
 		newSessionLogger:                newSessionLogger,
-		adaptWorkerCommandRunner:        adaptWorkerCommandRunner,
-		processRuntimeFactory:           processRuntimeFactory,
+		adaptWorkerCommandRunner:         adaptWorkerCommandRunner,
+		providerFromCommandRunnerFactory: providerFromCommandRunnerFactory,
+		processRuntimeFactory:            processRuntimeFactory,
 		ensureOperatorBackendScope:      ensureOperatorBackendScope,
 		generateRuntimeInstanceID:       generateRuntimeInstanceID,
 		resolveHome:                     resolveHome,
@@ -247,6 +250,7 @@ func (f *Factory) openRuntime(
 		f.resolveClock,
 		f.newSessionLogger,
 		f.adaptWorkerCommandRunner,
+		f.providerFromCommandRunnerFactory,
 		f.processRuntimeFactory,
 		f.ensureOperatorBackendScope,
 		f.generateRuntimeInstanceID,
