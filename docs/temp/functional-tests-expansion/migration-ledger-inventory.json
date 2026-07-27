@@ -3079,36 +3079,6 @@
       "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
-      "source_path": "tests/functional/runtime_api/api_cron_workstations_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestCronWorkstations_ServiceModeExpiryConsumesStaleTriggerWithTerminalOutputAndDefaultWindow",
-      "lane": "short",
-      "destination": "tests/functional/workstations/cron/clock_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-03-workstations-cron"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_cron_workstations_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestCronWorkstations_ServiceModeImplicitFailureRoutingMovesFailedCronWorkIntoFailedState",
-      "lane": "short",
-      "destination": "tests/functional/workstations/cron/clock_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-03-workstations-cron"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_cron_workstations_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetriesDispatchesAndFiltersViews",
-      "lane": "short",
-      "destination": "tests/functional/workstations/cron/clock_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "cron-time-work-smoke",
-      "deletion_only_batch": "runtime_api-delete-03-workstations-cron"
-    },
-    {
       "source_path": "tests/functional/runtime_api/api_event_replay_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline",
