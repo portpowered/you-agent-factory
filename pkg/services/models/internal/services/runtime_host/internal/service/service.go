@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
@@ -20,6 +21,9 @@ type service struct {
 	hostClock       models.HostClock
 	hostLogger      models.HostDiagnosticLogger
 	hostMetrics     models.HostMetricsRecorder
+	supervisor      supervisorSettings
+	mu              sync.Mutex
+	runtimeSlots    map[string]*supervisedRuntime
 }
 
 var _ runtimehost.Service = (*service)(nil)
@@ -35,6 +39,17 @@ func New(
 	hostLogger models.HostDiagnosticLogger,
 	hostMetrics models.HostMetricsRecorder,
 ) runtimehost.Service {
+	diagnostics := hostDiagnostics{logger: hostLogger, metrics: hostMetrics}
+	supervisor := supervisorSettings{
+		ReadinessTimeout:    DefaultReadinessTimeout,
+		HealthCheckInterval: DefaultHealthCheckInterval,
+		HealthCheckPath:     DefaultHealthCheckPath,
+		ProcessLauncher:     processLauncher,
+		HealthChecker:       HTTPHealthChecker{Client: hostHTTP, Path: DefaultHealthCheckPath},
+		Clock:               hostClock,
+		ServerStartBuilder:  defaultServerStartBuilder,
+		Diagnostics:         diagnostics,
+	}
 	return &service{
 		scopes:          scopes,
 		assets:          assets,
@@ -43,6 +58,8 @@ func New(
 		hostClock:       hostClock,
 		hostLogger:      hostLogger,
 		hostMetrics:     hostMetrics,
+		supervisor:      supervisor,
+		runtimeSlots:    make(map[string]*supervisedRuntime),
 	}
 }
 
@@ -59,7 +76,8 @@ func (s *service) InspectModelHost(
 	if s == nil || s.scopes == nil || s.assets == nil {
 		return models.InspectModelHostResult{}, models.ErrUnavailable
 	}
-	if _, err := s.scopes.Resolve(runtimescopes.Reference(request.Scope.String())); err != nil {
+	binding, err := s.scopes.Resolve(runtimescopes.Reference(request.Scope.String()))
+	if err != nil {
 		return models.InspectModelHostResult{}, scopeError(err)
 	}
 	inspection, err := s.assets.InspectRuntimeCache(ctx, models.InspectModelAssetsRequest{
@@ -69,16 +87,92 @@ func (s *service) InspectModelHost(
 	if err != nil {
 		return models.InspectModelHostResult{}, err
 	}
-	return models.InspectModelHostResult{
-		Host: hostSnapshotFromAssets(request.Scope, request.Name, inspection),
-	}, nil
+	snapshot := hostSnapshotFromAssets(request.Scope, request.Name, inspection)
+	snapshot = s.overlaySupervisedReadiness(
+		binding,
+		request.Scope,
+		request.Name,
+		inspection,
+		snapshot,
+	)
+	return models.InspectModelHostResult{Host: snapshot}, nil
 }
 
 func (s *service) EnsureModelHost(
-	context.Context,
-	models.EnsureModelHostRequest,
+	ctx context.Context,
+	request models.EnsureModelHostRequest,
 ) (models.EnsureModelHostResult, error) {
-	return models.EnsureModelHostResult{}, models.ErrUnsupportedOperation
+	if err := request.Validate(); err != nil {
+		return models.EnsureModelHostResult{}, err
+	}
+	if err := hostContextError(ctx); err != nil {
+		return models.EnsureModelHostResult{}, err
+	}
+	if s == nil || s.scopes == nil || s.assets == nil {
+		return models.EnsureModelHostResult{}, models.ErrUnavailable
+	}
+	binding, err := s.scopes.Resolve(runtimescopes.Reference(request.Scope.String()))
+	if err != nil {
+		return models.EnsureModelHostResult{}, scopeError(err)
+	}
+	inspection, err := s.assets.InspectRuntimeCache(ctx, models.InspectModelAssetsRequest{
+		Scope: request.Scope,
+		Name:  request.Name,
+	})
+	if err != nil {
+		return models.EnsureModelHostResult{}, err
+	}
+	cacheInspection := cacheInspectionFromAssets(inspection)
+	if !cacheInspection.Installed {
+		return models.EnsureModelHostResult{}, fmt.Errorf(
+			"%w: model assets are not installed",
+			models.ErrHostMissingAssets,
+		)
+	}
+
+	runtimeCfg := binding.RuntimeConfig()
+	identity := supervisedIdentityForModel(runtimeCfg, request.Name)
+	baseSnapshot := hostSnapshotFromAssets(request.Scope, request.Name, inspection)
+
+	if !requiresSupervisedBackend(identity.Backend) {
+		return models.EnsureModelHostResult{
+			Host:    baseSnapshot,
+			Outcome: models.HostEnsureAlreadyReady,
+		}, nil
+	}
+
+	worker, err := localWorkerForModel(runtimeCfg, request.Name)
+	if err != nil {
+		return models.EnsureModelHostResult{}, err
+	}
+	if !workerDeclaresSupervisedHealthEndpoint(worker) {
+		return models.EnsureModelHostResult{
+			Host:    baseSnapshot,
+			Outcome: models.HostEnsureAlreadyReady,
+		}, nil
+	}
+
+	spec, err := s.supervisor.ServerStartBuilder(identity, cacheInspection, worker)
+	if err != nil {
+		return models.EnsureModelHostResult{}, err
+	}
+
+	slotKey := runtimeSlotKey(request.Scope, request.Name)
+	slot := s.runtimeSlot(slotKey)
+	wasReady := slot.isReady()
+	if err := slot.ensureReady(ctx, identity, spec); err != nil {
+		return models.EnsureModelHostResult{}, err
+	}
+	if !slot.isReady() {
+		return models.EnsureModelHostResult{}, slot.failureOutcomeLocked()
+	}
+
+	snapshot := slot.hostSnapshotOverlay(request.Scope, request.Name, baseSnapshot)
+	outcome := models.HostEnsureBecameReady
+	if wasReady {
+		outcome = models.HostEnsureAlreadyReady
+	}
+	return models.EnsureModelHostResult{Host: snapshot, Outcome: outcome}, nil
 }
 
 func (s *service) StopModelHost(
@@ -86,6 +180,42 @@ func (s *service) StopModelHost(
 	models.StopModelHostRequest,
 ) (models.StopModelHostResult, error) {
 	return models.StopModelHostResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *service) overlaySupervisedReadiness(
+	binding models.RuntimeBinding,
+	scope models.RuntimeScopeRef,
+	modelName string,
+	inspection scopedassets.RuntimeCacheInspection,
+	snapshot models.ModelHostSnapshot,
+) models.ModelHostSnapshot {
+	identity := supervisedIdentityForModel(binding.RuntimeConfig(), modelName)
+	if !requiresSupervisedBackend(identity.Backend) || !inspection.Installed {
+		return snapshot
+	}
+	slot := s.peekRuntimeSlot(runtimeSlotKey(scope, modelName))
+	if slot == nil {
+		return snapshot
+	}
+	return slot.hostSnapshotOverlay(scope, modelName, snapshot)
+}
+
+func (s *service) peekRuntimeSlot(slotKey string) *supervisedRuntime {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.runtimeSlots[slotKey]
+}
+
+func (s *service) runtimeSlot(slotKey string) *supervisedRuntime {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	slot, ok := s.runtimeSlots[slotKey]
+	if ok {
+		return slot
+	}
+	slot = &supervisedRuntime{cfg: s.supervisor}
+	s.runtimeSlots[slotKey] = slot
+	return slot
 }
 
 func hostSnapshotFromAssets(

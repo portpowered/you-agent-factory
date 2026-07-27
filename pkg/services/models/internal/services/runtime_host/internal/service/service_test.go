@@ -6,8 +6,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -127,6 +129,132 @@ func TestInspectModelHostRejectsForeignScope(t *testing.T) {
 	}
 }
 
+func TestEnsureModelHostHealthyStartupReturnsReadyWithEndpoint(t *testing.T) {
+	t.Parallel()
+
+	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(healthServer.Close)
+
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "healthy-startup")
+	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	launcher := &fakeProcessLauncher{
+		newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+			return newFakeManagedProcess(healthServer.URL, nil)
+		},
+	}
+	service := newTestRuntimeHostWithScopesAndClock(t, scopes, launcher, realHostClock{})
+
+	result, err := service.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: ref,
+		Name:  "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("EnsureModelHost: %v", err)
+	}
+	if result.Outcome != models.HostEnsureBecameReady ||
+		result.Host.ReadinessState != models.ReadinessStateReady ||
+		result.Host.LifecycleState != models.LifecycleStateLoaded {
+		t.Fatalf("ensure result = %#v, want became-ready/ready/loaded", result)
+	}
+	if result.Host.Diagnostics["endpoint"] != healthServer.URL {
+		t.Fatalf("endpoint = %q, want %q", result.Host.Diagnostics["endpoint"], healthServer.URL)
+	}
+	if launcher.startCount() != 1 {
+		t.Fatalf("process starts = %d, want 1", launcher.startCount())
+	}
+}
+
+func TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess(t *testing.T) {
+	t.Parallel()
+
+	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(healthServer.Close)
+
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "concurrent-reuse")
+	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	launcher := &fakeProcessLauncher{
+		newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+			return newFakeManagedProcess(healthServer.URL, nil)
+		},
+	}
+	service := newTestRuntimeHostWithScopesAndClock(t, scopes, launcher, realHostClock{})
+
+	const workers = 8
+	var wg sync.WaitGroup
+	errCh := make(chan error, workers)
+	for worker := 0; worker < workers; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := service.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+				Scope: ref,
+				Name:  "OMNIVOICE_Q4_K_M",
+			})
+			errCh <- err
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			t.Fatalf("EnsureModelHost: %v", err)
+		}
+	}
+	if launcher.startCount() != 1 {
+		t.Fatalf("process starts = %d, want 1 shared supervised process", launcher.startCount())
+	}
+}
+
+func TestEnsureModelHostReturnsDetachedSnapshotWithoutPrivateHandles(t *testing.T) {
+	t.Parallel()
+
+	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(healthServer.Close)
+
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "detached-snapshot")
+	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	launcher := &fakeProcessLauncher{
+		newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+			return newFakeManagedProcess(healthServer.URL, nil)
+		},
+	}
+	service := newTestRuntimeHostWithScopesAndClock(t, scopes, launcher, realHostClock{})
+
+	result, err := service.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: ref,
+		Name:  "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("EnsureModelHost: %v", err)
+	}
+	result.Host.Diagnostics["mutated"] = "peer"
+	inspected, err := service.InspectModelHost(context.Background(), models.InspectModelHostRequest{
+		Scope: ref,
+		Name:  "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("InspectModelHost: %v", err)
+	}
+	if inspected.Host.Diagnostics["mutated"] != "" {
+		t.Fatal("peer mutation of ensure result changed retained host state")
+	}
+	if inspected.Host.Diagnostics["endpoint"] != healthServer.URL {
+		t.Fatalf("endpoint = %q, want %q", inspected.Host.Diagnostics["endpoint"], healthServer.URL)
+	}
+}
+
 func newTestRuntimeHost(t *testing.T, launcher *recordingProcessLauncher) runtimehost.Service {
 	t.Helper()
 	scopes := newScopes(t, t.Name())
@@ -136,7 +264,16 @@ func newTestRuntimeHost(t *testing.T, launcher *recordingProcessLauncher) runtim
 func newTestRuntimeHostWithScopes(
 	t *testing.T,
 	scopes runtimescopes.Service,
-	launcher *recordingProcessLauncher,
+	launcher models.HostProcessLauncher,
+) runtimehost.Service {
+	return newTestRuntimeHostWithScopesAndClock(t, scopes, launcher, testHostClock{})
+}
+
+func newTestRuntimeHostWithScopesAndClock(
+	t *testing.T,
+	scopes runtimescopes.Service,
+	launcher models.HostProcessLauncher,
+	clock models.HostClock,
 ) runtimehost.Service {
 	t.Helper()
 	assets, err := assetswire.NewService(
@@ -165,7 +302,7 @@ func newTestRuntimeHostWithScopes(
 		assets,
 		launcher,
 		http.DefaultClient,
-		testHostClock{},
+		clock,
 		nil,
 		nil,
 	)
@@ -236,6 +373,22 @@ func runtimeConfig() models.RuntimeConfig {
 	}
 }
 
+func supervisedRuntimeConfig() models.RuntimeConfig {
+	cfg := runtimeConfig()
+	cfg.Resources[0].Backend = "LLAMACPP"
+	cfg.Workers = []models.RuntimeWorker{{
+		Name:          "omnivoice-worker",
+		Model:         "OMNIVOICE_Q4_K_M",
+		ModelLocality: models.RuntimeModelLocalityLocal,
+		Command:       "fake-llamacpp-server",
+		Args: []string{
+			"--health-endpoint",
+			"http://127.0.0.1:1",
+		},
+	}}
+	return cfg
+}
+
 const metadataFileName = ".managed-cache.json"
 
 type cacheMetadata struct {
@@ -280,4 +433,94 @@ func writeCacheFixture(t *testing.T, cacheDirectory string, includeMetadata bool
 	if err := os.WriteFile(filepath.Join(root, metadataFileName), body, 0o644); err != nil {
 		t.Fatalf("write metadata: %v", err)
 	}
+}
+
+type fakeProcessLauncher struct {
+	mu         sync.Mutex
+	starts     int
+	newProcess func(spec models.HostProcessStartSpec) *fakeManagedProcess
+}
+
+func (f *fakeProcessLauncher) Start(
+	_ context.Context,
+	spec models.HostProcessStartSpec,
+) (models.HostManagedProcess, error) {
+	f.mu.Lock()
+	f.starts++
+	newProcess := f.newProcess
+	f.mu.Unlock()
+	if newProcess == nil {
+		return nil, errors.New("fake process launcher is not configured")
+	}
+	return newProcess(spec), nil
+}
+
+func (f *fakeProcessLauncher) startCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.starts
+}
+
+type fakeManagedProcess struct {
+	endpoint string
+	exitCh   chan error
+	stopCh   chan struct{}
+	stopOnce sync.Once
+	stopFn   func() error
+}
+
+func newFakeManagedProcess(endpoint string, exitCh chan error) *fakeManagedProcess {
+	if exitCh == nil {
+		exitCh = make(chan error, 1)
+	}
+	return &fakeManagedProcess{
+		endpoint: endpoint,
+		exitCh:   exitCh,
+		stopCh:   make(chan struct{}),
+	}
+}
+
+func (p *fakeManagedProcess) HealthEndpoint() string {
+	return p.endpoint
+}
+
+func (p *fakeManagedProcess) Wait() error {
+	return <-p.exitCh
+}
+
+func (p *fakeManagedProcess) Stop(context.Context) error {
+	if p.stopFn != nil {
+		return p.stopFn()
+	}
+	return p.defaultStop()
+}
+
+func (p *fakeManagedProcess) defaultStop() error {
+	p.stopOnce.Do(func() {
+		close(p.stopCh)
+		p.exitCh <- errors.New("stopped")
+	})
+	return nil
+}
+
+type realHostClock struct{}
+
+func (realHostClock) Now() time.Time {
+	return time.Now()
+}
+
+func (realHostClock) NewTimer(duration time.Duration) models.HostTimer {
+	return realHostTimer{timer: time.NewTimer(duration)}
+}
+
+type realHostTimer struct {
+	timer *time.Timer
+}
+
+func (t realHostTimer) C() <-chan time.Time {
+	return t.timer.C
+}
+
+func (t realHostTimer) Stop() bool {
+	return t.timer.Stop()
 }
