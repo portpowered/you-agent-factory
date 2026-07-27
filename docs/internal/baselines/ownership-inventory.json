@@ -1297,7 +1297,7 @@
       "fromOwner": "factory_visualization",
       "toOwner": "factory_definitions",
       "class": "query",
-      "evidence": "pkg/services/factory_visualization -\u003e pkg/services/factory_definitions"
+      "evidence": "pkg/services/factory_visualization/internal/contracts -\u003e pkg/services/factory_definitions"
     },
     {
       "fromOwner": "factory_visualization",
@@ -2796,12 +2796,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/ingest",
-      "disposition": "move",
-      "destination": "automations",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
       "disposition": "retain",
       "destination": "factory_runtime",
@@ -3403,6 +3397,24 @@
     },
     {
       "packagePath": "pkg/services/factory_visualization/internal/contracts",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
       "disposition": "retain",
       "destination": "factory_visualization",
       "destinationKind": "owner"
