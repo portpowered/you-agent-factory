@@ -152,6 +152,90 @@ func TestCLIInvalidJSONParameterNamesTheParameter(t *testing.T) {
 	}
 }
 
+// TestCLIJSONNullAndEmptyValuesRemainDistinct proves JSON null and empty value
+// shapes (empty string, empty object, and empty array) remain observably distinct
+// through CLI parameter mapping to the factory invocation, without silent
+// normalization into one another.
+func TestCLIJSONNullAndEmptyValuesRemainDistinct(t *testing.T) {
+	nullValue := "null"
+	emptyStringValue := `""`
+	emptyObjectValue := `{}`
+	emptyArrayValue := `[]`
+
+	factoryDir := scaffoldJSONNullAndEmptyInvocationFactory(t)
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName:      "processor",
+			WorkstationName: "process",
+			RunType:         workers.MockWorkerRunTypeAccept,
+		}},
+	})
+
+	submissions := &invocationSubmissionObservation{}
+	process := support.BuildProcess(t, serviceedges.Edges{
+		SubmissionRecorder: submissions.observe,
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--factory", factoryPath,
+		"--no-record",
+		"--with-mock-workers", mockWorkersPath,
+		"invoke marker",
+		"--nullable=" + nullValue,
+		"--emptyString=" + emptyStringValue,
+		"--emptyObject=" + emptyObjectValue,
+		"--emptyArray=" + emptyArrayValue,
+	})
+	inputs.WorkingDirectory = t.TempDir()
+
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(null and empty JSON parameter invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+
+	records := submissions.snapshot()
+	if len(records) != 1 {
+		t.Fatalf("canonical submissions = %d, want 1; records=%#v", len(records), records)
+	}
+	arguments := records[0].Request.InvocationArguments
+	if arguments == nil {
+		t.Fatal("submitted invocation arguments = nil")
+	}
+
+	assertInvocationArgumentJSON(t, arguments, "nullable", nullValue)
+	assertInvocationArgumentJSON(t, arguments, "emptyString", emptyStringValue)
+	assertInvocationArgumentJSON(t, arguments, "emptyObject", emptyObjectValue)
+	assertInvocationArgumentJSON(t, arguments, "emptyArray", emptyArrayValue)
+
+	observed := map[string]string{
+		"nullable":    arguments.Arguments["nullable"].Values[0],
+		"emptyString": arguments.Arguments["emptyString"].Values[0],
+		"emptyObject": arguments.Arguments["emptyObject"].Values[0],
+		"emptyArray":  arguments.Arguments["emptyArray"].Values[0],
+	}
+	for name, value := range observed {
+		for otherName, otherValue := range observed {
+			if name == otherName {
+				continue
+			}
+			if value == otherValue {
+				t.Fatalf(
+					"invocation arguments %q and %q normalized to the same value %q",
+					name,
+					otherName,
+					value,
+				)
+			}
+		}
+	}
+}
+
 func assertInvocationArgumentJSON(
 	t *testing.T,
 	arguments *work.InvocationArguments,
@@ -204,6 +288,60 @@ func jsonValuesEqual(left, right any) bool {
 		return false
 	}
 	return string(leftJSON) == string(rightJSON)
+}
+
+func scaffoldJSONNullAndEmptyInvocationFactory(t *testing.T) string {
+	t.Helper()
+
+	return support.ScaffoldFactory(t, map[string]any{
+		"name": "json-null-empty-params",
+		"invocationSignature": map[string]any{
+			"parameters": []any{
+				map[string]any{
+					"name":     "input",
+					"required": true,
+					"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+				},
+				map[string]any{
+					"name":     "nullable",
+					"required": true,
+					"bindings": []any{map[string]any{"kind": "NAMED"}},
+				},
+				map[string]any{
+					"name":     "emptyString",
+					"required": true,
+					"bindings": []any{map[string]any{"kind": "NAMED"}},
+				},
+				map[string]any{
+					"name":     "emptyObject",
+					"required": true,
+					"bindings": []any{map[string]any{"kind": "NAMED"}},
+				},
+				map[string]any{
+					"name":     "emptyArray",
+					"required": true,
+					"bindings": []any{map[string]any{"kind": "NAMED"}},
+				},
+			},
+		},
+		"workTypes": []any{map[string]any{
+			"name":             "task",
+			"handlingBehavior": []any{"DEFAULT"},
+			"states": []any{
+				map[string]any{"name": "init", "type": "INITIAL"},
+				map[string]any{"name": "complete", "type": "TERMINAL"},
+				map[string]any{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []any{map[string]any{"name": "processor"}},
+		"workstations": []map[string]any{{
+			"name":      "process",
+			"worker":    "processor",
+			"inputs":    []any{map[string]any{"workType": "task", "state": "init"}},
+			"outputs":   []any{map[string]any{"workType": "task", "state": "complete"}},
+			"onFailure": []any{map[string]any{"workType": "task", "state": "failed"}},
+		}},
+	})
 }
 
 func scaffoldJSONInvocationFactory(t *testing.T) string {
