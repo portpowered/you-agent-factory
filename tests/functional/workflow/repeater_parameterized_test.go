@@ -12,27 +12,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
-func TestRepeater_YieldsBetweenIterations(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "repeater_workstation"))
-
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "token-A"}`))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "token-B"}`))
-
-	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
-		"exec-worker":   {{Content: "retry"}, {Content: "done COMPLETE"}, {Content: "done COMPLETE"}},
-		"finish-worker": {{Content: "done COMPLETE"}, {Content: "done COMPLETE"}},
-	})
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
-
-	if provider.CallCount("exec-worker") < 3 {
-		t.Errorf("expected exec-worker called at least 3 times (interleaved), got %d", provider.CallCount("exec-worker"))
-	}
-	if provider.CallCount("finish-worker") < 2 {
-		t.Errorf("expected finish-worker called at least 2 times, got %d", provider.CallCount("finish-worker"))
-	}
-	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:complete": 2})
-}
-
 func TestParameterizedFields_WorkingDirectoryResolvesFromTags(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "repeater_workstation"))
 
@@ -80,21 +59,4 @@ func TestParameterizedFields_UnresolvedTemplateRoutesToFailure(t *testing.T) {
 	if provider.CallCount() != 0 {
 		t.Errorf("expected provider called 0 times (template error before invocation), got %d", provider.CallCount())
 	}
-}
-
-func TestRepeater_ResourceReleaseBetweenIterations(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "repeater_resource"))
-
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "resource repeater test"}`))
-
-	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
-		"exec-worker":   {{Content: "retry"}, {Content: "retry"}, {Content: "done COMPLETE"}},
-		"finish-worker": {{Content: "done COMPLETE"}},
-	})
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
-
-	if provider.CallCount("exec-worker") != 3 {
-		t.Errorf("expected exec-worker called 3 times, got %d", provider.CallCount("exec-worker"))
-	}
-	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
 }

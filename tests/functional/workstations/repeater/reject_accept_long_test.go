@@ -61,6 +61,30 @@ func TestRepeater_RefiresOnRejectedStopsOnAccepted(t *testing.T) {
 	assertRepeaterWorkStates(t, listed, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
 }
 
+// TestRepeater_ResourceReleaseBetweenIterations_ServiceHarness proves that a
+// repeater releases held resources between non-accepting iterations through the
+// public functional service harness so a later accepting output completes Work.
+func TestRepeater_ResourceReleaseBetweenIterations_ServiceHarness(t *testing.T) {
+	support.SkipLongFunctional(t, "slow repeater service-harness resource-release sweep")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "repeater_resource"))
+
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "service resource repeater test"}`))
+
+	provider := testutil.NewMockProvider(
+		workerexecution.InferenceResponse{Content: "Still working"},
+		workerexecution.InferenceResponse{Content: "Almost there"},
+		workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Finalized. COMPLETE"},
+	)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
+	assertRepeaterWorkStates(t, listed, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
+
+	if provider.CallCount() != 4 {
+		t.Errorf("provider call count = %d, want 4 reject-then-accept iterations", provider.CallCount())
+	}
+}
+
 // TestWorkstationStopWords_ThroughCustomerProcess proves that each configured
 // stop word accepts or rejects Work through the customer process boundary,
 // including factory-json, frontmatter, and workstation override policies.

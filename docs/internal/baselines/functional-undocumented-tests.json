@@ -1507,40 +1507,12 @@
       "name": "TestNtoN_TypeMatching"
     },
     {
-      "file": "workflow/multi_output_long_test.go",
-      "name": "TestMultiOutput_NoStopWordsConfigured"
-    },
-    {
-      "file": "workflow/multi_output_long_test.go",
-      "name": "TestMultiOutput_OutputTokensInheritInputLineage"
-    },
-    {
-      "file": "workflow/multi_output_long_test.go",
-      "name": "TestMultiOutput_SecondStopWord"
-    },
-    {
-      "file": "workflow/multi_output_long_test.go",
-      "name": "TestMultiOutput_WithStopWord"
-    },
-    {
-      "file": "workflow/multi_output_long_test.go",
-      "name": "TestMultiOutput_WithoutStopWord"
-    },
-    {
       "file": "workflow/name_propagation_long_test.go",
       "name": "TestNamePropagation_InPromptTemplate"
     },
     {
       "file": "workflow/name_propagation_long_test.go",
       "name": "TestNamePropagation_MarkdownFile"
-    },
-    {
-      "file": "workflow/ralph_loop_long_test.go",
-      "name": "TestRalphLoop_TemplateFieldsResolvePerIteration"
-    },
-    {
-      "file": "workflow/ralph_loop_test.go",
-      "name": "TestRalphLoop_ConvergesOnReviewerAccept"
     },
     {
       "file": "workflow/rejection_path_test.go",
@@ -1559,32 +1531,12 @@
       "name": "TestRejectionPath_WithRejectionArcsRoutesViaArcs"
     },
     {
-      "file": "workflow/repeater_parameterized_long_test.go",
-      "name": "TestRepeater_GuardedLoopBreakerTerminatesRejectedRepeater"
-    },
-    {
-      "file": "workflow/repeater_parameterized_long_test.go",
-      "name": "TestRepeater_RefiresOnRejectedStopsOnAccepted"
-    },
-    {
-      "file": "workflow/repeater_parameterized_long_test.go",
-      "name": "TestRepeater_ResourceReleaseBetweenIterations_ServiceHarness"
-    },
-    {
       "file": "workflow/repeater_parameterized_test.go",
       "name": "TestParameterizedFields_UnresolvedTemplateRoutesToFailure"
     },
     {
       "file": "workflow/repeater_parameterized_test.go",
       "name": "TestParameterizedFields_WorkingDirectoryResolvesFromTags"
-    },
-    {
-      "file": "workflow/repeater_parameterized_test.go",
-      "name": "TestRepeater_ResourceReleaseBetweenIterations"
-    },
-    {
-      "file": "workflow/repeater_parameterized_test.go",
-      "name": "TestRepeater_YieldsBetweenIterations"
     },
     {
       "file": "workflow/review_retry_exhaustion_long_test.go",
@@ -1609,10 +1561,6 @@
     {
       "file": "workflow/watcher_multichannel_submission_long_test.go",
       "name": "TestMultiChannelFileWatcher_ExecutionIDSubmission"
-    },
-    {
-      "file": "workflow/workstation_stopwords_long_test.go",
-      "name": "TestWorkstationStopWords_ThroughCustomerProcess"
     }
   ]
 }

@@ -405,7 +405,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     message/tool progress.
   - `TestJavaScriptTerminalResultFollowsFinalResponseEvent` covers ordering.
 
-- [ ] `tests/functional/orchestration/javascript/workers/overrides_test.go`
+- [x] `tests/functional/orchestration/javascript/workers/overrides_test.go`
   - `TestJavaScriptChildrenSelectDifferentProvidersAndModels` covers per-child
     overrides.
   - `TestJavaScriptMockWorkersReplaceOnlyNamedChildren` covers partial mocks.
@@ -453,10 +453,21 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCronDoesNotDoubleFireForOneScheduleBoundary`.
   - `TestCronShutdownPreventsLaterSubmission`.
 
-- [ ] `tests/functional/workstations/repeater/reject_accept_test.go`
-  - `TestRepeaterRejectsThenAcceptsAndStops`.
-  - `TestRepeaterHonorsEachConfiguredStopWord`.
-  - `TestRepeaterLoopBreakerTerminatesNonConvergingWork`.
+- [x] `tests/functional/workstations/repeater/reject_accept_test.go`
+  - `TestRepeater_YieldsBetweenIterations`.
+  - `TestRepeater_ResourceReleaseBetweenIterations`.
+  - `TestRalphLoop_ConvergesOnReviewerAccept`.
+- [x] `tests/functional/workstations/repeater/reject_accept_long_test.go`
+  - `TestRepeater_RefiresOnRejectedStopsOnAccepted`.
+  - `TestRepeater_GuardedLoopBreakerTerminatesRejectedRepeater`.
+  - `TestRepeater_ResourceReleaseBetweenIterations_ServiceHarness`.
+  - `TestWorkstationStopWords_ThroughCustomerProcess`.
+  - `TestMultiOutput_WithStopWord`.
+  - `TestMultiOutput_WithoutStopWord`.
+  - `TestMultiOutput_NoStopWordsConfigured`.
+  - `TestMultiOutput_SecondStopWord`.
+  - `TestMultiOutput_OutputTokensInheritInputLineage`.
+  - `TestRalphLoop_TemplateFieldsResolvePerIteration`.
 
 - [x] `tests/functional/workstations/poller/poller_test.go`
   - `TestPollerCreatesWorkFromExternalItems`.
