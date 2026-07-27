@@ -118,8 +118,11 @@ func (s *Service) providerInstance() (inferencecontract.Provider, error) {
 
 func inferenceRequest(request providers.ExecuteRequest) workers.ProviderInferenceRequest {
 	providerID := request.Provider.String()
+	dispatch := workDispatch(request)
 	infer := workers.ProviderInferenceRequest{
-		Dispatch:         workDispatch(request.AttemptID),
+		Dispatch:         dispatch,
+		WorkerType:       strings.TrimSpace(request.WorkerType),
+		WorkstationType:  strings.TrimSpace(request.WorkstationName),
 		Model:            strings.TrimSpace(request.Model),
 		ModelProvider:    modelProviderForProviderIdentity(providerID),
 		SystemPrompt:     request.SystemPrompt,
@@ -155,8 +158,13 @@ func modelProviderForProviderIdentity(providerID string) string {
 	}
 }
 
-func workDispatch(dispatchID string) work.WorkDispatch {
-	return work.WorkDispatch{DispatchID: strings.TrimSpace(dispatchID)}
+func workDispatch(request providers.ExecuteRequest) work.WorkDispatch {
+	dispatch := work.WorkDispatch{
+		DispatchID: strings.TrimSpace(request.AttemptID),
+		WorkerType: strings.TrimSpace(request.WorkerType),
+		WorkstationName: strings.TrimSpace(request.WorkstationName),
+	}
+	return dispatch
 }
 
 func executeResult(

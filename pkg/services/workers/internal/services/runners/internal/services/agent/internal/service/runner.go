@@ -125,6 +125,8 @@ func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRe
 	result := providers.ExecuteRequest{
 		Provider:         providerID,
 		AttemptID:        request.Dispatch.DispatchID,
+		WorkerType:       request.WorkerType,
+		WorkstationName:  request.WorkstationType,
 		Model:            request.Model,
 		SystemPrompt:     request.SystemPrompt,
 		UserMessage:      request.UserMessage,

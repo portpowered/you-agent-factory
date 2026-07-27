@@ -263,12 +263,16 @@ func (fake *agentProvidersFake) Request() providers.ExecuteRequest {
 func agentRequest() workers.RunnerExecutionRequest {
 	return workers.RunnerExecutionRequest{
 		Dispatch: work.WorkDispatch{
-			DispatchID: "dispatch-agent-1",
+			DispatchID:      "dispatch-agent-1",
+			WorkerType:      "goal-executor",
+			WorkstationName: "execute-goal",
 			InputTokens: []any{map[string]any{
 				"nested": []any{"dispatch-original"},
 			}},
 		},
-		RunnerID:     string(providers.IDCodex),
+		RunnerID:         string(providers.IDCodex),
+		WorkerType:       "goal-executor",
+		WorkstationType:  "execute-goal",
 		SystemPrompt: "system fixture",
 		UserMessage:  "user fixture",
 		OutputSchema: `{"type":"object"}`,
@@ -322,6 +326,8 @@ func assertAgentProviderRequest(t *testing.T, request providers.ExecuteRequest) 
 	want := providers.ExecuteRequest{
 		Provider:         providers.IDCodex,
 		AttemptID:        "dispatch-agent-1",
+		WorkerType:       "goal-executor",
+		WorkstationName:  "execute-goal",
 		SystemPrompt:     "system fixture",
 		UserMessage:      "user fixture",
 		OutputSchema:     `{"type":"object"}`,

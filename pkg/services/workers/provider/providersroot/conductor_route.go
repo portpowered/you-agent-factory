@@ -63,8 +63,14 @@ func invocationRequestFromExecute(request providers.ExecuteRequest) inference.In
 		invocationID = "providers-root-invocation"
 	}
 	execution := workers.RunnerExecutionRequest{
-		Dispatch:         work.WorkDispatch{DispatchID: invocationID},
+		Dispatch: work.WorkDispatch{
+			DispatchID:       invocationID,
+			WorkerType:       strings.TrimSpace(request.WorkerType),
+			WorkstationName:  strings.TrimSpace(request.WorkstationName),
+		},
 		RunnerID:         request.Provider.String(),
+		WorkerType:       strings.TrimSpace(request.WorkerType),
+		WorkstationType:  strings.TrimSpace(request.WorkstationName),
 		Model:            strings.TrimSpace(request.Model),
 		SystemPrompt:     request.SystemPrompt,
 		UserMessage:      request.UserMessage,

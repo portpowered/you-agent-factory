@@ -84,6 +84,8 @@ func sentinelForExecuteFailureKind(kind ExecuteFailureKind) error {
 type ExecuteRequest struct {
 	Provider         ID
 	AttemptID        string
+	WorkerType       string
+	WorkstationName  string
 	Model            string
 	SystemPrompt     string
 	UserMessage      string
