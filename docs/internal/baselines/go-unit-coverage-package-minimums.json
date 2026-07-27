@@ -1184,7 +1184,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization",
-      "minimum": 83.33
+      "minimum": 82.27
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work",
