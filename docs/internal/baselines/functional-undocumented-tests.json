@@ -19,10 +19,6 @@
       "name": "TestInvalidGoal_InvalidTopology_RejectsWithDocumentedGraphReferenceError"
     },
     {
-      "file": "acceptance/invalid_quiet_outcomes_test.go",
-      "name": "TestInvalidGoal_OutputModesExitNonZero"
-    },
-    {
       "file": "acceptance/invoke_repeat_subagent_outcomes_test.go",
       "name": "TestGoalRepeat_RepeatedNamedRunsAssignDistinctInvocationIdentityAndReuseInstalledCopy"
     },
