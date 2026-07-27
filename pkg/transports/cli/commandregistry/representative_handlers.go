@@ -104,6 +104,86 @@ func (r *Registry) VerifySessionRunnableCoverage(manifest climanifest.Manifest) 
 	return nil
 }
 
+// RunnableSessionHandlerIDs returns the manifest-declared handler IDs for the
+// complete runnable Session family. The manifest, rather than command names or
+// operation IDs, is the authority for executable binding identity.
+func RunnableSessionHandlerIDs(manifest climanifest.Manifest) ([]string, error) {
+	if len(manifest.Commands) != len(climanifestgen.SessionFamilyCommandIDs) {
+		return nil, fmt.Errorf(
+			"session manifest command count = %d, want %d",
+			len(manifest.Commands),
+			len(climanifestgen.SessionFamilyCommandIDs),
+		)
+	}
+	for commandID := range manifest.Commands {
+		if err := climanifestgen.AssertSessionFamilyCommandID(commandID); err != nil {
+			return nil, err
+		}
+	}
+
+	owners := make(map[string]string)
+	handlerIDs := make([]string, 0, len(climanifestgen.SessionFamilyCommandIDs)-1)
+	for _, commandID := range climanifestgen.SessionFamilyCommandIDs {
+		record, err := manifest.CommandByID(commandID)
+		if err != nil {
+			return nil, err
+		}
+		if !record.Runnable {
+			continue
+		}
+		if record.Handler == nil || record.Handler.ID == "" {
+			return nil, fmt.Errorf("session runnable command %q has no stable handler ID", commandID)
+		}
+		if owner, exists := owners[record.Handler.ID]; exists {
+			return nil, fmt.Errorf(
+				"session handler ID %q is duplicated by commands %q and %q",
+				record.Handler.ID,
+				owner,
+				commandID,
+			)
+		}
+		owners[record.Handler.ID] = commandID
+		handlerIDs = append(handlerIDs, record.Handler.ID)
+	}
+	sort.Strings(handlerIDs)
+	return handlerIDs, nil
+}
+
+// VerifySessionHandlerIDCoverage rejects missing, extra, cross-family, and nil
+// executable bindings before a Session command tree can be returned.
+func (r *Registry) VerifySessionHandlerIDCoverage(manifest climanifest.Manifest) error {
+	handlerIDs, err := RunnableSessionHandlerIDs(manifest)
+	if err != nil {
+		return err
+	}
+	expected := make(map[string]struct{}, len(handlerIDs))
+	var missing []string
+	for _, handlerID := range handlerIDs {
+		expected[handlerID] = struct{}{}
+		if _, lookupErr := r.LookupHandlers(handlerID); lookupErr != nil {
+			missing = append(missing, handlerID)
+		}
+	}
+
+	var extra []string
+	if r != nil {
+		for handlerID := range r.handlers {
+			if _, ok := expected[handlerID]; !ok {
+				extra = append(extra, handlerID)
+			}
+		}
+	}
+	sort.Strings(extra)
+	if len(missing) > 0 || len(extra) > 0 {
+		return fmt.Errorf(
+			"session handler ID coverage mismatch: missing=%v extra=%v",
+			missing,
+			extra,
+		)
+	}
+	return nil
+}
+
 // RepresentativeHandlers carries handwritten RunE handlers for contracted runnable
 // representative-family command IDs.
 type RepresentativeHandlers struct {

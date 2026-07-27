@@ -17,6 +17,50 @@ import (
 
 func noopRunE(*cobra.Command, []string) error { return nil }
 
+func TestVerifySessionHandlerIDCoverageRequiresExactManifestBindings(t *testing.T) {
+	manifest, err := generated.SessionFamilyManifest()
+	if err != nil {
+		t.Fatalf("SessionFamilyManifest() error = %v", err)
+	}
+	handlerIDs, err := commandregistry.RunnableSessionHandlerIDs(manifest)
+	if err != nil {
+		t.Fatalf("RunnableSessionHandlerIDs() error = %v", err)
+	}
+	registry := commandregistry.NewRegistry()
+	for _, handlerID := range handlerIDs {
+		if err := registry.Register(handlerID, noopRunE); err != nil {
+			t.Fatalf("Register(%q) error = %v", handlerID, err)
+		}
+	}
+	if err := registry.VerifySessionHandlerIDCoverage(manifest); err != nil {
+		t.Fatalf("VerifySessionHandlerIDCoverage() error = %v", err)
+	}
+
+	if err := registry.Register("you.work.list.handler", noopRunE); err != nil {
+		t.Fatalf("Register(cross-family) error = %v", err)
+	}
+	err = registry.VerifySessionHandlerIDCoverage(manifest)
+	if err == nil || !strings.Contains(err.Error(), "you.work.list.handler") {
+		t.Fatalf("VerifySessionHandlerIDCoverage() error = %v, want cross-family binding", err)
+	}
+}
+
+func TestRunnableSessionHandlerIDsRejectsDuplicateManifestBinding(t *testing.T) {
+	manifest, err := generated.SessionFamilyManifest()
+	if err != nil {
+		t.Fatalf("SessionFamilyManifest() error = %v", err)
+	}
+	create := manifest.Commands["you.session.create"]
+	deleteCommand := manifest.Commands["you.session.delete"]
+	deleteCommand.Handler.ID = create.Handler.ID
+	manifest.Commands[deleteCommand.ID] = deleteCommand
+
+	_, err = commandregistry.RunnableSessionHandlerIDs(manifest)
+	if err == nil || !strings.Contains(err.Error(), "duplicated") {
+		t.Fatalf("RunnableSessionHandlerIDs() error = %v, want duplicate handler ID", err)
+	}
+}
+
 func TestRunnableRepresentativeCommandIDsFromGeneratedManifest(t *testing.T) {
 	manifest, err := generated.RepresentativeFamilyManifest()
 	if err != nil {
