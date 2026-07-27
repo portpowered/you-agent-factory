@@ -15,6 +15,7 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	assetswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire"
+	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
@@ -276,6 +277,19 @@ func newTestRuntimeHostWithScopesAndClock(
 	clock models.HostClock,
 ) runtimehost.Service {
 	t.Helper()
+	return internalservice.New(
+		scopes,
+		mustAssetsService(t, scopes),
+		launcher,
+		http.DefaultClient,
+		clock,
+		nil,
+		nil,
+	)
+}
+
+func mustAssetsService(t *testing.T, scopes runtimescopes.Service) scopedassets.Service {
+	t.Helper()
 	assets, err := assetswire.NewService(
 		scopes,
 		models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
@@ -297,15 +311,7 @@ func newTestRuntimeHostWithScopesAndClock(
 	if err != nil {
 		t.Fatalf("construct assets: %v", err)
 	}
-	return internalservice.New(
-		scopes,
-		assets,
-		launcher,
-		http.DefaultClient,
-		clock,
-		nil,
-		nil,
-	)
+	return assets
 }
 
 type recordingProcessLauncher struct {

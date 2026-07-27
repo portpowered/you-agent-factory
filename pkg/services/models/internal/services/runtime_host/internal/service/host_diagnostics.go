@@ -75,13 +75,12 @@ func (d hostDiagnostics) logLoadFailed(identity supervisedIdentity, class hostFa
 		fields["error"] = err.Error()
 	}
 	d.warn("model host load failed", fields)
+	d.record(metricLoadFailure, fields)
 	switch class {
 	case hostFailureClassLoadingTimeout:
 		d.record(metricReadinessTimeout, fields)
 	case hostFailureClassProcessCrash:
 		d.record(metricProcessCrash, fields)
-	default:
-		d.record(metricLoadFailure, fields)
 	}
 }
 
