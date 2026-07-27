@@ -113,4 +113,16 @@ type Service interface {
 	// facts. Record commits updated facts through persist; persist failures do not
 	// report successful recovery.
 	NewHandledIdentities(facts WatcherFacts, persist CursorFactsPersist) (HandledIdentities, error)
+	// NewWatcherWithResume validates resume facts, wires cursor-backed handled
+	// identities into config, and returns an inert watcher for explicit preseed/watch.
+	NewWatcherWithResume(RestartRequest) (Watcher, WatcherFacts, error)
+}
+
+// RestartRequest carries inputs for constructing a watcher after Automations restart.
+type RestartRequest struct {
+	Config        Config
+	Identity      WatchIdentity
+	Authoritative *WatcherFacts
+	Resume        *WatcherFacts
+	Persist       CursorFactsPersist
 }

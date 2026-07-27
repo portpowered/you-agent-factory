@@ -308,6 +308,16 @@ func (fw *watcher) preseedFileRequest(path string, d fs.DirEntry, walkErr error)
 			zap.String("path", path), zap.Error(deriveErr))
 		return work.WorkRequest{}, false, false, nil
 	}
+	identity, identityErr := observationIdentity(fw.dir, path)
+	if identityErr != nil {
+		return work.WorkRequest{}, false, false, identityErr
+	}
+	if fw.handledIdentityStore().Contains(identity) {
+		fw.logger.Debug("preseed: skipping already-handled input",
+			zap.String("path", path),
+			zap.String("identity", string(identity)))
+		return work.WorkRequest{}, false, false, nil
+	}
 	if fw.knownWorkTypes != nil && workType != batchInputDirectoryName && !fw.knownWorkTypes[workType] {
 		fw.logger.Warn("preseed: skipping unknown work type",
 			zap.String("path", path), zap.String("work_type", workType))

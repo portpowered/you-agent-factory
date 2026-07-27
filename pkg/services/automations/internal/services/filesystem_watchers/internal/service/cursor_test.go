@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
@@ -12,7 +13,7 @@ import (
 func watchIdentityForDir(dir string) filesystemwatchers.WatchIdentity {
 	return filesystemwatchers.WatchIdentity{
 		AutomationID: "factory/test",
-		WatchRoot:    dir,
+		WatchRoot:    strings.ReplaceAll(dir, "\\", "/"),
 	}
 }
 
