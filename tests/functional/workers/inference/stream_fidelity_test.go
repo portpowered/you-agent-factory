@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	claudeFullStreamGoldenCase      = "full-stream-text-success"
-	codexPartialStreamGoldenCase    = "success"
-	openCodeSnapshotOnlyGoldenCase  = "structured-snapshot-success"
+	claudeFullStreamGoldenCase     = "full-stream-text-success"
+	codexPartialStreamGoldenCase   = "success"
+	openCodeSnapshotOnlyGoldenCase = "structured-snapshot-success"
+	geminiFinalOnlyGoldenCase        = "text-success"
 )
 
 // TestProviderFullStreamClaimsDeltasAndSnapshotsTruthfully replays a sanitized
@@ -185,6 +186,55 @@ func TestProviderSnapshotOnlyEmitsCompletedSnapshotsOnly(t *testing.T) {
 	}
 
 	assertSnapshotOnlyPublicResponseEvents(t, responseEvents, "Hello world COMPLETE")
+}
+
+// TestProviderFinalOnlyEmitsTerminalMessageOnly replays a sanitized final-only
+// provider transcript through root.BuildProcess and proves published Factory
+// response events expose only the terminal completed message with final-only
+// fidelity and native-final delivery—zero fabricated message deltas or native
+// streaming claims.
+func TestProviderFinalOnlyEmitsTerminalMessageOnly(t *testing.T) {
+	loaded := loadStreamFidelityGoldenCase(t, modelprovider.ProviderGemini, geminiFinalOnlyGoldenCase)
+	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelityFinalOnly {
+		t.Fatalf(
+			"manifest.fidelityClass = %q, want %q",
+			loaded.Manifest.FidelityClass,
+			support.ProviderSessionFidelityFinalOnly,
+		)
+	}
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderGemini, loaded.Process.Model))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider final-only fidelity"}`))
+
+	exitCode := 0
+	if loaded.Process.ExitCode != nil {
+		exitCode = *loaded.Process.ExitCode
+	}
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
+		Stderr:   []byte(loaded.Stderr),
+		ExitCode: exitCode,
+	})
+
+	_, listed, _, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		20*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
+		t.Fatalf("completed work = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
+		t.Fatalf("failed work = %d, want 0", got)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want exactly one provider-process edge", runner.CallCount())
+	}
+
+	assertFinalOnlyPublicResponseEvents(t, responseEvents, "gemini functional answer COMPLETE")
 }
 
 func loadStreamFidelityGoldenCase(
@@ -432,6 +482,81 @@ func assertSnapshotOnlyPublicResponseEvents(
 	}
 	if !terminalSeen {
 		t.Fatalf("snapshot-only replay missing terminal completed message %q", wantCompletedText)
+	}
+}
+
+func assertFinalOnlyPublicResponseEvents(
+	t *testing.T,
+	events []factoryapi.FactoryResponseEvent,
+	wantCompletedText string,
+) {
+	t.Helper()
+
+	var (
+		completedCount int
+		terminalSeen   bool
+	)
+
+	for _, event := range events {
+		switch event.Kind {
+		case factoryapi.FactoryResponseEventKindMessage:
+			switch event.Phase {
+			case factoryapi.FactoryResponseEventPhaseDelta:
+				t.Fatalf("final-only replay fabricated message delta: %#v", event)
+
+			case factoryapi.FactoryResponseEventPhaseCompleted:
+				if event.Provenance.Fidelity != factoryapi.FactoryResponseEventProvenanceFidelityFinalOnly {
+					t.Fatalf(
+						"final-only completed message fidelity = %q, want %q: %#v",
+						event.Provenance.Fidelity,
+						factoryapi.FactoryResponseEventProvenanceFidelityFinalOnly,
+						event,
+					)
+				}
+				if event.Provenance.Delivery != factoryapi.FactoryResponseEventProvenanceDeliveryNativeFinal {
+					t.Fatalf(
+						"final-only completed message delivery = %q, want %q: %#v",
+						event.Provenance.Delivery,
+						factoryapi.FactoryResponseEventProvenanceDeliveryNativeFinal,
+						event,
+					)
+				}
+				if event.Provenance.Representation != factoryapi.FactoryResponseEventProvenanceRepresentationSnapshot {
+					t.Fatalf(
+						"final-only completed message representation = %q, want %q: %#v",
+						event.Provenance.Representation,
+						factoryapi.FactoryResponseEventProvenanceRepresentationSnapshot,
+						event,
+					)
+				}
+
+				payload, err := event.Payload.AsFactoryResponseEventMessagePayload()
+				if err != nil {
+					t.Fatalf("decode completed message response event: %v", err)
+				}
+				text := streamFidelityMessageText(payload)
+				if text == "" {
+					t.Fatalf("final-only completed message missing text: %#v", event)
+				}
+				completedCount++
+				if strings.Contains(text, wantCompletedText) {
+					terminalSeen = true
+				}
+			}
+
+		case factoryapi.FactoryResponseEventKindTool:
+			t.Fatalf("final-only replay fabricated tool lifecycle: %#v", event)
+
+		case factoryapi.FactoryResponseEventKindUsage:
+			t.Fatalf("final-only replay fabricated usage lifecycle: %#v", event)
+		}
+	}
+
+	if completedCount == 0 {
+		t.Fatal("final-only replay missing authoritative completed message")
+	}
+	if !terminalSeen {
+		t.Fatalf("final-only replay missing terminal completed message %q", wantCompletedText)
 	}
 }
 
