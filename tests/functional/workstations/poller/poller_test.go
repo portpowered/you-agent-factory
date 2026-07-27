@@ -53,6 +53,41 @@ func TestPollerCreatesWorkFromExternalItems(t *testing.T) {
 	}
 }
 
+// TestPollerEmptyResultCreatesNoWork proves a POLLER workstation does not admit
+// Work when the external poll source returns a successful empty result. The
+// scenario replaces only the script poller command edge, waits for the empty
+// poll cycle to finish through a deterministic observation edge, and asserts
+// the public Work listing at the poller output location is unchanged.
+func TestPollerEmptyResultCreatesNoWork(t *testing.T) {
+	dir := scaffoldScriptPollerFactory(t)
+	support.ClearSeedInputs(t, dir)
+
+	runner := newPollerIngressCommandRunner(t, nil)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Edges: serviceedges.Edges{
+			ScriptCommandRunner: runner,
+		},
+	})
+	defer server.Stop(t)
+
+	outputLocation := support.WorkCustomerLocation(pollerWorkTypeName, pollerOutputStateName)
+	baseline := support.ListDefaultSessionWork(t, server.URL())
+	if got := support.CountWorkAtCustomerState(baseline, outputLocation); got != 0 {
+		t.Fatalf("baseline CountWorkAtCustomerState(%q) = %d, want 0 before empty poll", outputLocation, got)
+	}
+
+	waitForPollCycle(t, runner, 10*time.Second)
+
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if got := support.CountWorkAtCustomerState(listed, outputLocation); got != 0 {
+		t.Fatalf("CountWorkAtCustomerState(%q) = %d, want 0 after empty poll; listed=%#v", outputLocation, got, listed.Results)
+	}
+	if runner.callCount() < 1 {
+		t.Fatalf("poller command calls = %d, want at least one empty poll invocation", runner.callCount())
+	}
+}
+
 func scaffoldScriptPollerFactory(t *testing.T) string {
 	t.Helper()
 	return support.ScaffoldFactory(t, map[string]any{
@@ -100,6 +135,16 @@ func pollerExternalWorkRequestJSON(t *testing.T) []byte {
 		t.Fatalf("marshal poller work request: %v", err)
 	}
 	return payload
+}
+
+func waitForPollCycle(t *testing.T, runner *pollerIngressCommandRunner, timeout time.Duration) {
+	t.Helper()
+
+	select {
+	case <-runner.pollDone:
+	case <-time.After(timeout):
+		t.Fatalf("timed out waiting for poller poll cycle; calls=%d", runner.callCount())
+	}
 }
 
 func waitForListedWorkAtCustomerState(
