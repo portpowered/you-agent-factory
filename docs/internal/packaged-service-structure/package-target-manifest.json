@@ -86,6 +86,7 @@
     "pkg/services/factory_definitions/internal/services/validation",
     "pkg/services/factory_definitions/internal/services/validation/internal/service",
     "pkg/services/factory_definitions/internal/services/validation/internal/structural",
+    "pkg/services/factory_definitions/internal/services/validation/internal/topology",
     "pkg/services/factory_definitions/internal/services/validation/wire",
     "pkg/services/factory_definitions/internal/testcomposition",
     "pkg/services/factory_definitions/invocationinterpolation",
@@ -632,6 +633,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/structural",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/topology",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/validation"
     },

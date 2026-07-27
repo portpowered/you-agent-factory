@@ -10,6 +10,7 @@ import (
 	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/structural"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/topology"
 )
 
 // Service is the private nested validation implementation behind the CTR-DEF
@@ -65,7 +66,7 @@ func (s *Service) ValidateStructuralFactoryDefinition(
 	if err != nil {
 		return factoryroot.ValidateStructuralFactoryDefinitionResult{}, err
 	}
-	result := mergeValidationResults(structural.Validate(cfg), profileResult)
+	result := mergeValidationResults(structural.Validate(cfg), topology.Validate(cfg), profileResult)
 	return finishStructuralResult(result)
 }
 

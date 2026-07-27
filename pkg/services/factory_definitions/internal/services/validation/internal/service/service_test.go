@@ -276,3 +276,40 @@ func TestValidationService_WiredStructuralValidationReturnsTypedDuplicateWorkerT
 		t.Fatalf("validation targets = %#v, want duplicate worker structural target", validationFailure.Validation.Targets)
 	}
 }
+
+func TestValidationService_WiredTopologyValidationReturnsTypedDanglingPlaceTarget(t *testing.T) {
+	t.Parallel()
+
+	cfg := validPetriFactoryConfig()
+	cfg.Workstations[0].Outputs = []factorycontracts.IOConfig{{
+		WorkTypeName: "task",
+		StateName:    "bogus",
+	}}
+	svc := newValidationServiceWithConfig(t, cfg)
+
+	_, err := svc.ValidateStructuralFactoryDefinition(
+		context.Background(),
+		factoryroot.ValidateStructuralFactoryDefinitionRequest{
+			Canonical: []byte(`{"name":"structural-validation"}`),
+			Profile:   factoryroot.ValidationProfileTopology,
+		},
+	)
+	var validationFailure *factoryroot.FactoryDefinitionValidationFailure
+	if !errors.As(err, &validationFailure) {
+		t.Fatalf("error = %v, want FactoryDefinitionValidationFailure", err)
+	}
+	if !errors.Is(err, factoryroot.ErrFactoryDefinitionValidationFailed) {
+		t.Fatalf("error = %v, want %v", err, factoryroot.ErrFactoryDefinitionValidationFailed)
+	}
+	found := false
+	for _, target := range validationFailure.Validation.Targets {
+		if target.Code == factoryvalidation.CodeDanglingPlaceReference &&
+			target.Severity == factorycontracts.ValidationSeverityError &&
+			target.Subject.Type == factorycontracts.ValidationSubjectTypeRoute {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("validation targets = %#v, want dangling place topology target", validationFailure.Validation.Targets)
+	}
+}

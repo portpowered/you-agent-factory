@@ -22,8 +22,7 @@ func ValidateStructural(cfg *interfaces.FactoryConfig) Result {
 	var targets []Target
 	targets = append(targets, duplicateIdentifierTargets(cfg)...)
 	targets = append(targets, duplicateWorkStateTargets(cfg)...)
-	targets = append(targets, danglingReferenceTargets(cfg)...)
-	targets = append(targets, invalidPlaceReferenceTargets(cfg)...)
+	targets = append(targets, ValidateGraphTopology(cfg).Targets...)
 	targets = append(targets, conflictingWorkstationOutputTargets(cfg)...)
 	targets = append(targets, missingOutcomeRouteTargets(cfg)...)
 	targets = append(targets, ManagedRuntimeDependencyTargets(cfg)...)
