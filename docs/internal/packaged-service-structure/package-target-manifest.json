@@ -136,8 +136,12 @@
     "pkg/services/factory_runtime/internal/services/instance_host",
     "pkg/services/factory_runtime/internal/services/instance_host/internal/service",
     "pkg/services/factory_runtime/internal/services/instance_host/wire",
+    "pkg/services/factory_runtime/internal/services/orchestration",
+    "pkg/services/factory_runtime/internal/services/orchestration/internal/service",
+    "pkg/services/factory_runtime/internal/services/orchestration/wire",
     "pkg/services/factory_runtime/javascript",
     "pkg/services/factory_runtime/metrics",
+    "pkg/services/factory_runtime/orchestrationowner",
     "pkg/services/factory_runtime/orchestratorcontract",
     "pkg/services/factory_runtime/replayhooks",
     "pkg/services/factory_runtime/runtime",
@@ -906,12 +910,32 @@
       "destination": "factory_runtime/internal/services/instance_host"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/wire",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/javascript",
       "disposition": "move",
       "destination": "factory_runtime/internal/services/orchestration"
     },
     {
       "packagePath": "pkg/services/factory_runtime/metrics",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/orchestrationowner",
       "disposition": "retain",
       "destination": "factory_runtime"
     },
