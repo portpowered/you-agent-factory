@@ -332,7 +332,7 @@ func newTestRuntimeHostWithScopesAndClock(
 
 func mustLeasesService(t *testing.T, clock models.HostClock) hostleases.Service {
 	t.Helper()
-	leases, err := leaseswire.NewService(clock)
+	leases, err := leaseswire.NewService(clock, hostleases.UnconfiguredSlotFacts{})
 	if err != nil {
 		t.Fatalf("construct leases: %v", err)
 	}

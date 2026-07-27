@@ -113,7 +113,7 @@ func ShutdownHost(ctx context.Context, s runtimehost.Service) error {
 }
 
 func mustLeasesService(hostClock models.HostClock) hostleases.Service {
-	leases, err := leaseswire.NewService(hostClock)
+	leases, err := leaseswire.NewService(hostClock, hostleases.UnconfiguredSlotFacts{})
 	if err != nil {
 		panic(err)
 	}

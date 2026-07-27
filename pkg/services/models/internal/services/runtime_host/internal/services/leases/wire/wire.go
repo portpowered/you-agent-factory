@@ -13,11 +13,17 @@ import (
 // NewService constructs an inert leases owner over injected host effects.
 // Construction validates required dependencies and allocates lease/capacity
 // state only; it does not launch subprocesses or start application lifecycle.
-func NewService(hostClock models.HostClock) (hostleases.Service, error) {
+func NewService(
+	hostClock models.HostClock,
+	slotFacts hostleases.SlotFactsProvider,
+) (hostleases.Service, error) {
 	if isNilDependency(hostClock) {
 		return nil, fmt.Errorf("%w: model host clock is required", models.ErrInvalidHostDependencies)
 	}
-	return internalservice.New(hostClock), nil
+	if isNilDependency(slotFacts) {
+		return nil, fmt.Errorf("%w: model host slot facts provider is required", models.ErrInvalidHostDependencies)
+	}
+	return internalservice.New(hostClock, slotFacts), nil
 }
 
 func isNilDependency(value any) bool {
