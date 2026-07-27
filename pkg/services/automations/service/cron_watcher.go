@@ -8,13 +8,12 @@ import (
 	"sync"
 	"time"
 
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-
 	"github.com/go-co-op/gocron/v2"
 	"github.com/jonboulle/clockwork"
 	"go.uber.org/zap"
 
-	"github.com/portpowered/infinite-you/pkg/services/automations/timework"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
@@ -96,7 +95,7 @@ func (s *Service) registerCronJobs(
 		if ws.Kind != interfaces.WorkstationKindCron {
 			continue
 		}
-		schedule, err := cronSchedule(ws)
+		schedule, err := s.cronSchedule(ws)
 		if err != nil {
 			s.logger().Warn("cron watcher disabled",
 				zap.String("workstation", ws.Name),
@@ -196,15 +195,15 @@ func (s *Service) workflowIdentity(factoryDir string) string {
 	return ""
 }
 
-func cronSchedule(ws interfaces.FactoryWorkstationConfig) (string, error) {
+func (s *Service) cronSchedule(ws interfaces.FactoryWorkstationConfig) (string, error) {
 	if ws.Cron == nil {
-		return "", fmt.Errorf("missing cron config")
+		return "", fmt.Errorf("%w: missing cron config", cron.ErrInvalidSchedule)
 	}
 	schedule := strings.TrimSpace(ws.Cron.Schedule)
 	if schedule == "" {
-		return "", fmt.Errorf("missing cron schedule")
+		return "", fmt.Errorf("%w: schedule is required", cron.ErrInvalidSchedule)
 	}
-	if err := timework.ValidateCronSchedule(schedule); err != nil {
+	if err := s.cron.ValidateCronSchedule(schedule); err != nil {
 		return "", err
 	}
 	return schedule, nil
@@ -269,26 +268,31 @@ func (s *Service) submitCronTickAttempt(
 	}
 	defer cancel()
 
-	workRequest, metadata, err := timework.CronTimeWorkRequest(workflowIdentity, ws, firedAt)
+	submission, err := s.cron.SubmitCronTick(
+		attemptCtx,
+		cron.WorkRequestSubmitter(submitter),
+		workflowIdentity,
+		ws,
+		firedAt,
+	)
 	if err != nil {
+		if errors.Is(attemptCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("cron workstation %q %s: %w", ws.Name, cronExecutionError, context.DeadlineExceeded)
+		}
 		return fmt.Errorf("cron workstation %q time work request: %w", ws.Name, err)
 	}
-	work := workRequest.Works[0]
-
+	if !submission.Submitted {
+		return fmt.Errorf("cron workstation %q: expected submitted tick at %s", ws.Name, firedAt.Format(time.RFC3339Nano))
+	}
+	metadata := submission.Metadata
 	s.logger().Info("cron watcher trigger submitted",
 		zap.String("workstation", ws.Name),
-		zap.String("work_type", work.WorkTypeID),
-		zap.String("state", work.State),
+		zap.String("work_type", interfaces.SystemTimeWorkTypeID),
+		zap.String("state", interfaces.SystemTimePendingState),
 		zap.Time("nominal_at", metadata.NominalAt),
 		zap.Time("due_at", metadata.DueAt),
 		zap.Time("expires_at", metadata.ExpiresAt),
 	)
-	if err := submitter(attemptCtx, workRequest); err != nil {
-		if errors.Is(attemptCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
-			return fmt.Errorf("cron workstation %q %s: %w", ws.Name, cronExecutionError, context.DeadlineExceeded)
-		}
-		return err
-	}
 	return nil
 }
 

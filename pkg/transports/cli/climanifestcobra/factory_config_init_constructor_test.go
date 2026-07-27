@@ -99,7 +99,7 @@ func TestFactoryConfigInitFamilyUsesManifestDefaultsAndRequiredness(t *testing.T
 	}
 }
 
-func TestFactoryConfigInitFamilyOmitsRetiredInitializationPaths(t *testing.T) {
+func TestFactoryConfigInitFamilyOmitsRetiredScaffoldFlags(t *testing.T) {
 	components, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(factoryConfigInitHandlerStub{})
 	if err != nil {
 		t.Fatalf("NewFactoryConfigInitFamilyComponents() error = %v", err)
@@ -107,9 +107,14 @@ func TestFactoryConfigInitFamilyOmitsRetiredInitializationPaths(t *testing.T) {
 	if len(components.Config.Commands()) != 0 {
 		t.Fatalf("you config subcommands = %v, want retired config init absent", components.Config.Commands())
 	}
-	for _, name := range []string{"dir", "type", "executor"} {
+	for _, name := range []string{"type", "executor"} {
 		if flag := components.Init.Flags().Lookup(name); flag != nil {
 			t.Fatalf("you init retained retired --%s flag", name)
+		}
+	}
+	for _, name := range []string{"package", "dir", "format", "replace"} {
+		if flag := components.Init.Flags().Lookup(name); flag == nil {
+			t.Fatalf("you init --%s missing", name)
 		}
 	}
 }

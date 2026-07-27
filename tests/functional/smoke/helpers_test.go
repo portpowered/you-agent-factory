@@ -6,8 +6,12 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"testing"
 	"time"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -66,4 +70,31 @@ func namedFactorySmokeEnvironment(homeDir string) []string {
 		environment = append(environment, entry)
 	}
 	return append(environment, "HOME="+homeDir, "USERPROFILE="+homeDir)
+}
+
+func runFactoryThroughCustomerProcess(
+	t *testing.T,
+	dir string,
+	provider providercontract.Provider,
+) factoryapi.StatusResponse {
+	t.Helper()
+	server := support.NewProcessAPIServer()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		APIServerStarter: server.Start,
+		ProviderOverride: provider,
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--dir", dir,
+		"--continuously",
+		"--with-server",
+		"--server", "http://127.0.0.1:1",
+		"--quiet",
+		"--no-record",
+	})
+	inputs.Input.WorkingDirectory = dir
+	daemon := support.StartProcessCommand(t, process, inputs.Input)
+	status := support.WaitForTerminalStatus(t, server.WaitForURL(t), 15*time.Second)
+	daemon.Stop(t)
+	return status
 }

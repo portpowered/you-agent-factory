@@ -95,12 +95,13 @@ func newHarness(config harnessConfig) (factorysessionexecution.Service, error) {
 			harnessSyncWaitScheduler{},
 			config.CheckpointSummaries,
 			config.Workflows,
-			config.Workflows,
+			orchestrationJavaScriptFromWorkflows(config.Workflows),
 			config.Workflows,
 			nil,
 			factory.JavaScriptWorkerSettings{},
 			config.RecordingWriter,
 			func() string { return "00000000-0000-4000-8000-000000000001" },
+			nil, nil, nil,
 		), nil
 	default:
 		return nil, fmt.Errorf("durable execution test harness: unsupported mode %q", config.Mode)
@@ -678,4 +679,30 @@ func writeNamedWorkflow(t *testing.T, projectRoot, name, source string) {
 	if err := os.WriteFile(filepath.Join(dir, name+".js"), []byte(source), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
+}
+
+type orchestrationJavaScriptAdapter struct {
+	factory.JavaScriptWorkflowRuntime
+}
+
+func orchestrationJavaScriptFromWorkflows(workflows factory.JavaScriptWorkflows) factory.OrchestrationJavaScriptExecution {
+	if workflows == nil {
+		return nil
+	}
+	return orchestrationJavaScriptAdapter{workflows}
+}
+
+func (a orchestrationJavaScriptAdapter) RunJavaScript(
+	ctx context.Context,
+	req factory.JavaScriptRuntimeRequest,
+	hooks factory.JavaScriptRuntimeHooks,
+) (factory.JavaScriptRuntimeOutcome, error) {
+	return a.Run(ctx, req, hooks)
+}
+
+func (a orchestrationJavaScriptAdapter) ResumeJavaScript(
+	summary factory.JavaScriptCompletedCheckpointSummary,
+	records []factory.JavaScriptRuntimeRecord,
+) factory.JavaScriptResumeContext {
+	return a.ResumeContext(summary, records)
 }

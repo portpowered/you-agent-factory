@@ -6,10 +6,10 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryingest "github.com/portpowered/infinite-you/pkg/services/factory_runtime/ingest"
 	runtimemetrics "github.com/portpowered/infinite-you/pkg/services/factory_runtime/metrics"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
 
@@ -22,7 +22,9 @@ type Bundle struct {
 	StartedAtUTC         time.Time
 	EventHistory         factory.HostedLedger
 	Factory              factory.Factory
-	Listener             *factoryingest.FileWatcher
+	InputFiles           factory.InputFileSystem
+	InputDirectoryWalker factory.InputDirectoryWalker
+	WorkRequestIDs       work.RequestIDGenerator
 	Net                  *state.Net
 	RuntimeCfg           factory.LoadedConfig
 	Logger               *zap.Logger
@@ -58,14 +60,6 @@ func NewBundle(
 		Logger: logger, LogSink: logSink, MetricsSink: metricsSink,
 		Recording: recording, RecordPath: recordPath, dispatchCompleted: dispatchCompleted,
 	}
-}
-
-// FormatRuntimeStartTime returns the canonical runtime artifact timestamp.
-func FormatRuntimeStartTime(value time.Time) string {
-	if value.IsZero() {
-		return ""
-	}
-	return value.UTC().Format(time.RFC3339Nano)
 }
 
 // RuntimeLogger returns the bundle logger or a nop logger when unset.

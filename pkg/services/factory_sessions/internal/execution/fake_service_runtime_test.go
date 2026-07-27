@@ -64,9 +64,10 @@ func newConfiguredJavaScriptRuntimeService(config javaScriptRuntimeServiceConfig
 			BuildResult:  checkpointfixtures.ResumableCheckpointSummaryResult(),
 			LatestResult: checkpointfixtures.ResumableCheckpointSummaryResult(),
 		},
-		workflows, workflows, workflows,
+		workflows, orchestrationJavaScriptFromWorkflows(workflows), workflows,
 		nil, factory.JavaScriptWorkerSettings{}, mustTestRecordingWriter(),
 		testSessionIDGenerator,
+		nil, nil, nil,
 	)
 }
 
@@ -1408,11 +1409,16 @@ func testApplicationPersistencePolicies(t *testing.T, projectRoot string) {
 func testExecutionServiceChildExecutorHelpers(t *testing.T) {
 	t.Helper()
 
-	if err := validateLiveChildProviderExecutor(ChildExecutorModeLive, nil); err == nil {
-		t.Fatal("validateLiveChildProviderExecutor(live,nil) error = nil, want validation error")
+	if err := validateLiveChildProviderExecutor(ChildExecutorModeLive, nil, nil); err == nil {
+		t.Fatal("validateLiveChildProviderExecutor(live,nil,nil) error = nil, want validation error")
 	}
-	if err := validateLiveChildProviderExecutor(ChildExecutorModeFake, nil); err != nil {
-		t.Fatalf("validateLiveChildProviderExecutor(fake,nil) error = %v", err)
+	if err := validateLiveChildProviderExecutor(ChildExecutorModeLive, nil, func(workerexecution.ProgressPublisher) (workerexecution.InvocationExecutor, error) {
+		return nil, nil
+	}); err != nil {
+		t.Fatalf("validateLiveChildProviderExecutor(live,nil,liveChildInvocation) error = %v", err)
+	}
+	if err := validateLiveChildProviderExecutor(ChildExecutorModeFake, nil, nil); err != nil {
+		t.Fatalf("validateLiveChildProviderExecutor(fake,nil,nil) error = %v", err)
 	}
 
 	smoke := SmokeLiveChildProvider()
@@ -2125,6 +2131,11 @@ func testRuntimeMetadataAndSourceValidationBranches(t *testing.T) {
 	}
 	if err := validationErrorFromSourceIssues([]factory.WorkflowValidationIssue{{Message: "bad source", Line: 3, Column: 5}}); err == nil || err.Error() != "bad source (line 3, column 5)" {
 		t.Fatalf("validationErrorFromSourceIssues(location) = %v", err)
+	}
+	if err := validationErrorFromSourceIssues([]factory.WorkflowValidationIssue{
+		{Code: factory.WorkflowValidationCodeImportNotFound, Message: "missing module"},
+	}); err == nil || err.Error() != "[workflow.source.notFound] missing module" {
+		t.Fatalf("validationErrorFromSourceIssues(code) = %v", err)
 	}
 	if err := validationErrorFromSourceIssues([]factory.WorkflowValidationIssue{{}}); err == nil || err.Error() != "workflow source validation failed" {
 		t.Fatalf("validationErrorFromSourceIssues(default message) = %v", err)
@@ -3863,4 +3874,30 @@ func (localWorkflowSourceFilesForExecutionTest) ReadFile(path string) ([]byte, e
 }
 func (localWorkflowSourceFilesForExecutionTest) Stat(path string) (os.FileInfo, error) {
 	return os.Stat(path)
+}
+
+type orchestrationJavaScriptAdapter struct {
+	factory.JavaScriptWorkflowRuntime
+}
+
+func orchestrationJavaScriptFromWorkflows(workflows factory.JavaScriptWorkflows) factory.OrchestrationJavaScriptExecution {
+	if workflows == nil {
+		return nil
+	}
+	return orchestrationJavaScriptAdapter{workflows}
+}
+
+func (a orchestrationJavaScriptAdapter) RunJavaScript(
+	ctx context.Context,
+	req factory.JavaScriptRuntimeRequest,
+	hooks factory.JavaScriptRuntimeHooks,
+) (factory.JavaScriptRuntimeOutcome, error) {
+	return a.Run(ctx, req, hooks)
+}
+
+func (a orchestrationJavaScriptAdapter) ResumeJavaScript(
+	summary factory.JavaScriptCompletedCheckpointSummary,
+	records []factory.JavaScriptRuntimeRecord,
+) factory.JavaScriptResumeContext {
+	return a.ResumeContext(summary, records)
 }

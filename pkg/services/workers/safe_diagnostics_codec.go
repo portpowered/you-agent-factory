@@ -341,9 +341,7 @@ func isSafeProviderMetadataKey(key string) bool {
 		"stderr_excerpt",
 		"stdout_excerpt",
 		"worker_type",
-		"workstation_type",
-		"working_directory",
-		"worktree":
+		"workstation_type":
 		return true
 	default:
 		return false

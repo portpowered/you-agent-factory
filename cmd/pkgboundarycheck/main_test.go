@@ -213,15 +213,15 @@ func TestRunRejectsConstructionThroughPermittedExternalEffectContractImport(t *t
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoSourceFile(t, repoRoot, "pkg/services/workers/services/hosted_logic/contract.go", `package hostedlogic
+	writeGoSourceFile(t, repoRoot, "pkg/services/automations/internal/services/hosted_sources/contract.go", `package hostedsources
 
 func New() {}
 `)
 	writeGoSourceFile(t, repoRoot, "tests/functional/edge_test.go", `package functional
 
-import hostedlogic "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic"
+import hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
 
-func directImplementation() { hostedlogic.New() }
+func directImplementation() { hostedsources.New() }
 `)
 
 	stderr := &bytes.Buffer{}
@@ -230,7 +230,7 @@ func directImplementation() { hostedlogic.New() }
 		t.Fatal("run() error = nil, want external-effect implementation construction rejected")
 	}
 	for _, want := range []string{
-		"prohibited product-service construction: github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic.New",
+		"prohibited product-service construction: github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources.New",
 		"construct the collaborator in pkg/wire and inject its service-root role",
 	} {
 		if got := stderr.String(); !strings.Contains(got, want) {
@@ -486,10 +486,10 @@ func TestRunRejectsRetiredPackageRootsWithCanonicalOwners(t *testing.T) {
 		{packagePath: "pkg/workers", canonicalOwner: "pkg/services/workers"},
 		{packagePath: "pkg/modelhost", canonicalOwner: "pkg/services/models"},
 		{packagePath: "pkg/localmodels", canonicalOwner: "pkg/services/models"},
-		{packagePath: "pkg/hostedworkers", canonicalOwner: "Automation Hosted Sources (hosted polling / observation, secret resolution for observation, poll/restart/checkpoint, observation normalization, and commanding Work admission) or Workers Hosted Runner (remote Work execution request/result, execution lifecycle observation, cancellation, and normalized execution outcome under the Runner contract); transitional pkg/services/workers/services/hosted_logic location alone is not durable ownership"},
+		{packagePath: "pkg/hostedworkers", canonicalOwner: "pkg/services/automations/internal/services/hosted_sources or Workers Hosted Runner remote execution under pkg/services/workers/internal/services/runners"},
 		{packagePath: "pkg/invocations", canonicalOwner: "pkg/services/work, pkg/services/factory_sessions, or pkg/services/workers, according to the concern"},
 		{packagePath: "pkg/materialize", canonicalOwner: "pkg/services/work"},
-		{packagePath: "pkg/timework", canonicalOwner: "pkg/services/automations/timework"},
+		{packagePath: "pkg/timework", canonicalOwner: "pkg/services/automations/internal/services/cron"},
 		{packagePath: "pkg/workcontent", canonicalOwner: "pkg/services/work"},
 		{packagePath: "pkg/workgraph", canonicalOwner: "pkg/services/work"},
 		{packagePath: "pkg/workquery", canonicalOwner: "pkg/services/work"},
@@ -562,7 +562,7 @@ func TestRunRejectsRetiredPackageImportsWithCanonicalOwners(t *testing.T) {
 		{
 			importPath:     "github.com/portpowered/infinite-you/pkg/hostedworkers/linear",
 			retiredRoot:    "pkg/hostedworkers",
-			canonicalOwner: "Automation Hosted Sources (hosted polling / observation, secret resolution for observation, poll/restart/checkpoint, observation normalization, and commanding Work admission) or Workers Hosted Runner (remote Work execution request/result, execution lifecycle observation, cancellation, and normalized execution outcome under the Runner contract); transitional pkg/services/workers/services/hosted_logic location alone is not durable ownership",
+			canonicalOwner: "pkg/services/automations/internal/services/hosted_sources or Workers Hosted Runner remote execution under pkg/services/workers/internal/services/runners",
 		},
 		{
 			importPath:     "github.com/portpowered/infinite-you/pkg/invocations/inference",
@@ -577,7 +577,7 @@ func TestRunRejectsRetiredPackageImportsWithCanonicalOwners(t *testing.T) {
 		{
 			importPath:     "github.com/portpowered/infinite-you/pkg/timework",
 			retiredRoot:    "pkg/timework",
-			canonicalOwner: "pkg/services/automations/timework",
+			canonicalOwner: "pkg/services/automations/internal/services/cron",
 		},
 		{
 			importPath:     "github.com/portpowered/infinite-you/pkg/workcontent",

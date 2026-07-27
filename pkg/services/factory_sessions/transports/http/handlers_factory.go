@@ -879,6 +879,13 @@ type durableSessionEventsReader interface {
 	) error
 }
 
+type durableSessionResponseEventsReader interface {
+	SubscribeDurableFactoryResponseEvents(
+		ctx context.Context,
+		request factorysessionexecution.ResponseEventSubscriptionRequest,
+	) (apisurface.FactoryResponseEventSubscription, error)
+}
+
 type DurableExecutionSessionLister interface {
 	ListSessions(
 		context.Context,
@@ -905,6 +912,14 @@ func (s *Server) requireDurableSessionResultGetter(w http.ResponseWriter) (durab
 func (s *Server) requireDurableSessionEventsReader(w http.ResponseWriter) (durableSessionEventsReader, bool) {
 	if s.durableProjection == nil {
 		s.writeError(w, http.StatusInternalServerError, "durable factory session event replay is unavailable", "INTERNAL_ERROR")
+		return nil, false
+	}
+	return s.durableProjection, true
+}
+
+func (s *Server) requireDurableSessionResponseEventsReader(w http.ResponseWriter) (durableSessionResponseEventsReader, bool) {
+	if s.durableProjection == nil {
+		s.writeError(w, http.StatusInternalServerError, "durable factory session response-event replay is unavailable", "INTERNAL_ERROR")
 		return nil, false
 	}
 	return s.durableProjection, true

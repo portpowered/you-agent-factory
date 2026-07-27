@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "cursor-timeout",
+  "provider": "cursor",
+  "providerVersion": "fixture-1",
+  "fidelityClass": "partial-stream",
+  "case": "timeout",
+  "stdoutFile": "stdout.jsonl",
+  "stderrFile": "stderr.txt",
+  "requestFile": "request.json",
+  "processFile": "process.json",
+  "expectedProviderSessionFile": "expected-provider-session.json",
+  "expectedResponseEventsFile": "expected-response-events.ndjson",
+  "expectedInvocationResultFile": "expected-invocation-result.json",
+  "normalizedFields": [
+    "eventId",
+    "recordedAt",
+    "factorySessionId",
+    "runId",
+    "itemId"
+  ],
+  "sanitizerVersion": 1,
+  "source": "sanitized-provider-exec"
+}

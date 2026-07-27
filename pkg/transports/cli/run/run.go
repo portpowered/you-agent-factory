@@ -587,10 +587,21 @@ func autoPortDiagnostics(autoPort bool, requestedPort, resolvedPort int) string 
 
 func renderSimpleDashboard(output io.Writer, input factoryvisualization.View) {
 	fmt.Fprint(output, dashboard.FormatSimpleDashboardWithRenderData(
-		input.EngineState,
+		dashboardEngineSnapshotHeader(input.Runtime),
 		input.RenderData,
 		input.ObservedAt,
 	))
+}
+
+func dashboardEngineSnapshotHeader(
+	runtime factoryvisualization.RuntimeObservation,
+) interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net] {
+	return interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net]{
+		TickCount:     runtime.TickCount,
+		FactoryState:  runtime.FactoryState,
+		RuntimeStatus: runtime.RuntimeStatus,
+		Uptime:        runtime.Uptime,
+	}
 }
 
 func bindDashboardHost(cfg RunConfig) string {

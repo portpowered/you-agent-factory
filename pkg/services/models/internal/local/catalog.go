@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/catalog"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
 )
@@ -584,7 +583,7 @@ func PullModel(
 	ctx context.Context,
 	runtimeCfg *models.RuntimeConfig,
 	modelName string,
-) (modelassets.PullResult, error) {
+) (models.PullResult, error) {
 	return PullModelWithOptions(puller, ctx, runtimeCfg, modelName, PullOptions{})
 }
 
@@ -596,24 +595,24 @@ func PullModelWithOptions(
 	runtimeCfg *models.RuntimeConfig,
 	modelName string,
 	opts PullOptions,
-) (modelassets.PullResult, error) {
+) (models.PullResult, error) {
 	if runtimeCfg == nil {
-		return modelassets.PullResult{}, fmt.Errorf("factory service runtime is not available")
+		return models.PullResult{}, fmt.Errorf("factory service runtime is not available")
 	}
 	if puller == nil {
-		return modelassets.PullResult{}, fmt.Errorf("model asset puller is not available")
+		return models.PullResult{}, fmt.Errorf("model asset puller is not available")
 	}
 	catalog := BuildCatalog(runtimeCfg)
 	key := CanonicalModelName(modelName)
 	if key == "" {
-		return modelassets.PullResult{}, fmt.Errorf("%w: empty model name", managedruntime.ErrNotFound)
+		return models.PullResult{}, fmt.Errorf("%w: empty model name", managedruntime.ErrNotFound)
 	}
 	entry, ok := catalog[key]
 	if !ok {
-		return modelassets.PullResult{}, fmt.Errorf("%w: %s", managedruntime.ErrNotFound, modelName)
+		return models.PullResult{}, fmt.Errorf("%w: %s", managedruntime.ErrNotFound, modelName)
 	}
 	if entry.Summary.ProviderLocality != managedruntime.LocalityLocal {
-		return modelassets.PullResult{}, fmt.Errorf("%w: model %q is not a local model", modelassets.ErrPullUnsupported, modelName)
+		return models.PullResult{}, fmt.Errorf("%w: model %q is not a local model", models.ErrPullUnsupported, modelName)
 	}
 
 	var resolution ManagedRuntimeSourceResolution
@@ -624,11 +623,11 @@ func PullModelWithOptions(
 	result, err := puller.PullModel(ctx, runtimeCfg, modelName)
 	if err != nil {
 		switch {
-		case errors.Is(err, managedruntime.ErrNotFound), errors.Is(err, modelassets.ErrPullUnsupported):
-			return modelassets.PullResult{}, err
+		case errors.Is(err, managedruntime.ErrNotFound), errors.Is(err, models.ErrPullUnsupported):
+			return models.PullResult{}, err
 		default:
 			pullOutcome, readiness := ClassifyPullFailure(err)
-			failureResult := modelassets.PullResult{
+			failureResult := models.PullResult{
 				ModelName:          strings.TrimSpace(entry.Summary.Name),
 				ProviderLocality:   string(entry.Summary.ProviderLocality),
 				ManagedPullOutcome: pullOutcome,
@@ -638,7 +637,7 @@ func PullModelWithOptions(
 				SourceID:           strings.TrimSpace(resolution.SourceID),
 				ResolverNotes:      strings.TrimSpace(resolution.ResolverNotes),
 			}
-			return failureResult, &modelassets.PullError{Result: failureResult, Cause: err}
+			return failureResult, &models.PullError{Result: failureResult, Cause: err}
 		}
 	}
 
@@ -737,10 +736,10 @@ const (
 // EnrichPullResult projects a service-owned pull result into managed-runtime
 // readiness, lifecycle, and source diagnostics using post-pull cache inspection.
 func EnrichPullResult(
-	result modelassets.PullResult,
+	result models.PullResult,
 	inspection RuntimeCacheInspection,
 	resolution ManagedRuntimeSourceResolution,
-) modelassets.PullResult {
+) models.PullResult {
 	outcome, readiness, lifecycle := classifySuccessfulPull(result, inspection)
 	result.ManagedPullOutcome = outcome
 	result.ReadinessState = readiness
@@ -760,9 +759,9 @@ func ClassifyPullFailure(err error) (pullOutcome string, readiness string) {
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		return managedPullOutcomeTimedOut, managedReadinessFailed
-	case errors.Is(err, modelassets.ErrPullUnsupported):
+	case errors.Is(err, models.ErrPullUnsupported):
 		return managedPullOutcomeUnsupportedRuntime, managedReadinessUnsupported
-	case errors.Is(err, modelassets.ErrSourceFetchFailed):
+	case errors.Is(err, models.ErrSourceFetchFailed):
 		return managedPullOutcomeSourceFetchFailed, managedReadinessFailed
 	case isSourceFetchFailureMessage(err.Error()):
 		return managedPullOutcomeSourceFetchFailed, managedReadinessFailed
@@ -771,7 +770,7 @@ func ClassifyPullFailure(err error) (pullOutcome string, readiness string) {
 	}
 }
 
-func classifySuccessfulPull(result modelassets.PullResult, inspection RuntimeCacheInspection) (pullOutcome, readiness, lifecycle string) {
+func classifySuccessfulPull(result models.PullResult, inspection RuntimeCacheInspection) (pullOutcome, readiness, lifecycle string) {
 	legacyOutcome := strings.ToUpper(strings.TrimSpace(result.Outcome))
 	switch legacyOutcome {
 	case legacyPullOutcomePulled:

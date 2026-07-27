@@ -125,6 +125,8 @@ var servicesSet = wire.NewSet(
 	provideAutomationFactory,
 	provideFactorySessionsService,
 	providePortableRecordingWriter,
+	provideOrchestrationJavaScriptExecution,
+	provideOrchestrationCompilation,
 	provideFactorySessionExecutionFactory,
 	provideRecordingsProjectionFactory,
 	provideRecordingsFactory,
@@ -154,6 +156,7 @@ var servicesSet = wire.NewSet(
 	provideFactoryDefinitionNamedPathResolver,
 	provideFactoryDefinitionNamedFactoryCatalogFileSystem,
 	provideFactoryDefinitionPackagedInstallationFileSystem,
+	providePackagedFactoryInstallation,
 	provideFactoryDefinitionAuthoredReaderFileSystem,
 	provideFactoryDefinitionAuthoredWriterFileSystem,
 	provideFactoryDefinitionScaffoldFileSystem,
@@ -177,7 +180,7 @@ var servicesSet = wire.NewSet(
 	provideWorkersRuntimeFactory,
 	provideWorkersRuntimeExecutorsFactory,
 	provideWorkersMockCommandRunnerFactory,
-	provideWorkerHostedPollersFactory,
+	provideAutomationHostedSourcesFactory,
 	provideWorkersLocalRuntimeHooksFactory,
 	provideWorkerCommandRunnerAdapter,
 	provideFactoryDefinitionsFactory,
@@ -205,6 +208,7 @@ var factorySessionsServicesSet = wire.NewSet(
 )
 
 var factoryDefinitionsServicesSet = wire.NewSet(
+	provideOrchestratorDefinitionValidator,
 	provideFactoryDefinitionValidationService,
 	provideFactoryDefinitionValidator,
 	provideDefinitionValidationOperation,
@@ -226,6 +230,7 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 var workerServiceSet = wire.NewSet(
 	provideWorkerInvocationFactory,
 	provideProviderFromCommandRunnerFactory,
+	provideWorkerInvocationWithProgressFactory,
 	provideWorkerProcessEnvironment,
 	provideWorkerCurrentWorkingDirectory,
 )
@@ -261,10 +266,13 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideFlattenFactoryConfigOperation,
 	provideExpandFactoryConfigOperation,
 	provideConfigureInitOperation,
+	provideInstallPackagedFactoryOperation,
+	provideInstallPackagedFactoryCLI,
 	provideQueryFactoryOperation,
 	provideCurrentFactoryPointerReader,
 	provideListFactoriesOperation,
 	provideFactoryNameCompletionOperation,
+	providePackagedFactoryNameCompletionOperation,
 	provideSelectedFactorySignatureCompletionOperation,
 	provideValidateFactoryOperation,
 	provideCreateFactoryFromFileOperation,
@@ -291,6 +299,7 @@ var BundleSet = wire.NewSet(
 	workerServiceSet,
 	cliCommandOperationsSet,
 	providePackagedFactoryDefinitions,
+	providePackagedFactoryCatalog,
 	provideSystemInitializationService,
 	provideSystemInitializationOperation,
 	provideRuntimeOpener,

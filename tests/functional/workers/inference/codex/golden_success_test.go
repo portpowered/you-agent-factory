@@ -26,7 +26,7 @@ type codexGoldenReplayResult struct {
 
 // TestCodexGoldenTextAndToolSuccess replays the sanitized Codex message-tool-success
 // transcript through the public process boundary and proves public text and tool success.
-//golden: docs/temp/functional/provider-sessions/codex/success/manifest.json
+// golden: docs/temp/functional/provider-sessions/codex/success/manifest.json
 func TestCodexGoldenTextAndToolSuccess(t *testing.T) {
 	replay := runCodexGoldenSuccessReplay(t)
 
@@ -58,7 +58,7 @@ func TestCodexGoldenTextAndToolSuccess(t *testing.T) {
 // TestCodexGoldenDerivesProviderSessionAndResponseEvents replays the sanitized
 // Codex message-tool-success transcript and proves public Provider Session,
 // FactoryResponseEvent, and invocation-result metadata match the golden contract.
-//golden: docs/temp/functional/provider-sessions/codex/success/manifest.json
+// golden: docs/temp/functional/provider-sessions/codex/success/manifest.json
 func TestCodexGoldenDerivesProviderSessionAndResponseEvents(t *testing.T) {
 	replay := runCodexGoldenSuccessReplay(t)
 
@@ -373,48 +373,12 @@ func assertCodexGoldenTextAndToolSuccess(
 ) {
 	t.Helper()
 
-	var (
-		toolStarted    bool
-		toolCompleted  bool
-		messageSuccess bool
+	toolStarted, toolCompleted, messageSuccess := observeCodexResponseSuccess(
+		t,
+		responseEvents,
+		wantFinalText,
+		wantToolCallID,
 	)
-
-	for _, event := range responseEvents {
-		switch event.Kind {
-		case factoryapi.FactoryResponseEventKindTool:
-			payload, err := event.Payload.AsFactoryResponseEventToolPayload()
-			if err != nil {
-				t.Fatalf("decode tool response event: %v", err)
-			}
-			if payload.ToolCallId != wantToolCallID {
-				continue
-			}
-			switch event.Phase {
-			case factoryapi.FactoryResponseEventPhaseStarted:
-				toolStarted = true
-			case factoryapi.FactoryResponseEventPhaseCompleted:
-				toolCompleted = true
-			}
-		case factoryapi.FactoryResponseEventKindMessage:
-			if event.Phase != factoryapi.FactoryResponseEventPhaseCompleted {
-				continue
-			}
-			payload, err := event.Payload.AsFactoryResponseEventMessagePayload()
-			if err != nil {
-				t.Fatalf("decode message response event: %v", err)
-			}
-			for _, block := range payload.ContentBlocks {
-				text, err := block.AsFactoryResponseEventTextContentBlock()
-				if err != nil {
-					continue
-				}
-				if text.Text == wantFinalText {
-					messageSuccess = true
-				}
-			}
-		}
-	}
-
 	if toolStarted && toolCompleted && messageSuccess {
 		return
 	}
@@ -478,6 +442,52 @@ func assertCodexGoldenTextAndToolSuccess(
 	if response == nil || response.Outcome != factoryapi.WorkOutcomeAccepted {
 		t.Fatalf("terminal dispatch outcome = %#v, want ACCEPTED", response)
 	}
+}
+
+func observeCodexResponseSuccess(
+	t *testing.T,
+	responseEvents []factoryapi.FactoryResponseEvent,
+	wantFinalText string,
+	wantToolCallID string,
+) (bool, bool, bool) {
+	t.Helper()
+	var toolStarted, toolCompleted, messageSuccess bool
+	for _, event := range responseEvents {
+		switch event.Kind {
+		case factoryapi.FactoryResponseEventKindTool:
+			payload, err := event.Payload.AsFactoryResponseEventToolPayload()
+			if err != nil {
+				t.Fatalf("decode tool response event: %v", err)
+			}
+			if payload.ToolCallId != wantToolCallID {
+				continue
+			}
+			switch event.Phase {
+			case factoryapi.FactoryResponseEventPhaseStarted:
+				toolStarted = true
+			case factoryapi.FactoryResponseEventPhaseCompleted:
+				toolCompleted = true
+			}
+		case factoryapi.FactoryResponseEventKindMessage:
+			if event.Phase != factoryapi.FactoryResponseEventPhaseCompleted {
+				continue
+			}
+			payload, err := event.Payload.AsFactoryResponseEventMessagePayload()
+			if err != nil {
+				t.Fatalf("decode message response event: %v", err)
+			}
+			for _, block := range payload.ContentBlocks {
+				text, err := block.AsFactoryResponseEventTextContentBlock()
+				if err != nil {
+					continue
+				}
+				if text.Text == wantFinalText {
+					messageSuccess = true
+				}
+			}
+		}
+	}
+	return toolStarted, toolCompleted, messageSuccess
 }
 
 func goldenStdoutContainsToolLifecycle(loaded support.ProviderSessionCase, wantToolCallID string) bool {

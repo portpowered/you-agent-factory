@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -54,6 +56,33 @@ func TestNewServiceRejectsNilDependencies(t *testing.T) {
 	}
 	if got := NewService(&stubLedger{}, nil); got != nil {
 		t.Fatalf("NewService(ledger, nil) = %#v, want nil", got)
+	}
+}
+
+func TestNewServiceWithLifecycleEffectsUsesProvidedPublicationAndPlanner(t *testing.T) {
+	t.Parallel()
+
+	publication, err := NewPortableArtifactPublication()
+	if err != nil {
+		t.Fatalf("NewPortableArtifactPublication: %v", err)
+	}
+	planner := recordings.LiveRecordingTargetPlannerFunc(
+		func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+			return recordings.LiveRecordingTarget{ServicePath: "service/path"}, nil
+		},
+	)
+	if got := NewService(&stubLedger{}, NewProjectionService(), planner); got == nil {
+		t.Fatal("NewService with planner returned nil")
+	}
+	if got := NewServiceWithLifecycleEffects(
+		&stubLedger{},
+		NewProjectionService(),
+		planner,
+		nil,
+		nil,
+		publication,
+	); got == nil {
+		t.Fatal("NewServiceWithLifecycleEffects with publication returned nil")
 	}
 }
 
@@ -308,6 +337,19 @@ func assertProjectionQuery(t *testing.T, svc recordings.Service) {
 		WorldState: world.WorldState,
 	}); err != nil {
 		t.Fatalf("QueryWorkstationRequests: %v", err)
+	}
+	if _, err := svc.QuerySimpleDashboard(recordings.SimpleDashboardQueryRequest{
+		WorldState: recordings.WorldStateView{
+			SchemaVersion: recordings.WorldStateViewSchemaV1,
+			Payload:       "{",
+		},
+	}); !errors.Is(err, recordings.ErrInvalidProjectionInput) {
+		t.Fatalf("QuerySimpleDashboard invalid payload = %v, want ErrInvalidProjectionInput", err)
+	}
+	if _, err := svc.QueryWorkstationRequests(recordings.WorkstationRequestsQueryRequest{
+		WorldState: recordings.WorldStateView{SchemaVersion: "unsupported", Payload: "{}"},
+	}); !errors.Is(err, recordings.ErrUnsupportedProjectionView) {
+		t.Fatalf("QueryWorkstationRequests unsupported view = %v, want ErrUnsupportedProjectionView", err)
 	}
 	assertReconnectReplayValidation(t, svc)
 }
@@ -880,6 +922,59 @@ func assertServicePortableFailures(
 		Artifact: tampered,
 	}); !errors.Is(err, recordings.ErrInvalidPortableArtifactIntegrity) {
 		t.Fatalf("ValidatePortableArtifact tampered = %v", err)
+	}
+}
+
+func TestCombinedServicePortableExportAndReadDelegates(t *testing.T) {
+	t.Parallel()
+
+	destination := filepath.Join(t.TempDir(), "destination-is-directory")
+	if err := os.Mkdir(destination, 0o700); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	ledger := &stubLedger{}
+	svc := NewService(ledger, NewProjectionService())
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-export-delegate"}
+	bound, err := svc.BindRecording(recordings.BindRecordingRequest{
+		RecordingID: "recording-export-delegate",
+		Artifact:    recordings.RecordingArtifactReference(destination),
+		Scope:       scope,
+	})
+	if err != nil {
+		t.Fatalf("BindRecording: %v", err)
+	}
+	event := recordings.CanonicalEvent{
+		ID: "export-delegate-event", Kind: "WORK_REQUEST",
+		Scope:      scope,
+		RecordedAt: time.Unix(1_700_000_000, 0).UTC(),
+		Payload:    "{}",
+		Cursor: recordings.CanonicalEventCursor{
+			StreamGenerationID: "generation-export-delegate",
+		},
+	}
+	if _, err := svc.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
+		RecordingID: bound.Status.RecordingID,
+		Event:       event,
+	}); err != nil {
+		t.Fatalf("RecordRecordingEvent: %v", err)
+	}
+	if _, err := svc.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: bound.Status.RecordingID,
+		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
+	}); err != nil {
+		t.Fatalf("FinishRecording: %v", err)
+	}
+	if _, err := svc.ExportPortableArtifact(context.Background(), recordings.ExportPortableArtifactRequest{
+		RecordingID: bound.Status.RecordingID,
+	}); !errors.Is(err, recordings.ErrPortableArtifactExportFailed) {
+		t.Fatalf("ExportPortableArtifact = %v, want ErrPortableArtifactExportFailed", err)
+	}
+	if _, err := svc.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
+		RecordingID: bound.Status.RecordingID,
+		Reference:   recordings.RecordingArtifactReference(destination),
+	}); !errors.Is(err, recordings.ErrPortableArtifactUnavailable) &&
+		!errors.Is(err, recordings.ErrInvalidPortableArtifact) {
+		t.Fatalf("ReadPortableArtifact = %v, want ErrPortableArtifactUnavailable or ErrInvalidPortableArtifact", err)
 	}
 }
 

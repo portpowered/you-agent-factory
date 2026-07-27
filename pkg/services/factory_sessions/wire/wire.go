@@ -1,6 +1,9 @@
 // Package wire is the Factory Sessions service composition boundary.
-// Application Wire uses these providers without importing the service's
-// concrete implementation package.
+//
+// Wire performs construction only, returns the singular factorysessions.Service
+// root interface, and starts no lifecycle components. Parent-private identity
+// and response-stream owner wiring stays inside the owner service assembly path;
+// peers depend on Service rather than owner internals or construction ports.
 package wire
 
 import (
@@ -40,8 +43,11 @@ func NewWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector {
 	}
 }
 
-// NewService constructs the inert, process-scoped Factory Sessions service.
-// Runtime-specific values are supplied later through Service.ForRuntime.
+// NewService constructs an inert Factory Sessions root from construction and
+// process-edge ports. It composes the accepted root through parent-private
+// identity and response-stream owner construction without publishing owner types
+// on the returned peer surface. Missing required construction ports fail with a
+// deterministic construction error and a nil service.
 func NewService(
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
@@ -126,15 +132,23 @@ func NewDurableExecution(
 	syncWaits factorysessionexecution.SyncWaitScheduler,
 	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
 	workflows factoryruntime.JavaScriptWorkflows,
+	orchestration factoryruntime.OrchestrationJavaScriptExecution,
 	workerPresetIDs map[string]struct{},
 	workerSettings factoryruntime.JavaScriptWorkerSettings,
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
+	liveChildInvocation factorysessionexecution.LiveChildInvocationFactory,
+	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 ) (factorysessions.ExecutionService, error) {
+	responseStreams, err := responsestreamwire.NewService(generateResponseEventID)
+	if err != nil {
+		return nil, err
+	}
 	return durableexecutionwire.NewDurable(
 		projectRoot, persistencePolicy, stores, executor, clock, syncWaits,
-		checkpointSummaries, workflows, workerPresetIDs, workerSettings,
-		recordingWriter, generateSessionID,
+		checkpointSummaries, workflows, orchestration, workflows,
+		workerPresetIDs, workerSettings,
+		recordingWriter, generateSessionID, liveChildInvocation, generateResponseEventID, responseStreams,
 	)
 }
 
@@ -151,13 +165,14 @@ func NewStandaloneExecution(
 	syncWaits factorysessionexecution.SyncWaitScheduler,
 	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
 	workflows factoryruntime.JavaScriptWorkflows,
+	orchestration factoryruntime.OrchestrationJavaScriptExecution,
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
 	fixtureFiles fileeffects.ContractFixtureReader,
 ) (factorysessions.ExecutionService, error) {
 	return durableexecutionwire.NewStandalone(
 		provider, projectRoot, stores, fixtureCatalogPath, childExecutorMode,
-		executor, clock, syncWaits, checkpointSummaries, workflows,
+		executor, clock, syncWaits, checkpointSummaries, workflows, orchestration, workflows,
 		recordingWriter, generateSessionID, fixtureFiles,
 	)
 }

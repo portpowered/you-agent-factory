@@ -197,7 +197,7 @@ func TestRunBlocksProviderSessionAmbientEffects(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoSourceFile(t, repoRoot, "pkg/services/provider_sessions/cursor/defaults.go", `package cursor
+	writeGoSourceFile(t, repoRoot, "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/defaults.go", `package cursor
 
 import (
 	"database/sql"
@@ -263,7 +263,7 @@ func discover(root string) { _ = runtime.GOOS }
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			repoRoot := t.TempDir()
-			const filePath = "pkg/services/provider_sessions/cursor/defaults.go"
+			const filePath = "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/defaults.go"
 			writeGoSourceFile(t, repoRoot, filePath, test.source)
 			writeProductionDefaultTestBaseline(t, repoRoot, productionDefaultBaselineEntry{
 				Kind: test.kind, Symbol: test.symbol, FilePath: filePath,

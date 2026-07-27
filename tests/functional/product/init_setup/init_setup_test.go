@@ -84,6 +84,33 @@ func TestInitSuppliedInputsConfigureOnlyProviderModelDefaults(t *testing.T) {
 	}
 }
 
+// TestInitPackagedFactoryInstallDelegatesThroughDefinitions proves packaged
+// selection installs through the public init command without mutating operator
+// configuration.
+func TestInitPackagedFactoryInstallDelegatesThroughDefinitions(t *testing.T) {
+	fixture := newInitFixture(t)
+	targetRoot := filepath.Join(fixture.workingDir, "packaged-factories")
+	var stdout bytes.Buffer
+	err := fixture.execute(
+		serviceedges.Edges{},
+		&stdout,
+		"you", "init", "--package", "@you/goal", "--dir", targetRoot,
+	)
+	if err != nil {
+		t.Fatalf("Process.Execute() error = %v", err)
+	}
+	installed := filepath.Join(targetRoot, "@you", "goal", "factory.json")
+	if _, statErr := os.Stat(installed); statErr != nil {
+		t.Fatalf("packaged Factory missing at %s: %v", installed, statErr)
+	}
+	if got := stdout.String(); !strings.Contains(got, "Installed packaged factory @you/goal") {
+		t.Fatalf("stdout = %q, want packaged install success", got)
+	}
+	if got := fixture.readConfig(); got != existingOperatorConfig {
+		t.Fatalf("operator config changed after packaged init:\n%s", got)
+	}
+}
+
 // TestInitSuppliedInputFailuresDoNotWrite proves public validation and output
 // mode failures occur before the atomic operator-config commit.
 func TestInitSuppliedInputFailuresDoNotWrite(t *testing.T) {
@@ -145,9 +172,9 @@ func TestRetiredInitializationPathsAreRejectedWithoutWrites(t *testing.T) {
 			wantErr: `unknown command "create-basic-factory" for "you config"`,
 		},
 		{
-			name:    "legacy scaffold directory",
+			name:    "legacy scaffold directory without package",
 			args:    []string{"you", "init", "--dir", "legacy-factory"},
-			wantErr: "unknown flag: --dir",
+			wantErr: "use --provider",
 		},
 		{
 			name:    "legacy scaffold type",

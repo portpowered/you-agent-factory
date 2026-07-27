@@ -64,6 +64,16 @@ collaborators and return an empty root-owned result on any validation,
 resolution, rejection, or completeness failure so partial bindings never
 escape.
 
+Models asset source selection, cache inspection, verified preparation, and
+private local-runtime cache layout all belong to the single parent-private
+`pkg/services/models/internal/services/assets` service. Compatibility adapters
+receive that already-constructed service plus an opaque Models runtime scope;
+they must not reconstruct an asset puller or its filesystem/network effects.
+When a Factory Session runtime configuration is intentionally unavailable until
+assembly completes, resolve and memoize the immutable Models scope on first
+asset use, retrying a pre-assembly unavailable result instead of snapshotting a
+nil configuration permanently.
+
 When this recursive shape adds measured Go packages, register every package in
 both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
 `docs/internal/baselines/go-functional-coverage-package-minimums.json` in
@@ -574,7 +584,15 @@ Factory Sessions-local Wire from explicit runtime host callbacks; construction
 must not open, start, stop, or inspect a runtime. The outer Factory Sessions
 service delegates live operations through this capability, while discovery and
 target selection remain with the identity owner and durable lifecycle remains
-with the durable-execution owner.
+with the durable-execution owner. Prove customer-boundary live open/list/get/control/close
+through `support.StartFunctionalAPIServer` / `root.BuildProcess` in
+`tests/functional/sessions/live_runtime_build_process_test.go`, and prove
+live_runtime ownership through Sessions-root composition tests in
+`pkg/services/factory_sessions/internal/sessionservice/live_runtime_composition_test.go`.
+Reverse-order partial-failure cleanup for scope/instance binding remains owned by
+`pkg/services/factory_sessions/internal/runtimeopening` and is evidenced in
+`models_bind_test.go` plus the Sessions packaging failure guard in
+`live_runtime_reverse_order_evidence_test.go`.
 
 Live Factory Session artifact projection follows that placement rule as well.
 `pkg/factory/sessions` normalizes checkpoint-derived and runtime artifacts into
@@ -674,7 +692,14 @@ behind that private contract, and expose execution to HTTP, invocation, and MCP
 runtime views through the outer Factory Sessions `Service`. Runtime composition
 may retain an exact mutation-recording callback while assembling the Factory
 Runtime, but consumers must not receive the raw durable engine as a parallel
-service boundary.
+service boundary. The nested durable_execution public surface (`durable_execution`
+package root + `durable_execution/wire`) exposes only the named `Service`,
+`wire.NewService`, and approved `NewDurable`/`NewStandalone` composition owners;
+it must not declare identity, live-runtime, invocation, response-stream, or
+runtime-opening constructors. Focused Sessions durable start/resume/control/
+inspect call sites route through the bound owner capability (`sessionservice`
+`s.durable` and `durableLifecycleHost`) rather than re-reading the host
+`DurableExecution()` accessor after construction.
 
 Canonical root Wire imports only the Factory Sessions root, its service-local
 `wire` package, and service-owned transport adapters. When Wire must compose a
@@ -711,7 +736,14 @@ keep catalog methods on the singular `Service` rather than elevating
 `NamedFactoryCatalog` as a peer-facing authority, and extend the same
 external fake-peer characterization test with representative success and
 distinct typed invalid-name vs missing outcomes (`ErrInvalidNamedFactoryName`
-vs `ErrNamedFactoryNotFound`). Authoring slices similarly stay on the
+vs `ErrNamedFactoryNotFound`). Validate slices mirror the same pattern in
+`definition/validate_equivalence_test.go`: owner-local `newRootValidateServiceForPeer`
+construction, `peerExerciseRootValidateSuccess` / `peerExerciseRootValidateTypedFailures`
+helpers that accept only `factoryroot.Service`, shared cross-path fixtures
+(`CrossPathValidAlphaFactoryJSON` / `CrossPathInvalidFactoryJSON`), distinct
+`ErrInvalidFactoryDefinitionPayload` vs `FactoryDefinitionValidationFailure`
+with CTR-DEF characterization codes, and effective success via alpha fixture
+plus required DEFAULT handling work type. Authoring slices similarly stay on the
 singular `Service` with prepare/flatten/expand/create/replace request
 shapes that omit filesystem effects and mapping codecs; publish
 `ErrMalformedFactoryLayoutPayload` and `AtomicFactoryWriteFailure`
@@ -726,7 +758,15 @@ peer-facing loader); publish distinct `ErrInvalidAuthoredFactorySource` vs
 `ValidationResult` success shapes (not a peer-facing nested `Validator`
 interface); publish distinct `ErrInvalidFactoryDefinitionPayload` vs
 `FactoryDefinitionValidationFailure` (`ErrFactoryDefinitionValidationFailed`
-with blocking `ValidationTarget` findings and no Petri vocabulary). Snapshot
+with blocking `ValidationTarget` findings and no Petri vocabulary). The
+parent-private nested validation subservice locks its public surface in
+`internal/services/validation/boundary_test.go`: `service.go` exports only
+`Service` and `Dependencies` with factory_definitions root request/result
+vocabulary and contracts injected ports, direct imports avoid Wire/Runtime/
+Petri/peer/sibling-lease paths, and `wire/wire.go` constructs from injected
+ports without selecting Runtime/Petri implementations or sibling catalog/
+authoring_layout/compilation/snapshots_portability/distribution leases.
+Snapshot
 slices stay on the singular `Service` via `CaptureFactorySnapshot`,
 `PrepareFactorySnapshotImport`, and `MaterializeFactorySnapshot` returning
 detached `FactorySnapshot` / `PortableFactorySnapshotFacts` (not
@@ -876,11 +916,17 @@ stay off the public Runtime package surface enforced by `make pkg-boundary`.
 Adding that new production package (any non-test `.go` under a new
 `pkg/services/...` directory) also requires regenerating
 `docs/internal/packaged-service-structure/package-target-manifest.json` with
-`go run ./cmd/packagetargetmanifestcheck -write-inventory` then
-`-write-owner-packages`, and adding the matching retain row to
+`go run ./cmd/packagetargetmanifestcheck -write-inventory -write-owner-packages`
+then adding matching retain rows to
 `docs/internal/baselines/ownership-inventory.json` (sorted by `packagePath`)
-so `ownershipinventorycheck` / Dev Package Prerequisites / `make lint` stay
-green.
+and registering measured packages in both
+`docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+`docs/internal/baselines/go-functional-coverage-package-minimums.json` so
+`ownershipinventorycheck` / Dev Package Prerequisites / `make lint` stay
+green. When rebasing orchestration ownership onto main that already landed a
+sibling Runtime owner such as `instance_host`, keep both destination package
+rows in the shared manifest, ownership inventory, and coverage minimum files
+instead of choosing one side of the conflict.
 Migration adapter fakes that explicitly implement `APIFactory` should return
 `LegacyEngineObservation` (alias of `StateSnapshot`) rather than naming
 prohibited Petri public-surface symbols in non-internal packages.

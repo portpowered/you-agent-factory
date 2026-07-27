@@ -12,14 +12,21 @@ import (
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
-	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
+	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	assetswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire"
 	catalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
+	runtimehostwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
+)
+
+const (
+	defaultAssetBaseURL    = "https://huggingface.co"
+	defaultAssetAPIBaseURL = "https://huggingface.co/api"
 )
 
 // NewService constructs the inert, process-scoped Models service.
@@ -53,7 +60,9 @@ func NewService(
 	hostMetrics models.HostMetricsRecorder,
 	localHooks models.LocalRuntimeHooks,
 ) (models.Service, error) {
-	defaultEndpoints := modelassets.DefaultEndpoints()
+	defaultEndpoints := models.RuntimeAssetEndpoints{
+		BaseURL: defaultAssetBaseURL, APIBaseURL: defaultAssetAPIBaseURL,
+	}
 	if assetEndpoints.BaseURL != "" {
 		defaultEndpoints.BaseURL = assetEndpoints.BaseURL
 	}
@@ -80,28 +89,41 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
-	catalogService, err := catalogwire.NewService(runtimeScopes, newCatalogReadinessQuery(catalogReadinessEdges{
-		platform: localmodels.HostPlatform(assetPlatform), client: assetHTTP, endpoints: defaultEndpoints,
-		mkdirAll: modelassets.MakeDirectories(assetMkdirAll), stat: modelassets.InspectPath(assetStat),
-		home: modelassets.ResolveHomeDirectory(assetHome), writeFile: modelassets.WriteFile(assetWriteFile),
-		rename: modelassets.RenamePath(assetRename), remove: modelassets.RemovePath(assetRemove),
-		readFile: modelassets.ReadFile(assetReadFile), readDir: modelassets.ReadDirectory(assetReadDir),
-		create: modelassets.CreateFile(assetCreate), open: modelassets.OpenFile(assetOpen),
-	}))
+	assetService, err := assetswire.NewService(
+		runtimeScopes, assetPlatform, assetHTTP,
+		models.RuntimeAssetEndpoints{
+			BaseURL: defaultEndpoints.BaseURL, APIBaseURL: defaultEndpoints.APIBaseURL,
+		},
+		assetMkdirAll, assetStat, assetHome, assetWriteFile, assetRename,
+		assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen,
+	)
+	if err != nil {
+		return nil, err
+	}
+	catalogService, err := catalogwire.NewService(
+		runtimeScopes,
+		newCatalogReadinessQuery(assetService),
+	)
+	if err != nil {
+		return nil, err
+	}
+	runtimeHost, err := runtimehostwire.NewService(
+		runtimeScopes,
+		assetService,
+		processLauncher,
+		hostHTTP,
+		hostClock,
+		hostLogger,
+		hostMetrics,
+	)
 	if err != nil {
 		return nil, err
 	}
 	service, err := modelsservice.NewRoot(
-		localmodels.HostPlatform(assetPlatform), assetHTTP, defaultEndpoints,
-		modelassets.MakeDirectories(assetMkdirAll), modelassets.InspectPath(assetStat),
-		modelassets.ResolveHomeDirectory(assetHome), modelassets.WriteFile(assetWriteFile),
-		modelassets.RenamePath(assetRename), modelassets.RemovePath(assetRemove),
-		modelassets.ReadFile(assetReadFile), modelassets.ReadDirectory(assetReadDir),
-		modelassets.CreateFile(assetCreate), modelassets.OpenFile(assetOpen),
 		launcher, hostHTTP, clock,
 		runtimeRunner, runtimeHTTP, localmodels.InspectFile(runtimeInspect),
 		localmodels.TempDirectory(runtimeTempDir), createTempFile,
-		runtimeScopes, catalogService,
+		runtimeScopes, catalogService, assetService, runtimeHost,
 		models.ProcessDependencies{
 			Logger: logger, Clock: now, PullMetrics: pullMetrics,
 			HostLogger: hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,
@@ -113,33 +135,14 @@ func NewService(
 	return service, nil
 }
 
-type catalogReadinessEdges struct {
-	platform  localmodels.HostPlatform
-	client    modelassets.HTTPDoer
-	endpoints modelassets.Endpoints
-	mkdirAll  modelassets.MakeDirectories
-	stat      modelassets.InspectPath
-	home      modelassets.ResolveHomeDirectory
-	writeFile modelassets.WriteFile
-	rename    modelassets.RenamePath
-	remove    modelassets.RemovePath
-	readFile  modelassets.ReadFile
-	readDir   modelassets.ReadDirectory
-	create    modelassets.CreateFile
-	open      modelassets.OpenFile
-}
-
-func newCatalogReadinessQuery(edges catalogReadinessEdges) catalog.ReadinessQuery {
+func newCatalogReadinessQuery(assetService scopedassets.Service) catalog.ReadinessQuery {
 	return func(
 		ctx context.Context,
+		scopeRef models.RuntimeScopeRef,
 		scope models.RuntimeScopeConfig,
 		detail models.Detail,
 	) (models.Runtime, error) {
-		puller, err := localmodels.NewAssetPuller(
-			scope.CacheDirectory, edges.platform, edges.client, edges.endpoints,
-			edges.mkdirAll, edges.stat, edges.home, edges.writeFile, edges.rename,
-			edges.remove, edges.readFile, edges.readDir, edges.create, edges.open,
-		)
+		puller, err := localmodels.NewScopedAssetPuller(assetService, scopeRef)
 		if err != nil {
 			return models.Runtime{}, err
 		}

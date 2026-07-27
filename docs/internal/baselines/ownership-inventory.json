@@ -1051,7 +1051,7 @@
       "toOwner": "automations",
       "class": "external_effect",
       "architectureException": true,
-      "evidence": "pkg/services/edges -\u003e pkg/services/workers/services/hosted_logic"
+      "evidence": "pkg/services/edges -\u003e pkg/services/automations"
     },
     {
       "fromOwner": "edges",
@@ -1142,6 +1142,12 @@
       "toOwner": "automations",
       "class": "command",
       "evidence": "pkg/services/factory_definitions/validation -\u003e pkg/services/automations"
+    },
+    {
+      "fromOwner": "factory_definitions",
+      "toOwner": "initializer",
+      "class": "lifecycle",
+      "evidence": "pkg/services/factory_definitions/transports/cli -\u003e pkg/initializer/process"
     },
     {
       "fromOwner": "factory_definitions",
@@ -1297,7 +1303,7 @@
       "fromOwner": "factory_visualization",
       "toOwner": "factory_runtime",
       "class": "command",
-      "evidence": "pkg/services/factory_visualization -\u003e pkg/services/factory_runtime"
+      "evidence": "pkg/services/factory_visualization/internal/services/live_view_projection -\u003e pkg/services/factory_runtime"
     },
     {
       "fromOwner": "factory_visualization",
@@ -1309,7 +1315,13 @@
       "fromOwner": "factory_visualization",
       "toOwner": "recordings",
       "class": "event",
-      "evidence": "pkg/services/factory_visualization -\u003e pkg/services/recordings"
+      "evidence": "pkg/services/factory_visualization/internal/services/activation_lifecycle -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "recordings",
+      "class": "event",
+      "evidence": "pkg/services/factory_visualization/internal/services/live_view_projection/internal/service -\u003e pkg/services/recordings"
     },
     {
       "fromOwner": "initializer",
@@ -1372,10 +1384,22 @@
       "evidence": "pkg/services/operator_settings -\u003e pkg/services/factory_definitions"
     },
     {
+      "fromOwner": "operator_settings",
+      "toOwner": "providers",
+      "class": "query",
+      "evidence": "pkg/services/operator_settings/internal/services/resolution/internal/service -\u003e pkg/services/providers"
+    },
+    {
       "fromOwner": "platform",
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/platform/contentstaging -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "provider_sessions",
+      "toOwner": "providers",
+      "class": "command",
+      "evidence": "pkg/services/provider_sessions -\u003e pkg/services/providers"
     },
     {
       "fromOwner": "providers",
@@ -1654,12 +1678,6 @@
       "toOwner": "factory_sessions",
       "class": "command",
       "evidence": "pkg/services/work/service -\u003e pkg/services/factory_sessions"
-    },
-    {
-      "fromOwner": "workers",
-      "toOwner": "automations",
-      "class": "command",
-      "evidence": "pkg/services/workers/service -\u003e pkg/services/automations"
     },
     {
       "fromOwner": "workers",
@@ -2316,13 +2334,85 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/automations/service",
+      "packagePath": "pkg/services/automations/internal/services/cron",
       "disposition": "retain",
       "destination": "automations",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/automations/timework",
+      "packagePath": "pkg/services/automations/internal/services/cron/internal/service",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/cron/wire",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/filesystem_watchers",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/filesystem_watchers/internal/service",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/filesystem_watchers/wire",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources/internal/linear",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources/internal/service",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources/wire",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/reconciliation",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/reconciliation/internal/service",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/reconciliation/wire",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/service",
       "disposition": "retain",
       "destination": "automations",
       "destinationKind": "owner"
@@ -2425,6 +2515,48 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog/wire",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/requiredtools",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/service",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/structural",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/topology",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/wire",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -2592,6 +2724,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/transports/cli",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/ttsobservability",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -2730,12 +2868,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/ingest",
-      "disposition": "retain",
-      "destination": "factory_runtime",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
       "disposition": "retain",
       "destination": "factory_runtime",
@@ -2772,6 +2904,60 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/services/dispatch_planning",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/dispatch_planning/wire",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/instance_host",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/instance_host/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/instance_host/wire",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/wire",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/javascript",
       "disposition": "retain",
       "destination": "factory_runtime",
@@ -2779,6 +2965,12 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/metrics",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/orchestrationowner",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"
@@ -3306,6 +3498,42 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle/wire",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/live_view_projection",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/live_view_projection/internal/service",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/live_view_projection/wire",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/models",
       "disposition": "retain",
       "destination": "models",
@@ -3313,12 +3541,6 @@
     },
     {
       "packagePath": "pkg/services/models/internal/artifacts",
-      "disposition": "retain",
-      "destination": "models",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/models/internal/assets",
       "disposition": "retain",
       "destination": "models",
       "destinationKind": "owner"
@@ -3360,6 +3582,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/models/internal/services/assets",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/assets/internal/service",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/assets/wire",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/models/internal/services/catalog",
       "disposition": "retain",
       "destination": "models",
@@ -3373,6 +3613,42 @@
     },
     {
       "packagePath": "pkg/services/models/internal/services/catalog/wire",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_host",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_host/internal/service",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_host/internal/services/leases",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_host/internal/services/leases/wire",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_host/wire",
       "disposition": "retain",
       "destination": "models",
       "destinationKind": "owner"
@@ -3426,25 +3702,91 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/operator_settings/internal/service",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/services/resolution",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/services/resolution/internal/service",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/services/resolution/wire",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/wire",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/provider_sessions",
       "disposition": "retain",
       "destination": "provider_sessions",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/provider_sessions/codex",
+      "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader",
       "disposition": "retain",
       "destination": "provider_sessions",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/provider_sessions/cursor",
+      "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader/internal/service",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader/wire",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/wire",
       "disposition": "retain",
       "destination": "provider_sessions",
       "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/provider_sessions/service",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/wire",
       "disposition": "retain",
       "destination": "provider_sessions",
       "destinationKind": "owner"
@@ -3540,6 +3882,48 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/recordings/internal/canonical",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/artifacts_export",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/artifacts_export/internal/service",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/artifacts_export/wire",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/internal/service",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/wire",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/recordings/internal/services/projection_query",
       "disposition": "retain",
       "destination": "recordings",
@@ -3571,6 +3955,24 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/recording_lifecycle/wire",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/replay",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/replay/internal/service",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/replay/wire",
       "disposition": "retain",
       "destination": "recordings",
       "destinationKind": "owner"
@@ -3631,6 +4033,24 @@
     },
     {
       "packagePath": "pkg/services/work",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/state_access",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/state_access/internal/service",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/state_access/wire",
       "disposition": "retain",
       "destination": "work",
       "destinationKind": "owner"
@@ -4008,22 +4428,6 @@
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/services/hosted_logic",
-      "disposition": "move",
-      "destination": "automations",
-      "destinationKind": "owner",
-      "successor": "pkg/services/automations/internal/services/hosted_sources",
-      "deletionCondition": "delete Workers hosted_logic after Automation Hosted Sources cutover proof (IMP-automations-hosted-sources)"
-    },
-    {
-      "packagePath": "pkg/services/workers/services/hosted_logic/linear",
-      "disposition": "move",
-      "destination": "automations",
-      "destinationKind": "owner",
-      "successor": "pkg/services/automations/internal/services/hosted_sources",
-      "deletionCondition": "delete Workers hosted_logic after Automation Hosted Sources cutover proof (IMP-automations-hosted-sources)"
     },
     {
       "packagePath": "pkg/services/workers/services/inference",

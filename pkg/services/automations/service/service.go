@@ -3,10 +3,16 @@ package service
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/jonboulle/clockwork"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
+	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
+	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
+	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
+	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -29,6 +35,11 @@ type Service struct {
 	hostedPollers     automations.HostedPollers
 	resolveTemplates  workers.TemplateFieldResolver
 	executionPolicy   factorydefinitions.WorkstationExecutionPolicyService
+	reconciler        reconciliation.Service
+	cron              cron.Service
+	filesystemWatchers filesystemwatchers.Service
+	schedulerMu       sync.Mutex
+	schedulerSources  map[automations.SourceIdentity]*schedulerSource
 }
 
 // New constructs the automation service from explicit worker-sidecar
@@ -43,7 +54,7 @@ func New(
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 ) *Service {
-	return &Service{
+	service := &Service{
 		loggerValue:       logger,
 		clock:             clock,
 		commandRunnerEdge: commandRunner,
@@ -52,7 +63,12 @@ func New(
 		hostedPollers:     hostedPollers,
 		resolveTemplates:  resolveTemplates,
 		executionPolicy:   executionPolicy,
+		schedulerSources:  make(map[automations.SourceIdentity]*schedulerSource),
 	}
+	service.reconciler = service.newSchedulerReconciler()
+	service.cron = cronwire.NewService()
+	service.filesystemWatchers = fswire.NewService()
+	return service
 }
 
 // NewService constructs the Automations root contract for composition.
@@ -65,7 +81,7 @@ func NewService(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-) automations.Service {
+) *Service {
 	return New(
 		logger,
 		clock,
@@ -76,6 +92,64 @@ func NewService(
 		resolveTemplates,
 		executionPolicy,
 	)
+}
+
+// Root returns the inert published Automation operations backed by the same
+// reconciliation owner used for runtime scheduler supervision.
+func (s *Service) Root() automations.Root {
+	if s == nil || s.reconciler == nil {
+		return automations.Root{}
+	}
+	return automations.Root{Operations: s}
+}
+
+func (s *Service) Reconcile(
+	ctx context.Context,
+	request automations.ReconcileRequest,
+) (automations.ReconcileResult, error) {
+	return s.reconciler.Reconcile(ctx, request)
+}
+
+func (s *Service) StartSource(
+	ctx context.Context,
+	request automations.StartSourceRequest,
+) (automations.StartSourceResult, error) {
+	return s.reconciler.StartSource(ctx, request)
+}
+
+func (s *Service) StopSource(
+	ctx context.Context,
+	request automations.StopSourceRequest,
+) (automations.StopSourceResult, error) {
+	return s.reconciler.StopSource(ctx, request)
+}
+
+func (s *Service) WaitSource(
+	ctx context.Context,
+	request automations.WaitSourceRequest,
+) (automations.WaitSourceResult, error) {
+	return s.reconciler.WaitSource(ctx, request)
+}
+
+func (s *Service) SourceStatus(
+	ctx context.Context,
+	request automations.SourceStatusRequest,
+) (automations.SourceStatusResult, error) {
+	return s.reconciler.SourceStatus(ctx, request)
+}
+
+func (s *Service) GetStatus(
+	ctx context.Context,
+	request automations.GetStatusRequest,
+) (automations.GetStatusResult, error) {
+	return s.reconciler.GetStatus(ctx, request)
+}
+
+func (s *Service) GetCursor(
+	ctx context.Context,
+	request automations.GetCursorRequest,
+) (automations.GetCursorResult, error) {
+	return s.reconciler.GetCursor(ctx, request)
 }
 
 func (s *Service) logger() *zap.Logger {

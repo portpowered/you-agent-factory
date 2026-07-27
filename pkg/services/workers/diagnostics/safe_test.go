@@ -51,7 +51,12 @@ func TestSafeWorkDiagnosticsRedactsHostSpecificWorkingDirectory(t *testing.T) {
 func TestSafeWorkDiagnosticsAllowlistAndCloneIsolation(t *testing.T) {
 	t.Parallel()
 	safe := SafeWorkDiagnosticsFromWorkDiagnostics(&workerexecution.WorkDiagnostics{
-		Provider:       &workerexecution.ProviderDiagnostic{RequestMetadata: map[string]string{"request_id": "req-1", "authorization": "secret"}},
+		Provider: &workerexecution.ProviderDiagnostic{RequestMetadata: map[string]string{
+			"request_id":        "req-1",
+			"authorization":     "secret",
+			"working_directory": `C:\Users\operator\workspace`,
+			"worktree":          `C:\Users\operator\worktree`,
+		}},
 		RenderedPrompt: &workerexecution.RenderedPromptDiagnostic{Variables: map[string]string{"trace_id": "trace-1", "api_key": "secret"}},
 	})
 	if safe.Provider.RequestMetadata["request_id"] != "req-1" {
@@ -59,6 +64,12 @@ func TestSafeWorkDiagnosticsAllowlistAndCloneIsolation(t *testing.T) {
 	}
 	if _, ok := safe.Provider.RequestMetadata["authorization"]; ok {
 		t.Fatal("secret provider metadata leaked")
+	}
+	if _, ok := safe.Provider.RequestMetadata["working_directory"]; ok {
+		t.Fatal("host working directory leaked")
+	}
+	if _, ok := safe.Provider.RequestMetadata["worktree"]; ok {
+		t.Fatal("host worktree leaked")
 	}
 	if _, ok := safe.RenderedPrompt.Variables["api_key"]; ok {
 		t.Fatal("secret prompt variable leaked")

@@ -15,6 +15,11 @@ const (
 	progressDrainTimeout         = 250 * time.Millisecond
 )
 
+var (
+	errPresentationOutputClosed = errors.New("response presentation output is closed")
+	errPresentationBacklogFull  = errors.New("response presentation output backlog is full")
+)
+
 // Output serializes encoded presentation records onto one transport writer.
 // Best-effort outputs may reject records under backpressure; lossless outputs
 // retain every accepted record until CloseAndDrain completes.
@@ -108,14 +113,14 @@ func (o *bestEffortOutput) Enqueue(payload []byte) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.closed {
-		return errors.New("response presentation output is closed")
+		return errPresentationOutputClosed
 	}
 	select {
 	case o.queue <- line:
 		return nil
 	default:
 		o.dropped++
-		return errors.New("response presentation output backlog is full")
+		return errPresentationBacklogFull
 	}
 }
 
@@ -193,7 +198,7 @@ func (o *losslessOutput) Enqueue(payload []byte) error {
 		return o.writeErr
 	}
 	if o.closed {
-		return errors.New("response presentation output is closed")
+		return errPresentationOutputClosed
 	}
 	o.pending = append(o.pending, line)
 	o.ready.Signal()

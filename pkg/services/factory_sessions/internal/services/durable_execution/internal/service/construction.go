@@ -7,6 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -22,10 +23,15 @@ func NewDurable(
 	syncWaits factorysessionexecution.SyncWaitScheduler,
 	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
 	workflows factoryruntime.JavaScriptWorkflows,
+	orchestration factoryruntime.OrchestrationJavaScriptExecution,
+	childValues factoryruntime.JavaScriptChildValues,
 	workerPresetIDs map[string]struct{},
 	workerSettings factoryruntime.JavaScriptWorkerSettings,
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
+	liveChildInvocation factorysessionexecution.LiveChildInvocationFactory,
+	generateResponseEventID factorysessions.ResponseEventIDGenerator,
+	responseStreams responsestreamservice.Service,
 ) (*Service, error) {
 	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
 		persistencePolicy,
@@ -36,7 +42,7 @@ func NewDurable(
 		return nil, err
 	}
 	childExecutorMode := factorysessions.ChildExecutorModeFake
-	if executor != nil {
+	if executor != nil || liveChildInvocation != nil {
 		childExecutorMode = factorysessions.ChildExecutorModeLive
 	}
 	execution, err := factorysessionexecution.NewJavaScriptExecutionService(
@@ -48,12 +54,15 @@ func NewDurable(
 		syncWaits,
 		checkpointSummaries,
 		workflows,
-		workflows,
-		workflows,
+		orchestration,
+		childValues,
 		workerPresetIDs,
 		workerSettings,
 		recordingWriter,
 		generateSessionID,
+		liveChildInvocation,
+		generateResponseEventID,
+		responseStreams,
 	)
 	if err != nil {
 		return nil, err
@@ -74,6 +83,8 @@ func NewStandalone(
 	syncWaits factorysessionexecution.SyncWaitScheduler,
 	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
 	workflows factoryruntime.JavaScriptWorkflows,
+	orchestration factoryruntime.OrchestrationJavaScriptExecution,
+	childValues factoryruntime.JavaScriptChildValues,
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
 	fixtureFiles fileeffects.ContractFixtureReader,
@@ -106,12 +117,15 @@ func NewStandalone(
 			syncWaits,
 			checkpointSummaries,
 			workflows,
-			workflows,
-			workflows,
+			orchestration,
+			childValues,
 			nil,
 			factoryruntime.JavaScriptWorkerSettings{},
 			recordingWriter,
 			generateSessionID,
+			nil,
+			nil,
+			nil,
 		)
 		if err != nil {
 			return nil, err

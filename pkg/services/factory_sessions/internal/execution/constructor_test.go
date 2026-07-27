@@ -29,6 +29,21 @@ type constructorWorkflowContracts struct {
 	factory.JavaScriptChildValues
 }
 
+func (c constructorWorkflowContracts) RunJavaScript(
+	ctx context.Context,
+	req factory.JavaScriptRuntimeRequest,
+	hooks factory.JavaScriptRuntimeHooks,
+) (factory.JavaScriptRuntimeOutcome, error) {
+	return c.Run(ctx, req, hooks)
+}
+
+func (c constructorWorkflowContracts) ResumeJavaScript(
+	summary factory.JavaScriptCompletedCheckpointSummary,
+	records []factory.JavaScriptRuntimeRecord,
+) factory.JavaScriptResumeContext {
+	return c.ResumeContext(summary, records)
+}
+
 // serviceConfig keeps table-driven constructor tests compact without restoring
 // a production dependency bag.
 type serviceConfig struct {
@@ -71,6 +86,7 @@ func newExecutionService(provider ExecutionProvider, config serviceConfig) (Serv
 			config.WorkerSettings,
 			mustTestRecordingWriter(),
 			testSessionIDGenerator,
+			nil, nil, nil,
 		)
 	default:
 		return nil, NewValidationError("provider", "unsupported execution provider")
@@ -119,6 +135,7 @@ func TestNewJavaScriptExecutionServiceRequiresSyncWaitScheduler(t *testing.T) {
 		factory.JavaScriptWorkerSettings{},
 		mustTestRecordingWriter(),
 		testSessionIDGenerator,
+		nil, nil, nil,
 	)
 	if err == nil || !strings.Contains(err.Error(), "sync wait scheduler is required") {
 		t.Fatalf("NewJavaScriptExecutionService error = %v, want missing sync wait scheduler", err)

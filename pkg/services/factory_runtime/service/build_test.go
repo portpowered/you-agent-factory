@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestrationowner"
 	factoryservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -28,7 +29,7 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
 	}
-	bundle, err := factoryservice.NewRuntimeFactory(nil, nil, outputAsPayloadPolicy(), nil, testRuntimeLoggerFactory, nil, nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir).Build(
+	bundle, err := testRuntimeFactory().Build(
 		context.Background(), dir, dir, "~default",
 		"", interfaces.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
@@ -40,6 +41,7 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
 			return nil, nil
 		},
+		testRuntimeWorkers{},
 		nil,
 	)
 	if err != nil {
@@ -69,9 +71,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
 	}
-	bundle, err := factoryservice.NewRuntimeFactory(
-		nil, nil, outputAsPayloadPolicy(), nil, testRuntimeLoggerFactory, testRuntimeLogFactory(logDir), testRuntimeMetricsFactory(metricsDir), testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir).
-		Build(
+	bundle, err := testRuntimeFactoryWithSinks(logDir, metricsDir).Build(
 			context.Background(), dir, dir, "~default",
 			"", interfaces.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
 			logDir, factory.RuntimeLogStorageConfig{},
@@ -82,6 +82,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 			func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
 				return nil, nil
 			},
+			testRuntimeWorkers{},
 			nil,
 		)
 	if err != nil {
@@ -109,7 +110,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		t.Fatal("MetricsSink.Path() = empty")
 	}
 
-	disabledBundle, err := factoryservice.NewRuntimeFactory(nil, nil, outputAsPayloadPolicy(), nil, testRuntimeLoggerFactory, nil, nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir).Build(
+	disabledBundle, err := testRuntimeFactory().Build(
 		context.Background(), dir, dir, "~default",
 		"", interfaces.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
 		logDir, factory.RuntimeLogStorageConfig{},
@@ -122,6 +123,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
 			return nil, nil
 		},
+		testRuntimeWorkers{},
 		nil,
 	)
 	if err != nil {
@@ -138,6 +140,35 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 	}
 }
 
+type testRuntimeWorkers struct{}
+
+func (testRuntimeWorkers) StartWorkstationPool(
+	context.Context,
+	workers.WorkstationPoolStartRequest,
+) (workers.WorkstationPoolStartResult, error) {
+	return workers.WorkstationPoolStartResult{}, nil
+}
+
+func (testRuntimeWorkers) StopWorkstationPool(
+	context.Context,
+) (workers.WorkstationPoolStopResult, error) {
+	return workers.WorkstationPoolStopResult{}, nil
+}
+
+func (testRuntimeWorkers) DispatchWorkstation(
+	context.Context,
+	workers.WorkstationDispatchRequest,
+) (workers.WorkstationDispatchResult, error) {
+	return workers.WorkstationDispatchResult{}, nil
+}
+
+func (testRuntimeWorkers) CancelWorkstationDispatch(
+	context.Context,
+	workers.WorkstationDispatchCancelRequest,
+) (workers.WorkstationDispatchCancelResult, error) {
+	return workers.WorkstationDispatchCancelResult{}, nil
+}
+
 func loadedFactoryFixture(dir string) (interfaces.MutableLoadedFactorySource, error) {
 	payload, err := os.ReadFile(filepath.Join(dir, interfaces.FactoryConfigFile))
 	if err != nil {
@@ -148,6 +179,27 @@ func loadedFactoryFixture(dir string) (interfaces.MutableLoadedFactorySource, er
 		return nil, err
 	}
 	return factorydefinitionfixtures.NewLoadedSource(dir, config, nil, nil)
+}
+
+func testOrchestrationCompilation() factory.OrchestrationCompilation {
+	return factoryruntimeorchestrationowner.NewCompilation(testRuntimeID, nil, nil)
+}
+
+func testRuntimeFactory() *factoryservice.RuntimeFactory {
+	return factoryservice.NewRuntimeFactory(
+		nil, nil, outputAsPayloadPolicy(), nil, testRuntimeLoggerFactory, nil, nil,
+		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
+		testOrchestrationCompilation(),
+	)
+}
+
+func testRuntimeFactoryWithSinks(logDir, metricsDir string) *factoryservice.RuntimeFactory {
+	return factoryservice.NewRuntimeFactory(
+		nil, nil, outputAsPayloadPolicy(), nil, testRuntimeLoggerFactory,
+		testRuntimeLogFactory(logDir), testRuntimeMetricsFactory(metricsDir),
+		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
+		testOrchestrationCompilation(),
+	)
 }
 
 func outputAsPayloadPolicy() interfaces.WorkPropagationPolicyService {

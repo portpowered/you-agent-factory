@@ -86,7 +86,7 @@ func (s *service) GetModelReadiness(
 	if s.readiness == nil {
 		return models.GetModelReadinessResult{}, models.ErrUnavailable
 	}
-	readiness, err := s.readiness(ctx, scopeConfig.Clone(), detail.Clone())
+	readiness, err := s.readiness(ctx, request.Scope, scopeConfig.Clone(), detail.Clone())
 	if err != nil {
 		if contextError := ctx.Err(); contextError != nil {
 			return models.GetModelReadinessResult{}, contextError

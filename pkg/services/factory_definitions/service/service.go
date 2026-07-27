@@ -10,6 +10,8 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
+	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
+	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 )
 
@@ -19,6 +21,7 @@ func New(
 	clock factoryroot.Clock,
 	versionFileSystem factoryroot.VersionFileSystem,
 	validator factorydefinitions.Validator,
+	loadCanonical factorydefinitions.CanonicalFactoryJSONLoader,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	readCurrentFactoryPointer factorydefinitions.CurrentFactoryPointerReader,
 	prepareFactoryLayoutPayload factorydefinitions.FactoryLayoutPayloadPreparer,
@@ -29,9 +32,15 @@ func New(
 	replaceFactoryLayout factorydefinitions.FactoryLayoutReplacer,
 	namedPaths factoryroot.NamedPathResolver,
 	namedFactoryCatalogFileSystem factoryroot.NamedFactoryCatalogFileSystem,
+	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
+	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
+	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) factoryroot.Service {
 	if sessionHost == nil || clock == nil || versionFileSystem == nil ||
-		namedPaths == nil || namedFactoryCatalogFileSystem == nil {
+		namedPaths == nil || namedFactoryCatalogFileSystem == nil ||
+		packagedCatalog.List == nil || packagedCatalog.Resolve == nil ||
+		packagedInstaller.Install == nil {
 		return nil
 	}
 	host, err := factorydefinition.NewHost(
@@ -74,7 +83,23 @@ func New(
 		Paths:      namedPaths,
 		FileSystem: namedFactoryCatalogFileSystem,
 	})
-	definitions := factorydefinition.NewWithCatalog(host, catalogService, versionFileSystem)
+	operations, _ := validator.(factorydefinitions.DefinitionValidationOperation)
+	effective, _ := validator.(factorydefinitions.EffectiveDefinitionValidationOperation)
+	validationService, _ := validationwire.NewService(validationservice.Dependencies{
+		Operations:            operations,
+		Effective:             effective,
+		LoadCanonical:       loadCanonical,
+		RequiredToolChecker:   requiredToolChecker,
+		OrchestratorValidator: orchestratorValidator,
+	})
+	definitions := factorydefinition.NewWithCatalogPackagesValidationAndInstallation(
+		host,
+		catalogService,
+		validationService,
+		packagedCatalog,
+		packagedInstaller,
+		versionFileSystem,
+	)
 	sessionHost.AttachFactoryDefinitions(definitions)
 	return definitions
 }

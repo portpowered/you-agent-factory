@@ -262,12 +262,13 @@ func newExecutionService(provider fse.ExecutionProvider, config executionService
 				LatestResult: checkpointfixtures.ResumableCheckpointSummaryResult(),
 			},
 			workflows,
-			workflows,
+			orchestrationJavaScriptFromWorkflows(workflows),
 			workflows,
 			config.WorkerPresetIDs,
 			config.WorkerSettings,
 			fixtureRecordingWriter(),
 			fixtureSessionID,
+			nil, nil, nil,
 		)
 	default:
 		return nil, fse.NewValidationError("provider", "unsupported execution provider")
@@ -294,9 +295,10 @@ func newConfiguredJavaScriptRuntimeService(config runtimeServiceConfig) *fse.Jav
 			BuildResult:  checkpointSummary,
 			LatestResult: checkpointSummary,
 		},
-		workflows, workflows, workflows,
+		workflows, orchestrationJavaScriptFromWorkflows(workflows), workflows,
 		config.WorkerPresetIDs, config.WorkerSettings, fixtureRecordingWriter(),
 		fixtureSessionID,
+		nil, nil, nil,
 	)
 }
 
@@ -1186,4 +1188,30 @@ func waitForDispatchStatus(
 	}
 	t.Fatalf("dispatch %q did not reach status %q within %s", dispatchID, want, timeout)
 	return fse.DispatchSummary{}
+}
+
+type orchestrationJavaScriptAdapter struct {
+	factory.JavaScriptWorkflowRuntime
+}
+
+func orchestrationJavaScriptFromWorkflows(workflows factory.JavaScriptWorkflows) factory.OrchestrationJavaScriptExecution {
+	if workflows == nil {
+		return nil
+	}
+	return orchestrationJavaScriptAdapter{workflows}
+}
+
+func (a orchestrationJavaScriptAdapter) RunJavaScript(
+	ctx context.Context,
+	req factory.JavaScriptRuntimeRequest,
+	hooks factory.JavaScriptRuntimeHooks,
+) (factory.JavaScriptRuntimeOutcome, error) {
+	return a.Run(ctx, req, hooks)
+}
+
+func (a orchestrationJavaScriptAdapter) ResumeJavaScript(
+	summary factory.JavaScriptCompletedCheckpointSummary,
+	records []factory.JavaScriptRuntimeRecord,
+) factory.JavaScriptResumeContext {
+	return a.ResumeContext(summary, records)
 }

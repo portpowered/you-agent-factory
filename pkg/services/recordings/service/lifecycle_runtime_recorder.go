@@ -10,6 +10,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	canonicalpkg "github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/replay"
 )
 
@@ -178,7 +179,7 @@ func (recorder *lifecycleRuntimeRecorder) recordEventLocked(
 		return nil
 	}
 	event.Context.Sequence = int(recorder.nextSequence)
-	canonical := canonicalEventFromFactory(event, string(recorder.recordingID))
+	canonical := canonicalpkg.CanonicalEventFromFactory(event, string(recorder.recordingID))
 	canonical.Scope = recorder.scope
 	canonical.Sequence = recorder.nextSequence
 	canonical.Cursor.Sequence = recorder.nextSequence

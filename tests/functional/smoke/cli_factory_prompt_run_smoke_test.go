@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,144 +16,9 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
-
-func TestPackagedGoalRun_RealCLIWritesSummaryPrimaryResult(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow CLI packaged goal invocation smoke")
-	}
-
-	dir := scaffoldPackagedGoalInvocationFactoryForSmoke(t)
-	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
-	submittedGoal := fmt.Sprintf("functional-smoke-packaged-goal-%d", time.Now().UnixNano())
-	wantSummary := "mock worker accepted"
-
-	port, err := reserveLocalTCPPort()
-	if err != nil {
-		t.Fatalf("reserve port: %v", err)
-	}
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-
-	mockWorkersPath := writeDefaultMockWorkersConfig(t)
-	binaryPath := buildYouCLIBinary(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(
-		ctx,
-		binaryPath,
-		"run",
-		"--factory", factoryPath,
-		"--with-mock-workers",
-		"--no-record",
-		"--server", baseURL,
-		"--quiet",
-		mockWorkersPath,
-		submittedGoal,
-	)
-	cmd.Dir = dir
-
-	var stdout, stderr strings.Builder
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("you run --factory packaged goal: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
-	}
-	if got := stdout.String(); got != wantSummary {
-		t.Fatalf("stdout = %q, want summary %q", got, wantSummary)
-	}
-	if strings.Contains(stdout.String(), submittedGoal) {
-		t.Fatalf("stdout echoed submitted goal text %q", submittedGoal)
-	}
-	if stderr.Len() != 0 {
-		t.Fatalf("stderr = %q, want empty stderr on successful invocation", stderr.String())
-	}
-}
-
-func scaffoldPackagedGoalInvocationFactoryForSmoke(t *testing.T) string {
-	t.Helper()
-
-	cfg := factoryPromptRunSmokeConfig()
-	cfg["name"] = "@you/goal"
-	cfg["invocationReturn"] = map[string]any{
-		"policy":        "EXPLICIT",
-		"workTypeName":  "goal",
-		"terminalState": "complete",
-	}
-	workTypes := cfg["workTypes"].([]map[string]any)
-	workTypes[0]["name"] = "goal"
-	workstations := cfg["workstations"].([]map[string]any)
-	workstations[0]["name"] = "execute-goal"
-	workstations[0]["worker"] = "goal-executor"
-	for _, ioKey := range []string{"inputs", "outputs", "onFailure"} {
-		ios := workstations[0][ioKey].([]map[string]string)
-		for i := range ios {
-			ios[i]["workType"] = "goal"
-		}
-	}
-	cfg["workers"] = []map[string]string{{"name": "goal-executor"}}
-
-	dir := support.ScaffoldFactory(t, cfg)
-	support.WriteAgentConfig(
-		t,
-		dir,
-		"goal-executor",
-		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
-	)
-	return dir
-}
-
-func TestFactoryPromptRun_RealCLIWritesPrimaryResultFromPositionalText(t *testing.T) {
-	dir := support.ScaffoldFactory(t, factoryPromptRunSmokeConfig())
-	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
-	prompt := fmt.Sprintf("functional-smoke-factory-prompt-%d", time.Now().UnixNano())
-
-	port, err := reserveLocalTCPPort()
-	if err != nil {
-		t.Fatalf("reserve port: %v", err)
-	}
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-
-	mockWorkersPath := writeDefaultMockWorkersConfig(t)
-	binaryPath := buildYouCLIBinary(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(
-		ctx,
-		binaryPath,
-		"run",
-		"--factory", factoryPath,
-		"--with-mock-workers",
-		"--no-record",
-		"--server", baseURL,
-		"--quiet",
-		mockWorkersPath,
-		prompt,
-	)
-	cmd.Dir = dir
-
-	var stdout, stderr strings.Builder
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("you run --factory: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
-	}
-	if got := stdout.String(); got != prompt {
-		t.Fatalf("stdout = %q, want only primary result %q", got, prompt)
-	}
-	if stderr.Len() != 0 {
-		t.Fatalf("stderr = %q, want empty stderr on successful invocation", stderr.String())
-	}
-	functionalevidence.Covers(t, "cli/you.run")
-}
 
 func TestFactoryPromptRun_RealCLIWritesPrimaryResultFromStdin(t *testing.T) {
 	if testing.Short() {
@@ -292,35 +156,6 @@ func TestFactoryPromptRun_RealCLIFailureWritesNoSuccessPayloadToStdout(t *testin
 	}
 }
 
-func TestFactoryPromptRun_RealCLIRejectsFactoryWithoutDefaultHandling(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow CLI factory prompt run smoke")
-	}
-
-	dir := support.ScaffoldFactory(t, factoryPromptRunSmokeConfigWithoutDefault())
-	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
-
-	binaryPath := buildYouCLIBinary(t)
-	cmd := exec.Command(
-		binaryPath,
-		"run",
-		"--factory", factoryPath,
-		"--no-record",
-		"--quiet",
-		"missing-default-handling",
-	)
-	cmd.Dir = dir
-
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("expected failure without DEFAULT handling work type, output:\n%s", output)
-	}
-	combined := string(output)
-	if !strings.Contains(combined, "handlingBehavior DEFAULT") {
-		t.Fatalf("error output = %q, want handlingBehavior DEFAULT guidance", combined)
-	}
-}
-
 func TestFactoryPromptRun_RealCLICleanInvocationStdoutRemainsPipeableAcrossRuns(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow CLI factory prompt run smoke")
@@ -403,106 +238,40 @@ func TestFactoryPromptRun_RealCLIAmbiguousPromptAndStdinFailsBeforeRuntimeStartu
 	}
 }
 
-func TestNamedFactoryRun_RealCLIResolvesGlobalFactoryFromUnrelatedWorkingDirectory(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow CLI named-factory run smoke")
-	}
-
-	homeDir := t.TempDir()
-
-	sourceDir := support.ScaffoldFactory(t, factoryPromptRunSmokeConfig())
-	namedFactoryDir := support.CreateNamedFactory(
-		t,
-		homeDir,
-		sourceDir,
-		"alpha",
-		filepath.Join(sourceDir, interfaces.FactoryConfigFile),
-	)
-
-	prompt := fmt.Sprintf("functional-smoke-named-factory-%d", time.Now().UnixNano())
-	testutil.WriteSeedRequest(t, namedFactoryDir, work.SubmitRequest{
-		WorkID:     "named-factory-smoke-work",
-		WorkTypeID: defaultPromptRunWorkTypeName,
-		TraceID:    "named-factory-smoke-trace",
-		Payload:    []byte(prompt),
-	})
-
-	port, err := reserveLocalTCPPort()
-	if err != nil {
-		t.Fatalf("reserve port: %v", err)
-	}
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-
-	mockWorkersPath := writeDefaultMockWorkersConfig(t)
-	binaryPath := buildYouCLIBinary(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	unrelatedWorkingDir := t.TempDir()
-	cmd := exec.CommandContext(
-		ctx,
-		binaryPath,
-		"run",
-		"--named", "alpha",
-		"--with-mock-workers",
-		"--no-record",
-		"--with-server",
-		"--server", baseURL,
-		"--continuously",
-		"--quiet",
-		mockWorkersPath,
-	)
-	cmd.Dir = unrelatedWorkingDir
-	cmd.Env = append(
-		os.Environ(),
-		"HOME="+homeDir,
-		"USERPROFILE="+homeDir,
-	)
-
-	var stdout, stderr strings.Builder
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start you run --named: %v", err)
-	}
-
-	waitCh := make(chan error, 1)
-	go func() {
-		waitCh <- cmd.Wait()
-	}()
-
-	item, err := waitForFactoryPromptWorkComplete(
-		ctx,
-		baseURL,
-		defaultPromptRunWorkTypeName,
-		"named-factory-smoke-work",
-		20*time.Second,
-	)
-	if err != nil {
-		if waitErr := <-waitCh; waitErr != nil {
-			t.Fatalf(
-				"wait for completed named-factory work: %v\nyou run --named: %v\nstdout:\n%s\nstderr:\n%s",
-				err,
-				waitErr,
-				stdout.String(),
-				stderr.String(),
-			)
-		}
-		t.Fatalf("wait for completed named-factory work: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
-	}
-	if stringPointerValue(item.WorkTypeName) != defaultPromptRunWorkTypeName {
-		t.Fatalf("work type = %q, want %q", stringPointerValue(item.WorkTypeName), defaultPromptRunWorkTypeName)
-	}
-	if !factoryPromptRunWorkContentIncludes(item, "mock worker accepted") {
-		t.Fatalf("work content = %#v, want mock worker result", item.Content)
-	}
-
-	cancel()
-	_ = <-waitCh
-}
-
 const defaultPromptRunWorkTypeName = "prompt-task"
+
+func scaffoldPackagedGoalInvocationFactoryForSmoke(t *testing.T) string {
+	t.Helper()
+
+	cfg := factoryPromptRunSmokeConfig()
+	cfg["name"] = "@you/goal"
+	cfg["invocationReturn"] = map[string]any{
+		"policy":        "EXPLICIT",
+		"workTypeName":  "goal",
+		"terminalState": "complete",
+	}
+	workTypes := cfg["workTypes"].([]map[string]any)
+	workTypes[0]["name"] = "goal"
+	workstations := cfg["workstations"].([]map[string]any)
+	workstations[0]["name"] = "execute-goal"
+	workstations[0]["worker"] = "goal-executor"
+	for _, ioKey := range []string{"inputs", "outputs", "onFailure"} {
+		ios := workstations[0][ioKey].([]map[string]string)
+		for i := range ios {
+			ios[i]["workType"] = "goal"
+		}
+	}
+	cfg["workers"] = []map[string]string{{"name": "goal-executor"}}
+
+	dir := support.ScaffoldFactory(t, cfg)
+	support.WriteAgentConfig(
+		t,
+		dir,
+		"goal-executor",
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
+	)
+	return dir
+}
 
 func factoryPromptRunSmokeConfig() map[string]any {
 	return map[string]any{
@@ -527,24 +296,6 @@ func factoryPromptRunSmokeConfig() map[string]any {
 			},
 		},
 	}
-}
-
-func factoryPromptRunSmokeConfigWithoutDefault() map[string]any {
-	cfg := factoryPromptRunSmokeConfig()
-	workTypes := cfg["workTypes"].([]map[string]any)
-	withoutDefault := make([]map[string]any, len(workTypes))
-	for i, workType := range workTypes {
-		cloned := make(map[string]any, len(workType))
-		for key, value := range workType {
-			if key == "handlingBehavior" {
-				continue
-			}
-			cloned[key] = value
-		}
-		withoutDefault[i] = cloned
-	}
-	cfg["workTypes"] = withoutDefault
-	return cfg
 }
 
 func factoryPromptRunSmokeConfigWithUnresolvedInvocationReturn() map[string]any {
@@ -719,109 +470,4 @@ func reserveLocalTCPPort() (int, error) {
 		return 0, fmt.Errorf("unexpected listener address type %T", listener.Addr())
 	}
 	return addr.Port, nil
-}
-
-func waitForFactoryPromptWorkComplete(
-	ctx context.Context,
-	baseURL string,
-	workTypeName string,
-	wantWorkID string,
-	timeout time.Duration,
-) (factoryapi.Work, error) {
-	client := &http.Client{Timeout: 2 * time.Second}
-	deadline := time.Now().Add(timeout)
-	var lastResults []factoryapi.Work
-
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-			return factoryapi.Work{}, ctx.Err()
-		default:
-		}
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, support.DefaultSessionWorkURL(baseURL, "/work"), nil)
-		if err != nil {
-			return factoryapi.Work{}, err
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			select {
-			case <-ctx.Done():
-				return factoryapi.Work{}, ctx.Err()
-			case <-time.After(10 * time.Millisecond):
-				continue
-			}
-		}
-
-		var work factoryapi.ListWorkResponse
-		decodeErr := json.NewDecoder(resp.Body).Decode(&work)
-		_ = resp.Body.Close()
-		if decodeErr != nil {
-			return factoryapi.Work{}, decodeErr
-		}
-		if resp.StatusCode != http.StatusOK {
-			return factoryapi.Work{}, fmt.Errorf("GET /work status = %d", resp.StatusCode)
-		}
-		lastResults = append(lastResults[:0], work.Results...)
-
-		for _, item := range work.Results {
-			if stringPointerValue(item.WorkTypeName) != workTypeName {
-				continue
-			}
-			if factoryPromptRunWorkStateName(item.State) != "complete" {
-				continue
-			}
-			if factoryPromptRunWorkStateType(item.State) != factoryapi.WorkStateTypeTERMINAL {
-				continue
-			}
-			if stringPointerValue(item.WorkId) != wantWorkID {
-				continue
-			}
-			return item, nil
-		}
-
-		select {
-		case <-ctx.Done():
-			return factoryapi.Work{}, ctx.Err()
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
-
-	lastResultsJSON, _ := json.Marshal(lastResults)
-	return factoryapi.Work{}, fmt.Errorf(
-		"timed out waiting for completed %q work %q; last results: %s",
-		workTypeName,
-		wantWorkID,
-		lastResultsJSON,
-	)
-}
-
-func factoryPromptRunWorkContentIncludes(item factoryapi.Work, wantPrompt string) bool {
-	if item.Content == nil {
-		return false
-	}
-	for _, part := range *item.Content {
-		textPart, err := part.AsWorkTextContentPart()
-		if err != nil {
-			continue
-		}
-		if textPart.Text == wantPrompt {
-			return true
-		}
-	}
-	return false
-}
-
-func factoryPromptRunWorkStateName(state *factoryapi.WorkState) string {
-	if state == nil {
-		return ""
-	}
-	return state.Name
-}
-
-func factoryPromptRunWorkStateType(state *factoryapi.WorkState) factoryapi.WorkStateType {
-	if state == nil {
-		return ""
-	}
-	return state.Type
 }

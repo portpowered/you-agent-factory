@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-func validateLiveChildProviderExecutor(mode string, executor workers.InvocationExecutor) error {
-	if mode == ChildExecutorModeLive && executor == nil {
+func validateLiveChildProviderExecutor(mode string, executor workers.InvocationExecutor, liveChildInvocation LiveChildInvocationFactory) error {
+	if mode == ChildExecutorModeLive && executor == nil && liveChildInvocation == nil {
 		return NewValidationError("runtime.childExecutorMode", "worker invocation executor is required for live child execution")
 	}
 	return nil
@@ -75,7 +75,7 @@ func PrepareStart(
 	if err != nil {
 		return PreparedStart{}, err
 	}
-	if err := validateResolvedSourceContent(resolution, workflows); err != nil {
+	if err := validateResolvedSourceContent(normalized.Source, resolution, workflows); err != nil {
 		return PreparedStart{}, err
 	}
 	if err := workflows.ValidateArgs(resolution.ArgsSchema, normalized.Args); err != nil {
@@ -104,10 +104,7 @@ func PrepareStart(
 	}
 
 	executableSource := strings.TrimSpace(resolution.Content)
-	loaded, loadIssues := workflows.LoadSource(factory.WorkflowValidationLoadRequest{
-		SourceRef: resolution.SourceRef,
-		Content:   executableSource,
-	})
+	loaded, loadIssues := workflows.LoadSource(workflowValidationLoadRequest(normalized.Source, resolution, executableSource))
 	if len(loadIssues) > 0 {
 		return PreparedStart{}, validationErrorFromSourceIssues(loadIssues)
 	}
@@ -210,6 +207,7 @@ func applyInlineFactoryDeclaration(resolution *factory.WorkflowSourceResolution,
 }
 
 func validateResolvedSourceContent(
+	source Source,
 	resolution factory.WorkflowSourceResolution,
 	workflows factory.JavaScriptWorkflowDefinitions,
 ) error {
@@ -218,10 +216,7 @@ func validateResolvedSourceContent(
 		return NewValidationError("source", "workflow source content is empty")
 	}
 
-	loaded, loadIssues := workflows.LoadSource(factory.WorkflowValidationLoadRequest{
-		SourceRef: resolution.SourceRef,
-		Content:   content,
-	})
+	loaded, loadIssues := workflows.LoadSource(workflowValidationLoadRequest(source, resolution, content))
 	if len(loadIssues) > 0 {
 		return validationErrorFromSourceIssues(loadIssues)
 	}
@@ -234,13 +229,34 @@ func validateResolvedSourceContent(
 		ArgsSchema: resolution.ArgsSchema,
 	})
 	if validationResult.HasIssues() {
-		return validationErrorFromSourceIssues(validationResult.Issues)
+		return validationErrorFromSourceIssues(remapWrappedValidationIssues(validationResult.Issues, loaded))
 	}
 	return nil
 }
 
 func wrapWorkflowSourceForValidation(source string) string {
 	return "(function(){\n" + source + "\n})()"
+}
+
+func remapWrappedValidationIssues(
+	issues []factory.WorkflowValidationIssue,
+	loaded factory.WorkflowValidationLoadedSource,
+) []factory.WorkflowValidationIssue {
+	if len(issues) == 0 {
+		return issues
+	}
+	out := make([]factory.WorkflowValidationIssue, len(issues))
+	for i, issue := range issues {
+		out[i] = issue
+		line := issue.Line
+		if line > 1 {
+			line--
+		}
+		if line > 0 {
+			out[i].Line = loaded.RemapLine(line)
+		}
+	}
+	return out
 }
 
 func validateStartArgs(args map[string]any) error {
@@ -276,6 +292,9 @@ func validationErrorFromSourceIssues(issues []factory.WorkflowValidationIssue) e
 		message = "workflow source validation failed"
 	}
 	message += issue.LocationSuffix()
+	if code := strings.TrimSpace(issue.Code); code != "" {
+		message = fmt.Sprintf("[%s] %s", code, message)
+	}
 	return NewValidationError("source", message)
 }
 

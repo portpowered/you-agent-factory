@@ -175,7 +175,7 @@ func canonicalProjectionFact(
 			StreamGenerationID: "gen-1",
 			Sequence:           sequence,
 		},
-		Kind:    "QUERY_CONTRACT_NOOP",
+		Kind:    recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeRunResponse),
 		Payload: `{}`,
 		RecordedAt: time.Unix(
 			1_700_000_000+int64(sequence),

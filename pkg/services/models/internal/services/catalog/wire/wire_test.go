@@ -12,7 +12,7 @@ func TestNewServiceIsInert(t *testing.T) {
 	t.Parallel()
 
 	scopes := panicScopes{}
-	readiness := func(context.Context, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+	readiness := func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
 		panic("readiness query called during catalog construction")
 	}
 	service, err := NewService(scopes, readiness)

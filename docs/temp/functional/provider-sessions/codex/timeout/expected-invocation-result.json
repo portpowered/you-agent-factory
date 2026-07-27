@@ -1,0 +1,5 @@
+{
+  "failureReason": "timeout",
+  "message": "Codex request timed out.",
+  "ok": false
+}
