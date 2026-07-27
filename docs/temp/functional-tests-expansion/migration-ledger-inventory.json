@@ -5021,9 +5021,9 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/transport/mcp_serve/resolved_serve_handler_test.go",
-      "package": "you-agent-factory/tests/functional/transport/mcp_serve",
-      "scenario": "TestProcessMCPServe_RuntimeRejectsMissingHomeEnvironment",
+      "source_path": "tests/functional/transport/mcp/stdio/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/transport/mcp/stdio",
+      "scenario": "TestMCPDiscoveryContainsCanonicalFactorySessionTools",
       "lane": "short",
       "destination": "tests/functional/transport/mcp/stdio/discovery_test.go",
       "catch_all": "none",
@@ -5031,9 +5031,9 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/transport/mcp_serve/resolved_serve_handler_test.go",
-      "package": "you-agent-factory/tests/functional/transport/mcp_serve",
-      "scenario": "TestResolvedServeHandler_FixtureAndRuntimePathsReachInitializer",
+      "source_path": "tests/functional/transport/mcp/stdio/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/transport/mcp/stdio",
+      "scenario": "TestMCPStdioFixtureAndRuntimePathsReachInitializer",
       "lane": "short",
       "destination": "tests/functional/transport/mcp/stdio/discovery_test.go",
       "catch_all": "none",
@@ -5041,9 +5041,9 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/transport/mcp_serve/resolved_serve_handler_test.go",
-      "package": "you-agent-factory/tests/functional/transport/mcp_serve",
-      "scenario": "TestResolvedServeHandler_ReportsMissingCanonicalInputsBeforeInitializer",
+      "source_path": "tests/functional/transport/mcp/stdio/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/transport/mcp/stdio",
+      "scenario": "TestMCPStdioInitializeAndToolDiscovery",
       "lane": "short",
       "destination": "tests/functional/transport/mcp/stdio/discovery_test.go",
       "catch_all": "none",
@@ -5051,9 +5051,29 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/transport/mcp_serve/resolved_serve_handler_test.go",
-      "package": "you-agent-factory/tests/functional/transport/mcp_serve",
-      "scenario": "TestResolvedServeHandler_RequiresInjectedDependencies",
+      "source_path": "tests/functional/transport/mcp/stdio/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/transport/mcp/stdio",
+      "scenario": "TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot",
+      "lane": "short",
+      "destination": "tests/functional/transport/mcp/stdio/discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/mcp/stdio/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/transport/mcp/stdio",
+      "scenario": "TestMCPStdioRuntimeRejectsMissingHomeEnvironment",
+      "lane": "short",
+      "destination": "tests/functional/transport/mcp/stdio/discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/mcp/stdio/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/transport/mcp/stdio",
+      "scenario": "TestMCPUnknownToolReturnsProtocolError",
       "lane": "short",
       "destination": "tests/functional/transport/mcp/stdio/discovery_test.go",
       "catch_all": "none",

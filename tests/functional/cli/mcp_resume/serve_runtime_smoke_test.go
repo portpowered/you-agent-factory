@@ -25,7 +25,6 @@ func TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult(t *testing.T) {
 	projectRoot := runtimeSmokeProjectRoot(t)
 	client, shutdown, serveErr := startRunServeRuntimeSmokeServer(t, projectRoot)
 	assertInstallSmokeInitialize(t, client)
-	assertInstallSmokeDiscovery(t, client)
 
 	sessionID := assertRuntimeSmokeAsyncStart(t, client)
 	assertRuntimeSmokePollObservesRunningOrTerminal(t, client, sessionID)
