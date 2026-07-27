@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 var publishedCatalogNames = []string{
@@ -53,11 +54,25 @@ func TestLoadPublishedDefinitionCatalogReturnsExactDetachedGeneratedDefinitions(
 		if definition.Project != entry.Project || !reflect.DeepEqual(definition.JSON, want) {
 			t.Fatalf("definition %q does not preserve manifest identity and exact generated JSON bytes", definition.Name)
 		}
+		wantYAML, err := fs.ReadFile(packagedfactories.Published(), entry.YAML.Locator)
+		if err != nil {
+			t.Fatalf("read published %s: %v", entry.YAML.Locator, err)
+		}
+		if !reflect.DeepEqual(definition.YAML, wantYAML) ||
+			!reflect.DeepEqual(definition.Formats, []factorydefinitions.PackagedFactoryFormat{
+				factorydefinitions.PackagedFactoryFormatJSON,
+				factorydefinitions.PackagedFactoryFormatYAML,
+			}) {
+			t.Fatalf("definition %q does not preserve published format metadata", definition.Name)
+		}
 	}
 
 	definitions[0].JSON[0] = 'x'
+	definitions[0].YAML[0] = 'x'
+	definitions[0].Formats[0] = "changed"
 	again := catalog.All()
-	if again[0].JSON[0] == 'x' {
+	if again[0].JSON[0] == 'x' || again[0].YAML[0] == 'x' ||
+		again[0].Formats[0] != "JSON" {
 		t.Fatal("All() returned shared mutable definition bytes")
 	}
 	lookup, ok := catalog.Lookup("@you/goal")

@@ -32,6 +32,8 @@ type Service struct {
 	catalog.Service
 	host              Host
 	versionFileSystem factoryroot.VersionFileSystem
+	packagedCatalog   factoryroot.PackagedFactoryCatalogOperations
+	packagedInstaller factoryroot.PackagedFactoryInstallationOperations
 }
 
 type nonCatalogDefaults interface {
@@ -48,6 +50,7 @@ type nonCatalogDefaults interface {
 	PrepareFactorySnapshotImport(context.Context, factoryroot.PrepareFactorySnapshotImportRequest) (factoryroot.PrepareFactorySnapshotImportResult, error)
 	MaterializeFactorySnapshot(context.Context, factoryroot.MaterializeFactorySnapshotRequest) (factoryroot.MaterializeFactorySnapshotResult, error)
 	ListBuiltInPackagedFactories(context.Context, factoryroot.ListBuiltInPackagedFactoriesRequest) (factoryroot.ListBuiltInPackagedFactoriesResult, error)
+	ResolveBuiltInPackagedFactory(context.Context, factoryroot.ResolveBuiltInPackagedFactoryRequest) (factoryroot.ResolveBuiltInPackagedFactoryResult, error)
 	InstallPackagedFactory(context.Context, factoryroot.InstallPackagedFactoryRequest) (factoryroot.InstallPackagedFactoryResult, error)
 	CreateFactoryScaffold(context.Context, factoryroot.CreateFactoryScaffoldRequest) (factoryroot.CreateFactoryScaffoldResult, error)
 }
@@ -76,6 +79,103 @@ func NewWithCatalog(
 	service := New(host, versionFileSystems...)
 	service.Service = catalogService
 	return service
+}
+
+// NewWithCatalogAndPackages constructs the Definitions root collaborator with
+// both persisted and embedded catalog operations.
+func NewWithCatalogAndPackages(
+	host Host,
+	catalogService catalog.Service,
+	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
+	versionFileSystems ...factoryroot.VersionFileSystem,
+) *Service {
+	service := NewWithCatalog(host, catalogService, versionFileSystems...)
+	service.packagedCatalog = packagedCatalog
+	return service
+}
+
+// NewWithCatalogPackagesAndInstallation constructs the complete Definitions
+// root collaborator for catalog selection and canonical packaged installation.
+func NewWithCatalogPackagesAndInstallation(
+	host Host,
+	catalogService catalog.Service,
+	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
+	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
+	versionFileSystems ...factoryroot.VersionFileSystem,
+) *Service {
+	service := NewWithCatalogAndPackages(
+		host,
+		catalogService,
+		packagedCatalog,
+		versionFileSystems...,
+	)
+	service.packagedInstaller = packagedInstaller
+	return service
+}
+
+func (s *Service) ListBuiltInPackagedFactories(
+	ctx context.Context,
+	request factoryroot.ListBuiltInPackagedFactoriesRequest,
+) (factoryroot.ListBuiltInPackagedFactoriesResult, error) {
+	if s == nil || s.packagedCatalog.List == nil {
+		return factoryroot.UnimplementedService{}.ListBuiltInPackagedFactories(ctx, request)
+	}
+	return s.packagedCatalog.ListBuiltInPackagedFactories(ctx, request)
+}
+
+func (s *Service) ResolveBuiltInPackagedFactory(
+	ctx context.Context,
+	request factoryroot.ResolveBuiltInPackagedFactoryRequest,
+) (factoryroot.ResolveBuiltInPackagedFactoryResult, error) {
+	if s == nil || s.packagedCatalog.Resolve == nil {
+		return factoryroot.UnimplementedService{}.ResolveBuiltInPackagedFactory(ctx, request)
+	}
+	return s.packagedCatalog.ResolveBuiltInPackagedFactory(ctx, request)
+}
+
+func (s *Service) InstallPackagedFactory(
+	ctx context.Context,
+	request factoryroot.InstallPackagedFactoryRequest,
+) (factoryroot.InstallPackagedFactoryResult, error) {
+	if err := ctx.Err(); err != nil {
+		return factoryroot.InstallPackagedFactoryResult{}, err
+	}
+	if err := factoryroot.ValidateInstallPackagedFactoryRequest(request); err != nil {
+		return factoryroot.InstallPackagedFactoryResult{}, err
+	}
+	resolved, err := s.ResolveBuiltInPackagedFactory(
+		ctx,
+		factoryroot.ResolveBuiltInPackagedFactoryRequest{Name: request.Name},
+	)
+	if err != nil {
+		return factoryroot.InstallPackagedFactoryResult{}, err
+	}
+	if s == nil || s.packagedInstaller.Install == nil {
+		return factoryroot.InstallPackagedFactoryResult{},
+			fmt.Errorf("%w: packaged Factory installation collaborator is required",
+				factoryroot.ErrFactoryDistributeFailed)
+	}
+	installed, err := s.packagedInstaller.InstallPackagedFactory(
+		ctx,
+		factoryroot.PackagedFactoryInstallParams{
+			NamedFactoriesRoot: request.RootDir,
+			Definition:         resolved.Definition,
+			Format:             request.Format,
+			Replace:            request.Replace,
+		},
+	)
+	if err != nil {
+		return factoryroot.InstallPackagedFactoryResult{},
+			fmt.Errorf("%w: %w", factoryroot.ErrFactoryDistributeFailed, err)
+	}
+	return factoryroot.InstallPackagedFactoryResult{
+		Definition: factoryroot.DistributedFactoryDefinitionFacts{
+			Name:       installed.Name,
+			FactoryDir: installed.FactoryDir,
+		},
+		Outcome: installed.Outcome,
+		Format:  installed.Format,
+	}, nil
 }
 
 // Save coordinates the session-scoped definition submission pipeline for the

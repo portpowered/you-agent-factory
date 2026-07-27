@@ -26,6 +26,7 @@ const functionalServerReadyTimeout = 5 * time.Second
 // exactly as it is for a real CLI invocation.
 type FunctionalAPIServerConfig struct {
 	FactoryDir                string
+	FactoryConfigPath         string
 	WorkingDirectory          string
 	UseMockWorkers            bool
 	MockWorkersConfig         *workers.MockWorkersConfig
@@ -128,10 +129,14 @@ func StartFunctionalAPIServiceModeServer(t *testing.T, factoryDir string, useMoc
 func functionalRunArgs(t *testing.T, cfg FunctionalAPIServerConfig) []string {
 	t.Helper()
 	args := []string{
-		"--dir", cfg.FactoryDir,
 		"--continuously",
 		"--with-server",
 		"--quiet",
+	}
+	if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
+		args = append(args, "--factory", cfg.FactoryConfigPath)
+	} else {
+		args = append(args, "--dir", cfg.FactoryDir)
 	}
 	if !containsFunctionalArgument(cfg.Args, "--record") {
 		args = append(args, "--no-record")

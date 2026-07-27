@@ -749,8 +749,10 @@ func TestInitCommand_HelpDocumentsProviderModelSetup(t *testing.T) {
 		"Configure provider and model defaults",
 		"--provider",
 		"--model",
-		"provider must be registered",
-		"any non-empty model identifier",
+		"registered default model provider",
+		"optional non-empty free-form default model identifier",
+		"--package",
+		"packaged Factory",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("init help missing %q:\n%s", want, help)

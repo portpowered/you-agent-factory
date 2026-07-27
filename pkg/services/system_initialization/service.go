@@ -86,3 +86,4 @@ func (functions OperatorSettingsFunctions) EnsureLocalBackendScope(path string) 
 }
 
 type PackagedFactoryInstaller = factorydefinitions.PackagedFactoryInstaller
+type PackagedFactoryCatalogOperations = factorydefinitions.PackagedFactoryCatalogOperations

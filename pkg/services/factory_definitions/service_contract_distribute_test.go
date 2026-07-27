@@ -17,6 +17,24 @@ func (p fakeDefinitionsPeer) ListBuiltInPackagedFactories(
 	return factorydefinitions.ListBuiltInPackagedFactoriesResult{Entries: entries}, nil
 }
 
+func (p fakeDefinitionsPeer) ResolveBuiltInPackagedFactory(
+	_ context.Context,
+	request factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
+) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
+	for _, entry := range p.builtIns {
+		if entry.Name == request.Name {
+			return factorydefinitions.ResolveBuiltInPackagedFactoryResult{
+				Definition: factorydefinitions.PackagedDefinition{
+					Name: entry.Name, Project: entry.Project,
+					Formats: append([]factorydefinitions.PackagedFactoryFormat(nil), entry.Formats...),
+				},
+				Formats: append([]factorydefinitions.PackagedFactoryFormat(nil), entry.Formats...),
+			}, nil
+		}
+	}
+	return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, factorydefinitions.ErrUnknownPackagedFactoryIdentity
+}
+
 func (p fakeDefinitionsPeer) InstallPackagedFactory(
 	_ context.Context,
 	request factorydefinitions.InstallPackagedFactoryRequest,

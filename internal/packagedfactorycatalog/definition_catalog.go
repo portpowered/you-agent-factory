@@ -79,6 +79,11 @@ func LoadDefinitionCatalog(source fs.FS) (DefinitionCatalog, error) {
 			Name:    entry.PublicName,
 			Project: entry.Project,
 			JSON:    append([]byte(nil), jsonPayload...),
+			YAML:    append([]byte(nil), yamlPayload...),
+			Formats: []factorydefinitions.PackagedFactoryFormat{
+				factorydefinitions.PackagedFactoryFormatJSON,
+				factorydefinitions.PackagedFactoryFormatYAML,
+			},
 		})
 	}
 	if len(definitions) == 0 {
@@ -121,5 +126,7 @@ func (catalog DefinitionCatalog) Lookup(name string) (factorydefinitions.Package
 
 func clonePackagedDefinition(definition factorydefinitions.PackagedDefinition) factorydefinitions.PackagedDefinition {
 	definition.JSON = append([]byte(nil), definition.JSON...)
+	definition.YAML = append([]byte(nil), definition.YAML...)
+	definition.Formats = append([]factorydefinitions.PackagedFactoryFormat(nil), definition.Formats...)
 	return definition
 }

@@ -775,8 +775,19 @@ response-stream output.
 - Public provider/model setup enters through the manifest-derived `you init`
   handler in `pkg/transports/cli/commandregistry`, which translates stable
   `you.init.flag.provider` and `you.init.flag.model` inputs into the narrow
-  `pkg/transports/cli/initsetup.Config` request. The initsetup adapter owns
-  home-to-config-path translation, prompt rendering, and human output. Enable
+  `pkg/transports/cli/initsetup.Config` request. Packaged Factory installation
+  enters through the same handler when `you.init.flag.package` is supplied,
+  delegating to `pkg/services/factory_definitions/transports/cli` and the shared
+  `InstallPackagedFactory` operation. The initsetup adapter owns
+  home-to-config-path translation, prompt rendering, and human output. Product
+  portability evidence for init-materialized packaged Factories belongs in
+  `tests/functional/product/packaged_factory_portability`: initialize through
+  `you init --package`, assert restored split-layout assets and portable paths,
+  then invoke from an unrelated working directory outside the repository.
+  Functional API-server fixtures that materialize YAML/YML authored roots must
+  set `support.FunctionalAPIServerConfig.FactoryConfigPath` instead of relying
+  on `--dir`, because `--factory` and `--dir` are mutually exclusive at the CLI
+  boundary. Enable
   prompts only from the invocation-local stdin/stdout TTY classifications on
   the process context, pass Cobra's invocation-local input/output streams, and
   preserve cancellation from that same context; do not inspect host streams in
@@ -800,7 +811,8 @@ response-stream output.
 - Root-built functional fixtures that execute initializer-owned commands must
   use an invocation-local HOME/USERPROFILE and explicit Factory test data.
   Environment overrides follow last-value-wins process semantics. Do not
-  bootstrap fixtures through the retired `you init --dir` scaffold path or let
+  bootstrap fixtures through the retired `you init --type`/`--executor` scaffold
+  path or let
   parallel packages share one mutable customer home.
 - JavaScript packaged factories keep authored workflow files in the package
   definition's `scripts/` assets and assemble them through
@@ -1544,8 +1556,9 @@ response-stream output.
   Later S24 scenario stories should compose scenario assertions on top of this
   package rather than re-building binary/home/log wiring in each test file.
 - `packages/packaged-factories/factories/` owns authored Factory sources and
-  `internal/packagedfactorycatalog` owns manifest-derived backend lookup; config
-  initialization is the only catalog-to-disk installation boundary. Named
+  `internal/packagedfactorycatalog` owns manifest-derived backend lookup;
+  `pkg/services/factory_definitions` owns public-name selection and the
+  catalog-to-disk installation boundary. Named
   resolution in `pkg/config/layout.go` reads project-local then global disk
   state only; it does not install packages or expose compatibility JSON aliases.
   `pkg/services/factory_definitions/packages/packageassets` is the shared,
@@ -1560,13 +1573,24 @@ response-stream output.
   assembly rejects unsafe or duplicate canonical bundled targets before the
   payload can reach config initialization. The assembler attaches exact asset
   bytes but does not install or persist anything.
-  `pkg/initializer/configinit` passes each missing assembled catalog payload
-  through the injected Factory Definitions `Persistence` boundary. That shared
-  persistence path materializes `SCRIPT` entries at mode `0755`, writes only
-  thin UTF-8 bundled-file metadata to `factory.json`, and validates the staged
-  runtime before publishing the named-factory directory. Existing valid package
-  directories are loaded read-only and skipped as a whole, so later init runs
-  do not normalize permissions or replace operator-edited scripts. At runtime,
+  `pkg/services/factory_definitions/packagedinstallation` passes each selected
+  detached catalog payload through the injected Factory Definitions
+  `Persistence` boundary. Bootstrap and customer selection share this
+  materializer. The prepared layout carries an explicit safe root filename so
+  an accepted JSON, YAML, or YML selection writes exactly one `factory.json`,
+  `factory.yaml`, or `factory.yml` while the omitted/default selection remains
+  JSON. That shared persistence path materializes `SCRIPT` entries at mode
+  `0755`, writes only thin UTF-8 bundled-file metadata to the selected root
+  definition, and validates the staged runtime before publishing the
+  named-factory directory. Existing valid package directories are loaded
+  read-only and skipped as a whole when the requested authored-root format
+  matches the committed layout, so later init runs do not normalize
+  permissions or replace operator-edited scripts. Alternate format selection
+  without explicit replacement returns `ErrNamedFactoryAlreadyExists`, while
+  accepted replacement uses the same atomic `ReplaceNamedFactory` path and
+  reports a `replaced` outcome. Package selection combined with scaffold-specific
+  inputs is rejected by `ValidateInstallPackagedFactoryRequest` before catalog
+  lookup or filesystem effects begin.
   `pkg/workers/executor.ScriptExecutor` resolves portable `scripts/**` commands
   (and legacy `factory/scripts/**` references) against the active runtime
   configuration's factory directory before using the generic subprocess path;

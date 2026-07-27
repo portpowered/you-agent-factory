@@ -105,6 +105,7 @@
     "pkg/services/factory_definitions/service",
     "pkg/services/factory_definitions/snapshotcapture",
     "pkg/services/factory_definitions/ttsobservability",
+    "pkg/services/factory_definitions/transports/cli",
     "pkg/services/factory_definitions/validation",
     "pkg/services/factory_definitions/wire/defaultscaffold",
     "pkg/services/factory_definitions/workers",
@@ -714,6 +715,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/ttsobservability",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/transports/cli",
       "disposition": "retain",
       "destination": "factory_definitions"
     },
