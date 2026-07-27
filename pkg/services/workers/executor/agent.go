@@ -60,7 +60,7 @@ func NewAgentExecutor(
 // and the shared runner execution contract.
 func NewAgentExecutorWithRunner(
 	runtimeConfig interfaces.RuntimeDefinitionLookup,
-	runner Runner,
+	runner workerexecution.Runner,
 	logger logging.Logger,
 	clock func() time.Time,
 	retryRandom platformrandom.Source,
@@ -551,7 +551,7 @@ type providerRunnerAdapter struct {
 }
 
 type runnerProviderAdapter struct {
-	inner Runner
+	inner workerexecution.Runner
 }
 
 func (a runnerProviderAdapter) Infer(ctx context.Context, request workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
@@ -567,7 +567,7 @@ func (a runnerProviderAdapter) Infer(ctx context.Context, request workerexecutio
 
 // RunnerFromProvider adapts a legacy provider implementation onto the shared
 // runner execution contract.
-func RunnerFromProvider(provider providercontract.Provider) Runner {
+func RunnerFromProvider(provider providercontract.Provider) workerexecution.Runner {
 	return providerRunnerAdapter{executor: workerinvocation.NewExecutor(provider)}
 }
 

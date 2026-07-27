@@ -2,7 +2,13 @@
 // implementations. Peer services consume only the Workers root service.
 package runners
 
-import "github.com/portpowered/infinite-you/pkg/services/workers"
+import (
+	"time"
+
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+)
+
+const ScriptIdentity = "script"
 
 // Registration explicitly associates one canonical identity and metadata
 // snapshot with its common Workers Runner implementation.
@@ -25,6 +31,23 @@ type Binding struct {
 	Identity string
 	Metadata workers.RunnerMetadata
 	Runner   workers.Runner
+}
+
+// ScriptConfig is the private registry construction input for one configured
+// Script Runner. The implementation translates it into its own immutable state.
+type ScriptConfig struct {
+	Command          string
+	Args             []string
+	FactoryDirectory string
+}
+
+// ScriptDependencies are the exact effects projected into one Script Runner.
+type ScriptDependencies struct {
+	CommandRunner workers.CommandRunner
+	FactoryDocs   workers.FactoryDocsLoader
+	Now           func() time.Time
+	Publish       workers.ProgressPublisher
+	Record        workers.ScriptEventRecorder
 }
 
 // Service resolves immutable runner registrations without executing or

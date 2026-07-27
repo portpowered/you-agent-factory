@@ -338,6 +338,66 @@ func TestExecCommandRunner_ContextCancelTerminatesSpawnedChildProcess(t *testing
 	}
 }
 
+func TestExecCommandRunner_InterruptionPreventsDelayedDescendantSideEffect(t *testing.T) {
+	t.Run("cancellation", func(t *testing.T) {
+		assertInterruptionPreventsDelayedSideEffect(t, false)
+	})
+	t.Run("deadline", func(t *testing.T) {
+		assertInterruptionPreventsDelayedSideEffect(t, true)
+	})
+}
+
+func assertInterruptionPreventsDelayedSideEffect(t *testing.T, deadline bool) {
+	t.Helper()
+	requireProcessIntegration(t)
+	tempDir := t.TempDir()
+	pidFile := filepath.Join(tempDir, "child.pid")
+	sideEffectFile := filepath.Join(tempDir, "delayed-side-effect")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if deadline {
+		ctx, cancel = context.WithTimeout(context.Background(), 500*time.Millisecond)
+	}
+	defer cancel()
+	runDone := make(chan error, 1)
+	go func() {
+		_, err := testExecCommandRunner(t, nil).Run(ctx, CommandRequest{
+			Command: os.Args[0],
+			Args: []string{
+				"-test.run=TestExecCommandRunner_HelperProcess",
+				"--",
+				"spawn-child-side-effect",
+			},
+			Env: append(os.Environ(),
+				"GO_WANT_COMMAND_HELPER=1",
+				"COMMAND_HELPER_PID_FILE="+pidFile,
+				"COMMAND_HELPER_SIDE_EFFECT_FILE="+sideEffectFile,
+			),
+		})
+		runDone <- err
+	}()
+
+	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
+	t.Cleanup(func() {
+		commandTestTerminateProcess(childPID)
+	})
+	if !deadline {
+		cancel()
+	}
+	err := <-runDone
+	wantErr := context.Canceled
+	if deadline {
+		wantErr = context.DeadlineExceeded
+	}
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Run error = %v, want %v", err, wantErr)
+	}
+	time.Sleep(time.Second)
+	if _, statErr := os.Stat(sideEffectFile); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("delayed descendant side effect exists after Run returned: %v", statErr)
+	}
+}
+
 func TestExecCommandRunner_PostRunCleanupWaitsForParentWait(t *testing.T) {
 	requireProcessIntegration(t)
 	if runtime.GOOS == "windows" {
@@ -733,16 +793,10 @@ func TestExecCommandRunner_HelperProcess(t *testing.T) {
 	case "sleep":
 		time.Sleep(time.Second)
 		os.Exit(0)
-	case "spawn-child":
-		spawnCommandHelperChild()
-		time.Sleep(10 * time.Second)
-		os.Exit(0)
-	case "spawn-child-success":
-		spawnCommandHelperChild()
-		os.Exit(0)
-	case "child-sleep":
-		time.Sleep(10 * time.Second)
-		os.Exit(0)
+	case "spawn-child", "spawn-child-success", "spawn-child-side-effect":
+		runCommandHelperSpawnMode(mode)
+	case "child-sleep", "delayed-side-effect":
+		runCommandHelperChildMode(mode)
 	case "pid-sleep":
 		if os.Getenv("COMMAND_HELPER_PID_WRITTEN_BY_PARENT") != "1" {
 			writeCommandHelperPID()
@@ -763,6 +817,31 @@ func TestExecCommandRunner_HelperProcess(t *testing.T) {
 		fmt.Fprintf(os.Stderr, "unknown helper mode %q\n", mode)
 		os.Exit(2)
 	}
+}
+
+func runCommandHelperSpawnMode(mode string) {
+	childMode := "child-sleep"
+	if mode == "spawn-child-side-effect" {
+		childMode = "delayed-side-effect"
+	}
+	spawnCommandHelperChildMode(childMode)
+	if mode != "spawn-child-success" {
+		time.Sleep(10 * time.Second)
+	}
+	os.Exit(0)
+}
+
+func runCommandHelperChildMode(mode string) {
+	if mode == "child-sleep" {
+		time.Sleep(10 * time.Second)
+		os.Exit(0)
+	}
+	time.Sleep(800 * time.Millisecond)
+	if err := os.WriteFile(os.Getenv("COMMAND_HELPER_SIDE_EFFECT_FILE"), []byte("unexpected"), 0o600); err != nil {
+		fmt.Fprintf(os.Stderr, "write delayed side effect: %v\n", err)
+		os.Exit(2)
+	}
+	os.Exit(0)
 }
 
 func commandLogFieldsMap(keysAndValues ...any) map[string]any {
@@ -800,7 +879,7 @@ func assertCommandHelperInputs() {
 	}
 }
 
-func spawnCommandHelperChild() {
+func spawnCommandHelperChildMode(mode string) {
 	pidFile := os.Getenv("COMMAND_HELPER_PID_FILE")
 	if pidFile == "" {
 		fmt.Fprintln(os.Stderr, "missing COMMAND_HELPER_PID_FILE")
@@ -810,7 +889,7 @@ func spawnCommandHelperChild() {
 	child := exec.Command(os.Args[0],
 		"-test.run=TestExecCommandRunner_HelperProcess",
 		"--",
-		"child-sleep",
+		mode,
 	)
 	child.Env = append(os.Environ(),
 		"GO_WANT_COMMAND_HELPER=1",

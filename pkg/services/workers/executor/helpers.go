@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
-	"strings"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
@@ -27,20 +25,9 @@ type ProviderError = workerprovider.ProviderError
 const (
 	providerSessionKindSessionID       = "session_id"
 	codexWindowsProcessFailureExitCode = 4294967295
-
-	omitZeroWorkerEventExitCode    = false
-	includeZeroWorkerEventExitCode = true
-
-	redactedCommandEnvValue     = "<redacted>"
-	metadataOnlyCommandEnvValue = "<metadata-only>"
 )
 
 type DefaultPromptRenderer = workerprompting.DefaultPromptRenderer
-
-const (
-	RedactedCommandEnvValue     = redactedCommandEnvValue
-	MetadataOnlyCommandEnvValue = metadataOnlyCommandEnvValue
-)
 
 func cloneInputTokens(rawTokens []any) []workerexecution.Token {
 	if len(rawTokens) == 0 {
@@ -160,144 +147,6 @@ func cloneEnvVars(envVars map[string]string) map[string]string {
 		clone[key] = value
 	}
 	return clone
-}
-
-type commandEnvDiagnosticProjection struct {
-	Count  int
-	Keys   []string
-	Values map[string]string
-}
-
-func projectCommandEnvForDiagnostics(env []string) commandEnvDiagnosticProjection {
-	projection := commandEnvDiagnosticProjection{}
-	if len(env) == 0 {
-		return projection
-	}
-
-	seenKeys := make(map[string]struct{}, len(env))
-	values := make(map[string]string, len(env))
-	for _, entry := range env {
-		name, value, ok := strings.Cut(entry, "=")
-		if !ok || name == "" {
-			continue
-		}
-		projection.Count++
-		seenKeys[name] = struct{}{}
-		switch classifyCommandEnvKey(name) {
-		case "safe":
-			values[name] = value
-		case "redacted":
-			values[name] = redactedCommandEnvValue
-		default:
-			values[name] = metadataOnlyCommandEnvValue
-		}
-	}
-
-	if len(seenKeys) > 0 {
-		projection.Keys = make([]string, 0, len(seenKeys))
-		for name := range seenKeys {
-			projection.Keys = append(projection.Keys, name)
-		}
-		sort.Strings(projection.Keys)
-	}
-	if len(values) > 0 {
-		projection.Values = values
-	}
-	return projection
-}
-
-var safeCommandEnvKeys = map[string]struct{}{
-	"CI":                  {},
-	"CGO_ENABLED":         {},
-	"EDITOR":              {},
-	"FORCE_COLOR":         {},
-	"GIT_EDITOR":          {},
-	"GIT_MERGE_AUTOEDIT":  {},
-	"GIT_SEQUENCE_EDITOR": {},
-	"GIT_TERMINAL_PROMPT": {},
-	"GOARCH":              {},
-	"GOOS":                {},
-	"NO_COLOR":            {},
-	"OS":                  {},
-	"RUNNER_OS":           {},
-	"TERM":                {},
-	"VISUAL":              {},
-}
-
-var sensitiveCommandEnvNameFragments = []string{
-	"TOKEN",
-	"SECRET",
-	"PASSWORD",
-	"PASS",
-	"KEY",
-	"CREDENTIAL",
-	"CREDENTIALS",
-	"AUTH",
-	"ANTHROPIC",
-	"OPENAI",
-	"GEMINI",
-	"GOOGLE_APPLICATION_CREDENTIALS",
-	"AWS_ACCESS_KEY_ID",
-	"AWS_SECRET_ACCESS_KEY",
-}
-
-func classifyCommandEnvKey(name string) string {
-	normalized := strings.ToUpper(strings.TrimSpace(name))
-	if normalized == "" {
-		return "metadata_only"
-	}
-	for _, fragment := range sensitiveCommandEnvNameFragments {
-		if strings.Contains(normalized, fragment) {
-			return "redacted"
-		}
-	}
-	if _, ok := safeCommandEnvKeys[normalized]; ok {
-		return "safe"
-	}
-	return "metadata_only"
-}
-
-func commandEnvDiagnosticMetadata(projection commandEnvDiagnosticProjection) map[string]string {
-	if projection.Count == 0 && len(projection.Keys) == 0 {
-		return nil
-	}
-	return map[string]string{
-		"env_count": fmt.Sprintf("%d", projection.Count),
-		"env_keys":  strings.Join(projection.Keys, ","),
-	}
-}
-
-func workerEventExitCode(exitCode int, present bool, includeZero bool) *int {
-	if !present {
-		return nil
-	}
-	if exitCode == 0 && !includeZero {
-		return nil
-	}
-	exitCodeCopy := exitCode
-	return &exitCodeCopy
-}
-
-func firstImageContentPart(rawTokens []any) (int, int, work.WorkContentPart, bool) {
-	for tokenIndex, token := range cloneInputTokens(rawTokens) {
-		for partIndex, part := range token.Color.Content {
-			if part.Type == work.WorkContentPartTypeImage {
-				return tokenIndex, partIndex, part, true
-			}
-		}
-	}
-	return 0, 0, work.WorkContentPart{}, false
-}
-
-func unsupportedImageContentError(rawTokens []any, executionPath string) error {
-	tokenIndex, partIndex, part, ok := firstImageContentPart(rawTokens)
-	if !ok {
-		return nil
-	}
-	if part.File == "" {
-		return fmt.Errorf("input_tokens[%d].color.content[%d]: image content is not supported by %s; configure modelProvider codex for image-capable execution", tokenIndex, partIndex, executionPath)
-	}
-	return fmt.Errorf("input_tokens[%d].color.content[%d].file: image content %q is not supported by %s; configure modelProvider codex for image-capable execution", tokenIndex, partIndex, part.File, executionPath)
 }
 
 const (
