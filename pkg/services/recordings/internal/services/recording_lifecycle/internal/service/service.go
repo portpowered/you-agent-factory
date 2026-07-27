@@ -17,15 +17,24 @@ type recordingSession struct {
 	selection      recordings.RecordingTargetRequest
 	scope          recordings.CanonicalEventScope
 	events         []recordings.CanonicalEvent
+	version        uint64
+	flushedVersion uint64
 	flushedThrough *recordings.CanonicalEventCursor
 	failures       []recordings.RecordingFailure
 	finalizedAt    *time.Time
+
+	flushMu      sync.Mutex
+	periodicStop chan struct{}
+	periodicDone chan struct{}
+	stopOnce     sync.Once
 }
 
 // Service serializes target binding and lifecycle state for Recordings.
 type Service struct {
 	mu              sync.Mutex
 	targets         recordings.LiveRecordingTargetPlanner
+	writer          recordings.RecordingSnapshotWriter
+	tickers         recordings.RecordingFlushTickerFactory
 	byID            map[string]*recordingSession
 	nextRecordingID int
 }
@@ -33,9 +42,15 @@ type Service struct {
 var _ recordinglifecycle.Service = (*Service)(nil)
 
 // New constructs one private recording-lifecycle owner.
-func New(targets recordings.LiveRecordingTargetPlanner) *Service {
+func New(
+	targets recordings.LiveRecordingTargetPlanner,
+	writer recordings.RecordingSnapshotWriter,
+	tickers recordings.RecordingFlushTickerFactory,
+) *Service {
 	return &Service{
 		targets: targets,
+		writer:  writer,
+		tickers: tickers,
 		byID:    make(map[string]*recordingSession),
 	}
 }
@@ -50,19 +65,39 @@ func (service *Service) StartRecording(
 		strings.TrimSpace(request.Scope.FactorySessionID) == "" {
 		return recordings.StartRecordingResult{}, recordings.ErrInvalidRecordingScope
 	}
+	if result, handled, err := service.existingStart(request); handled {
+		return result, err
+	}
+	return service.startNewRecording(request)
+}
+
+func (service *Service) existingStart(
+	request recordings.StartRecordingRequest,
+) (recordings.StartRecordingResult, bool, error) {
 	if id := strings.TrimSpace(string(request.RecordingID)); id != "" {
 		service.mu.Lock()
 		existing, exists := service.byID[id]
 		if exists && existing.scope == request.Scope && existing.selection == request.Target {
 			status := recordingStatus(request.RecordingID, existing)
 			service.mu.Unlock()
-			return recordings.StartRecordingResult{Enabled: true, Status: status}, nil
+			return recordings.StartRecordingResult{
+				Enabled: true,
+				Status:  status,
+			}, true, nil
 		}
 		service.mu.Unlock()
 		if exists {
-			return recordings.StartRecordingResult{}, recordings.ErrRecordingBindingConflict
+			return recordings.StartRecordingResult{},
+				true,
+				recordings.ErrRecordingBindingConflict
 		}
 	}
+	return recordings.StartRecordingResult{}, false, nil
+}
+
+func (service *Service) startNewRecording(
+	request recordings.StartRecordingRequest,
+) (recordings.StartRecordingResult, error) {
 	artifact := request.Target.Artifact
 	serviceTarget := strings.TrimSpace(string(artifact))
 	if serviceTarget == "" {
@@ -93,6 +128,7 @@ func (service *Service) StartRecording(
 	if err != nil {
 		return recordings.StartRecordingResult{}, err
 	}
+	service.startPeriodic(bound.Status.RecordingID, request.FlushInterval)
 	return recordings.StartRecordingResult{Enabled: true, Status: bound.Status}, nil
 }
 
@@ -184,6 +220,7 @@ func (service *Service) RecordRecordingEvent(
 		return recordings.RecordRecordingEventResult{}, recordings.ErrInvalidRecordingEvent
 	}
 	session.events = append(session.events, request.Event)
+	session.version++
 	return recordings.RecordRecordingEventResult{
 		Status: recordingStatus(request.RecordingID, session),
 	}, nil
@@ -214,17 +251,38 @@ func (service *Service) RecordRecordingError(
 func (service *Service) FlushRecording(
 	request recordings.FlushRecordingRequest,
 ) (recordings.FlushRecordingResult, error) {
-	service.mu.Lock()
-	defer service.mu.Unlock()
-	session, err := service.sessionLocked(request.RecordingID)
+	session, err := service.session(request.RecordingID)
 	if err != nil {
 		return recordings.FlushRecordingResult{}, err
 	}
-	if len(session.events) > 0 {
-		cursor := session.events[len(session.events)-1].Cursor
-		session.flushedThrough = &cursor
+	if err := service.flush(request.RecordingID, session); err != nil {
+		return recordings.FlushRecordingResult{}, err
 	}
+	service.mu.Lock()
+	defer service.mu.Unlock()
 	return recordings.FlushRecordingResult{
+		Status: recordingStatus(request.RecordingID, session),
+	}, nil
+}
+
+func (service *Service) StopRecording(
+	request recordings.StopRecordingRequest,
+) (recordings.StopRecordingResult, error) {
+	session, err := service.session(request.RecordingID)
+	if err != nil {
+		return recordings.StopRecordingResult{}, err
+	}
+	session.stopOnce.Do(func() {
+		if session.periodicStop != nil {
+			close(session.periodicStop)
+		}
+	})
+	if session.periodicDone != nil {
+		<-session.periodicDone
+	}
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	return recordings.StopRecordingResult{
 		Status: recordingStatus(request.RecordingID, session),
 	}, nil
 }

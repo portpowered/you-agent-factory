@@ -527,19 +527,46 @@ func NewService(
 	projection recordings.ProjectionService,
 	targets ...recordings.LiveRecordingTargetPlanner,
 ) recordings.Service {
-	if ledger == nil || projection == nil {
+	return NewServiceWithLifecycleEffects(
+		ledger,
+		projection,
+		firstTargetPlanner(targets),
+		nil,
+		nil,
+	)
+}
+
+func firstTargetPlanner(
+	targets []recordings.LiveRecordingTargetPlanner,
+) recordings.LiveRecordingTargetPlanner {
+	if len(targets) == 0 {
 		return nil
 	}
-	targetPlanner := recordings.LiveRecordingTargetPlanner(nil)
-	if len(targets) > 0 {
-		targetPlanner = targets[0]
+	return targets[0]
+}
+
+// NewServiceWithLifecycleEffects constructs the Recordings root with the exact
+// active-flush persistence and scheduling effects selected by Wire.
+func NewServiceWithLifecycleEffects(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targetPlanner recordings.LiveRecordingTargetPlanner,
+	writer recordings.RecordingSnapshotWriter,
+	tickers recordings.RecordingFlushTickerFactory,
+) recordings.Service {
+	if ledger == nil || projection == nil {
+		return nil
 	}
 	return &combinedService{
 		Ledger:            ledger,
 		ProjectionService: projection,
-		Service:           recordinglifecyclewire.NewService(targetPlanner),
-		replayByKey:       make(map[string]*factorydefinitions.ReplayArtifact),
-		replayPlans:       make(map[recordings.ReplayPlanHandle]*neutralReplayPlan),
+		Service: recordinglifecyclewire.NewService(
+			targetPlanner,
+			writer,
+			tickers,
+		),
+		replayByKey: make(map[string]*factorydefinitions.ReplayArtifact),
+		replayPlans: make(map[recordings.ReplayPlanHandle]*neutralReplayPlan),
 	}
 }
 

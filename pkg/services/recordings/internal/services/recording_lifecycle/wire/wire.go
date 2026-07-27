@@ -9,6 +9,10 @@ import (
 
 // NewService constructs the private lifecycle owner from the exact target
 // planner selected by the application graph.
-func NewService(targets recordings.LiveRecordingTargetPlanner) recordinglifecycle.Service {
-	return lifecycleservice.New(targets)
+func NewService(
+	targets recordings.LiveRecordingTargetPlanner,
+	writer recordings.RecordingSnapshotWriter,
+	tickers recordings.RecordingFlushTickerFactory,
+) recordinglifecycle.Service {
+	return lifecycleservice.New(targets, writer, tickers)
 }

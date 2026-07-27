@@ -21,6 +21,7 @@ type Service interface {
 	RecordRecordingEvent(recordings.RecordRecordingEventRequest) (recordings.RecordRecordingEventResult, error)
 	RecordRecordingError(recordings.RecordRecordingErrorRequest) (recordings.RecordRecordingErrorResult, error)
 	FlushRecording(recordings.FlushRecordingRequest) (recordings.FlushRecordingResult, error)
+	StopRecording(recordings.StopRecordingRequest) (recordings.StopRecordingResult, error)
 	FinishRecording(recordings.FinishRecordingRequest) (recordings.FinishRecordingResult, error)
 	QueryRecordingStatus(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error)
 	Snapshot(recordings.RecordingID) (Snapshot, error)

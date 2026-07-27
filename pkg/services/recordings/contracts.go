@@ -77,6 +77,10 @@ var ErrInvalidRecordingFailure = errors.New("invalid recording failure")
 // recording finished.
 var ErrRecordingWriteRejected = errors.New("recording write rejected after finish")
 
+// DefaultRecordingFlushInterval is the cadence used when an enabled recording
+// does not request a positive active-flush interval.
+const DefaultRecordingFlushInterval = 250 * time.Millisecond
+
 // ErrMissingReplayArtifact reports that a replay-load request lacks a usable
 // artifact path or id.
 var ErrMissingReplayArtifact = errors.New("missing replay artifact path or id")
@@ -364,10 +368,11 @@ type RecordingTargetRequest struct {
 // requests are intentionally inert: they do not select a target or allocate an
 // identity.
 type StartRecordingRequest struct {
-	Enabled     bool
-	RecordingID RecordingID
-	Scope       CanonicalEventScope
-	Target      RecordingTargetRequest
+	Enabled       bool
+	RecordingID   RecordingID
+	Scope         CanonicalEventScope
+	Target        RecordingTargetRequest
+	FlushInterval time.Duration
 }
 
 // StartRecordingResult reports whether recording was enabled and, when it was,
@@ -412,6 +417,17 @@ type FlushRecordingResult struct {
 	Status RecordingStatusFacts
 }
 
+// StopRecordingRequest identifies active periodic lifecycle work to cancel and
+// join. It does not finalize the recording or perform a final flush.
+type StopRecordingRequest struct {
+	RecordingID RecordingID
+}
+
+// StopRecordingResult reports status after periodic lifecycle work has stopped.
+type StopRecordingResult struct {
+	Status RecordingStatusFacts
+}
+
 // FinishRecordingRequest is the plain finish request for one bound recording.
 type FinishRecordingRequest struct {
 	RecordingID RecordingID
@@ -433,6 +449,27 @@ type RecordingStatusRequest struct {
 type RecordingStatusResult struct {
 	Status RecordingStatusFacts
 }
+
+// RecordingSnapshot is the detached value passed to the exact persistence
+// effect selected by Wire. Target selection remains private to Recordings.
+type RecordingSnapshot struct {
+	Status RecordingStatusFacts
+	Events []CanonicalEvent
+}
+
+// RecordingSnapshotWriter persists one consistent lifecycle snapshot at the
+// Recordings-private service target.
+type RecordingSnapshotWriter func(string, RecordingSnapshot) error
+
+// RecordingFlushTicker is the exact scheduling handle owned by one active
+// recording. Its fields are effects rather than another service interface.
+type RecordingFlushTicker struct {
+	Ticks <-chan time.Time
+	Stop  func()
+}
+
+// RecordingFlushTickerFactory constructs an injected cadence source.
+type RecordingFlushTickerFactory func(time.Duration) RecordingFlushTicker
 
 // LoadReplayArtifactRequest is retained for the pre-neutral replay adapter.
 //
@@ -640,6 +677,9 @@ type Service interface {
 	RecordRecordingError(RecordRecordingErrorRequest) (RecordRecordingErrorResult, error)
 	// FlushRecording flushes one bound recording through the published slice.
 	FlushRecording(FlushRecordingRequest) (FlushRecordingResult, error)
+	// StopRecording cancels and joins active periodic flush work without
+	// finalizing or performing the caller-owned final flush.
+	StopRecording(StopRecordingRequest) (StopRecordingResult, error)
 	// FinishRecording finalizes one recording with terminal metadata.
 	FinishRecording(FinishRecordingRequest) (FinishRecordingResult, error)
 	// QueryRecordingStatus returns detached lifecycle and accumulated failure

@@ -15,7 +15,7 @@ func TestNewServiceConstructsLifecycleOwner(t *testing.T) {
 			return recordings.LiveRecordingTarget{}, nil
 		},
 	)
-	if service := recordinglifecyclewire.NewService(planner); service == nil {
+	if service := recordinglifecyclewire.NewService(planner, nil, nil); service == nil {
 		t.Fatal("NewService returned nil")
 	}
 }

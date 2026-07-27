@@ -320,6 +320,18 @@ func (fake *peerRootServiceFake) FlushRecording(
 	}, nil
 }
 
+func (fake *peerRootServiceFake) StopRecording(
+	request recordings.StopRecordingRequest,
+) (recordings.StopRecordingResult, error) {
+	session, err := fake.recordingSession(request.RecordingID)
+	if err != nil {
+		return recordings.StopRecordingResult{}, err
+	}
+	return recordings.StopRecordingResult{
+		Status: peerRecordingStatus(request.RecordingID, session),
+	}, nil
+}
+
 func (fake *peerRootServiceFake) FinishRecording(
 	request recordings.FinishRecordingRequest,
 ) (recordings.FinishRecordingResult, error) {
