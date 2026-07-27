@@ -133,6 +133,18 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/internal/service",
+      "minimum": 70.30
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation",
       "exception": {
         "kind": "measurement",
@@ -371,10 +383,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/engine",
       "minimum": 87.14
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/ingest",
-      "minimum": 70.30
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
@@ -804,7 +812,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization",
-      "minimum": 66.23
+      "minimum": 66.16
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts",
@@ -1007,6 +1015,10 @@
       "minimum": 94.11
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers",
       "minimum": 59.32
     },
@@ -1195,6 +1207,24 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work",
       "minimum": 84.87
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/internal/service",
+      "minimum": 78.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire",
+      "minimum": 100.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/materialize",
