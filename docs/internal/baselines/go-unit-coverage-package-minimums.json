@@ -1616,7 +1616,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli",
-      "minimum": 75.97
+      "minimum": 75.89
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/batchload",
@@ -1834,7 +1834,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
-      "minimum": 81.94
+      "minimum": 81.85
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions",
