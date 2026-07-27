@@ -65,8 +65,7 @@ var providerPublicEffectContractImports = map[string]struct{}{
 	"github.com/portpowered/infinite-you/pkg/services/providers/execution/inferencecontract": {},
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty":                        {},
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":    {},
-	"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic":         {},
-	"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear":  {},
+	"github.com/portpowered/infinite-you/pkg/services/automations":         {},
 }
 
 var forbiddenCompositionCalls = map[string]struct{}{
