@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	piGoldenTextSuccessCase        = "text-success"
-	piGoldenStructuredFailureCase  = "structured-failure"
+	piGoldenTextSuccessCase       = "text-success"
+	piGoldenStructuredFailureCase = "structured-failure"
+	piGoldenTimeoutCase           = "timeout"
 )
 
 // TestPiGoldenTextSuccess replays a sanitized Pi text-success transcript through
@@ -216,6 +217,103 @@ func TestPiGoldenStructuredFailure(t *testing.T) {
 	}
 }
 
+// TestPiGoldenTimeout replays a sanitized Pi timeout transcript through the customer
+// process boundary and proves a public timeout outcome distinct from structured failure,
+// with matching Provider Session, response-event, and invocation-result metadata.
+//golden: docs/temp/functional/provider-sessions/pi/timeout/manifest.json
+func TestPiGoldenTimeout(t *testing.T) {
+	repoRoot := testutil.MustRepoRoot(t)
+	caseDir := filepath.Join(
+		repoRoot,
+		filepath.FromSlash(support.ProviderSessionFixturePath("pi", piGoldenTimeoutCase)),
+	)
+
+	loaded, err := support.LoadProviderSessionCase(caseDir)
+	if err != nil {
+		t.Fatalf("LoadProviderSessionCase: %v", err)
+	}
+	if loaded.Manifest.ID != "pi-timeout" {
+		t.Fatalf("manifest.ID = %q, want pi-timeout", loaded.Manifest.ID)
+	}
+	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelityFinalOnly {
+		t.Fatalf(
+			"manifest.fidelityClass = %q, want %q",
+			loaded.Manifest.FidelityClass,
+			support.ProviderSessionFidelityFinalOnly,
+		)
+	}
+
+	var request struct {
+		Model     string `json:"model"`
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(loaded.Request, &request); err != nil {
+		t.Fatalf("decode request.json: %v", err)
+	}
+	if request.Model == "" || request.SessionID == "" {
+		t.Fatalf("request.json = %#v, want model and session_id", request)
+	}
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderPi, request.Model))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"pi golden timeout"}`))
+
+	exitCode := 124
+	if loaded.Process.ExitCode != nil {
+		exitCode = *loaded.Process.ExitCode
+	}
+	timeoutResult := platformprocess.CommandResult{
+		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
+		Stderr:   []byte(loaded.Stderr),
+		ExitCode: exitCode,
+	}
+	runner := testutil.NewProviderCommandRunner(timeoutResult, timeoutResult, timeoutResult)
+
+	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		30*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
+		t.Fatalf("completed work = %d, want 0", got)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
+	}
+	if runner.CallCount() < 1 {
+		t.Fatalf("provider command runner calls = %d, want at least 1", runner.CallCount())
+	}
+
+	inferencePayload := piGoldenFailedInferenceObservationWithReason(t, events, factoryapi.WorkFailureTypeTimeout)
+	if inferencePayload.Outcome != factoryapi.InferenceOutcomeFailed {
+		t.Fatalf("inference outcome = %q, want FAILED", inferencePayload.Outcome)
+	}
+	if inferencePayload.FailureDetail == nil {
+		t.Fatal("inference response missing failure detail")
+	}
+	if inferencePayload.FailureDetail.Reason != factoryapi.WorkFailureTypeTimeout {
+		t.Fatalf("failure reason = %q, want TIMEOUT (runner calls=%d)", inferencePayload.FailureDetail.Reason, runner.CallCount())
+	}
+	if inferencePayload.FailureDetail.Message != "Pi execution timed out." {
+		t.Fatalf("failure message = %q, want Pi execution timed out.", inferencePayload.FailureDetail.Message)
+	}
+
+	observed := support.ProviderSessionObservedGoldens{
+		ProviderSession:   observePiProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ResponseEvents:   observePiResponseEventGoldens(responseEvents),
+		InvocationResult: observePiInvocationResultGolden(inferencePayload, ""),
+	}
+	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
+		var updated *support.ProviderSessionGoldensUpdatedError
+		if errors.As(err, &updated) {
+			t.Fatalf("%v", err)
+		}
+		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
+	}
+}
+
 func piGoldenInferenceObservation(
 	t *testing.T,
 	events []factoryapi.FactoryEvent,
@@ -263,6 +361,15 @@ func piGoldenFailedInferenceObservation(
 	events []factoryapi.FactoryEvent,
 ) factoryapi.InferenceResponseEventPayload {
 	t.Helper()
+	return piGoldenFailedInferenceObservationWithReason(t, events, "")
+}
+
+func piGoldenFailedInferenceObservationWithReason(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	wantReason factoryapi.WorkFailureType,
+) factoryapi.InferenceResponseEventPayload {
+	t.Helper()
 
 	var (
 		inferencePayload factoryapi.InferenceResponseEventPayload
@@ -279,10 +386,16 @@ func piGoldenFailedInferenceObservation(
 		if payload.Outcome != factoryapi.InferenceOutcomeFailed {
 			continue
 		}
+		if wantReason != "" && payload.FailureDetail != nil && payload.FailureDetail.Reason != wantReason {
+			continue
+		}
 		inferencePayload = payload
 		foundInference = true
 	}
 	if !foundInference {
+		if wantReason != "" {
+			t.Fatalf("missing failed INFERENCE_RESPONSE with reason %q", wantReason)
+		}
 		t.Fatal("missing failed INFERENCE_RESPONSE in factory events")
 	}
 	return inferencePayload
