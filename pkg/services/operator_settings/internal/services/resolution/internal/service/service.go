@@ -24,24 +24,31 @@ func (s *service) ResolveEffective(
 		return operatorsettings.ResolveEffectiveResult{}, err
 	}
 
+	invocationOverrides, err := expandInvocationOverrides(request)
+	if err != nil {
+		return operatorsettings.ResolveEffectiveResult{}, err
+	}
+
 	providerRaw, providerSource := winningLayerValue(
 		request.DocumentBaseline.WorkerModelProvider,
 		request.EnvironmentOverrides.WorkerModelProvider,
-		request.InvocationOverrides.WorkerModelProvider,
+		invocationOverrides.WorkerModelProvider,
 	)
 	modelRaw, modelSource := winningLayerValue(
 		request.DocumentBaseline.WorkerModel,
 		request.EnvironmentOverrides.WorkerModel,
-		request.InvocationOverrides.WorkerModel,
+		invocationOverrides.WorkerModel,
 	)
 
-	resolvedProvider, err := resolveWorkerModelProvider(providerRaw, providerSource, request)
+	resolvedProvider, err := resolveWorkerModelProvider(providerRaw, providerSource, request, invocationOverrides)
 	if err != nil {
 		return operatorsettings.ResolveEffectiveResult{}, err
 	}
 
 	return operatorsettings.ResolveEffectiveResult{
 		Selection: operatorsettings.EffectiveSelection{
+			BackendScopeID:            strings.TrimSpace(request.BackendScopeID),
+			WorkerPresets:             cloneWorkerPresets(request.WorkerPresets),
 			WorkerModelProvider:       resolvedProvider,
 			WorkerModel:               strings.TrimSpace(modelRaw),
 			WorkerModelProviderSource: providerSource,
@@ -49,6 +56,56 @@ func (s *service) ResolveEffective(
 			ConfigPath:                strings.TrimSpace(request.ConfigPath),
 		},
 	}, nil
+}
+
+func expandInvocationOverrides(
+	request operatorsettings.ResolveEffectiveRequest,
+) (operatorsettings.EffectiveOverrideFacts, error) {
+	overrides := request.InvocationOverrides.Clone()
+	presetID := strings.TrimSpace(overrides.WorkerPresetID)
+	if presetID == "" {
+		return overrides, nil
+	}
+
+	preset, ok := findWorkerPreset(request.WorkerPresets, presetID)
+	if !ok {
+		return operatorsettings.EffectiveOverrideFacts{}, operatorsettings.ResolutionFailure{
+			Kind:    operatorsettings.ResolutionFailureKindUnsupportedOverride,
+			Message: presetID,
+			Field:   "workerPresetID",
+		}
+	}
+
+	if strings.TrimSpace(overrides.WorkerModelProvider) == "" {
+		overrides.WorkerModelProvider = preset.ModelProvider
+	}
+	if strings.TrimSpace(overrides.WorkerModel) == "" {
+		overrides.WorkerModel = preset.Model
+	}
+	return overrides, nil
+}
+
+func findWorkerPreset(
+	presets []operatorsettings.DocumentWorkerPreset,
+	id string,
+) (operatorsettings.DocumentWorkerPreset, bool) {
+	for _, preset := range presets {
+		if strings.TrimSpace(preset.ID) == id {
+			return preset, true
+		}
+	}
+	return operatorsettings.DocumentWorkerPreset{}, false
+}
+
+func cloneWorkerPresets(
+	presets []operatorsettings.DocumentWorkerPreset,
+) []operatorsettings.DocumentWorkerPreset {
+	if presets == nil {
+		return nil
+	}
+	cloned := make([]operatorsettings.DocumentWorkerPreset, len(presets))
+	copy(cloned, presets)
+	return cloned
 }
 
 func winningLayerValue(
@@ -70,6 +127,7 @@ func resolveWorkerModelProvider(
 	raw string,
 	winningSource operatorsettings.EffectiveLayerSource,
 	request operatorsettings.ResolveEffectiveRequest,
+	invocationOverrides operatorsettings.EffectiveOverrideFacts,
 ) (string, error) {
 	if raw == "" {
 		return "", nil
@@ -87,7 +145,7 @@ func resolveWorkerModelProvider(
 		return canonical, nil
 	}
 
-	concreteRaw := concreteProviderBelowSource(winningSource, request)
+	concreteRaw := concreteProviderBelowSource(winningSource, request, invocationOverrides)
 	if concreteRaw == "" {
 		return "", operatorsettings.ResolutionFailure{
 			Kind:    operatorsettings.ResolutionFailureKindInvalidInput,
@@ -109,6 +167,7 @@ func resolveWorkerModelProvider(
 func concreteProviderBelowSource(
 	winningSource operatorsettings.EffectiveLayerSource,
 	request operatorsettings.ResolveEffectiveRequest,
+	invocationOverrides operatorsettings.EffectiveOverrideFacts,
 ) string {
 	type layer struct {
 		source operatorsettings.EffectiveLayerSource
@@ -117,7 +176,7 @@ func concreteProviderBelowSource(
 	layers := []layer{
 		{source: operatorsettings.EffectiveLayerSourceFile, value: request.DocumentBaseline.WorkerModelProvider},
 		{source: operatorsettings.EffectiveLayerSourceEnv, value: request.EnvironmentOverrides.WorkerModelProvider},
-		{source: operatorsettings.EffectiveLayerSourceFlag, value: request.InvocationOverrides.WorkerModelProvider},
+		{source: operatorsettings.EffectiveLayerSourceFlag, value: invocationOverrides.WorkerModelProvider},
 	}
 
 	below := make([]layer, 0, 2)
