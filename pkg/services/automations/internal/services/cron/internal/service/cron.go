@@ -56,7 +56,12 @@ func (s *service) EvaluateCronSchedule(schedule string, lastEvaluatedAt, evaluat
 	lastEvaluatedAt = lastEvaluatedAt.UTC()
 	evaluatedAt = evaluatedAt.UTC()
 	if evaluatedAt.Before(lastEvaluatedAt) {
-		return croncontract.CronScheduleEvaluation{}, fmt.Errorf("evaluation time %s precedes last evaluation time %s", evaluatedAt.Format(time.RFC3339Nano), lastEvaluatedAt.Format(time.RFC3339Nano))
+		return croncontract.CronScheduleEvaluation{}, fmt.Errorf(
+			"%w: evaluation time %s precedes last evaluation time %s",
+			croncontract.ErrInvalidEvaluationWindow,
+			evaluatedAt.Format(time.RFC3339Nano),
+			lastEvaluatedAt.Format(time.RFC3339Nano),
+		)
 	}
 
 	nominalAt, err := nextCronScheduleFire(schedule, lastEvaluatedAt)
@@ -184,7 +189,7 @@ func (s *service) CronTimeWorkRequest(workflowIdentity string, ws interfaces.Fac
 func nextCronScheduleFire(schedule string, after time.Time) (time.Time, error) {
 	schedule = strings.TrimSpace(schedule)
 	if schedule == "" {
-		return time.Time{}, fmt.Errorf("cron schedule is required")
+		return time.Time{}, fmt.Errorf("%w: schedule is required", croncontract.ErrInvalidSchedule)
 	}
 	after = after.UTC()
 	parseInput := schedule
@@ -193,11 +198,11 @@ func nextCronScheduleFire(schedule string, after time.Time) (time.Time, error) {
 	}
 	parsed, err := cronparser.ParseStandard(parseInput)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid cron schedule %q: %w", schedule, err)
+		return time.Time{}, fmt.Errorf("%w: invalid cron schedule %q: %v", croncontract.ErrInvalidSchedule, schedule, err)
 	}
 	next := parsed.Next(after)
 	if next.IsZero() {
-		return time.Time{}, fmt.Errorf("cron schedule %q produced no next fire", schedule)
+		return time.Time{}, fmt.Errorf("%w: cron schedule %q produced no next fire", croncontract.ErrInvalidSchedule, schedule)
 	}
 	return next.UTC(), nil
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -72,6 +73,54 @@ func TestParseCronTiming_InvalidScheduleIncludesValue(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), `"not a cron"`) {
 		t.Fatalf("expected error to include bad schedule value, got %v", err)
+	}
+}
+
+func TestEvaluateCronSchedule_ReportsFirstMissedNominalFireAcrossMultipleIntervals(t *testing.T) {
+	svc := testCronService()
+	lastEvaluatedAt := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	schedule := "*/5 * * * *"
+	wantFirstMissed := lastEvaluatedAt.Add(5 * time.Minute)
+
+	for _, test := range []struct {
+		name        string
+		evaluatedAt time.Time
+		wantDue     bool
+	}{
+		{
+			name:        "two missed fires",
+			evaluatedAt: lastEvaluatedAt.Add(14 * time.Minute),
+			wantDue:     true,
+		},
+		{
+			name:        "three missed fires",
+			evaluatedAt: lastEvaluatedAt.Add(20 * time.Minute),
+			wantDue:     true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := svc.EvaluateCronSchedule(schedule, lastEvaluatedAt, test.evaluatedAt)
+			if err != nil {
+				t.Fatalf("EvaluateCronSchedule: %v", err)
+			}
+			if got.Due != test.wantDue {
+				t.Fatalf("due = %t, want %t", got.Due, test.wantDue)
+			}
+			if !got.NominalAt.Equal(wantFirstMissed) {
+				t.Fatalf("nominal at = %s, want first missed fire %s", got.NominalAt, wantFirstMissed)
+			}
+		})
+	}
+
+	notDue, err := svc.EvaluateCronSchedule(schedule, lastEvaluatedAt, lastEvaluatedAt.Add(4*time.Minute))
+	if err != nil {
+		t.Fatalf("EvaluateCronSchedule not-due: %v", err)
+	}
+	if notDue.Due {
+		t.Fatalf("due = true before first nominal fire, want false")
+	}
+	if !notDue.NominalAt.Equal(wantFirstMissed) {
+		t.Fatalf("nominal at = %s, want %s", notDue.NominalAt, wantFirstMissed)
 	}
 }
 
@@ -149,11 +198,30 @@ func TestEvaluateCronSchedule_HonorsExplicitScheduleTimezone(t *testing.T) {
 func TestEvaluateCronSchedule_RejectsInvalidInput(t *testing.T) {
 	svc := testCronService()
 	now := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
-	if _, err := svc.EvaluateCronSchedule("not a cron", now, now); err == nil || !strings.Contains(err.Error(), `"not a cron"`) {
-		t.Fatalf("invalid schedule error = %v, want actionable schedule value", err)
+	if _, err := svc.EvaluateCronSchedule("not a cron", now, now); err == nil || !errors.Is(err, cron.ErrInvalidSchedule) {
+		t.Fatalf("invalid schedule error = %v, want typed ErrInvalidSchedule", err)
 	}
-	if _, err := svc.EvaluateCronSchedule("* * * * *", now, now.Add(-time.Second)); err == nil || !strings.Contains(err.Error(), "precedes") {
-		t.Fatalf("reversed interval error = %v, want explicit ordering error", err)
+	if _, err := svc.EvaluateCronSchedule("* * * * *", now, now.Add(-time.Second)); err == nil || !errors.Is(err, cron.ErrInvalidEvaluationWindow) {
+		t.Fatalf("reversed interval error = %v, want typed ErrInvalidEvaluationWindow", err)
+	}
+}
+
+func TestEvaluateCronSchedule_InvalidBoundsPerformNoWorkSubmission(t *testing.T) {
+	svc := testCronService()
+	now := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+
+	_, err := svc.EvaluateCronSchedule("* * * * *", now, now.Add(-time.Second))
+	if err == nil || !errors.Is(err, cron.ErrInvalidEvaluationWindow) {
+		t.Fatalf("invalid window error = %v, want typed ErrInvalidEvaluationWindow", err)
+	}
+
+	// Schedule evaluation returns timing facts only; Work submission is owned by CronTimeWorkRequest.
+	eval, err := svc.EvaluateCronSchedule("*/5 * * * *", now, now.Add(5*time.Minute))
+	if err != nil {
+		t.Fatalf("EvaluateCronSchedule: %v", err)
+	}
+	if !eval.Due || eval.NominalAt.IsZero() {
+		t.Fatalf("evaluation = %+v, want due with nominal fire time", eval)
 	}
 }
 
