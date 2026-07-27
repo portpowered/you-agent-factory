@@ -341,7 +341,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestInlineJavaScriptFactoryRunsFromCLI` covers an inline definition.
   - `TestInlineJavaScriptSyntaxErrorReturnsSourceLocation` covers load failure.
 
-- [ ] `tests/functional/orchestration/javascript/loading/file_javascript_test.go`
+- [x] `tests/functional/orchestration/javascript/loading/file_javascript_test.go`
   - `TestJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot` covers path
     resolution.
   - `TestJavaScriptFactoryMissingImportFailsActionably` covers load failure.
