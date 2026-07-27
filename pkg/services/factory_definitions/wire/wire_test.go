@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -128,6 +129,100 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 				t.Fatalf("NewService() = %#v, want nil service", service)
 			}
 		})
+	}
+}
+
+func TestNewServiceConstructsInertRoot(t *testing.T) {
+	t.Parallel()
+
+	baselineGoroutines := runtime.NumGoroutine()
+	sessionHost := &recordingSessionHost{}
+	namedPaths := &recordingNamedPathResolver{}
+	namedFactoryCatalogFileSystem := &recordingNamedFactoryCatalogFileSystem{}
+	versionFileSystem := &recordingVersionFileSystem{}
+	clock := &recordingClock{}
+
+	packagedCatalog, err := factorydefinitionsservice.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{{
+		Name:    "@you/wire-inert",
+		Project: "wire-inert",
+		JSON:    []byte(`{"name":"wire-inert"}`),
+		Formats: []factorydefinitions.PackagedFactoryFormat{
+			factorydefinitions.PackagedFactoryFormatJSON,
+		},
+	}})
+	if err != nil {
+		t.Fatalf("NewPackagedFactoryCatalog() error = %v", err)
+	}
+
+	service, err := factorydefinitionswire.NewService(
+		sessionHost,
+		stubValidator{},
+		stubPersistence{},
+		&factoryloading.Loader{},
+		func(string, *factorydefinitions.FactoryConfig, bool, bool) error { return nil },
+		func(string, *factorydefinitions.FactoryConfig) error { return nil },
+		namedPaths,
+		namedFactoryCatalogFileSystem,
+		clock,
+		versionFileSystem,
+		func(
+			context.Context,
+			factorydefinitions.ListEffectiveFactoriesRequest,
+		) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+			return factorydefinitions.ListEffectiveFactoriesResult{}, nil
+		},
+		packagedCatalog,
+		factorydefinitions.PackagedFactoryInstallationOperations{
+			Install: func(
+				context.Context,
+				factorydefinitions.PackagedFactoryInstallParams,
+			) (factorydefinitions.PackagedFactoryInstallResult, error) {
+				return factorydefinitions.PackagedFactoryInstallResult{}, nil
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewService() returned nil service")
+	}
+	var root factorydefinitions.Service = service
+	if root == nil {
+		t.Fatal("constructed value is not assignable to factorydefinitions.Service")
+	}
+
+	if namedPaths.calls != 0 {
+		t.Fatalf("construction invoked named path resolver %d times, want no filesystem activity", namedPaths.calls)
+	}
+	if namedFactoryCatalogFileSystem.calls != 0 {
+		t.Fatalf(
+			"construction invoked named Factory catalog filesystem %d times, want no filesystem activity",
+			namedFactoryCatalogFileSystem.calls,
+		)
+	}
+	if versionFileSystem.calls != 0 {
+		t.Fatalf("construction invoked version filesystem %d times, want no filesystem activity", versionFileSystem.calls)
+	}
+	if clock.calls != 0 {
+		t.Fatalf("construction read clock %d times, want no runtime activity", clock.calls)
+	}
+	if sessionHost.runtimeCalls != 0 {
+		t.Fatalf(
+			"construction invoked session-host runtime ports %d times, want no disk or runtime activity",
+			sessionHost.runtimeCalls,
+		)
+	}
+	if sessionHost.attachCalls != 1 {
+		t.Fatalf("AttachFactoryDefinitions calls = %d, want exactly one construction-time wiring call", sessionHost.attachCalls)
+	}
+	if leaked := runtime.NumGoroutine() - baselineGoroutines; leaked > 4 {
+		t.Fatalf(
+			"construction started background goroutines: baseline=%d current=%d delta=%d",
+			baselineGoroutines,
+			runtime.NumGoroutine(),
+			leaked,
+		)
 	}
 }
 
@@ -380,3 +475,194 @@ func (stubNamedPathResolver) ReadCurrentPointer(string) (string, error) {
 	return "", fs.ErrNotExist
 }
 func (stubNamedPathResolver) WriteCurrentPointer(string, string) error { return nil }
+
+type recordingNamedPathResolver struct{ calls int }
+
+func (r *recordingNamedPathResolver) ResolveCandidatePaths(string, string, string) (factorydefinitions.NamedFactoryCandidatePaths, error) {
+	r.calls++
+	panic("named path resolver invoked during inert construction")
+}
+
+func (r *recordingNamedPathResolver) ResolveExistingDir(string, string) (string, error) {
+	r.calls++
+	panic("named path resolver invoked during inert construction")
+}
+
+func (r *recordingNamedPathResolver) RequireDefinitionDir(string) error {
+	r.calls++
+	panic("named path resolver invoked during inert construction")
+}
+
+func (r *recordingNamedPathResolver) ResolveCurrentDir(string) (string, error) {
+	r.calls++
+	panic("named path resolver invoked during inert construction")
+}
+
+func (r *recordingNamedPathResolver) ReadCurrentPointer(string) (string, error) {
+	r.calls++
+	panic("named path resolver invoked during inert construction")
+}
+
+func (r *recordingNamedPathResolver) WriteCurrentPointer(string, string) error {
+	r.calls++
+	panic("named path resolver invoked during inert construction")
+}
+
+type recordingNamedFactoryCatalogFileSystem struct{ calls int }
+
+func (f *recordingNamedFactoryCatalogFileSystem) Stat(string) (fs.FileInfo, error) {
+	f.calls++
+	panic("named Factory catalog filesystem invoked during inert construction")
+}
+
+func (f *recordingNamedFactoryCatalogFileSystem) ReadDir(string) ([]fs.DirEntry, error) {
+	f.calls++
+	panic("named Factory catalog filesystem invoked during inert construction")
+}
+
+func (f *recordingNamedFactoryCatalogFileSystem) RemoveAll(string) error {
+	f.calls++
+	panic("named Factory catalog filesystem invoked during inert construction")
+}
+
+type recordingVersionFileSystem struct{ calls int }
+
+func (v *recordingVersionFileSystem) Stat(string) (fs.FileInfo, error) {
+	v.calls++
+	panic("version filesystem invoked during inert construction")
+}
+
+type recordingClock struct{ calls int }
+
+func (c *recordingClock) Now() time.Time {
+	c.calls++
+	panic("clock invoked during inert construction")
+}
+
+type recordingSessionHost struct {
+	runtimeCalls int
+	attachCalls  int
+}
+
+func (h *recordingSessionHost) recordRuntimeCall() {
+	h.runtimeCalls++
+	panic("session-host runtime port invoked during inert construction")
+}
+
+func (h *recordingSessionHost) PersistRootDir() string {
+	h.recordRuntimeCall()
+	return ""
+}
+
+func (h *recordingSessionHost) WorkstationLoader() factorydefinitions.WorkstationLoader {
+	h.recordRuntimeCall()
+	return nil
+}
+
+func (h *recordingSessionHost) CurrentRuntimeConfig() factorydefinitions.LoadedFactorySource {
+	h.recordRuntimeCall()
+	return nil
+}
+
+func (h *recordingSessionHost) WorkflowID() string {
+	h.recordRuntimeCall()
+	return ""
+}
+
+func (h *recordingSessionHost) RequireSession(string) (*factorydefinitions.DefinitionSession, error) {
+	h.recordRuntimeCall()
+	return nil, errors.New("session not found")
+}
+
+func (h *recordingSessionHost) SessionRuntimeConfig(string) (factorydefinitions.LoadedFactorySource, error) {
+	h.recordRuntimeCall()
+	return nil, errors.New("session not found")
+}
+
+func (h *recordingSessionHost) SessionFactoryPersistRoot(*factorydefinitions.DefinitionSession) string {
+	h.recordRuntimeCall()
+	return ""
+}
+
+func (h *recordingSessionHost) ValidateEditableFactorySnapshot(context.Context, *factorydefinitions.FactorySnapshot) error {
+	h.recordRuntimeCall()
+	return nil
+}
+
+func (h *recordingSessionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*factorydefinitions.FactorySnapshot, error) {
+	h.recordRuntimeCall()
+	return nil, errors.New("session not found")
+}
+
+func (h *recordingSessionHost) WithActivationLock(func() error) error {
+	h.recordRuntimeCall()
+	return nil
+}
+
+func (h *recordingSessionHost) RequireIdleRuntimeForSession(context.Context, string) error {
+	h.recordRuntimeCall()
+	return nil
+}
+
+func (h *recordingSessionHost) ActivateSessionEditableFactory(
+	context.Context,
+	*factorydefinitions.DefinitionSession,
+	string, string, string, string, string,
+) error {
+	h.recordRuntimeCall()
+	return nil
+}
+
+func (h *recordingSessionHost) ReplaceFactoryLayoutAtDir(
+	string,
+	*factorydefinitions.PreparedFactoryLayoutPayload,
+) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
+	h.recordRuntimeCall()
+	return nil, nil
+}
+
+func (h *recordingSessionHost) SaveNow() time.Time {
+	h.recordRuntimeCall()
+	return time.Unix(0, 0)
+}
+
+func (h *recordingSessionHost) RunSessionID() string {
+	h.recordRuntimeCall()
+	return ""
+}
+
+func (h *recordingSessionHost) SessionForActivation(string) *factorydefinitions.DefinitionSession {
+	h.recordRuntimeCall()
+	return nil
+}
+
+func (h *recordingSessionHost) NamedFactoryActivationPaths(*factorydefinitions.DefinitionSession) (string, string) {
+	h.recordRuntimeCall()
+	return "", ""
+}
+
+func (h *recordingSessionHost) RequireIdleBeforeNamedFactoryActivation(
+	context.Context,
+	string,
+	*factorydefinitions.DefinitionSession,
+) error {
+	h.recordRuntimeCall()
+	return nil
+}
+
+func (h *recordingSessionHost) SwapPersistedNamedFactoryRuntime(
+	context.Context,
+	string,
+	*factorydefinitions.DefinitionSession,
+	string, string, string, string,
+) error {
+	h.recordRuntimeCall()
+	return nil
+}
+
+func (h *recordingSessionHost) AttachFactoryDefinitions(
+	definitions factorydefinitions.Service,
+) factorydefinitions.Service {
+	h.attachCalls++
+	return definitions
+}
