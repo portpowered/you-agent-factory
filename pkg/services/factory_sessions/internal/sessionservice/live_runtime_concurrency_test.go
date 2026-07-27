@@ -3,8 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
-	"path/filepath"
-	"strings"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -18,25 +17,14 @@ import (
 
 type registryBackedLiveRuntimeHost struct {
 	liveRuntimeEffectHost
-	registry   *sessionregistry.Registry
-	openMu     sync.Mutex
-	openCalls  atomic.Int32
+	registry  *sessionregistry.Registry
+	openMu    sync.Mutex
+	nextID    atomic.Int32
+	openCalls atomic.Int32
 }
 
-func legacyTargetKey(target factorysessions.Target) string {
-	folderPath := filepath.Clean(strings.TrimSpace(target.FolderPath))
-	if folderPath == "." {
-		folderPath = ""
-	}
-	folderPath = filepath.ToSlash(folderPath)
-	targetKind := strings.TrimSpace(string(target.Ref.Kind))
-	targetName := strings.TrimSpace(target.Ref.Name)
-	if targetKind == "" {
-		targetKind = string(factorysessions.TargetKindDefault)
-	}
-	return strings.Join([]string{folderPath, targetKind, targetName}, "::")
-}
-
+// OpenLiveSessionForTarget mirrors production open semantics: each successful
+// activation allocates a new session identity without logical-key dedupe.
 func (h *registryBackedLiveRuntimeHost) OpenLiveSessionForTarget(ctx context.Context, target factorysessions.Target) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -46,20 +34,12 @@ func (h *registryBackedLiveRuntimeHost) OpenLiveSessionForTarget(ctx context.Con
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	if existing := h.registry.FindByLogicalSessionKeyID(legacyTargetKey(target)); existing != nil {
-		h.registry.Select(existing.ID)
-		if h.sessions == nil {
-			h.sessions = make(map[string]*livesession.LiveSession)
-		}
-		h.sessions[existing.ID] = existing
-		return existing.ID, nil
-	}
 	h.openCalls.Add(1)
 	time.Sleep(2 * time.Millisecond)
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	const sessionID = "sess-gateway-concurrent"
+	sessionID := fmt.Sprintf("sess-gateway-open-%d", h.nextID.Add(1))
 	session := &livesession.LiveSession{
 		ID: sessionID,
 		SessionState: livesession.SessionState{
@@ -68,11 +48,7 @@ func (h *registryBackedLiveRuntimeHost) OpenLiveSessionForTarget(ctx context.Con
 		},
 		Target: target.Ref,
 	}
-	h.registry.Upsert(session, true)
-	if h.sessions == nil {
-		h.sessions = make(map[string]*livesession.LiveSession)
-	}
-	h.sessions[sessionID] = session
+	h.registry.Upsert(session, h.registry.Count() == 0)
 	h.sessionIDs = h.registry.IDs()
 	return sessionID, nil
 }
@@ -94,7 +70,6 @@ func (h *registryBackedLiveRuntimeHost) RequireSession(sessionID string) (*lives
 
 func (h *registryBackedLiveRuntimeHost) StopLiveSession(sessionID string) error {
 	h.stopCalls++
-	delete(h.sessions, sessionID)
 	h.registry.Remove(sessionID)
 	h.sessionIDs = h.registry.IDs()
 	return nil
@@ -117,7 +92,7 @@ func newRegistryBackedLiveRuntimeGateway(t *testing.T) (*factorysessionservice.S
 	return newLiveRuntimeCompositionGateway(t, host), host
 }
 
-func TestService_ConcurrentOpenThroughLiveRuntimeOwnerConvergesOnOneIdentity(t *testing.T) {
+func TestService_ConcurrentOpenThroughLiveRuntimeOwnerAllocatesDistinctActivations(t *testing.T) {
 	t.Parallel()
 
 	gateway, host := newRegistryBackedLiveRuntimeGateway(t)
@@ -144,16 +119,21 @@ func TestService_ConcurrentOpenThroughLiveRuntimeOwnerConvergesOnOneIdentity(t *
 	}
 	wg.Wait()
 
+	seen := make(map[string]struct{}, workers)
 	for index, id := range ids {
-		if id != "sess-gateway-concurrent" {
-			t.Fatalf("open[%d] = %q, want sess-gateway-concurrent", index, id)
+		if id == "" {
+			t.Fatalf("open[%d] returned empty identity", index)
 		}
+		if _, exists := seen[id]; exists {
+			t.Fatalf("open[%d] = %q, want distinct identity per activation", index, id)
+		}
+		seen[id] = struct{}{}
 	}
-	if host.registry.Count() != 1 {
-		t.Fatalf("registry count = %d, want 1", host.registry.Count())
+	if host.registry.Count() != workers {
+		t.Fatalf("registry count = %d, want %d distinct activations", host.registry.Count(), workers)
 	}
-	if host.openCalls.Load() != 1 {
-		t.Fatalf("activation calls = %d, want 1", host.openCalls.Load())
+	if host.openCalls.Load() != workers {
+		t.Fatalf("activation calls = %d, want %d", host.openCalls.Load(), workers)
 	}
 }
 
@@ -162,9 +142,11 @@ func TestService_ConcurrentResolveAndCloseLeavesDeterminateRegistryState(t *test
 
 	gateway, host := newRegistryBackedLiveRuntimeGateway(t)
 	ctx := context.Background()
-	if _, err := gateway.OpenFactorySessionFromFolder(ctx, "/tmp", nil, false, false); err != nil {
+	opened, err := gateway.OpenFactorySessionFromFolder(ctx, "/tmp", nil, false, false)
+	if err != nil {
 		t.Fatalf("OpenFactorySessionFromFolder: %v", err)
 	}
+	sessionID := opened.SessionID
 
 	const workers = 24
 	var wg sync.WaitGroup
@@ -172,16 +154,16 @@ func TestService_ConcurrentResolveAndCloseLeavesDeterminateRegistryState(t *test
 	for range workers {
 		go func() {
 			defer wg.Done()
-			if gateway.ResolveFactorySession("sess-gateway-concurrent") != nil {
-				_ = gateway.CloseFactorySession(ctx, "sess-gateway-concurrent")
+			if gateway.ResolveFactorySession(sessionID) != nil {
+				_ = gateway.CloseFactorySession(ctx, sessionID)
 				return
 			}
-			_, _ = gateway.GetFactorySession(ctx, "sess-gateway-concurrent")
+			_, _ = gateway.GetFactorySession(ctx, sessionID)
 		}()
 	}
 	wg.Wait()
 
-	if gateway.ResolveFactorySession("sess-gateway-concurrent") != nil {
+	if gateway.ResolveFactorySession(sessionID) != nil {
 		if host.registry.Count() != 1 {
 			t.Fatalf("active registry count = %d, want 1", host.registry.Count())
 		}
@@ -190,7 +172,7 @@ func TestService_ConcurrentResolveAndCloseLeavesDeterminateRegistryState(t *test
 	if host.registry.Count() != 0 {
 		t.Fatalf("inactive registry count = %d, want 0", host.registry.Count())
 	}
-	_, err := gateway.GetFactorySession(ctx, "sess-gateway-concurrent")
+	_, err = gateway.GetFactorySession(ctx, sessionID)
 	if err == nil || !errors.Is(err, factorysessions.ErrNotFound) {
 		t.Fatalf("Get after concurrent close = %v, want ErrNotFound", err)
 	}
@@ -237,8 +219,5 @@ func TestService_OpenFactorySessionCancellationDoesNotPublishActiveRegistryEntry
 	}
 	if host.registry.Count() != 0 {
 		t.Fatalf("registry count after cancelled open = %d, want 0", host.registry.Count())
-	}
-	if gateway.ResolveFactorySession("sess-gateway-concurrent") != nil {
-		t.Fatal("cancelled open left an active registry identity")
 	}
 }
