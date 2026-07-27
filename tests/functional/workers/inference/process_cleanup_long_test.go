@@ -91,33 +91,3 @@ Spawn a companion process on the first attempt and succeed after timeout requeue
 		)
 	}
 }
-
-func assertProcessCleanupListedWorkIdentity(
-	t *testing.T,
-	response factoryapi.ListWorkResponse,
-	stateName, workID, workType, traceID string,
-	tags map[string]string,
-) {
-	t.Helper()
-	for _, item := range response.Results {
-		if item.State == nil || item.State.Name != stateName {
-			continue
-		}
-		if workID != "" && (item.WorkId == nil || *item.WorkId != workID) {
-			t.Errorf("listed Work ID = %#v, want %q", item.WorkId, workID)
-		}
-		if item.WorkTypeName == nil || *item.WorkTypeName != workType {
-			t.Errorf("listed Work type = %#v, want %q", item.WorkTypeName, workType)
-		}
-		if traceID != "" && (item.TraceId == nil || *item.TraceId != traceID) {
-			t.Errorf("listed Work trace ID = %#v, want %q", item.TraceId, traceID)
-		}
-		for key, want := range tags {
-			if item.Tags == nil || (*item.Tags)[key] != want {
-				t.Errorf("listed Work tag %q = %#v, want %q", key, item.Tags, want)
-			}
-		}
-		return
-	}
-	t.Fatalf("listed Work has no item in state %q: %#v", stateName, response.Results)
-}

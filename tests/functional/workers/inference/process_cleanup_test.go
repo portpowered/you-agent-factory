@@ -126,9 +126,105 @@ func TestProcessTreeHelper(t *testing.T) {
 		os.Exit(0)
 	case "companion-timeout-once":
 		runCompanionTimeoutOnceHelper(pidFile)
+	case "timeout-once":
+		runTimeoutOnceHelper(pidFile)
 	default:
 		return
 	}
+}
+
+// TestProviderSuccessWaitsForProcessAndStreamClosure proves a successful script-worker
+// invocation waits for the provider process to exit and its stdout stream to close
+// before surfacing a public terminal success outcome, and that later success after a
+// prior timeout only settles once timeout cleanup has finished.
+func TestProviderSuccessWaitsForProcessAndStreamClosure(t *testing.T) {
+	support.SkipLongFunctional(t, "slow timeout retry and success cleanup proof")
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	attemptFile := filepath.Join(t.TempDir(), "timeout-attempts.txt")
+	providerPIDFile := attemptFile + ".provider.pid"
+	traceID := "trace-timeout-requeue-smoke"
+	workID := "work-timeout-requeue-smoke"
+	const successStdout = "recovered after timeout"
+
+	workerAgentsPath := filepath.Join(dir, "workers", "script-worker", "AGENTS.md")
+	workerAgents := fmt.Sprintf(`---
+type: SCRIPT_WORKER
+command: %s
+args:
+  - '-test.run=TestProcessTreeHelper'
+  - '--'
+  - 'timeout-once'
+  - %s
+timeout: 1500ms
+---
+Timeout once, then succeed after the Agent Factory requeues the work.
+`, yamlSingleQuoted(os.Args[0]), yamlSingleQuoted(attemptFile))
+	if err := os.WriteFile(workerAgentsPath, []byte(workerAgents), 0o644); err != nil {
+		t.Fatalf("write worker AGENTS.md: %v", err)
+	}
+
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkID:     workID,
+		WorkTypeID: "task",
+		TraceID:    traceID,
+		Payload:    []byte("timeout once and retry"),
+	})
+
+	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		processCleanupScriptEdges(t),
+		20*time.Second,
+	)
+
+	assertProcessCleanupSessionPlaces(t, listed, map[string]int{
+		"task:done":   1,
+		"task:init":   0,
+		"task:failed": 0,
+	})
+	assertProcessCleanupListedWorkIdentity(t, listed, "done", workID, "task", traceID, nil)
+	assertProcessCleanupDispatchOutcomeSequence(t, events, []factoryapi.WorkOutcome{
+		factoryapi.WorkOutcomeFailed,
+		factoryapi.WorkOutcomeAccepted,
+	}, "execution timeout")
+	assertProcessCleanupScriptResponseBeforeAcceptedDispatch(t, events, successStdout)
+	if _, err := os.Stat(providerPIDFile); err != nil {
+		t.Fatalf("provider pid file missing after successful attempt: %v", err)
+	}
+	providerPID := readProcessCleanupPID(t, providerPIDFile)
+	t.Cleanup(func() {
+		processCleanupTerminateProcess(providerPID)
+	})
+	if processCleanupProcessRunning(providerPID) {
+		t.Fatalf("provider process %d is still running after terminal success", providerPID)
+	}
+	if session.Runtime.Progress.Categories.Terminal != 1 {
+		t.Fatalf(
+			"session progress categories = %+v, want one terminal work item after timeout requeue success",
+			session.Runtime.Progress.Categories,
+		)
+	}
+	if session.Runtime.Progress.Categories.Processing != 0 {
+		t.Fatalf(
+			"session processing count = %d, want 0 after success-path cleanup",
+			session.Runtime.Progress.Categories.Processing,
+		)
+	}
+}
+
+func runTimeoutOnceHelper(attemptFile string) {
+	attempt := readProcessCleanupAttempt(attemptFile) + 1
+	if err := os.WriteFile(attemptFile, []byte(strconv.Itoa(attempt)), 0o600); err != nil {
+		fmt.Fprintf(os.Stderr, "write attempt file: %v\n", err)
+		os.Exit(2)
+	}
+	if attempt == 1 {
+		time.Sleep(30 * time.Second)
+		os.Exit(0)
+	}
+	writeProcessCleanupPID(attemptFile + ".provider.pid")
+	fmt.Println("recovered after timeout")
+	os.Exit(0)
 }
 
 func runCompanionTimeoutOnceHelper(attemptFile string) {
@@ -255,6 +351,117 @@ func assertProcessCleanupDispatchOutcomeSequence(
 	if firstError != "" && (responses[0].Error == nil || !strings.Contains(*responses[0].Error, firstError)) {
 		t.Errorf("first dispatch error = %#v, want text %q", responses[0].Error, firstError)
 	}
+}
+
+func assertProcessCleanupScriptResponseBeforeAcceptedDispatch(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	wantStdout string,
+) {
+	t.Helper()
+
+	scriptResponseIndex, scriptResponse := processCleanupSucceededScriptResponse(t, events)
+	if scriptResponse.Outcome != factoryapi.ScriptExecutionOutcomeSucceeded {
+		t.Fatalf("script response outcome = %s, want succeeded", scriptResponse.Outcome)
+	}
+	if scriptResponse.ExitCode == nil || *scriptResponse.ExitCode != 0 {
+		t.Fatalf("script response exit code = %#v, want 0", scriptResponse.ExitCode)
+	}
+	if strings.TrimSpace(scriptResponse.Stdout) != wantStdout {
+		t.Fatalf("script response stdout = %q, want %q", scriptResponse.Stdout, wantStdout)
+	}
+	if scriptResponse.Stderr != "" {
+		t.Fatalf("script response stderr = %q, want empty", scriptResponse.Stderr)
+	}
+
+	dispatchResponseIndex := processCleanupAcceptedDispatchIndexForDispatchID(t, events, scriptResponse.DispatchId)
+	if dispatchResponseIndex <= scriptResponseIndex {
+		t.Fatalf(
+			"dispatch response index = %d, script response index = %d; want script stream closure before accepted dispatch",
+			dispatchResponseIndex,
+			scriptResponseIndex,
+		)
+	}
+}
+
+func processCleanupSucceededScriptResponse(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+) (int, factoryapi.ScriptResponseEventPayload) {
+	t.Helper()
+
+	for index, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeScriptResponse {
+			continue
+		}
+		payload, err := event.Payload.AsScriptResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode script response: %v", err)
+		}
+		if payload.Outcome != factoryapi.ScriptExecutionOutcomeSucceeded {
+			continue
+		}
+		return index, payload
+	}
+	t.Fatalf("factory events do not contain a succeeded script response")
+	return -1, factoryapi.ScriptResponseEventPayload{}
+}
+
+func processCleanupAcceptedDispatchIndexForDispatchID(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	dispatchID string,
+) int {
+	t.Helper()
+
+	for index, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		if support.StringPointerValue(event.Context.DispatchId) != dispatchID {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch response: %v", err)
+		}
+		if payload.Outcome != factoryapi.WorkOutcomeAccepted {
+			continue
+		}
+		return index
+	}
+	t.Fatalf("factory events do not contain accepted dispatch response for dispatch %s", dispatchID)
+	return -1
+}
+
+func assertProcessCleanupListedWorkIdentity(
+	t *testing.T,
+	response factoryapi.ListWorkResponse,
+	stateName, workID, workType, traceID string,
+	tags map[string]string,
+) {
+	t.Helper()
+	for _, item := range response.Results {
+		if item.State == nil || item.State.Name != stateName {
+			continue
+		}
+		if workID != "" && (item.WorkId == nil || *item.WorkId != workID) {
+			t.Errorf("listed Work ID = %#v, want %q", item.WorkId, workID)
+		}
+		if item.WorkTypeName == nil || *item.WorkTypeName != workType {
+			t.Errorf("listed Work type = %#v, want %q", item.WorkTypeName, workType)
+		}
+		if traceID != "" && (item.TraceId == nil || *item.TraceId != traceID) {
+			t.Errorf("listed Work trace ID = %#v, want %q", item.TraceId, traceID)
+		}
+		for key, want := range tags {
+			if item.Tags == nil || (*item.Tags)[key] != want {
+				t.Errorf("listed Work tag %q = %#v, want %q", key, item.Tags, want)
+			}
+		}
+		return
+	}
+	t.Fatalf("listed Work has no item in state %q: %#v", stateName, response.Results)
 }
 
 func processCleanupDispatchResponses(t *testing.T, events []factoryapi.FactoryEvent) []factoryapi.DispatchResponseEventPayload {
