@@ -142,3 +142,22 @@ func TestProject_MapsRuntimeStatus(t *testing.T) {
 		t.Fatalf("unknown runtime status = %q, want IDLE default", got.Status)
 	}
 }
+
+func TestProject_FactoryStatusMatchesSnapshotProjection(t *testing.T) {
+	t.Parallel()
+	snap := sampleRootObservationSnapshot()
+	fromSnapshot := factory.NewFactoryStatusProjector().ProjectFactoryStatus(snap)
+	fromObservation := factory.FactoryStatusFromObservation(Project(snap, factory.ObservationScopeFull))
+	if fromObservation.RuntimeStatus != fromSnapshot.RuntimeStatus ||
+		fromObservation.FactoryState != fromSnapshot.FactoryState ||
+		fromObservation.TotalTokens != fromSnapshot.TotalTokens ||
+		fromObservation.Categories != fromSnapshot.Categories ||
+		len(fromObservation.Resources) != len(fromSnapshot.Resources) {
+		t.Fatalf("observation status = %#v, want snapshot parity %#v", fromObservation, fromSnapshot)
+	}
+	for i := range fromObservation.Resources {
+		if fromObservation.Resources[i] != fromSnapshot.Resources[i] {
+			t.Fatalf("resource[%d] = %#v, want %#v", i, fromObservation.Resources[i], fromSnapshot.Resources[i])
+		}
+	}
+}

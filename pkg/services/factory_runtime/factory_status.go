@@ -39,6 +39,7 @@ type FactoryResourceUsage struct {
 // never categorize runtime tokens themselves.
 type FactoryStatusProjector interface {
 	ProjectFactoryStatus(*StateSnapshot) FactoryStatus
+	ProjectFactoryStatusFromObservation(Observation) FactoryStatus
 }
 
 type factoryStatusProjector struct{}
@@ -63,6 +64,10 @@ func (factoryStatusProjector) ProjectFactoryStatus(snapshot *StateSnapshot) Fact
 		RuntimeStatus:          string(snapshot.RuntimeStatus),
 		TotalTokens:            countFactoryStatusTokens(&snapshot.Marking),
 	}
+}
+
+func (factoryStatusProjector) ProjectFactoryStatusFromObservation(observation Observation) FactoryStatus {
+	return FactoryStatusFromObservation(observation)
 }
 
 func projectFactoryStatusTokens(marking *PetriMarkingSnapshot, net *Net) (FactoryStatusCategories, []FactoryResourceUsage) {

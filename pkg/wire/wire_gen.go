@@ -160,6 +160,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
+	idGenerator := provideFactoryRuntimeIDGenerator(edges2)
+	orchestrationJavaScriptExecution := provideOrchestrationJavaScriptExecution(idGenerator, javaScriptWorkflows)
 	writer, err := providePortableRecordingWriter(edges2)
 	if err != nil {
 		return nil, err
@@ -174,7 +176,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	v25 := provideWorkerCommandRunnerAdapter()
-	v26 := provideFactorySessionExecutionFactory(javaScriptWorkflows, writer, v21, v22, v16, responseEventIDGenerator, v23, v24, ptyAllocator, v25, edges2)
+	v26 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, writer, v21, v22, v16, responseEventIDGenerator, v23, v24, ptyAllocator, v25, edges2)
 	v27 := provideRecordingsProjectionFactory()
 	storage := provideReplayArtifactStorage()
 	v28 := provideRecordingsFactory(liveRecordingTargetPlanner, storage)
@@ -251,12 +253,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	idGenerator := provideFactoryRuntimeIDGenerator(edges2)
 	requestIDGenerator := provideWorkRequestIDGenerator(edges2)
 	runtimeDirectoryFileSystem := provideFactoryRuntimeDirectories(edges2)
 	inputFileSystem := provideFactoryRuntimeInputs(edges2)
 	inputDirectoryWalker := provideFactoryRuntimeInputDirectoryWalker(edges2)
-	runtimeFactory := service.NewRuntimeFactory(quorumPolicyService, invocationOutputShapingService, workPropagationPolicyService, decisionEnvelopeService, runtimeLoggerFactory, runtimeLogSinkFactory, runtimeMetricsSinkFactory, idGenerator, requestIDGenerator, runtimeDirectoryFileSystem, inputFileSystem, inputDirectoryWalker)
+	orchestrationCompilation := provideOrchestrationCompilation(idGenerator, javaScriptWorkflows)
+	runtimeFactory := service.NewRuntimeFactory(quorumPolicyService, invocationOutputShapingService, workPropagationPolicyService, decisionEnvelopeService, runtimeLoggerFactory, runtimeLogSinkFactory, runtimeMetricsSinkFactory, idGenerator, requestIDGenerator, runtimeDirectoryFileSystem, inputFileSystem, inputDirectoryWalker, orchestrationCompilation)
 	assembly, err := service.NewAssembly(runtimeFactory)
 	if err != nil {
 		return nil, err
@@ -335,7 +337,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	v51 := provideFactorySessionContractFixtureReader(edges2)
-	v52 := provideStandaloneSessionExecutionFactory(javaScriptWorkflows, writer, v21, v22, v16, v51)
+	v52 := provideStandaloneSessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, writer, v21, v22, v16, v51)
 	runtimeArtifactRootResolver := provideRuntimeArtifactRootResolver()
 	v53 := provideFactorySessionExecutionOpeningFileSystem(edges2)
 	logger, err := logging.NewDefaultLogger()
@@ -618,6 +620,8 @@ var servicesSet = wire2.NewSet(
 	provideAutomationFactory,
 	provideFactorySessionsService,
 	providePortableRecordingWriter,
+	provideOrchestrationJavaScriptExecution,
+	provideOrchestrationCompilation,
 	provideFactorySessionExecutionFactory,
 	provideRecordingsProjectionFactory,
 	provideRecordingsFactory,

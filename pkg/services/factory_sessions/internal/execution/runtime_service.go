@@ -218,7 +218,7 @@ type JavaScriptRuntimeService struct {
 	syncWaits           SyncWaitScheduler
 	checkpointSummaries factory.JavaScriptCheckpointSummaries
 	workflowDefinitions factory.JavaScriptWorkflowDefinitions
-	workflowRuntime     factory.JavaScriptWorkflowRuntime
+	orchestration     factory.OrchestrationJavaScriptExecution
 	childValues         factory.JavaScriptChildValues
 	workerPresetIDs     map[string]struct{}
 	workerSettings      factory.JavaScriptWorkerSettings
@@ -248,7 +248,7 @@ func NewJavaScriptRuntimeService(
 	syncWaits SyncWaitScheduler,
 	checkpointSummaries factory.JavaScriptCheckpointSummaries,
 	workflowDefinitions factory.JavaScriptWorkflowDefinitions,
-	workflowRuntime factory.JavaScriptWorkflowRuntime,
+	orchestration factory.OrchestrationJavaScriptExecution,
 	childValues factory.JavaScriptChildValues,
 	workerPresetIDs map[string]struct{},
 	workerSettings factory.JavaScriptWorkerSettings,
@@ -270,7 +270,7 @@ func NewJavaScriptRuntimeService(
 		syncWaits:           syncWaits,
 		checkpointSummaries: checkpointSummaries,
 		workflowDefinitions: workflowDefinitions,
-		workflowRuntime:     workflowRuntime,
+		orchestration:       orchestration,
 		childValues:         childValues,
 		workerPresetIDs:     workerPresetIDs,
 		workerSettings:      workerSettings,
@@ -708,7 +708,7 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
 	if err != nil {
 		return factory.JavaScriptRuntimeOutcome{}, err
 	}
-	return s.workflowRuntime.Run(ctx, factory.JavaScriptRuntimeRequest{
+	return s.orchestration.RunJavaScript(ctx, factory.JavaScriptRuntimeRequest{
 		Source:         sourceContent,
 		SourceRef:      resolved.SourceRef,
 		SessionID:      sessionID,

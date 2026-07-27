@@ -351,7 +351,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestNamedJavaScriptFactoryRunsThroughAPIInvocation` covers HTTP entry.
   - `TestNamedJavaScriptFactoryUsesSameFactorySessionControls` covers pause.
 
-- [ ] `tests/functional/orchestration/javascript/loading/typescript_test.go`
+- [x] `tests/functional/orchestration/javascript/loading/typescript_test.go`
   - `TestTypeScriptFactoryTranspilesAndRuns` covers supported syntax.
   - `TestTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic` covers error.
   - `TestTypeScriptSourceMapReportsAuthoredLocation` covers mapped location.
@@ -462,10 +462,11 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestEligibleWorkstationContentionChoosesOneDispatchOnly`.
   - `TestContentionMakesProgressAcrossRepeatedWork`.
 
-- [ ] `tests/functional/workstations/cron/clock_test.go`
+- [x] `tests/functional/workstations/cron/clock_test.go`
   - `TestCronFiresAtInjectedTimeWithoutWallClockSleep`.
   - `TestCronDoesNotDoubleFireForOneScheduleBoundary`.
   - `TestCronShutdownPreventsLaterSubmission`.
+  - `TestCronImplicitFailureRoutingMovesFailedCronWorkIntoFailedState`.
 
 - [x] `tests/functional/workstations/repeater/reject_accept_test.go`
   - `TestRepeater_YieldsBetweenIterations`.

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
@@ -377,6 +378,148 @@ func TestShutdownStopsSupervisedRuntimesAndCancelsIdleTimers(t *testing.T) {
 	if stopCount.Load() != 1 {
 		t.Fatalf("stop count = %d, want 1", stopCount.Load())
 	}
+}
+
+func TestIdleUnloadStopsRuntimeAfterLeaseRelease(t *testing.T) {
+	t.Parallel()
+
+	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(healthServer.Close)
+
+	var stopCount atomic.Int32
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "idle-unload-lease-release")
+	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	service := internalservice.NewWithLeasesFacts(
+		scopes,
+		mustAssetsService(t, scopes),
+		&fakeProcessLauncher{
+			newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+				process := newFakeManagedProcess(healthServer.URL, nil)
+				process.stopFn = func() error {
+					stopCount.Add(1)
+					return process.defaultStop()
+				}
+				return process
+			},
+		},
+		http.DefaultClient,
+		realHostClock{},
+		nil,
+		nil,
+		leaseReadySlotFacts{capacity: 1},
+		internalservice.HostPolicyTestConfig{IdleUnloadAfter: 40 * time.Millisecond},
+	)
+
+	_, err := service.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: ref,
+		Name:  "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("EnsureModelHost: %v", err)
+	}
+
+	leases := internalservice.LeasesService(service)
+	acquired, err := leases.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope:  ref,
+		Name:   "OMNIVOICE_Q4_K_M",
+		Holder: "worker-a",
+	})
+	if err != nil {
+		t.Fatalf("AcquireModelLease: %v", err)
+	}
+	if _, err := leases.ReleaseModelLease(context.Background(), models.ReleaseModelLeaseRequest{
+		Scope: ref,
+		Lease: acquired.Lease.Lease,
+	}); err != nil {
+		t.Fatalf("ReleaseModelLease: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for stopCount.Load() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for idle unload after lease release")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestIdleUnloadDoesNotStopActiveLeaseHolder(t *testing.T) {
+	t.Parallel()
+
+	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(healthServer.Close)
+
+	var stopCount atomic.Int32
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "idle-active-lease-holder")
+	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	service := internalservice.NewWithLeasesFacts(
+		scopes,
+		mustAssetsService(t, scopes),
+		&fakeProcessLauncher{
+			newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+				process := newFakeManagedProcess(healthServer.URL, nil)
+				process.stopFn = func() error {
+					stopCount.Add(1)
+					return process.defaultStop()
+				}
+				return process
+			},
+		},
+		http.DefaultClient,
+		realHostClock{},
+		nil,
+		nil,
+		leaseReadySlotFacts{capacity: 2},
+		internalservice.HostPolicyTestConfig{IdleUnloadAfter: 40 * time.Millisecond},
+	)
+
+	_, err := service.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: ref,
+		Name:  "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("EnsureModelHost: %v", err)
+	}
+
+	leases := internalservice.LeasesService(service)
+	if _, err := leases.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope:  ref,
+		Name:   "OMNIVOICE_Q4_K_M",
+		Holder: "worker-a",
+	}); err != nil {
+		t.Fatalf("AcquireModelLease: %v", err)
+	}
+
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if stopCount.Load() != 0 {
+		t.Fatalf("stop count = %d, want 0 while lease holder active", stopCount.Load())
+	}
+}
+
+type leaseReadySlotFacts struct {
+	capacity int
+}
+
+func (facts leaseReadySlotFacts) SlotFacts(
+	context.Context,
+	models.RuntimeScopeRef,
+	string,
+) (hostleases.SlotFacts, error) {
+	return hostleases.SlotFacts{
+		Readiness: models.ReadinessStateReady,
+		Capacity:  facts.capacity,
+	}, nil
 }
 
 func newRuntimeHostWithPolicy(
