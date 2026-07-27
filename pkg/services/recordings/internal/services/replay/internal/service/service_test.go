@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -381,6 +382,91 @@ func TestObserveReplayDivergenceOnExpectedThroughMismatch(t *testing.T) {
 	}
 }
 
+func TestCreateReplayPlanRejectsCorruptCanonicalEvents(t *testing.T) {
+	t.Parallel()
+
+	valid := recordings.ReplayRecordingFacts{
+		RecordingID: "recording-replay-corrupt",
+		Scope:       recordings.CanonicalEventScope{FactorySessionID: "session-replay-corrupt"},
+		Events: []recordings.CanonicalEvent{
+			scopedReplayStateEvent(0, `{"state":"RUNNING"}`, recordings.CanonicalEventScope{FactorySessionID: "session-replay-corrupt"}),
+			scopedReplayStateEvent(1, `{"state":"COMPLETED"}`, recordings.CanonicalEventScope{FactorySessionID: "session-replay-corrupt"}),
+		},
+	}
+	for name, mutate := range privateMalformedReplayRecordingMutations() {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			replay, _, _, _ := newReplayHarness(t)
+			corrupt := clonePrivateReplayRecording(valid)
+			mutate(&corrupt)
+			result, err := replay.CreateReplayPlan(recordings.CreateReplayPlanRequest{
+				SchemaVersion: recordings.ReplayPlanSchemaV1,
+				Timing:        recordings.ReplayTimingOrderOnly,
+				Recording:     corrupt,
+			})
+			assertBoundedReplayError(t, err, recordings.ErrCorruptReplayInput)
+			if result != (recordings.CreateReplayPlanResult{}) {
+				t.Fatalf("CreateReplayPlan corrupt result = %#v, want no observable plan", result)
+			}
+
+			planned, err := replay.CreateReplayPlan(recordings.CreateReplayPlanRequest{
+				SchemaVersion: recordings.ReplayPlanSchemaV1,
+				Timing:        recordings.ReplayTimingOrderOnly,
+				Recording:     valid,
+			})
+			if err != nil {
+				t.Fatalf("CreateReplayPlan valid after rejection: %v", err)
+			}
+			var observed recordings.ObserveReplayResult
+			for step := 0; step < len(valid.Events); step++ {
+				observed, err = replay.ObserveReplay(recordings.ObserveReplayRequest{
+					Plan: planned.Plan.Handle,
+				})
+				if err != nil {
+					t.Fatalf("ObserveReplay valid after rejection step %d: %v", step, err)
+				}
+			}
+			if observed.Observation.Kind != recordings.ReplayCompleted {
+				t.Fatalf("ObserveReplay valid after rejection = %#v, want COMPLETED", observed)
+			}
+		})
+	}
+}
+
+func TestCreateReplayPlanRejectsEmptyRecordingIdentity(t *testing.T) {
+	t.Parallel()
+
+	replay, _, _, _ := newReplayHarness(t)
+	recording := recordings.ReplayRecordingFacts{
+		RecordingID: "   ",
+		Events: []recordings.CanonicalEvent{
+			replayStateEvent(0, `{"state":"RUNNING"}`),
+		},
+	}
+	result, err := replay.CreateReplayPlan(recordings.CreateReplayPlanRequest{
+		SchemaVersion: recordings.ReplayPlanSchemaV1,
+		Timing:        recordings.ReplayTimingOrderOnly,
+		Recording:     recording,
+	})
+	assertBoundedReplayError(t, err, recordings.ErrCorruptReplayInput)
+	if result != (recordings.CreateReplayPlanResult{}) {
+		t.Fatalf("CreateReplayPlan empty identity result = %#v, want no observable plan", result)
+	}
+}
+
+func TestObserveReplayReturnsReplayPlanNotFound(t *testing.T) {
+	t.Parallel()
+
+	replay, _, _, _ := newReplayHarness(t)
+	if _, err := replay.ObserveReplay(recordings.ObserveReplayRequest{
+		Plan: "missing-replay-plan",
+	}); !errors.Is(err, recordings.ErrReplayPlanNotFound) {
+		t.Fatalf("ObserveReplay missing plan = %v, want ErrReplayPlanNotFound", err)
+	}
+	assertBoundedReplayError(t, recordings.ErrReplayPlanNotFound, recordings.ErrReplayPlanNotFound)
+}
+
 func TestCreateReplayPlanDetachesCallerFacts(t *testing.T) {
 	t.Parallel()
 
@@ -479,9 +565,18 @@ func finalizeReplayRecording(
 }
 
 func replayStateEvent(sequence recordings.CanonicalEventSequence, payload string) recordings.CanonicalEvent {
+	return scopedReplayStateEvent(sequence, payload, recordings.CanonicalEventScope{FactorySessionID: "session-replay-load-plan"})
+}
+
+func scopedReplayStateEvent(
+	sequence recordings.CanonicalEventSequence,
+	payload string,
+	scope recordings.CanonicalEventScope,
+) recordings.CanonicalEvent {
 	return recordings.CanonicalEvent{
 		ID:       recordings.CanonicalEventID("state-" + string(rune('0'+sequence))),
 		Sequence: sequence,
+		Scope:    scope,
 		Cursor: recordings.CanonicalEventCursor{
 			StreamGenerationID: "generation-replay-load-plan",
 			Sequence:           sequence,
@@ -489,5 +584,78 @@ func replayStateEvent(sequence recordings.CanonicalEventSequence, payload string
 		RecordedAt: time.Unix(1_700_000_000+int64(sequence), 0).UTC(),
 		Kind:       "FACTORY_STATE_RESPONSE",
 		Payload:    payload,
+	}
+}
+
+func privateMalformedReplayRecordingMutations() map[string]func(*recordings.ReplayRecordingFacts) {
+	return map[string]func(*recordings.ReplayRecordingFacts){
+		"missing identity": func(recording *recordings.ReplayRecordingFacts) {
+			recording.Events[0].ID = ""
+		},
+		"whitespace identity": func(recording *recordings.ReplayRecordingFacts) {
+			recording.Events[0].ID = "   "
+		},
+		"missing kind": func(recording *recordings.ReplayRecordingFacts) {
+			recording.Events[0].Kind = ""
+		},
+		"whitespace kind": func(recording *recordings.ReplayRecordingFacts) {
+			recording.Events[0].Kind = "   "
+		},
+		"zero timestamp": func(recording *recordings.ReplayRecordingFacts) {
+			recording.Events[0].RecordedAt = time.Time{}
+		},
+		"whitespace scope": func(recording *recordings.ReplayRecordingFacts) {
+			recording.Scope.FactorySessionID = "   "
+			recording.Events[0].Scope = recording.Scope
+			recording.Events[1].Scope = recording.Scope
+		},
+		"invalid JSON": func(recording *recordings.ReplayRecordingFacts) {
+			recording.Events[0].Payload = `{"incomplete":`
+		},
+		"missing cursor generation": func(recording *recordings.ReplayRecordingFacts) {
+			recording.Events[0].Cursor.StreamGenerationID = ""
+		},
+		"cursor sequence mismatch": func(recording *recordings.ReplayRecordingFacts) {
+			recording.Events[0].Cursor.Sequence++
+		},
+		"negative sequence": func(recording *recordings.ReplayRecordingFacts) {
+			recording.Events[0].Sequence = -1
+			recording.Events[0].Cursor.Sequence = -1
+		},
+		"generation mismatch": func(recording *recordings.ReplayRecordingFacts) {
+			recording.Events[1].Cursor.StreamGenerationID = "other-generation"
+		},
+		"out of order": func(recording *recordings.ReplayRecordingFacts) {
+			recording.Events[1].Sequence = recording.Events[0].Sequence
+			recording.Events[1].Cursor.Sequence = recording.Events[1].Sequence
+		},
+	}
+}
+
+func clonePrivateReplayRecording(recording recordings.ReplayRecordingFacts) recordings.ReplayRecordingFacts {
+	cloned := recording
+	cloned.Events = append([]recordings.CanonicalEvent(nil), recording.Events...)
+	return cloned
+}
+
+func assertBoundedReplayError(t *testing.T, err error, want error) {
+	t.Helper()
+	if !errors.Is(err, want) {
+		t.Fatalf("error = %v, want %v", err, want)
+	}
+	message := err.Error()
+	if len(message) > 120 {
+		t.Fatalf("error message too long (%d chars): %q", len(message), message)
+	}
+	for _, leaked := range []string{
+		"/pkg/",
+		"ledger",
+		"internal/services",
+		"decoder",
+		"runtime engine",
+	} {
+		if strings.Contains(strings.ToLower(message), strings.ToLower(leaked)) {
+			t.Fatalf("error leaked %q: %q", leaked, message)
+		}
 	}
 }
