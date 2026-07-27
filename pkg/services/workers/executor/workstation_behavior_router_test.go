@@ -27,13 +27,13 @@ func TestNewScriptExecutorWithDependenciesValidatesAndUsesSelectedCommandEdge(t 
 	}
 }
 
-func TestScriptExecutorExecuteRequiresClock(t *testing.T) {
+func TestScriptExecutorExecuteRequiresResolvedRunner(t *testing.T) {
 	executor := NewScriptExecutorWithRunner(
 		&interfaces.FactoryWorkerConfig{Command: "selected-script"},
 		&capturingCommandRunner{}, nil, "", nil, nil,
 	)
-	if _, err := executor.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{}); err == nil || !strings.Contains(err.Error(), "clock is required") {
-		t.Fatalf("missing clock error = %v", err)
+	if _, err := executor.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{}); err == nil || !strings.Contains(err.Error(), "runner is required") {
+		t.Fatalf("missing Runner error = %v", err)
 	}
 }
 

@@ -2,10 +2,14 @@ package executor
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -131,8 +135,132 @@ func assertScriptFailureMetadata(
 	}
 }
 
+type scriptTestTB interface {
+	Helper()
+	Fatalf(string, ...any)
+}
+
+func bindLegacyScriptRunner(t scriptTestTB, executor *ScriptExecutor) {
+	t.Helper()
+	docs := executor.FactoryDocs
+	if docs == nil {
+		docs = func(string) (map[string]string, error) { return nil, nil }
+	}
+	binding, err := resolveScriptRunner(
+		&interfaces.FactoryWorkerConfig{
+			Command: executor.Command,
+			Args:    append([]string(nil), executor.Args...),
+		},
+		streamingTestCommandRunner(executor.CommandRunner),
+		executor.FactoryDir,
+		executor.Publish,
+		executor.recorder,
+		executor.Now,
+		docs,
+	)
+	if err != nil {
+		t.Fatalf("resolve legacy test Script Runner: %v", err)
+	}
+	executor.runner = binding.Runner
+}
+
+type completeOutputTestCommandRunner struct {
+	CommandRunner
+}
+
+func streamingTestCommandRunner(runner CommandRunner) CommandRunner {
+	if _, ok := runner.(interface {
+		RunStreaming(
+			context.Context,
+			CommandRequest,
+			workerprocess.OutputChunkObserver,
+		) (CommandResult, error)
+	}); ok {
+		return runner
+	}
+	return completeOutputTestCommandRunner{CommandRunner: runner}
+}
+
+func (runner completeOutputTestCommandRunner) RunStreaming(
+	ctx context.Context,
+	request CommandRequest,
+	observer workerprocess.OutputChunkObserver,
+) (CommandResult, error) {
+	result, err := runner.Run(ctx, request)
+	if observer != nil && len(result.Stdout) > 0 {
+		observer(workerprocess.OutputStreamStdout, append([]byte(nil), result.Stdout...))
+	}
+	if observer != nil && len(result.Stderr) > 0 {
+		observer(workerprocess.OutputStreamStderr, append([]byte(nil), result.Stderr...))
+	}
+	return result, err
+}
+
+func NewScriptExecutor(
+	definition *interfaces.FactoryWorkerConfig,
+	logger logging.Logger,
+	factoryDirectory string,
+	record workerexecution.ScriptEventRecorder,
+	now func() time.Time,
+) *ScriptExecutor {
+	executor := &ScriptExecutor{Logger: logger, recorder: record, Now: now}
+	if definition != nil {
+		executor.Command = definition.Command
+		executor.Args = append([]string(nil), definition.Args...)
+		executor.FactoryDir = strings.TrimSpace(factoryDirectory)
+	}
+	return executor
+}
+
+func NewScriptExecutorWithRunner(
+	definition *interfaces.FactoryWorkerConfig,
+	runner CommandRunner,
+	logger logging.Logger,
+	factoryDirectory string,
+	record workerexecution.ScriptEventRecorder,
+	now func() time.Time,
+) *ScriptExecutor {
+	executor := NewScriptExecutor(definition, logger, factoryDirectory, record, now)
+	executor.CommandRunner = runner
+	if definition != nil && runner != nil && now != nil {
+		bindLegacyScriptRunner(testPanicTB{}, executor)
+	}
+	return executor
+}
+
+func NewScriptExecutorWithDependencies(
+	definition *interfaces.FactoryWorkerConfig,
+	commandRunner CommandRunner,
+	logger logging.Logger,
+	factoryDirectory string,
+	record workerexecution.ScriptEventRecorder,
+	now func() time.Time,
+	factoryDocs workerexecution.FactoryDocsLoader,
+) (*ScriptExecutor, error) {
+	if definition == nil {
+		return nil, errors.New("construct script worker: definition is required")
+	}
+	if commandRunner == nil {
+		return nil, errors.New("construct script worker: command runner is required")
+	}
+	if factoryDocs == nil {
+		return nil, errors.New("construct script worker: Factory docs loader is required")
+	}
+	executor := NewScriptExecutor(definition, logger, factoryDirectory, record, now)
+	executor.CommandRunner = commandRunner
+	executor.FactoryDocs = factoryDocs
+	return executor, nil
+}
+
+type testPanicTB struct{}
+
+func (testPanicTB) Helper() {}
+func (testPanicTB) Fatalf(format string, args ...any) {
+	panic(fmt.Sprintf(format, args...))
+}
+
 func TestScriptFactoryConstructsRegistryBackedExecutor(t *testing.T) {
-	command := fixedCommandRunner{stdout: []byte("factory output")}
+	command := streamingTestCommandRunner(fixedCommandRunner{stdout: []byte("factory output")})
 	clock := workerprocess.ClockFunc(func() time.Time {
 		return time.Date(2026, time.July, 26, 23, 0, 0, 0, time.UTC)
 	})
@@ -168,7 +296,7 @@ func TestScriptFactoryConstructsRegistryBackedExecutor(t *testing.T) {
 	if got, err := factory.WithCommandRunner(nil); err != nil || got != factory {
 		t.Fatalf("WithCommandRunner(nil) = (%p, %v), want original factory", got, err)
 	}
-	replaced, err := factory.WithCommandRunner(fixedCommandRunner{stdout: []byte("replacement")})
+	replaced, err := factory.WithCommandRunner(streamingTestCommandRunner(fixedCommandRunner{stdout: []byte("replacement")}))
 	if err != nil || replaced == factory {
 		t.Fatalf("WithCommandRunner(replacement) = (%p, %v), want detached factory", replaced, err)
 	}
@@ -199,5 +327,46 @@ func TestScriptFactoryRejectsIncompleteDependencies(t *testing.T) {
 	}
 	if _, err := factory.WithCommandRunner(fixedCommandRunner{}); err == nil {
 		t.Fatal("nil ScriptFactory.WithCommandRunner() error = nil")
+	}
+}
+
+func TestNewScriptExecutorRejectsIncompleteRegistryDependencies(t *testing.T) {
+	definition := &interfaces.FactoryWorkerConfig{Command: "fixture"}
+	command := fixedCommandRunner{}
+	docs := func(string) (map[string]string, error) { return nil, nil }
+	for _, tc := range []struct {
+		name       string
+		definition *interfaces.FactoryWorkerConfig
+		command    CommandRunner
+		docs       workerexecution.FactoryDocsLoader
+		now        func() time.Time
+	}{
+		{name: "definition", command: command, docs: docs, now: time.Now},
+		{name: "command", definition: definition, docs: docs, now: time.Now},
+		{name: "Factory docs", definition: definition, command: command, now: time.Now},
+		{name: "clock", definition: definition, command: command, docs: docs},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := newScriptExecutor(
+				tc.definition, tc.command, nil, "", nil, nil, tc.now, tc.docs,
+			); err == nil {
+				t.Fatalf("newScriptExecutor() error = nil, want missing %s", tc.name)
+			}
+		})
+	}
+	if executor := NewScriptExecutor(nil, nil, "", nil, time.Now); executor == nil {
+		t.Fatal("NewScriptExecutor(nil) = nil, want compatibility executor")
+	}
+}
+
+func TestExecutionWorkDir_FallsBackFromWorktreeToContext(t *testing.T) {
+	request := testScriptRequest(work.WorkDispatch{}, withScriptWorktree("/tmp/worktree"))
+	if got := executionWorkDir(request); got != "/tmp/worktree" {
+		t.Fatalf("executionWorkDir() = %q, want %q", got, "/tmp/worktree")
+	}
+
+	request = testScriptRequest(work.WorkDispatch{}, withScriptWorkingDirectory("/tmp/context"))
+	if got := executionWorkDir(request); got != "/tmp/context" {
+		t.Fatalf("executionWorkDir() = %q, want %q", got, "/tmp/context")
 	}
 }

@@ -166,6 +166,7 @@ func TestScriptExecutor_CancellationReturnsFailedResult(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
+	bindLegacyScriptRunner(t, executor)
 	result, err := executor.Execute(ctx, testScriptRequest(work.WorkDispatch{DispatchID: "d-1", TransitionID: "t-3"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -186,6 +187,7 @@ func TestScriptExecutor_TemplateSubstitutionAndEnvMerging(t *testing.T) {
 	cmd, args := echoCommand("{{ (index .Inputs 0).WorkID }}")
 	executor := &ScriptExecutor{Command: cmd, Args: args, Now: time.Now, CommandRunner: testScriptExecRunner(t)}
 
+	bindLegacyScriptRunner(t, executor)
 	result, err := executor.Execute(context.Background(), testScriptRequest(
 		work.WorkDispatch{
 			DispatchID:   "d-1",
@@ -220,6 +222,7 @@ func TestScriptExecutor_RejectsImageContentBeforeRunner(t *testing.T) {
 		CommandRunner: runner,
 	}
 
+	bindLegacyScriptRunner(t, executor)
 	result, err := executor.Execute(context.Background(), testScriptRequest(
 		work.WorkDispatch{
 			DispatchID:   "d-image-script",
@@ -260,6 +263,7 @@ func TestScriptExecutor_ExecutionWorkDirPrefersWorkingDirectory(t *testing.T) {
 		CommandRunner: runner,
 	}
 
+	bindLegacyScriptRunner(t, executor)
 	_, err := executor.Execute(context.Background(), testScriptRequest(
 		work.WorkDispatch{
 			DispatchID:   "d-1",
@@ -296,6 +300,7 @@ func TestScriptExecutor_PropagatesExecutionMetadataToCommandRunner(t *testing.T)
 		WorkIDs:             []string{"work-1", "work-2"},
 		ReplayKey:           "transition-1/trace-1/work-1/work-2",
 	}
+	bindLegacyScriptRunner(t, executor)
 	_, err := executor.Execute(context.Background(), testScriptRequest(work.WorkDispatch{
 		DispatchID:   "d-1",
 		TransitionID: "transition-1",
@@ -336,6 +341,7 @@ func TestScriptExecutor_SharedCommandRunnerReceivesResolvedDispatchRequest(t *te
 		ReplayKey:           "transition-script/trace-script/work-script",
 	}
 
+	bindLegacyScriptRunner(t, executor)
 	result, err := executor.Execute(context.Background(), sharedRunnerDispatch(wantExecution))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -551,6 +557,7 @@ func newRecordedScriptExecutor(runner CommandRunner, recorder func(workerexecuti
 func executeRecordedScript(t *testing.T, executor *ScriptExecutor) workerexecution.WorkResult {
 	t.Helper()
 
+	bindLegacyScriptRunner(t, executor)
 	result, err := executor.Execute(context.Background(), sharedRunnerDispatch(work.ExecutionMetadata{
 		DispatchCreatedTick: 7,
 		CurrentTick:         9,
@@ -624,6 +631,7 @@ func TestScriptExecutor_DirectCommandEnvironmentDoesNotAddProviderAutomationDefa
 		CommandRunner: envPrintingCommandRunner{},
 	}
 
+	bindLegacyScriptRunner(t, executor)
 	result, err := executor.Execute(context.Background(), testScriptRequest(work.WorkDispatch{
 		DispatchID:   "d-script-env",
 		TransitionID: "t-script-env",
@@ -657,6 +665,7 @@ func TestScriptExecutor_CommandEnvironmentUsesDispatchEnvOverrides(t *testing.T)
 		CommandRunner: runner,
 	}
 
+	bindLegacyScriptRunner(t, executor)
 	result, err := executor.Execute(context.Background(), testScriptRequest(
 		work.WorkDispatch{
 			DispatchID:   "d-script-override-env",
@@ -695,6 +704,7 @@ func TestScriptExecutor_AttachesCommandDiagnosticsToWorkResult(t *testing.T) {
 		},
 	}
 
+	bindLegacyScriptRunner(t, executor)
 	result, err := executor.Execute(context.Background(), testScriptRequest(
 		work.WorkDispatch{
 			DispatchID:   "d-1",
@@ -746,6 +756,7 @@ func TestScriptExecutor_CommandDiagnosticsRedactSensitiveEnvWithoutChangingExecu
 	}
 
 	const rawSecret = "super-secret-script-token"
+	bindLegacyScriptRunner(t, executor)
 	result, err := executor.Execute(context.Background(), testScriptRequest(
 		work.WorkDispatch{
 			DispatchID:   "d-sensitive-env",
@@ -812,18 +823,6 @@ func mapValues(values map[string]string) []string {
 	return out
 }
 
-func TestExecutionWorkDir_FallsBackFromWorktreeToContext(t *testing.T) {
-	request := testScriptRequest(work.WorkDispatch{}, withScriptWorktree("/tmp/worktree"))
-	if got := executionWorkDir(request); got != "/tmp/worktree" {
-		t.Fatalf("executionWorkDir() = %q, want %q", got, "/tmp/worktree")
-	}
-
-	request = testScriptRequest(work.WorkDispatch{}, withScriptWorkingDirectory("/tmp/context"))
-	if got := executionWorkDir(request); got != "/tmp/context" {
-		t.Fatalf("executionWorkDir() = %q, want %q", got, "/tmp/context")
-	}
-}
-
 func TestScriptExecutor_TimeoutStopsProcessBeforeItCanFinish(t *testing.T) {
 	outputFile := filepath.Join(t.TempDir(), "helper-finished.txt")
 	executor := &ScriptExecutor{
@@ -836,6 +835,7 @@ func TestScriptExecutor_TimeoutStopsProcessBeforeItCanFinish(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
+	bindLegacyScriptRunner(t, executor)
 	result, err := executor.Execute(ctx, testScriptRequest(
 		work.WorkDispatch{
 			DispatchID:   "d-helper",

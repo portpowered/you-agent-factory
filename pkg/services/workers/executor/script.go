@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -31,8 +30,7 @@ type ScriptExecutor struct {
 	FactoryDocs   workers.FactoryDocsLoader
 	Publish       workers.ProgressPublisher
 
-	runnerMu sync.Mutex
-	runner   workers.Runner
+	runner workers.Runner
 }
 
 // ScriptEventRecorder receives worker-owned script-boundary facts.
@@ -109,50 +107,6 @@ func (f *ScriptFactory) WithCommandRunner(runner CommandRunner) (*ScriptFactory,
 	return NewScriptFactory(runner, f.commandClock, f.factoryDocs)
 }
 
-// NewScriptExecutorWithDependencies preserves the existing package-local
-// constructor while routing execution through the private Runner registry.
-func NewScriptExecutorWithDependencies(
-	definition *workerconfig.FactoryWorkerConfig,
-	commandRunner CommandRunner,
-	logger logging.Logger,
-	factoryDirectory string,
-	record workers.ScriptEventRecorder,
-	now func() time.Time,
-	factoryDocs workers.FactoryDocsLoader,
-) (*ScriptExecutor, error) {
-	if definition == nil {
-		return nil, errors.New("construct script worker: definition is required")
-	}
-	if commandRunner == nil {
-		return nil, errors.New("construct script worker: command runner is required")
-	}
-	if factoryDocs == nil {
-		return nil, errors.New("construct script worker: Factory docs loader is required")
-	}
-	if now == nil {
-		executor := NewScriptExecutorWithRunner(
-			definition,
-			commandRunner,
-			logger,
-			factoryDirectory,
-			record,
-			now,
-		)
-		executor.FactoryDocs = factoryDocs
-		return executor, nil
-	}
-	return newScriptExecutor(
-		definition,
-		commandRunner,
-		logger,
-		factoryDirectory,
-		nil,
-		record,
-		now,
-		factoryDocs,
-	)
-}
-
 func newScriptExecutor(
 	definition *workerconfig.FactoryWorkerConfig,
 	commandRunner CommandRunner,
@@ -223,7 +177,7 @@ func resolveScriptRunner(
 			FactoryDirectory: strings.TrimSpace(factoryDirectory),
 		},
 		runners.ScriptDependencies{
-			CommandRunner: ensureStreamingCommandRunner(commandRunner),
+			CommandRunner: commandRunner,
 			FactoryDocs:   factoryDocs,
 			Now:           now,
 			Publish:       publish,
@@ -242,125 +196,17 @@ func resolveScriptRunner(
 	return binding, nil
 }
 
-// NewScriptExecutor creates a compatibility adapter. Production construction
-// uses ScriptFactory.New so incomplete dependencies fail before dispatch.
-func NewScriptExecutor(
-	definition *workerconfig.FactoryWorkerConfig,
-	logger logging.Logger,
-	factoryDirectory string,
-	record workers.ScriptEventRecorder,
-	now func() time.Time,
-) *ScriptExecutor {
-	if definition == nil {
-		return &ScriptExecutor{Logger: logger, Now: now}
-	}
-	return &ScriptExecutor{
-		Command:    definition.Command,
-		Args:       append([]string(nil), definition.Args...),
-		FactoryDir: strings.TrimSpace(factoryDirectory),
-		Logger:     logger,
-		recorder:   record,
-		Now:        now,
-	}
-}
-
-// NewScriptExecutorWithRunner creates a compatibility adapter with an explicit
-// command edge. It still resolves the Script Runner through the private registry
-// when Execute first observes the complete legacy configuration.
-func NewScriptExecutorWithRunner(
-	definition *workerconfig.FactoryWorkerConfig,
-	runner CommandRunner,
-	logger logging.Logger,
-	factoryDirectory string,
-	record workers.ScriptEventRecorder,
-	now func() time.Time,
-) *ScriptExecutor {
-	executor := NewScriptExecutor(definition, logger, factoryDirectory, record, now)
-	executor.CommandRunner = runner
-	return executor
-}
-
 // Execute invokes only the registry-resolved common Runner and translates its
 // canonical result into the existing workstation result shape.
 func (se *ScriptExecutor) Execute(
 	ctx context.Context,
 	request workers.WorkstationExecutionRequest,
 ) (workers.WorkResult, error) {
-	if se == nil || se.Now == nil {
-		return workers.WorkResult{}, errors.New("script executor clock is required")
+	if se == nil || se.runner == nil {
+		return workers.WorkResult{}, errors.New("script executor runner is required")
 	}
-	runner, err := se.resolvedRunner()
-	if err != nil {
-		return workers.WorkResult{}, err
-	}
-	result, executionErr := runner.Execute(ctx, scriptRunnerRequest(request))
+	result, executionErr := se.runner.Execute(ctx, scriptRunnerRequest(request))
 	return scriptWorkResult(request.Dispatch.DispatchID, request.Dispatch.TransitionID, result, executionErr), nil
-}
-
-func (se *ScriptExecutor) resolvedRunner() (workers.Runner, error) {
-	se.runnerMu.Lock()
-	defer se.runnerMu.Unlock()
-	if se.runner != nil {
-		return se.runner, nil
-	}
-	if se.CommandRunner == nil {
-		return nil, errors.New("construct script worker: command runner is required")
-	}
-	factoryDocs := se.FactoryDocs
-	if factoryDocs == nil {
-		factoryDocs = func(string) (map[string]string, error) { return nil, nil }
-	}
-	binding, err := resolveScriptRunner(
-		&workerconfig.FactoryWorkerConfig{
-			Command: se.Command,
-			Args:    append([]string(nil), se.Args...),
-		},
-		se.CommandRunner,
-		se.FactoryDir,
-		se.Publish,
-		se.recorder,
-		se.Now,
-		factoryDocs,
-	)
-	if err != nil {
-		return nil, err
-	}
-	se.runner = binding.Runner
-	return se.runner, nil
-}
-
-type streamingCommandRunner interface {
-	RunStreaming(
-		context.Context,
-		CommandRequest,
-		workerprocess.OutputChunkObserver,
-	) (CommandResult, error)
-}
-
-type completeOutputStreamingRunner struct {
-	CommandRunner
-}
-
-func ensureStreamingCommandRunner(runner CommandRunner) CommandRunner {
-	if _, ok := runner.(streamingCommandRunner); ok {
-		return runner
-	}
-	return completeOutputStreamingRunner{CommandRunner: runner}
-}
-
-func (r completeOutputStreamingRunner) RunStreaming(
-	ctx context.Context,
-	request CommandRequest,
-	observer workerprocess.OutputChunkObserver,
-) (CommandResult, error) {
-	result, err := r.Run(ctx, request)
-	if observer != nil && len(result.Stdout) > 0 {
-		observer(workerprocess.OutputStreamStdout, append([]byte(nil), result.Stdout...))
-	}
-	if observer != nil && len(result.Stderr) > 0 {
-		observer(workerprocess.OutputStreamStderr, append([]byte(nil), result.Stderr...))
-	}
-	return result, err
 }
 
 func scriptRunnerRequest(request workers.WorkstationExecutionRequest) workers.RunnerExecutionRequest {

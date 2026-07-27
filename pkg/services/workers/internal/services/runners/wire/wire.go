@@ -2,6 +2,8 @@
 package wire
 
 import (
+	"errors"
+
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/script"
@@ -33,14 +35,12 @@ func NewScriptRegistry(
 			Record:        dependencies.Record,
 		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	return NewService([]runners.Registration{{
+	service, registryErr := NewService([]runners.Registration{{
 		Identity: runners.ScriptIdentity,
 		Metadata: scriptMetadata(),
 		Runner:   implementation,
 	}})
+	return service, errors.Join(err, registryErr)
 }
 
 func scriptMetadata() workers.RunnerMetadata {
