@@ -3,6 +3,7 @@ package dispatch
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -440,6 +441,221 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 		}
 		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
 	})
+}
+
+// TestPetriInvocationInputAndOutputMapping proves submitted Work payload and
+// Trace identity map into worker invocation inputs at the external-effect edge
+// and that public Work projections and Factory Events keep outputs and lineage
+// attributable to the originating Work identity without inspecting internal
+// Petri structures.
+func TestPetriInvocationInputAndOutputMapping(t *testing.T) {
+	t.Run("factory_model_maps_to_provider_invocation", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "e2e"))
+		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"model mapping probe"}`))
+
+		provider := testutil.NewMockProvider(
+			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
+		)
+		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderOverride: provider,
+		}, 10*time.Second)
+
+		terminal := support.WorkCustomerLocation("task", "complete")
+		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 1})
+		if provider.CallCount() != 1 {
+			t.Fatalf("provider call count = %d, want 1", provider.CallCount())
+		}
+
+		call := provider.LastCall()
+		if call.Model != "test-model" {
+			t.Errorf("provider model = %q, want test-model", call.Model)
+		}
+		if call.SystemPrompt == "" {
+			t.Error("provider system prompt is empty, want Factory worker prompt content")
+		}
+	})
+
+	t.Run("work_payload_maps_into_provider_user_message", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
+		markdownNeedle := "# Architecture Review"
+		testutil.WriteSeedMarkdownFile(t, dir, "task", "architecture-review",
+			[]byte("# Architecture Review\n\nPlease review the system architecture."))
+
+		provider := testutil.NewMockProvider(
+			workerexecution.InferenceResponse{Content: "Reviewed. COMPLETE"},
+		)
+		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderOverride: provider,
+		}, 10*time.Second)
+
+		terminal := support.WorkCustomerLocation("task", "complete")
+		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 1})
+		assertCompletedWorkName(t, listed, "task", "architecture-review")
+		userMessage := provider.LastCall().UserMessage
+		if !strings.Contains(userMessage, markdownNeedle) {
+			t.Errorf(
+				"provider user message = %q, want markdown payload needle %q",
+				userMessage,
+				markdownNeedle,
+			)
+		}
+		if !strings.Contains(userMessage, "Task Name: architecture-review") {
+			t.Errorf(
+				"provider user message = %q, want seeded Work name architecture-review",
+				userMessage,
+			)
+		}
+	})
+
+	t.Run("work_name_maps_into_invocation_prompt", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
+		workName := "design-doc-review"
+		traceID := "trace-prompt-mapping"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			Name:       workName,
+			WorkTypeID: "task",
+			TraceID:    traceID,
+			Payload:    []byte(`review the design document`),
+		})
+
+		provider := testutil.NewMockProvider(
+			workerexecution.InferenceResponse{Content: "Reviewed. COMPLETE"},
+		)
+		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderOverride: provider,
+		}, 10*time.Second)
+
+		terminal := support.WorkCustomerLocation("task", "complete")
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{traceID})
+		userMessage := provider.LastCall().UserMessage
+		if !strings.Contains(userMessage, "Task Name: "+workName) {
+			t.Errorf(
+				"provider user message = %q, want rendered prompt to contain Task Name: %s",
+				userMessage,
+				workName,
+			)
+		}
+	})
+
+	t.Run("cross_work_type_terminal_preserves_origin_trace", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_to_prd"))
+		originTraceID := "trace-cross-work-type-mapping"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "idea",
+			TraceID:    originTraceID,
+			Payload:    []byte(`{"title":"search bar on docs"}`),
+		})
+
+		provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+			"planner":       {{Content: "Done. COMPLETE"}},
+			"prd-processor": {{Content: "Done. COMPLETE"}},
+		})
+		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderOverride: provider,
+		}, 10*time.Second)
+
+		terminal := support.WorkCustomerLocation("prd", "complete")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			terminal: 1,
+			support.WorkCustomerLocation("idea", "init"): 0,
+		})
+		assertListedWorkStateTrace(t, listed, "prd", "complete", originTraceID)
+		if provider.CallCount("planner") != 1 {
+			t.Errorf("planner call count = %d, want 1", provider.CallCount("planner"))
+		}
+	})
+
+	t.Run("failed_terminal_preserves_origin_trace_lineage", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
+		originTraceID := "trace-failed-lineage-mapping"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "idea",
+			TraceID:    originTraceID,
+			Payload:    []byte(`{"title":"failed lineage mapping"}`),
+		})
+
+		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
+			"planner": {
+				{Content: "Task processed successfully.<COMPLETE>"},
+			},
+			"processor": {
+				{Content: "Task execution failed.<FAILED>"},
+			},
+		})
+		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderOverride:    provider,
+			ScriptCommandRunner: support.NewStaticSuccessCommandRunner("script-output-ok"),
+		}, 15*time.Second)
+
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			support.WorkCustomerLocation("idea", "complete"): 1,
+			support.WorkCustomerLocation("plan", "complete"): 1,
+			support.WorkCustomerLocation("task", "failed"):   1,
+			support.WorkCustomerLocation("task", "complete"): 0,
+			support.WorkCustomerLocation("idea", "init"):     0,
+			support.WorkCustomerLocation("plan", "init"):     0,
+			support.WorkCustomerLocation("task", "init"):     0,
+		})
+		assertListedWorkStateTrace(t, listed, "idea", "complete", originTraceID)
+		assertListedWorkStateTrace(t, listed, "plan", "complete", originTraceID)
+		assertListedWorkStateTrace(t, listed, "task", "failed", originTraceID)
+	})
+
+	t.Run("dispatch_events_reference_terminal_work_identity", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "e2e"))
+		traceID := "trace-dispatch-event-mapping"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "task",
+			TraceID:    traceID,
+			Payload:    []byte(`{"title":"dispatch event mapping"}`),
+		})
+
+		provider := testutil.NewMockProvider(
+			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
+		)
+		_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderOverride: provider},
+			10*time.Second,
+		)
+
+		terminal := support.WorkCustomerLocation("task", "complete")
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{traceID})
+		assertDispatchEventsReferenceTerminalWork(t, events, listed, terminal, []string{traceID})
+	})
+}
+
+func assertListedWorkStateTrace(
+	t *testing.T,
+	response factoryapi.ListWorkResponse,
+	workType, state, traceID string,
+) {
+	t.Helper()
+	for _, item := range response.Results {
+		if item.WorkTypeName == nil || *item.WorkTypeName != workType || item.State == nil || item.State.Name != state {
+			continue
+		}
+		if item.TraceId == nil || *item.TraceId != traceID {
+			t.Errorf("%s:%s trace ID = %#v, want %q", workType, state, item.TraceId, traceID)
+		}
+		return
+	}
+	t.Errorf("listed Work missing %s:%s", workType, state)
+}
+
+func assertCompletedWorkName(t *testing.T, response factoryapi.ListWorkResponse, workType, wantName string) {
+	t.Helper()
+	for _, item := range response.Results {
+		if item.WorkTypeName == nil || *item.WorkTypeName != workType || item.State == nil || item.State.Name != "complete" {
+			continue
+		}
+		if item.Name != wantName {
+			t.Errorf("%s:complete name = %q, want %q", workType, item.Name, wantName)
+		}
+		return
+	}
+	t.Errorf("listed Work missing %s:complete", workType)
 }
 
 func assertFailedDispatchForWork(
