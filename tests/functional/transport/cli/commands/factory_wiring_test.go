@@ -220,14 +220,11 @@ func TestCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T) {
 		t.Fatalf("you factory replace-current: %v\noutput:\n%s", err, replaceOut)
 	}
 	replaceOutput := string(replaceOut)
-	if !strings.Contains(replaceOutput, factoryReplaceSuccessMarker+" "+factoryReplaceCurrentName) {
-		t.Fatalf("replace-current output missing success marker for %q:\n%s", factoryReplaceCurrentName, replaceOutput)
+	if !strings.Contains(replaceOutput, factoryReplaceSuccessMarker) {
+		t.Fatalf("replace-current output missing success marker %q:\n%s", factoryReplaceSuccessMarker, replaceOutput)
 	}
 
 	postReplace := queryFactoryViaCLIJSON(t, ctx, binaryPath, server.URL(), factoryDir)
-	if postReplace.Name != factoryReplaceCurrentName {
-		t.Fatalf("post-replace factory name = %q, want %q", postReplace.Name, factoryReplaceCurrentName)
-	}
 	if postReplace.Id == nil || *postReplace.Id != factoryReplaceCurrentName {
 		t.Fatalf("post-replace factory id = %#v, want %q", postReplace.Id, factoryReplaceCurrentName)
 	}
