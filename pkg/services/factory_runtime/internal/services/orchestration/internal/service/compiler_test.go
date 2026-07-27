@@ -58,6 +58,46 @@ func TestCompileSelectsJavaScriptKindForInlineWorkflow(t *testing.T) {
 	}
 }
 
+func TestCompileSelectsJavaScriptKindForSourceRefWorkflow(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	workflowSource := `agent.run({ prompt: "review", label: "child" });
+return { ok: true };`
+	if err := os.WriteFile(filepath.Join(dir, "workflow.js"), []byte(workflowSource), 0o600); err != nil {
+		t.Fatalf("write workflow source: %v", err)
+	}
+
+	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
+	reader := factoryruntime.NewWorkflowSourceReader(dir, localWorkflowSourceFiles{})
+	result, err := compiler.Compile(context.Background(), orchestration.CompileRequest{
+		Config: &factorydefinitions.FactoryConfig{
+			Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
+				Kind: factorydefinitions.OrchestratorKindJavaScript,
+				JavaScript: &factorydefinitions.FactoryOrchestratorJavaScriptConfig{
+					SourceRef: "workflow.js",
+					ArgsSchema: json.RawMessage(`{
+						"type":"object",
+						"required":["prompt"],
+						"properties":{"prompt":{"type":"string"}},
+						"additionalProperties":false
+					}`),
+				},
+			},
+		},
+		SourceReader: reader,
+	})
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	if result.Kind != orchestration.KindJavaScript {
+		t.Fatalf("Kind = %q, want JAVASCRIPT", result.Kind)
+	}
+	if result.Binding == nil || result.Binding.OrchestrationKind() != orchestration.KindJavaScript {
+		t.Fatalf("Binding = %#v, want non-nil JAVASCRIPT binding", result.Binding)
+	}
+}
+
 func TestCompileRejectsUnsupportedOrchestrationKind(t *testing.T) {
 	t.Parallel()
 
