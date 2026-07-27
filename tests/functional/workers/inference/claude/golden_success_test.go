@@ -31,6 +31,21 @@ func TestClaudeGoldenFullStreamTextSuccess(t *testing.T) {
 	assertProviderSessionGoldensMatch(t, loaded, observed)
 }
 
+// TestClaudeGoldenToolLifecycleAndSessionIdentity replays a sanitized Claude
+// tool/session transcript through the customer process boundary and proves
+// public Factory response events, Provider Session metadata, and the terminal
+// invocation result expose tool start/completion lifecycle plus the stable
+// Provider Session identity supplied by the golden transcript.
+//
+//golden: docs/temp/functional/provider-sessions/claude/tool-lifecycle-session-identity/manifest.json
+func TestClaudeGoldenToolLifecycleAndSessionIdentity(t *testing.T) {
+	support.SkipLongFunctional(t, "slow Claude golden tool lifecycle replay")
+
+	loaded := loadClaudeGoldenCase(t, "tool-lifecycle-session-identity")
+	observed := replayClaudeGoldenCase(t, loaded)
+	assertProviderSessionGoldensMatch(t, loaded, observed)
+}
+
 func loadClaudeGoldenCase(t *testing.T, caseName string) support.ProviderSessionCase {
 	t.Helper()
 
