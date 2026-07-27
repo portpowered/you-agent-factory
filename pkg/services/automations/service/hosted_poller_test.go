@@ -19,8 +19,9 @@ import (
 
 // TestStartHostedLinearPoller_SubmitsIssuesThroughWorkersService verifies the
 // Automations owner forwards hosted-poller inputs and output admission through
-// its injected Workers-owned root role. Provider polling behavior with this
-// same scenario name lives in hosted_logic/supervisor_test.go.
+// its injected hosted-sources owner.
+// Provider polling behavior with this same scenario name lives in
+// automations/internal/services/hosted_sources/internal/service/supervisor_test.go.
 func TestStartHostedLinearPoller_SubmitsIssuesThroughWorkersService(t *testing.T) {
 	poller := hostedLinearPollerWorkstation()
 	worker := hostedLinearPollerWorker()

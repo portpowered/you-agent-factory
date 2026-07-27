@@ -39,3 +39,55 @@ func TestWriteAndReadFileFailuresAreActionable(t *testing.T) {
 		t.Fatal("ReadFile() error = nil, want missing-file error")
 	}
 }
+
+func TestWriteFileWindowsReplaceRetriesUntilFailure(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	blockingPath := filepath.Join(dir, "blocked")
+	if err := os.MkdirAll(filepath.Join(blockingPath, "occupied"), 0o755); err != nil {
+		t.Fatalf("mkdir blocking path: %v", err)
+	}
+
+	storage := NewLocal("windows")
+	err := storage.WriteFile(blockingPath, []byte("payload"))
+	if err == nil {
+		t.Fatal("WriteFile() error = nil, want replace failure")
+	}
+	if !strings.Contains(err.Error(), "temp artifact left at") {
+		t.Fatalf("WriteFile() error = %v, want temp artifact context", err)
+	}
+}
+
+func TestWriteFileNonWindowsReplaceFailureIsActionable(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	blockingPath := filepath.Join(dir, "blocked")
+	if err := os.Mkdir(blockingPath, 0o755); err != nil {
+		t.Fatalf("mkdir blocking path: %v", err)
+	}
+
+	storage := NewLocal("linux")
+	err := storage.WriteFile(blockingPath, []byte("payload"))
+	if err == nil {
+		t.Fatal("WriteFile() error = nil, want replace failure")
+	}
+	if !strings.Contains(err.Error(), "replace replay artifact with temp file") {
+		t.Fatalf("WriteFile() error = %v, want non-windows replace context", err)
+	}
+}
+
+func TestReadFileWindowsRetriesMissingArtifact(t *testing.T) {
+	t.Parallel()
+
+	storage := NewLocal("windows")
+	missing := filepath.Join(t.TempDir(), "missing.replay.json")
+	_, err := storage.ReadFile(missing)
+	if err == nil {
+		t.Fatal("ReadFile() error = nil, want missing-file error")
+	}
+	if !os.IsNotExist(err) {
+		t.Fatalf("ReadFile() error = %v, want missing-file error", err)
+	}
+}

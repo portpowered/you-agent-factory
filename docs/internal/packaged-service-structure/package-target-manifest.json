@@ -70,6 +70,10 @@
     "pkg/services/automations/internal/services/filesystem_watchers",
     "pkg/services/automations/internal/services/filesystem_watchers/internal/service",
     "pkg/services/automations/internal/services/filesystem_watchers/wire",
+    "pkg/services/automations/internal/services/hosted_sources",
+    "pkg/services/automations/internal/services/hosted_sources/internal/linear",
+    "pkg/services/automations/internal/services/hosted_sources/internal/service",
+    "pkg/services/automations/internal/services/hosted_sources/wire",
     "pkg/services/automations/internal/services/reconciliation",
     "pkg/services/automations/internal/services/reconciliation/internal/service",
     "pkg/services/automations/internal/services/reconciliation/wire",
@@ -294,6 +298,9 @@
     "pkg/services/recordings/internal/services/artifacts_export",
     "pkg/services/recordings/internal/services/artifacts_export/internal/service",
     "pkg/services/recordings/internal/services/artifacts_export/wire",
+    "pkg/services/recordings/internal/services/canonical_ledger",
+    "pkg/services/recordings/internal/services/canonical_ledger/internal/service",
+    "pkg/services/recordings/internal/services/canonical_ledger/wire",
     "pkg/services/recordings/internal/services/projection_query",
     "pkg/services/recordings/internal/services/projection_query/internal/service",
     "pkg/services/recordings/internal/services/projection_query/wire",
@@ -362,8 +369,6 @@
     "pkg/services/workers/provider/structured",
     "pkg/services/workers/runner",
     "pkg/services/workers/service",
-    "pkg/services/workers/services/hosted_logic",
-    "pkg/services/workers/services/hosted_logic/linear",
     "pkg/services/workers/services/inference",
     "pkg/services/workers/services/testing",
     "pkg/services/workers/skippermissions",
@@ -588,6 +593,26 @@
       "packagePath": "pkg/services/automations/internal/services/filesystem_watchers/wire",
       "disposition": "retain",
       "destination": "automations/internal/services/filesystem_watchers"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources",
+      "disposition": "retain",
+      "destination": "automations/internal/services/hosted_sources"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources/internal/linear",
+      "disposition": "retain",
+      "destination": "automations/internal/services/hosted_sources"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources/internal/service",
+      "disposition": "retain",
+      "destination": "automations/internal/services/hosted_sources"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources/wire",
+      "disposition": "retain",
+      "destination": "automations/internal/services/hosted_sources"
     },
     {
       "packagePath": "pkg/services/automations/internal/services/reconciliation",
@@ -1710,6 +1735,21 @@
       "destination": "recordings/internal/services/artifacts_export"
     },
     {
+      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/internal/service",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/wire",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
       "packagePath": "pkg/services/recordings/internal/services/projection_query",
       "disposition": "retain",
       "destination": "recordings/internal/services/projection_query"
@@ -2048,16 +2088,6 @@
       "packagePath": "pkg/services/workers/service",
       "disposition": "retain",
       "destination": "workers"
-    },
-    {
-      "packagePath": "pkg/services/workers/services/hosted_logic",
-      "disposition": "move",
-      "destination": "workers/internal/services/runners"
-    },
-    {
-      "packagePath": "pkg/services/workers/services/hosted_logic/linear",
-      "disposition": "move",
-      "destination": "workers/internal/services/runners"
     },
     {
       "packagePath": "pkg/services/workers/services/inference",

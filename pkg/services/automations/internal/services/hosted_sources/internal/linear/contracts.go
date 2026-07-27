@@ -1,4 +1,4 @@
-package hostedlinear
+package linear
 
 import "github.com/portpowered/infinite-you/pkg/services/workers"
 

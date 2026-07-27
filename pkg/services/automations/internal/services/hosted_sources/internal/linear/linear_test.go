@@ -1,4 +1,4 @@
-package hostedlinear
+package linear
 
 import (
 	"context"
@@ -274,6 +274,175 @@ func TestRunPollCycle_StopsAtCheckpointAndSkipsResubmission(t *testing.T) {
 	}
 	if second.FoundNewer {
 		t.Fatal("expected second cycle to stop at checkpoint with no newer issues")
+	}
+}
+
+func TestRunPollCycle_CheckpointDecodeFailureFailsWithoutSubmit(t *testing.T) {
+	worker := linearWorkerConfigForTest(
+		interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		nil,
+	)
+	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
+	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
+	if err := os.WriteFile(checkpointPath, []byte("not-json"), 0o600); err != nil {
+		t.Fatalf("write corrupt checkpoint: %v", err)
+	}
+
+	httpCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpCalls++
+		t.Fatal("unexpected provider request when checkpoint decode fails")
+	}))
+	defer server.Close()
+
+	submitCalls := 0
+	_, err := RunPollCycle(
+		context.Background(),
+		Client{Endpoint: server.URL, HTTPClient: server.Client(), Logger: zap.NewNop()},
+		nil,
+		workstation,
+		worker,
+		func(_ context.Context, request work.WorkRequest) error {
+			submitCalls++
+			t.Fatalf("unexpected submit when checkpoint decode fails: %#v", request)
+			return nil
+		},
+		checkpointStoreForTest(t),
+		checkpointPath,
+		"linear-secret-key",
+		zap.NewNop(),
+	)
+	if err == nil || !strings.Contains(err.Error(), "decode hosted linear checkpoint") {
+		t.Fatalf("RunPollCycle() error = %v, want checkpoint decode failure", err)
+	}
+	if submitCalls != 0 {
+		t.Fatalf("submit calls = %d, want 0 when checkpoint decode fails", submitCalls)
+	}
+	if httpCalls != 0 {
+		t.Fatalf("provider HTTP calls = %d, want 0 when checkpoint decode fails", httpCalls)
+	}
+}
+
+func TestRunPollCycle_NoNewerIssuesSkipsSubmitAndCheckpoint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"issues": {
+					"nodes": [],
+					"pageInfo": {"hasNextPage": false, "endCursor": ""}
+				}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	worker := linearWorkerConfigForTest(
+		interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		nil,
+	)
+	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
+	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
+	initialCheckpoint := Checkpoint{IssueID: "issue-old", UpdatedAt: "2026-05-22T07:00:00Z"}
+	writeLinearCheckpointForTest(t, checkpointPath, initialCheckpoint)
+
+	submitCalls := 0
+	result, err := RunPollCycle(
+		context.Background(),
+		Client{Endpoint: server.URL, HTTPClient: server.Client(), Logger: zap.NewNop()},
+		nil,
+		workstation,
+		worker,
+		func(_ context.Context, request work.WorkRequest) error {
+			submitCalls++
+			t.Fatalf("unexpected submit with no newer issues: %#v", request)
+			return nil
+		},
+		checkpointStoreForTest(t),
+		checkpointPath,
+		"linear-secret-key",
+		zap.NewNop(),
+	)
+	if err != nil {
+		t.Fatalf("RunPollCycle: %v", err)
+	}
+	if result.FoundNewer {
+		t.Fatal("expected cycle with no newer issues to report FoundNewer=false")
+	}
+	if submitCalls != 0 {
+		t.Fatalf("submit calls = %d, want 0", submitCalls)
+	}
+	checkpoint := readLinearCheckpointForTest(t, checkpointPath)
+	if checkpoint != initialCheckpoint {
+		t.Fatalf("checkpoint = %#v, want unchanged %#v", checkpoint, initialCheckpoint)
+	}
+}
+
+func TestRunPollCycle_SubmitFailureSurfacesTypedErrorAndSkipsCheckpoint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"issues": {
+					"nodes": [
+						{
+							"id": "issue-new",
+							"identifier": "ENG-101",
+							"title": "Newest issue",
+							"description": "",
+							"updatedAt": "2026-05-22T07:10:00Z",
+							"url": "https://linear.app/example/issue/ENG-101",
+							"team": {"id": "team-1", "key": "ENG", "name": "Engineering"},
+							"state": {"id": "state-1", "name": "Todo", "type": "unstarted"},
+							"assignee": null
+						}
+					],
+					"pageInfo": {"hasNextPage": false, "endCursor": ""}
+				}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	worker := linearWorkerConfigForTest(
+		interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		nil,
+	)
+	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
+	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
+	initialCheckpoint := Checkpoint{IssueID: "issue-old", UpdatedAt: "2026-05-22T07:00:00Z"}
+	writeLinearCheckpointForTest(t, checkpointPath, initialCheckpoint)
+
+	workAdmissionErr := errors.New("work: admission rejected")
+	_, err := RunPollCycle(
+		context.Background(),
+		Client{Endpoint: server.URL, HTTPClient: server.Client(), Logger: zap.NewNop()},
+		nil,
+		workstation,
+		worker,
+		func(_ context.Context, request work.WorkRequest) error {
+			if len(request.Works) != 1 || request.Works[0].WorkID != "linear:issue-new" {
+				t.Fatalf("submitted request = %#v, want only newest issue above checkpoint", request)
+			}
+			return workAdmissionErr
+		},
+		checkpointStoreForTest(t),
+		checkpointPath,
+		"linear-secret-key",
+		zap.NewNop(),
+	)
+	if err == nil {
+		t.Fatal("RunPollCycle() error = nil, want typed work admission failure")
+	}
+	if !errors.Is(err, ErrWorkAdmission) {
+		t.Fatalf("RunPollCycle() error = %v, want errors.Is ErrWorkAdmission", err)
+	}
+	if !errors.Is(err, workAdmissionErr) {
+		t.Fatalf("RunPollCycle() error = %v, want wrapped work admission cause", err)
+	}
+	checkpoint := readLinearCheckpointForTest(t, checkpointPath)
+	if checkpoint != initialCheckpoint {
+		t.Fatalf("checkpoint = %#v, want unchanged %#v after submit failure", checkpoint, initialCheckpoint)
 	}
 }
 
