@@ -77,6 +77,26 @@ func TestNewServiceRoutesStartIdempotencyThroughOwner(t *testing.T) {
 	}
 }
 
+func TestNewServiceRoutesControlThroughOwner(t *testing.T) {
+	t.Parallel()
+
+	stub := &controlSpy{}
+	service, err := durableexecutionwire.NewService(stub)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	paused, err := service.Pause(context.Background(), "sess-control", factorysessions.ControlRequest{})
+	if err != nil || paused.SessionID != "sess-control" ||
+		paused.Outcome != factorysessions.LifecycleControlOutcomeAccepted ||
+		paused.Status != factorysessions.LifecycleStatusPaused {
+		t.Fatalf("Pause = (%#v, %v), want published durable control result", paused, err)
+	}
+	if stub.pauseCalls != 1 {
+		t.Fatalf("pause calls = %d, want 1", stub.pauseCalls)
+	}
+}
+
 func TestNewServiceRoutesInspectThroughOwner(t *testing.T) {
 	t.Parallel()
 
@@ -153,6 +173,21 @@ func (s *executionSpy) StartSync(context.Context, factorysessions.StartRequest) 
 func (s *executionSpy) GetSession(context.Context, string) (factorysessions.SessionReadResult, error) {
 	s.calls++
 	return factorysessions.SessionReadResult{SessionID: "sess-1"}, nil
+}
+
+type controlSpy struct {
+	factorysessions.ExecutionService
+	pauseCalls int
+}
+
+func (s *controlSpy) Pause(_ context.Context, sessionID string, _ factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	s.pauseCalls++
+	return factorysessions.LifecycleControlResult{
+		SessionID: sessionID,
+		Operation: factorysessions.LifecycleControlPause,
+		Outcome:   factorysessions.LifecycleControlOutcomeAccepted,
+		Status:    factorysessions.LifecycleStatusPaused,
+	}, nil
 }
 
 type inspectSpy struct {
