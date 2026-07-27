@@ -2,19 +2,27 @@ package commands_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
 	factoryWiringName     = "cli-factory-wiring"
 	factoryWiringWorkType = "task"
+
+	factoryFlattenExpandName         = "portable-flatten-expand-factory"
+	factoryFlattenExpandWorker       = "executor"
+	factoryFlattenExpandWorkstation  = "execute-task"
+	factoryFlattenExpandExpandMarker = "Expanded factory config into"
 )
 
 // TestCLIFactoryInitValidateAndQuery proves you factory create authors a named
@@ -104,6 +112,138 @@ func TestCLIFactoryInitValidateAndQuery(t *testing.T) {
 			t.Fatalf("factory query output missing %q:\n%s", marker, queryOutput)
 		}
 	}
+}
+
+// TestCLIFactoryFlattenExpandPreservesMeaning proves you factory config expand
+// materializes split layout artifacts and you factory config flatten emits
+// canonical camelCase JSON whose customer-visible payload matches the original
+// Factory meaning without asserting definitions-domain import/export internals.
+func TestCLIFactoryFlattenExpandPreservesMeaning(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI factory wiring")
+	}
+
+	dir := t.TempDir()
+	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(factoryPath, portableFlattenExpandFixtureJSON(), 0o644); err != nil {
+		t.Fatalf("write factory.json: %v", err)
+	}
+
+	binaryPath := buildYouCLIBinary(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	want := flattenFactoryConfigViaCLI(t, ctx, binaryPath, dir)
+
+	expandCmd := exec.CommandContext(
+		ctx,
+		binaryPath,
+		"factory", "config", "expand", factoryPath,
+	)
+	expandCmd.Dir = dir
+	expandOut, err := expandCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("you factory config expand: %v\noutput:\n%s", err, expandOut)
+	}
+	if !strings.Contains(string(expandOut), factoryFlattenExpandExpandMarker) {
+		t.Fatalf("factory expand output missing success marker %q:\n%s", factoryFlattenExpandExpandMarker, expandOut)
+	}
+
+	for _, relPath := range []string{
+		filepath.Join("workers", factoryFlattenExpandWorker, "AGENTS.md"),
+		filepath.Join("workstations", factoryFlattenExpandWorkstation, "AGENTS.md"),
+	} {
+		if _, err := os.Stat(filepath.Join(dir, relPath)); err != nil {
+			t.Fatalf("expected expand to materialize %s: %v", relPath, err)
+		}
+	}
+
+	got := flattenFactoryConfigViaCLI(t, ctx, binaryPath, dir)
+	if !reflect.DeepEqual(got, want) {
+		wantJSON, _ := json.MarshalIndent(want, "", "  ")
+		gotJSON, _ := json.MarshalIndent(got, "", "  ")
+		t.Fatalf("flatten after expand changed Factory meaning\nwant: %s\ngot:  %s", wantJSON, gotJSON)
+	}
+}
+
+func flattenFactoryConfigViaCLI(t *testing.T, ctx context.Context, binaryPath, factoryDir string) any {
+	t.Helper()
+
+	flattenCmd := exec.CommandContext(
+		ctx,
+		binaryPath,
+		"factory", "config", "flatten", factoryDir,
+	)
+	flattenCmd.Dir = factoryDir
+	flattenOut, err := flattenCmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			t.Fatalf("you factory config flatten: %v\nstderr:\n%s", err, exitErr.Stderr)
+		}
+		t.Fatalf("you factory config flatten: %v", err)
+	}
+
+	flattenOutput := string(flattenOut)
+	for _, marker := range []string{`"workTypes"`, `"workers"`, `"workstations"`} {
+		if !strings.Contains(flattenOutput, marker) {
+			t.Fatalf("flatten output missing camelCase marker %q:\n%s", marker, flattenOutput)
+		}
+	}
+	if strings.Contains(flattenOutput, `"work_types"`) || strings.Contains(flattenOutput, `"model_provider"`) {
+		t.Fatalf("flatten output should use camelCase keys:\n%s", flattenOutput)
+	}
+
+	var payload any
+	if err := json.Unmarshal(flattenOut, &payload); err != nil {
+		t.Fatalf("flatten output is not valid JSON: %v\n%s", err, flattenOutput)
+	}
+	return payload
+}
+
+func portableFlattenExpandFixtureJSON() []byte {
+	return []byte(`{
+  "name": "` + factoryFlattenExpandName + `",
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "resources": [{ "name": "agent-slot", "capacity": 1 }],
+  "workers": [
+    {
+      "name": "` + factoryFlattenExpandWorker + `",
+      "type": "MODEL_WORKER",
+      "model": "claude-sonnet-4-20250514",
+      "modelProvider": "CLAUDE",
+      "resources": [{ "name": "agent-slot", "capacity": 1 }],
+      "stopToken": "COMPLETE",
+      "body": "You are the portable factory executor."
+    }
+  ],
+  "workstations": [
+    {
+      "id": "execute-task-id",
+      "name": "` + factoryFlattenExpandWorkstation + `",
+      "behavior": "STANDARD",
+      "worker": "` + factoryFlattenExpandWorker + `",
+      "inputs": [{ "workType": "task", "state": "init" }],
+      "outputs": [{ "workType": "task", "state": "complete" }],
+      "onFailure": [{ "workType": "task", "state": "failed" }],
+      "resources": [{ "name": "agent-slot", "capacity": 1 }],
+      "definition": {
+        "type": "MODEL_WORKSTATION",
+        "worker": "` + factoryFlattenExpandWorker + `",
+        "body": "Complete {{ (index .Inputs 0).WorkID }}.",
+        "stopWords": ["DONE"]
+      }
+    }
+  ]
+}`)
 }
 
 func factoryWiringFactoryConfig() map[string]any {
