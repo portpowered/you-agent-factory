@@ -236,7 +236,7 @@ func (delegate *inferenceConformanceDelegate) Execute(
 }
 
 func inferenceDependencies(
-	modelsEdge runners.InferenceLocalInvoker,
+	modelsEdge inference.LocalInvoker,
 	delegate workers.Runner,
 ) runners.InferenceDependencies {
 	return runners.InferenceDependencies{
@@ -269,12 +269,12 @@ func inferenceRequest() workers.RunnerExecutionRequest {
 		"nested": []any{"original"},
 	}
 	return workers.RunnerExecutionRequest{
-		RunnerID:           inference.Identity,
-		ModelOperation:     "transcribe",
-		WorkingDirectory:   "explicit-work-dir",
-		Worktree:           "worktree-fallback",
-		InputTokens:        []any{token},
-		EnvVars:            map[string]string{"RUNTIME": "original"},
+		RunnerID:         inference.Identity,
+		ModelOperation:   "transcribe",
+		WorkingDirectory: "explicit-work-dir",
+		Worktree:         "worktree-fallback",
+		InputTokens:      []any{token},
+		EnvVars:          map[string]string{"RUNTIME": "original"},
 		ModelBindings: []workers.ResolvedModelOperationBinding{{
 			Slot:   "audio",
 			Source: workers.ModelOperationBindingSourceInput,

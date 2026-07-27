@@ -300,7 +300,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestGeminiGoldenRateLimitAndStructuredFailure`.
   - `TestGeminiGoldenTimeout`.
 
-- [ ] `tests/functional/workers/inference/kiro/golden_test.go`
+- [x] `tests/functional/workers/inference/kiro/golden_test.go`
   - `TestKiroGoldenTextSuccess`.
   - `TestKiroGoldenAuthAndStructuredFailure`.
   - `TestKiroGoldenTimeout`.
@@ -431,7 +431,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestExecutionWorkstationDispatchesEligibleWorkOnce`.
   - `TestExecutionWorkstationFailureProjectsPublicFailedState`.
 
-- [ ] `tests/functional/workstations/execution/contention_test.go`
+- [x] `tests/functional/workstations/execution/contention_test.go`
   - `TestEligibleWorkstationContentionChoosesOneDispatchOnly`.
   - `TestContentionMakesProgressAcrossRepeatedWork`.
 

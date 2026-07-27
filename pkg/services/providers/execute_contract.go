@@ -36,8 +36,9 @@ const (
 // ExecuteFailure retains normalized one-attempt failure facts peers can branch
 // on with errors.Is / errors.As without importing Workers provider internals.
 type ExecuteFailure struct {
-	Kind    ExecuteFailureKind
-	Message string
+	Kind        ExecuteFailureKind
+	Message     string
+	Diagnostics *ExecuteDiagnostics
 }
 
 func (failure ExecuteFailure) Error() string {
@@ -50,6 +51,15 @@ func (failure ExecuteFailure) Error() string {
 
 func (failure ExecuteFailure) Unwrap() error {
 	return sentinelForExecuteFailureKind(failure.Kind)
+}
+
+// Clone returns a detached execute-failure copy.
+func (failure ExecuteFailure) Clone() ExecuteFailure {
+	if failure.Diagnostics != nil {
+		diagnostics := failure.Diagnostics.Clone()
+		failure.Diagnostics = &diagnostics
+	}
+	return failure
 }
 
 func sentinelForExecuteFailureKind(kind ExecuteFailureKind) error {

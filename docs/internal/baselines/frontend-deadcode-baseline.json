@@ -1,1 +1,137 @@
-[]
+[
+  {
+    "file": "packages/client/src/generated/openapi.ts",
+    "kind": "type",
+    "name": "$defs"
+  },
+  {
+    "file": "packages/client/src/generated/openapi.ts",
+    "kind": "type",
+    "name": "webhooks"
+  },
+  {
+    "file": "packages/components/scripts/verify-package-storybook-browser-helpers.mjs",
+    "kind": "export",
+    "name": "createStoryUrl"
+  },
+  {
+    "file": "packages/components/src/charts/index.ts",
+    "kind": "type",
+    "name": "ComponentsCategory",
+    "namespace": "charts"
+  },
+  {
+    "file": "packages/components/src/data-display/index.ts",
+    "kind": "type",
+    "name": "ComponentsCategory",
+    "namespace": "dataDisplay"
+  },
+  {
+    "file": "packages/components/src/factory-emulator/index.ts",
+    "kind": "type",
+    "name": "ComponentsCategory",
+    "namespace": "factoryEmulator"
+  },
+  {
+    "file": "packages/components/src/feedback/index.ts",
+    "kind": "type",
+    "name": "ComponentsCategory",
+    "namespace": "feedback"
+  },
+  {
+    "file": "packages/components/src/forms/index.ts",
+    "kind": "type",
+    "name": "ComponentsCategory",
+    "namespace": "forms"
+  },
+  {
+    "file": "packages/components/src/graphs/index.ts",
+    "kind": "type",
+    "name": "ComponentsCategory",
+    "namespace": "graphs"
+  },
+  {
+    "file": "packages/components/src/icons/index.ts",
+    "kind": "type",
+    "name": "ComponentsCategory",
+    "namespace": "icons"
+  },
+  {
+    "file": "packages/components/src/layout/index.ts",
+    "kind": "type",
+    "name": "ComponentsCategory",
+    "namespace": "layout"
+  },
+  {
+    "file": "packages/components/src/navigation/index.ts",
+    "kind": "type",
+    "name": "ComponentsCategory",
+    "namespace": "navigation"
+  },
+  {
+    "file": "packages/components/src/overlays/index.ts",
+    "kind": "type",
+    "name": "ComponentsCategory",
+    "namespace": "overlays"
+  },
+  {
+    "file": "packages/components/src/primitives/index.ts",
+    "kind": "type",
+    "name": "ComponentsCategory",
+    "namespace": "primitives"
+  },
+  {
+    "file": "packages/components/src/recipes/index.ts",
+    "kind": "type",
+    "name": "ComponentsCategory",
+    "namespace": "recipes"
+  },
+  {
+    "file": "packages/components/src/styles/package-token-fixture-usage.ts",
+    "kind": "file",
+    "name": "packages/components/src/styles/package-token-fixture-usage.ts"
+  },
+  {
+    "file": "packages/components/src/testing/index.ts",
+    "kind": "type",
+    "name": "ComponentsCategory",
+    "namespace": "testing"
+  },
+  {
+    "file": "packages/components/src/tokens/index.ts",
+    "kind": "type",
+    "name": "ComponentsCategory",
+    "namespace": "tokens"
+  },
+  {
+    "file": "packages/components/src/utilities/index.ts",
+    "kind": "type",
+    "name": "ComponentsCategory",
+    "namespace": "utilities"
+  },
+  {
+    "file": "packages/components/vite.build.config.ts",
+    "kind": "file",
+    "name": "packages/components/vite.build.config.ts"
+  },
+  {
+    "file": "packages/components/vitest.build.config.ts",
+    "kind": "file",
+    "name": "packages/components/vitest.build.config.ts"
+  },
+  {
+    "file": "packages/factory-replay/fixtures/installed-consumer/consumer.mjs",
+    "kind": "file",
+    "name": "packages/factory-replay/fixtures/installed-consumer/consumer.mjs"
+  },
+  {
+    "file": "packages/factory-replay/fixtures/installed-consumer/consumer.ts",
+    "kind": "file",
+    "name": "packages/factory-replay/fixtures/installed-consumer/consumer.ts"
+  },
+  {
+    "file": "packages/factory-visualizers/vite.build.config.ts",
+    "kind": "file",
+    "name": "packages/factory-visualizers/vite.build.config.ts"
+  }
+]

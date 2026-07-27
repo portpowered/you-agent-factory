@@ -154,6 +154,8 @@ type CanonicalEvent struct {
 	RecordedAt  time.Time
 	Kind        CanonicalEventKind
 	Payload     string
+	// SourceContext preserves detached producer correlation metadata.
+	SourceContext string
 }
 
 // SubscriptionOutcomeKind identifies one deterministic observation from a
@@ -832,12 +834,10 @@ type WorkerEventRecorder interface {
 	RecordAgentRunEvent(workerexecution.AgentRunResponseEvent)
 }
 
-// RuntimeRecorder owns the lifecycle and durable flush behavior of one replay
-// recording without exposing the concrete replay artifact writer. Existing
-// Runtime callers may still consume this capability surface; peers should prefer
-// the plain recording-lifecycle methods on Service as the cross-service source
-// of truth rather than treating RuntimeRecorder construction as the peer seam.
+// RuntimeRecorder adapts Factory Runtime calls to the Recordings-owned
+// lifecycle and durable flush behavior of one recording.
 type RuntimeRecorder interface {
+	BindRecordingService(Service, CanonicalEventScope) error
 	Start(context.Context)
 	Stop()
 	RecordEvent(interfaces.FactoryEvent)
