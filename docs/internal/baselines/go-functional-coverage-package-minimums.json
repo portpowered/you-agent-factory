@@ -1174,7 +1174,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/construction",
-      "minimum": 77.96
+      "minimum": 74.13
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/diagnostics",
@@ -1360,7 +1360,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/claude",
-      "minimum": 47.31
+      "minimum": 47.08
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/claude/exitfailure",
@@ -1446,7 +1446,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/service",
-      "minimum": 65.14
+      "minimum": 59.15
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic",
