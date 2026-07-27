@@ -711,6 +711,7 @@ cause rather than runner alone:
 | Module-mocked async hook | `use-dashboard-checkpoint-preflight.test.tsx` | 778ms | Replaced four Vitest files (884 lines) with one feature-owned Bun core contract using explicit resolver and mutation effects; focused execution is about 635ms and no longer constructs mocked application providers. |
 | Omnibus widget rendering | `current-selection-widget.provider-session-selection.test.tsx` | 720ms | Removed the redundant 500-line widget suite; inference-history selection state now runs in the feature-owned `useSelectedProviderSessionState` Bun contract (about 164ms), while selection controls remain covered by WorkItemCard and workstation-attempt contracts. |
 | Graph/editor host composition | `react-flow-current-activity-card-host-contract.test.tsx` | 700ms | Retain the small host boundary; continue replacing aggregate imports with owner modules. |
+| Workflow-activity bento aggregation | `workflow-activity-bento-card.test.tsx` | 385ms | Replaced the six-case, module-mocked graph omnibus with a two-case Bun contract around the extracted bento shell. Shared card chrome, editor controls, graph layout, and accessibility behavior stay with their existing feature owners. |
 | Cross-owner dashboard wiring | `dashboard-replay-wiring.component.test.tsx` | 697ms | Removed the app-shell duplicate: stream append and fixed-tick behavior are owned by the Bun snapshot hook, timeline store, slider, and bento snapshot contracts. |
 | Graph validation and charts | workflow editor validation and work chart tests | 675–691ms | WorkChart's 18 rendered contracts run under Bun. The duplicate workflow-activity editor validation suite is removed, and the seven feature-owned `useFactoryValidation` contracts now run under Bun in about 654ms with an injected validator rather than a process-global module mock. |
 | Chart wrapper duplication | `d3-information-card.test.tsx` | 540ms | Replaced the 600-line, ten-case Vitest suite with a three-case Bun owner contract for frame composition, localization/series wiring, and state forwarding. Legend, geometry, zoom, and state behavior remain with the dedicated WorkChart contracts. |
@@ -726,10 +727,11 @@ widget mounts, and process-global module mocks. Assertion execution is not the
 primary cost. Migration therefore starts by narrowing ownership and dependency
 seams; changing only the runner for an app-sized test preserves most latency.
 
-After the import-controller reconciliation, the complete component command owns
-233 Bun files and 115 remaining Vitest files and completes locally in 76.47s:
-37.65s in Bun and 38.82s in Vitest. The last measured unit lane is 18.05s, so
-the combined non-browser correctness feedback is approximately 94.52s.
+After the workflow-activity bento reconciliation, the complete component command
+owns 234 Bun files and 114 remaining Vitest files and completes locally in
+75.51s: 37.40s in Bun and 38.10s in Vitest. The last measured unit lane is
+18.05s, so the combined non-browser correctness feedback is approximately
+93.56s.
 
 The same reconciliation removed the canonical-section omnibus widget loop.
 Every detail owner structurally composes `SelectionDetailLayout`; the base
