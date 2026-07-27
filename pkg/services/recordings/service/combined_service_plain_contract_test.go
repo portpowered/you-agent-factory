@@ -57,6 +57,33 @@ func TestNewServiceRejectsNilDependencies(t *testing.T) {
 	}
 }
 
+func TestNewServiceWithLifecycleEffectsUsesProvidedPublicationAndPlanner(t *testing.T) {
+	t.Parallel()
+
+	publication, err := NewPortableArtifactPublication()
+	if err != nil {
+		t.Fatalf("NewPortableArtifactPublication: %v", err)
+	}
+	planner := recordings.LiveRecordingTargetPlannerFunc(
+		func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+			return recordings.LiveRecordingTarget{ServicePath: "service/path"}, nil
+		},
+	)
+	if got := NewService(&stubLedger{}, NewProjectionService(), planner); got == nil {
+		t.Fatal("NewService with planner returned nil")
+	}
+	if got := NewServiceWithLifecycleEffects(
+		&stubLedger{},
+		NewProjectionService(),
+		planner,
+		nil,
+		nil,
+		publication,
+	); got == nil {
+		t.Fatal("NewServiceWithLifecycleEffects with publication returned nil")
+	}
+}
+
 func TestCombinedServicePlainSlices_SuccessAndTypedFailures(t *testing.T) {
 	t.Parallel()
 
