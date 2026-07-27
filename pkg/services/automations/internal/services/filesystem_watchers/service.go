@@ -42,6 +42,35 @@ type HandledIdentities interface {
 	Record(ObservationIdentity) error
 }
 
+// WatchIdentity identifies one configured filesystem watch root within an
+// Automation.
+type WatchIdentity struct {
+	AutomationID string
+	WatchRoot    string
+}
+
+// Cursor is an opaque durable watcher position. Peers may persist and return
+// the value but must not interpret its contents.
+type Cursor string
+
+// WatcherFacts are durable cursor facts persisted across Automations restart.
+type WatcherFacts struct {
+	Identity   WatchIdentity
+	Cursor     Cursor
+	Checkpoint string
+}
+
+// CursorProjection returns the opaque cursor/checkpoint pair peers consume
+// through Automations cursor/status contracts.
+func (f WatcherFacts) CursorProjection() (Cursor, string) {
+	return f.Cursor, f.Checkpoint
+}
+
+// CursorFactsPersist commits updated watcher facts after a successful handled
+// observation. Implementations are Automations-owned; peers inject durable
+// stores without importing parent-private persistence types.
+type CursorFactsPersist func(WatcherFacts) error
+
 // Config carries the inert construction inputs for one filesystem watcher.
 type Config struct {
 	Dir               string
@@ -67,4 +96,21 @@ type Watcher interface {
 // Service constructs inert filesystem watchers for Automations composition.
 type Service interface {
 	NewWatcher(Config) Watcher
+	// ResumeWatcherFacts validates detached committed facts on Automations restart.
+	// When authoritative facts already exist, resume must match them.
+	ResumeWatcherFacts(
+		identity WatchIdentity,
+		authoritative *WatcherFacts,
+		resume *WatcherFacts,
+	) (WatcherFacts, error)
+	// ValidateExpectedCursor rejects stale optimistic concurrency tokens without
+	// mutating authoritative facts.
+	ValidateExpectedCursor(authoritative WatcherFacts, expected Cursor) error
+	// WatcherFactsFromCursor rebuilds detached facts from opaque cursor/checkpoint
+	// values peers retrieved through Automations contracts.
+	WatcherFactsFromCursor(identity WatchIdentity, cursor Cursor, checkpoint string) (WatcherFacts, error)
+	// NewHandledIdentities constructs a cursor-backed identity store from resumed
+	// facts. Record commits updated facts through persist; persist failures do not
+	// report successful recovery.
+	NewHandledIdentities(facts WatcherFacts, persist CursorFactsPersist) (HandledIdentities, error)
 }
