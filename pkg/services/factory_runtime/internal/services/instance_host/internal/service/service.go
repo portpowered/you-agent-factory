@@ -41,16 +41,6 @@ func New(dependencies instancehost.Dependencies) (instancehost.Service, error) {
 	}, nil
 }
 
-func (h *Host) Stop(handle factoryruntime.HostedHandle) error {
-	concrete, ok := handle.(*factoryhost.Handle)
-	if !ok || concrete == nil {
-		return h.lifecycle.Stop(handle)
-	}
-	err := h.lifecycle.Stop(concrete)
-	h.removeHandle(concrete)
-	return err
-}
-
 func (h *Host) StopSidecars(handle factoryruntime.HostedHandle) {
 	h.lifecycle.StopSidecars(handle)
 }
