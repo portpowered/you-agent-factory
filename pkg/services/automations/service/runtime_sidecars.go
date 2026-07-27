@@ -205,6 +205,8 @@ func (s *schedulerSource) configure(config schedulerSourceConfig) {
 	if !s.configured {
 		s.config = config
 		s.configured = true
+		s.started = make(chan struct{})
+		s.launchErr = nil
 	}
 }
 
@@ -227,8 +229,6 @@ func (s *schedulerSource) start(
 	s.ctx = sourceCtx
 	s.cancel = cancel
 	s.children = &sync.WaitGroup{}
-	s.started = make(chan struct{})
-	s.launchErr = nil
 	s.active = true
 	s.config.sidecars.Add(1)
 	go owner.monitorSchedulerSource(identity, sourceCtx, s.config.sidecars)

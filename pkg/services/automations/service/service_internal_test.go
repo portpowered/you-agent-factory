@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
@@ -106,6 +108,57 @@ func TestSchedulerSidecarsReconcileLifecycleBeforeCanonicalWorkSubmission(t *tes
 
 	restartCancel()
 	restartedSidecars.Wait()
+}
+
+func TestSchedulerSourceObservationAttachesBeforeStartEffectInitialization(t *testing.T) {
+	service := New(zap.NewNop(), clockwork.NewFakeClock(), nil, "", "", nil, nil, nil)
+	identity := automations.SourceIdentity{
+		AutomationID: "workflow-start-barrier",
+		SourceID:     runtimeSchedulerSourceID,
+	}
+	factoryConfig := &interfaces.FactoryConfig{}
+	runtimeConfig := runtimefixtures.RuntimeConfigLookupFixture{
+		Factory:     factoryConfig,
+		FactoryPath: t.TempDir(),
+	}
+	var sidecars sync.WaitGroup
+	source := &schedulerSource{}
+	source.configure(schedulerSourceConfig{
+		sidecars:      &sidecars,
+		factoryDir:    runtimeConfig.FactoryDir(),
+		factoryConfig: factoryConfig,
+		runtimeConfig: runtimeConfig,
+		submitter:     func(context.Context, work.WorkRequest) error { return nil },
+	})
+	effect := reconciliation.WaitEffect{
+		Desired: automations.DesiredLifecycleRunning,
+		Observation: automations.SourceObservation{
+			Identity:   identity,
+			InstanceID: "instance-start-barrier",
+			State:      automations.ObservedLifecycleStarting,
+		},
+	}
+
+	cancelledCtx, cancelWait := context.WithCancel(context.Background())
+	cancelWait()
+	if _, err := source.observe(cancelledCtx, effect); !errors.Is(err, context.Canceled) {
+		t.Fatalf("observe before start effect = %v, want attached wait cancellation", err)
+	}
+
+	ctx, cancelSource := context.WithCancel(context.Background())
+	if err := source.start(ctx, service, identity); err != nil {
+		t.Fatalf("start scheduler source: %v", err)
+	}
+	observation, err := source.observe(context.Background(), effect)
+	if err != nil {
+		t.Fatalf("observe initialized scheduler source: %v", err)
+	}
+	if observation.State != automations.ObservedLifecycleRunning {
+		t.Fatalf("initialized observation = %q, want %q",
+			observation.State, automations.ObservedLifecycleRunning)
+	}
+	cancelSource()
+	sidecars.Wait()
 }
 
 func startSchedulerConcurrently(

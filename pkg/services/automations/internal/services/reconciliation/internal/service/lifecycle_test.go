@@ -243,6 +243,141 @@ func TestSourceLifecycleStopsOnceAndConvergesThroughWait(t *testing.T) {
 	}
 }
 
+func TestStopSourceCommitsStoppingBeforeExactlyOnceEffect(t *testing.T) {
+	t.Parallel()
+
+	identity := sourceIdentity("owned-stop")
+	effects := newBlockingStopEffects(identity)
+	service := reconciliationwire.NewService(effects.bundle())
+	effects.service = service
+	startAndWait(t, service, identity)
+	running, err := service.SourceStatus(
+		context.Background(),
+		automations.SourceStatusRequest{Identity: identity},
+	)
+	if err != nil {
+		t.Fatalf("SourceStatus before stop: %v", err)
+	}
+
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := service.StopSource(
+			context.Background(),
+			automations.StopSourceRequest{Identity: identity},
+		)
+		firstDone <- err
+	}()
+	if err := <-effects.entered; err != nil {
+		t.Fatal(err)
+	}
+	assertStatus(
+		t,
+		service,
+		identity,
+		running.Observation.InstanceID,
+		automations.ObservedLifecycleStopping,
+	)
+
+	repeated, err := service.StopSource(
+		context.Background(),
+		automations.StopSourceRequest{Identity: identity},
+	)
+	if err != nil {
+		t.Fatalf("repeated StopSource during effect: %v", err)
+	}
+	if !repeated.Outcome.Idempotent ||
+		repeated.Outcome.Observation.State != automations.ObservedLifecycleStopping {
+		t.Fatalf("repeated outcome = %+v, want idempotent stopping", repeated.Outcome)
+	}
+
+	close(effects.release)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first StopSource effect: %v", err)
+	}
+	waited, err := service.WaitSource(
+		context.Background(),
+		automations.WaitSourceRequest{
+			Identity: identity,
+			Desired:  automations.DesiredLifecycleStopped,
+		},
+	)
+	if err != nil {
+		t.Fatalf("WaitSource stopped: %v", err)
+	}
+	assertLifecycle(
+		t,
+		waited.Outcome,
+		automations.DesiredLifecycleStopped,
+		automations.ObservedLifecycleStopped,
+		automations.ConvergenceStatusConverged,
+		false,
+	)
+	if calls := effects.stopCount(); calls != 1 {
+		t.Fatalf("stop effect calls = %d, want 1", calls)
+	}
+}
+
+type blockingStopEffects struct {
+	identity automations.SourceIdentity
+	service  reconciliation.Service
+	entered  chan error
+	release  chan struct{}
+
+	mu    sync.Mutex
+	calls int
+}
+
+func newBlockingStopEffects(identity automations.SourceIdentity) *blockingStopEffects {
+	return &blockingStopEffects{
+		identity: identity,
+		entered:  make(chan error, 1),
+		release:  make(chan struct{}),
+	}
+}
+
+func (f *blockingStopEffects) bundle() reconciliation.Effects {
+	return reconciliation.Effects{
+		Start: func(context.Context, reconciliation.StartEffect) error { return nil },
+		Stop:  f.stop,
+		Wait:  convergedWait,
+	}
+}
+
+func (f *blockingStopEffects) stop(ctx context.Context, _ reconciliation.StopEffect) error {
+	status, err := f.service.SourceStatus(
+		ctx,
+		automations.SourceStatusRequest{Identity: f.identity},
+	)
+	if err == nil && status.Observation.State != automations.ObservedLifecycleStopping {
+		err = errors.New("stop effect ran before stopping became authoritative")
+	}
+	f.mu.Lock()
+	f.calls++
+	f.mu.Unlock()
+	f.entered <- err
+	<-f.release
+	return nil
+}
+
+func (f *blockingStopEffects) stopCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
+func convergedWait(
+	_ context.Context,
+	effect reconciliation.WaitEffect,
+) (automations.SourceObservation, error) {
+	observation := effect.Observation
+	if effect.Desired == automations.DesiredLifecycleRunning {
+		observation.State = automations.ObservedLifecycleRunning
+	} else {
+		observation.State = automations.ObservedLifecycleStopped
+	}
+	return observation, nil
+}
+
 func TestSourceLifecycleConcurrentStartInvokesOneActivation(t *testing.T) {
 	t.Parallel()
 

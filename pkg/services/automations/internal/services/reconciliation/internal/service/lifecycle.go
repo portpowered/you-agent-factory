@@ -52,7 +52,7 @@ func (s *service) StartSource(
 	return result, nil
 }
 
-type startSnapshot struct {
+type lifecycleSnapshot struct {
 	desired     automations.DesiredLifecycleState
 	observation automations.SourceObservation
 	terminalErr error
@@ -62,32 +62,32 @@ func (s *service) planStartLocked(
 	ctx context.Context,
 	request automations.StartSourceRequest,
 	record *sourceRecord,
-) (automations.StartSourceResult, *reconciliation.StartEffect, startSnapshot, error) {
+) (automations.StartSourceResult, *reconciliation.StartEffect, lifecycleSnapshot, error) {
 	if record.kind != request.Kind {
-		return automations.StartSourceResult{}, nil, startSnapshot{}, operationError(
+		return automations.StartSourceResult{}, nil, lifecycleSnapshot{}, operationError(
 			"StartSource", automations.ErrorCodeConflict, automations.ErrConflict,
 			"source kind differs from the authoritative source",
 		)
 	}
 	if err := validateAuthoritativeResume(request.Resume, record.observation); err != nil {
-		return automations.StartSourceResult{}, nil, startSnapshot{}, err
+		return automations.StartSourceResult{}, nil, lifecycleSnapshot{}, err
 	}
 	if err := ctx.Err(); err != nil {
 		return automations.StartSourceResult{
 			Outcome: cancelledLifecycleOutcome(
 				automations.DesiredLifecycleRunning, record.observation, false,
 			),
-		}, nil, startSnapshot{}, cancelledOperationError("StartSource", err)
+		}, nil, lifecycleSnapshot{}, cancelledOperationError("StartSource", err)
 	}
 	if result, done := existingStartResult(record); done {
-		return result, nil, startSnapshot{}, record.terminalErr
+		return result, nil, lifecycleSnapshot{}, record.terminalErr
 	}
 	if s.effects.Start == nil {
-		return automations.StartSourceResult{}, nil, startSnapshot{},
+		return automations.StartSourceResult{}, nil, lifecycleSnapshot{},
 			unavailableEffectsError("StartSource")
 	}
 
-	prior := startSnapshot{
+	prior := lifecycleSnapshot{
 		desired:     record.desired,
 		observation: record.observation,
 		terminalErr: record.terminalErr,
@@ -138,7 +138,7 @@ func existingStartResult(
 
 func commitStartFailure(
 	record *sourceRecord,
-	prior startSnapshot,
+	prior lifecycleSnapshot,
 	err error,
 ) (automations.LifecycleOutcome, error) {
 	if isCancellation(err) {
@@ -172,13 +172,31 @@ func (s *service) StopSource(
 	}
 
 	record.mu.Lock()
-	defer record.mu.Unlock()
+	result, effect, prior, err := s.planStopLocked(ctx, record)
+	record.mu.Unlock()
+	if err != nil || effect == nil {
+		return result, err
+	}
+	if err := s.effects.Stop(ctx, *effect); err != nil {
+		record.mu.Lock()
+		outcome, terminalErr := commitStopFailure(record, *effect, prior, err)
+		record.mu.Unlock()
+		return automations.StopSourceResult{Outcome: outcome}, terminalErr
+	}
+	return result, nil
+}
+
+func (s *service) planStopLocked(
+	ctx context.Context,
+	record *sourceRecord,
+) (automations.StopSourceResult, *reconciliation.StopEffect, lifecycleSnapshot, error) {
 	if err := ctx.Err(); err != nil {
 		return automations.StopSourceResult{
-			Outcome: cancelledLifecycleOutcome(
-				automations.DesiredLifecycleStopped, record.observation, false,
-			),
-		}, cancelledOperationError("StopSource", err)
+				Outcome: cancelledLifecycleOutcome(
+					automations.DesiredLifecycleStopped, record.observation, false,
+				),
+			}, nil, lifecycleSnapshot{},
+			cancelledOperationError("StopSource", err)
 	}
 	switch record.observation.State {
 	case automations.ObservedLifecycleStopped:
@@ -189,7 +207,7 @@ func (s *service) StopSource(
 				automations.ConvergenceStatusConverged,
 				true,
 			),
-		}, nil
+		}, nil, lifecycleSnapshot{}, nil
 	case automations.ObservedLifecycleStopping:
 		return automations.StopSourceResult{
 			Outcome: lifecycleOutcome(
@@ -198,31 +216,31 @@ func (s *service) StopSource(
 				automations.ConvergenceStatusProgressing,
 				true,
 			),
-		}, nil
+		}, nil, lifecycleSnapshot{}, nil
 	case automations.ObservedLifecycleFailed, automations.ObservedLifecycleCancelled:
 		if record.desired == automations.DesiredLifecycleStopped {
 			return automations.StopSourceResult{
 				Outcome: terminalLifecycleOutcome(
 					record.desired, record.observation, true,
 				),
-			}, record.terminalErr
+			}, nil, lifecycleSnapshot{}, record.terminalErr
 		}
 	}
 
 	if s.effects.Stop == nil {
-		return automations.StopSourceResult{}, unavailableEffectsError("StopSource")
+		return automations.StopSourceResult{}, nil, lifecycleSnapshot{},
+			unavailableEffectsError("StopSource")
 	}
-	if err := s.effects.Stop(ctx, reconciliation.StopEffect{
-		Observation: record.observation,
-	}); err != nil {
-		outcome, terminalErr := recordEffectFailure(
-			"StopSource", automations.DesiredLifecycleStopped, record, err,
-		)
-		return automations.StopSourceResult{Outcome: outcome}, terminalErr
+
+	prior := lifecycleSnapshot{
+		desired:     record.desired,
+		observation: record.observation,
+		terminalErr: record.terminalErr,
 	}
 	record.desired = automations.DesiredLifecycleStopped
 	record.observation.State = automations.ObservedLifecycleStopping
 	record.terminalErr = nil
+	effect := reconciliation.StopEffect{Observation: record.observation}
 	return automations.StopSourceResult{
 		Outcome: lifecycleOutcome(
 			record.desired,
@@ -230,7 +248,30 @@ func (s *service) StopSource(
 			automations.ConvergenceStatusProgressing,
 			false,
 		),
-	}, nil
+	}, &effect, prior, nil
+}
+
+func commitStopFailure(
+	record *sourceRecord,
+	effect reconciliation.StopEffect,
+	prior lifecycleSnapshot,
+	err error,
+) (automations.LifecycleOutcome, error) {
+	if record.observation != effect.Observation {
+		result, currentErr := currentWaitResult(automations.DesiredLifecycleStopped, record)
+		return result.Outcome, currentErr
+	}
+	if isCancellation(err) {
+		record.desired = prior.desired
+		record.observation = prior.observation
+		record.terminalErr = prior.terminalErr
+		return cancelledLifecycleOutcome(
+			automations.DesiredLifecycleStopped, prior.observation, false,
+		), cancelledOperationError("StopSource", err)
+	}
+	return recordEffectFailure(
+		"StopSource", automations.DesiredLifecycleStopped, record, err,
+	)
 }
 
 func (s *service) WaitSource(
