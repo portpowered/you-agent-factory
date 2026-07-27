@@ -2933,5 +2933,16 @@
       "target": "pkg/services/workers"
     }
   ],
-  "violations": []
+  "violations": [
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/cli/factory_run/events/events_test.go",
+      "target": "cli"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/workers/internal/services/runners",
+      "target": "pkg/services/workers/internal/services/runners/service.go:InferenceLocalInvoker,pkg/services/workers/internal/services/runners/service.go:Service"
+    }
+  ]
 }
