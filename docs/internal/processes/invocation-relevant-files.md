@@ -429,20 +429,48 @@ primary-result behavior.
   stdout hangs or fails protocol validation because conductor integrations
   decode through the Providers-owned adapters. Codex progress maps
   `turn.started`/`turn.completed` to RUN lifecycle events and lowercases RUN
-  payload status for REST smoke assertions. Fake custom Integration E2E
+  payload status for REST smoke assertions. Codex and Claude conductor
+  integrations must emit the authoritative `message.completed` snapshot from
+  `ExecuteResult.Content`, not sanitized `ExecuteDiagnostics.Progress`
+  message facts, because Providers root redacts request prompt substrings from
+  diagnostic progress and the inference protocol requires completed-message
+  content to agree with the terminal response. Fake custom Integration E2E
   proof belongs in `tests/functional/workers/inference/` (approved
   domain/subsection under `make pkg-structure`; leave legacy
   `tests/functional/providers/contract/doc.go` as the required package
   placeholder) and must register Integrations constructed inside Workers
   (for example `inferencecontract.ProgressingExternalIntegration`) rather
   than calling `inferencecontract.NewDiscovery` / `NewEventDraft` /
-  `NewResponse` from the functional package. Provider failure normalization
+  `NewResponse` from the functional package.   Provider failure normalization
   (non-zero exit, auth/rate-limit/timeout distinction, and public diagnostic
   redaction) belongs in
   `tests/functional/workers/inference/failure_normalization_test.go`; drive
   command-backed failures through `root.BuildProcess` with
   `serviceedges.Edges{ProviderCommandRunner: ...}` and assert on Work,
-  Factory Event, and Provider Session surfaces only. Script execution-environment
+  Factory Event, and Provider Session surfaces only. Provider and model
+  selection (explicit provider/model edge routing, worker provider precedence
+  over operator defaults, and unknown-provider fail-before-start validation)
+  belongs in `tests/functional/workers/inference/selection_test.go`; drive
+  proofs through `support.RunFactoryToCompletionWithEdgesAndObservations` or
+  `support.BuildProcess` with `serviceedges.Edges{ProviderRegistrations: ...}`
+  and assert on registered integration stats plus public Work outcomes only.
+  Provider command-flag mapping and unsupported-flag capability rejection
+  (skip-permissions policy, resolved worktree names, explicit model values, and
+  pre-start unsupported-capability failures such as workstation `outputSchema`
+  on Gemini) belongs in
+  `tests/functional/workers/inference/flags_test.go`; drive proofs through
+  `support.RunFactoryToCompletionWithEdgesAndObservations` with
+  `serviceedges.Edges{ProviderCommandRunner: ...}` and assert on provider-process
+  command args plus public Work outcomes only. Provider stream fidelity
+  (full-stream truthful deltas and snapshots, partial-stream non-fabrication of
+  missing deltas, snapshot-only completed snapshots without deltas, and final-only
+  terminal messages without native-stream claims) belongs in
+  `tests/functional/workers/inference/stream_fidelity_test.go`; drive proofs
+  through `support.RunFactoryToCompletionWithEdgesAndResponseEvents` with
+  sanitized FND-006 provider-session goldens replayed via
+  `serviceedges.Edges{ProviderCommandRunner: ...}` (and OpenCode snapshot-only
+  executable-locator edges when required) and assert on public Factory response
+  events and Work outcomes only. Script execution-environment
   boundary proofs (declared env filtering, missing-executable public failure,
   resource-token template resolution, multi-input ordering, and worktree
   passthrough) belong in
@@ -455,7 +483,14 @@ primary-result behavior.
   `tests/functional/workers/script/execution_test.go`; drive them through
   `support.RunFactoryToCompletionWithEdgesAndObservations` with a replaced
   `ScriptCommandRunner` and assert on Work customer states plus dispatch
-  response events via the shared `helpers_test.go` assertions.
+  response events via the shared `helpers_test.go` assertions. Provider process
+  and companion cleanup (timeout process-tree termination, cancellation
+  companion teardown, and success-path process/stream closure) belongs in
+  `tests/functional/workers/inference/process_cleanup_test.go` with
+  functionallong companion coverage in `process_cleanup_long_test.go`; drive
+  script-backed subprocess proofs through `root.BuildProcess` with
+  `serviceedges.Edges{ScriptCommandRunner: platformprocess.NewExecCommandRunner(...)}`
+  and assert on Work, Factory Event, and dispatch outcomes only.
 - Wire supplies that same registry to the Workers runtime for routed provider
   selection, conductor composition, manifest-maximum capability checks, and
   executable-prerequisite preflight, and to Factory Sessions through the narrow
@@ -571,8 +606,20 @@ response-stream output.
 
 - Canonical Factory Event vocabulary and sequence context:
   `pkg/services/factory_definitions/contracts/factory_events.go`
-- Shared ordered output serialization and final-once terminal write:
-  `pkg/services/factory_visualization/factory_event_stream.go`
+- Peer-facing Factory Visualization root contracts live on the singular
+  `factory_visualization.Root` in
+  `pkg/services/factory_visualization/root_contract.go`: request-activated
+  lifecycle (`Activate` / `Join` / `StopDrain`), live projection (`Observe`),
+  and presentation/drain (`OpenPresentation` / `PresentProgress` /
+  `FinalizePresentation` / `ClosePresentation`). Peers use plain
+  request/result/typed-error vocabulary only; transports must not treat
+  `io.Writer`, queue capacity, backpressure, or final-write ordering as their
+  policy source of truth on that seam. Characterization proof:
+  `TestRootContractInvariants_AllSlicesThroughSingularRoot`.
+- Shared ordered output serialization and final-once terminal write helpers
+  (transport-shaped, non-authority):
+  `pkg/services/factory_visualization/factory_event_stream.go`,
+  `pkg/services/factory_visualization/response_presentation.go`
 - Keep provider-response chunks and ephemeral `FactoryResponseEvent` values out
   of this presentation boundary. The Factory Session invocation operation
   attaches the canonical consumer before live execution, durable JavaScript
@@ -797,8 +844,19 @@ response-stream output.
 - Public provider/model setup enters through the manifest-derived `you init`
   handler in `pkg/transports/cli/commandregistry`, which translates stable
   `you.init.flag.provider` and `you.init.flag.model` inputs into the narrow
-  `pkg/transports/cli/initsetup.Config` request. The initsetup adapter owns
-  home-to-config-path translation, prompt rendering, and human output. Enable
+  `pkg/transports/cli/initsetup.Config` request. Packaged Factory installation
+  enters through the same handler when `you.init.flag.package` is supplied,
+  delegating to `pkg/services/factory_definitions/transports/cli` and the shared
+  `InstallPackagedFactory` operation. The initsetup adapter owns
+  home-to-config-path translation, prompt rendering, and human output. Product
+  portability evidence for init-materialized packaged Factories belongs in
+  `tests/functional/product/packaged_factory_portability`: initialize through
+  `you init --package`, assert restored split-layout assets and portable paths,
+  then invoke from an unrelated working directory outside the repository.
+  Functional API-server fixtures that materialize YAML/YML authored roots must
+  set `support.FunctionalAPIServerConfig.FactoryConfigPath` instead of relying
+  on `--dir`, because `--factory` and `--dir` are mutually exclusive at the CLI
+  boundary. Enable
   prompts only from the invocation-local stdin/stdout TTY classifications on
   the process context, pass Cobra's invocation-local input/output streams, and
   preserve cancellation from that same context; do not inspect host streams in
@@ -822,7 +880,8 @@ response-stream output.
 - Root-built functional fixtures that execute initializer-owned commands must
   use an invocation-local HOME/USERPROFILE and explicit Factory test data.
   Environment overrides follow last-value-wins process semantics. Do not
-  bootstrap fixtures through the retired `you init --dir` scaffold path or let
+  bootstrap fixtures through the retired `you init --type`/`--executor` scaffold
+  path or let
   parallel packages share one mutable customer home.
 - JavaScript packaged factories keep authored workflow files in the package
   definition's `scripts/` assets and assemble them through
@@ -1566,8 +1625,9 @@ response-stream output.
   Later S24 scenario stories should compose scenario assertions on top of this
   package rather than re-building binary/home/log wiring in each test file.
 - `packages/packaged-factories/factories/` owns authored Factory sources and
-  `internal/packagedfactorycatalog` owns manifest-derived backend lookup; config
-  initialization is the only catalog-to-disk installation boundary. Named
+  `internal/packagedfactorycatalog` owns manifest-derived backend lookup;
+  `pkg/services/factory_definitions` owns public-name selection and the
+  catalog-to-disk installation boundary. Named
   resolution in `pkg/config/layout.go` reads project-local then global disk
   state only; it does not install packages or expose compatibility JSON aliases.
   `pkg/services/factory_definitions/packages/packageassets` is the shared,
@@ -1582,13 +1642,24 @@ response-stream output.
   assembly rejects unsafe or duplicate canonical bundled targets before the
   payload can reach config initialization. The assembler attaches exact asset
   bytes but does not install or persist anything.
-  `pkg/initializer/configinit` passes each missing assembled catalog payload
-  through the injected Factory Definitions `Persistence` boundary. That shared
-  persistence path materializes `SCRIPT` entries at mode `0755`, writes only
-  thin UTF-8 bundled-file metadata to `factory.json`, and validates the staged
-  runtime before publishing the named-factory directory. Existing valid package
-  directories are loaded read-only and skipped as a whole, so later init runs
-  do not normalize permissions or replace operator-edited scripts. At runtime,
+  `pkg/services/factory_definitions/packagedinstallation` passes each selected
+  detached catalog payload through the injected Factory Definitions
+  `Persistence` boundary. Bootstrap and customer selection share this
+  materializer. The prepared layout carries an explicit safe root filename so
+  an accepted JSON, YAML, or YML selection writes exactly one `factory.json`,
+  `factory.yaml`, or `factory.yml` while the omitted/default selection remains
+  JSON. That shared persistence path materializes `SCRIPT` entries at mode
+  `0755`, writes only thin UTF-8 bundled-file metadata to the selected root
+  definition, and validates the staged runtime before publishing the
+  named-factory directory. Existing valid package directories are loaded
+  read-only and skipped as a whole when the requested authored-root format
+  matches the committed layout, so later init runs do not normalize
+  permissions or replace operator-edited scripts. Alternate format selection
+  without explicit replacement returns `ErrNamedFactoryAlreadyExists`, while
+  accepted replacement uses the same atomic `ReplaceNamedFactory` path and
+  reports a `replaced` outcome. Package selection combined with scaffold-specific
+  inputs is rejected by `ValidateInstallPackagedFactoryRequest` before catalog
+  lookup or filesystem effects begin.
   `pkg/workers/executor.ScriptExecutor` resolves portable `scripts/**` commands
   (and legacy `factory/scripts/**` references) against the active runtime
   configuration's factory directory before using the generic subprocess path;

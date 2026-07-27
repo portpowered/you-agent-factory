@@ -1,10 +1,13 @@
 package providersessions
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 // Service is the singular Provider Sessions root contract for cross-service
@@ -22,7 +25,9 @@ type Service interface {
 	// receive a detached Detail value (transcript, parse, usage, and related
 	// normalized facts) or a typed Provider Sessions failure such as
 	// ErrUnsupportedProvider, ErrUnsupportedKind, ErrInvalidIdentifier,
-	// ErrSessionNotFound, ErrAmbiguousSessionFile, and/or LookupError. Callers do
+	// ErrSessionNotFound, ErrAmbiguousSessionFile, ErrSessionOutsideRoot,
+	// ErrSessionSourceNotRegularFile, ErrSessionStorageUnavailable, and/or
+	// LookupError. Callers do
 	// not supply filesystem/SQL/OS effect ports or Codex/Cursor reader types to
 	// invoke this peer API. Additive typed SessionRef slices (Inspect, Project)
 	// share this singular root without replacing Details.
@@ -32,7 +37,9 @@ type Service interface {
 	// providers.SessionRef vocabulary (provider + kind + id). Peers receive a
 	// detached InspectResult or a typed Provider Sessions failure such as
 	// ErrUnsupportedProvider, ErrUnsupportedKind, ErrInvalidIdentifier,
-	// ErrSessionNotFound, ErrAmbiguousSessionFile, and/or LookupError. This slice
+	// ErrSessionNotFound, ErrAmbiguousSessionFile, ErrSessionOutsideRoot,
+	// ErrSessionSourceNotRegularFile, ErrSessionStorageUnavailable, and/or
+	// LookupError. This slice
 	// does not import Providers catalog/execution, enumeration, availability,
 	// capability, or Workers selection-policy types.
 	Inspect(InspectRequest) (InspectResult, error)
@@ -42,27 +49,25 @@ type Service interface {
 	// whose Detail covers transcript entries, reasoning summaries,
 	// tool/function-call facts, parse summary, and token usage, or a typed
 	// Provider Sessions failure such as ErrUnsupportedProvider,
-	// ErrUnsupportedKind, ErrSessionNotFound, and/or LookupError. Method
+	// ErrUnsupportedKind, ErrSessionNotFound, ErrSessionOutsideRoot,
+	// ErrSessionSourceNotRegularFile, ErrSessionStorageUnavailable, and/or
+	// LookupError. Method
 	// signatures and published values do not name private Codex/Cursor reader
 	// types, filesystem/SQL/OS effect ports, or Providers execution types.
 	Project(ProjectRequest) (ProjectResult, error)
 }
 
-// SessionRef is the detached typed provider-session identity in the
-// providers.SessionRef vocabulary (provider + kind + id). Until CTR-PROV
-// publishes the canonical Providers type, this Provider Sessions-owned value is
-// the peer identity accepted by additive root slices. It does not carry
-// Providers catalog/execution or Workers selection-policy fields.
-type SessionRef struct {
-	Provider Provider
-	Kind     string
-	ID       string
-}
+// SessionRef is an alias for the Providers-owned canonical provider-session
+// identity. Provider Sessions does not publish a second identity type.
+type SessionRef = providers.SessionRef
 
 // InspectRequest asks the root Service to validate and inspect one detached
 // SessionRef without requiring filesystem/SQL/OS effect ports from the caller.
 type InspectRequest struct {
 	Session SessionRef
+	// Context carries cancellation for the inspection operation. When nil,
+	// context.Background is used.
+	Context context.Context
 }
 
 // InspectResult is the detached success outcome for typed SessionRef
@@ -78,6 +83,9 @@ type InspectResult struct {
 // effect ports from the caller.
 type ProjectRequest struct {
 	Session SessionRef
+	// Context carries cancellation for the inspection operation. When nil,
+	// context.Background is used.
+	Context context.Context
 }
 
 // ProjectResult is the detached Detail-shaped projection peers consume for
@@ -94,7 +102,7 @@ const (
 	ProviderCodex  Provider = "codex"
 	ProviderCursor Provider = "cursor"
 
-	SessionIDKind = "session_id"
+	SessionIDKind = providers.SessionIDKind
 )
 
 type Detail struct {
@@ -239,15 +247,21 @@ type UnknownEvent struct {
 }
 
 var (
-	ErrAmbiguousSessionFile = errors.New("ambiguous provider session file")
-	ErrInvalidIdentifier    = errors.New("invalid provider session identifier")
-	ErrSessionNotFound      = errors.New("provider session not found")
-	ErrUnsupportedKind      = errors.New("unsupported provider session kind")
-	ErrUnsupportedProvider  = errors.New("unsupported provider session provider")
+	ErrAmbiguousSessionFile        = errors.New("ambiguous provider session file")
+	ErrInvalidIdentifier           = errors.New("invalid provider session identifier")
+	ErrOperationCanceled           = fmt.Errorf("provider session inspection canceled: %w", context.Canceled)
+	ErrResourceLimitExceeded       = errors.New("provider session inspection resource limit exceeded")
+	ErrSessionNotFound             = errors.New("provider session not found")
+	ErrSessionOutsideRoot          = errors.New("provider session resolves outside configured storage")
+	ErrSessionSourceNotRegularFile = errors.New("provider session source is not a regular file")
+	ErrSessionStorageUnavailable   = errors.New("provider session storage is unavailable")
+	ErrUnsupportedKind             = errors.New("unsupported provider session kind")
+	ErrUnsupportedProvider         = errors.New("unsupported provider session provider")
 )
 
-// LookupError retains normalized provider and root context without exposing
-// provider-specific storage details through the service API.
+// LookupError retains normalized provider context. Root is optional legacy
+// diagnostic context; Codex lookups omit it so configured host paths do not
+// cross the Provider Sessions boundary.
 type LookupError struct {
 	Provider Provider
 	Root     string

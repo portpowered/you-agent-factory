@@ -56,6 +56,7 @@ func (server *ProcessAPIServer) Start(
 	server.mu.Unlock()
 
 	<-ctx.Done()
+	httpServer.CloseClientConnections()
 	httpServer.Close()
 	return nil
 }

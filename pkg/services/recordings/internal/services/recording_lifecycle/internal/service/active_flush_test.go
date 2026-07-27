@@ -228,6 +228,7 @@ func newActiveFlushRoot(
 		nil,
 		writer,
 		tickers,
+		nil,
 	)
 }
 

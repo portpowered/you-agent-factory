@@ -82,7 +82,13 @@ func (i *Integration) Invoke(
 			failureFromExecuteError(err, sessionRefFromResult(result.SessionRef)),
 		))
 	}
-	if err := writeProgressEvents(ctx, writer, request.InvocationID(), result.Diagnostics); err != nil {
+	if err := writeProgressEvents(
+		ctx,
+		writer,
+		request.InvocationID(),
+		result.Diagnostics,
+		result.Content,
+	); err != nil {
 		return err
 	}
 	return writer.Close(ctx, inference.SuccessfulCompletion(inference.NewResponse(inference.ResponseInput{
@@ -212,23 +218,24 @@ func writeProgressEvents(
 	writer inference.ResponseWriter,
 	runID string,
 	diagnostics *providers.ExecuteDiagnostics,
+	content string,
 ) error {
-	if diagnostics == nil {
-		return nil
-	}
-	completedMessages := make(map[string]struct{})
-	for _, progress := range diagnostics.Progress {
-		event, ok := progressEvent(runID, progress)
-		if !ok {
-			continue
-		}
-		draft := event.Draft()
-		if draft.Kind == workers.KindMessage && draft.Phase == workers.PhaseCompleted {
-			if _, seen := completedMessages[draft.ItemID]; seen {
+	if diagnostics != nil {
+		for _, progress := range diagnostics.Progress {
+			event, ok := progressEvent(runID, progress)
+			if !ok {
 				continue
 			}
-			completedMessages[draft.ItemID] = struct{}{}
+			draft := event.Draft()
+			if draft.Kind == workers.KindMessage && draft.Phase == workers.PhaseCompleted {
+				continue
+			}
+			if err := writer.WriteEvent(ctx, event); err != nil {
+				return err
+			}
 		}
+	}
+	if event, ok := authoritativeMessageCompletedEvent(runID, content); ok {
 		if err := writer.WriteEvent(ctx, event); err != nil {
 			return err
 		}

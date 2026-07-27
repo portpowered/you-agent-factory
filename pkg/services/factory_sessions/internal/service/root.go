@@ -107,7 +107,10 @@ func (r *Root) ForRuntime(binding factorysessions.RuntimeBinding) (factorysessio
 		return nil, fmt.Errorf("construct Factory Sessions runtime: service is required")
 	}
 	if binding.Clock == nil {
-		return nil, fmt.Errorf("construct Factory Sessions runtime: clock is required")
+		return nil, &factorysessions.OpeningBindingError{
+			Field:   "clock",
+			Message: "clock is required",
+		}
 	}
 	assembly := legacyservice.NewAssembly(
 		r.newJavaScriptCheckpointStore,

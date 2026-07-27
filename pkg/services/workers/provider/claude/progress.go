@@ -201,6 +201,44 @@ func toolEvent(
 	return event, true
 }
 
+func authoritativeMessageCompletedEvent(
+	runID string,
+	content string,
+) (inference.EventDraft, bool) {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return inference.EventDraft{}, false
+	}
+	payload, err := json.Marshal(workerexecution.MessagePayload{
+		Role: "assistant",
+		ContentBlocks: []workerexecution.ContentBlock{{
+			Kind: workerexecution.ContentBlockText,
+			Text: strings.Clone(content),
+		}},
+	})
+	if err != nil {
+		return inference.EventDraft{}, false
+	}
+	event, err := inference.NewEventDraft(inference.EventDraftInput{
+		RunID:   runID,
+		Kind:    workerexecution.KindMessage,
+		Phase:   workerexecution.PhaseCompleted,
+		ItemID:  "claude-message",
+		Payload: payload,
+		Provenance: workerexecution.Provenance{
+			Provider:        string(providers.IDClaude),
+			Delivery:        workerexecution.DeliveryNativeStream,
+			Representation:  workerexecution.RepresentationSnapshot,
+			Fidelity:        workerexecution.FidelityFinalOnly,
+			NativeEventType: "message.completed",
+		},
+	})
+	if err != nil {
+		return inference.EventDraft{}, false
+	}
+	return event, true
+}
+
 func toolResultSummary(detail string) json.RawMessage {
 	detail = strings.TrimSpace(detail)
 	if detail == "" {

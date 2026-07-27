@@ -1,0 +1,5 @@
+{
+  "failureReason": "timeout",
+  "message": "Claude request timed out.",
+  "ok": false
+}

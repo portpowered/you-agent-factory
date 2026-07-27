@@ -268,13 +268,12 @@ func TestScanTestBehaviorBoundariesRejectsProviderSessionPolicyInTransportSuppor
 	writeGoSourceFile(t, repoRoot, "pkg/transports/http/server_test_helpers_test.go", `package http
 import (
   sessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-  codex "github.com/portpowered/infinite-you/pkg/services/provider_sessions/codex"
   cursor "github.com/portpowered/infinite-you/pkg/services/provider_sessions/cursor"
   service "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service"
   workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 type testProviderSessionService struct{}
-func newTestProviderSessionService() { sessions.CanonicalProvider("agent"); service.NewForRoots(); codex.LoadDetails(); cursor.LoadDetails(); workers.CanonicalProviderSessionProvider("agent") }
+func newTestProviderSessionService() { sessions.CanonicalProvider("agent"); service.NewForRoots(); cursor.LoadDetails(); workers.CanonicalProviderSessionProvider("agent") }
 func scriptedProviderSessionDetail() {}
 `)
 

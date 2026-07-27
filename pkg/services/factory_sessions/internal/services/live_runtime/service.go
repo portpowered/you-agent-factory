@@ -16,6 +16,7 @@ type Service interface {
 	Get(context.Context, string) (factorysessions.SessionProjection, error)
 	Resolve(string) *livesession.LiveSession
 	Snapshot(context.Context, string) (*factoryruntime.StateSnapshot, error)
+	Observe(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
 	ApplyControl(context.Context, string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 	Close(context.Context, string) error
 }

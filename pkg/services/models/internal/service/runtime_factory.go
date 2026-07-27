@@ -13,6 +13,7 @@ import (
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
+	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	"go.uber.org/zap"
 )
@@ -30,6 +31,7 @@ type Root struct {
 	runtimeTempFile localmodels.CreateTempFile
 	runtimeScopes   runtimescopes.Service
 	assets          scopedassets.Service
+	runtimeHost     runtimehost.Service
 	runtimeMu       sync.RWMutex
 	runtimeByScope  map[models.RuntimeScopeRef]models.Service
 	catalog         modelcatalog.Service
@@ -51,6 +53,7 @@ func NewRoot(
 	runtimeScopes runtimescopes.Service,
 	catalogService modelcatalog.Service,
 	assetService scopedassets.Service,
+	runtimeHostService runtimehost.Service,
 	processDependencies ...models.ProcessDependencies,
 ) (*Root, error) {
 	if processLauncher == nil {
@@ -86,6 +89,9 @@ func NewRoot(
 	if assetService == nil {
 		return nil, missingDependencyError("Models Assets service")
 	}
+	if runtimeHostService == nil {
+		return nil, missingDependencyError("Models Runtime Host service")
+	}
 	process := models.ProcessDependencies{}
 	if len(processDependencies) > 0 {
 		process = processDependencies[0]
@@ -101,6 +107,7 @@ func NewRoot(
 		runtimeRunner: runtimeRunner, runtimeHTTP: runtimeHTTP,
 		runtimeInspect: runtimeInspect, runtimeTempDir: runtimeTempDir, runtimeTempFile: runtimeTempFile,
 		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
+		runtimeHost: runtimeHostService,
 		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
 		process:        process,
 	}, nil
@@ -114,23 +121,23 @@ func (o *Root) ForRuntime(binding models.RuntimeBinding) (models.Service, error)
 	if err := models.ValidateRuntimeBinding(binding); err != nil {
 		return nil, err
 	}
-	assets, err := localmodels.NewDeferredScopedAssetPuller(o.assets, func() (models.RuntimeScopeRef, error) {
-		if binding.RuntimeConfig() == nil {
-			return models.RuntimeScopeRef{}, models.ErrUnavailable
-		}
-		privateScope, openErr := o.runtimeScopes.Open(binding)
-		if openErr != nil {
-			return models.RuntimeScopeRef{}, openErr
-		}
-		return (models.RuntimeScopeRef{}).Parse(string(privateScope))
-	})
+	privateScope, err := o.runtimeScopes.Open(binding)
 	if err != nil {
 		return nil, err
 	}
-	return o.runtimeForBindingWithAssets(binding, assets)
+	scope, err := (models.RuntimeScopeRef{}).Parse(string(privateScope))
+	if err != nil {
+		return nil, err
+	}
+	assets, err := localmodels.NewScopedAssetPuller(o.assets, scope)
+	if err != nil {
+		return nil, err
+	}
+	return o.runtimeForBindingWithAssets(scope, binding, assets)
 }
 
 func (o *Root) runtimeForBindingWithAssets(
+	scope models.RuntimeScopeRef,
 	binding models.RuntimeBinding,
 	assets localmodels.AssetPuller,
 ) (models.Service, error) {
@@ -140,11 +147,19 @@ func (o *Root) runtimeForBindingWithAssets(
 	if err != nil {
 		return nil, err
 	}
-	healthChecker := modelhost.HTTPHealthChecker{Client: o.hostHTTP, Path: modelhost.DefaultHealthCheckPath}
 	return newRuntimeWithHostEdges(
-		binding.CacheDirectory, binding.RuntimeConfig, o.process.Logger, o.process.Clock,
-		o.process.PullMetrics, o.process.HostLogger, o.process.HostMetrics, o.process.LocalHooks,
-		assets, localRuntime, o.processLauncher, healthChecker, o.hostClock, nil,
+		scope,
+		binding.RuntimeConfig,
+		o.process.Logger,
+		o.process.Clock,
+		o.process.PullMetrics,
+		o.process.HostLogger,
+		o.process.HostMetrics,
+		o.process.LocalHooks,
+		assets,
+		localRuntime,
+		o.runtimeHost,
+		nil,
 	)
 }
 
@@ -285,45 +300,63 @@ func (o *Root) RemoveModelAssets(
 }
 
 func (o *Root) EnsureModelHost(
-	context.Context,
-	models.EnsureModelHostRequest,
+	ctx context.Context,
+	request models.EnsureModelHostRequest,
 ) (models.EnsureModelHostResult, error) {
-	return models.EnsureModelHostResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.runtimeHost == nil {
+		return models.EnsureModelHostResult{}, models.ErrUnsupportedOperation
+	}
+	return o.runtimeHost.EnsureModelHost(ctx, request)
 }
 
 func (o *Root) InspectModelHost(
-	context.Context,
-	models.InspectModelHostRequest,
+	ctx context.Context,
+	request models.InspectModelHostRequest,
 ) (models.InspectModelHostResult, error) {
-	return models.InspectModelHostResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.runtimeHost == nil {
+		return models.InspectModelHostResult{}, models.ErrUnsupportedOperation
+	}
+	return o.runtimeHost.InspectModelHost(ctx, request)
 }
 
 func (o *Root) StopModelHost(
-	context.Context,
-	models.StopModelHostRequest,
+	ctx context.Context,
+	request models.StopModelHostRequest,
 ) (models.StopModelHostResult, error) {
-	return models.StopModelHostResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.runtimeHost == nil {
+		return models.StopModelHostResult{}, models.ErrUnsupportedOperation
+	}
+	return o.runtimeHost.StopModelHost(ctx, request)
 }
 
 func (o *Root) AcquireModelLease(
-	context.Context,
-	models.AcquireModelLeaseRequest,
+	ctx context.Context,
+	request models.AcquireModelLeaseRequest,
 ) (models.AcquireModelLeaseResult, error) {
-	return models.AcquireModelLeaseResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.runtimeHost == nil {
+		return models.AcquireModelLeaseResult{}, models.ErrUnsupportedOperation
+	}
+	return o.runtimeHost.AcquireModelLease(ctx, request)
 }
 
 func (o *Root) GetModelLease(
-	context.Context,
-	models.GetModelLeaseRequest,
+	ctx context.Context,
+	request models.GetModelLeaseRequest,
 ) (models.GetModelLeaseResult, error) {
-	return models.GetModelLeaseResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.runtimeHost == nil {
+		return models.GetModelLeaseResult{}, models.ErrUnsupportedOperation
+	}
+	return o.runtimeHost.GetModelLease(ctx, request)
 }
 
 func (o *Root) ReleaseModelLease(
-	context.Context,
-	models.ReleaseModelLeaseRequest,
+	ctx context.Context,
+	request models.ReleaseModelLeaseRequest,
 ) (models.ReleaseModelLeaseResult, error) {
-	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.runtimeHost == nil {
+		return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
+	}
+	return o.runtimeHost.ReleaseModelLease(ctx, request)
 }
 
 func (o *Root) InvokeModelWithLease(
@@ -381,7 +414,7 @@ func (o *Root) scopedRuntime(scope models.RuntimeScopeRef) (models.Service, erro
 		if err != nil {
 			return nil, err
 		}
-		return o.runtimeForBindingWithAssets(binding, assets)
+		return o.runtimeForBindingWithAssets(scope, binding, assets)
 	})
 }
 
@@ -424,7 +457,7 @@ func (o *Root) scopedRuntimeWithBuilder(
 }
 
 func newRuntimeWithHostEdges(
-	cacheDir string,
+	scope models.RuntimeScopeRef,
 	runtimeConfig models.RuntimeConfigLoader,
 	logger *zap.Logger,
 	now func() time.Time,
@@ -434,9 +467,7 @@ func newRuntimeWithHostEdges(
 	hooks models.LocalRuntimeHooks,
 	assetPuller localmodels.AssetPuller,
 	localRuntime localmodels.Runtime,
-	processLauncher modelhost.ProcessLauncher,
-	healthChecker modelhost.HealthChecker,
-	hostClock modelhost.Clock,
+	runtimeHost runtimehost.Service,
 	host modelhost.Host,
 ) (models.Service, error) {
 	if assetPuller == nil {
@@ -456,20 +487,12 @@ func newRuntimeWithHostEdges(
 	modelHost := host
 	if modelHost == nil {
 		gateway := modelhost.NewLocalAssetGateway(assetPuller)
-		modelHost, err = modelhost.NewHost(
+		modelHost, err = modelhost.NewScopedCompatHost(
+			scope,
+			runtimeHost,
 			gateway,
-			gateway,
-			processLauncher,
 			modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
-			modelhost.DefaultReadinessTimeout,
-			modelhost.DefaultHealthCheckInterval,
-			modelhost.DefaultHealthCheckPath,
-			healthChecker,
-			hostClock,
-			modelhost.DefaultServerStartBuilder,
 			modelhost.Diagnostics{Logger: hostLogger, Metrics: hostMetrics},
-			0,
-			0,
 		)
 		if err != nil {
 			return nil, err

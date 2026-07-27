@@ -90,7 +90,6 @@ var RequiredSpecialtyTargets = []string{
 var ExpectedDeletionOnlyBatches = []string{
 	"runtime_api-delete-01-transport-http",
 	"runtime_api-delete-02-work-submission",
-	"runtime_api-delete-03-workstations-cron",
 	"runtime_api-delete-04-sessions",
 	"runtime_api-delete-05-factory-packaged",
 	"runtime_api-delete-06-factory-current",
@@ -99,7 +98,6 @@ var ExpectedDeletionOnlyBatches = []string{
 	"runtime_api-delete-09-workers-resilience",
 	"runtime_api-delete-10-observability-product",
 	"runtime_api-delete-11-wrong-layer",
-	"smoke-delete-01-orchestration-petri",
 	"smoke-delete-03-factory-definitions",
 	"smoke-delete-04-transport-cli",
 	"smoke-delete-05-factory-packaged",
@@ -119,7 +117,6 @@ var ExpectedDeletionOnlyBatches = []string{
 	"workflow-delete-09-orchestration-javascript",
 	"guards_batch-delete-01-work-relationships",
 	"guards_batch-delete-02-guards-global",
-	"guards_batch-delete-03-orchestration-dispatch",
 	"guards_batch-delete-04-resources-concurrency",
 	"guards_batch-delete-05-resources-fairness",
 	"guards_batch-delete-06-resilience-batch",

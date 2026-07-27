@@ -80,6 +80,7 @@ func TestComposeRunInputsPreservesSupportedTypeHints(t *testing.T) {
 		work.InvocationParameterTypeHintDirectoryPath,
 		work.InvocationParameterTypeHintNumberString,
 		work.InvocationParameterTypeHintBooleanString,
+		work.InvocationParameterTypeHintJSON,
 	}
 	for _, typeHint := range supported {
 		t.Run(typeHint, func(t *testing.T) {

@@ -140,6 +140,65 @@
   `functional-boundary-check` stays unavoidable through the nested
   `test-functional-coverage` call, and the lane uploads Markdown, coverage
   JSON, profile, and command log on success and failure.
+  JavaScript file-backed loading functional coverage belongs in
+  `tests/functional/orchestration/javascript/loading/file_javascript_test.go`:
+  drive sync Factory Session execution through `support.BuildProcess` +
+  `support.FakeInputs` with `you --json run`, `--factory`, and
+  `--with-mock-workers`; scaffold file-backed factories with
+  `orchestrator.javascript.sourceRef` and workflow modules beside
+  `factory.json`; prove factory-relative ES module imports resolve under the
+  Factory root with a terminal `COMPLETED` primary result that reflects the
+  imported module contribution and zero provider dispatch; prove missing
+  factory-relative imports fail before work starts with customer-stable
+  `workflow.source.notFound` diagnostics that name the missing path without
+  private VM stack frames or live provider execution. Substitute external
+  effects only through `edges.Edges`. Catalog metadata infers domain
+  `orchestration` and subsection `javascript/loading` from the path; every
+  top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
+  stays viz-compatible.
+  Named JavaScript Factory loading functional coverage belongs in
+  `tests/functional/orchestration/javascript/loading/named_factory_test.go`:
+  register inline factories with `support.CreateNamedFactory`, invoke by name
+  through `you --json run --named` from an unrelated working directory with
+  `HOME` pinned to the test catalog, and prove terminal `COMPLETED` primary
+  outcomes tied to the named Factory identity; prove the same named Factory
+  through `POST /factory-sessions/sync` with `source.kind=FACTORY_ID` and
+  `edges.FactoryRuntimeWorkflowHome` so global catalog lookup resolves; prove
+  pause/resume Factory Session controls on async durable sessions started with
+  `POST /factory-sessions/async` plus matching CLI `session pause|resume` with
+  `--server`, asserting durable `status` and `resolvedSource.sourceRef` on the
+  named identity. Substitute external effects only through `edges.Edges`.
+  JavaScript output mapping functional coverage belongs in
+  `tests/functional/orchestration/javascript/contracts/output_mapping_test.go`:
+  drive sync Factory Session execution through
+  `tests/functional/internal/support.StartFunctionalAPIServer` with
+  `WaitForServiceModeRuntime: true`, `UseMockWorkers: true`, and a recording
+  `edges.Edges.ProviderCommandRunner`; prove script `return` values map to
+  `result.primaryResult`, final results, durable `resultSummary`, and
+  `SESSION_RESULT_UPDATED` Factory Events; prove `workflow.artifact()`
+  structured artifacts appear on artifact list/detail, final result
+  `artifactIds`, session `artifactRefs`, and result/completion Factory Events;
+  prove unsupported root return values (for example function values) yield
+  `FAILED` session status with actionable `failureDetail` containing
+  `workflow.result.unsupportedType` without private VM stack frames or live
+  provider execution. Substitute external effects only through `edges.Edges`.
+  Catalog metadata infers domain `orchestration` and subsection
+  `javascript/contracts` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  TypeScript Factory loading functional coverage belongs in
+  `tests/functional/orchestration/javascript/loading/typescript_test.go`:
+  drive sync Factory Session execution through `support.BuildProcess` +
+  `support.FakeInputs` with `you --json run`, `--factory`, and
+  `--with-mock-workers`; scaffold file-backed factories with
+  `orchestrator.javascript.sourceRef` pointing to `.ts` workflow files that
+  require MVP TypeScript stripping; prove supported TypeScript transpiles and
+  runs to terminal `COMPLETED` primary outcomes that reflect typed source
+  execution with zero provider dispatch; prove deliberate type or syntax
+  failures fail before dispatch with customer-stable `workflow.source.syntaxError`
+  diagnostics that are actionable without private VM internals; prove
+  source-map remapping reports authored `.ts` line/column suffixes in failure
+  diagnostics rather than only emitted JavaScript locations. Substitute
+  external effects only through `edges.Edges`.
   JavaScript agent composition functional coverage belongs in
   `tests/functional/orchestration/javascript/composition/agent_test.go`:
   drive sync Factory Session execution through
@@ -252,6 +311,65 @@
   metadata infers domain `transport` and subsection `cli/parameters` from the
   path; every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+  CLI key=value parameter mapping functional coverage belongs in
+  `tests/functional/transport/cli/parameters/key_value_test.go`: prove repeated
+  `--key=value` tokens reach canonical `InvocationArguments` through
+  `SubmissionRecorder`, prove values with embedded `=` survive intact, prove
+  duplicate keys on REPEATED parameters append in CLI observation order, and
+  prove malformed shapes (missing value, bare `key=value` without `--`) fail
+  with stable diagnostics and zero provider dispatch through
+  `ProviderCommandRunner` at the public `support.BuildProcess` boundary. Catalog
+  metadata infers domain `transport` and subsection `cli/parameters` from the
+  path; every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
+  HTTP API server startup/shutdown functional coverage belongs in
+  `tests/functional/transport/http/server/startup_shutdown_test.go`: prove
+  configured `--server` loopback listeners serve non-empty `GET /status`
+  readiness after start through `support.StartFunctionalAPIServer`, prove
+  shutdown closes the listener and terminates active public streams (including
+  in-flight Factory Session invocations) without leaking ports, and prove bind
+  failure through `platformhttpserver.NewStarter` on `edges.Edges.APIServerStarter`
+  reports `SERVER_BIND_FAILED` with zero browser/readiness side effects and
+  rebound availability on the requested address. Catalog metadata infers domain
+  `transport` and subsection `http/server` from the path; every top-level
+  `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
+  HTTP API server OpenAPI routing functional coverage belongs in
+  `tests/functional/transport/http/server/routing_test.go`: prove every
+  published OpenAPI operation inventory entry reaches a non-404 handler through
+  safe public HTTP requests against `support.StartFunctionalAPIServer` with
+  `WaitForServiceModeRuntime: true` and `UseMockWorkers: true`, prove unknown
+  paths outside the OpenAPI surface return structured `NOT_FOUND` JSON errors
+  via `Server.NotFoundHandler`, and prove wrong HTTP methods on known routes
+  return structured `405` `METHOD_NOT_ALLOWED` errors via
+  `Server.MethodNotAllowedHandler` instead of not-found outcomes that would
+  hide method mismatches. Catalog metadata infers domain `transport` and
+  subsection `http/server` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  CLI JSON parameter values functional coverage belongs in
+  `tests/functional/transport/cli/parameters/json_values_test.go`: prove nested
+  JSON object and array named parameters reach canonical `InvocationArguments`
+  intact through `SubmissionRecorder`, prove invalid JSON for a `typeHint: "JSON"`
+  parameter fails with a named-parameter diagnostic and zero provider dispatch
+  through `ProviderCommandRunner`, and prove JSON `null`, empty string, empty
+  object, and empty array remain observably distinct without normalization loss
+  at the public `support.BuildProcess` boundary. Catalog metadata infers domain
+  `transport` and subsection `cli/parameters` from the path; every top-level
+  `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
+  CLI operator-default environment precedence functional coverage belongs in
+  `tests/functional/transport/cli/parameters/environment_precedence_test.go`:
+  prove explicit `--default-worker-model-provider` and `--default-worker-model`
+  flags override conflicting `YOU_DEFAULT_WORKER_MODEL_PROVIDER` and
+  `YOU_DEFAULT_WORKER_MODEL` environment values with `SourceCLIFlag` provenance
+  on `CLIObserver` resolved inputs, prove environment overrides conflicting
+  `~/.you-agent-factory/config.json` defaults with `SourceEnvironment` when no
+  overriding flag is present, and prove unset operator-default environment
+  variables fall back to global config with `SourceOperatorConfig` without
+  fabricating `SourceEnvironment` overrides at the public
+  `support.BuildProcess` boundary. Catalog metadata infers domain `transport`
+  and subsection `cli/parameters` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
   CLI response-stream backpressure functional coverage belongs in
   `tests/functional/transport/cli/output/stream_backpressure_test.go`:
   invoke `support.BuildProcess` with a gated or mid-stream-failing stdout writer
@@ -306,9 +424,14 @@ Wave 0 functional-tests-expansion planning authority lives under
   `tests/functional` inventory coverage, checklist destination validity, and
   lane preservation against the companion JSON. When a deletion-only batch is
   fully consumed (all scenarios owned by destination cells with
-  `deletion_only_batch: n/a`), remove its id from
-  `internal/migrationledgercheck.ExpectedDeletionOnlyBatches` and mark the
-  batch `released` in `migration-ledger.md`.
+  `deletion_only_batch: n/a`; for example `runtime_api-delete-03-workstations-cron`),
+  remove the source scenarios and ledger rows, add destination rows with
+  `deletion_only_batch: n/a`, drop the batch id from
+  `internal/migrationledgercheck/check.go` `ExpectedDeletionOnlyBatches`, mark the
+  batch `released` in `migration-ledger.md`, update summary counts in
+  `migration-ledger-inventory.json`, retarget any specialty Make bindings, and
+  refresh `test-file-checklist.md` plus narrowly coupled baselines
+  (`package-structure-baseline.json`, `functional-undocumented-tests.json`).
   `make pkg-structure` enforces the domain-mirrored functional layout
   `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
   unclassified scenario packages are blocking, while existing nonconforming
@@ -526,6 +649,54 @@ Wave 0 functional-tests-expansion planning authority lives under
   (`malformed-record`, `process-failure`, `timeout`) replay through
   `tests/functional/workers/inference/cursor/golden_failure_test.go`. Use
   `stdout.txt` when fixtures include non-JSON stream lines; `.jsonl` loaders
-  reject invalid JSON per line. Retryable timeout cases must queue multiple
+  reject invalid JSON per line.   Retryable timeout cases must queue multiple
   identical `ProviderCommandRunner` results so retries do not fall through to
   the default mock.
+- Workers inference provider/model selection functional coverage belongs in
+  `tests/functional/workers/inference/selection_test.go`: prove explicit
+  worker `modelProvider` and `model` dispatch invoke only the matching
+  registered `ProviderRegistrations` edge and complete factory dispatch, prove
+  worker-authored providers override operator defaults when both edges are
+  registered, and prove unknown provider aliases fail factory startup with a
+  stable validation error before any registered provider edge is invoked.
+  Drive proofs through `support.RunFactoryToCompletionWithEdgesAndObservations`
+  or `support.BuildProcess` with `serviceedges.Edges{ProviderRegistrations: ...}`
+  and assert on integration stats plus public Work outcomes only. Catalog
+  metadata infers domain `workers` and subsection `inference` from the path;
+  every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
+- Workers inference provider command-flag functional coverage belongs in
+  `tests/functional/workers/inference/flags_test.go`: prove skip-permissions
+  policy, resolved worktree names, and explicit model values map onto the
+  selected provider-process command args, and prove unsupported provider flags
+  (for example workstation `outputSchema` on Gemini) fail with a capability
+  error before any `ProviderCommandRunner` call. Drive proofs through
+  `support.RunFactoryToCompletionWithEdgesAndObservations` with
+  `serviceedges.Edges{ProviderCommandRunner: ...}` and assert on command args
+  plus public Work outcomes only. Catalog metadata infers domain `workers` and
+  subsection `inference` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+- Workers inference provider stream-fidelity functional coverage belongs in
+  `tests/functional/workers/inference/stream_fidelity_test.go`: prove full-stream
+  providers publish truthful message deltas and completed snapshots (native-stream
+  delivery, no final-only fabrication), partial-stream providers do not fabricate
+  missing message deltas, snapshot-only providers emit completed snapshots only
+  (zero deltas, no final-only), and final-only providers emit only the terminal
+  completed message (`FINAL_ONLY` / `NATIVE_FINAL`, zero message deltas). Drive
+  proofs through `support.RunFactoryToCompletionWithEdgesAndResponseEvents` with
+  sanitized FND-006 provider-session goldens replayed via
+  `serviceedges.Edges{ProviderCommandRunner: ...}` (and OpenCode snapshot-only
+  executable-locator edges when required) and assert on public
+  `FactoryResponseEvent` provenance plus terminal Work outcomes only. Catalog
+  metadata infers domain `workers` and subsection `inference` from the path;
+  every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
+
+- `tests/functional/automations/` owns root.BuildProcess evidence for packaged
+  Automations cron scheduling and filesystem watcher preseed. Keep cron workstation
+  factories explicit with `"behavior": "CRON"` and observe submissions through
+  `serviceedges.Edges.SubmissionRecorder` on `support.StartFunctionalAPIServer`,
+  matching the runtime_api cron smoke helpers. For filesystem watchers, scaffold
+  factories with workstation `inputs`, seed `inputs/<workType>/default/` before
+  `StartFunctionalAPIServer`, and assert preseed submissions through the same
+  recorder seam rather than importing parent-private `filesystem_watchers` packages.

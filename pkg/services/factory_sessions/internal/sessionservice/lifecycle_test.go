@@ -42,13 +42,16 @@ func (h *lifecycleGatewayHost) StopLiveSession(sessionID string) error {
 type gatewayLifecycleFactory struct {
 	factoryState       string
 	subscribeFactoryFn func(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error)
+	pauseCalls         int
+	resumeCalls        int
+	terminateCalls     int
 }
 
 func (f *gatewayLifecycleFactory) Run(context.Context) error { return nil }
 
-func (f *gatewayLifecycleFactory) Pause(context.Context) error { return nil }
+func (f *gatewayLifecycleFactory) Pause(context.Context) error { f.pauseCalls++; return nil }
 
-func (f *gatewayLifecycleFactory) Resume(context.Context) error { return nil }
+func (f *gatewayLifecycleFactory) Resume(context.Context) error { f.resumeCalls++; return nil }
 
 func (f *gatewayLifecycleFactory) ControlPause(ctx context.Context, _ factory.PauseRequest) (factory.PauseResult, error) {
 	err := f.Pause(ctx)
@@ -61,6 +64,7 @@ func (f *gatewayLifecycleFactory) ControlResume(ctx context.Context, _ factory.R
 }
 
 func (f *gatewayLifecycleFactory) Terminate(context.Context, factory.TerminateRequest) (factory.TerminateResult, error) {
+	f.terminateCalls++
 	return factory.TerminateResult{Outcome: factory.ControlOutcomeAccepted}, nil
 }
 

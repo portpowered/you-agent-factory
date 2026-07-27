@@ -171,9 +171,9 @@ func assertBuiltCLIInitContract(
 	configPath := filepath.Join(session.HomeDir, ".you-agent-factory", "config.json")
 	removed, removedErr := session.Run(ctx, "init", "--dir", "legacy-factory")
 	if removedErr == nil ||
-		!strings.Contains(removed.Stdout+removed.Stderr+removedErr.Error(), "unknown flag: --dir") {
+		!strings.Contains(removed.Stdout+removed.Stderr+removedErr.Error(), "use --provider") {
 		t.Fatalf(
-			"removed init input = (%v, stdout=%q, stderr=%q), want unknown flag",
+			"init without packaged selection = (%v, stdout=%q, stderr=%q), want provider setup requirement",
 			removedErr,
 			removed.Stdout,
 			removed.Stderr,

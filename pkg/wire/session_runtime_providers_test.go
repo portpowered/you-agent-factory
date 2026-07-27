@@ -59,6 +59,7 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 	conductorInvocation := provideConductorInvocationWithProgressFactory(edges)
 	factory := provideFactorySessionExecutionFactory(
 		workflows,
+		provideOrchestrationJavaScriptExecution(provideFactoryRuntimeIDGenerator(edges), workflows),
 		writer,
 		stores,
 		syncWaits,
