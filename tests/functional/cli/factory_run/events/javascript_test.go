@@ -49,6 +49,7 @@ func TestJavaScriptInvocationEmitsCanonicalPhaseAndCheckpointEvents(t *testing.T
 	assertJavaScriptLifecycle(t, lifecycle)
 }
 
+// TestJavaScriptInvocationWithServerJoinsListenerAfterTerminalResult proves hosted JavaScript cleanup at the CLI boundary.
 func TestJavaScriptInvocationWithServerJoinsListenerAfterTerminalResult(t *testing.T) {
 	var starts, stops, browsers atomic.Int32
 	stdout := runJavaScriptResponseStreamWithOptions(

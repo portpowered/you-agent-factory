@@ -22,7 +22,7 @@ runtime-metrics-dir			root directory for structured runtime metrics JSONL files 
 runtime-metrics-max-age-days		30	maximum days to retain rotated runtime metrics files
 runtime-metrics-max-backups		20	maximum rotated runtime metrics files to retain
 runtime-metrics-max-size-mb		100	rotate each runtime metrics file after this many megabytes
-server		http://localhost:7437	factory API base URI (http:// or https://); HTTP client commands target this URI and you run binds locally to its host and port
+server		http://localhost:7437	factory API base URI (http:// or https://); HTTP client commands target this URI, while you server and server-enabled runs bind its loopback host and port
 skip-permissions		false	request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration
 verbose	v	false	emit concise command diagnostics to stderr
 with-mock-workers			enable mock-worker execution with an optional mock-workers JSON config path

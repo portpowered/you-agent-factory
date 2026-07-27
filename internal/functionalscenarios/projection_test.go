@@ -23,7 +23,7 @@ func TestProjectCanonicalRepositoryInventories(t *testing.T) {
 		t.Fatalf("Project() error = %v", err)
 	}
 
-	wantCounts := map[string]int{InterfaceCLI: 39, InterfaceREST: 43, InterfaceMCP: 10, InterfaceSSE: 2}
+	wantCounts := map[string]int{InterfaceCLI: 39, InterfaceREST: 44, InterfaceMCP: 10, InterfaceSSE: 2}
 	gotCounts := make(map[string]int)
 	byID := make(map[string]Component, len(projection.Components))
 	for _, component := range projection.Components {

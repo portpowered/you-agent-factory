@@ -16,8 +16,8 @@ func TestBuildReviewedManifestPublishesTruthfulCoverageAndSSEPolicy(t *testing.T
 	if err != nil {
 		t.Fatalf("BuildReviewedManifest() error = %v", err)
 	}
-	if len(manifest.Scenarios) != 94 {
-		t.Fatalf("scenario count = %d, want 94", len(manifest.Scenarios))
+	if len(manifest.Scenarios) != 95 {
+		t.Fatalf("scenario count = %d, want 95", len(manifest.Scenarios))
 	}
 	byID := make(map[string]Scenario, len(manifest.Scenarios))
 	for _, scenario := range manifest.Scenarios {

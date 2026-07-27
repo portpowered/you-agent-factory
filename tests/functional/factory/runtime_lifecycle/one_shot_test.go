@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestOneShotRunJoinsRuntimeLifecycle proves one-shot completion joins the owned runtime.
 func TestOneShotRunJoinsRuntimeLifecycle(t *testing.T) {
 	factoryRoot := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "e2e"))
 	testutil.WriteSeedFile(t, factoryRoot, "task", []byte(`{"title": "one-shot lifecycle"}`))

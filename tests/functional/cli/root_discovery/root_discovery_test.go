@@ -60,6 +60,7 @@ func TestBareRootPrintsConciseHelpWithoutProductEffects(t *testing.T) {
 	}
 }
 
+// TestCurrentFactoryFailsBeforeProductActivation proves invalid Current Factory selection is side-effect free.
 func TestCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -101,6 +102,7 @@ func TestCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
 	}
 }
 
+// TestServerCurrentFactoryFailsBeforeProductActivation proves server validation precedes product activation.
 func TestServerCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -131,6 +133,7 @@ func TestServerCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
 	}
 }
 
+// TestRunScopedSiteMissingCurrentFactoryFailsBeforeProductActivation proves site selection does not bypass validation.
 func TestRunScopedSiteMissingCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
 	workingDirectory := t.TempDir()
 	var effects atomic.Int32
@@ -231,6 +234,7 @@ func runCurrentFactoryFailureCaseForCommand(
 	}
 }
 
+// TestServerReadinessGatesBrowserAndCancellationJoinsOwnedServer proves readiness ordering and joined shutdown.
 func TestServerReadinessGatesBrowserAndCancellationJoinsOwnedServer(t *testing.T) {
 	for iteration := 0; iteration < 3; iteration++ {
 		t.Run(fmt.Sprintf("iteration-%d", iteration), func(t *testing.T) {
@@ -309,6 +313,7 @@ func runServerLifecycleCase(t *testing.T) {
 	}
 }
 
+// TestServerBindExhaustionWritesDeclaredErrorWithoutResidualEffects proves terminal bind failures leave no lifecycle effects.
 func TestServerBindExhaustionWritesDeclaredErrorWithoutResidualEffects(t *testing.T) {
 	workingDirectory := t.TempDir()
 	factoryDir := filepath.Join(workingDirectory, "factory")
@@ -381,6 +386,7 @@ func TestServerBindExhaustionWritesDeclaredErrorWithoutResidualEffects(t *testin
 	}
 }
 
+// TestCurrentFactoryRunsToIdleWithoutStartingServer proves ordinary Current Factory runs remain serverless.
 func TestCurrentFactoryRunsToIdleWithoutStartingServer(t *testing.T) {
 	workingDirectory := t.TempDir()
 	factoryDir := filepath.Join(workingDirectory, "factory")
@@ -438,6 +444,7 @@ func TestCurrentFactoryRunsToIdleWithoutStartingServer(t *testing.T) {
 	}
 }
 
+// TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness proves one-shot hosting and site readiness.
 func TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -511,6 +518,7 @@ func TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness(t *t
 	}
 }
 
+// TestContinuousRunScopedServerKeepsListenerUntilCancellation proves continuous hosting follows invocation cancellation.
 func TestContinuousRunScopedServerKeepsListenerUntilCancellation(t *testing.T) {
 	workingDirectory := t.TempDir()
 	factoryDir := filepath.Join(workingDirectory, "factory")

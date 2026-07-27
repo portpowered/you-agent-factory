@@ -25,6 +25,7 @@ import (
 	codexexitfailure "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex/exitfailure"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/commandenv"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor"
+	geminipkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	kiropkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro"
 
@@ -680,6 +681,11 @@ func parseProviderExitFailure(provider string, result CommandResult) parsedProvi
 			failure:         ProviderFailureResult{Reason: failure.Reason, Message: failure.Message},
 			providerSession: failure.ProviderSession,
 		}
+	case string(modelprovider.ProviderGemini):
+		failure := geminipkg.ParseProviderFailure(geminipkg.FailureInput{
+			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+		})
+		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
 	default:
 		return parsedProviderFailure{failure: parseUnknownProviderFailure(normalizedProvider, result)}
 	}

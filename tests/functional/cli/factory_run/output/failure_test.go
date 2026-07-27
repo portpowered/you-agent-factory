@@ -114,6 +114,7 @@ func TestInvocationFailureOutputContracts(t *testing.T) {
 	})
 }
 
+// TestOutputSelectionFailsBeforeProductActivation proves invalid output choices remain side-effect free.
 func TestOutputSelectionFailsBeforeProductActivation(t *testing.T) {
 	tests := []struct {
 		name     string

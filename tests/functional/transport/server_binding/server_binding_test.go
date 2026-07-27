@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
+// TestBuiltExecutableFallsBackFromOccupiedLoopbackPortAndReportsActualURL proves the shipped socket fallback contract.
 func TestBuiltExecutableFallsBackFromOccupiedLoopbackPortAndReportsActualURL(t *testing.T) {
 	busyListener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {

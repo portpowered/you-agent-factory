@@ -1,5 +1,6 @@
 {
   "formatVersion": "1.0.0",
+  "providerSchema": "https://schemas.you.dev/model-providers/provider-manifest/1.0.0.schema.json",
   "providers": [
     {
       "id": "example-alpha",

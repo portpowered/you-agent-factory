@@ -25,6 +25,7 @@ const (
 	wantInvocationResponse = "mock worker accepted"
 )
 
+// TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles proves hosted invocation cleanup across selectors.
 func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -96,6 +97,7 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 	}
 }
 
+// TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness proves raw JavaScript hosting shares one lifecycle.
 func TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness(t *testing.T) {
 	for _, test := range []struct {
 		name        string
@@ -150,6 +152,7 @@ func TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness(t *testing.T) {
 	}
 }
 
+// TestRunScopedServerOwnsReplayLifecycle proves replay hosting joins its listener at terminal completion.
 func TestRunScopedServerOwnsReplayLifecycle(t *testing.T) {
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
