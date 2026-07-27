@@ -7,7 +7,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/definitionmapping"
-	factoryingest "github.com/portpowered/infinite-you/pkg/services/factory_runtime/ingest"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/scheduler"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service/host"
@@ -331,45 +330,31 @@ func assembleRuntimeBundle(
 	if err != nil {
 		return nil, fmt.Errorf("create factory: %w", err)
 	}
-	listener, err := buildRuntimeListener(dir, activeFactory, logger, net, runtimeDirs, inputFiles, inputDirectoryWalker, workRequestIDs)
-	if err != nil {
+	if err := ensureRuntimeInputsDir(dir, logger, runtimeDirs); err != nil {
 		return nil, err
 	}
 
 	bundle.Factory = activeFactory
-	bundle.Listener = listener
+	bundle.InputFiles = inputFiles
+	bundle.InputDirectoryWalker = inputDirectoryWalker
+	bundle.WorkRequestIDs = workRequestIDs
 	return bundle, nil
 }
 
-func buildRuntimeListener(
+func ensureRuntimeInputsDir(
 	factoryDir string,
-	activeFactory factory.Factory,
 	logger *zap.Logger,
-	net *state.Net,
 	runtimeDirs factory.RuntimeDirectoryFileSystem,
-	inputFiles factory.InputFileSystem,
-	inputDirectoryWalker factory.InputDirectoryWalker,
-	workRequestIDs work.RequestIDGenerator,
-) (*factoryingest.FileWatcher, error) {
+) error {
 	inputsDir := filepath.Join(factoryDir, interfaces.InputsDir)
 	if !dirExists(inputsDir, runtimeDirs) {
 		if err := runtimeDirs.MkdirAll(inputsDir, 0o755); err != nil {
-			return nil, fmt.Errorf("create inputs dir: %w", err)
+			return fmt.Errorf("create inputs dir: %w", err)
 		}
-	} else {
-		logger.Info("using inputs/ directory", zap.String("dir", inputsDir))
+		return nil
 	}
-	return factoryingest.NewFileWatcher(
-			inputsDir,
-			activeFactory,
-			logger,
-			nil,
-			state.ValidStatesByType(net.WorkTypes),
-			inputFiles,
-			inputDirectoryWalker,
-			workRequestIDs,
-		),
-		nil
+	logger.Info("using inputs/ directory", zap.String("dir", inputsDir))
+	return nil
 }
 
 func newSessionLogger(base *zap.Logger, sessionID string, folderPath string, factoryDir string) *zap.Logger {

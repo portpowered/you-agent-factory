@@ -1,4 +1,4 @@
-package ingest
+package service
 
 import (
 	"context"
@@ -49,9 +49,9 @@ func TestFileWatcher_InjectedEventProcessesAfterDirectoryRegistration(t *testing
 		t.Fatal(err)
 	}
 
-	factory := &mockFactory{submitted: make(chan struct{}, 1)}
+	submitter := &recordingSubmitter{submitted: make(chan struct{}, 1)}
 	watcher := newScriptedEventWatcher()
-	fw := NewFileWatcher(dir, factory, zap.NewNop(), nil, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	fw := newTestWatcher(dir, submitter, zap.NewNop(), nil, nil, localInputFiles{}, filepath.WalkDir)
 	fw.newWatcher = func() (fileEventWatcher, error) { return watcher, nil }
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -61,11 +61,11 @@ func TestFileWatcher_InjectedEventProcessesAfterDirectoryRegistration(t *testing
 	waitForRegisteredDirectory(t, watcher.added, dir)
 	watcher.events <- fsnotify.Event{Name: path, Op: fsnotify.Create}
 	select {
-	case <-factory.submitted:
+	case <-submitter.submitted:
 	case <-time.After(time.Second):
 		t.Fatal("injected file event was not submitted")
 	}
-	requests := factory.getWorkRequests()
+	requests := submitter.getWorkRequests()
 	if got := string(requests[0].Works[0].Payload.([]byte)); got != string(content) {
 		t.Fatalf("payload = %q, want %q", got, content)
 	}

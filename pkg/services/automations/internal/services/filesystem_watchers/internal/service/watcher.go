@@ -1,5 +1,4 @@
-// Package ingest provides filesystem-backed external input ingestion for the factory runtime.
-package ingest
+package service
 
 import (
 	"context"
@@ -12,14 +11,14 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
 
-// FileWatcher watches a directory for new .md and .json files and submits
-// them to a Factory.
+// watcher watches a directory for new .md and .json files and submits Work
+// Requests through the injected admission collaborator.
 //
 // Directory layout:
 //
@@ -29,16 +28,16 @@ import (
 // The execution-id from the channel directory name is attached to wrapped work
 // request items so downstream guards can correlate generated work with the
 // parent execution.
-type FileWatcher struct {
+type watcher struct {
 	dir     string
-	factory factory.Factory
+	submit  filesystemwatchers.WorkRequestSubmitter
 	logger  *zap.Logger
 	// knownWorkTypes restricts submissions to known work types.
 	// If nil, all subdirectories are accepted.
 	knownWorkTypes  map[string]bool
 	knownWorkStates map[string]map[string]bool
-	files           factory.InputFileSystem
-	walkDirectory   factory.InputDirectoryWalker
+	files           filesystemwatchers.InputFileSystem
+	walkDirectory   filesystemwatchers.DirectoryWalker
 	workRequestIDs  work.RequestIDGenerator
 	newWatcher      fileEventWatcherFactory
 }
@@ -71,48 +70,41 @@ func newFSNotifyEventWatcher() (fileEventWatcher, error) {
 
 const batchInputDirectoryName = "BATCH"
 
-// NewFileWatcher creates a FileWatcher that watches dir for new files.
-func NewFileWatcher(
-	dir string,
-	f factory.Factory,
-	logger *zap.Logger,
-	workTypes []string,
-	statesByType map[string]map[string]bool,
-	files factory.InputFileSystem,
-	walkDirectory factory.InputDirectoryWalker,
-	workRequestIDs work.RequestIDGenerator,
-) *FileWatcher {
-	if files == nil {
-		panic("Factory Runtime input filesystem is required")
+func newWatcher(config filesystemwatchers.Config) *watcher {
+	if config.Files == nil {
+		panic("filesystem watcher input filesystem is required")
 	}
-	if walkDirectory == nil {
-		panic("Factory Runtime input directory walker is required")
+	if config.WalkDirectory == nil {
+		panic("filesystem watcher directory walker is required")
 	}
-	if workRequestIDs == nil {
+	if config.WorkRequestIDs == nil {
 		panic("Work Request ID generator is required")
 	}
+	if config.Submitter == nil {
+		panic("filesystem watcher Work Request submitter is required")
+	}
 	var knownWorkTypes map[string]bool
-	if workTypes != nil {
-		knownWorkTypes = make(map[string]bool, len(workTypes))
-		for _, workType := range workTypes {
+	if config.KnownWorkTypes != nil {
+		knownWorkTypes = make(map[string]bool, len(config.KnownWorkTypes))
+		for _, workType := range config.KnownWorkTypes {
 			knownWorkTypes[workType] = true
 		}
 	}
-	return &FileWatcher{
-		dir:             dir,
-		factory:         f,
-		logger:          logger,
+	return &watcher{
+		dir:             config.Dir,
+		submit:          config.Submitter,
+		logger:          config.Logger,
 		knownWorkTypes:  knownWorkTypes,
-		knownWorkStates: statesByType,
-		files:           files,
-		walkDirectory:   walkDirectory,
-		workRequestIDs:  workRequestIDs,
+		knownWorkStates: config.ValidStatesByType,
+		files:           config.Files,
+		walkDirectory:   config.WalkDirectory,
+		workRequestIDs:  config.WorkRequestIDs,
 		newWatcher:      newFSNotifyEventWatcher,
 	}
 }
 
 // Watch starts watching for file events. It blocks until ctx is cancelled.
-func (fw *FileWatcher) Watch(ctx context.Context) error {
+func (fw *watcher) Watch(ctx context.Context) error {
 	watcher, err := fw.newWatcher()
 	if err != nil {
 		return fmt.Errorf("create watcher: %w", err)
@@ -171,7 +163,7 @@ func (fw *FileWatcher) Watch(ctx context.Context) error {
 // intended to be called once at startup so that work items staged before the
 // factory started are picked up automatically. If no eligible files are found,
 // it is a no-op.
-func (fw *FileWatcher) PreseedInputs(ctx context.Context) error {
+func (fw *watcher) PreseedInputs(ctx context.Context) error {
 	requests, err := fw.collectPreseedRequests()
 	if err != nil {
 		return err
@@ -186,14 +178,14 @@ func (fw *FileWatcher) PreseedInputs(ctx context.Context) error {
 
 	fw.logger.Info("preseeding factory with existing inputs", zap.Int("count", len(requests)))
 	for _, request := range requests {
-		if _, err := fw.factory.SubmitWorkRequest(ctx, request); err != nil {
+		if err := fw.submit(ctx, request); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (fw *FileWatcher) collectPreseedRequests() ([]work.WorkRequest, error) {
+func (fw *watcher) collectPreseedRequests() ([]work.WorkRequest, error) {
 	var batchRequests []work.WorkRequest
 	var fileWorks []work.Work
 	usedFileWorkNames := map[string]int{}
@@ -231,7 +223,7 @@ func (fw *FileWatcher) collectPreseedRequests() ([]work.WorkRequest, error) {
 	return requests, nil
 }
 
-func (fw *FileWatcher) preseedFileRequest(path string, d fs.DirEntry, walkErr error) (work.WorkRequest, bool, bool, error) {
+func (fw *watcher) preseedFileRequest(path string, d fs.DirEntry, walkErr error) (work.WorkRequest, bool, bool, error) {
 	if walkErr != nil {
 		fw.logger.Warn("preseed: skipping unreadable path",
 			zap.String("path", path), zap.Error(walkErr))
@@ -283,7 +275,7 @@ func (fw *FileWatcher) preseedFileRequest(path string, d fs.DirEntry, walkErr er
 	return request, explicitBatch, true, nil
 }
 
-func (fw *FileWatcher) validatePreseedRequests(workRequests []work.WorkRequest) error {
+func (fw *watcher) validatePreseedRequests(workRequests []work.WorkRequest) error {
 	for i, request := range workRequests {
 		if _, err := work.NormalizeWorkRequest(request, work.WorkRequestNormalizeOptions{
 			ValidWorkTypes:    fw.knownWorkTypes,
@@ -298,7 +290,7 @@ func (fw *FileWatcher) validatePreseedRequests(workRequests []work.WorkRequest) 
 
 // watchExistingDirs adds the root and all existing subdirectories to the watcher,
 // walking 2 levels deep (work-type then channel).
-func (fw *FileWatcher) watchExistingDirs(watcher fileEventWatcher) error {
+func (fw *watcher) watchExistingDirs(watcher fileEventWatcher) error {
 	if err := watcher.Add(fw.dir); err != nil {
 		return fmt.Errorf("watch %s: %w", fw.dir, err)
 	}
@@ -347,7 +339,7 @@ func isTempFile(name string) bool {
 }
 
 // handleFile processes a newly created file.
-func (fw *FileWatcher) handleFile(ctx context.Context, path string) error {
+func (fw *watcher) handleFile(ctx context.Context, path string) error {
 	filename := filepath.Base(path)
 
 	// Ignore temp files.
@@ -390,15 +382,14 @@ func (fw *FileWatcher) handleFile(ctx context.Context, path string) error {
 	if err != nil {
 		return err
 	}
-	_, err = fw.factory.SubmitWorkRequest(ctx, request)
-	return err
+	return fw.submit(ctx, request)
 }
 
 // deriveWorkTypeAndChannel extracts the work type and optional execution ID
 // from a canonical watched input path:
 //
 //	<root>/<work-type>/<channel>/file      → workType, channel (or "" if "default")
-func (fw *FileWatcher) deriveWorkTypeAndChannel(path string) (workType string, executionID string, err error) {
+func (fw *watcher) deriveWorkTypeAndChannel(path string) (workType string, executionID string, err error) {
 	targetPath, err := filepath.Rel(fw.dir, path)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to get relative path for %s: %w", path, err)
@@ -524,7 +515,7 @@ func uniqueFileWorkName(name string, index int, used map[string]int) string {
 // readFileWithRetry reads a file, retrying if the content is empty.
 // This handles the race where fsnotify fires CREATE before the writer
 // has finished flushing the file content (common on Windows).
-func (fw *FileWatcher) readFileWithRetry(path string, maxRetries int, delay time.Duration) ([]byte, error) {
+func (fw *watcher) readFileWithRetry(path string, maxRetries int, delay time.Duration) ([]byte, error) {
 	var content []byte
 	var err error
 	for i := range maxRetries {
