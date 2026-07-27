@@ -562,8 +562,8 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_ReturnsRetryableProviderMe
 	if result.Outcome != workerexecution.OutcomeFailed {
 		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
-	if provider.callCount != 1 {
-		t.Fatalf("provider call count = %d, want 1", provider.callCount)
+	if provider.callCount != 3 {
+		t.Fatalf("provider call count = %d, want 3 after retryable exhaustion", provider.callCount)
 	}
 	if result.FailureMetadata == nil {
 		t.Fatal("expected failure metadata on failed result")

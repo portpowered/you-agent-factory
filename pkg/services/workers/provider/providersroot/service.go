@@ -120,16 +120,18 @@ func inferenceRequest(request providers.ExecuteRequest) workers.ProviderInferenc
 	providerID := request.Provider.String()
 	dispatch := workDispatch(request)
 	infer := workers.ProviderInferenceRequest{
-		Dispatch:         dispatch,
-		WorkerType:       strings.TrimSpace(request.WorkerType),
-		WorkstationType:  strings.TrimSpace(request.WorkstationName),
-		Model:            strings.TrimSpace(request.Model),
-		ModelProvider:    modelProviderForProviderIdentity(providerID),
-		SystemPrompt:     request.SystemPrompt,
-		UserMessage:      request.UserMessage,
-		OutputSchema:     request.OutputSchema,
-		WorkingDirectory: request.WorkingDirectory,
-		Worktree:         request.Worktree,
+		Dispatch:           dispatch,
+		WorkerType:         strings.TrimSpace(request.WorkerType),
+		WorkstationType:    strings.TrimSpace(request.WorkstationName),
+		Model:              strings.TrimSpace(request.Model),
+		ModelProvider:      modelProviderForProviderIdentity(providerID),
+		SystemPrompt:       request.SystemPrompt,
+		UserMessage:        request.UserMessage,
+		OutputSchema:       request.OutputSchema,
+		WorkingDirectory:   request.WorkingDirectory,
+		Worktree:           request.Worktree,
+		EnvVars:            cloneMetadata(request.EnvVars),
+		ProcessEnvironment: append([]string(nil), request.ProcessEnvironment...),
 	}
 	if request.ResumeSession != nil {
 		infer.SessionID = request.ResumeSession.ID

@@ -91,8 +91,10 @@ type ExecuteRequest struct {
 	UserMessage      string
 	OutputSchema     string
 	ResumeSession    *SessionRef
-	WorkingDirectory string
-	Worktree         string
+	WorkingDirectory   string
+	Worktree           string
+	EnvVars            map[string]string
+	ProcessEnvironment []string
 }
 
 // Validate checks request fields whose validity does not depend on catalog
@@ -118,6 +120,10 @@ func (request ExecuteRequest) Clone() ExecuteRequest {
 	if request.ResumeSession != nil {
 		resume := request.ResumeSession.Clone()
 		cloned.ResumeSession = &resume
+	}
+	cloned.EnvVars = cloneStringMap(request.EnvVars)
+	if request.ProcessEnvironment != nil {
+		cloned.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
 	}
 	return cloned
 }

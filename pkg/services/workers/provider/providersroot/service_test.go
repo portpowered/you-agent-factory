@@ -66,6 +66,24 @@ func TestNewServiceRequiresFactory(t *testing.T) {
 	}
 }
 
+func TestInferenceRequestForwardsEnvFields(t *testing.T) {
+	request := providers.ExecuteRequest{
+		Provider:           providers.IDCodex,
+		AttemptID:          "dispatch-env-1",
+		WorkerType:         "goal-executor",
+		WorkstationName:    "execute-goal",
+		EnvVars:            map[string]string{"FIXTURE": "configured"},
+		ProcessEnvironment: []string{"FIXTURE=configured"},
+	}
+	infer := inferenceRequest(request)
+	if infer.EnvVars["FIXTURE"] != "configured" {
+		t.Fatalf("EnvVars = %#v, want configured env", infer.EnvVars)
+	}
+	if len(infer.ProcessEnvironment) != 1 || infer.ProcessEnvironment[0] != "FIXTURE=configured" {
+		t.Fatalf("ProcessEnvironment = %#v, want forwarded process env", infer.ProcessEnvironment)
+	}
+}
+
 func testClock() time.Time {
 	return time.Date(2026, time.July, 20, 12, 0, 0, 0, time.UTC)
 }

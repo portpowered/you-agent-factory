@@ -60,19 +60,24 @@ func TestAgentExecutor_ModelOperationOutputUsesCanonicalWorkContent(t *testing.T
 	}
 }
 
-func TestAgentExecutor_RetryableFailureDoesNotRetryInExecutor(t *testing.T) {
+func TestAgentExecutor_RetryableFailureRetriesWithPreservedSession(t *testing.T) {
 	const sessionID = "675f9238-5f05-456c-9a9f-f8fe486f49e4"
+	throttleErr := workerprovider.NewProviderErrorWithSession(
+		workerexecution.WorkFailureTypeThrottled,
+		"temporarily unavailable",
+		nil,
+		&workerexecution.ProviderSessionMetadata{
+			Provider: string(modelprovider.ProviderKiro),
+			Kind:     providerSessionKindSessionID,
+			ID:       sessionID,
+		},
+	)
 	provider := &agentMockProvider{
-		err: workerprovider.NewProviderErrorWithSession(
-			workerexecution.WorkFailureTypeInternalServerError,
-			"temporarily unavailable",
-			nil,
-			&workerexecution.ProviderSessionMetadata{
-				Provider: string(modelprovider.ProviderKiro),
-				Kind:     providerSessionKindSessionID,
-				ID:       sessionID,
-			},
-		),
+		errors: []error{throttleErr, nil},
+		responses: []workerexecution.InferenceResponse{
+			{},
+			{Content: "ok"},
+		},
 	}
 	executor := NewAgentExecutor(
 		staticRuntimeConfig{
@@ -96,14 +101,20 @@ func TestAgentExecutor_RetryableFailureDoesNotRetryInExecutor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if provider.callCount != 1 {
-		t.Fatalf("provider call count = %d, want 1", provider.callCount)
+	if provider.callCount != 2 {
+		t.Fatalf("provider call count = %d, want 2", provider.callCount)
 	}
-	if result.Outcome != workerexecution.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
+	if provider.lastReq.SessionID != sessionID {
+		t.Fatalf("retry SessionID = %q, want %q", provider.lastReq.SessionID, sessionID)
 	}
-	if result.ProviderSession == nil || result.ProviderSession.ID != sessionID {
-		t.Fatalf("result Provider Session = %#v, want %q", result.ProviderSession, sessionID)
+	if !containsRunnerCapability(
+		provider.lastReq.RequiredOptionalCapabilities,
+		workerexecution.RunnerOptionalCapabilitySessionResume,
+	) {
+		t.Fatalf("retry capabilities = %#v, want session resume", provider.lastReq.RequiredOptionalCapabilities)
+	}
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 }
 

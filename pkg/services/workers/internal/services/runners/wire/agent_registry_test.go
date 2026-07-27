@@ -152,7 +152,7 @@ func TestAgentRunnerSnapshotsRequestBeforeProviderAttempt(t *testing.T) {
 	request.SessionID = "caller-mutated"
 	request.WorkingDirectory = "caller-mutated"
 	request.Worktree = "caller-mutated"
-	request.InputTokens[0].(map[string]any)["nested"].([]any)[0] = "caller-mutated"
+	request.EnvVars = map[string]string{"FIXTURE": "caller-mutated"}
 	close(fake.release)
 	if err := <-done; err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -338,6 +338,7 @@ func assertAgentProviderRequest(t *testing.T, request providers.ExecuteRequest) 
 			Kind:     providers.SessionIDKind,
 			ID:       "resume-session-1",
 		},
+		EnvVars: map[string]string{"FIXTURE": "original"},
 	}
 	if !reflect.DeepEqual(request, want) {
 		t.Fatalf("Providers.Execute request = %#v, want %#v", request, want)

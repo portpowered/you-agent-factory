@@ -123,16 +123,18 @@ func validateRequest(request workers.RunnerExecutionRequest) error {
 func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRequest {
 	providerID := providers.ID(request.RunnerID)
 	result := providers.ExecuteRequest{
-		Provider:         providerID,
-		AttemptID:        request.Dispatch.DispatchID,
-		WorkerType:       request.WorkerType,
-		WorkstationName:  request.WorkstationType,
-		Model:            request.Model,
-		SystemPrompt:     request.SystemPrompt,
-		UserMessage:      request.UserMessage,
-		OutputSchema:     request.OutputSchema,
-		WorkingDirectory: request.WorkingDirectory,
-		Worktree:         request.Worktree,
+		Provider:           providerID,
+		AttemptID:          request.Dispatch.DispatchID,
+		WorkerType:         request.WorkerType,
+		WorkstationName:    request.WorkstationType,
+		Model:              request.Model,
+		SystemPrompt:       request.SystemPrompt,
+		UserMessage:        request.UserMessage,
+		OutputSchema:       request.OutputSchema,
+		WorkingDirectory:   request.WorkingDirectory,
+		Worktree:           request.Worktree,
+		EnvVars:            cloneMetadata(request.EnvVars),
+		ProcessEnvironment: append([]string(nil), request.ProcessEnvironment...),
 	}
 	if strings.TrimSpace(request.SessionID) != "" {
 		result.ResumeSession = &providers.SessionRef{

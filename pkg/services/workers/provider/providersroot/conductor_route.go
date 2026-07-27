@@ -34,7 +34,7 @@ func (s *Service) executeViaConductor(
 	err := s.config.Conductor.Invoke(
 		ctx,
 		identity,
-		invocationRequestFromExecute(request),
+		invocationRequestFromExecute(request, s.config.SkipPermissions),
 		destination,
 	)
 	if err != nil {
@@ -57,7 +57,10 @@ func conductorIdentity(providerID string) string {
 	}
 }
 
-func invocationRequestFromExecute(request providers.ExecuteRequest) inference.InvocationRequest {
+func invocationRequestFromExecute(
+	request providers.ExecuteRequest,
+	skipPermissions bool,
+) inference.InvocationRequest {
 	invocationID := strings.TrimSpace(request.AttemptID)
 	if invocationID == "" {
 		invocationID = "providers-root-invocation"
@@ -75,8 +78,11 @@ func invocationRequestFromExecute(request providers.ExecuteRequest) inference.In
 		SystemPrompt:     request.SystemPrompt,
 		UserMessage:      request.UserMessage,
 		OutputSchema:     request.OutputSchema,
-		WorkingDirectory: request.WorkingDirectory,
-		Worktree:         request.Worktree,
+		WorkingDirectory:   request.WorkingDirectory,
+		Worktree:             request.Worktree,
+		EnvVars:              cloneMetadata(request.EnvVars),
+		ProcessEnvironment:   append([]string(nil), request.ProcessEnvironment...),
+		SkipPermissions:      skipPermissions,
 	}
 	if request.ResumeSession != nil {
 		execution.SessionID = request.ResumeSession.ID
