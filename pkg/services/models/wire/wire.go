@@ -4,10 +4,12 @@ package wire
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
 	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
@@ -45,6 +47,7 @@ func NewService(
 	runtimeTempFile models.RuntimeCreateTempFile,
 	logger *zap.Logger,
 	now func() time.Time,
+	issuerEntropy platformrandom.Source,
 	pullMetrics models.PullMetricsRecorder,
 	hostLogger models.HostDiagnosticLogger,
 	hostMetrics models.HostMetricsRecorder,
@@ -69,9 +72,11 @@ func NewService(
 	if runtimeTempFile != nil {
 		createTempFile = runtimeTempFileAdapter{next: runtimeTempFile}.create
 	}
-	runtimeScopes, err := runtimescopeswire.NewService(func() string {
-		return runtimeScopeIssuerID(now, assetHTTP, hostHTTP)
-	})
+	issuerID, err := runtimeScopeIssuerID(issuerEntropy)
+	if err != nil {
+		return nil, fmt.Errorf("construct Models Runtime Scopes issuer identity: %w", err)
+	}
+	runtimeScopes, err := runtimescopeswire.NewService(func() string { return issuerID })
 	if err != nil {
 		return nil, err
 	}
@@ -148,11 +153,19 @@ func newCatalogReadinessQuery(edges catalogReadinessEdges) catalog.ReadinessQuer
 	}
 }
 
-func runtimeScopeIssuerID(now func() time.Time, assetHTTP models.AssetHTTPDoer, hostHTTP models.HostHTTPDoer) string {
-	if now == nil {
-		return ""
+func runtimeScopeIssuerID(entropy platformrandom.Source) (string, error) {
+	if entropy == nil {
+		return "", fmt.Errorf("issuer entropy is required")
 	}
-	return fmt.Sprintf("%d:%p:%p", now().UTC().UnixNano(), assetHTTP, hostHTTP)
+	var identity [16]byte
+	for index := range identity {
+		value, err := entropy.Int63n(256)
+		if err != nil {
+			return "", err
+		}
+		identity[index] = byte(value)
+	}
+	return hex.EncodeToString(identity[:]), nil
 }
 
 // NewInvocationArtifactExporter constructs the Models-owned invocation artifact exporter.

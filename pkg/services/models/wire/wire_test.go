@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -12,9 +13,48 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"go.uber.org/zap"
 )
+
+func TestProductionCompositionRejectsScopesFromAnotherModelsAuthority(t *testing.T) {
+	t.Parallel()
+
+	entropy := &sequentialEntropySource{}
+	now := func() time.Time { return time.Unix(123, 456) }
+	left := newProductionTestServiceWithDependencies(t, now, entropy)
+	right := newProductionTestServiceWithDependencies(t, now, entropy)
+	config := models.RuntimeScopeConfig{Runtime: models.RuntimeConfig{
+		Workers: []models.RuntimeWorker{{
+			Name:          "voice-local",
+			Type:          models.RuntimeWorkerTypeModel,
+			Model:         "OMNIVOICE_Q4_K_M",
+			ModelLocality: models.RuntimeModelLocalityLocal,
+			Operations:    []models.RuntimeOperation{{Name: "TTS"}},
+		}},
+	}}
+	leftScope, err := left.OpenRuntimeScope(
+		context.Background(),
+		models.OpenRuntimeScopeRequest{Config: config},
+	)
+	if err != nil {
+		t.Fatalf("open left runtime scope: %v", err)
+	}
+	rightScope, err := right.OpenRuntimeScope(
+		context.Background(),
+		models.OpenRuntimeScopeRequest{Config: config},
+	)
+	if err != nil {
+		t.Fatalf("open right runtime scope: %v", err)
+	}
+	if leftScope.Scope.String() == rightScope.Scope.String() {
+		t.Fatalf("separate Models authorities issued the same first scope %q", leftScope.Scope.String())
+	}
+
+	assertForeignCatalogScope(t, "left rejects right", left, rightScope.Scope)
+	assertForeignCatalogScope(t, "right rejects left", right, leftScope.Scope)
+}
 
 func TestProductionCompositionReportsCurrentScopedReadinessWithCompatibilityParity(t *testing.T) {
 	t.Parallel()
@@ -98,6 +138,15 @@ func TestProductionCompositionReportsCurrentScopedReadinessWithCompatibilityPari
 
 func newProductionTestService(t *testing.T) models.Service {
 	t.Helper()
+	return newProductionTestServiceWithDependencies(t, time.Now, platformrandom.CryptoSource{})
+}
+
+func newProductionTestServiceWithDependencies(
+	t *testing.T,
+	now func() time.Time,
+	issuerEntropy platformrandom.Source,
+) models.Service {
+	t.Helper()
 	service, err := NewService(
 		models.AssetHostPlatform{OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH},
 		http.DefaultClient,
@@ -123,7 +172,8 @@ func newProductionTestService(t *testing.T) models.Service {
 			return os.CreateTemp(dir, pattern)
 		},
 		zap.NewNop(),
-		time.Now,
+		now,
+		issuerEntropy,
 		nil,
 		nil,
 		nil,
@@ -133,6 +183,55 @@ func newProductionTestService(t *testing.T) models.Service {
 		t.Fatalf("NewService: %v", err)
 	}
 	return service
+}
+
+type sequentialEntropySource struct {
+	next int64
+}
+
+func (source *sequentialEntropySource) Int63n(upperBound int64) (int64, error) {
+	source.next++
+	return source.next % upperBound, nil
+}
+
+func assertForeignCatalogScope(
+	t *testing.T,
+	name string,
+	service models.Service,
+	foreignScope models.RuntimeScopeRef,
+) {
+	t.Helper()
+
+	list, err := service.ListCatalog(
+		context.Background(),
+		models.ListModelsRequest{Scope: foreignScope},
+	)
+	if !errors.Is(err, models.ErrRuntimeScopeForeign) {
+		t.Fatalf("%s ListCatalog error = %v, want ErrRuntimeScopeForeign", name, err)
+	}
+	if len(list.Models) != 0 {
+		t.Fatalf("%s ListCatalog returned foreign models: %#v", name, list.Models)
+	}
+
+	get, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: foreignScope, Name: "OMNIVOICE_Q4_K_M", Operation: "TTS",
+	})
+	if !errors.Is(err, models.ErrRuntimeScopeForeign) {
+		t.Fatalf("%s GetCatalogModel error = %v, want ErrRuntimeScopeForeign", name, err)
+	}
+	if get.Model.Name != "" {
+		t.Fatalf("%s GetCatalogModel returned foreign model: %#v", name, get.Model)
+	}
+
+	readiness, err := service.GetModelReadiness(context.Background(), models.GetModelReadinessRequest{
+		Scope: foreignScope, Name: "OMNIVOICE_Q4_K_M", Operation: "TTS",
+	})
+	if !errors.Is(err, models.ErrRuntimeScopeForeign) {
+		t.Fatalf("%s GetModelReadiness error = %v, want ErrRuntimeScopeForeign", name, err)
+	}
+	if readiness.ModelName != "" || readiness.Readiness.Identity != "" {
+		t.Fatalf("%s GetModelReadiness returned foreign readiness: %#v", name, readiness)
+	}
 }
 
 func assertReadinessParity(t *testing.T, scoped, compatibility models.Runtime) {
