@@ -269,7 +269,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCodexGoldenStructuredFailure` replays a non-zero structured failure.
   - `TestCodexGoldenTimeoutHasNoFalseTerminalMessage` covers timeout.
 
-- [ ] `tests/functional/workers/inference/claude/golden_success_test.go`
+- [x] `tests/functional/workers/inference/claude/golden_success_test.go`
   - `TestClaudeGoldenFullStreamTextSuccess` covers deltas and final snapshot.
   - `TestClaudeGoldenToolLifecycleAndSessionIdentity` covers tools/session.
 
