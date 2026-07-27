@@ -222,23 +222,45 @@ func observeChildProgressExecutionOrdering(
 		mu.Unlock()
 	}
 
+	sseReady := make(chan struct{})
+	sseDone := make(chan struct{})
 	errCh := make(chan error, 2)
 	go func() {
+		defer close(sseDone)
 		err := streamFactoryResponseEvents(ctx, serverURL, sessionID, func(event factoryapi.FactoryResponseEvent) {
 			mu.Lock()
 			events = append(events, event)
 			mu.Unlock()
 			record(executionObservationResponseEvent)
+		}, func() {
+			close(sseReady)
 		})
 		errCh <- err
 	}()
 	go func() {
+		select {
+		case <-sseReady:
+		case <-ctx.Done():
+			errCh <- ctx.Err()
+			return
+		}
+
 		result, err := pollForFinalSessionResult(ctx, serverURL, sessionID)
 		if err != nil {
 			errCh <- err
 			return
 		}
 		terminal = *result
+
+		// Record terminal observation only after the response-event stream
+		// finishes delivering retained events so concurrent polling cannot win
+		// the race before SSE catches up on fast CI hosts.
+		select {
+		case <-sseDone:
+		case <-ctx.Done():
+			errCh <- ctx.Err()
+			return
+		}
 		record(executionObservationTerminalResult)
 		errCh <- nil
 	}()
@@ -255,6 +277,7 @@ func streamFactoryResponseEvents(
 	ctx context.Context,
 	serverURL, sessionID string,
 	onEvent func(factoryapi.FactoryResponseEvent),
+	onConnected func(),
 ) error {
 	endpoint := strings.TrimSuffix(serverURL, "/") +
 		"/factory-sessions/" + sessionID + "/response-events"
@@ -283,6 +306,10 @@ func streamFactoryResponseEvents(
 			body, _ := io.ReadAll(response.Body)
 			response.Body.Close()
 			return fmt.Errorf("GET factory response events status = %d: %s", response.StatusCode, body)
+		}
+		if onConnected != nil {
+			onConnected()
+			onConnected = nil
 		}
 
 		scanner := bufio.NewScanner(response.Body)
