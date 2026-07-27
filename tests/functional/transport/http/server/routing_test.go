@@ -23,11 +23,6 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 	for _, operation := range inventory.Operations {
 		operation := operation
 		t.Run(operation.OperationID, func(t *testing.T) {
-			if operation.OperationID == "getFactorySessionResult" ||
-				operation.OperationID == "getFactorySessionPartialResult" {
-				t.Skip("live JavaScript /result and /partial-result reads return NOT_FOUND for functional-server sessions until a reachable live JS projection fixture exists")
-			}
-
 			request, err := ctx.safeRequest(operation)
 			if err != nil {
 				t.Fatalf("build safe request for %s %s (%s): %v", operation.Method, operation.Path, operation.OperationID, err)
@@ -82,16 +77,18 @@ func newRoutingReachabilityContext(t *testing.T) *routingReachabilityContext {
 	t.Helper()
 
 	dir := scaffoldRoutingReachabilityFactory(t)
+	liveJavaScriptFactoryDir := scaffoldRoutingLiveJavaScriptFactory(t)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
 	})
 	ctx := &routingReachabilityContext{
-		t:          t,
-		server:     server,
-		baseURL:    server.URL(),
-		factoryDir: dir,
+		t:                        t,
+		server:                   server,
+		baseURL:                  server.URL(),
+		factoryDir:               dir,
+		liveJavaScriptFactoryDir: liveJavaScriptFactoryDir,
 	}
 	ctx.prepareSessions()
 	ctx.prepareWork()

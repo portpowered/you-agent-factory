@@ -28,6 +28,11 @@ const (
 	routingReachabilityWorkstation    = "process"
 )
 
+const routingLiveJavaScriptWorkflowSource = `phase("plan");
+workflow.checkpoint({ label: "routing-reachability-plan", state: { ready: true } });
+phase("execute");
+return "routing-reachability-live-result";`
+
 const routingArtifactWorkflowSource = `return (async function () {
   const artifactRef = workflow.artifact({
     kind: "log",
@@ -42,14 +47,15 @@ const routingArtifactWorkflowSource = `return (async function () {
 })();`
 
 type routingReachabilityContext struct {
-	t          *testing.T
-	server     *support.FunctionalAPIServer
-	baseURL    string
-	factoryDir string
-	jsLive     string
-	durable    routingDurableSessionContext
-	opened     string
-	workID     string
+	t                       *testing.T
+	server                  *support.FunctionalAPIServer
+	baseURL                 string
+	factoryDir              string
+	liveJavaScriptFactoryDir string
+	jsLive                  string
+	durable                 routingDurableSessionContext
+	opened                  string
+	workID                  string
 }
 
 type routingDurableSessionContext struct {
@@ -63,7 +69,7 @@ func (ctx *routingReachabilityContext) prepareSessions() {
 
 	ctx.durable = startRoutingArtifactDurableSession(ctx.t, ctx.baseURL)
 	ctx.opened = openRoutingFactorySession(ctx.t, ctx.baseURL, ctx.factoryDir)
-	ctx.jsLive = startRoutingBusyLoopJavaScriptSession(ctx.t, ctx.baseURL)
+	ctx.jsLive = openRoutingLiveJavaScriptFactorySession(ctx.t, ctx.baseURL, ctx.liveJavaScriptFactoryDir)
 }
 
 func (ctx *routingReachabilityContext) prepareWork() {
@@ -311,26 +317,19 @@ func startRoutingArtifactDurableSession(t *testing.T, baseURL string) routingDur
 	}
 }
 
-func startRoutingBusyLoopJavaScriptSession(t *testing.T, baseURL string) string {
+func openRoutingLiveJavaScriptFactorySession(t *testing.T, baseURL, factoryDir string) string {
 	t.Helper()
 
-	workflowName := "busy-loop"
-	started := postRoutingJSON[factoryapi.FactorySessionExecutionResponse](
+	response := postRoutingJSON[factoryapi.OpenFactorySessionResponse](
 		t,
-		baseURL+"/factory-sessions/async",
-		factoryapi.FactorySessionExecutionRequest{
-			RequestId: "routing-reachability-busy-loop",
-			Source: factoryapi.FactorySessionExecutionSource{
-				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
-				WorkflowName: &workflowName,
-			},
-		},
-		"start routing busy-loop JavaScript session",
+		baseURL+"/factory-sessions",
+		factoryapi.OpenFactorySessionRequest{FolderPath: factoryDir},
+		"open routing live JavaScript factory session",
 	)
-	if strings.TrimSpace(started.SessionId) == "" {
-		t.Fatalf("async JavaScript session id is empty: %#v", started)
+	if response.Session == nil || strings.TrimSpace(response.Session.Id) == "" {
+		t.Fatalf("open live JavaScript factory session response = %#v, want session id", response)
 	}
-	return started.SessionId
+	return response.Session.Id
 }
 
 func openRoutingFactorySession(t *testing.T, baseURL, factoryDir string) string {
@@ -374,6 +373,35 @@ func postRoutingJSON[T any](t *testing.T, endpoint string, body any, label strin
 	return decoded
 }
 
+func scaffoldRoutingLiveJavaScriptFactory(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "routing-reachability-live-javascript",
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"sourceRef": "workflow.js",
+			},
+		},
+	})
+	if err := os.WriteFile(
+		filepath.Join(dir, "workflow.js"),
+		[]byte(routingLiveJavaScriptWorkflowSource),
+		0o600,
+	); err != nil {
+		t.Fatalf("write live JavaScript routing workflow: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "mock-workers.json"),
+		[]byte(`{"mockWorkers":[]}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write live JavaScript mock-workers config: %v", err)
+	}
+	return dir
+}
+
 func scaffoldRoutingReachabilityFactory(t *testing.T) string {
 	t.Helper()
 
@@ -403,7 +431,6 @@ func scaffoldRoutingReachabilityFactory(t *testing.T) string {
 	); err != nil {
 		t.Fatalf("write routing javascript workflow: %v", err)
 	}
-	installRoutingBusyLoopWorkflow(t, dir)
 	installRoutingReachabilityModelWorker(t, dir)
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	return dir
@@ -451,26 +478,6 @@ func installRoutingReachabilityModelWorker(t *testing.T, dir string) {
 		t.Fatalf("write factory.json: %v", err)
 	}
 	support.WriteAgentConfig(t, dir, "tts-worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, routingReachabilityModelName))
-}
-
-func installRoutingBusyLoopWorkflow(t *testing.T, dir string) {
-	t.Helper()
-
-	workflowDir := filepath.Join(dir, ".claude", "workflows")
-	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
-		t.Fatalf("mkdir workflows: %v", err)
-	}
-	fixturePath := support.AgentFactoryPath(
-		t,
-		filepath.Join("tests", "fixtures", "javascript_runtime", "busy-loop.workflow.js"),
-	)
-	raw, err := os.ReadFile(fixturePath)
-	if err != nil {
-		t.Fatalf("read busy-loop workflow fixture: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(workflowDir, "busy-loop.js"), raw, 0o600); err != nil {
-		t.Fatalf("write busy-loop workflow: %v", err)
-	}
 }
 
 func stringPtr(value string) *string {
