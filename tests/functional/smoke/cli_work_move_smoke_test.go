@@ -51,6 +51,7 @@ func TestWorkMove_RealCLIMovesSubmittedWork(t *testing.T) {
 		"--factory", factoryPath,
 		"--with-mock-workers",
 		"--no-record",
+		"--with-server",
 		"--server", baseURL,
 		"--continuously",
 		"--quiet",

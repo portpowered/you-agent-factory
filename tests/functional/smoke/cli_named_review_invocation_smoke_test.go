@@ -93,7 +93,7 @@ func runNamedReviewInvocationCLIJSON(
 	args = append(args,
 		"--with-mock-workers", "--no-record",
 		"--server", fmt.Sprintf("http://127.0.0.1:%d", port),
-		"--quiet", mockWorkersPath,
+		mockWorkersPath,
 		"write the release notes",
 	)
 

@@ -402,7 +402,7 @@ func startRootCLIResumeAPIServer(
 	go func() {
 		runErr <- process.Execute(root.Input{
 			Args: []string{
-				"you", "run", "--dir", projectRoot, "--continuously", "--quiet", "--no-record",
+				"you", "run", "--dir", projectRoot, "--continuously", "--with-server", "--quiet", "--no-record",
 			},
 			Env:              env,
 			Context:          ctx,
