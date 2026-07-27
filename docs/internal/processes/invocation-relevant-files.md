@@ -41,6 +41,13 @@ primary-result behavior.
   `runnerswire.NewInferenceCompositionRunner` in
   `pkg/services/workers/service/runtime_options.go` instead of decorator-only
   local-model wrappers.
+- A Runner implemented as a nested private service under
+  `internal/services/runners/internal/services/<name>` follows the recursive
+  service shape enforced by `make pkg-structure`: expose exactly one `Service`
+  interface at the service root, keep implementation and construction under
+  `internal/service`, and let the service-local `wire` package project that
+  implementation to the parent Runners wire package. The parent must not import
+  through the nested Go `internal` boundary directly.
 - Selection-aware `you run` schema resolution belongs at the CLI read boundary:
   resolve an already-selected named Factory config path or explicit Factory
   source through the read-only Factory Definitions loader, check cancellation
