@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -568,6 +569,51 @@ func TestMockClient_RuntimeService_AsyncPollingObservesTerminalResult(t *testing
 	}
 }
 
+func TestPackageBoundary_DoesNotImportFactorySessionsInternal(t *testing.T) {
+	t.Parallel()
+
+	forbidden := "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal"
+	for _, packagePath := range []string{
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp",
+		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog",
+	} {
+		packagePath := packagePath
+		t.Run(packagePath, func(t *testing.T) {
+			t.Parallel()
+			assertPackageDirectImportsForbidden(t, packagePath, []string{forbidden})
+		})
+	}
+}
+
+func TestBind_FakeExecutionRootInvokedThroughCanonicalListSessionsTool(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	fake := fakeExecutionRoot{
+		listSessions: func(_ context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+			invoked = true
+			if request.Scope != factorysessions.SessionListScopePersisted {
+				t.Fatalf("scope = %q, want persisted", request.Scope)
+			}
+			return factorysessions.ListSessionsResult{Scope: factorysessions.SessionListScopePersisted}, nil
+		},
+	}
+	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
+		Execution: fake,
+		Prepare:   canonicalMCPRequestPreparation,
+	})
+	raw, err := operation(context.Background(), mcpfactorysession.ToolListSessions, json.RawMessage(`{"scope":"persisted"}`))
+	if err != nil {
+		t.Fatalf("CallTool(list_sessions) error = %v", err)
+	}
+	if !invoked {
+		t.Fatal("fake execution root was not invoked")
+	}
+	if !strings.Contains(string(raw), `"scope":"persisted"`) {
+		t.Fatalf("CallTool(list_sessions) = %s, want persisted scope result", raw)
+	}
+}
+
 func TestToolOperationPropagatesCallerContextAndCancellation(t *testing.T) {
 	type markerKey struct{}
 	const markerValue = "mcp-request-context"
@@ -926,3 +972,36 @@ func assertOmitsDurableSession(
 }
 
 func strPtr(value string) *string { return &value }
+
+type fakeExecutionRoot struct {
+	factorysessions.ExecutionService
+	listSessions func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
+}
+
+func (root fakeExecutionRoot) ListSessions(
+	ctx context.Context,
+	request factorysessions.ListSessionsRequest,
+) (factorysessions.ListSessionsResult, error) {
+	if root.listSessions == nil {
+		panic("unexpected ListSessions on fake execution root")
+	}
+	return root.listSessions(ctx, request)
+}
+
+func assertPackageDirectImportsForbidden(t *testing.T, packagePath string, forbiddenRoots []string) {
+	t.Helper()
+
+	cmd := exec.Command("go", "list", "-f", "{{.Imports}}", packagePath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list imports for %s: %v\n%s", packagePath, err, output)
+	}
+	imports := strings.Fields(strings.Trim(string(output), "[]"))
+	for _, importPath := range imports {
+		for _, forbidden := range forbiddenRoots {
+			if importPath == forbidden || strings.HasPrefix(importPath, forbidden+"/") {
+				t.Fatalf("%s must not import forbidden ownership %s; found direct import %s", packagePath, forbidden, importPath)
+			}
+		}
+	}
+}
