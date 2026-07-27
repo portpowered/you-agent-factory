@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -43,6 +44,15 @@ var parallelDeclaredResultOrderingLabels = []string{
 	"child-beta",
 	"child-gamma",
 }
+
+const parallelPartialFailureWorkflow = `return (async function () {
+  const results = await parallel([
+    { prompt: "child-alpha", label: "child-alpha" },
+    { prompt: "child-beta and force provider failure", label: "child-beta" },
+    { prompt: "child-gamma", label: "child-gamma" },
+  ]);
+  return { results };
+})();`
 
 // TestJavaScriptParallelDispatchesChildrenConcurrently proves JavaScript parallel
 // keeps more than one external child call in flight at the same time through the
@@ -177,6 +187,71 @@ func TestJavaScriptParallelPreservesDeclaredResultOrdering(t *testing.T) {
 		t.Fatalf("dispatch count = %d, want 3 public child dispatches", len(dispatches.Dispatches))
 	}
 	assertParallelCompositionDispatchLabels(t, dispatches.Dispatches, parallelDeclaredResultOrderingLabels)
+}
+
+// TestJavaScriptParallelPartialFailureUsesDocumentedPolicy proves JavaScript parallel
+// surfaces one failed child as an explicit failed result with a stable diagnostic while
+// successful siblings still complete, matching the documented partial-failure policy rather
+// than aborting the whole workflow call.
+func TestJavaScriptParallelPartialFailureUsesDocumentedPolicy(t *testing.T) {
+	t.Parallel()
+
+	dir := support.ScaffoldFactory(t, parallelCompositionFactoryConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
+	homeDir := writeParallelCompositionGlobalConfig(t)
+
+	provider := newPartialFailureParallelChildProvider()
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Env: append(os.Environ(),
+			"HOME="+homeDir,
+			"USERPROFILE="+homeDir,
+		),
+		Edges: serviceedges.Edges{ProviderOverride: provider},
+	})
+	baseURL := strings.TrimSuffix(server.URL(), "/")
+
+	started := startParallelCompositionWorkflowAsync(
+		t,
+		baseURL,
+		"parallel-composition-partial-failure",
+		parallelPartialFailureWorkflow,
+	)
+	sessionID := started.SessionId
+	if sessionID == "" {
+		t.Fatal("session id unexpectedly empty")
+	}
+
+	completed := waitForParallelCompositionSessionStatus(
+		t,
+		baseURL,
+		sessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
+		15*time.Second,
+	)
+	if completed.ResultSummary == nil ||
+		completed.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("resultSummary = %#v, want FINAL", completed.ResultSummary)
+	}
+	if completed.Progress == nil ||
+		intValueOrZero(completed.Progress.TotalDispatches) != 3 ||
+		intValueOrZero(completed.Progress.CompletedDispatches) != 2 ||
+		intValueOrZero(completed.Progress.FailedDispatches) != 1 {
+		t.Fatalf("progress = %#v, want three dispatches with two completed and one failed", completed.Progress)
+	}
+
+	resultPayload := readParallelCompositionFinalResult(t, baseURL, sessionID)
+	assertParallelCompositionPartialFailureResults(t, resultPayload, parallelDeclaredResultOrderingLabels)
+
+	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
+		t,
+		baseURL+"/factory-sessions/"+sessionID+"/dispatches",
+	)
+	if len(dispatches.Dispatches) != 3 {
+		t.Fatalf("dispatch count = %d, want 3 public child dispatches", len(dispatches.Dispatches))
+	}
+	assertParallelCompositionPartialFailureDispatches(t, dispatches.Dispatches, parallelDeclaredResultOrderingLabels)
 }
 
 func parallelCompositionFactoryConfig() map[string]any {
@@ -398,6 +473,87 @@ func assertParallelCompositionResultLabels(
 	}
 }
 
+func assertParallelCompositionPartialFailureResults(
+	t *testing.T,
+	payload map[string]any,
+	wantLabels []string,
+) {
+	t.Helper()
+
+	results, ok := payload["results"].([]any)
+	if !ok || len(results) != len(wantLabels) {
+		t.Fatalf("result.results = %#v, want %d entries", payload["results"], len(wantLabels))
+	}
+	for index, wantLabel := range wantLabels {
+		child, ok := results[index].(map[string]any)
+		if !ok {
+			t.Fatalf("results[%d] = %#v, want object child result", index, results[index])
+		}
+		gotLabel, _ := child["label"].(string)
+		if gotLabel != wantLabel {
+			t.Fatalf("results[%d].label = %q, want %q", index, gotLabel, wantLabel)
+		}
+		if wantLabel == "child-beta" {
+			gotStatus, _ := child["status"].(string)
+			if gotStatus != "FAILED" {
+				t.Fatalf("results[%d].status = %q, want FAILED", index, gotStatus)
+			}
+			diagnostic, _ := child["diagnostic"].(string)
+			if strings.TrimSpace(diagnostic) == "" {
+				t.Fatalf("results[%d].diagnostic is empty, want non-empty public diagnostic", index)
+			}
+			if child["artifactRef"] != nil {
+				t.Fatalf("results[%d].artifactRef = %#v, want absent on failed child", index, child["artifactRef"])
+			}
+			continue
+		}
+		gotStatus, _ := child["status"].(string)
+		if gotStatus != "COMPLETED" {
+			t.Fatalf("results[%d].status = %q, want COMPLETED", index, gotStatus)
+		}
+	}
+}
+
+func assertParallelCompositionPartialFailureDispatches(
+	t *testing.T,
+	dispatches []factoryapi.FactorySessionDispatchSummary,
+	wantLabels []string,
+) {
+	t.Helper()
+
+	gotByLabel := make(map[string]factoryapi.FactorySessionDispatchSummary, len(dispatches))
+	for _, dispatch := range dispatches {
+		if dispatch.Label == nil || strings.TrimSpace(*dispatch.Label) == "" {
+			t.Fatalf("dispatch %s missing label, want labeled child dispatches", dispatch.Id)
+		}
+		gotByLabel[*dispatch.Label] = dispatch
+	}
+	for _, wantLabel := range wantLabels {
+		dispatch, ok := gotByLabel[wantLabel]
+		if !ok {
+			t.Fatalf("dispatch labels = %v, missing %q", gotByLabel, wantLabel)
+		}
+		if wantLabel == "child-beta" {
+			if dispatch.Status != factoryapi.FactoryDispatchStatusFAILED {
+				t.Fatalf("dispatch %s status = %q, want FAILED", dispatch.Id, dispatch.Status)
+			}
+			if dispatch.FailureDetail == nil || strings.TrimSpace(dispatch.FailureDetail.Message) == "" {
+				t.Fatalf("dispatch %s failureDetail = %#v, want non-empty public diagnostic", dispatch.Id, dispatch.FailureDetail)
+			}
+			if dispatch.OutputArtifactIds != nil && len(*dispatch.OutputArtifactIds) > 0 {
+				t.Fatalf("dispatch %s outputArtifactIds = %#v, want none on failed child", dispatch.Id, dispatch.OutputArtifactIds)
+			}
+			continue
+		}
+		if dispatch.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
+			t.Fatalf("dispatch %s status = %q, want COMPLETED", dispatch.Id, dispatch.Status)
+		}
+		if dispatch.FailureDetail != nil {
+			t.Fatalf("dispatch %s failureDetail = %#v, want nil on successful sibling", dispatch.Id, dispatch.FailureDetail)
+		}
+	}
+}
+
 func assertParallelCompositionDispatchLabels(
 	t *testing.T,
 	dispatches []factoryapi.FactorySessionDispatchSummary,
@@ -595,3 +751,29 @@ func (p *labelGatedParallelChildProvider) Infer(
 }
 
 var _ workerprovider.Provider = (*labelGatedParallelChildProvider)(nil)
+
+type partialFailureParallelChildProvider struct{}
+
+func newPartialFailureParallelChildProvider() *partialFailureParallelChildProvider {
+	return &partialFailureParallelChildProvider{}
+}
+
+func (p *partialFailureParallelChildProvider) Infer(
+	_ context.Context,
+	req workerexecution.ProviderInferenceRequest,
+) (workerexecution.InferenceResponse, error) {
+	if strings.Contains(req.UserMessage, "force provider failure") {
+		return workerexecution.InferenceResponse{}, workerexecution.NewProviderError(
+			workerexecution.WorkFailureTypePermanentBadRequest,
+			"Provider rejected the request as invalid.",
+			errors.New("scripted parallel child failure"),
+		)
+	}
+
+	label := parallelChildLabelFromRequest(req)
+	return workerexecution.InferenceResponse{
+		Content: fmt.Sprintf(`{"text":"parallel-child:%s:COMPLETE","label":%q}`, label, label),
+	}, nil
+}
+
+var _ workerprovider.Provider = (*partialFailureParallelChildProvider)(nil)
