@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
@@ -25,7 +26,7 @@ type InvocationOperation interface {
 // consumed by CLI selection.
 type DirectJavaScriptRunOperation interface {
 	Supports(string) bool
-	Run(context.Context, factorysessions.DirectJavaScriptRunRequest) error
+	Open(context.Context, factorysessions.DirectJavaScriptRunRequest) (factorysessions.DirectJavaScriptApplication, error)
 }
 
 // SessionInvoker is the exact live invocation role consumed by mapping tests.
@@ -54,14 +55,17 @@ func NewSelectionFactory(
 	invocation InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
 	directJavaScript DirectJavaScriptRunOperation,
+	buildApplication initializer.RuntimeRunnerBuilder,
 ) (SelectionFactory, error) {
-	if open == nil || buildRunner == nil || invocation == nil || presentation == nil || directJavaScript == nil {
+	if open == nil || buildRunner == nil || invocation == nil || presentation == nil ||
+		directJavaScript == nil || buildApplication == nil {
 		return nil, fmt.Errorf("run transport operations are required")
 	}
 	return func(cfg RunConfig) processcontract.RunSelection {
 		return &selection{
 			cfg: cfg, open: open, buildRunner: buildRunner, invocation: invocation,
 			presentation: presentation, directJavaScript: directJavaScript,
+			buildApplication: buildApplication,
 		}
 	}, nil
 }
@@ -73,6 +77,7 @@ type selection struct {
 	invocation       InvocationOperation
 	presentation     factoryvisualization.ResponsePresentation
 	directJavaScript DirectJavaScriptRunOperation
+	buildApplication initializer.RuntimeRunnerBuilder
 }
 
 func (s *selection) Open(
@@ -87,27 +92,25 @@ func (s *selection) Open(
 		return nil, err
 	}
 	if s.directJavaScript.Supports(cfg.FactoryConfigPath) {
-		return directJavaScriptApplication{
-			operation: s.directJavaScript,
-			request: factorysessions.DirectJavaScriptRunRequest{
-				SourcePath: cfg.FactoryConfigPath, MockWorkersEnabled: cfg.MockWorkersEnabled,
-				JSONOutput: cfg.JSONOutput, Output: cfg.Output,
-			},
-		}, nil
+		request := factorysessions.DirectJavaScriptRunRequest{
+			SourcePath: cfg.FactoryConfigPath, MockWorkersEnabled: cfg.MockWorkersEnabled,
+			JSONOutput: cfg.JSONOutput, Output: cfg.Output, Logger: cfg.Logger,
+		}
+		if intent.APIEnabled {
+			request.Host = &factorysessions.RuntimeHostRequest{
+				Directory: cfg.Dir, Port: cfg.Port, AutoPort: cfg.AutoPort,
+			}
+			request.RuntimeHostObserver = newRuntimeHostObserver(
+				ctx, cfg, resolvedRunRecordPath{}, cfg.Port,
+				func() runtimeartifact.Diagnostics { return runtimeartifact.Diagnostics{} },
+			)
+		}
+		return s.buildApplication(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
+			opened, err := s.directJavaScript.Open(openCtx, request)
+			return initializer.OpenedApplication{Plan: opened.Plan}, err
+		})
 	}
 	return s.open(ctx, cfg, s.buildRunner, s.invocation, s.presentation)
-}
-
-type directJavaScriptApplication struct {
-	operation DirectJavaScriptRunOperation
-	request   factorysessions.DirectJavaScriptRunRequest
-}
-
-func (application directJavaScriptApplication) Run(ctx context.Context) error {
-	if err := application.operation.Run(ctx, application.request); err != nil {
-		return fmt.Errorf("initialize run service: %w", err)
-	}
-	return nil
 }
 
 func applyRunIntent(cfg RunConfig, intent processcontract.RunIntent) (RunConfig, error) {

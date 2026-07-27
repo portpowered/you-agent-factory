@@ -7,8 +7,10 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
@@ -62,16 +64,25 @@ func TestDirectJavaScriptRunOperationOwnsOpeningRequestPolicyAndCleanup(t *testi
 				started, jsonOutput, outputMatches = request, jsonValue, writer == output
 				return nil
 			}
-			operation, err := NewDirectJavaScriptRunOperation(builder, runSync, func() string { return "direct-test-id" })
+			operation, err := NewDirectJavaScriptRunOperation(
+				builder, runSync, func() string { return "direct-test-id" },
+				func(roles.OwnedExecutionService, roles.DirectJavaScriptLifecycle, factorysessions.DirectJavaScriptRunRequest) (lifecycle.Component, error) {
+					return nil, nil
+				},
+			)
 			if err != nil {
 				t.Fatalf("NewDirectJavaScriptRunOperation: %v", err)
 			}
 			source := filepath.Join(t.TempDir(), "workflow.mjs")
-			if err := operation.Run(context.Background(), factorysessions.DirectJavaScriptRunRequest{
+			opened, err := operation.Open(context.Background(), factorysessions.DirectJavaScriptRunRequest{
 				SourcePath: source, MockWorkersEnabled: testCase.mockWorkers,
 				JSONOutput: true, Output: output,
-			}); err != nil {
-				t.Fatalf("Run: %v", err)
+			})
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			if err := lifecycle.NewManager().Run(context.Background(), opened.Plan); err != nil {
+				t.Fatalf("Run lifecycle: %v", err)
 			}
 			if provider != string(factorysessions.ExecutionProviderJavaScriptRuntime) || projectRoot != filepath.Dir(source) || fixturePath != "" || builderMode != testCase.wantMode {
 				t.Fatalf("builder inputs = (%q, %q, %q, %q)", provider, projectRoot, fixturePath, builderMode)
@@ -101,13 +112,64 @@ func TestDirectJavaScriptRunOperationJoinsExecutionAndCloseFailures(t *testing.T
 			return runFailure
 		},
 		func() string { return "direct-test-id" },
+		func(roles.OwnedExecutionService, roles.DirectJavaScriptLifecycle, factorysessions.DirectJavaScriptRunRequest) (lifecycle.Component, error) {
+			return nil, nil
+		},
 	)
 	if err != nil {
 		t.Fatalf("NewDirectJavaScriptRunOperation: %v", err)
 	}
-	err = operation.Run(context.Background(), factorysessions.DirectJavaScriptRunRequest{SourcePath: "workflow.js"})
+	opened, err := operation.Open(
+		context.Background(),
+		factorysessions.DirectJavaScriptRunRequest{SourcePath: "workflow.js"},
+	)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	err = lifecycle.NewManager().Run(context.Background(), opened.Plan)
 	if !errors.Is(err, runFailure) || !errors.Is(err, closeFailure) {
 		t.Fatalf("Run error = %v, want joined run and close failures", err)
+	}
+}
+
+func TestDirectJavaScriptRunOperationGatesHostedCompletionOnReadiness(t *testing.T) {
+	owned := &ownedExecutionStub{}
+	var ready atomic.Bool
+	operation, err := NewDirectJavaScriptRunOperation(
+		func(context.Context, string, string, string, string) (roles.OwnedExecutionService, error) {
+			return owned, nil
+		},
+		func(context.Context, factorysessions.ExecutionService, factorysessions.StartRequest, bool, io.Writer) error {
+			if !ready.Load() {
+				t.Fatal("direct JavaScript completion started before listener readiness")
+			}
+			return nil
+		},
+		func() string { return "direct-test-id" },
+		func(_ roles.OwnedExecutionService, _ roles.DirectJavaScriptLifecycle, request factorysessions.DirectJavaScriptRunRequest) (lifecycle.Component, error) {
+			return lifecycle.NewRunner(func(ctx context.Context) error {
+				ready.Store(true)
+				request.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: request.Host.Port})
+				<-ctx.Done()
+				return ctx.Err()
+			}), nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewDirectJavaScriptRunOperation: %v", err)
+	}
+	opened, err := operation.Open(context.Background(), factorysessions.DirectJavaScriptRunRequest{
+		SourcePath: "workflow.js",
+		Host:       &factorysessions.RuntimeHostRequest{Port: 7437},
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := lifecycle.NewManager().Run(context.Background(), opened.Plan); err != nil {
+		t.Fatalf("Run lifecycle: %v", err)
+	}
+	if !owned.closed {
+		t.Fatal("hosted execution was not closed")
 	}
 }
 

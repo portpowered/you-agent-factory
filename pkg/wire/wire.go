@@ -314,6 +314,7 @@ var BundleSet = wire.NewSet(
 	wire.Bind(new(factorysessionwire.StdioOpeningOperation), new(*factorysessionwire.StdioOpeningService)),
 	provideStdioApplicationOpener,
 	provideDirectJavaScriptSyncRunner,
+	provideDirectJavaScriptHostAdapter,
 	factorysessionwire.NewDirectJavaScriptRunOperation,
 	initializerapplication.NewInitializer,
 	factorysessionwire.NewExecutionServiceBuilder,

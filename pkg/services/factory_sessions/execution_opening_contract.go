@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"go.uber.org/zap"
 )
 
 // ProviderIdentityResolver resolves one authored provider selection through
@@ -32,10 +34,13 @@ type StdioOpeningRequest struct {
 // JavaScript workflow invocation. Source resolution and execution policy stay
 // behind DirectJavaScriptRunOperation.
 type DirectJavaScriptRunRequest struct {
-	SourcePath         string
-	MockWorkersEnabled bool
-	JSONOutput         bool
-	Output             io.Writer
+	SourcePath          string
+	MockWorkersEnabled  bool
+	JSONOutput          bool
+	Output              io.Writer
+	Host                *RuntimeHostRequest
+	RuntimeHostObserver RuntimeHostObserver
+	Logger              *zap.Logger
 }
 
 // --- merged from opening_contract.go ---

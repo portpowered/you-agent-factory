@@ -47,6 +47,8 @@ type (
 	StdioOpeningOperation                = roles.StdioOpeningOperation
 	DirectJavaScriptRunOperation         = roles.DirectJavaScriptRunOperation
 	DirectJavaScriptSyncRunner           = roles.DirectJavaScriptSyncRunner
+	DirectJavaScriptHostAdapter          = roles.DirectJavaScriptHostAdapter
+	DirectJavaScriptLifecycle            = roles.DirectJavaScriptLifecycle
 	RequestPreparation                   = roles.RequestPreparation
 	Registry                             = roles.Registry
 	RuntimePersistenceStore              = roles.RuntimePersistenceStore
@@ -237,8 +239,9 @@ func NewDirectJavaScriptRunOperation(
 	build ExecutionServiceBuilder,
 	runSync DirectJavaScriptSyncRunner,
 	generateSessionID factorysessions.SessionIDGenerator,
+	host roles.DirectJavaScriptHostAdapter,
 ) (DirectJavaScriptRunOperation, error) {
-	return executionopening.NewDirectJavaScriptRunOperation(build, runSync, generateSessionID)
+	return executionopening.NewDirectJavaScriptRunOperation(build, runSync, generateSessionID, host)
 }
 
 func NewStdioOpeningService(

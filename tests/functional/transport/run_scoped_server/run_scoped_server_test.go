@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,6 +93,112 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 				t.Fatalf("browser calls = %d, want %d", browserCalls.Load(), test.wantBrowser)
 			}
 		})
+	}
+}
+
+func TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		mode        string
+		wantBrowser int32
+	}{
+		{name: "server", mode: "--with-server"},
+		{name: "site", mode: "--with-site", wantBrowser: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			workingDirectory := t.TempDir()
+			workflowPath := filepath.Join(workingDirectory, "workflow.js")
+			if err := os.WriteFile(workflowPath, []byte(`return "hosted JavaScript";`), 0o600); err != nil {
+				t.Fatalf("write workflow: %v", err)
+			}
+			var listenerStarts, listenerStops, browserCalls atomic.Int32
+			process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+					listenerStarts.Add(1)
+					assertDashboardHandler(t, request.Handler)
+					request.OnBound(platformhttpserver.Binding{Port: request.Port})
+					<-ctx.Done()
+					listenerStops.Add(1)
+					return ctx.Err()
+				},
+				BrowserOpener: func(context.Context, string) error {
+					browserCalls.Add(1)
+					return nil
+				},
+			})
+			if err != nil {
+				t.Fatalf("BuildProcess() error = %v", err)
+			}
+			homeDir := t.TempDir()
+			environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+			stdout, stderr := execute(t, process, environment, workingDirectory, []string{
+				"you", "run", "--factory", workflowPath, "--with-mock-workers", test.mode,
+			}, "")
+			if stderr != "" || !strings.Contains(stdout, "completed (SUCCEEDED)") {
+				t.Fatalf("JavaScript stdout=%q stderr=%q", stdout, stderr)
+			}
+			if listenerStarts.Load() != 1 || listenerStops.Load() != 1 {
+				t.Fatalf(
+					"listener lifecycle = starts:%d stops:%d, want exactly one joined server",
+					listenerStarts.Load(), listenerStops.Load(),
+				)
+			}
+			if browserCalls.Load() != test.wantBrowser {
+				t.Fatalf("browser calls = %d, want %d", browserCalls.Load(), test.wantBrowser)
+			}
+		})
+	}
+}
+
+func TestRunScopedServerOwnsReplayLifecycle(t *testing.T) {
+	homeDir := t.TempDir()
+	workingDirectory := t.TempDir()
+	var listenerStarts, listenerStops, browserCalls atomic.Int32
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			listenerStarts.Add(1)
+			request.OnBound(platformhttpserver.Binding{Port: request.Port})
+			<-ctx.Done()
+			listenerStops.Add(1)
+			return ctx.Err()
+		},
+		BrowserOpener: func(context.Context, string) error {
+			browserCalls.Add(1)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	initializeGoalFactory(t, process, environment, workingDirectory, homeDir)
+	mockWorkersPath := writeMockWorkersConfig(t)
+	replayPath := filepath.Join(t.TempDir(), "goal.replay.json")
+	_, _ = execute(t, process, environment, workingDirectory, []string{
+		"you", "run", "--named", goalFactoryName,
+		"--with-mock-workers", mockWorkersPath, "--record", replayPath, "record replay",
+	}, "")
+	stdout, stderr := execute(t, process, environment, workingDirectory, []string{
+		"you", "run", "--replay", replayPath, "--with-server",
+	}, "")
+	if stderr != "" || stdout == "" {
+		t.Fatalf("replay stdout=%q stderr=%q", stdout, stderr)
+	}
+	if listenerStarts.Load() != 1 || listenerStops.Load() != 1 || browserCalls.Load() != 0 {
+		t.Fatalf(
+			"replay lifecycle = starts:%d stops:%d browsers:%d",
+			listenerStarts.Load(), listenerStops.Load(), browserCalls.Load(),
+		)
+	}
+}
+
+func assertDashboardHandler(t *testing.T, handler http.Handler) {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodGet, "/dashboard/ui", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("dashboard status = %d, want 200", response.Code)
 	}
 }
 

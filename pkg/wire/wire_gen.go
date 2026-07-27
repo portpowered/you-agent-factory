@@ -437,11 +437,15 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	responsePresentation := provideResponsePresentation()
 	v63 := provideDirectJavaScriptSyncRunner()
-	v64, err := wire.NewDirectJavaScriptRunOperation(v52, v63, v15)
+	directJavaScriptHostAdapter, err := provideDirectJavaScriptHostAdapter(handler, starter, runnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	selectionFactory, err := provideRunSelectionFactory(runOpener, runRuntimeRunnerBuilder, v53, responsePresentation, v64)
+	v64, err := wire.NewDirectJavaScriptRunOperation(v52, v63, v15, directJavaScriptHostAdapter)
+	if err != nil {
+		return nil, err
+	}
+	selectionFactory, err := provideRunSelectionFactory(runOpener, runRuntimeRunnerBuilder, v53, responsePresentation, v64, runtimeRunnerBuilder)
 	if err != nil {
 		return nil, err
 	}
@@ -767,7 +771,8 @@ var BundleSet = wire2.NewSet(
 	provideInvocationOperation, application.NewStdioRunnerBuilder, application.NewOpenedStdioRunnerBuilder, provideFixtureStdioApplicationBuilder,
 	provideRuntimeStdioApplicationBuilder,
 	provideSessionExecutionOpeningFactory, wire2.Bind(new(wire.StdioExecutionOpening), new(*wire.ExecutionOpeningFactory)), wire.NewStdioOpeningService, wire2.Bind(new(wire.StdioOpeningOperation), new(*wire.StdioOpeningService)), provideStdioApplicationOpener,
-	provideDirectJavaScriptSyncRunner, wire.NewDirectJavaScriptRunOperation, application.NewInitializer, wire.NewExecutionServiceBuilder, provideCLIExecutionServiceBuilder,
+	provideDirectJavaScriptSyncRunner,
+	provideDirectJavaScriptHostAdapter, wire.NewDirectJavaScriptRunOperation, application.NewInitializer, wire.NewExecutionServiceBuilder, provideCLIExecutionServiceBuilder,
 	provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation,
 	provideCLICommandFactory, application.NewProcess, wire2.Bind(new(process.Initializer), new(*application.Initializer)), wire2.Bind(new(process.CommandFactory), new(cli.CommandFactory)),

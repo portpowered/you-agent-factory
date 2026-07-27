@@ -1740,6 +1740,12 @@ response-stream output.
   hidden Cobra command to harvest help strings or add flag-name switches in the
   family constructor; the source guard and executable/manifest parity tests
   under `pkg/transports/cli/baseline` and `climanifestcobra` protect that seam.
+- Raw JavaScript `you run --factory workflow.js` owns a standalone durable
+  execution service rather than a Factory Runtime. When hosting that run, bind
+  the same execution service to the generated HTTP/dashboard transport, gate
+  the terminal sync operation on listener readiness, and place transport,
+  completion, and execution cleanup in one Factory Sessions lifecycle plan.
+  Do not open a second execution scope merely to serve the API.
 - When a migrated command starts projecting authored Examples into Cobra help,
   refresh the matching intentional help fixture under
   `pkg/transports/cli/baseline/testdata/` (for docs:

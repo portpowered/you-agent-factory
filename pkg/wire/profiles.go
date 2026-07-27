@@ -784,9 +784,10 @@ func provideRunSelectionFactory(
 	invocation factorysessionwire.InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
 	directJavaScript factorysessionwire.DirectJavaScriptRunOperation,
+	buildApplication initializer.RuntimeRunnerBuilder,
 ) (runcli.SelectionFactory, error) {
 	return runcli.NewSelectionFactory(
-		open, buildRunner, invocation, presentation, directJavaScript,
+		open, buildRunner, invocation, presentation, directJavaScript, buildApplication,
 	)
 }
 
@@ -836,4 +837,40 @@ func provideRuntimeOpener(factory *factorysessionwire.RuntimeOpeningFactory) fac
 
 func provideDirectJavaScriptSyncRunner() factorysessionwire.DirectJavaScriptSyncRunner {
 	return sessionexecutioncli.RunNormalizedSync
+}
+
+func provideDirectJavaScriptHostAdapter(
+	httpHandler *httpapplication.Handler,
+	start platformhttpserver.Starter,
+	newRunner lifecycle.RunnerFactory,
+) (factorysessionwire.DirectJavaScriptHostAdapter, error) {
+	if httpHandler == nil || start == nil || newRunner == nil {
+		return nil, errors.New("direct JavaScript HTTP handler, starter, and lifecycle runner are required")
+	}
+	return func(
+		execution factorysessionwire.OwnedExecutionService,
+		executionLifecycle factorysessionwire.DirectJavaScriptLifecycle,
+		request factorysessions.DirectJavaScriptRunRequest,
+	) (lifecycle.Component, error) {
+		if request.Host == nil {
+			return nil, errors.New("direct JavaScript host request is required")
+		}
+		handler, err := httpHandler.BindDurableExecution(
+			execution, executionLifecycle, request.Logger,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return newRunner(func(ctx context.Context) error {
+			return start(ctx, platformhttpserver.StartRequest{
+				Handler: handler, Port: request.Host.Port, AutoPort: request.Host.AutoPort,
+				Logger: request.Logger,
+				OnBound: func(binding platformhttpserver.Binding) {
+					if request.RuntimeHostObserver != nil {
+						request.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: binding.Port})
+					}
+				},
+			})
+		}), nil
+	}, nil
 }
