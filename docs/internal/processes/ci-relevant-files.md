@@ -163,10 +163,20 @@
   blocking `Provider.Infer` until public `inFlightDispatches` reaches the fan-out
   size, release children to assert declared input-order results and documented
   partial-failure shaping on `/factory-sessions/{id}/results?mode=final` and
-  `/dispatches` without wall-clock sleeps. Catalog metadata infers domain
-  `orchestration` and subsection `javascript/composition` from the path; every
-  top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
-  stays viz-compatible.
+  `/dispatches` without wall-clock sleeps. JavaScript staged composition
+  functional coverage belongs in
+  `tests/functional/orchestration/javascript/composition/stages_test.go`:
+  drive sync Factory Session execution through
+  `tests/functional/internal/support.StartFunctionalAPIServer` with
+  `UseMockWorkers: true` and a recording `edges.Edges.ProviderCommandRunner`,
+  prove named `pipeline` stage labels and `phase(name)` ordered progress on
+  public dispatch listings, `result.primaryResult`, and
+  `GET /factory-sessions/{id}/events` `ORCHESTRATOR_PHASE_CHANGED` events, and
+  prove `pipeline([], worker, next?)` completes with the documented empty
+  ordered per-item public result and zero child dispatches without live provider
+  execution. Catalog metadata infers domain `orchestration` and subsection
+  `javascript/composition` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
   JavaScript per-child worker override functional coverage belongs in
   `tests/functional/orchestration/javascript/workers/overrides_test.go`:
   drive sync or async Factory Session execution through
