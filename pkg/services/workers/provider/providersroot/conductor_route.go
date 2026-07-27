@@ -166,7 +166,7 @@ func (d *conductorDestination) result(providerID providers.ID) (providers.Execut
 
 func executeFailureFromConductor(failure inference.Failure) providers.ExecuteFailure {
 	executeFailure := providers.ExecuteFailure{
-		Kind:    executeFailureKindFromConductor(failure.Kind()),
+		Kind:    executeFailureKindFromConductor(failure),
 		Message: failure.Message(),
 	}
 	if session := failure.ProviderSession(); session != nil {
@@ -190,8 +190,8 @@ func executeFailureFromConductor(failure inference.Failure) providers.ExecuteFai
 	return executeFailure
 }
 
-func executeFailureKindFromConductor(kind inference.FailureKind) providers.ExecuteFailureKind {
-	switch kind {
+func executeFailureKindFromConductor(failure inference.Failure) providers.ExecuteFailureKind {
+	switch failure.Kind() {
 	case inference.FailureTimeout:
 		return providers.ExecuteFailureKindTimeout
 	case inference.FailureThrottled:
@@ -205,6 +205,9 @@ func executeFailureKindFromConductor(kind inference.FailureKind) providers.Execu
 	case inference.FailureCanceled:
 		return providers.ExecuteFailureKindCanceled
 	default:
+		if failure.Retryable() {
+			return providers.ExecuteFailureKindDependency
+		}
 		return providers.ExecuteFailureKindUnknown
 	}
 }

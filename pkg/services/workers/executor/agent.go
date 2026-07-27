@@ -478,7 +478,11 @@ func (ae *AgentExecutor) inferWithRetry(
 		if !decision.Retryable || retryCount >= ae.retryConfig.maxRetries {
 			return workerexecution.InferenceResponse{}, retryCount, providerErr
 		}
-		if session := providerErr.ProviderSession; session != nil && strings.TrimSpace(session.ID) != "" {
+		session := providerErr.ProviderSession
+		if session == nil {
+			session = result.ProviderSession
+		}
+		if session != nil && strings.TrimSpace(session.ID) != "" {
 			req.SessionID = strings.TrimSpace(session.ID)
 			req.RequiredOptionalCapabilities = appendRunnerCapabilityIfMissing(
 				req.RequiredOptionalCapabilities,

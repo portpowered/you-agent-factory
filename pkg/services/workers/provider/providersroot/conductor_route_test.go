@@ -4,7 +4,29 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
+
+func TestExecuteFailureKindFromConductor_PreservesRetryableUnknownAsDependency(t *testing.T) {
+	failure := inference.NewFailure(inference.FailureInput{
+		Kind:      inference.FailureUnknown,
+		Message:   "temporary service failure",
+		Retryable: true,
+	})
+	if got := executeFailureKindFromConductor(failure); got != providers.ExecuteFailureKindDependency {
+		t.Fatalf("kind = %q, want dependency for retryable unknown conductor failure", got)
+	}
+}
+
+func TestExecuteFailureKindFromConductor_TerminalUnknownStaysUnknown(t *testing.T) {
+	failure := inference.NewFailure(inference.FailureInput{
+		Kind:    inference.FailureUnknown,
+		Message: "provider exited unexpectedly",
+	})
+	if got := executeFailureKindFromConductor(failure); got != providers.ExecuteFailureKindUnknown {
+		t.Fatalf("kind = %q, want unknown for non-retryable conductor failure", got)
+	}
+}
 
 func TestInvocationRequestFromExecute_ForwardsEnvAndSkipPermissions(t *testing.T) {
 	request := providers.ExecuteRequest{
