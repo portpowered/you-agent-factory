@@ -14,7 +14,10 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const claudeFullStreamGoldenCase = "full-stream-text-success"
+const (
+	claudeFullStreamGoldenCase   = "full-stream-text-success"
+	codexPartialStreamGoldenCase = "success"
+)
 
 // TestProviderFullStreamClaimsDeltasAndSnapshotsTruthfully replays a sanitized
 // full-stream provider transcript through root.BuildProcess and proves published
@@ -68,6 +71,55 @@ func TestProviderFullStreamClaimsDeltasAndSnapshotsTruthfully(t *testing.T) {
 	}
 
 	assertFullStreamPublicResponseEvents(t, responseEvents, "Parity hello world COMPLETE")
+}
+
+// TestProviderPartialStreamDoesNotFabricateMissingDeltas replays a sanitized
+// partial-stream provider transcript through root.BuildProcess and proves
+// published Factory response events expose native streaming with completed
+// message snapshots only—no fabricated message deltas and no final-only fidelity
+// on those snapshots.
+func TestProviderPartialStreamDoesNotFabricateMissingDeltas(t *testing.T) {
+	loaded := loadStreamFidelityGoldenCase(t, modelprovider.ProviderCodex, codexPartialStreamGoldenCase)
+	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelityPartialStream {
+		t.Fatalf(
+			"manifest.fidelityClass = %q, want %q",
+			loaded.Manifest.FidelityClass,
+			support.ProviderSessionFidelityPartialStream,
+		)
+	}
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider partial stream fidelity"}`))
+
+	exitCode := 0
+	if loaded.Process.ExitCode != nil {
+		exitCode = *loaded.Process.ExitCode
+	}
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
+		Stderr:   []byte(loaded.Stderr),
+		ExitCode: exitCode,
+	})
+
+	_, listed, factoryEvents, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		20*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
+		t.Fatalf("completed work = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
+		t.Fatalf("failed work = %d, want 0", got)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want exactly one provider-process edge", runner.CallCount())
+	}
+
+	assertPartialStreamPublicResponseEvents(t, responseEvents, factoryEvents, "Codex fixture answer COMPLETE")
 }
 
 func loadStreamFidelityGoldenCase(
@@ -185,6 +237,97 @@ func assertFullStreamPublicResponseEvents(
 	if completedText != wantCompletedText {
 		t.Fatalf("completed message snapshot = %q, want %q", completedText, wantCompletedText)
 	}
+}
+
+func assertPartialStreamPublicResponseEvents(
+	t *testing.T,
+	responseEvents []factoryapi.FactoryResponseEvent,
+	factoryEvents []factoryapi.FactoryEvent,
+	wantCompletedText string,
+) {
+	t.Helper()
+
+	var (
+		snapshotCount   int
+		terminalMatched bool
+	)
+
+	for _, event := range responseEvents {
+		if event.Kind != factoryapi.FactoryResponseEventKindMessage {
+			continue
+		}
+
+		switch event.Phase {
+		case factoryapi.FactoryResponseEventPhaseDelta:
+			t.Fatalf("partial-stream replay fabricated message delta: %#v", event)
+
+		case factoryapi.FactoryResponseEventPhaseCompleted:
+			if event.Provenance.Fidelity == factoryapi.FactoryResponseEventProvenanceFidelityFinalOnly {
+				t.Fatalf("partial-stream replay claimed final-only fidelity on completed message: %#v", event)
+			}
+			if event.Provenance.Delivery != factoryapi.FactoryResponseEventProvenanceDeliveryNativeStream {
+				t.Fatalf(
+					"partial-stream completed message delivery = %q, want %q: %#v",
+					event.Provenance.Delivery,
+					factoryapi.FactoryResponseEventProvenanceDeliveryNativeStream,
+					event,
+				)
+			}
+			if event.Provenance.Representation != factoryapi.FactoryResponseEventProvenanceRepresentationSnapshot {
+				t.Fatalf(
+					"partial-stream completed message representation = %q, want %q: %#v",
+					event.Provenance.Representation,
+					factoryapi.FactoryResponseEventProvenanceRepresentationSnapshot,
+					event,
+				)
+			}
+
+			payload, err := event.Payload.AsFactoryResponseEventMessagePayload()
+			if err != nil {
+				t.Fatalf("decode completed message response event: %v", err)
+			}
+			text := streamFidelityMessageText(payload)
+			if text == "" {
+				t.Fatalf("partial-stream completed message missing text: %#v", event)
+			}
+			snapshotCount++
+			if text == wantCompletedText {
+				terminalMatched = true
+			}
+		}
+	}
+
+	if snapshotCount == 0 {
+		terminalMatched = streamFidelityInferenceResponseContains(t, factoryEvents, wantCompletedText)
+	}
+	if !terminalMatched {
+		t.Fatalf("partial-stream replay missing terminal message %q", wantCompletedText)
+	}
+}
+
+func streamFidelityInferenceResponseContains(
+	t *testing.T,
+	factoryEvents []factoryapi.FactoryEvent,
+	wantText string,
+) bool {
+	t.Helper()
+
+	for _, event := range factoryEvents {
+		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+			continue
+		}
+		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode inference response event: %v", err)
+		}
+		if payload.Outcome != factoryapi.InferenceOutcomeSucceeded {
+			continue
+		}
+		if payload.Response != nil && strings.Contains(*payload.Response, wantText) {
+			return true
+		}
+	}
+	return false
 }
 
 func streamFidelityMessageText(message factoryapi.FactoryResponseEventMessagePayload) string {
