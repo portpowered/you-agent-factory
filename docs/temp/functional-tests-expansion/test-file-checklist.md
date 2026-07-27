@@ -98,7 +98,7 @@ intentionally small enough to distribute across many agents.
     output.
   - `TestCLIJSONNullAndEmptyValuesRemainDistinct` prevents normalization loss.
 
-- [ ] `tests/functional/transport/cli/parameters/environment_precedence_test.go`
+- [x] `tests/functional/transport/cli/parameters/environment_precedence_test.go`
   - `TestCLIExplicitFlagOverridesEnvironmentDefault` verifies precedence.
   - `TestCLIEnvironmentOverridesGlobalConfig` verifies documented precedence.
   - `TestCLIUnsetEnvironmentFallsBackWithoutFabricatingValue` covers absence.
