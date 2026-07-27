@@ -323,6 +323,10 @@
       "minimum": 69.35
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli",
+      "minimum": 39.72
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/ttsobservability",
       "minimum": 15.55
     },
