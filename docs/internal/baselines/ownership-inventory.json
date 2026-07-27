@@ -2340,6 +2340,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/automations/internal/services/filesystem_watchers",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/filesystem_watchers/internal/service",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/filesystem_watchers/wire",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/automations/internal/services/hosted_sources",
       "disposition": "retain",
       "destination": "automations",
@@ -2791,12 +2809,6 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/exhaustiontests",
-      "disposition": "retain",
-      "destination": "factory_runtime",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/ingest",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"
@@ -3835,6 +3847,24 @@
     },
     {
       "packagePath": "pkg/services/work",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/state_access",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/state_access/internal/service",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/state_access/wire",
       "disposition": "retain",
       "destination": "work",
       "destinationKind": "owner"

@@ -14,6 +14,12 @@ var errLegacySidecarsCalled = errors.New("legacy sidecars called")
 
 type legacyAutomationService struct{}
 
+func (legacyAutomationService) NewFilesystemWatcher(
+	automations.FilesystemWatcherConfig,
+) automations.FilesystemWatcher {
+	return nil
+}
+
 func (legacyAutomationService) StartSchedulerSidecarsForRuntime(
 	context.Context,
 	*sync.WaitGroup,
