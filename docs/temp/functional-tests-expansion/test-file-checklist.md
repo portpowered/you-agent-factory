@@ -476,6 +476,9 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPollerEmptyResultCreatesNoWork`.
   - `TestPollerRecoverableFailureRetriesWithoutDuplicates`.
 
+- [x] `tests/functional/workstations/poller/build_process_test.go`
+  - `TestScriptPollerAutomationRemainsInertThroughRootBuildProcessConstruction`.
+
 - [ ] `tests/functional/workstations/watcher/files_test.go`
   - `TestFileWatcherHandlesSingleSequentialAndConcurrentFiles`.
   - `TestFileWatcherDoesNotLeakOrDuplicateWork`.

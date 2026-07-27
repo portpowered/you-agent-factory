@@ -6461,6 +6461,16 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/workstations/poller/build_process_test.go",
+      "package": "you-agent-factory/tests/functional/workstations/poller",
+      "scenario": "TestScriptPollerAutomationRemainsInertThroughRootBuildProcessConstruction",
+      "lane": "short",
+      "destination": "tests/functional/workstations/poller/build_process_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/workstations/repeater/reject_accept_long_test.go",
       "package": "you-agent-factory/tests/functional/workstations/repeater",
       "scenario": "TestMultiOutput_NoStopWordsConfigured",
@@ -6623,16 +6633,16 @@
       "work": 2,
       "workers": 48,
       "workflow": 51,
-      "workstations": 20
+      "workstations": 21
     },
-    "customer_top_level_Test_scenarios": 640,
-    "files_with_customer_Test": 217,
-    "functional_test_go_files": 251,
+    "customer_top_level_Test_scenarios": 641,
+    "files_with_customer_Test": 218,
+    "functional_test_go_files": 252,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 112,
-    "lane_short": 528,
+    "lane_short": 529,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
       "you-agent-factory/tests/functional/bootstrap_portability": 19,
@@ -6697,7 +6707,7 @@
       "you-agent-factory/tests/functional/workers/script": 13,
       "you-agent-factory/tests/functional/workflow": 51,
       "you-agent-factory/tests/functional/workstations/execution": 4,
-      "you-agent-factory/tests/functional/workstations/poller": 3,
+      "you-agent-factory/tests/functional/workstations/poller": 4,
       "you-agent-factory/tests/functional/workstations/repeater": 13
     }
   },
@@ -6779,7 +6789,7 @@
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 528,
+    "lane_short": 529,
     "lane_functionallong": 118,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,

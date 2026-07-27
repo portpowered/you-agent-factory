@@ -217,6 +217,21 @@
   inline workflows when override validation fails before dispatch. Catalog
   metadata infers domain `orchestration` and subsection `javascript/workers`
   from the path.
+  Script-poller packaged-owner evidence belongs to
+  `pkg/services/automations/internal/services/script_pollers` and is reached
+  only through `pkg/services/automations/service`. Unit evidence covers submit,
+  timeout/restart, malformed rejection, and cursor persistence in the packaged
+  owner tests; `ownership_test.go` proves peer packages do not import the
+  private owner. Root `BuildProcess` functional evidence belongs in
+  `tests/functional/workstations/poller/poller_test.go` and
+  `tests/functional/workstations/poller/build_process_test.go`: drive POLLER
+  workstation supervision through `tests/functional/internal/support.BuildProcess`
+  with injected `edges.Edges.ScriptCommandRunner` and optional
+  `edges.Edges.Clock`, observe Work admission through public session listings,
+  and prove construction remains inert before an explicit run invocation.
+  Catalog metadata infers domain `workstations` and subsection `poller` from
+  the path; every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
   Mock-worker replacement functional coverage belongs in
   `tests/functional/workers/mock/replacement_test.go`: prove named-only
   `--with-mock-workers` replacement through
