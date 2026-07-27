@@ -1,4 +1,4 @@
-package hostedworkers
+package service
 
 import (
 	"context"
@@ -9,7 +9,8 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	hostedlinear "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear"
+	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
+	hostedlinear "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear"
 	"go.uber.org/zap"
 )
 
@@ -24,7 +25,7 @@ func StartLinearPoller(
 	ctx context.Context,
 	sidecars *sync.WaitGroup,
 	logger *zap.Logger,
-	clock Clock,
+	clock hostedsources.Clock,
 	httpClient hostedlinear.HTTPDoer,
 	secretResolver hostedlinear.SecretResolver,
 	checkpoints hostedlinear.CheckpointStore,
@@ -98,7 +99,12 @@ func (p *LinearPoller) run(ctx context.Context, logger *zap.Logger) error {
 
 	apiKey, err := p.secretResolver(ctx, p.runtimeConfig, p.worker.Auth.SecretRef)
 	if err != nil {
-		return fmt.Errorf("resolve hosted linear auth %q: %w", p.worker.Auth.SecretRef, err)
+		return fmt.Errorf(
+			"resolve hosted linear auth %q: %w: %w",
+			p.worker.Auth.SecretRef,
+			hostedlinear.ErrSecretResolution,
+			err,
+		)
 	}
 
 	pollerClient := hostedlinear.Client{

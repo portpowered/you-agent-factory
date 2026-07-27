@@ -7,6 +7,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 	visualizationcontracts "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts"
 )
 
@@ -46,9 +47,9 @@ func (s *currentRuntimeSource) SubscribeFactoryEvents(
 	return stream, err
 }
 
-func (s *currentRuntimeSource) GetEngineStateSnapshot(
+func (s *currentRuntimeSource) GetRuntimeSnapshotFacts(
 	ctx context.Context,
-) (snapshot *factoryruntime.StateSnapshot, err error) {
+) (facts *liveviewprojection.RuntimeSnapshotFacts, err error) {
 	if s == nil || s.reader == nil {
 		return nil, factorysessions.ErrRuntimeNotAvailable
 	}
@@ -60,9 +61,32 @@ func (s *currentRuntimeSource) GetEngineStateSnapshot(
 		if !ok {
 			return factorysessions.ErrRuntimeNotAvailable
 		}
-		var snapshotErr error
-		snapshot, snapshotErr = legacyObservation.GetEngineStateSnapshot(ctx)
-		return snapshotErr
+		snapshot, snapshotErr := legacyObservation.GetEngineStateSnapshot(ctx)
+		if snapshotErr != nil {
+			return snapshotErr
+		}
+		facts = sanitizeRuntimeSnapshotFacts(snapshot)
+		return nil
 	})
-	return snapshot, err
+	return facts, err
+}
+
+func sanitizeRuntimeSnapshotFacts(
+	snapshot *factoryruntime.StateSnapshot,
+) *liveviewprojection.RuntimeSnapshotFacts {
+	if snapshot == nil {
+		return nil
+	}
+	return &liveviewprojection.RuntimeSnapshotFacts{
+		RuntimeObservation: liveviewprojection.RuntimeObservation{
+			TickCount:     snapshot.TickCount,
+			FactoryState:  snapshot.FactoryState,
+			RuntimeStatus: snapshot.RuntimeStatus,
+			Uptime:        snapshot.Uptime,
+		},
+		ActiveThrottlePauses: append(
+			[]factorydefinitions.ActiveThrottlePause(nil),
+			snapshot.ActiveThrottlePauses...,
+		),
+	}
 }

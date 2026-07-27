@@ -1419,6 +1419,21 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/automations/hosted_sources_factory.go",
+      "target": "NewHostedSourcesFactory"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/automations/internal/services/hosted_sources/service.go",
+      "target": "NewCheckpointStore"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/automations/internal/services/hosted_sources/service.go",
+      "target": "NewSecretResolver"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_definitions/config_file_operations.go",
       "target": "NewFactoryConfigFileLoader"
     },
@@ -2214,21 +2229,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/services/hosted_logic/config.go",
-      "target": "NewLinearPoller"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/services/hosted_logic/service.go",
-      "target": "New"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/services/hosted_logic/supervisor.go",
-      "target": "StartLinearPoller"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/services/inference/inference.go",
       "target": "DirectInferenceWorkstationConfig"
     },
@@ -2349,11 +2349,6 @@
     },
     {
       "rule": "service-root-interface-count",
-      "filePath": "pkg/services/workers/services/hosted_logic",
-      "target": "<none>"
-    },
-    {
-      "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/inference",
       "target": "<none>"
     },
@@ -2366,11 +2361,6 @@
       "rule": "service-root-missing-internal",
       "filePath": "pkg/services/workers/services/agents/internal",
       "target": "pkg/services/workers/services/agents"
-    },
-    {
-      "rule": "service-root-missing-internal",
-      "filePath": "pkg/services/workers/services/hosted_logic/internal",
-      "target": "pkg/services/workers/services/hosted_logic"
     },
     {
       "rule": "service-root-missing-internal",
@@ -2776,11 +2766,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/services",
       "target": "pkg/services/workers"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/services/hosted_logic/linear",
-      "target": "pkg/services/workers/services/hosted_logic"
     },
     {
       "rule": "service-root-unexpected-directory",

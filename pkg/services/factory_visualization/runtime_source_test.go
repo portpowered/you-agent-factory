@@ -46,12 +46,12 @@ func TestCurrentRuntimeSourceBindsThroughSessionRuntimeReader(t *testing.T) {
 		t.Fatalf("WithRuntimeRead calls = %d, want 1", runtimeReadCalls)
 	}
 
-	snapshot, err := source.GetEngineStateSnapshot(context.Background())
+	facts, err := source.GetRuntimeSnapshotFacts(context.Background())
 	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: error = %v", err)
+		t.Fatalf("GetRuntimeSnapshotFacts: error = %v", err)
 	}
-	if snapshot == nil || snapshot.TickCount != 5 {
-		t.Fatalf("GetEngineStateSnapshot = %#v, want tick 5", snapshot)
+	if facts == nil || facts.RuntimeObservation.TickCount != 5 {
+		t.Fatalf("GetRuntimeSnapshotFacts = %#v, want tick 5", facts)
 	}
 	if runtimeReadCalls != 2 {
 		t.Fatalf("WithRuntimeRead calls after snapshot = %d, want 2", runtimeReadCalls)

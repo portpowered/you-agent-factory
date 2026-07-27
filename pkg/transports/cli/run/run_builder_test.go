@@ -223,7 +223,14 @@ func (f testRunnerOpeners) BuildRunner(
 	return testDashboardRenderingRunner{
 		LocalRuntimeRunner: runner,
 		sink:               visualizationSink,
-		input:              factoryvisualization.View{EngineState: *snapshot},
+		input: factoryvisualization.View{
+			Runtime: factoryvisualization.RuntimeObservation{
+				TickCount:     snapshot.TickCount,
+				FactoryState:  snapshot.FactoryState,
+				RuntimeStatus: snapshot.RuntimeStatus,
+				Uptime:        snapshot.Uptime,
+			},
+		},
 	}, nil
 }
 
