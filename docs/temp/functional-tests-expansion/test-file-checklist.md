@@ -204,10 +204,13 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### MCP transport
 
-- [ ] `tests/functional/transport/mcp/stdio/discovery_test.go`
+- [x] `tests/functional/transport/mcp/stdio/discovery_test.go`
   - `TestMCPStdioInitializeAndToolDiscovery`.
   - `TestMCPDiscoveryContainsCanonicalFactorySessionTools`.
   - `TestMCPUnknownToolReturnsProtocolError`.
+  - `TestMCPStdioRuntimeRejectsMissingHomeEnvironment`.
+  - `TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot`.
+  - `TestMCPStdioFixtureAndRuntimePathsReachInitializer`.
 
 - [ ] `tests/functional/transport/mcp/protocol/errors_test.go`
   - `TestMCPMalformedParametersReturnInvalidParams`.

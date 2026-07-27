@@ -113,6 +113,65 @@ func TestMCPDiscoveryContainsCanonicalFactorySessionTools(t *testing.T) {
 	}
 }
 
+// TestMCPStdioRuntimeRejectsMissingHomeEnvironment proves runtime-backed you mcp
+// serve fails with a customer-visible home diagnostic before stdio initialize when
+// HOME and USERPROFILE are absent from the process environment.
+func TestMCPStdioRuntimeRejectsMissingHomeEnvironment(t *testing.T) {
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "mcp", "serve", "--runtime", "--project-root", t.TempDir(),
+	})
+	inputs.Env = []string{"PATH="}
+	inputs.WorkingDirectory = t.TempDir()
+	err := process.Execute(inputs.Input)
+	if err == nil || !strings.Contains(err.Error(), "home directory is not defined in the supplied environment") {
+		t.Fatalf("Process.Execute(mcp serve --runtime) error = %v, want missing-home diagnostic", err)
+	}
+}
+
+// TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot proves runtime-backed you
+// mcp serve rejects a project root that cannot resolve a factory layout before
+// stdio initialize succeeds.
+func TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot(t *testing.T) {
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	projectRoot := t.TempDir()
+	homeDir := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "mcp", "serve", "--runtime", "--project-root", projectRoot,
+	})
+	inputs.Env = append([]string{"PATH=", "HOME=" + homeDir, "USERPROFILE=" + homeDir}, os.Environ()...)
+	inputs.WorkingDirectory = projectRoot
+	err := process.Execute(inputs.Input)
+	if err == nil || !strings.Contains(err.Error(), "factory layout not found") {
+		t.Fatalf("Process.Execute(mcp serve --runtime) error = %v, want factory layout diagnostic", err)
+	}
+}
+
+// TestMCPStdioFixtureAndRuntimePathsReachInitializer proves fixture-backed and
+// runtime-backed you mcp serve both reach a successful stdio initialize through
+// the public process boundary with injected transport dependencies.
+func TestMCPStdioFixtureAndRuntimePathsReachInitializer(t *testing.T) {
+	t.Run("fixture-backed", func(t *testing.T) {
+		client, shutdown, serveErr := startFixtureBackedMCPServer(t)
+		defer func() {
+			shutdown()
+			closeMCPServer(t, serveErr)
+		}()
+		initializeMCPClient(t, client)
+	})
+	t.Run("runtime-backed", func(t *testing.T) {
+		projectRoot := support.ScaffoldSingleStepFactory(t, "mcp-stdio-discovery-runtime")
+		t.Cleanup(func() { _ = os.RemoveAll(projectRoot) })
+
+		client, shutdown, serveErr := startRuntimeBackedMCPServer(t, projectRoot)
+		defer func() {
+			shutdown()
+			closeMCPServer(t, serveErr)
+		}()
+		initializeMCPClient(t, client)
+	})
+}
+
 type stdioMCPClient struct {
 	t      *testing.T
 	stdin  io.WriteCloser
@@ -242,6 +301,65 @@ func startFixtureBackedMCPServer(t *testing.T) (*stdioMCPClient, func(), <-chan 
 	select {
 	case err := <-serveErr:
 		t.Fatalf("start fixture-backed MCP server: %v; stderr=%s", err, stderr.String())
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	var shutdownOnce sync.Once
+	shutdown := func() {
+		shutdownOnce.Do(func() {
+			cancel()
+			_ = stdinWrite.Close()
+		})
+	}
+	t.Cleanup(shutdown)
+
+	return newStdioMCPClient(t, stdinWrite, stdoutRead), shutdown, serveErr
+}
+
+func startRuntimeBackedMCPServer(t *testing.T, projectRoot string) (*stdioMCPClient, func(), <-chan error) {
+	t.Helper()
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+
+	stdinRead, stdinWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stdin pipe: %v", err)
+	}
+	stdoutRead, stdoutWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stdout pipe: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = stdinRead.Close()
+		_ = stdinWrite.Close()
+		_ = stdoutRead.Close()
+		_ = stdoutWrite.Close()
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	homeDir := t.TempDir()
+	t.Cleanup(func() { _ = os.RemoveAll(homeDir) })
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+
+	serveErr := make(chan error, 1)
+	var stderr bytes.Buffer
+	go func() {
+		serveErr <- process.Execute(root.Input{
+			Args: []string{
+				"you", "mcp", "serve",
+				"--runtime", "--project-root", projectRoot,
+			},
+			Env:              env,
+			Stdin:            stdinRead,
+			Stdout:           stdoutWrite,
+			Stderr:           &stderr,
+			Context:          ctx,
+			WorkingDirectory: projectRoot,
+		})
+	}()
+	select {
+	case err := <-serveErr:
+		t.Fatalf("start runtime-backed MCP server: %v; stderr=%s", err, stderr.String())
 	case <-time.After(100 * time.Millisecond):
 	}
 
