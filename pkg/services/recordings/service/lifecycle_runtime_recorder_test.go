@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -178,4 +179,37 @@ func newLifecycleRecorderForTest(
 		t.Fatalf("recorder type = %T", value)
 	}
 	return recorder
+}
+
+func TestLifecycleRuntimeRecorderStopAndIdempotentRecordEvent(t *testing.T) {
+	t.Parallel()
+
+	startedAt := time.Date(2026, 7, 27, 16, 0, 0, 0, time.UTC)
+	root := NewServiceWithLifecycleEffects(
+		NewRuntimeLedger(nil, func() time.Time { return startedAt }, "generation", nil),
+		NewProjectionService(),
+		nil,
+		nil,
+		nil,
+		nil,
+		runtimeRecorderTestClock{now: startedAt},
+	)
+	recorder := newLifecycleRecorderForTest(t, startedAt, "recording-stop.json")
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-stop"}
+	if err := recorder.BindRecordingService(root, scope); err != nil {
+		t.Fatalf("BindRecordingService: %v", err)
+	}
+	event := factorydefinitions.FactoryEvent{
+		Id:   "dup-event",
+		Type: factorydefinitions.FactoryEventTypeWorkRequest,
+		Context: factorydefinitions.FactoryEventContext{
+			EventTime: startedAt,
+		},
+		Payload: []byte(`{}`),
+	}
+	recorder.Start(context.Background())
+	recorder.RecordEvent(event)
+	recorder.RecordEvent(event)
+	recorder.Stop()
+	recorder.Finish(startedAt.Add(time.Minute))
 }

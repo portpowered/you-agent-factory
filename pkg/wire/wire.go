@@ -125,6 +125,8 @@ var servicesSet = wire.NewSet(
 	provideAutomationFactory,
 	provideFactorySessionsService,
 	providePortableRecordingWriter,
+	provideOrchestrationJavaScriptExecution,
+	provideOrchestrationCompilation,
 	provideFactorySessionExecutionFactory,
 	provideRecordingsProjectionFactory,
 	provideRecordingsFactory,
@@ -178,7 +180,7 @@ var servicesSet = wire.NewSet(
 	provideWorkersRuntimeFactory,
 	provideWorkersRuntimeExecutorsFactory,
 	provideWorkersMockCommandRunnerFactory,
-	provideWorkerHostedPollersFactory,
+	provideAutomationHostedSourcesFactory,
 	provideWorkersLocalRuntimeHooksFactory,
 	provideWorkerCommandRunnerAdapter,
 	provideFactoryDefinitionsFactory,
@@ -206,6 +208,7 @@ var factorySessionsServicesSet = wire.NewSet(
 )
 
 var factoryDefinitionsServicesSet = wire.NewSet(
+	provideOrchestratorDefinitionValidator,
 	provideFactoryDefinitionValidationService,
 	provideFactoryDefinitionValidator,
 	provideDefinitionValidationOperation,

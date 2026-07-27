@@ -64,7 +64,9 @@ func projectedSessionStreamIdentity(
 		return nil
 	}
 	streamGenerationID := ""
-	if ctx.Snapshot != nil {
+	if ctx.Observation.Health.StreamGenerationID != "" {
+		streamGenerationID = strings.TrimSpace(ctx.Observation.Health.StreamGenerationID)
+	} else if ctx.Snapshot != nil {
 		streamGenerationID = strings.TrimSpace(ctx.Snapshot.StreamGenerationID)
 	}
 	if streamGenerationID == "" {
@@ -120,6 +122,9 @@ func projectOrchestratorIdentity(runtime *RuntimeProjection, cfg *interfaces.Fac
 }
 
 func projectedSessionStatus(ctx ProjectionContext) string {
+	if ctx.Observation.Status != "" {
+		return string(ctx.Observation.Status)
+	}
 	if ctx.Snapshot == nil {
 		if ctx.JavaScript != nil && strings.TrimSpace(ctx.JavaScript.ScriptStatus) == "FINISHED" {
 			return string(interfaces.RuntimeStatusFinished)
@@ -130,6 +135,9 @@ func projectedSessionStatus(ctx ProjectionContext) string {
 }
 
 func projectedSessionLifecycleControlStatus(ctx ProjectionContext) string {
+	if status := strings.TrimSpace(ctx.Observation.Health.LifecycleControlStatus); status != "" {
+		return status
+	}
 	if ctx.Snapshot != nil {
 		return strings.TrimSpace(ctx.Snapshot.LifecycleControlStatus)
 	}
@@ -137,6 +145,9 @@ func projectedSessionLifecycleControlStatus(ctx ProjectionContext) string {
 }
 
 func projectedSessionFactoryState(ctx ProjectionContext) string {
+	if state := strings.TrimSpace(ctx.Observation.Health.FactoryState); state != "" {
+		return state
+	}
 	if ctx.Snapshot == nil {
 		return "UNKNOWN"
 	}
@@ -144,6 +155,19 @@ func projectedSessionFactoryState(ctx ProjectionContext) string {
 }
 
 func projectedSessionProgress(ctx ProjectionContext) RuntimeProgress {
+	if ctx.Observation.Status != "" || ctx.Observation.Progress != (factory.ObservationProgress{}) {
+		return RuntimeProgress{
+			FactoryState: projectedSessionFactoryState(ctx),
+			Categories: RuntimeStatusCategories{
+				Failed:     ctx.Observation.Progress.WorkCategories.Failed,
+				Initial:    ctx.Observation.Progress.WorkCategories.Initial,
+				Processing: ctx.Observation.Progress.WorkCategories.Processing,
+				Terminal:   ctx.Observation.Progress.WorkCategories.Terminal,
+			},
+			InFlightCount: ctx.Observation.Progress.InFlightDispatchCount,
+			TotalTokens:   ctx.Observation.Progress.TotalWorkCount,
+		}
+	}
 	if ctx.Snapshot == nil {
 		return RuntimeProgress{
 			FactoryState:  projectedSessionFactoryState(ctx),
@@ -162,6 +186,17 @@ func projectedSessionProgress(ctx ProjectionContext) RuntimeProgress {
 }
 
 func projectedSessionUsage(ctx ProjectionContext) RuntimeUsage {
+	if len(ctx.Observation.Resources) > 0 {
+		resources := make([]RuntimeResourceUsage, 0, len(ctx.Observation.Resources))
+		for _, resource := range ctx.Observation.Resources {
+			resources = append(resources, RuntimeResourceUsage{
+				Name:      resource.ResourceID,
+				Available: resource.AvailableCount,
+				Total:     resource.AvailableCount + resource.InUseCount,
+			})
+		}
+		return RuntimeUsage{Resources: resources}
+	}
 	if ctx.Snapshot == nil {
 		return RuntimeUsage{Resources: []RuntimeResourceUsage{}}
 	}
@@ -171,7 +206,9 @@ func projectedSessionUsage(ctx ProjectionContext) RuntimeUsage {
 
 func projectedSessionLifecycle(ctx ProjectionContext, now time.Time) RuntimeLifecycle {
 	startedAt := now
-	if ctx.Snapshot != nil && ctx.Snapshot.Uptime > 0 {
+	if ctx.Observation.Health.Uptime > 0 {
+		startedAt = now.Add(-ctx.Observation.Health.Uptime).UTC()
+	} else if ctx.Snapshot != nil && ctx.Snapshot.Uptime > 0 {
 		startedAt = now.Add(-ctx.Snapshot.Uptime).UTC()
 	} else if !ctx.RuntimeStartedAt.IsZero() {
 		startedAt = ctx.RuntimeStartedAt.UTC()
@@ -180,7 +217,11 @@ func projectedSessionLifecycle(ctx ProjectionContext, now time.Time) RuntimeLife
 		StartedAt: startedAt,
 		UpdatedAt: now.UTC(),
 	}
-	if ctx.Snapshot != nil && ctx.Snapshot.RuntimeStatus == interfaces.RuntimeStatusFinished {
+	finished := ctx.Observation.Status == factory.ObservationStatusFinished
+	if !finished && ctx.Snapshot != nil {
+		finished = ctx.Snapshot.RuntimeStatus == interfaces.RuntimeStatusFinished
+	}
+	if finished {
 		finishedAt := now.UTC()
 		lifecycle.FinishedAt = &finishedAt
 	}

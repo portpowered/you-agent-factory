@@ -62,6 +62,10 @@ func (statusProjectorRole) ProjectFactoryStatus(*factoryruntime.LegacyEngineObse
 	return factoryruntime.FactoryStatus{}
 }
 
+func (statusProjectorRole) ProjectFactoryStatusFromObservation(observation factoryruntime.Observation) factoryruntime.FactoryStatus {
+	return factoryruntime.FactoryStatusFromObservation(observation)
+}
+
 type contentStagingRole struct{ work.ContentStagingService }
 type contentPreparationRole struct{ work.ContentPreparation }
 type workRequestPreparationRole struct{ work.RequestPreparationService }

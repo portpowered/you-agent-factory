@@ -3,14 +3,12 @@ package wire
 import (
 	"context"
 	"database/sql"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -29,6 +27,7 @@ import (
 	factorycheckpointstore "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointstore"
 	factorycheckpointsummary "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointsummary"
 	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript"
+	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestrationowner"
 	factoryruntimeservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -48,8 +47,6 @@ import (
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	workersservice "github.com/portpowered/infinite-you/pkg/services/workers/service"
-	hostedworkers "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic"
-	hostedlinear "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear"
 	workerworktree "github.com/portpowered/infinite-you/pkg/services/workers/worktree"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
@@ -221,12 +218,19 @@ func provideWorkflowPreviewOperation(
 	return workflows
 }
 
+func provideOrchestratorDefinitionValidator(
+	workflows factoryruntime.JavaScriptWorkflows,
+) factorydefinitions.OrchestratorDefinitionValidator {
+	return factoryruntimeservice.NewOrchestratorDefinitionValidator(workflows)
+}
+
 func provideFactoryDefinitionValidationService(
 	workflows factoryruntime.JavaScriptWorkflows,
 	loader *factoryloading.Loader,
+	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) *factoryvalidation.Service {
 	return factoryvalidation.New(
-		factoryruntimeservice.NewOrchestratorDefinitionValidator(workflows),
+		orchestratorValidator,
 		loader.LoadSourceFromCanonicalJSON,
 	)
 }
@@ -395,8 +399,23 @@ func provideFactorySessionsService(
 	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks)
 }
 
+func provideOrchestrationJavaScriptExecution(
+	newID factoryruntime.IDGenerator,
+	workflows factoryruntime.JavaScriptWorkflows,
+) factoryruntime.OrchestrationJavaScriptExecution {
+	return factoryruntimeorchestrationowner.New(newID, workflows)
+}
+
+func provideOrchestrationCompilation(
+	newID factoryruntime.IDGenerator,
+	workflows factoryruntime.JavaScriptWorkflows,
+) factoryruntime.OrchestrationCompilation {
+	return factoryruntimeorchestrationowner.NewCompilation(newID, workflows, workflows)
+}
+
 func provideFactorySessionExecutionFactory(
 	workflows factoryruntime.JavaScriptWorkflows,
+	orchestration factoryruntime.OrchestrationJavaScriptExecution,
 	recordingWriter recordingartifacts.Writer,
 	stores factorysessionwire.RuntimePersistenceStoreFactory,
 	syncWaits factorysessionwire.SyncWaitScheduler,
@@ -438,6 +457,7 @@ func provideFactorySessionExecutionFactory(
 			syncWaits,
 			factorycheckpointsummary.New(),
 			workflows,
+			orchestration,
 			workerPresetIDs,
 			workerSettings,
 			recordingWriter,
@@ -450,6 +470,7 @@ func provideFactorySessionExecutionFactory(
 
 func provideStandaloneSessionExecutionFactory(
 	workflows factoryruntime.JavaScriptWorkflows,
+	orchestration factoryruntime.OrchestrationJavaScriptExecution,
 	recordingWriter recordingartifacts.Writer,
 	stores factorysessionwire.RuntimePersistenceStoreFactory,
 	syncWaits factorysessionwire.SyncWaitScheduler,
@@ -475,6 +496,7 @@ func provideStandaloneSessionExecutionFactory(
 			syncWaits,
 			factorycheckpointsummary.New(),
 			workflows,
+			orchestration,
 			recordingWriter,
 			sessionIDs,
 			fixtureFiles,
@@ -743,35 +765,6 @@ func provideWorkersRuntimeExecutorsFactory() factoryruntime.WorkersRuntimeExecut
 
 func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandRunnerFactory {
 	return workersservice.NewMockCommandRunner
-}
-
-func provideWorkerHostedPollersFactory(edges serviceedges.Edges) (factorysessionwire.WorkerHostedPollersFactory, error) {
-	checkpointStore := edges.HostedLinearCheckpointStore
-	if checkpointStore == nil {
-		var err error
-		checkpointStore, err = hostedlinear.NewCheckpointStore(platformfilesystem.Local{})
-		if err != nil {
-			return nil, err
-		}
-	}
-	return func(
-		logger *zap.Logger,
-		clock workers.HostedPollerClock,
-		httpClient workers.HostedPollerHTTPDoer,
-		secretResolver workers.HostedPollerSecretResolver,
-		linearEndpoint string,
-	) automations.HostedPollers {
-		if clock == nil {
-			clock = clockwork.NewRealClock()
-		}
-		if httpClient == nil {
-			httpClient = &http.Client{Timeout: hostedlinear.DefaultRequestTimeout}
-		}
-		if secretResolver == nil {
-			secretResolver = hostedlinear.NewSecretResolver(os.Getenv, os.ReadFile)
-		}
-		return hostedworkers.New(logger, clock, httpClient, secretResolver, linearEndpoint, checkpointStore)
-	}, nil
 }
 
 func provideWorkersLocalRuntimeHooksFactory() factorysessionwire.WorkersLocalRuntimeHooksFactory {

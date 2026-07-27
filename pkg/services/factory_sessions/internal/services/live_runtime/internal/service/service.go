@@ -91,6 +91,21 @@ func (s *service) Snapshot(ctx context.Context, sessionID string) (*factoryrunti
 	return snapshot, nil
 }
 
+func (s *service) Observe(
+	ctx context.Context,
+	sessionID string,
+	req factoryruntime.ObserveRequest,
+) (factoryruntime.ObserveResult, error) {
+	if s == nil {
+		return factoryruntime.ObserveResult{}, fmt.Errorf("live-runtime service is required")
+	}
+	runtime, err := s.dependencies.SessionFactory(sessionID)
+	if err != nil {
+		return factoryruntime.ObserveResult{}, err
+	}
+	return runtime.Observe(ctx, req)
+}
+
 func (s *service) ApplyControl(ctx context.Context, sessionID string, operation factorysessions.LifecycleControlKind, control factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
 	if s == nil {
 		return factorysessions.LifecycleControlResult{}, fmt.Errorf("live-runtime service is required")

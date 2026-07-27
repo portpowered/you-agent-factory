@@ -70,6 +70,10 @@
     "pkg/services/automations/internal/services/filesystem_watchers",
     "pkg/services/automations/internal/services/filesystem_watchers/internal/service",
     "pkg/services/automations/internal/services/filesystem_watchers/wire",
+    "pkg/services/automations/internal/services/hosted_sources",
+    "pkg/services/automations/internal/services/hosted_sources/internal/linear",
+    "pkg/services/automations/internal/services/hosted_sources/internal/service",
+    "pkg/services/automations/internal/services/hosted_sources/wire",
     "pkg/services/automations/internal/services/reconciliation",
     "pkg/services/automations/internal/services/reconciliation/internal/service",
     "pkg/services/automations/internal/services/reconciliation/wire",
@@ -86,6 +90,13 @@
     "pkg/services/factory_definitions/internal/services/catalog",
     "pkg/services/factory_definitions/internal/services/catalog/internal/service",
     "pkg/services/factory_definitions/internal/services/catalog/wire",
+    "pkg/services/factory_definitions/internal/services/validation",
+    "pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
+    "pkg/services/factory_definitions/internal/services/validation/internal/requiredtools",
+    "pkg/services/factory_definitions/internal/services/validation/internal/service",
+    "pkg/services/factory_definitions/internal/services/validation/internal/structural",
+    "pkg/services/factory_definitions/internal/services/validation/internal/topology",
+    "pkg/services/factory_definitions/internal/services/validation/wire",
     "pkg/services/factory_definitions/internal/testcomposition",
     "pkg/services/factory_definitions/invocationinterpolation",
     "pkg/services/factory_definitions/invocationoutput",
@@ -136,8 +147,12 @@
     "pkg/services/factory_runtime/internal/services/instance_host",
     "pkg/services/factory_runtime/internal/services/instance_host/internal/service",
     "pkg/services/factory_runtime/internal/services/instance_host/wire",
+    "pkg/services/factory_runtime/internal/services/orchestration",
+    "pkg/services/factory_runtime/internal/services/orchestration/internal/service",
+    "pkg/services/factory_runtime/internal/services/orchestration/wire",
     "pkg/services/factory_runtime/javascript",
     "pkg/services/factory_runtime/metrics",
+    "pkg/services/factory_runtime/orchestrationowner",
     "pkg/services/factory_runtime/orchestratorcontract",
     "pkg/services/factory_runtime/replayhooks",
     "pkg/services/factory_runtime/runtime",
@@ -220,6 +235,9 @@
     "pkg/services/factory_sessions/wire/contracts",
     "pkg/services/factory_visualization",
     "pkg/services/factory_visualization/internal/contracts",
+    "pkg/services/factory_visualization/internal/services/activation_lifecycle",
+    "pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service",
+    "pkg/services/factory_visualization/internal/services/activation_lifecycle/wire",
     "pkg/services/models",
     "pkg/services/models/internal/artifacts",
     "pkg/services/models/internal/catalog",
@@ -277,6 +295,9 @@
     "pkg/services/recordings/internal/services/artifacts_export",
     "pkg/services/recordings/internal/services/artifacts_export/internal/service",
     "pkg/services/recordings/internal/services/artifacts_export/wire",
+    "pkg/services/recordings/internal/services/canonical_ledger",
+    "pkg/services/recordings/internal/services/canonical_ledger/internal/service",
+    "pkg/services/recordings/internal/services/canonical_ledger/wire",
     "pkg/services/recordings/internal/services/projection_query",
     "pkg/services/recordings/internal/services/projection_query/internal/service",
     "pkg/services/recordings/internal/services/projection_query/wire",
@@ -347,8 +368,6 @@
     "pkg/services/workers/provider/structured",
     "pkg/services/workers/runner",
     "pkg/services/workers/service",
-    "pkg/services/workers/services/hosted_logic",
-    "pkg/services/workers/services/hosted_logic/linear",
     "pkg/services/workers/services/inference",
     "pkg/services/workers/services/testing",
     "pkg/services/workers/skippermissions",
@@ -575,6 +594,26 @@
       "destination": "automations/internal/services/filesystem_watchers"
     },
     {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources",
+      "disposition": "retain",
+      "destination": "automations/internal/services/hosted_sources"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources/internal/linear",
+      "disposition": "retain",
+      "destination": "automations/internal/services/hosted_sources"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources/internal/service",
+      "disposition": "retain",
+      "destination": "automations/internal/services/hosted_sources"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources/wire",
+      "disposition": "retain",
+      "destination": "automations/internal/services/hosted_sources"
+    },
+    {
       "packagePath": "pkg/services/automations/internal/services/reconciliation",
       "disposition": "retain",
       "destination": "automations/internal/services/reconciliation"
@@ -653,6 +692,41 @@
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog/wire",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/requiredtools",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/service",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/structural",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/topology",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/wire",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/testcomposition",
@@ -905,12 +979,32 @@
       "destination": "factory_runtime/internal/services/instance_host"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/wire",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/javascript",
       "disposition": "move",
       "destination": "factory_runtime/internal/services/orchestration"
     },
     {
       "packagePath": "pkg/services/factory_runtime/metrics",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/orchestrationowner",
       "disposition": "retain",
       "destination": "factory_runtime"
     },
@@ -1325,6 +1419,21 @@
       "destination": "factory_visualization"
     },
     {
+      "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/activation_lifecycle"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/activation_lifecycle"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle/wire",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/activation_lifecycle"
+    },
+    {
       "packagePath": "pkg/services/models",
       "disposition": "retain",
       "destination": "models"
@@ -1608,6 +1717,21 @@
       "packagePath": "pkg/services/recordings/internal/services/artifacts_export/wire",
       "disposition": "retain",
       "destination": "recordings/internal/services/artifacts_export"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/internal/service",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/wire",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/canonical_ledger"
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/projection_query",
@@ -1958,16 +2082,6 @@
       "packagePath": "pkg/services/workers/service",
       "disposition": "retain",
       "destination": "workers"
-    },
-    {
-      "packagePath": "pkg/services/workers/services/hosted_logic",
-      "disposition": "move",
-      "destination": "workers/internal/services/runners"
-    },
-    {
-      "packagePath": "pkg/services/workers/services/hosted_logic/linear",
-      "disposition": "move",
-      "destination": "workers/internal/services/runners"
     },
     {
       "packagePath": "pkg/services/workers/services/inference",

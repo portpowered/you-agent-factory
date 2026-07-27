@@ -7,6 +7,34 @@ import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
+// CanonicalEventFromFactory maps one legacy Factory event to the detached
+// canonical event shape returned by the Recordings append/subscribe slice.
+func CanonicalEventFromFactory(
+	event factorydefinitions.FactoryEvent,
+	generationID string,
+) recordings.CanonicalEvent {
+	sourceContext, _ := json.Marshal(event.Context)
+	scope := recordings.CanonicalEventScope{}
+	if event.Context.SessionID != nil {
+		scope.FactorySessionID = *event.Context.SessionID
+	}
+	sequence := recordings.CanonicalEventSequence(event.Context.Sequence)
+	return recordings.CanonicalEvent{
+		ID:          recordings.CanonicalEventID(event.Id),
+		Sequence:    sequence,
+		FactoryTick: event.Context.Tick,
+		Scope:       scope,
+		Cursor: recordings.CanonicalEventCursor{
+			StreamGenerationID: generationID,
+			Sequence:           sequence,
+		},
+		RecordedAt:    event.Context.EventTime,
+		Kind:          recordings.CanonicalEventKind(event.Type),
+		Payload:       string(event.Payload),
+		SourceContext: string(sourceContext),
+	}
+}
+
 // FactoryEventFromCanonical maps one detached canonical event to the legacy
 // Factory-event shape consumed by projection reducers.
 func FactoryEventFromCanonical(event recordings.CanonicalEvent) factorydefinitions.FactoryEvent {

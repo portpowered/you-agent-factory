@@ -527,11 +527,17 @@ func assertCanonicalResultProgression(
 	},
 ) {
 	t.Helper()
-	snapshot, err := runtime.GetEngineStateSnapshot(t.Context())
-	requireNoRootErr(t, err, "GetEngineStateSnapshot")
-	if !markingContainsWorkAtPlace(&snapshot.Marking, "work-result-ingress", "task:done") ||
-		snapshot.InFlightCount != 0 || len(snapshot.DispatchHistory) != 1 {
-		t.Fatalf("canonical result progression snapshot = %#v", snapshot)
+	impl, ok := runtime.(*factoryImpl)
+	if !ok {
+		t.Fatal("runtime is not factoryImpl")
+	}
+	observed, err := impl.Observe(t.Context(), factory.ObserveRequest{Scope: factory.ObservationScopeFull})
+	requireNoRootErr(t, err, "Observe")
+	if observed.Observation.Progress.InFlightDispatchCount != 0 ||
+		len(observed.Observation.Results) != 1 ||
+		observed.Observation.Results[0].WorkID != "work-result-ingress" ||
+		observed.Observation.Results[0].Outcome != string(workers.OutcomeAccepted) {
+		t.Fatalf("canonical result progression observation = %#v", observed.Observation)
 	}
 	if ledger.CallCount("RecordWorkstationRequest") != 1 ||
 		ledger.CallCount("RecordWorkstationResponse") != 1 {

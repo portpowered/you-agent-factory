@@ -334,6 +334,18 @@
   `transport` and subsection `http/server` from the path; every top-level
   `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
   viz-compatible.
+  HTTP API server OpenAPI routing functional coverage belongs in
+  `tests/functional/transport/http/server/routing_test.go`: prove every
+  published OpenAPI operation inventory entry reaches a non-404 handler through
+  safe public HTTP requests against `support.StartFunctionalAPIServer` with
+  `WaitForServiceModeRuntime: true` and `UseMockWorkers: true`, prove unknown
+  paths outside the OpenAPI surface return structured `NOT_FOUND` JSON errors
+  via `Server.NotFoundHandler`, and prove wrong HTTP methods on known routes
+  return structured `405` `METHOD_NOT_ALLOWED` errors via
+  `Server.MethodNotAllowedHandler` instead of not-found outcomes that would
+  hide method mismatches. Catalog metadata infers domain `transport` and
+  subsection `http/server` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
   CLI JSON parameter values functional coverage belongs in
   `tests/functional/transport/cli/parameters/json_values_test.go`: prove nested
   JSON object and array named parameters reach canonical `InvocationArguments`
@@ -688,3 +700,8 @@ Wave 0 functional-tests-expansion planning authority lives under
   factories with workstation `inputs`, seed `inputs/<workType>/default/` before
   `StartFunctionalAPIServer`, and assert preseed submissions through the same
   recorder seam rather than importing parent-private `filesystem_watchers` packages.
+
+- `tests/functional/automations/hosted_sources_root_composition_test.go` owns
+  root.BuildProcess inert-construction evidence for Automations hosted Linear
+  polling. Assert zero `SubmissionRecorder` submissions after `support.BuildProcess`
+  before runtime lifecycle starts, matching the cron inert-construction pattern.

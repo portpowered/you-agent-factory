@@ -8,21 +8,19 @@ import (
 )
 
 type factoryStatusSessionReader interface {
-	GetEngineStateSnapshotForSession(context.Context, string) (*factoryruntime.LegacyEngineObservation, error)
+	ObserveForSession(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
 }
 
 type factoryStatusAPI struct {
-	runtime   factoryruntime.Service
-	sessions  factoryStatusSessionReader
-	projector factoryruntime.FactoryStatusProjector
+	runtime  factoryruntime.Service
+	sessions factoryStatusSessionReader
 }
 
 func newFactoryStatusAPI(
 	runtime factoryruntime.Service,
 	sessions factoryStatusSessionReader,
-	projector factoryruntime.FactoryStatusProjector,
 ) apisurface.FactoryStatusAPI {
-	return &factoryStatusAPI{runtime: runtime, sessions: sessions, projector: projector}
+	return &factoryStatusAPI{runtime: runtime, sessions: sessions}
 }
 
 func (api *factoryStatusAPI) ProjectFactoryStatus(ctx context.Context, sessionID string) (factoryruntime.FactoryStatus, error) {
@@ -33,36 +31,14 @@ func (api *factoryStatusAPI) ProjectFactoryStatus(ctx context.Context, sessionID
 		if err != nil {
 			return factoryruntime.FactoryStatus{}, err
 		}
-		return factoryStatusFromObservation(result.Observation), nil
+		return factoryruntime.FactoryStatusFromObservation(result.Observation), nil
 	}
 
-	snapshot, err := api.sessions.GetEngineStateSnapshotForSession(ctx, sessionID)
+	result, err := api.sessions.ObserveForSession(ctx, sessionID, factoryruntime.ObserveRequest{
+		Scope: factoryruntime.ObservationScopeFull,
+	})
 	if err != nil {
 		return factoryruntime.FactoryStatus{}, err
 	}
-	return api.projector.ProjectFactoryStatus(snapshot), nil
-}
-
-func factoryStatusFromObservation(observation factoryruntime.Observation) factoryruntime.FactoryStatus {
-	resources := make([]factoryruntime.FactoryResourceUsage, 0, len(observation.Resources))
-	for _, resource := range observation.Resources {
-		resources = append(resources, factoryruntime.FactoryResourceUsage{
-			Available: resource.AvailableCount,
-			Name:      resource.ResourceID,
-			Total:     resource.AvailableCount + resource.InUseCount,
-		})
-	}
-	return factoryruntime.FactoryStatus{
-		Categories: factoryruntime.FactoryStatusCategories{
-			Failed:     observation.Progress.WorkCategories.Failed,
-			Initial:    observation.Progress.WorkCategories.Initial,
-			Processing: observation.Progress.WorkCategories.Processing,
-			Terminal:   observation.Progress.WorkCategories.Terminal,
-		},
-		FactoryState:           observation.Health.FactoryState,
-		LifecycleControlStatus: observation.Health.LifecycleControlStatus,
-		Resources:              resources,
-		RuntimeStatus:          string(observation.Status),
-		TotalTokens:            observation.Progress.TotalWorkCount,
-	}
+	return factoryruntime.FactoryStatusFromObservation(result.Observation), nil
 }

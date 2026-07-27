@@ -58,7 +58,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIQuietModeSuppressesNonResultNoise` verifies quiet output remains
     script-safe.
 
-- [ ] `tests/functional/transport/cli/process/exit_codes_test.go`
+- [x] `tests/functional/transport/cli/process/exit_codes_test.go`
   - `TestCLIValidationFailureExitCode` covers invalid customer input.
   - `TestCLIWorkerFailureExitCode` covers a terminal worker failure.
   - `TestCLIInterruptedExitCode` covers cancellation/interruption.
@@ -126,10 +126,12 @@ intentionally small enough to distribute across many agents.
   - `TestCLINDJSONFailureEndsWithOneTerminalResult` guards duplicate terminal
     records.
 
-- [ ] `tests/functional/transport/cli/output/text_stream_test.go`
+- [x] `tests/functional/transport/cli/output/text_stream_test.go`
   - `TestCLITextStreamSurfacesIncrementalMessages` covers streaming providers.
   - `TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise` covers human mode.
   - `TestCLITextStreamInterruptedRunDoesNotClaimCompletion` covers failure.
+  - `TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet`
+    covers non-quiet operator continuous startup reporting.
 
 - [x] `tests/functional/transport/cli/output/stream_backpressure_test.go`
   - `TestCLISlowWriterDoesNotReorderResponseEvents` uses a controlled blocking
@@ -152,7 +154,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLISubmitUnavailableServer` covers connection failure and exit code.
   - `TestCLISubmitBackendErrorPreservesPublicMessage` covers error mapping.
 
-- [ ] `tests/functional/transport/cli/commands/work_wiring_test.go`
+- [x] `tests/functional/transport/cli/commands/work_wiring_test.go`
   - `TestCLIWorkListAndShowReflectSubmittedWork` covers public read models.
   - `TestCLIWorkMoveChangesState` covers manual recovery/move.
   - `TestCLIWorkShowMissingReturnsNotFound` covers error behavior.
@@ -180,7 +182,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIServerShutdownClosesListenerAndActiveStreams`.
   - `TestAPIServerBindFailureUnwindsStartedLifecycleRoles`.
 
-- [ ] `tests/functional/transport/http/server/routing_test.go`
+- [x] `tests/functional/transport/http/server/routing_test.go`
   - `TestAPIRoutesEveryOpenAPIOperationToNon404Handler` uses the operation
     inventory with safe requests.
   - `TestAPIUnknownRouteReturnsStructuredNotFound`.

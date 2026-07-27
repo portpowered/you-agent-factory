@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -102,7 +103,7 @@ func appendOverflowEvent(t *testing.T, svc recordings.Service, sequence int, rec
 		Event: recordings.CanonicalEvent{
 			ID:         recordings.CanonicalEventID("overflow-" + strconv.Itoa(sequence)),
 			RecordedAt: recordedAt,
-			Kind:       "OVERFLOW_TEST",
+			Kind:       recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeWorkRequest),
 			Payload:    `{"retained":true}`,
 		},
 	})
