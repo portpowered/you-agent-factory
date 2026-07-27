@@ -19,6 +19,8 @@ const (
 	functionalReplacementSessionID = "4b11c29d-332f-4fa2-b5d3-cd0fb02f75b0"
 )
 
+// TestKiroConductorSuccessThroughRootBuildProcess proves a successful Kiro
+// invocation through the customer process boundary.
 func TestKiroConductorSuccessThroughRootBuildProcess(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	workerConfig := strings.Replace(
@@ -79,6 +81,8 @@ Test workstation.
 	}
 }
 
+// TestKiroConductorResumeThroughRootBuildProcess proves Kiro resume behavior
+// through the customer process boundary.
 func TestKiroConductorResumeThroughRootBuildProcess(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
@@ -165,6 +169,8 @@ func assertKiroRetryProviderSessions(t *testing.T, events []factoryapi.FactoryEv
 	}
 }
 
+// TestKiroRejectsUnsupportedWorkingDirectoryBeforeProviderIO proves invalid
+// working-directory policy fails before Kiro provider IO.
 func TestKiroRejectsUnsupportedWorkingDirectoryBeforeProviderIO(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
@@ -194,6 +200,8 @@ Test workstation.
 	}
 }
 
+// TestKiroNativeFailureThroughRootBuildProcessIsSafe proves native Kiro
+// failures remain safe and observable through the customer process boundary.
 func TestKiroNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(

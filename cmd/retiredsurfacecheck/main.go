@@ -50,7 +50,7 @@ func run(cfg config, stdout, stderr io.Writer) error {
 		return err
 	}
 	if len(violations) == 0 {
-		fmt.Fprintln(stdout, "[agent-factory:retired-surface] retired command/docs surfaces, encoded-path production resolution, and handwritten run/server registration remain absent")
+		fmt.Fprintln(stdout, "[agent-factory:retired-surface] retired command/docs surfaces, encoded-path production resolution, and secondary CLI public-shape definitions remain absent")
 		return nil
 	}
 	for _, violation := range violations {

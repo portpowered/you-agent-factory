@@ -1,6 +1,7 @@
 package work
 
 import (
+	"bytes"
 	"context"
 	"testing"
 )
@@ -23,5 +24,14 @@ func TestWorkCommands_RequireCallerOwnedOutput(t *testing.T) {
 				t.Fatalf("error = %v, want output writer is required", err)
 			}
 		})
+	}
+}
+
+func TestShowRequiresCallerContext(t *testing.T) {
+	t.Parallel()
+
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{Output: &bytes.Buffer{}})
+	if err == nil || err.Error() != "context is required" {
+		t.Fatalf("error = %v, want context is required", err)
 	}
 }

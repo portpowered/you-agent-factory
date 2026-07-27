@@ -145,6 +145,8 @@ func TestBuiltCLI_HelpPrintsUsageAndExitsSuccessfully(t *testing.T) {
 	}
 }
 
+// TestBuiltCLI_ConfigAndFactoryAuthoringUseAcceptedInputs proves the built
+// executable accepts canonical config and Factory-authoring inputs.
 func TestBuiltCLI_ConfigAndFactoryAuthoringUseAcceptedInputs(t *testing.T) {
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t)

@@ -60,6 +60,8 @@ func TestBareRootPrintsConciseHelpWithoutProductEffects(t *testing.T) {
 	}
 }
 
+// TestRemovedInitInputFailsBeforeConfigurationMutation proves an unsupported
+// init input is rejected before operator configuration can change.
 func TestRemovedInitInputFailsBeforeConfigurationMutation(t *testing.T) {
 	var mutations atomic.Int32
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
@@ -89,6 +91,47 @@ func TestRemovedInitInputFailsBeforeConfigurationMutation(t *testing.T) {
 	}
 	if mutations.Load() != 0 {
 		t.Fatalf("removed init input configuration mutations = %d, want 0", mutations.Load())
+	}
+}
+
+// TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs proves the
+// generated Session and Work leaves reach their typed transport handlers through
+// the public process root with the canonical argument and flag shapes.
+func TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs(t *testing.T) {
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	workingDirectory := t.TempDir()
+	unavailableServer := "http://127.0.0.1:1"
+	cases := [][]string{
+		{"you", "--server", unavailableServer, "session", "list", "--json"},
+		{"you", "--server", unavailableServer, "session", "show", "session-1", "--json"},
+		{"you", "--server", unavailableServer, "session", "delete", "session-1", "--json"},
+		{"you", "--server", unavailableServer, "session", "pause", "session-1", "--json"},
+		{"you", "--server", unavailableServer, "session", "resume", "session-1", "--json"},
+		{"you", "--server", unavailableServer, "session", "dispatches", "session-1", "--json"},
+		{"you", "--server", unavailableServer, "work", "list", "--json"},
+		{"you", "--server", unavailableServer, "work", "show", "work-1", "--json"},
+		{"you", "--server", unavailableServer, "work", "move", "work-1", "complete", "--json"},
+	}
+	for _, args := range cases {
+		_, _, executeErr := executeFactoryArgs(
+			t,
+			process,
+			workingDirectory,
+			args,
+			false,
+			t.Context(),
+		)
+		if executeErr == nil {
+			t.Fatalf("%v unexpectedly succeeded against unavailable server", args)
+		}
+		for _, rejected := range []string{"unknown command", "unknown flag", "accepts "} {
+			if strings.Contains(executeErr.Error(), rejected) {
+				t.Fatalf("%v rejected before its handler: %v", args, executeErr)
+			}
+		}
 	}
 }
 

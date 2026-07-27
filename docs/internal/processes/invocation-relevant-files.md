@@ -1792,6 +1792,14 @@ response-stream output.
   executable/manifest parity tests under `pkg/transports/cli/baseline` and
   `climanifestcobra` protect that seam. Keep source scanning out of the
   behavioral Go test suite.
+- Keep `retired-surface-check` focused on non-test production boundaries. For
+  manifest-owned root, session, work, submit, run, server, and Factory-authoring
+  families, it rejects handwritten `cobra.Command` presentation metadata,
+  direct Cobra/pflag public-input registration, and the retired CLI-shape
+  mirrors/functions. Generic projectors under `climanifestcobra` may register
+  parser storage only from manifest records. Test the lint diagnostic with
+  synthetic source fixtures; prove customer behavior separately through
+  `root.BuildProcess`, built-executable, and semantic contract tests.
 - Generated command-family handlers should translate invocation-local values
   addressed by stable manifest input ID into a fresh typed transport config for
   each execution. Do not retain shared config pointers as parser storage across

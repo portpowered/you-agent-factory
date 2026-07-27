@@ -22,6 +22,8 @@ type listEntry struct {
 	Description      string `json:"description"`
 }
 
+// TestFactoryListProjectsEffectiveCatalogWithoutInitialization proves listing
+// reads the effective catalog without mutating Factory installation state.
 func TestFactoryListProjectsEffectiveCatalogWithoutInitialization(t *testing.T) {
 	home := t.TempDir()
 	workingDirectory := t.TempDir()
@@ -102,6 +104,8 @@ func (f failingCatalogFileSystem) ReadDir(path string) ([]fs.DirEntry, error) {
 	return f.Local.ReadDir(path)
 }
 
+// TestFactoryListReportsCatalogDiscoveryFailuresAtomically proves discovery
+// failure produces no partial customer catalog result.
 func TestFactoryListReportsCatalogDiscoveryFailuresAtomically(t *testing.T) {
 	sourceErr := errors.New("catalog unavailable")
 	for _, test := range []struct {
@@ -145,6 +149,8 @@ func TestFactoryListReportsCatalogDiscoveryFailuresAtomically(t *testing.T) {
 	}
 }
 
+// TestFactoryListHonorsPreCanceledContextAtomically proves pre-cancellation
+// prevents catalog work and partial customer output.
 func TestFactoryListHonorsPreCanceledContextAtomically(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

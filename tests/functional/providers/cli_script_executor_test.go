@@ -34,6 +34,8 @@ func TestScriptExecutor_Failure(t *testing.T) {
 	server.Stop(t)
 }
 
+// TestScriptExecutor_CommandCancellationIsReported proves provider command
+// cancellation reaches the customer-visible execution result.
 func TestScriptExecutor_CommandCancellationIsReported(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
@@ -44,6 +46,8 @@ func TestScriptExecutor_CommandCancellationIsReported(t *testing.T) {
 	server.Stop(t)
 }
 
+// TestScriptExecutor_MissingCommandFailsStartup proves a missing provider
+// command fails explicitly before execution begins.
 func TestScriptExecutor_MissingCommandFailsStartup(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
@@ -68,6 +72,8 @@ func TestScriptExecutor_MissingCommandFailsStartup(t *testing.T) {
 	}
 }
 
+// TestScriptExecutor_InvalidWorkstationTemplateFailsBeforeCommand proves an
+// invalid workstation template cannot invoke the provider command.
 func TestScriptExecutor_InvalidWorkstationTemplateFailsBeforeCommand(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	writeFixtureFile(

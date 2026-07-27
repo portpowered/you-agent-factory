@@ -88,10 +88,6 @@ func WorkDispatchInputTokens(dispatch work.WorkDispatch) []workerexecution.Token
 	return cloneInputTokens(dispatch.InputTokens)
 }
 
-func CommandRequestInputTokens(request CommandRequest) []workerexecution.Token {
-	return cloneInputTokens(request.InputTokens)
-}
-
 func workDispatchNonResourceTokensForWorkstation(dispatch work.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig) []workerexecution.Token {
 	var tokens []workerexecution.Token
 	for _, token := range orderedWorkDispatchTokensForWorkstation(dispatch, workstationDef) {

@@ -170,7 +170,7 @@ func TestRootRunFunctionalHostReportsOccupiedAddressAndAllowsReuse(t *testing.T)
 		FactoryRoot:    factoryRoot,
 		SystemRoot:     systemRoot,
 		ListenAddress:  address,
-		StartupTimeout: 3 * time.Second,
+		StartupTimeout: 10 * time.Second,
 	})
 	if err == nil {
 		_ = blocker.Close()

@@ -210,6 +210,8 @@ func TestRunScopedServerUsesProductionListenerAndReportsFallback(t *testing.T) {
 	_ = rebound.Close()
 }
 
+// TestRunScopedServerRejectsRemoteBindTargetAtCLIBoundary proves remote bind
+// targets fail at the customer CLI boundary before listener startup.
 func TestRunScopedServerRejectsRemoteBindTargetAtCLIBoundary(t *testing.T) {
 	workingDirectory := t.TempDir()
 	workflowPath := filepath.Join(workingDirectory, "workflow.js")
@@ -242,6 +244,8 @@ func TestRunScopedServerRejectsRemoteBindTargetAtCLIBoundary(t *testing.T) {
 	}
 }
 
+// TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary proves port
+// exhaustion is reported through the customer CLI contract.
 func TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary(t *testing.T) {
 	busyListener, err := net.Listen("tcp4", "127.0.0.1:65535")
 	if err != nil {
