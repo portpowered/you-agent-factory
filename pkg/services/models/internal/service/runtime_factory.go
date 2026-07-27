@@ -270,10 +270,13 @@ func runtimeScopeError(err error) error {
 }
 
 func (o *Root) PrepareModelAssets(
-	context.Context,
-	models.PrepareModelAssetsRequest,
+	ctx context.Context,
+	request models.PrepareModelAssetsRequest,
 ) (models.PrepareModelAssetsResult, error) {
-	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.assets == nil {
+		return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
+	}
+	return o.assets.PrepareModelAssets(ctx, request)
 }
 
 func (o *Root) InspectModelAssets(

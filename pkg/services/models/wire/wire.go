@@ -82,12 +82,12 @@ func NewService(
 		return nil, err
 	}
 	assetService, err := assetswire.NewService(
-		runtimeScopes,
-		assetPlatform,
-		assetStat,
-		assetHome,
-		assetReadFile,
-		assetReadDir,
+		runtimeScopes, assetPlatform, assetHTTP,
+		models.RuntimeAssetEndpoints{
+			BaseURL: defaultEndpoints.BaseURL, APIBaseURL: defaultEndpoints.APIBaseURL,
+		},
+		assetMkdirAll, assetStat, assetHome, assetWriteFile, assetRename,
+		assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen,
 	)
 	if err != nil {
 		return nil, err

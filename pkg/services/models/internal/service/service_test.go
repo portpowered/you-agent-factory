@@ -384,6 +384,47 @@ func TestRootCatalogMatchesDirectPrivateCatalogBehavior(t *testing.T) {
 	assertRootReadinessMatchesPrivate(t, root, privateCatalog, opened.Scope, currentReadiness)
 }
 
+func TestRootDelegatesAssetPreparation(t *testing.T) {
+	t.Parallel()
+
+	want := models.PrepareModelAssetsResult{
+		Outcome: models.AssetPreparationAlreadyAvailable,
+		Asset: models.AssetSnapshot{
+			ModelName: "scoped-model", Readiness: models.AssetReadinessAvailable,
+		},
+	}
+	privateAssets := &preparationAssetService{result: want}
+	root := &Root{assets: privateAssets}
+	request := models.PrepareModelAssetsRequest{Name: "scoped-model"}
+	got, err := root.PrepareModelAssets(context.Background(), request)
+	if err != nil {
+		t.Fatalf("PrepareModelAssets: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) || privateAssets.request != request {
+		t.Fatalf("PrepareModelAssets = %#v request %#v, want %#v / %#v", got, privateAssets.request, want, request)
+	}
+}
+
+type preparationAssetService struct {
+	request models.PrepareModelAssetsRequest
+	result  models.PrepareModelAssetsResult
+}
+
+func (service *preparationAssetService) PrepareModelAssets(
+	_ context.Context,
+	request models.PrepareModelAssetsRequest,
+) (models.PrepareModelAssetsResult, error) {
+	service.request = request
+	return service.result, nil
+}
+
+func (*preparationAssetService) InspectModelAssets(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (models.InspectModelAssetsResult, error) {
+	return models.InspectModelAssetsResult{}, nil
+}
+
 func TestRootCatalogMatchesDirectPrivateCatalogFailures(t *testing.T) {
 	t.Parallel()
 

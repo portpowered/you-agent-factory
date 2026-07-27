@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -230,6 +232,11 @@ func newTestService(scopes runtimescopes.Service, cacheReads *int) *service {
 	return New(
 		scopes,
 		models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		http.DefaultClient,
+		models.RuntimeAssetEndpoints{
+			BaseURL: "https://assets.example.test", APIBaseURL: "https://api.example.test",
+		},
+		os.MkdirAll,
 		func(path string) (os.FileInfo, error) {
 			record()
 			return os.Stat(path)
@@ -238,6 +245,9 @@ func newTestService(scopes runtimescopes.Service, cacheReads *int) *service {
 			record()
 			return os.UserHomeDir()
 		},
+		os.WriteFile,
+		os.Rename,
+		os.Remove,
 		func(path string) ([]byte, error) {
 			record()
 			return os.ReadFile(path)
@@ -246,6 +256,8 @@ func newTestService(scopes runtimescopes.Service, cacheReads *int) *service {
 			record()
 			return os.ReadDir(path)
 		},
+		func(path string) (io.WriteCloser, error) { return os.Create(path) },
+		func(path string) (io.ReadCloser, error) { return os.Open(path) },
 	).(*service)
 }
 

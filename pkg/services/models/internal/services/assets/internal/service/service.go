@@ -20,10 +20,18 @@ const metadataFileName = ".managed-cache.json"
 type service struct {
 	scopes        runtimescopes.Service
 	platform      models.AssetHostPlatform
+	client        models.AssetHTTPDoer
+	endpoints     models.RuntimeAssetEndpoints
+	makeDirectory models.AssetMakeDirectories
 	inspectPath   models.AssetInspectPath
 	resolveHome   models.AssetResolveHomeDirectory
+	writeFile     models.AssetWriteFile
+	renamePath    models.AssetRenamePath
+	removePath    models.AssetRemovePath
 	readFile      models.AssetReadFile
 	readDirectory models.AssetReadDirectory
+	createFile    models.AssetCreateFile
+	openFile      models.AssetOpenFile
 }
 
 type assetSpec struct {
@@ -51,18 +59,34 @@ var _ assets.Service = (*service)(nil)
 func New(
 	scopes runtimescopes.Service,
 	platform models.AssetHostPlatform,
+	client models.AssetHTTPDoer,
+	endpoints models.RuntimeAssetEndpoints,
+	makeDirectory models.AssetMakeDirectories,
 	inspectPath models.AssetInspectPath,
 	resolveHome models.AssetResolveHomeDirectory,
+	writeFile models.AssetWriteFile,
+	renamePath models.AssetRenamePath,
+	removePath models.AssetRemovePath,
 	readFile models.AssetReadFile,
 	readDirectory models.AssetReadDirectory,
+	createFile models.AssetCreateFile,
+	openFile models.AssetOpenFile,
 ) assets.Service {
 	return &service{
 		scopes:        scopes,
 		platform:      platform,
+		client:        client,
+		endpoints:     endpoints,
+		makeDirectory: makeDirectory,
 		inspectPath:   inspectPath,
 		resolveHome:   resolveHome,
+		writeFile:     writeFile,
+		renamePath:    renamePath,
+		removePath:    removePath,
 		readFile:      readFile,
 		readDirectory: readDirectory,
+		createFile:    createFile,
+		openFile:      openFile,
 	}
 }
 

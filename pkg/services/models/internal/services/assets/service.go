@@ -7,10 +7,14 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
-// Service resolves scoped asset sources and reports detached cache facts.
-// Pulling, verification, and removal remain private implementation details as
-// those operations are added to this service.
+// Service resolves scoped asset sources, prepares verified revisions, and
+// reports detached cache facts. Pulling, verification, and publication remain
+// private implementation details.
 type Service interface {
+	PrepareModelAssets(
+		context.Context,
+		models.PrepareModelAssetsRequest,
+	) (models.PrepareModelAssetsResult, error)
 	InspectModelAssets(
 		context.Context,
 		models.InspectModelAssetsRequest,

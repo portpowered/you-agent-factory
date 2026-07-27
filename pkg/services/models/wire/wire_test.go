@@ -2,10 +2,13 @@ package wire
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -198,6 +201,69 @@ func TestProductionCompositionInspectsScopedAssetsThroughModelsRoot(t *testing.T
 	}
 }
 
+func TestProductionCompositionPreparesAssetsThroughModelsRoot(t *testing.T) {
+	t.Parallel()
+
+	baseBody := []byte("root base")
+	tokenizerBody := []byte("root tokenizer")
+	baseChecksum := fmt.Sprintf("%x", sha256.Sum256(baseBody))
+	tokenizerChecksum := fmt.Sprintf("%x", sha256.Sum256(tokenizerBody))
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/models/Serveurperso/OmniVoice-GGUF":
+			_ = json.NewEncoder(writer).Encode(map[string]any{
+				"sha": "root-prepared",
+				"siblings": []map[string]any{
+					{
+						"rfilename": "omnivoice-base-Q4_K_M.gguf",
+						"lfs":       map[string]any{"oid": baseChecksum, "size": len(baseBody)},
+					},
+					{
+						"rfilename": "omnivoice-tokenizer-Q4_K_M.gguf",
+						"lfs":       map[string]any{"oid": tokenizerChecksum, "size": len(tokenizerBody)},
+					},
+				},
+			})
+		case "/Serveurperso/OmniVoice-GGUF/resolve/root-prepared/omnivoice-base-Q4_K_M.gguf":
+			_, _ = writer.Write(baseBody)
+		case "/Serveurperso/OmniVoice-GGUF/resolve/root-prepared/omnivoice-tokenizer-Q4_K_M.gguf":
+			_, _ = writer.Write(tokenizerBody)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	service := newProductionTestServiceWithAssetSource(
+		t, server.Client(), models.RuntimeAssetEndpoints{
+			BaseURL: server.URL, APIBaseURL: server.URL,
+		},
+	)
+	opened, err := service.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{
+		Config: models.RuntimeScopeConfig{
+			CacheDirectory: t.TempDir(),
+			Runtime: models.RuntimeConfig{Resources: []models.RuntimeResource{{
+				Type: models.RuntimeResourceTypeModel, Model: "OMNIVOICE_Q4_K_M",
+			}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("OpenRuntimeScope: %v", err)
+	}
+	result, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+		Scope: opened.Scope, Name: "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("PrepareModelAssets: %v", err)
+	}
+	if result.Outcome != models.AssetPreparationPrepared ||
+		result.Asset.Readiness != models.AssetReadinessAvailable ||
+		result.Asset.Integrity != models.AssetIntegrityVerified ||
+		result.Asset.Revision != "root-prepared" {
+		t.Fatalf("PrepareModelAssets result = %#v", result)
+	}
+}
+
 func newProductionTestService(t *testing.T) models.Service {
 	t.Helper()
 	return newProductionTestServiceWithDependencies(t, time.Now, platformrandom.CryptoSource{})
@@ -208,11 +274,33 @@ func newProductionTestServiceWithDependencies(
 	now func() time.Time,
 	issuerEntropy platformrandom.Source,
 ) models.Service {
+	return newProductionTestServiceWithAssetEdges(
+		t, http.DefaultClient, models.RuntimeAssetEndpoints{}, now, issuerEntropy,
+	)
+}
+
+func newProductionTestServiceWithAssetSource(
+	t *testing.T,
+	client models.AssetHTTPDoer,
+	endpoints models.RuntimeAssetEndpoints,
+) models.Service {
+	return newProductionTestServiceWithAssetEdges(
+		t, client, endpoints, time.Now, platformrandom.CryptoSource{},
+	)
+}
+
+func newProductionTestServiceWithAssetEdges(
+	t *testing.T,
+	client models.AssetHTTPDoer,
+	endpoints models.RuntimeAssetEndpoints,
+	now func() time.Time,
+	issuerEntropy platformrandom.Source,
+) models.Service {
 	t.Helper()
 	service, err := NewService(
 		models.AssetHostPlatform{OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH},
-		http.DefaultClient,
-		models.RuntimeAssetEndpoints{},
+		client,
+		endpoints,
 		os.MkdirAll,
 		os.Stat,
 		os.UserHomeDir,

@@ -1,6 +1,8 @@
 package wire
 
 import (
+	"io"
+	"net/http"
 	"os"
 	"testing"
 
@@ -18,34 +20,72 @@ func TestNewServiceRequiresScopedCacheInspectionDependencies(t *testing.T) {
 	home := models.AssetResolveHomeDirectory(os.UserHomeDir)
 	readFile := models.AssetReadFile(os.ReadFile)
 	readDirectory := models.AssetReadDirectory(os.ReadDir)
+	endpoints := models.RuntimeAssetEndpoints{
+		BaseURL: "https://assets.example.test", APIBaseURL: "https://api.example.test",
+	}
 
 	tests := []struct {
 		name      string
 		scopes    runtimescopes.Service
 		platform  models.AssetHostPlatform
+		client    models.AssetHTTPDoer
+		endpoints models.RuntimeAssetEndpoints
+		mkdir     models.AssetMakeDirectories
 		inspect   models.AssetInspectPath
 		home      models.AssetResolveHomeDirectory
+		write     models.AssetWriteFile
+		rename    models.AssetRenamePath
+		remove    models.AssetRemovePath
 		readFile  models.AssetReadFile
 		readDir   models.AssetReadDirectory
+		create    models.AssetCreateFile
+		open      models.AssetOpenFile
 		wantError bool
 	}{
-		{name: "valid", scopes: scopes, platform: platform, inspect: inspect, home: home, readFile: readFile, readDir: readDirectory},
-		{name: "scopes", platform: platform, inspect: inspect, home: home, readFile: readFile, readDir: readDirectory, wantError: true},
-		{name: "platform", scopes: scopes, inspect: inspect, home: home, readFile: readFile, readDir: readDirectory, wantError: true},
-		{name: "inspect", scopes: scopes, platform: platform, home: home, readFile: readFile, readDir: readDirectory, wantError: true},
-		{name: "home", scopes: scopes, platform: platform, inspect: inspect, readFile: readFile, readDir: readDirectory, wantError: true},
-		{name: "read file", scopes: scopes, platform: platform, inspect: inspect, home: home, readDir: readDirectory, wantError: true},
-		{name: "read directory", scopes: scopes, platform: platform, inspect: inspect, home: home, readFile: readFile, wantError: true},
+		validAssetDependencies("valid", scopes, platform, endpoints),
+		{
+			name: "platform", scopes: scopes, client: http.DefaultClient, endpoints: endpoints,
+			mkdir: os.MkdirAll, inspect: inspect, home: home, write: os.WriteFile, rename: os.Rename,
+			remove: os.Remove, readFile: readFile, readDir: readDirectory,
+			create: func(path string) (io.WriteCloser, error) { return os.Create(path) },
+			open:   func(path string) (io.ReadCloser, error) { return os.Open(path) }, wantError: true,
+		},
+		{
+			name: "scopes", platform: platform, client: http.DefaultClient, endpoints: endpoints,
+			mkdir: os.MkdirAll, inspect: inspect, home: home, write: os.WriteFile, rename: os.Rename,
+			remove: os.Remove, readFile: readFile, readDir: readDirectory,
+			create: func(path string) (io.WriteCloser, error) { return os.Create(path) },
+			open:   func(path string) (io.ReadCloser, error) { return os.Open(path) }, wantError: true,
+		},
+		{
+			name: "source", scopes: scopes, platform: platform, mkdir: os.MkdirAll,
+			inspect: inspect, home: home, write: os.WriteFile, rename: os.Rename,
+			remove: os.Remove, readFile: readFile, readDir: readDirectory,
+			create: func(path string) (io.WriteCloser, error) { return os.Create(path) },
+			open:   func(path string) (io.ReadCloser, error) { return os.Open(path) }, wantError: true,
+		},
+		{
+			name: "cache", scopes: scopes, platform: platform, client: http.DefaultClient,
+			endpoints: endpoints, wantError: true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			service, err := NewService(
 				test.scopes,
 				test.platform,
+				test.client,
+				test.endpoints,
+				test.mkdir,
 				test.inspect,
 				test.home,
+				test.write,
+				test.rename,
+				test.remove,
 				test.readFile,
 				test.readDir,
+				test.create,
+				test.open,
 			)
 			if test.wantError {
 				if service != nil || err == nil {
@@ -57,6 +97,55 @@ func TestNewServiceRequiresScopedCacheInspectionDependencies(t *testing.T) {
 				t.Fatalf("NewService = (%#v, %v), want service", service, err)
 			}
 		})
+	}
+}
+
+func validAssetDependencies(
+	name string,
+	scopes runtimescopes.Service,
+	platform models.AssetHostPlatform,
+	endpoints models.RuntimeAssetEndpoints,
+) struct {
+	name      string
+	scopes    runtimescopes.Service
+	platform  models.AssetHostPlatform
+	client    models.AssetHTTPDoer
+	endpoints models.RuntimeAssetEndpoints
+	mkdir     models.AssetMakeDirectories
+	inspect   models.AssetInspectPath
+	home      models.AssetResolveHomeDirectory
+	write     models.AssetWriteFile
+	rename    models.AssetRenamePath
+	remove    models.AssetRemovePath
+	readFile  models.AssetReadFile
+	readDir   models.AssetReadDirectory
+	create    models.AssetCreateFile
+	open      models.AssetOpenFile
+	wantError bool
+} {
+	return struct {
+		name      string
+		scopes    runtimescopes.Service
+		platform  models.AssetHostPlatform
+		client    models.AssetHTTPDoer
+		endpoints models.RuntimeAssetEndpoints
+		mkdir     models.AssetMakeDirectories
+		inspect   models.AssetInspectPath
+		home      models.AssetResolveHomeDirectory
+		write     models.AssetWriteFile
+		rename    models.AssetRenamePath
+		remove    models.AssetRemovePath
+		readFile  models.AssetReadFile
+		readDir   models.AssetReadDirectory
+		create    models.AssetCreateFile
+		open      models.AssetOpenFile
+		wantError bool
+	}{
+		name: name, scopes: scopes, platform: platform, client: http.DefaultClient, endpoints: endpoints,
+		mkdir: os.MkdirAll, inspect: os.Stat, home: os.UserHomeDir, write: os.WriteFile,
+		rename: os.Rename, remove: os.Remove, readFile: os.ReadFile, readDir: os.ReadDir,
+		create: func(path string) (io.WriteCloser, error) { return os.Create(path) },
+		open:   func(path string) (io.ReadCloser, error) { return os.Open(path) },
 	}
 }
 
