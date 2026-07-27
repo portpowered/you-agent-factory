@@ -20,7 +20,10 @@ const agentFixtureExecutionFailure = "fixture execution failure"
 
 func TestNewAgentRegistryIsInertAndExecutesOneDetachedProviderAttempt(t *testing.T) {
 	fake := newAgentProvidersFake()
-	registry, err := NewAgentRegistry(runners.AgentDependencies{Providers: fake})
+	registry, err := NewAgentRegistry(runners.AgentDependencies{
+		Providers: fake,
+		Publish:   agentNoopPublisher,
+	})
 	if err != nil {
 		t.Fatalf("NewAgentRegistry() error = %v", err)
 	}
@@ -80,7 +83,10 @@ func TestNewAgentRegistryIsInertAndExecutesOneDetachedProviderAttempt(t *testing
 
 func TestAgentRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
 	fake := newAgentProvidersFake()
-	registry, err := NewAgentRegistry(runners.AgentDependencies{Providers: fake})
+	registry, err := NewAgentRegistry(runners.AgentDependencies{
+		Providers: fake,
+		Publish:   agentNoopPublisher,
+	})
 	if err != nil {
 		t.Fatalf("NewAgentRegistry() error = %v", err)
 	}
@@ -119,7 +125,10 @@ func TestAgentRunnerSnapshotsRequestBeforeProviderAttempt(t *testing.T) {
 		entered:            make(chan struct{}),
 		release:            make(chan struct{}),
 	}
-	registry, err := NewAgentRegistry(runners.AgentDependencies{Providers: fake})
+	registry, err := NewAgentRegistry(runners.AgentDependencies{
+		Providers: fake,
+		Publish:   agentNoopPublisher,
+	})
 	if err != nil {
 		t.Fatalf("NewAgentRegistry() error = %v", err)
 	}
@@ -155,9 +164,20 @@ func TestAgentRunnerSnapshotsRequestBeforeProviderAttempt(t *testing.T) {
 }
 
 func TestNewAgentRegistryRejectsMissingProvidersRoot(t *testing.T) {
-	_, err := NewAgentRegistry(runners.AgentDependencies{})
+	_, err := NewAgentRegistry(runners.AgentDependencies{
+		Publish: agentNoopPublisher,
+	})
 	if err == nil {
 		t.Fatal("NewAgentRegistry() error = nil, want missing Providers root")
+	}
+}
+
+func TestNewAgentRegistryRejectsMissingProgressPublisher(t *testing.T) {
+	_, err := NewAgentRegistry(runners.AgentDependencies{
+		Providers: newAgentProvidersFake(),
+	})
+	if err == nil {
+		t.Fatal("NewAgentRegistry() error = nil, want missing progress publisher")
 	}
 }
 
@@ -175,6 +195,8 @@ type blockingAgentProvidersFake struct {
 }
 
 var _ providers.Service = (*agentProvidersFake)(nil)
+
+func agentNoopPublisher(workers.ProgressFragment) {}
 
 func newAgentProvidersFake() *agentProvidersFake {
 	return &agentProvidersFake{result: providers.ExecuteResult{

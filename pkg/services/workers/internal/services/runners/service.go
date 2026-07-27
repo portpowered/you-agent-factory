@@ -71,10 +71,11 @@ type InferenceDependencies struct {
 	Delegate workers.Runner
 }
 
-// AgentDependencies are the exact peer-service capabilities projected into
-// one Agent Runner.
+// AgentDependencies are the exact peer-service and observation capabilities
+// projected into one Agent Runner.
 type AgentDependencies struct {
 	Providers providers.Service
+	Publish   workers.ProgressPublisher
 }
 
 // Service resolves immutable runner registrations without executing or

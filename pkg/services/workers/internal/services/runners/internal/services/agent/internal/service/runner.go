@@ -13,17 +13,24 @@ import (
 
 type service struct {
 	providers providers.Service
+	publish   workers.ProgressPublisher
 }
 
 var _ agent.Service = (*service)(nil)
 
-// New validates and captures the singular Providers root without starting an
-// execution attempt or constructing another service graph.
-func New(providersService providers.Service) (agent.Service, error) {
+// New validates and captures the singular Providers root and Workers-owned
+// observation edge without starting an attempt or constructing another graph.
+func New(
+	providersService providers.Service,
+	publish workers.ProgressPublisher,
+) (agent.Service, error) {
 	if providersService == nil {
 		return nil, misconfigured("agent Providers service is required", nil)
 	}
-	return &service{providers: providersService}, nil
+	if publish == nil {
+		return nil, misconfigured("agent progress publisher is required", nil)
+	}
+	return &service{providers: providersService, publish: publish}, nil
 }
 
 // Execute snapshots one common Runner request and delegates exactly one
@@ -46,7 +53,30 @@ func (s *service) Execute(
 		}
 		return workers.RunnerExecutionResult{}, normalizeExecutionError(err)
 	}
-	return runnerResult(result, providers.ID(request.RunnerID)), nil
+	result = result.Clone()
+	response := runnerResult(result, providers.ID(request.RunnerID))
+	s.publishProgress(request.Dispatch.DispatchID, result, response.ProviderSession)
+	return response, nil
+}
+
+func (s *service) publishProgress(
+	dispatchID string,
+	result providers.ExecuteResult,
+	session *workers.ProviderSessionMetadata,
+) {
+	if result.Diagnostics == nil {
+		return
+	}
+	for _, progress := range result.Diagnostics.Progress {
+		s.publish(workers.ProgressFragment{
+			DispatchID:         dispatchID,
+			Kind:               workers.ProgressFragmentKind,
+			Type:               progress.Phase,
+			Payload:            progress.Detail,
+			ProviderSessionRef: workers.CloneProviderSessionMetadata(session),
+			Metadata:           cloneMetadata(progress.Metadata),
+		})
+	}
 }
 
 func validateRequest(request workers.RunnerExecutionRequest) error {

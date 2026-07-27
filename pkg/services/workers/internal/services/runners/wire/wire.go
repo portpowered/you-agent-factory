@@ -80,7 +80,10 @@ func NewInferenceRegistry(
 func NewAgentRegistry(
 	dependencies runners.AgentDependencies,
 ) (runners.Service, error) {
-	implementation, err := agentwire.NewService(dependencies.Providers)
+	implementation, err := agentwire.NewService(
+		dependencies.Providers,
+		dependencies.Publish,
+	)
 	service, registryErr := NewService([]runners.Registration{{
 		Identity: runners.AgentIdentity,
 		Metadata: agentMetadata(),
