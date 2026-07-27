@@ -417,13 +417,6 @@ func effectiveWorkDir(request workers.RunnerExecutionRequest) string {
 	return request.Worktree
 }
 
-func mergedEnvironment(base []string, overrides map[string]string) []string {
-	return platformprocess.MergeCommandEnv(
-		base,
-		platformprocess.CommandEnvEntriesFromMap(overrides),
-	)
-}
-
 func resolveFactoryScripts(factoryDirectory string, values []string) []string {
 	resolved := make([]string, len(values))
 	for index, value := range values {

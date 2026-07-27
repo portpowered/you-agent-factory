@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -79,7 +80,7 @@ func TestRunnerResolvesConfiguredInvocationDeterministically(t *testing.T) {
 	if captured.WorkDir != "explicit-work-dir" {
 		t.Fatalf("working directory = %q, want explicit-work-dir", captured.WorkDir)
 	}
-	assertEnv(t, captured.Env, "BASE", "injected")
+	assertEnvAbsent(t, captured.Env, "BASE")
 	assertEnv(t, captured.Env, "RUNTIME", "request-env")
 	assertEnvCount(t, captured.Env, "RUNTIME", 1)
 	if captured.DispatchID != "dispatch-1" ||
@@ -135,11 +136,8 @@ func TestRunnerReturnsSuccessfulOutputWithOrderedSafeDiagnostics(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 	request := validRequest()
-	request.ProcessEnvironment = append(
-		request.ProcessEnvironment,
-		"CI=true",
-		"SCRIPT_API_TOKEN=fixture-secret",
-	)
+	request.EnvVars["CI"] = "true"
+	request.EnvVars["SCRIPT_API_TOKEN"] = "fixture-secret"
 
 	result, err := scriptRunner.Execute(t.Context(), request)
 	if err != nil {
@@ -935,6 +933,16 @@ func assertFailureType(t *testing.T, err error, want workers.WorkFailureType) {
 	var failure *workers.ProviderError
 	if !errors.As(err, &failure) || failure.Type != want {
 		t.Fatalf("error = %#v, want ProviderError type %q", err, want)
+	}
+}
+
+func assertEnvAbsent(t *testing.T, env []string, name string) {
+	t.Helper()
+	prefix := name + "="
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			t.Fatalf("environment %s = %#v, want absent when Factory declares bounded env", name, env)
+		}
 	}
 }
 
