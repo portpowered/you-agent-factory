@@ -1,5 +1,5 @@
 {
-  "ok": true,
   "content": "Codex fixture answer COMPLETE",
-  "finishReason": "stop"
+  "finishReason": "stop",
+  "ok": true
 }
