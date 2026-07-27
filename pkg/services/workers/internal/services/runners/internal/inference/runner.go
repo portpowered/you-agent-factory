@@ -107,6 +107,17 @@ func validateRequest(request workers.RunnerExecutionRequest) error {
 	if request.RunnerID != Identity {
 		return badRequest(fmt.Sprintf("inference runner identity must be %q", Identity), nil)
 	}
+	for _, capability := range request.RequiredOptionalCapabilities {
+		switch capability {
+		case workers.RunnerOptionalCapabilityWorkingDirectory,
+			workers.RunnerOptionalCapabilityWorktree:
+		default:
+			return &workers.UnsupportedRunnerCapabilityError{
+				RunnerID:   Identity,
+				Capability: capability,
+			}
+		}
+	}
 	if strings.TrimSpace(request.ModelOperation) == "" {
 		return badRequest("inference model operation is required", nil)
 	}
