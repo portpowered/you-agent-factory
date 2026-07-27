@@ -2,7 +2,6 @@ package wire
 
 import (
 	"io/fs"
-	"strings"
 	"testing"
 	"time"
 
@@ -13,14 +12,51 @@ import (
 )
 
 func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
-	service, err := NewService(
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-	)
-	if err == nil || !strings.Contains(err.Error(), "session result projection is required") {
-		t.Fatalf("NewService() error = %v, want deterministic required dependency error", err)
+	t.Parallel()
+
+	valid := validNewServiceInputs()
+	tests := []struct {
+		name   string
+		mutate func(*newServiceInputs)
+	}{
+		{name: "session result projection", mutate: func(in *newServiceInputs) { in.sessionResultProjection = nil }},
+		{name: "response event ID generator", mutate: func(in *newServiceInputs) { in.eventIDs = nil }},
+		{name: "session ID generator", mutate: func(in *newServiceInputs) { in.sessionIDs = nil }},
+		{name: "home directory resolver", mutate: func(in *newServiceInputs) { in.resolveHome = nil }},
+		{name: "directory inspection", mutate: func(in *newServiceInputs) { in.directoryInspection = nil }},
+		{name: "named path resolver", mutate: func(in *newServiceInputs) { in.namedPaths = nil }},
+		{name: "invocation input reader", mutate: func(in *newServiceInputs) { in.invocationInputFiles = nil }},
+		{name: "initial Work reader", mutate: func(in *newServiceInputs) { in.initialWorkFiles = nil }},
+		{name: "symlink resolver", mutate: func(in *newServiceInputs) { in.resolveSymlinks = nil }},
 	}
-	if service != nil {
-		t.Fatalf("NewService() = %#v, want nil service", service)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			inputs := valid
+			test.mutate(&inputs)
+			service, err := inputs.callNewService()
+			if err == nil {
+				t.Fatalf("NewService() error = nil, want missing %s dependency", test.name)
+			}
+			if service != nil {
+				t.Fatalf("NewService() = %#v, want nil service", service)
+			}
+		})
+	}
+}
+
+func TestNewServiceConstructsPublishedRoot(t *testing.T) {
+	t.Parallel()
+
+	service, err := validNewServiceInputs().callNewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewService() returned nil service")
+	}
+	var root factorysessions.Service = service
+	if root == nil {
+		t.Fatal("constructed root is nil")
 	}
 }
 
@@ -28,21 +64,10 @@ func TestNewServiceIsInertAndRequiresRuntimeClockBinding(t *testing.T) {
 	clock := &recordingClock{}
 	directories := &recordingDirectoryInspection{}
 	symlinkCalls := 0
-	service, err := NewService(
-		nil,
-		resultProjector{},
-		nil,
-		nil,
-		nil,
-		func() string { return "response-event-id" },
-		func() string { return "session-id" },
-		func() (string, error) { return "home", nil },
-		directories,
-		namedPathResolver{},
-		fileeffects.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
-		fileeffects.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
-		func(path string) (string, error) { symlinkCalls++; return path, nil },
-	)
+	inputs := validNewServiceInputs()
+	inputs.directoryInspection = directories
+	inputs.resolveSymlinks = func(path string) (string, error) { symlinkCalls++; return path, nil }
+	service, err := inputs.callNewService()
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -80,6 +105,54 @@ type resultProjector struct{}
 
 func (resultProjector) ProjectSessionResults(factoryruntime.SessionResultInput) factoryruntime.SessionResultProjection {
 	return factoryruntime.SessionResultProjection{}
+}
+
+type newServiceInputs struct {
+	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
+	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
+	interpolation                factorydefinitions.InvocationInterpolationService
+	invocationWorkTypes          factorydefinitions.InvocationWorkTypeService
+	ttsObservability             factorydefinitions.TTSObservabilityService
+	eventIDs                     factorysessions.ResponseEventIDGenerator
+	sessionIDs                   factorysessions.SessionIDGenerator
+	resolveHome                  factorysessions.HomeDirectoryResolver
+	directoryInspection          DirectoryInspection
+	namedPaths                   factorydefinitions.NamedPathResolver
+	invocationInputFiles         fileeffects.InvocationInputReader
+	initialWorkFiles             fileeffects.InitialWorkReader
+	resolveSymlinks              factorysessions.LogicalTargetResolveSymlinks
+}
+
+func validNewServiceInputs() newServiceInputs {
+	return newServiceInputs{
+		sessionResultProjection: resultProjector{},
+		eventIDs:                func() string { return "response-event-id" },
+		sessionIDs:              func() string { return "session-id" },
+		resolveHome:             func() (string, error) { return "home", nil },
+		directoryInspection:     &recordingDirectoryInspection{},
+		namedPaths:              namedPathResolver{},
+		invocationInputFiles:    fileeffects.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
+		initialWorkFiles:        fileeffects.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
+		resolveSymlinks:         func(path string) (string, error) { return path, nil },
+	}
+}
+
+func (in newServiceInputs) callNewService() (factorysessions.Service, error) {
+	return NewService(
+		in.newJavaScriptCheckpointStore,
+		in.sessionResultProjection,
+		in.interpolation,
+		in.invocationWorkTypes,
+		in.ttsObservability,
+		in.eventIDs,
+		in.sessionIDs,
+		in.resolveHome,
+		in.directoryInspection,
+		in.namedPaths,
+		in.invocationInputFiles,
+		in.initialWorkFiles,
+		in.resolveSymlinks,
+	)
 }
 
 type recordingClock struct{ calls int }
