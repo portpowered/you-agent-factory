@@ -393,9 +393,10 @@ primary-result behavior.
 - Canonical metadata for `you.run`, `you.submit`, and `you.submit.batch` lives
   in `contracts/cli/commands.json`. Keep positional cardinality, stdin channels,
   source precedence, conflicts, no-option defaults, output modes, effects, and
-  stable handler/OpenAPI bindings aligned with the handwritten constructors in
+  stable handler/OpenAPI bindings aligned with the typed execution adapters in
   `pkg/transports/cli/root_work.go` and
-  `pkg/transports/cli/root_submit_batch.go`.
+  `pkg/transports/cli/root_submit_batch.go`. Local flag help also belongs in
+  the manifest; do not construct or scrape a secondary Cobra tree to supply it.
 - `pkg/transports/cli/climanifest/run_submit_validation.go` rejects incomplete
   or contradictory family records before generation. Update its focused
   validation cases whenever the supported family contract changes.
@@ -972,7 +973,9 @@ response-stream output.
   plus registry-attached handwritten handlers. Production root construction is
   generated-only through `newRootCommandWithGeneratedRepresentativeFamily`;
   deprecated handwritten command trees and constructor-parity interfaces have
-  been removed. `WorkFamilyBindings.FlagUsages` supplies local flag help text.
+  been removed. Session, work, and submit local flag help is projected directly
+  from each manifest flag's `usage`; transport binding structs carry typed
+  values and operations, not presentation fallbacks.
 - Whole-production CLI closure is checked by `pkg/transports/cli/clicontract`
   and exposed through `cmd/clicontractsmoke` / `make cli-contract-smoke`.
   The same behavioral smoke is part of `make cli-manifest-check` and compares

@@ -68,7 +68,6 @@ func newSessionFamilyBindings() climanifestcobra.SessionFamilyBindings {
 		Dispatches: &sessioncli.DispatchesConfig{},
 		Pause:      &sessioncli.LifecycleControlConfig{},
 		Resume:     &sessioncli.LifecycleControlConfig{},
-		FlagUsages: sessionFamilyFlagUsages(),
 	}
 }
 
@@ -85,27 +84,5 @@ func sessionListPrepare(options CommandFactory) func(context.Context, *sessioncl
 		cfg.DurableLister = service.ListSessions
 		cfg.DurableCloser = service
 		return nil
-	}
-}
-
-func sessionFamilyFlagUsages() map[string]string {
-	return map[string]string{
-		"you.session.create.dir":              "folder path to open as a live factory session",
-		"you.session.create.init-new-factory": "write the default init scaffold at --dir and open a live session",
-		"you.session.create.validate-only":    "validate the folder and optional target without creating a live session",
-		"you.session.create.target-kind":      "target kind when disambiguating runnable factories (default or named)",
-		"you.session.create.target-name":      "named target when --target-kind is named",
-
-		"you.session.create.json":       "emit the API open-factory-session JSON response",
-		"you.session.list.scope":        "session list scope: live, persisted, or all",
-		"you.session.list.json":         "emit the API list-factory-sessions JSON response",
-		"you.session.delete.json":       "emit a JSON confirmation after the session closes",
-		"you.session.dispatches.phase":  "filter by exact Dispatch phase",
-		"you.session.dispatches.status": "filter by canonical Dispatch status",
-		"you.session.show.port":         "deprecated; use --server",
-		"you.session.dispatches.port":   "deprecated; use --server",
-		"you.session.pause.port":        "deprecated; use --server",
-		"you.session.resume.port":       "deprecated; use --server",
-		"port":                          "HTTP server port",
 	}
 }

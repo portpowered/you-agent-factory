@@ -29,7 +29,6 @@ type RunSubmitFlagBindings struct {
 	RunLocalTargets     map[string]any
 	Submit              *submitcli.SubmitConfig
 	SubmitBatch         *submitcli.BatchConfig
-	LegacyFlagUsages    map[string]string
 }
 
 // NewRunSubmitFamilyComponents builds the detached family from generated
@@ -171,11 +170,7 @@ func registerRunSubmitLocalFlags(
 		if err != nil {
 			return err
 		}
-		usage := flag.Usage
-		if usage == "" {
-			usage = bindings.LegacyFlagUsages[flag.Long]
-		}
-		if err := registerFlag(cmd.Flags(), flag, target, usage); err != nil {
+		if err := registerFlag(cmd.Flags(), flag, target, flag.Usage); err != nil {
 			return fmt.Errorf("register local flag %q: %w", flag.Long, err)
 		}
 		if err := applyFlagContract(cmd.Flags().Lookup(flag.Long), flag); err != nil {

@@ -8,7 +8,6 @@ import (
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
@@ -21,7 +20,6 @@ import (
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *cobra.Command {
@@ -124,7 +122,6 @@ func newGenericRepresentativeFamily(
 		return nil, err
 	}
 	root.SilenceUsage = true
-	applySessionGenericFlagUsages(root, manifest, sessionBindings.FlagUsages)
 	return root, nil
 }
 
@@ -156,34 +153,6 @@ func sessionInputBindings(
 		}
 	}
 	return result
-}
-
-func applySessionGenericFlagUsages(
-	root *cobra.Command,
-	manifest climanifest.Manifest,
-	usages map[string]string,
-) {
-	for commandID, record := range manifest.Commands {
-		if !strings.HasPrefix(commandID, "you.session") {
-			continue
-		}
-		command, _, err := root.Find(strings.Fields(strings.TrimPrefix(record.Path, "you ")))
-		if err != nil || command == nil {
-			continue
-		}
-		for _, flag := range record.Flags {
-			if flag.Scope == "inherited" {
-				continue
-			}
-			usage := usages[commandID+"."+flag.Long]
-			if usage == "" {
-				usage = usages[flag.Long]
-			}
-			if registered := command.Flags().Lookup(flag.Long); registered != nil && usage != "" {
-				registered.Usage = usage
-			}
-		}
-	}
 }
 
 func productionGenericCobraHandler(
@@ -652,26 +621,7 @@ func newRunSubmitHandlerRegistry(
 		RunLocalTargets:     runLocalTargets(&runCfg, &invocationOutputMode),
 		Submit:              &submitCfg,
 		SubmitBatch:         &batchCfg,
-		LegacyFlagUsages:    submitFlagUsages(globals, diagnostics, rootOptions),
 	}, nil
-}
-
-func submitFlagUsages(
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	rootOptions CommandFactory,
-) map[string]string {
-	submit := newSubmitCommand(globals, diagnostics, rootOptions)
-	commands := append([]*cobra.Command{submit}, submit.Commands()...)
-	usages := make(map[string]string)
-	for _, cmd := range commands {
-		cmd.LocalNonPersistentFlags().VisitAll(func(flag *pflag.Flag) {
-			if _, exists := usages[flag.Name]; !exists {
-				usages[flag.Name] = flag.Usage
-			}
-		})
-	}
-	return usages
 }
 
 func runLocalTargets(cfg *runcli.RunConfig, invocationOutput *string) map[string]any {
@@ -901,24 +851,7 @@ func newWorkFamilyBindings(globals *cliGlobalOptions) (climanifestcobra.WorkFami
 		ShowConfig:      &showCfg,
 		MoveConfig:      &moveCfg,
 		VisualizeFormat: &visualizeFormat,
-		FlagUsages:      workFamilyFlagUsages(),
 	}, &visualizeFormat
-}
-
-func workFamilyFlagUsages() map[string]string {
-	return map[string]string{
-		"state-name":     "filter by current state name",
-		"state-type":     "filter by current state type (INITIAL, PROCESSING, TERMINAL, FAILED)",
-		"name":           "filter by case-insensitive substring of work name (applied before pagination)",
-		"work-type-name": "filter by exact workTypeName (applied before pagination)",
-		"trace-id":       "filter by exact traceId or currentChainingTraceId (applied before pagination)",
-		"sort-by":        "sort returned work by field (state.type)",
-		"max-results":    "maximum work items to return per page after server-side filters",
-		"next-token":     "pagination cursor returned by a previous work list response",
-		"session":        "target one live factory session; omit to use the default compatibility session",
-		"request-id":     "optional client idempotency key for operator moves",
-		"format":         "output format: mermaid or markdown-mermaid",
-	}
 }
 
 func newWorkHandlerRegistry(

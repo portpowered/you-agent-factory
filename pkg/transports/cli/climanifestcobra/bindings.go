@@ -85,7 +85,6 @@ type SessionFamilyBindings struct {
 	Dispatches *sessioncli.DispatchesConfig
 	Pause      *sessioncli.LifecycleControlConfig
 	Resume     *sessioncli.LifecycleControlConfig
-	FlagUsages map[string]string
 }
 
 type persistentInputResolver struct {
