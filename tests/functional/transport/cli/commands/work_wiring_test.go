@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +25,8 @@ const (
 	workWiringMoveWorkType  = "task"
 
 	workWiringMissingWorkID = "work-missing-999"
+
+	workWiringVisualizeRequestID = "cli-work-wiring-visualize"
 )
 
 // TestCLIWorkListAndShowReflectSubmittedWork proves you work list and you work show
@@ -221,6 +225,39 @@ func TestCLIWorkShowMissingReturnsNotFound(t *testing.T) {
 	assertCLIWorkShowNotFoundFailure(t, showJSONOut, err, workWiringMissingWorkID)
 }
 
+// TestCLIWorkVisualizeProducesDeterministicGraph proves you work visualize emits
+// the same dependency graph for a fixed batch input across repeated CLI invocations.
+func TestCLIWorkVisualizeProducesDeterministicGraph(t *testing.T) {
+	workingDir := t.TempDir()
+	binaryPath := buildYouCLIBinary(t)
+	batchPath := writeWorkWiringVisualizeBatchFile(t, workingDir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	firstOut, err := runYouCLI(ctx, binaryPath, workingDir, "",
+		"work", "visualize", batchPath,
+	)
+	if err != nil {
+		t.Fatalf("you work visualize (first): %v\noutput:\n%s", err, firstOut)
+	}
+
+	secondOut, err := runYouCLI(ctx, binaryPath, workingDir, "",
+		"work", "visualize", batchPath,
+	)
+	if err != nil {
+		t.Fatalf("you work visualize (second): %v\noutput:\n%s", err, secondOut)
+	}
+
+	first := string(firstOut)
+	second := string(secondOut)
+	if first != second {
+		t.Fatalf("visualize output not deterministic:\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+
+	assertWorkWiringVisualizeGraphOutput(t, first)
+}
+
 func assertCLIWorkShowNotFoundFailure(
 	t *testing.T,
 	output []byte,
@@ -256,6 +293,48 @@ func assertCLIWorkShowNotFoundFailure(
 	}
 	if strings.Contains(text, "Work ID:\t") && strings.Contains(text, "State name:\t") {
 		t.Fatalf("work show must not emit human success work payload:\n%s", text)
+	}
+}
+
+func writeWorkWiringVisualizeBatchFile(t *testing.T, dir string) string {
+	t.Helper()
+
+	batchPath := filepath.Join(dir, "work-wiring-visualize-batch.json")
+	content := fmt.Sprintf(`{
+  "requestId": %q,
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {"name": "alpha", "workTypeName": "task"},
+    {"name": "beta", "workTypeName": "task"},
+    {"name": "gamma", "workTypeName": "task"}
+  ],
+  "relations": [
+    {"type": "DEPENDS_ON", "sourceWorkName": "beta", "targetWorkName": "alpha"},
+    {"type": "DEPENDS_ON", "sourceWorkName": "gamma", "targetWorkName": "beta"}
+  ]
+}`, workWiringVisualizeRequestID)
+	if err := os.WriteFile(batchPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write visualize batch file: %v", err)
+	}
+	return batchPath
+}
+
+func assertWorkWiringVisualizeGraphOutput(t *testing.T, output string) {
+	t.Helper()
+
+	if !strings.HasPrefix(output, "flowchart TD\n") {
+		t.Fatalf("visualize output missing flowchart header:\n%s", output)
+	}
+	for _, want := range []string{
+		`alpha["alpha"]`,
+		`beta["beta"]`,
+		`gamma["gamma"]`,
+		"beta --> alpha",
+		"gamma --> beta",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("visualize output missing %q:\n%s", want, output)
+		}
 	}
 }
 
