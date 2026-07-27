@@ -8,6 +8,7 @@ import (
 	"errors"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // Adapter maps Provider Sessions HTTP operations through the accepted root
@@ -27,11 +28,26 @@ func NewAdapter(sessions providersessions.Service) *Adapter {
 }
 
 // Details invokes the Provider Sessions root Details slice for one session
-// identity. HTTP decode/encode for the detail operation is added in later
-// adapter stories; this method proves the fake-root injection seam.
+// identity.
 func (a *Adapter) Details(provider, kind, id string) (providersessions.Detail, error) {
 	if a == nil || a.sessions == nil {
 		return providersessions.Detail{}, errors.New("Provider Sessions service is required")
 	}
 	return a.sessions.Details(provider, kind, id)
+}
+
+// GetProviderSessionDetails decodes owned detail HTTP inputs, invokes the root
+// Details slice, and encodes the success response shape.
+func (a *Adapter) GetProviderSessionDetails(
+	params factoryapi.GetProviderSessionDetailsParams,
+) (factoryapi.ProviderSessionDetailResponse, error) {
+	provider, kind, id, err := decodeDetailsParams(params)
+	if err != nil {
+		return factoryapi.ProviderSessionDetailResponse{}, err
+	}
+	detail, err := a.Details(provider, kind, id)
+	if err != nil {
+		return factoryapi.ProviderSessionDetailResponse{}, err
+	}
+	return providerSessionDetailToAPI(detail), nil
 }
