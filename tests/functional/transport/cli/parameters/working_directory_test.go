@@ -1,14 +1,21 @@
 package parameters_test
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -97,6 +104,85 @@ func TestCLIWorkingDirectoryDoesNotLeakIntoOutput(t *testing.T) {
 			invocationDirectory,
 			portableOutput,
 		)
+	}
+}
+
+// TestCLIMissingWorkingDirectoryAssetFailsActionably proves a missing
+// invocation-local Current Factory asset fails with a stable diagnostic before
+// provider dispatch or other lifecycle activation side effects can start.
+func TestCLIMissingWorkingDirectoryAssetFailsActionably(t *testing.T) {
+	invocationDirectory := t.TempDir()
+	missingFactoryJSON := filepath.Join(invocationDirectory, "factory", "factory.json")
+
+	homeDirectory := t.TempDir()
+	var lifecycleEffects atomic.Int32
+	providerRunner := testutil.NewProviderCommandRunner()
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--no-record",
+	})
+	inputs.Input.WorkingDirectory = invocationDirectory
+	inputs.Input.Env = append(
+		os.Environ(),
+		"HOME="+homeDirectory,
+		"USERPROFILE="+homeDirectory,
+	)
+
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: providerRunner,
+		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
+			lifecycleEffects.Add(1)
+			return nil
+		},
+		BrowserOpener: func(context.Context, string) error {
+			lifecycleEffects.Add(1)
+			return nil
+		},
+		RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
+			lifecycleEffects.Add(1)
+		},
+		FactorySessionIDGenerator: func() string {
+			lifecycleEffects.Add(1)
+			return "unexpected-session"
+		},
+	})
+
+	if err := process.Execute(inputs.Input); err == nil {
+		t.Fatalf(
+			"missing Current Factory succeeded; stdout:\n%s\nstderr:\n%s",
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(bytes.TrimSpace([]byte(inputs.Stderr())), &response); err != nil {
+		t.Fatalf(
+			"stderr is not one ErrorResponse: %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	if response.Code != factoryapi.ErrorResponseCode("CURRENT_FACTORY_NOT_FOUND") {
+		t.Fatalf("ErrorResponse = %#v, want code CURRENT_FACTORY_NOT_FOUND", response)
+	}
+	diagnostic := response.Message + inputs.Stderr()
+	if !strings.Contains(diagnostic, "factory.json") {
+		t.Fatalf(
+			"diagnostic omitted missing factory.json asset %q:\n%s",
+			missingFactoryJSON,
+			diagnostic,
+		)
+	}
+	if inputs.Stdout() != "" {
+		t.Fatalf("missing Current Factory stdout = %q, want empty", inputs.Stdout())
+	}
+	if providerRunner.CallCount() != 0 {
+		t.Fatalf("provider dispatch calls = %d, want 0", providerRunner.CallCount())
+	}
+	if lifecycleEffects.Load() != 0 {
+		t.Fatalf("lifecycle activation effects = %d, want 0", lifecycleEffects.Load())
 	}
 }
 
