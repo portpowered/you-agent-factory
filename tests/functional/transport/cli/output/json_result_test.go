@@ -88,6 +88,29 @@ func TestCLIJSONFailureRemainsValidJSON(t *testing.T) {
 	})
 }
 
+// TestCLIJSONContainsNoPrivateRuntimeFields proves CLI single-JSON success and
+// terminal failure payloads decode through the public contract and omit private
+// runtime vocabulary such as Petri internals, retired record shapes, and
+// provider-session chunk fields.
+func TestCLIJSONContainsNoPrivateRuntimeFields(t *testing.T) {
+	t.Run("success stdout stays on public InvocationResponse fields", func(t *testing.T) {
+		stdout := runGoalSingleJSON(t)
+		assertPublicSingleJSONInvocationPayload(t, stdout, "stdout")
+	})
+
+	t.Run("terminal failure stdout and stderr stay on public contract fields", func(t *testing.T) {
+		stdout, stderr, err := runSingleJSONInvocation(t, []string{
+			"you", "--json", "run", "--named", jsonGoalFactoryName, "--no-record",
+			"deterministic terminal failure",
+		}, jsonGoalFactoryName, rejectingGoalMockWorkers())
+		if err == nil {
+			t.Fatal("Process.Execute error = nil, want terminal invocation failure")
+		}
+		assertPublicSingleJSONInvocationPayload(t, stdout, "stdout")
+		assertPublicSingleJSONErrorPayload(t, stderr, "stderr")
+	})
+}
+
 func runGoalSingleJSON(t *testing.T) string {
 	t.Helper()
 
@@ -167,6 +190,70 @@ func decodeSingleJSONErrorResponse(t *testing.T, stderr string) factoryapi.Error
 		t.Fatalf("stderr contains data after ErrorResponse: %v\nstderr:\n%s", err, stderr)
 	}
 	return response
+}
+
+var singleJSONForbiddenLiterals = []string{
+	"FactoryResponseEvent", "response_event", "provider_session", "providerSession",
+	"textDelta", "toolCallId", "toolCalls",
+	`"recordType":"progress"`, `"recordType":"compaction"`, `"recordType":"primary_result"`,
+	`"primary_result":`, `"marking":`, `"placeId":`, `"Petri":`,
+}
+
+func assertPublicSingleJSONInvocationPayload(t *testing.T, payload, stream string) {
+	t.Helper()
+	_ = decodeSingleJSONInvocationResponse(t, payload)
+	assertNoPrivateRuntimeKeysInJSON(t, payload, stream)
+}
+
+func assertPublicSingleJSONErrorPayload(t *testing.T, payload, stream string) {
+	t.Helper()
+	_ = decodeSingleJSONErrorResponse(t, payload)
+	assertNoPrivateRuntimeKeysInJSON(t, payload, stream)
+}
+
+func assertNoPrivateRuntimeKeysInJSON(t *testing.T, payload, stream string) {
+	t.Helper()
+	var raw any
+	if err := json.Unmarshal([]byte(payload), &raw); err != nil {
+		t.Fatalf("decode %s JSON: %v\n%s", stream, err, payload)
+	}
+	if key := singleJSONPrivateRuntimeKey(raw); key != "" {
+		t.Fatalf("%s exposes private runtime field %q:\n%s", stream, key, payload)
+	}
+	for _, forbidden := range singleJSONForbiddenLiterals {
+		if strings.Contains(payload, forbidden) {
+			t.Fatalf("%s contains forbidden private runtime literal %q:\n%s", stream, forbidden, payload)
+		}
+	}
+}
+
+func singleJSONPrivateRuntimeKey(value any) string {
+	switch value := value.(type) {
+	case map[string]any:
+		for _, key := range []string{
+			"diagnostics", "response", "providerSession", "provider_session",
+			"textDelta", "toolCallId", "toolCalls",
+			"marking", "placeId", "Petri",
+			"progress", "compaction", "primary_result",
+			"recordType", "factory_event", "response_event",
+		} {
+			if _, exists := value[key]; exists {
+				return key
+			}
+		}
+		for _, child := range value {
+			if key := singleJSONPrivateRuntimeKey(child); key != "" {
+				return key
+			}
+		}
+	case []any:
+		for _, child := range value {
+			if key := singleJSONPrivateRuntimeKey(child); key != "" {
+				return key
+			}
+		}
+	}
+	return ""
 }
 
 func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationResponse) string {
