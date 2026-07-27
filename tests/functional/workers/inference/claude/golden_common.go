@@ -7,9 +7,14 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// Claude timeout retries are retryable; queue one transcript result per process
+// invocation so ProviderCommandRunner never falls back to its default mock.
+const claudeGoldenTimeoutCommandInvocations = 9
 
 func loadClaudeGoldenCase(t *testing.T, caseName string) support.ProviderSessionCase {
 	t.Helper()
@@ -32,6 +37,14 @@ func marshalProviderSessionGoldenJSON(value any) (json.RawMessage, error) {
 		return nil, err
 	}
 	return json.RawMessage(encoded), nil
+}
+
+func claudeTimeoutCommandRunner(timeoutResult platformprocess.CommandResult) *testutil.ProviderCommandRunner {
+	results := make([]platformprocess.CommandResult, claudeGoldenTimeoutCommandInvocations)
+	for index := range results {
+		results[index] = timeoutResult
+	}
+	return testutil.NewProviderCommandRunner(results...)
 }
 
 func assertProviderSessionGoldensMatch(

@@ -89,11 +89,7 @@ func replayClaudeTimeoutGoldenCase(
 		Stderr:   []byte(loaded.Stderr),
 		ExitCode: exitCode,
 	}
-	runner := testutil.NewProviderCommandRunner(
-		timeoutResult,
-		timeoutResult,
-		timeoutResult,
-	)
+	runner := claudeTimeoutCommandRunner(timeoutResult)
 
 	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
 		t,
@@ -108,8 +104,12 @@ func replayClaudeTimeoutGoldenCase(
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
 	}
-	if runner.CallCount() < 1 {
-		t.Fatalf("Claude command runner calls = %d, want at least 1", runner.CallCount())
+	if runner.CallCount() != claudeGoldenTimeoutCommandInvocations {
+		t.Fatalf(
+			"Claude command runner calls = %d, want %d",
+			runner.CallCount(),
+			claudeGoldenTimeoutCommandInvocations,
+		)
 	}
 
 	inferencePayload := claudeGoldenFailedInferenceObservationWithReason(
@@ -156,6 +156,15 @@ func assertClaudeGoldenResponseStreamClosesWithoutSuccess(
 	last := responseEvents[len(responseEvents)-1]
 	if last.Phase != factoryapi.FactoryResponseEventPhaseFailed {
 		t.Fatalf("terminal response event phase = %q, want FAILED", last.Phase)
+	}
+	if last.Kind == factoryapi.FactoryResponseEventKindError {
+		payload, err := last.Payload.AsFactoryResponseEventErrorPayload()
+		if err != nil {
+			t.Fatalf("decode terminal ERROR response event: %v", err)
+		}
+		if payload.Message != "Claude request timed out." {
+			t.Fatalf("terminal response error message = %q, want Claude request timed out.", payload.Message)
+		}
 	}
 	for _, event := range responseEvents {
 		if event.Phase == factoryapi.FactoryResponseEventPhaseCompleted {
