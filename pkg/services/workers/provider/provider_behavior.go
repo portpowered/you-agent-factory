@@ -435,19 +435,6 @@ func providerFailurePolicyForReason(reason workerexecution.WorkFailureType) prov
 	}
 }
 
-func providerFailureDecisionForFamily(family workerexecution.WorkFailureFamily) workerexecution.WorkFailureDecision {
-	switch family {
-	case workerexecution.WorkFailureFamilyRetryable:
-		return workerexecution.WorkFailureDecision{Retryable: true}
-	case workerexecution.WorkFailureFamilyThrottle:
-		return workerexecution.WorkFailureDecision{Retryable: true, TriggersThrottlePause: true}
-	case workerexecution.WorkFailureFamilyTerminal:
-		return workerexecution.WorkFailureDecision{Terminal: true}
-	default:
-		return workerexecution.WorkFailureDecision{Terminal: true}
-	}
-}
-
 func providerErrorFamilyForType(errorType workerexecution.WorkFailureType) workerexecution.WorkFailureFamily {
 	return providerFailurePolicyForReason(errorType).Family
 }
