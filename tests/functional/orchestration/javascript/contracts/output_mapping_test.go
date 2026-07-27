@@ -38,13 +38,6 @@ return { artifactRef: artifactRef };`
 	unsupportedReturnValidationDiagnostic = "workflow result cannot include a function value"
 )
 
-var privateJavaScriptVMDiagnosticMarkers = []string{
-	"goja",
-	"goja.",
-	"stack frame",
-	"heap dump",
-}
-
 // TestJavaScriptReturnValueMapsToPrimaryInvocationResult proves a JavaScript
 // Factory script return value maps onto the customer-visible primary invocation
 // result on public Factory Session projection and Factory Event surfaces after
@@ -770,19 +763,6 @@ func factoryEventReferencesReturnValue(
 	return strings.Contains(string(encoded), want)
 }
 
-func marshalPrimaryResultForDiagnostics(t *testing.T, result *factoryapi.FactorySessionResult) string {
-	t.Helper()
-
-	if result == nil || result.PrimaryResult == nil {
-		return ""
-	}
-	encoded, err := json.Marshal(result.PrimaryResult)
-	if err != nil {
-		t.Fatalf("marshal primary result for diagnostics: %v", err)
-	}
-	return string(encoded)
-}
-
 func marshalFactoryEventsForDiagnostics(t *testing.T, events []factoryapi.FactoryEvent) string {
 	t.Helper()
 
@@ -817,15 +797,4 @@ func marshalArtifactListForDiagnostics(
 		t.Fatalf("marshal artifact list for diagnostics: %v", err)
 	}
 	return string(encoded)
-}
-
-func assertNoPrivateJavaScriptVMDiagnostics(t *testing.T, outputs ...string) {
-	t.Helper()
-
-	combined := strings.ToLower(strings.Join(outputs, "\n"))
-	for _, marker := range privateJavaScriptVMDiagnosticMarkers {
-		if strings.Contains(combined, strings.ToLower(marker)) {
-			t.Fatalf("diagnostics exposed private VM detail %q in %q", marker, strings.Join(outputs, "\n---\n"))
-		}
-	}
 }
