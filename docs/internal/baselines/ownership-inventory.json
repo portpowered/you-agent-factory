@@ -3534,12 +3534,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/provider_sessions/cursor",
-      "disposition": "retain",
-      "destination": "provider_sessions",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader",
       "disposition": "retain",
       "destination": "provider_sessions",
@@ -3556,6 +3550,30 @@
       "disposition": "retain",
       "destination": "provider_sessions",
       "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/cursor_reader",
+      "destinationKind": "nested"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/cursor_reader",
+      "destinationKind": "nested"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/wire",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/cursor_reader",
+      "destinationKind": "nested"
     },
     {
       "packagePath": "pkg/services/provider_sessions/service",

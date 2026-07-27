@@ -91,7 +91,7 @@ intentionally small enough to distribute across many agents.
   - `TestRunDuplicateKeyUsesDocumentedPrecedence` covers duplicate input.
   - `TestRunMalformedKeyValueFailsWithoutDispatch` covers missing key/value.
 
-- [ ] `tests/functional/transport/cli/parameters/json_values_test.go`
+- [x] `tests/functional/transport/cli/parameters/json_values_test.go`
   - `TestCLIJSONParameterPreservesNestedObjectAndArray` verifies typed payload
     mapping.
   - `TestCLIInvalidJSONParameterNamesTheParameter` verifies actionable error
@@ -234,7 +234,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Inference workers — shared contract
 
-- [ ] `tests/functional/workers/inference/selection_test.go`
+- [x] `tests/functional/workers/inference/selection_test.go`
   - `TestExplicitProviderAndModelReachSelectedProviderEdge` covers selection.
   - `TestWorkerProviderOverridesGlobalDefault` covers precedence.
   - `TestUnknownProviderFailsBeforeProcessStart` covers validation.

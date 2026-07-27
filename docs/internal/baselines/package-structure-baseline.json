@@ -2669,6 +2669,11 @@
     },
     {
       "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/provider_sessions/codex",
+      "target": "pkg/services/provider_sessions"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/provider_sessions/cursor",
       "target": "pkg/services/provider_sessions"
     },

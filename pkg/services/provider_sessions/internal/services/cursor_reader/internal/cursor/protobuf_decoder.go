@@ -5,75 +5,6 @@ import (
 	"fmt"
 )
 
-// decodeProtobufStrings extracts length-delimited strings from protobuf-encoded data.
-func decodeProtobufStrings(data []byte) ([]string, error) {
-	var strings []string
-	offset := 0
-
-	for offset < len(data) {
-		if offset+1 > len(data) {
-			break
-		}
-
-		// Read tag byte: [field_number << 3 | wire_type]
-		tag := data[offset]
-		offset++
-
-		wireType := tag & 0x07
-		_ = tag >> 3 // fieldNum (not used in this function)
-
-		// Only handle wire type 2 (length-delimited)
-		if wireType != 2 {
-			// Skip other wire types (0=varint, 1=64-bit, 5=32-bit)
-			switch wireType {
-			case 0:
-				// Varint - skip bytes until we find a non-continuation byte
-				for offset < len(data) && (data[offset]&0x80) != 0 {
-					offset++
-				}
-				if offset < len(data) {
-					offset++
-				}
-			case 1:
-				// 64-bit - skip 8 bytes
-				offset += 8
-			case 5:
-				// 32-bit - skip 4 bytes
-				offset += 4
-			}
-			continue
-		}
-
-		// Read length (varint)
-		length, lengthBytes := decodeVarint(data[offset:])
-		if lengthBytes == 0 {
-			break // Invalid varint
-		}
-		offset += lengthBytes
-
-		// Read the string data
-		if offset+int(length) > len(data) {
-			break // Not enough data
-		}
-
-		stringData := data[offset : offset+int(length)]
-		offset += int(length)
-
-		// Try to extract readable strings
-		// Check if it's valid UTF-8 and mostly readable
-		if isReadableText(string(stringData)) {
-			strings = append(strings, string(stringData))
-		} else {
-			// Try to find JSON or other readable content within
-			if jsonBytes, found := extractJSONFromBinary(stringData); found {
-				strings = append(strings, string(jsonBytes))
-			}
-		}
-	}
-
-	return strings, nil
-}
-
 // decodeVarint decodes a protobuf varint and returns the value and number of bytes consumed
 func decodeVarint(data []byte) (uint64, int) {
 	var result uint64
@@ -101,7 +32,15 @@ func decodeVarint(data []byte) (uint64, int) {
 // extractProtobufFields extracts all fields from protobuf data and returns them as a map
 // pkgmaintcheck:ignore-cyclomatic-complexity MIT-ported cursor-session protobuf decoding stays grouped until extraction refactor.
 // This is a simplified decoder that focuses on extracting readable content
-func extractProtobufFields(data []byte) (map[string]interface{}, error) {
+func extractProtobufFields(ins *inspection, data []byte, depth int) (map[string]interface{}, error) {
+	if depth > effectiveLimit(testLimitOverrides.protobufNesting, maxProtobufNesting) {
+		return nil, fmt.Errorf("protobuf nesting limit exceeded")
+	}
+	if ins != nil {
+		if err := ins.recordProtobufWork(); err != nil {
+			return nil, err
+		}
+	}
 	result := make(map[string]interface{})
 	offset := 0
 	fieldCount := 0
@@ -161,7 +100,7 @@ func extractProtobufFields(data []byte) (map[string]interface{}, error) {
 					result[fieldKey] = string(jsonBytes)
 				} else {
 					// Try to decode nested protobuf
-					if nestedFields, err := extractProtobufFields(fieldData); err == nil && len(nestedFields) > 0 {
+					if nestedFields, err := extractProtobufFields(ins, fieldData, depth+1); err == nil && len(nestedFields) > 0 {
 						result[fieldKey] = nestedFields
 					} else {
 						// Store as hex for debugging
@@ -191,7 +130,7 @@ func extractProtobufFields(data []byte) (map[string]interface{}, error) {
 	return result, nil
 }
 
-func tryProtobufDecode(data []byte) (map[string]interface{}, bool) {
+func tryProtobufDecode(ins *inspection, data []byte) (map[string]interface{}, bool) {
 	// Check if it looks like protobuf (starts with valid tag bytes)
 	if len(data) == 0 {
 		return nil, false
@@ -207,7 +146,7 @@ func tryProtobufDecode(data []byte) (map[string]interface{}, bool) {
 	}
 
 	// Try to decode
-	fields, err := extractProtobufFields(data)
+	fields, err := extractProtobufFields(ins, data, 0)
 	if err != nil {
 		return nil, false
 	}

@@ -8,19 +8,17 @@ import (
 	"strings"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/cursor"
 	codexreader "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader"
 	codexreaderwire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader/wire"
+	cursorreader "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader"
+	cursorreaderwire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 type inspectionService struct {
-	codex                 codexreader.Service
-	cursorRoot            cursor.AgentStorageRoot
-	cursorWalkDirectory   providersessions.CursorWalkDirectory
-	cursorResolveSymlinks providersessions.CursorResolveSymlinks
-	cursorOpenDatabase    providersessions.CursorOpenSQLDatabase
-	files                 providersessions.FileSystem
+	codex        codexreader.Service
+	cursorReader cursorreader.Service
+	files        providersessions.FileSystem
 }
 
 // Compile-time proof that production inspectionService seals the singular
@@ -47,11 +45,11 @@ func New(
 	if err != nil {
 		return nil, err
 	}
-	cursorRoot, err := cursor.DefaultAgentStorageRoot(resolveHome, files, cursorOperatingSystem)
+	cursorRoot, err := cursorreaderwire.DefaultStorageRoot(resolveHome, files, cursorOperatingSystem)
 	if err != nil {
 		return nil, err
 	}
-	return newForRoots(files, codexWalkDirectory, codexResolveSymlinks, cursorWalkDirectory, cursorResolveSymlinks, cursorOpenDatabase, codexRoot, string(cursorRoot))
+	return newForRoots(files, codexWalkDirectory, codexResolveSymlinks, cursorWalkDirectory, cursorResolveSymlinks, cursorOpenDatabase, codexRoot, cursorRoot)
 }
 
 // NewForRoots constructs Provider Sessions with explicit storage roots.
@@ -71,6 +69,10 @@ func NewForRoots(
 }
 
 func newForRoots(files providersessions.FileSystem, codexWalkDirectory providersessions.CodexWalkDirectory, codexResolveSymlinks providersessions.CodexResolveSymlinks, cursorWalkDirectory providersessions.CursorWalkDirectory, cursorResolveSymlinks providersessions.CursorResolveSymlinks, cursorOpenDatabase providersessions.CursorOpenSQLDatabase, codexRoot, cursorRoot string) (providersessions.Service, error) {
+	cursorReader, err := cursorreaderwire.NewService(files, cursorWalkDirectory, cursorResolveSymlinks, cursorOpenDatabase, cursorRoot)
+	if err != nil {
+		return nil, err
+	}
 	codexRoot = filepath.Clean(codexRoot)
 	codexService, err := codexreaderwire.NewService(codexreader.Dependencies{
 		Files:           files,
@@ -82,12 +84,9 @@ func newForRoots(files providersessions.FileSystem, codexWalkDirectory providers
 		return nil, err
 	}
 	return &inspectionService{
-		codex:                 codexService,
-		cursorRoot:            cursor.AgentStorageRoot(cursorRoot),
-		cursorWalkDirectory:   cursorWalkDirectory,
-		cursorResolveSymlinks: cursorResolveSymlinks,
-		cursorOpenDatabase:    cursorOpenDatabase,
-		files:                 files,
+		codex:        codexService,
+		cursorReader: cursorReader,
+		files:        files,
 	}, nil
 }
 
@@ -126,81 +125,69 @@ func validateStorageDependencies(files providersessions.FileSystem, codexWalkDir
 // Details loads one provider session and returns provider-independent
 // inspection data.
 func (s *inspectionService) Details(provider, kind, id string) (providersessions.Detail, error) {
-	normalizedProvider, err := normalizeProvider(provider)
+	providerID, err := normalizeProvider(provider)
 	if err != nil {
 		return providersessions.Detail{}, err
 	}
-	if strings.TrimSpace(kind) != providersessions.SessionIDKind {
-		return providersessions.Detail{}, providersessions.ErrUnsupportedKind
-	}
-
-	var detail providersessions.Detail
-	switch normalizedProvider {
-	case providersessions.ProviderCodex:
-		detail, err = s.codex.Details(context.Background(), providers.SessionRef{
-			Provider: providers.IDCodex,
-			Kind:     kind,
-			ID:       id,
-		})
-	case providersessions.ProviderCursor:
-		detail, err = cursor.LoadDetails(s.files, s.cursorWalkDirectory, s.cursorResolveSymlinks, s.cursorOpenDatabase, s.cursorRoot, id)
-	}
-	if err == nil {
-		return detail, nil
-	}
-	return providersessions.Detail{}, &providersessions.LookupError{
-		Provider: normalizedProvider,
-		Root:     s.rootFor(normalizedProvider),
-		Err:      err,
-	}
+	return s.detailsForRef(context.Background(), providers.SessionRef{Provider: providerID, Kind: kind, ID: id})
 }
 
 // Inspect validates and inspects a detached typed SessionRef through the same
 // storage-backed lookup path as Details, returning a plain InspectResult.
 func (s *inspectionService) Inspect(req providersessions.InspectRequest) (providersessions.InspectResult, error) {
-	if err := validateSessionRef(req.Session); err != nil {
-		return providersessions.InspectResult{}, err
-	}
-	detail, err := s.Details(req.Session.Provider.String(), req.Session.Kind, req.Session.ID)
+	detail, err := s.detailsForRef(req.Context, req.Session)
 	if err != nil {
 		return providersessions.InspectResult{}, err
 	}
 	return providersessions.InspectResult{
-		Session: providers.SessionRef{
-			Provider: canonicalProviderID(detail.ProviderSession.Provider),
-			Kind:     detail.ProviderSession.Kind,
-			ID:       detail.ProviderSession.ID,
-		},
-		Source: detail.Source,
+		Session: req.Session.Clone(),
+		Source:  detail.Source,
 	}, nil
 }
 
 // Project projects provider-independent transcript/detail facts for a detached
 // typed SessionRef through the same storage-backed lookup path as Details.
 func (s *inspectionService) Project(req providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
-	if err := validateSessionRef(req.Session); err != nil {
-		return providersessions.ProjectResult{}, err
-	}
-	detail, err := s.Details(req.Session.Provider.String(), req.Session.Kind, req.Session.ID)
+	detail, err := s.detailsForRef(req.Context, req.Session)
 	if err != nil {
 		return providersessions.ProjectResult{}, err
 	}
 	return providersessions.ProjectResult{
-		Session: providers.SessionRef{
-			Provider: canonicalProviderID(detail.ProviderSession.Provider),
-			Kind:     detail.ProviderSession.Kind,
-			ID:       detail.ProviderSession.ID,
-		},
-		Detail: detail,
+		Session: req.Session.Clone(),
+		Detail:  detail,
 	}, nil
 }
 
-func normalizeProvider(provider string) (providersessions.Provider, error) {
+func (s *inspectionService) detailsForRef(ctx context.Context, ref providers.SessionRef) (providersessions.Detail, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := validateSessionRef(ref); err != nil {
+		return providersessions.Detail{}, err
+	}
+	switch ref.Provider {
+	case providers.IDCursor:
+		return s.cursorReader.Read(ctx, ref)
+	case providers.IDCodex:
+		detail, err := s.codex.Details(ctx, ref)
+		if err == nil {
+			return detail, nil
+		}
+		return providersessions.Detail{}, &providersessions.LookupError{
+			Provider: providersessions.ProviderCodex,
+			Err:      err,
+		}
+	default:
+		return providersessions.Detail{}, providersessions.ErrUnsupportedProvider
+	}
+}
+
+func normalizeProvider(provider string) (providers.ID, error) {
 	switch strings.TrimSpace(provider) {
 	case string(providersessions.ProviderCodex):
-		return providersessions.ProviderCodex, nil
+		return providers.IDCodex, nil
 	case string(providersessions.ProviderCursor), "agent", "cursor-agent":
-		return providersessions.ProviderCursor, nil
+		return providers.IDCursor, nil
 	default:
 		return "", providersessions.ErrUnsupportedProvider
 	}
@@ -219,20 +206,4 @@ func validateSessionRef(session providers.SessionRef) error {
 		return providersessions.ErrUnsupportedKind
 	}
 	return nil
-}
-
-func canonicalProviderID(provider providersessions.Provider) providers.ID {
-	if provider == providersessions.ProviderCursor {
-		return providers.IDCursor
-	}
-	return providers.IDCodex
-}
-
-func (s *inspectionService) rootFor(provider providersessions.Provider) string {
-	switch provider {
-	case providersessions.ProviderCursor:
-		return string(s.cursorRoot)
-	default:
-		return ""
-	}
 }

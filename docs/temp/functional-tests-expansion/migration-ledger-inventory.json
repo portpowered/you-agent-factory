@@ -2509,6 +2509,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/providers/cursor/historical_inspection_root_test.go",
+      "package": "you-agent-factory/tests/functional/providers/cursor",
+      "scenario": "TestCursorHistoricalInspectionThroughRootBuildProcess_ReturnsDeterministicNormalizedDetail",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/details/cursor_details_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/cursor/historical_inspection_root_test.go",
+      "package": "you-agent-factory/tests/functional/providers/cursor",
+      "scenario": "TestCursorHistoricalInspectionThroughRootBuildProcess_PropagatesMissingAndContainmentFailures",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/details/cursor_details_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/cursor/historical_inspection_root_test.go",
+      "package": "you-agent-factory/tests/functional/providers/cursor",
+      "scenario": "TestCursorHistoricalInspectionThroughRootBuildProcess_DegradesAdverseNativeDataSafely",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/details/cursor_details_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/providers/kiro/process_harness_test.go",
       "package": "you-agent-factory/tests/functional/providers/kiro",
       "scenario": "TestKiroConductorResumeThroughRootBuildProcess",
@@ -5129,6 +5159,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/transport/cli/parameters/json_values_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIJSONParameterPreservesNestedObjectAndArray",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/json_values_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/json_values_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIInvalidJSONParameterNamesTheParameter",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/json_values_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/json_values_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIJSONNullAndEmptyValuesRemainDistinct",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/json_values_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/transport/docs/topic_inventory_test.go",
       "package": "you-agent-factory/tests/functional/transport/docs",
       "scenario": "TestDocsTopicInventory_AliasesRemainQueryableThroughPackagedSurface",
@@ -5579,9 +5639,9 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/workers/inference/fake_custom_integration_test.go",
+      "source_path": "tests/functional/workers/inference/selection_test.go",
       "package": "you-agent-factory/tests/functional/workers/inference",
-      "scenario": "TestFakeCustomIntegrationCompletesFactoryDispatchThroughRootBuildProcess",
+      "scenario": "TestExplicitProviderAndModelReachSelectedProviderEdge",
       "lane": "short",
       "destination": "tests/functional/workers/inference/selection_test.go",
       "catch_all": "none",
@@ -5589,9 +5649,19 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/workers/inference/fake_custom_integration_test.go",
+      "source_path": "tests/functional/workers/inference/selection_test.go",
       "package": "you-agent-factory/tests/functional/workers/inference",
-      "scenario": "TestFakeCustomIntegrationRemainsInertThroughRootBuildProcessConstruction",
+      "scenario": "TestWorkerProviderOverridesGlobalDefault",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/selection_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/selection_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestUnknownProviderFailsBeforeProcessStart",
       "lane": "short",
       "destination": "tests/functional/workers/inference/selection_test.go",
       "catch_all": "none",
@@ -6629,12 +6699,12 @@
       "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-27T19:15:00Z",
+  "scanned_at_utc": "2026-07-27T20:00:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 21,
       "guards_batch": 27,
-      "none": 340,
+      "none": 341,
       "replay_contracts": 23,
       "runtime_api": 106,
       "smoke": 84,
@@ -6660,18 +6730,18 @@
       "smoke": 84,
       "transport": 49,
       "work": 2,
-      "workers": 50,
+      "workers": 51,
       "workflow": 44,
       "workstations": 29
     },
-    "customer_top_level_Test_scenarios": 643,
+    "customer_top_level_Test_scenarios": 650,
     "files_with_customer_Test": 219,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 95,
-    "lane_short": 548,
+    "lane_short": 555,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
       "you-agent-factory/tests/functional/automations": 4,
@@ -6703,7 +6773,7 @@
       "you-agent-factory/tests/functional/product/packaged_factory_portability": 1,
       "you-agent-factory/tests/functional/providers": 39,
       "you-agent-factory/tests/functional/providers/codex": 8,
-      "you-agent-factory/tests/functional/providers/cursor": 5,
+      "you-agent-factory/tests/functional/providers/cursor": 8,
       "you-agent-factory/tests/functional/providers/gemini": 9,
       "you-agent-factory/tests/functional/providers/kiro": 4,
       "you-agent-factory/tests/functional/replay_contracts": 23,
@@ -6715,7 +6785,7 @@
       "you-agent-factory/tests/functional/smoke": 86,
       "you-agent-factory/tests/functional/transport/cli/commands": 10,
       "you-agent-factory/tests/functional/transport/cli/output": 9,
-      "you-agent-factory/tests/functional/transport/cli/parameters": 13,
+      "you-agent-factory/tests/functional/transport/cli/parameters": 16,
       "you-agent-factory/tests/functional/transport/docs": 1,
       "you-agent-factory/tests/functional/transport/http": 1,
       "you-agent-factory/tests/functional/transport/http/status": 2,
@@ -6726,7 +6796,7 @@
       "you-agent-factory/tests/functional/transport/submit": 2,
       "you-agent-factory/tests/functional/work/cli": 1,
       "you-agent-factory/tests/functional/work/visualization": 1,
-      "you-agent-factory/tests/functional/workers/inference": 9,
+      "you-agent-factory/tests/functional/workers/inference": 10,
       "you-agent-factory/tests/functional/workers/inference/agy": 3,
       "you-agent-factory/tests/functional/workers/inference/claude": 4,
       "you-agent-factory/tests/functional/workers/inference/codex": 5,
@@ -6814,15 +6884,15 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T21:20:00Z",
+    "audited_at_utc": "2026-07-27T20:30:00Z",
     "story": "structured-packages-implementation-auto-03-script-pollers-mergeability",
-    "live_customer_scenarios": 643,
-    "ledger_rows": 643,
+    "live_customer_scenarios": 650,
+    "ledger_rows": 650,
     "unmapped_scenarios": 0,
     "checklist_destinations": 437,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 548,
+    "lane_short": 555,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,

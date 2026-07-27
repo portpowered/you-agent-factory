@@ -969,10 +969,6 @@
       "minimum": 90.90
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/cursor",
-      "minimum": 43.36
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader",
       "exception": {
         "kind": "measurement",
@@ -989,6 +985,28 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader/wire",
       "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
+      "minimum": 43.36
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
+      "minimum": 67.50
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/wire",
+      "minimum": 50.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service",
