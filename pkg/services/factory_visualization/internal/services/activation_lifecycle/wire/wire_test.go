@@ -12,13 +12,18 @@ import (
 	activationlifecyclewire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/wire"
 )
 
-type wireSourceStub struct{}
+type wireSourceStub struct {
+	subscribeHook func()
+}
 
-func (wireSourceStub) SubscribeFactoryEvents(
+func (s wireSourceStub) SubscribeFactoryEvents(
 	context.Context,
 	*factorydefinitions.FactoryEventReconnectCursor,
 	factorydefinitions.FactoryEventReconnectScope,
 ) (*factorydefinitions.FactoryEventStream, error) {
+	if s.subscribeHook != nil {
+		s.subscribeHook()
+	}
 	return &factorydefinitions.FactoryEventStream{
 		Events: make(chan factorydefinitions.FactoryEvent),
 	}, nil
@@ -54,18 +59,17 @@ type wireClock struct{}
 
 func (wireClock) Now() time.Time { return time.Unix(1, 0) }
 
-type wireSink struct{}
-
-func (wireSink) PresentFactoryView(activationlifecycle.View) {}
-
 func TestNewServiceConstructsActivationLifecycleOwner(t *testing.T) {
 	t.Parallel()
 
+	subscribeCalls := 0
+	presentCalls := 0
+	source := wireSourceStub{subscribeHook: func() { subscribeCalls++ }}
 	service, err := activationlifecyclewire.NewService(
-		wireSourceStub{},
+		source,
 		wireProjectionStub{},
 		wireClock{},
-		wireSink{},
+		wireSinkFunc(func(activationlifecycle.View) { presentCalls++ }),
 		nil,
 	)
 	if err != nil {
@@ -75,4 +79,19 @@ func TestNewServiceConstructsActivationLifecycleOwner(t *testing.T) {
 		t.Fatal("NewService() returned nil")
 	}
 	var _ activationlifecycle.Service = service
+	if subscribeCalls != 0 || presentCalls != 0 {
+		t.Fatalf("NewService() side effects: subscribe=%d present=%d, want inert construction", subscribeCalls, presentCalls)
+	}
+
+	_, err = service.Join(context.Background(), activationlifecycle.JoinRequest{})
+	if err == nil {
+		t.Fatal("Join before Activate: error = nil, want not-activated failure")
+	}
+	if subscribeCalls != 0 || presentCalls != 0 {
+		t.Fatal("Join before Activate must not subscribe or present")
+	}
 }
+
+type wireSinkFunc func(activationlifecycle.View)
+
+func (f wireSinkFunc) PresentFactoryView(view activationlifecycle.View) { f(view) }

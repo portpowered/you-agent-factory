@@ -17,11 +17,8 @@ func TestActivationLifecycleOwnerBacksRootLifecycleSlice(t *testing.T) {
 	t.Parallel()
 
 	subscribeCalls := 0
-	live := make(chan factorydefinitions.FactoryEvent)
 	source := &lifecycleSourceStub{
-		stream: &factorydefinitions.FactoryEventStream{
-			Events: live,
-		},
+		stream:   newLifecycleEventStream(),
 		snapshot: &factoryruntime.StateSnapshot{TickCount: 1},
 	}
 	source.subscribeHook = func() { subscribeCalls++ }
@@ -105,6 +102,12 @@ func (s *lifecycleSourceStub) SubscribeFactoryEvents(
 
 func (s *lifecycleSourceStub) GetEngineStateSnapshot(context.Context) (*factoryruntime.StateSnapshot, error) {
 	return s.snapshot, nil
+}
+
+func newLifecycleEventStream() *factorydefinitions.FactoryEventStream {
+	return &factorydefinitions.FactoryEventStream{
+		Events: make(chan factorydefinitions.FactoryEvent),
+	}
 }
 
 type lifecycleProjectionStub struct{}
