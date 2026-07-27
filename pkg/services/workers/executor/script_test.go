@@ -511,6 +511,21 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 			wantResult:    workerexecution.OutcomeFailed,
 			wantErrorText: "execution cancelled: exec: file not found",
 		},
+		{
+			name: "missing executable",
+			runner: commandRunnerFunc(func(_ context.Context, _ CommandRequest) (CommandResult, error) {
+				return CommandResult{Stderr: []byte("exec failed")}, exec.ErrNotFound
+			}),
+			wantOutcome:   workerexecution.ScriptExecutionOutcomeProcessError,
+			wantFailure:   &processError,
+			wantStderr:    "exec failed",
+			wantResult:    workerexecution.OutcomeFailed,
+			wantErrorText: "Script executable could not be found.",
+			wantFailureMetadata: func() *workerexecution.WorkFailureType {
+				value := workerexecution.WorkFailureTypeMissingExecutable
+				return &value
+			}(),
+		},
 	}
 }
 

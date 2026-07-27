@@ -1801,6 +1801,86 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/orchestration/javascript/composition/agent_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
+      "scenario": "TestJavaScriptAgentFailureReturnsStableFailureRecord",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/composition/agent_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/composition/agent_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
+      "scenario": "TestJavaScriptAgentReturnsUnaryResult",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/composition/agent_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/composition/parallel_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
+      "scenario": "TestJavaScriptParallelDispatchesChildrenConcurrently",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/composition/parallel_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/composition/parallel_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
+      "scenario": "TestJavaScriptParallelPartialFailureUsesDocumentedPolicy",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/composition/parallel_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/composition/parallel_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
+      "scenario": "TestJavaScriptParallelPreservesDeclaredResultOrdering",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/composition/parallel_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/durability/resume_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/durability",
+      "scenario": "TestJavaScriptCorruptCheckpointFailsActionably",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/durability/resume_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/durability/resume_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/durability",
+      "scenario": "TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/durability/resume_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/durability/resume_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/durability",
+      "scenario": "TestJavaScriptResumeRestoresCheckpointAndFinalResult",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/durability/resume_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
       "package": "you-agent-factory/tests/functional/orchestration/petri/dispatch",
       "scenario": "TestPetriConcurrentFailureDoesNotDuplicateDispatch",
@@ -2091,10 +2171,70 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
-      "package": "you-agent-factory/tests/functional/providers",
-      "scenario": "TestTemplateTests_ScriptExecutorDropsResourceTokensFromArgTemplates",
+      "source_path": "tests/functional/workers/script/environment_long_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
+      "scenario": "TestScriptWorkerDropsResourceTokensFromArgTemplates",
       "lane": "functionallong",
+      "destination": "tests/functional/workers/script/environment_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/script/environment_long_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
+      "scenario": "TestScriptWorkerOrdersMultipleInputsByWorkstationConfigWithResources",
+      "lane": "functionallong",
+      "destination": "tests/functional/workers/script/environment_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/script/environment_long_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
+      "scenario": "TestScriptWorkstationDropsResourceTokensFromPromptTemplates",
+      "lane": "functionallong",
+      "destination": "tests/functional/workers/script/environment_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/script/environment_long_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
+      "scenario": "TestScriptWorkstationOrdersMultipleInputsByWorkstationConfigWithResources",
+      "lane": "functionallong",
+      "destination": "tests/functional/workers/script/environment_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/script/environment_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
+      "scenario": "TestScriptWorkerMissingExecutableFailsActionably",
+      "lane": "short",
+      "destination": "tests/functional/workers/script/environment_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/script/environment_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
+      "scenario": "TestScriptWorkerReceivesDeclaredEnvironmentOnly",
+      "lane": "short",
+      "destination": "tests/functional/workers/script/environment_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/script/environment_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
+      "scenario": "TestScriptWorkerWorktreePassthrough",
+      "lane": "short",
       "destination": "tests/functional/workers/script/environment_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
@@ -2103,9 +2243,9 @@
     {
       "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
       "package": "you-agent-factory/tests/functional/providers",
-      "scenario": "TestTemplateTests_ScriptExecutorOrdersMultipleInputsByWorkstationConfigWithResources",
+      "scenario": "TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates",
       "lane": "functionallong",
-      "destination": "tests/functional/workers/script/environment_test.go",
+      "destination": "tests/functional/workers/inference/claude/golden_success_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -2116,26 +2256,6 @@
       "scenario": "TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates",
       "lane": "functionallong",
       "destination": "tests/functional/workers/inference/codex/golden_success_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
-      "package": "you-agent-factory/tests/functional/providers",
-      "scenario": "TestTemplateTests_ScriptWrapDropsResourceTokensFromWorkstationTemplates",
-      "lane": "functionallong",
-      "destination": "tests/functional/workers/script/environment_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
-      "package": "you-agent-factory/tests/functional/providers",
-      "scenario": "TestTemplateTests_ScriptWrapOrdersMultipleInputsByWorkstationConfigWithResources",
-      "lane": "functionallong",
-      "destination": "tests/functional/workers/script/environment_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -2178,16 +2298,6 @@
       "destination": "tests/functional/workers/inference/process_cleanup_test.go",
       "catch_all": "none",
       "specialty_targets": "script-timeout-companion-smoke-100",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/providers/cli_worktree_passthrough_test.go",
-      "package": "you-agent-factory/tests/functional/providers",
-      "scenario": "TestWorktreePassthrough",
-      "lane": "short",
-      "destination": "tests/functional/workers/script/environment_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
       "deletion_only_batch": "n/a"
     },
     {
@@ -5281,6 +5391,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/workers/inference/pi/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/pi",
+      "scenario": "TestPiGoldenStructuredFailure",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/pi/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/pi/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/pi",
+      "scenario": "TestPiGoldenTextSuccess",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/pi/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/pi/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/pi",
+      "scenario": "TestPiGoldenTimeout",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/pi/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/workers/inference/opencode/golden_test.go",
       "package": "you-agent-factory/tests/functional/workers/inference/opencode",
       "scenario": "TestOpenCodeGoldenFinalOnlyFallback",
@@ -6108,14 +6248,14 @@
       "you-agent-factory/tests/functional/workstations/execution": 2,
       "you-agent-factory/tests/functional/workstations/poller": 3
     },
-    "customer_top_level_Test_scenarios": 583,
+    "customer_top_level_Test_scenarios": 597,
     "files_with_customer_Test": 200,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
-    "lane_functionallong": 116,
-    "lane_short": 467
+    "lane_functionallong": 117,
+    "lane_short": 480
   },
   "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. Non-catch-all rows mapped by FND-007-006; catch-all rows mapped by FND-007-003\u2026005.",
   "runtime_api_mapping": {
@@ -6189,15 +6329,15 @@
   },
   "completeness_audit": {
     "audited_at_utc": "2026-07-27T15:35:00Z",
-    "story": "ft-wave1-cli-submit-wiring-mergeability",
-    "live_customer_scenarios": 583,
-    "ledger_rows": 583,
+    "story": "ft-wave1-script-environment-mergeability",
+    "live_customer_scenarios": 597,
+    "ledger_rows": 597,
     "unmapped_scenarios": 0,
     "checklist_destinations": 434,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 467,
-    "lane_functionallong": 116,
+    "lane_short": 480,
+    "lane_functionallong": 117,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
     "validator": "go run ./cmd/migrationledgercheck"

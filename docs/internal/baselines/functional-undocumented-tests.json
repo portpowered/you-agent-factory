@@ -520,23 +520,11 @@
     },
     {
       "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptExecutorDropsResourceTokensFromArgTemplates"
-    },
-    {
-      "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptExecutorOrdersMultipleInputsByWorkstationConfigWithResources"
+      "name": "TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates"
     },
     {
       "file": "providers/cli_template_resolution_long_test.go",
       "name": "TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates"
-    },
-    {
-      "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptWrapDropsResourceTokensFromWorkstationTemplates"
-    },
-    {
-      "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptWrapOrdersMultipleInputsByWorkstationConfigWithResources"
     },
     {
       "file": "providers/cli_timeout_cleanup_smoke_test.go",
