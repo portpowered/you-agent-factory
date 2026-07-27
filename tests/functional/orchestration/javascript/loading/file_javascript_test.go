@@ -1,3 +1,118 @@
 // file_javascript_test.go holds customer functional scenarios for file-backed
 // JavaScript Factory loading through the public CLI and customer process boundary.
 package loading_test
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+const fileJavaScriptImportedSuccessResult = "<FILE_IMPORT_SUCCESS>"
+
+// TestJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot proves a
+// file-backed JavaScript Factory resolves a factory-relative import through
+// the public you run customer process boundary with a terminal COMPLETED
+// primary outcome that reflects the imported module contribution.
+func TestJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t *testing.T) {
+	t.Parallel()
+
+	dir := scaffoldFileBackedJavaScriptFactoryWithRelativeImport(t)
+	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run",
+		"--factory", filepath.Join(dir, "factory.json"),
+		"--with-mock-workers", mockWorkersPath,
+		"--output", "primary",
+		"--no-record",
+		"hello",
+	})
+	homeDir := t.TempDir()
+	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = dir
+
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	if err := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}).Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	if inputs.Stderr() != "" {
+		t.Fatalf("stderr = %q, want empty stderr on successful JSON invocation", inputs.Stderr())
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0 for file-backed factory without child dispatch", runner.CallCount())
+	}
+
+	result := decodeSingleInvocationResponse(t, inputs.Stdout())
+	assertFileJavaScriptImportedSuccessOutcome(t, result)
+	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+}
+
+func scaffoldFileBackedJavaScriptFactoryWithRelativeImport(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "file-javascript-relative-import",
+		"invocationSignature": map[string]any{
+			"parameters": []any{map[string]any{
+				"name": "prompt", "required": false,
+				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+			}},
+		},
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"sourceRef": "workflow.js",
+				"argsSchema": map[string]any{
+					"type":                 "object",
+					"properties":           map[string]any{"prompt": map[string]any{"type": "string"}},
+					"additionalProperties": false,
+				},
+			},
+		},
+	})
+	libDir := filepath.Join(dir, "lib")
+	if err := os.MkdirAll(libDir, 0o700); err != nil {
+		t.Fatalf("create lib directory: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(libDir, "constants.js"),
+		[]byte(`export const successResult = "`+fileJavaScriptImportedSuccessResult+`";`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write imported module: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "workflow.js"),
+		[]byte(`import { successResult } from "./lib/constants.js";
+workflow.final(successResult);`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write workflow entry: %v", err)
+	}
+	return dir
+}
+
+func assertFileJavaScriptImportedSuccessOutcome(t *testing.T, result factoryapi.InvocationResponse) {
+	t.Helper()
+
+	if result.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("terminal outcome = %s, want COMPLETED", result.Status)
+	}
+	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
+		t.Fatalf("primary result = %#v, want exactly one content part", result.PrimaryResult)
+	}
+	part, err := (*result.PrimaryResult)[0].AsWorkJsonContentPart()
+	if err != nil {
+		t.Fatalf("decode primary result content part: %v", err)
+	}
+	if got, ok := part.Json.(string); !ok || got != fileJavaScriptImportedSuccessResult {
+		t.Fatalf("primary result = %#v, want exact imported string %q", part.Json, fileJavaScriptImportedSuccessResult)
+	}
+}

@@ -75,7 +75,7 @@ func PrepareStart(
 	if err != nil {
 		return PreparedStart{}, err
 	}
-	if err := validateResolvedSourceContent(resolution, workflows); err != nil {
+	if err := validateResolvedSourceContent(normalized.Source, resolution, workflows); err != nil {
 		return PreparedStart{}, err
 	}
 	if err := workflows.ValidateArgs(resolution.ArgsSchema, normalized.Args); err != nil {
@@ -104,10 +104,7 @@ func PrepareStart(
 	}
 
 	executableSource := strings.TrimSpace(resolution.Content)
-	loaded, loadIssues := workflows.LoadSource(factory.WorkflowValidationLoadRequest{
-		SourceRef: resolution.SourceRef,
-		Content:   executableSource,
-	})
+	loaded, loadIssues := workflows.LoadSource(workflowValidationLoadRequest(normalized.Source, resolution, executableSource))
 	if len(loadIssues) > 0 {
 		return PreparedStart{}, validationErrorFromSourceIssues(loadIssues)
 	}
@@ -210,6 +207,7 @@ func applyInlineFactoryDeclaration(resolution *factory.WorkflowSourceResolution,
 }
 
 func validateResolvedSourceContent(
+	source Source,
 	resolution factory.WorkflowSourceResolution,
 	workflows factory.JavaScriptWorkflowDefinitions,
 ) error {
@@ -218,10 +216,7 @@ func validateResolvedSourceContent(
 		return NewValidationError("source", "workflow source content is empty")
 	}
 
-	loaded, loadIssues := workflows.LoadSource(factory.WorkflowValidationLoadRequest{
-		SourceRef: resolution.SourceRef,
-		Content:   content,
-	})
+	loaded, loadIssues := workflows.LoadSource(workflowValidationLoadRequest(source, resolution, content))
 	if len(loadIssues) > 0 {
 		return validationErrorFromSourceIssues(loadIssues)
 	}
