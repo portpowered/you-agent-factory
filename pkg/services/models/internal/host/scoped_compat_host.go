@@ -310,9 +310,9 @@ func (h *ScopedCompatHost) issueLease(
 		h.diagnostics.logLeaseExhausted(snapshot.Identity)
 		return Lease{}, leaseCapacityError(modelName)
 	}
-	endpoint := strings.TrimSpace(snapshot.Diagnostics["endpoint"])
-	if requiresSupervisedBackend(snapshot.Identity) && endpoint == "" {
-		return Lease{}, ErrRuntimeNotReady
+	endpoint, err := h.supervisedLeaseEndpoint(runtimeCfg, modelName, snapshot.Identity, snapshot.Diagnostics)
+	if err != nil {
+		return Lease{}, err
 	}
 	h.seq++
 	leaseID := fmt.Sprintf("model-lease-%d", h.seq)
@@ -392,6 +392,50 @@ func (h *ScopedCompatHost) identityFromCatalog(
 		}
 	}
 	return identity
+}
+
+func (h *ScopedCompatHost) supervisedLeaseEndpoint(
+	runtimeCfg *models.RuntimeConfig,
+	modelName string,
+	identity Identity,
+	diagnostics map[string]string,
+) (string, error) {
+	if !requiresSupervisedBackend(identity) {
+		return "", nil
+	}
+	worker, err := localWorkerForModel(runtimeCfg, modelName)
+	if err != nil {
+		return "", err
+	}
+	if !workerDeclaresSupervisedHealthEndpoint(worker) {
+		return "", nil
+	}
+	endpoint := strings.TrimSpace(diagnostics["endpoint"])
+	if endpoint == "" {
+		return "", ErrRuntimeNotReady
+	}
+	return endpoint, nil
+}
+
+func localWorkerForModel(
+	runtimeCfg *models.RuntimeConfig,
+	modelName string,
+) (*models.RuntimeWorker, error) {
+	if runtimeCfg == nil {
+		return nil, fmt.Errorf("runtime config is not available")
+	}
+	target := canonicalModelKey(modelName)
+	for _, worker := range runtimeCfg.Workers {
+		if canonicalModelKey(worker.Model) != target {
+			continue
+		}
+		if strings.TrimSpace(worker.ModelLocality) != models.RuntimeModelLocalityLocal {
+			continue
+		}
+		copied := worker
+		return &copied, nil
+	}
+	return nil, fmt.Errorf("local model worker not found for %q", modelName)
 }
 
 func readinessFromModelHostSnapshot(host models.ModelHostSnapshot, identity Identity) ReadinessSnapshot {
