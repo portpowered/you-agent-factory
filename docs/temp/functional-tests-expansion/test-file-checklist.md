@@ -175,7 +175,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### HTTP server and protocol mechanics
 
-- [ ] `tests/functional/transport/http/server/startup_shutdown_test.go`
+- [x] `tests/functional/transport/http/server/startup_shutdown_test.go`
   - `TestAPIServerStartsOnConfiguredListenerAndServesStatus`.
   - `TestAPIServerShutdownClosesListenerAndActiveStreams`.
   - `TestAPIServerBindFailureUnwindsStartedLifecycleRoles`.
