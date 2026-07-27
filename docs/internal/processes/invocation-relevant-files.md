@@ -251,8 +251,8 @@ primary-result behavior.
   resolve onto their canonical conductor identity. Bundled built-ins remain on
   the provider-native Infer/command path until their package-owned Integration
   replaces the native-runtime compatibility stub; `UsesNativeRunner` keeps the
-  stub on the native path and routes migrated Integrations (currently Gemini
-  and Kiro)
+  stub on the native path and routes migrated Integrations (currently Gemini,
+  Kiro, and Cursor)
   through the conductor without a concrete-provider switch in shared
   orchestration. Aggregate dispatch/failure branches and `ProviderOverride`
   remain intact and bypass the registry/conductor decorators. Concurrent cancel,
@@ -1073,14 +1073,19 @@ response-stream output.
   `inferencecontract.ExecuteInvocation` remains the single owner of canonical,
   non-retryable cancellation. Bind the
   migrated providers as registry catalog Integrations
-  (`gemini.NewIntegration`, `kiro.NewIntegration`) from
+  (`gemini.NewIntegration`, `kiro.NewIntegration`, `cursor.NewIntegration`) from
   `BuiltInRegistrations`, and let
   `UsesNativeRunner` route Integrations that no longer advertise the
   native-runtime compatibility marker through `conductor.Invoke` without adding
   a concrete-provider switch in shared orchestration. Process composition
   passes the shared `ProviderCommandRunner` edge into
   `BuiltInRegistrations(BuiltInDependencies{CommandRunner})` so migrated
-  Integrations and native executors share one command boundary. Worker
+  Integrations and native executors share one command boundary. Cursor also
+  receives the resolved Workers operating system and exact
+  `WorkersProviderTemporaryFileSystem` edge through those dependencies; its
+  provider-scoped root-process functional tests replace only those two typed
+  effects and prove that every created oversized-prompt file is closed and
+  removed on success and adverse outcomes. Worker
   construction resolves persisted plus invocation-override permission policy
   once, then an outer invocation-policy runner records the effective value on
   `ProviderInferenceRequest`; this outer boundary must wrap the conductor
