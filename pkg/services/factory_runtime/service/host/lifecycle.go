@@ -13,17 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
 )
 
-// IsCanceledStartup reports the specific startup cancellation case that is
-// expected when the owning process context has already ended.
-func IsCanceledStartup(ctx context.Context, err error) bool {
-	return ctx != nil && ctx.Err() != nil && errors.Is(err, context.Canceled)
-}
-
-// StartupReadinessError normalizes service-mode readiness failures.
-func StartupReadinessError(err error) error {
-	return factory.StartupReadinessError(err)
-}
-
 // Handle hosts one running factory runtime bundle and coordinates its run loop.
 type Handle struct {
 	Bundle *Bundle

@@ -2838,6 +2838,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/services/instance_host",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/instance_host/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/instance_host/wire",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/javascript",
       "disposition": "retain",
       "destination": "factory_runtime",
@@ -3456,6 +3474,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/models/internal/services/runtime_host",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_host/internal/service",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_host/wire",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/models/internal/services/runtime_scopes",
       "disposition": "retain",
       "destination": "models",
@@ -3510,12 +3546,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/provider_sessions/cursor",
-      "disposition": "retain",
-      "destination": "provider_sessions",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader",
       "disposition": "retain",
       "destination": "provider_sessions",
@@ -3532,6 +3562,30 @@
       "disposition": "retain",
       "destination": "provider_sessions",
       "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/cursor_reader",
+      "destinationKind": "nested"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/cursor_reader",
+      "destinationKind": "nested"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/wire",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/cursor_reader",
+      "destinationKind": "nested"
     },
     {
       "packagePath": "pkg/services/provider_sessions/service",

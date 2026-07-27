@@ -14,6 +14,10 @@ func provideRecordingsFactory(
 ) factorysessionwire.RecordingsFactory {
 	writer := recordingsservice.NewReplayRecordingSnapshotWriter(storage.WriteFile)
 	tickers := recordingsservice.NewRecordingFlushTickerFactory()
+	publication, err := recordingsservice.NewPortableArtifactPublication()
+	if err != nil {
+		panic(err)
+	}
 	return func(
 		ledger recordings.Ledger,
 		projection recordings.ProjectionService,
@@ -24,6 +28,7 @@ func provideRecordingsFactory(
 			targets,
 			writer,
 			tickers,
+			publication,
 			platformclock.Real{},
 		)
 	}

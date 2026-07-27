@@ -236,7 +236,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/smoke/cli_factory_prompt_run_smoke_test.go::TestFactoryPromptRun_RealCLIWritesPrimaryResultFromPositionalText",
+          "test": "tests/functional/transport/cli/commands/run_wiring_test.go::TestCLIRunFactoryByPath",
           "boundary": "cli"
         }
       ]
