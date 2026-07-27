@@ -4,6 +4,7 @@ package execution
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -188,6 +189,72 @@ func TestEligibleWorkstationContentionChoosesOneDispatchOnly(t *testing.T) {
 	})
 }
 
+// TestContentionMakesProgressAcrossRepeatedWork proves that submitting
+// repeated Work items while multiple execution workstations remain eligible
+// still drives each item forward to the Factory success path without stalls
+// or unbounded duplicate dispatches, observed through public Work and
+// Factory Event projections.
+func TestContentionMakesProgressAcrossRepeatedWork(t *testing.T) {
+	support.SkipLongFunctional(t, "slow execution-workstation repeated-contention sweep")
+
+	const repeatedWorkCount = 3
+
+	dir := support.ScaffoldFactory(t, contendingExecutionFactoryConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	for i := 1; i <= repeatedWorkCount; i++ {
+		testutil.WriteSeedFile(t, dir, "task", []byte(fmt.Sprintf(`{"item":"contended-%d"}`, i)))
+	}
+
+	responses := make([]workerexecution.InferenceResponse, repeatedWorkCount)
+	for i := range responses {
+		responses[i] = workerexecution.InferenceResponse{Content: "Done. COMPLETE"}
+	}
+	provider := testutil.NewMockProvider(responses...)
+
+	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		30*time.Second,
+	)
+	dispatches := support.ObserveDispatchEvents(t, events)
+
+	if provider.CallCount() != repeatedWorkCount {
+		t.Fatalf("provider call count = %d, want %d when repeated work contends", provider.CallCount(), repeatedWorkCount)
+	}
+	if session.Runtime.Progress.Categories.Terminal != repeatedWorkCount || session.Runtime.Progress.Categories.Failed != 0 {
+		t.Fatalf(
+			"session progress categories = %+v, want %d terminal and zero failed",
+			session.Runtime.Progress.Categories,
+			repeatedWorkCount,
+		)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "complete")); got != repeatedWorkCount {
+		t.Fatalf("CountWorkAtCustomerState(task:complete) = %d, want %d; listed=%#v", got, repeatedWorkCount, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "init")); got != 0 {
+		t.Fatalf("CountWorkAtCustomerState(task:init) = %d, want 0 after all items complete", got)
+	}
+
+	workIDs := terminalTaskWorkIDsAtState(t, listed, "complete")
+	if len(workIDs) != repeatedWorkCount {
+		t.Fatalf("terminal task work IDs = %v, want %d completed items", workIDs, repeatedWorkCount)
+	}
+	for _, workID := range workIDs {
+		if completed := countCompletedDispatchesForWork(dispatches, workID); completed != 1 {
+			t.Fatalf("completed dispatch count for work %q = %d, want 1; dispatches=%#v", workID, completed, dispatches)
+		}
+		fired := competingWorkstationsThatDispatched(dispatches, workID)
+		if len(fired) != 1 {
+			t.Fatalf("competing workstations that dispatched work %q = %v, want exactly one", workID, fired)
+		}
+		if fired[0] != contendingPrimaryWorkstation && fired[0] != contendingAlternateWorkstation {
+			t.Fatalf("dispatch workstation = %q, want %q or %q", fired[0], contendingPrimaryWorkstation, contendingAlternateWorkstation)
+		}
+	}
+}
+
 func contendingExecutionFactoryConfig() map[string]any {
 	return map[string]any{
 		"name": "execution-contention",
@@ -225,6 +292,17 @@ func contendingExecutionFactoryConfig() map[string]any {
 func terminalTaskWorkIDAtState(t *testing.T, listed factoryapi.ListWorkResponse, state string) string {
 	t.Helper()
 
+	ids := terminalTaskWorkIDsAtState(t, listed, state)
+	if len(ids) != 1 {
+		t.Fatalf("task work at state %q count = %d, want 1; ids=%v listed=%#v", state, len(ids), ids, listed)
+	}
+	return ids[0]
+}
+
+func terminalTaskWorkIDsAtState(t *testing.T, listed factoryapi.ListWorkResponse, state string) []string {
+	t.Helper()
+
+	ids := make([]string, 0, len(listed.Results))
 	for _, item := range listed.Results {
 		if item.WorkTypeName == nil || *item.WorkTypeName != "task" {
 			continue
@@ -236,10 +314,9 @@ func terminalTaskWorkIDAtState(t *testing.T, listed factoryapi.ListWorkResponse,
 		if workID == "" {
 			t.Fatalf("task work at %q has empty work ID: %#v", state, item)
 		}
-		return workID
+		ids = append(ids, workID)
 	}
-	t.Fatalf("no task work found at state %q in listing: %#v", state, listed)
-	return ""
+	return ids
 }
 
 func countCompletedDispatchesForWork(
