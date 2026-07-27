@@ -49,3 +49,10 @@ var retiredFunctionalFactoryEventTypes = []string{
 	"FACTORY_STATE_CHANGE",
 	"RUN_FINISHED",
 }
+
+func stringValueFromFunctionalPtr[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
+}
