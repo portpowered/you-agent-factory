@@ -3,14 +3,18 @@ package service
 import (
 	"context"
 	"errors"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
+	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
+	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
-	"strings"
-	"testing"
-	"time"
 )
 
 func TestNewRootRejectsMissingHostPlatform(t *testing.T) {
@@ -27,6 +31,7 @@ func TestNewRootRejectsMissingHostPlatform(t *testing.T) {
 			nil, modelassets.Endpoints{},
 			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 			nil, nil, nil, nil, nil, nil, nil, nil,
+			nil, nil,
 		)
 		if opener != nil || !errors.Is(err, ErrInvalidDependencies) || !strings.Contains(err.Error(), "model asset host platform") {
 			t.Fatalf("NewRoot(%#v) = (%#v, %v), want missing host-platform dependency", platform, opener, err)
@@ -231,6 +236,144 @@ func TestService_ReleaseLease_ReturnsLeaseNotFoundWhenHostMissing(t *testing.T) 
 	if !errors.Is(err, models.ErrHostLeaseNotFound) {
 		t.Fatalf("ReleaseLease nil host = %v, want ErrHostLeaseNotFound", err)
 	}
+}
+
+func TestRootListCatalogReturnsStableDetachedScopedProjection(t *testing.T) {
+	t.Parallel()
+
+	root := newScopedCatalogRoot(t)
+	request := models.OpenRuntimeScopeRequest{Config: models.RuntimeScopeConfig{
+		CacheDirectory: "original-cache",
+		Runtime: models.RuntimeConfig{
+			FactoryDirectory: "selected-factory",
+			Workers: []models.RuntimeWorker{
+				scopedCatalogWorker("zeta", "zeta-model", "summarize"),
+				scopedCatalogWorker("alpha-generate", " alpha-model ", "generate"),
+				scopedCatalogWorker("alpha-embed", "ALPHA-MODEL", "embed"),
+			},
+			Resources: []models.RuntimeResource{
+				scopedCatalogResource("zeta-cache", "zeta-model", ""),
+				scopedCatalogResource("alpha-cache", "ALPHA-MODEL", "MODELSCOPE"),
+			},
+		},
+	}}
+	opened, err := root.OpenRuntimeScope(context.Background(), request)
+	if err != nil {
+		t.Fatalf("OpenRuntimeScope: %v", err)
+	}
+
+	// The accepted scope owns the effective snapshot taken at open time.
+	request.Config.Runtime.Workers[0].Model = "mutated-model"
+	request.Config.Runtime.Resources[1].Provider = "mutated-provider"
+
+	first, err := root.ListCatalog(context.Background(), models.ListModelsRequest{Scope: opened.Scope})
+	if err != nil {
+		t.Fatalf("ListCatalog: %v", err)
+	}
+	assertScopedCatalog(t, first)
+
+	second, err := root.ListCatalog(context.Background(), models.ListModelsRequest{Scope: opened.Scope})
+	if err != nil {
+		t.Fatalf("ListCatalog repeated: %v", err)
+	}
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("repeated ListCatalog differs:\nfirst:  %#v\nsecond: %#v", first, second)
+	}
+
+	mutateScopedCatalogResult(first)
+	afterMutation, err := root.ListCatalog(context.Background(), models.ListModelsRequest{Scope: opened.Scope})
+	if err != nil {
+		t.Fatalf("ListCatalog after caller mutation: %v", err)
+	}
+	assertScopedCatalog(t, afterMutation)
+}
+
+func newScopedCatalogRoot(t *testing.T) *Root {
+	t.Helper()
+	scopes, err := runtimescopeswire.NewService(func() string { return "catalog-root-test" })
+	if err != nil {
+		t.Fatalf("construct Runtime Scopes: %v", err)
+	}
+	catalog, err := catalogwire.NewService(scopes)
+	if err != nil {
+		t.Fatalf("construct Catalog: %v", err)
+	}
+	return &Root{runtimeScopes: scopes, catalog: catalog}
+}
+
+func scopedCatalogWorker(name, model, operation string) models.RuntimeWorker {
+	return models.RuntimeWorker{
+		Name:          name,
+		Type:          models.RuntimeWorkerTypeInference,
+		Model:         model,
+		ModelLocality: models.RuntimeModelLocalityLocal,
+		Operations: []models.RuntimeOperation{{
+			Name: operation,
+			Inputs: []models.RuntimeOperationSlot{{
+				Name: "input", ContentTypes: []string{
+					models.RuntimeContentTypeText,
+					models.RuntimeContentTypeAudio,
+				},
+			}},
+		}},
+		Resources: []models.RuntimeResource{{Name: modelResourceName(model)}},
+	}
+}
+
+func modelResourceName(model string) string {
+	if localmodels.CanonicalModelName(model) == "ALPHA-MODEL" {
+		return "alpha-cache"
+	}
+	return "zeta-cache"
+}
+
+func scopedCatalogResource(name, model, provider string) models.RuntimeResource {
+	return models.RuntimeResource{
+		Name: name, Type: models.RuntimeResourceTypeModel, Capacity: 1,
+		Model: model, Backend: "GGUF", LoadPolicy: "ON_DEMAND", Provider: provider,
+	}
+}
+
+func assertScopedCatalog(t *testing.T, result models.ListModelsResult) {
+	t.Helper()
+	if len(result.Models) != 2 {
+		t.Fatalf("ListCatalog models = %#v, want two canonical identities", result.Models)
+	}
+	alpha := result.Models[0]
+	if localmodels.CanonicalModelName(alpha.Name) != "ALPHA-MODEL" {
+		t.Fatalf("first model = %q, want canonical ALPHA-MODEL identity", alpha.Name)
+	}
+	if len(alpha.Operations) != 2 ||
+		alpha.Operations[0].Name != "embed" ||
+		alpha.Operations[1].Name != "generate" {
+		t.Fatalf("alpha operations = %#v, want embed then generate", alpha.Operations)
+	}
+	if got := alpha.Operations[0].Inputs[0].ContentTypes; !reflect.DeepEqual(
+		got,
+		[]string{models.RuntimeContentTypeAudio, models.RuntimeContentTypeText},
+	) {
+		t.Fatalf("alpha content types = %#v, want deterministic AUDIO/TEXT order", got)
+	}
+	if len(alpha.Resources) != 1 || alpha.Resources[0].Model == nil ||
+		*alpha.Resources[0].Model != "ALPHA-MODEL" {
+		t.Fatalf("alpha resources = %#v, want detached model resource", alpha.Resources)
+	}
+	if alpha.Status != models.StatusReady ||
+		alpha.ManagedRuntime.Diagnostics["sourceKind"] != localmodels.ManagedRuntimeSourceKindManagedMirror {
+		t.Fatalf("alpha status/runtime = %#v, want ready managed-mirror projection", alpha)
+	}
+	if localmodels.CanonicalModelName(result.Models[1].Name) != "ZETA-MODEL" {
+		t.Fatalf("second model = %q, want ZETA-MODEL", result.Models[1].Name)
+	}
+}
+
+func mutateScopedCatalogResult(result models.ListModelsResult) {
+	result.Models[0].Name = "mutated"
+	result.Models[0].Operations[0].Name = "mutated"
+	result.Models[0].Operations[0].Inputs[0].ContentTypes[0] = "mutated"
+	*result.Models[0].Resources[0].Model = "mutated"
+	result.Models[0].ManagedRuntime.SupportedOperations[0].Name = "mutated"
+	result.Models[0].ManagedRuntime.Diagnostics["sourceKind"] = "mutated"
 }
 
 func assertContractOnlyUnsupported(t *testing.T, operation string, err error) {

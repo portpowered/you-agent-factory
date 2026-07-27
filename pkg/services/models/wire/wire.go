@@ -4,6 +4,7 @@ package wire
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -13,6 +14,8 @@ import (
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
+	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
+	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
 )
 
@@ -65,6 +68,16 @@ func NewService(
 	if runtimeTempFile != nil {
 		createTempFile = runtimeTempFileAdapter{next: runtimeTempFile}.create
 	}
+	runtimeScopes, err := runtimescopeswire.NewService(func() string {
+		return runtimeScopeIssuerID(now, assetHTTP, hostHTTP)
+	})
+	if err != nil {
+		return nil, err
+	}
+	catalogService, err := catalogwire.NewService(runtimeScopes)
+	if err != nil {
+		return nil, err
+	}
 	service, err := modelsservice.NewRoot(
 		localmodels.HostPlatform(assetPlatform), assetHTTP, defaultEndpoints,
 		modelassets.MakeDirectories(assetMkdirAll), modelassets.InspectPath(assetStat),
@@ -75,6 +88,7 @@ func NewService(
 		launcher, hostHTTP, clock,
 		runtimeRunner, runtimeHTTP, localmodels.InspectFile(runtimeInspect),
 		localmodels.TempDirectory(runtimeTempDir), createTempFile,
+		runtimeScopes, catalogService,
 		models.ProcessDependencies{
 			Logger: logger, Clock: now, PullMetrics: pullMetrics,
 			HostLogger: hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,
@@ -84,6 +98,13 @@ func NewService(
 		return nil, err
 	}
 	return service, nil
+}
+
+func runtimeScopeIssuerID(now func() time.Time, assetHTTP models.AssetHTTPDoer, hostHTTP models.HostHTTPDoer) string {
+	if now == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d:%p:%p", now().UTC().UnixNano(), assetHTTP, hostHTTP)
 }
 
 // NewInvocationArtifactExporter constructs the Models-owned invocation artifact exporter.

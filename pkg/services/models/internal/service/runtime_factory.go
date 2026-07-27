@@ -10,6 +10,8 @@ import (
 	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
+	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	"go.uber.org/zap"
 )
 
@@ -37,6 +39,8 @@ type Root struct {
 	runtimeInspect  localmodels.InspectFile
 	runtimeTempDir  localmodels.TempDirectory
 	runtimeTempFile localmodels.CreateTempFile
+	runtimeScopes   runtimescopes.Service
+	catalog         modelcatalog.Service
 	process         models.ProcessDependencies
 }
 
@@ -65,6 +69,8 @@ func NewRoot(
 	runtimeInspect localmodels.InspectFile,
 	runtimeTempDir localmodels.TempDirectory,
 	runtimeTempFile localmodels.CreateTempFile,
+	runtimeScopes runtimescopes.Service,
+	catalogService modelcatalog.Service,
 	processDependencies ...models.ProcessDependencies,
 ) (*Root, error) {
 	if strings.TrimSpace(assetPlatform.OperatingSystem) == "" || strings.TrimSpace(assetPlatform.Architecture) == "" {
@@ -105,6 +111,12 @@ func NewRoot(
 		assetCreate == nil || assetOpen == nil {
 		return nil, missingDependencyError("model asset cache operations")
 	}
+	if runtimeScopes == nil {
+		return nil, missingDependencyError("Models Runtime Scopes service")
+	}
+	if catalogService == nil {
+		return nil, missingDependencyError("Models Catalog service")
+	}
 	process := models.ProcessDependencies{}
 	if len(processDependencies) > 0 {
 		process = processDependencies[0]
@@ -123,6 +135,7 @@ func NewRoot(
 		processLauncher: processLauncher, hostHTTP: hostHTTP, hostClock: hostClock,
 		runtimeRunner: runtimeRunner, runtimeHTTP: runtimeHTTP,
 		runtimeInspect: runtimeInspect, runtimeTempDir: runtimeTempDir, runtimeTempFile: runtimeTempFile,
+		runtimeScopes: runtimeScopes, catalog: catalogService,
 		process: process,
 	}, nil
 }
@@ -158,10 +171,31 @@ func (o *Root) ForRuntime(binding models.RuntimeBinding) (models.Service, error)
 }
 
 func (o *Root) OpenRuntimeScope(
-	context.Context,
-	models.OpenRuntimeScopeRequest,
+	ctx context.Context,
+	request models.OpenRuntimeScopeRequest,
 ) (models.OpenRuntimeScopeResult, error) {
-	return models.OpenRuntimeScopeResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.runtimeScopes == nil {
+		return models.OpenRuntimeScopeResult{}, models.ErrUnsupportedOperation
+	}
+	if err := ctx.Err(); err != nil {
+		return models.OpenRuntimeScopeResult{}, err
+	}
+	config := request.Config.Clone()
+	ref, err := o.runtimeScopes.Open(models.RuntimeBinding{
+		CacheDirectory: config.CacheDirectory,
+		RuntimeConfig: func() *models.RuntimeConfig {
+			runtimeConfig := config.Runtime
+			return &runtimeConfig
+		},
+	})
+	if err != nil {
+		return models.OpenRuntimeScopeResult{}, err
+	}
+	scope, err := (models.RuntimeScopeRef{}).Parse(string(ref))
+	if err != nil {
+		return models.OpenRuntimeScopeResult{}, err
+	}
+	return models.OpenRuntimeScopeResult{Scope: scope}, nil
 }
 
 func (o *Root) CloseRuntimeScope(
@@ -172,10 +206,13 @@ func (o *Root) CloseRuntimeScope(
 }
 
 func (o *Root) ListCatalog(
-	context.Context,
-	models.ListModelsRequest,
+	ctx context.Context,
+	request models.ListModelsRequest,
 ) (models.ListModelsResult, error) {
-	return models.ListModelsResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.catalog == nil {
+		return models.ListModelsResult{}, models.ErrUnsupportedOperation
+	}
+	return o.catalog.ListCatalog(ctx, request)
 }
 
 func (o *Root) GetCatalogModel(
