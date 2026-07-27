@@ -2,8 +2,10 @@ package service_test
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -43,8 +45,6 @@ func (w *gatedPresentationWriter) String() string {
 }
 
 func TestNewServiceIsInert(t *testing.T) {
-	t.Parallel()
-
 	before := runtime.NumGoroutine()
 	service := responseeventpresentationwire.NewService()
 	if service == nil {
@@ -233,4 +233,207 @@ func waitForPresentationWriteAttempt(t *testing.T, writer *gatedPresentationWrit
 		time.Sleep(time.Millisecond)
 	}
 	t.Fatal("timed out waiting for presentation write")
+}
+
+type syncWriter struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (w *syncWriter) Write(payload []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.Write(payload)
+}
+
+func (w *syncWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
+func assertTerminalAfterAcceptedProgress(t *testing.T, content, terminal string) {
+	t.Helper()
+	count := strings.Count(content, terminal)
+	if count != 1 {
+		t.Fatalf("terminal marker count = %d, want 1 in %q", count, content)
+	}
+	idx := strings.Index(content, terminal)
+	if idx < 0 {
+		t.Fatalf("output missing terminal %q in %q", terminal, content)
+	}
+	if tail := content[idx+len(terminal):]; tail != "" {
+		t.Fatalf("unexpected bytes after terminal: %q", tail)
+	}
+}
+
+func TestResponsePresentation_LosslessConcurrentEnqueueDrainAndFinalizeRace(t *testing.T) {
+	t.Parallel()
+
+	service := presentationservice.New()
+	writer := &syncWriter{}
+	output := service.OpenLosslessOutput(writer)
+
+	const workers = 8
+	var accepted atomic.Int64
+	var enqueueWG sync.WaitGroup
+	enqueueWG.Add(workers)
+	stop := make(chan struct{})
+	for worker := 0; worker < workers; worker++ {
+		go func(id int) {
+			defer enqueueWG.Done()
+			for index := 0; ; index++ {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				payload := fmt.Sprintf("progress-%d-%d", id, index)
+				if err := output.Enqueue([]byte(payload)); err == nil {
+					accepted.Add(1)
+				}
+			}
+		}(worker)
+	}
+
+	drainDone := make(chan error, 1)
+	go func() {
+		drainDone <- output.CloseAndDrain()
+	}()
+
+	select {
+	case err := <-drainDone:
+		if err != nil {
+			t.Fatalf("CloseAndDrain: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("lossless CloseAndDrain hung under concurrent enqueue pressure")
+	}
+	close(stop)
+	enqueueWG.Wait()
+
+	const terminal = "TERMINAL\n"
+	if err := output.WithWriterExclusive(func(w io.Writer) error {
+		_, writeErr := io.WriteString(w, terminal)
+		return writeErr
+	}); err != nil {
+		t.Fatalf("WithWriterExclusive: %v", err)
+	}
+
+	content := writer.String()
+	assertTerminalAfterAcceptedProgress(t, content, terminal)
+	if accepted.Load() > 0 && !strings.Contains(content, "progress-") {
+		t.Fatalf("accepted progress missing before terminal in %q", content)
+	}
+}
+
+func TestResponsePresentation_FactoryEventStreamConcurrentPresentFinalizeRace(t *testing.T) {
+	t.Parallel()
+
+	service := presentationservice.New()
+	writer := &syncWriter{}
+	stream := service.OpenLosslessFactoryEventStream(writer, func(event factorydefinitions.FactoryEvent) ([]byte, bool) {
+		return []byte(event.Id), true
+	})
+
+	const workers = 6
+	var presentWG sync.WaitGroup
+	presentWG.Add(workers)
+	stop := make(chan struct{})
+	for worker := 0; worker < workers; worker++ {
+		go func(id int) {
+			defer presentWG.Done()
+			for index := 0; ; index++ {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				stream.PresentFactoryEvents([]factorydefinitions.FactoryEvent{
+					{Id: fmt.Sprintf("event-%d-%d", id, index)},
+				})
+			}
+		}(worker)
+	}
+	time.Sleep(25 * time.Millisecond)
+
+	const terminal = "TERMINAL\n"
+	finalizeDone := make(chan struct{})
+	var finalized bool
+	var finalizeErr error
+	go func() {
+		defer close(finalizeDone)
+		finalized, finalizeErr = stream.Finalize(func(w io.Writer, progressSeen bool) error {
+			if !progressSeen {
+				t.Error("terminal writer did not observe accepted Factory Events")
+			}
+			_, writeErr := io.WriteString(w, terminal)
+			return writeErr
+		})
+	}()
+
+	select {
+	case <-finalizeDone:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Factory-event Finalize hung under concurrent Present pressure")
+	}
+	close(stop)
+	presentWG.Wait()
+
+	if finalizeErr != nil || !finalized {
+		t.Fatalf("Finalize() = (%v, %v), want (true, nil)", finalized, finalizeErr)
+	}
+	assertTerminalAfterAcceptedProgress(t, writer.String(), terminal)
+}
+
+func TestResponsePresentation_BestEffortConcurrentEnqueuePressureRace(t *testing.T) {
+	t.Parallel()
+
+	service := presentationservice.New()
+	writer := newGatedPresentationWriter()
+	output := service.OpenBestEffortOutput(writer)
+	if err := output.Enqueue([]byte("progress")); err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	waitForPresentationWriteAttempt(t, writer)
+
+	const workers = 8
+	var enqueueWG sync.WaitGroup
+	enqueueWG.Add(workers)
+	stop := make(chan struct{})
+	for worker := 0; worker < workers; worker++ {
+		go func() {
+			defer enqueueWG.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					_ = output.Enqueue([]byte("progress"))
+				}
+			}
+		}()
+	}
+	time.Sleep(25 * time.Millisecond)
+
+	drainDone := make(chan error, 1)
+	go func() {
+		drainDone <- output.CloseAndDrain()
+	}()
+
+	select {
+	case err := <-drainDone:
+		if err != nil {
+			t.Fatalf("CloseAndDrain: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("best-effort CloseAndDrain hung under concurrent enqueue pressure")
+	}
+	close(stop)
+	enqueueWG.Wait()
+
+	writer.release()
+	if output.Dropped() == 0 {
+		t.Fatal("best-effort output did not report drops under concurrent backlog pressure")
+	}
 }
