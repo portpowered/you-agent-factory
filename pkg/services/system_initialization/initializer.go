@@ -12,8 +12,9 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
-// Initializer installs operator configuration and the injected packaged
-// Factory catalog.
+// Initializer is the canonical System Bootstrap workflow implementer. It
+// satisfies the singular peer-facing Service contract without exposing
+// additional Bootstrap authority interfaces to peers.
 type Initializer struct {
 	operatorSettings  OperatorSettings
 	packagedCatalog   factorydefinitions.PackagedFactoryCatalogOperations
@@ -21,6 +22,8 @@ type Initializer struct {
 	inspectPath       InspectPath
 	migrationFiles    LegacyFactoryMigrationFileSystem
 }
+
+var _ Service = (*Initializer)(nil)
 
 // New constructs the canonical service from already-selected collaborators.
 func New(
@@ -65,12 +68,12 @@ func (initializer *Initializer) Initialize(
 		return Result{}, fmt.Errorf("initialize system: context is required")
 	}
 	if err := ctx.Err(); err != nil {
-		return Result{}, fmt.Errorf("initialize system: %w", err)
+		return Result{}, fmt.Errorf("initialize system: %w: %w", ErrInitializeCancelled, err)
 	}
 
 	homeDir := strings.TrimSpace(request.HomeDir)
 	if homeDir == "" {
-		return Result{}, fmt.Errorf("home directory is required")
+		return Result{}, fmt.Errorf("%w", ErrMissingHomeDir)
 	}
 	if initializer == nil {
 		return Result{}, fmt.Errorf("initialize system: service is required")
