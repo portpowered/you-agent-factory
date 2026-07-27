@@ -12,6 +12,8 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/events"
+	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
+	artifactsexportwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/wire"
 	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
@@ -33,6 +35,7 @@ type combinedService struct {
 	recordings.Ledger
 	recordings.ProjectionService
 	recordinglifecycle.Service
+	artifactsExport artifactsexport.Service
 
 	appendMu       sync.Mutex
 	lifecycleMu    sync.Mutex
@@ -568,17 +571,19 @@ func NewServiceWithLifecycleEffects(
 	if ledger == nil || projection == nil {
 		return nil
 	}
+	lifecycle := recordinglifecyclewire.NewService(
+		targetPlanner,
+		writer,
+		tickers,
+		clocks...,
+	)
 	return &combinedService{
 		Ledger:            ledger,
 		ProjectionService: projection,
-		Service: recordinglifecyclewire.NewService(
-			targetPlanner,
-			writer,
-			tickers,
-			clocks...,
-		),
-		replayByKey: make(map[string]*factorydefinitions.ReplayArtifact),
-		replayPlans: make(map[recordings.ReplayPlanHandle]*neutralReplayPlan),
+		Service:           lifecycle,
+		artifactsExport:   artifactsexportwire.NewService(lifecycle),
+		replayByKey:       make(map[string]*factorydefinitions.ReplayArtifact),
+		replayPlans:       make(map[recordings.ReplayPlanHandle]*neutralReplayPlan),
 	}
 }
 

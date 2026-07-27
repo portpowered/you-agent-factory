@@ -8,13 +8,30 @@ import (
 	"io"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
 )
 
-func (service *combinedService) BuildPortableArtifact(
+// Service keeps portable artifact close/export/read behind the Recordings-owned
+// artifacts_export capability.
+type Service struct {
+	snapshots artifactsexport.SnapshotSource
+}
+
+var _ artifactsexport.Service = (*Service)(nil)
+
+// New constructs the artifacts_export service from the lifecycle snapshot seam.
+func New(snapshots artifactsexport.SnapshotSource) *Service {
+	return &Service{snapshots: snapshots}
+}
+
+func (service *Service) BuildPortableArtifact(
 	request recordings.BuildPortableArtifactRequest,
 ) (recordings.BuildPortableArtifactResult, error) {
-	snapshot, err := service.Snapshot(request.RecordingID)
+	if service.snapshots == nil {
+		return recordings.BuildPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
+	}
+	snapshot, err := service.snapshots.Snapshot(request.RecordingID)
 	if err != nil || snapshot.Status.FinalizedAt == nil {
 		return recordings.BuildPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
 	}
@@ -37,7 +54,7 @@ func (service *combinedService) BuildPortableArtifact(
 	return recordings.BuildPortableArtifactResult{Artifact: artifact}, nil
 }
 
-func (service *combinedService) ValidatePortableArtifact(
+func (service *Service) ValidatePortableArtifact(
 	request recordings.ValidatePortableArtifactRequest,
 ) (recordings.ValidatePortableArtifactResult, error) {
 	if err := validatePortableArtifact(request.Artifact); err != nil {
@@ -48,7 +65,7 @@ func (service *combinedService) ValidatePortableArtifact(
 	}, nil
 }
 
-func (service *combinedService) EncodePortableArtifact(
+func (service *Service) EncodePortableArtifact(
 	request recordings.EncodePortableArtifactRequest,
 ) (recordings.EncodePortableArtifactResult, error) {
 	if err := validatePortableArtifact(request.Artifact); err != nil {
@@ -61,7 +78,7 @@ func (service *combinedService) EncodePortableArtifact(
 	return recordings.EncodePortableArtifactResult{Payload: payload}, nil
 }
 
-func (service *combinedService) DecodePortableArtifact(
+func (service *Service) DecodePortableArtifact(
 	request recordings.DecodePortableArtifactRequest,
 ) (recordings.DecodePortableArtifactResult, error) {
 	decoder := json.NewDecoder(bytes.NewReader(request.Payload))
@@ -82,7 +99,7 @@ func (service *combinedService) DecodePortableArtifact(
 	}, nil
 }
 
-func (service *combinedService) SummarizePortableArtifact(
+func (service *Service) SummarizePortableArtifact(
 	request recordings.SummarizePortableArtifactRequest,
 ) (recordings.SummarizePortableArtifactResult, error) {
 	if err := validatePortableArtifact(request.Artifact); err != nil {
@@ -162,7 +179,7 @@ func validatePortableArtifactSummary(artifact recordings.PortableArtifact) error
 func validatePortableArtifactEvents(artifact recordings.PortableArtifact) error {
 	var previous recordings.CanonicalEvent
 	for index, event := range artifact.Events {
-		if !validAppendEvent(event) || event.Scope != artifact.Summary.Scope ||
+		if !validCanonicalEvent(event) || event.Scope != artifact.Summary.Scope ||
 			event.Cursor.StreamGenerationID == "" ||
 			event.Cursor.Sequence != event.Sequence ||
 			event.Sequence < 0 {
@@ -181,6 +198,16 @@ func validatePortableArtifactEvents(artifact recordings.PortableArtifact) error 
 		previous = event
 	}
 	return nil
+}
+
+func validCanonicalEvent(event recordings.CanonicalEvent) bool {
+	return strings.TrimSpace(string(event.ID)) != "" &&
+		strings.TrimSpace(string(event.Kind)) != "" &&
+		!event.RecordedAt.IsZero() &&
+		(event.Scope.FactorySessionID == "" ||
+			strings.TrimSpace(event.Scope.FactorySessionID) != "") &&
+		json.Valid([]byte(event.Payload)) &&
+		(event.SourceContext == "" || json.Valid([]byte(event.SourceContext)))
 }
 
 func portableArtifactDigest(artifact recordings.PortableArtifact) (string, error) {
