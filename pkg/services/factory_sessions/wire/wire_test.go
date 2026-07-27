@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"errors"
 	"io/fs"
 	"runtime"
 	"testing"
@@ -136,7 +137,9 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	}
 }
 
-func TestNewServiceIsInertAndRequiresRuntimeClockBinding(t *testing.T) {
+func TestNewServiceServesPublishedForRuntimePeerBehavior(t *testing.T) {
+	t.Parallel()
+
 	clock := &recordingClock{}
 	directories := &recordingDirectoryInspection{}
 	symlinkCalls := 0
@@ -150,12 +153,36 @@ func TestNewServiceIsInertAndRequiresRuntimeClockBinding(t *testing.T) {
 	if service == nil {
 		t.Fatal("NewService() returned nil service")
 	}
-	if assembly, bindErr := service.ForRuntime(factorysessions.RuntimeBinding{}); bindErr == nil || assembly != nil {
-		t.Fatalf("ForRuntime() without clock = %#v, %v; want deterministic error", assembly, bindErr)
+
+	bound, bindErr := service.ForRuntime(factorysessions.RuntimeBinding{})
+	if bound != nil {
+		t.Fatalf("ForRuntime() without clock = %#v, want nil Service on missing binding input", bound)
 	}
-	assembly, err := service.ForRuntime(factorysessions.RuntimeBinding{Clock: clock})
-	if err != nil || assembly == nil {
-		t.Fatalf("ForRuntime() = %#v, %v; want bound assembly", assembly, err)
+	var openingErr *factorysessions.OpeningBindingError
+	if !errors.As(bindErr, &openingErr) {
+		t.Fatalf("ForRuntime() error = %v, want *OpeningBindingError", bindErr)
+	}
+	if openingErr.Field != "clock" {
+		t.Fatalf("OpeningBindingError.Field = %q, want clock", openingErr.Field)
+	}
+	if !errors.Is(bindErr, factorysessions.ErrOpeningBindingInvalid) {
+		t.Fatalf("ForRuntime() error = %v, want errors.Is ErrOpeningBindingInvalid", bindErr)
+	}
+
+	bound, err = service.ForRuntime(factorysessions.RuntimeBinding{Clock: clock})
+	if err != nil {
+		t.Fatalf("ForRuntime() error = %v, want nil", err)
+	}
+	if bound == nil {
+		t.Fatal("ForRuntime() returned nil Service view")
+	}
+	var runtimeView factorysessions.Service = bound
+	if runtimeView == nil {
+		t.Fatal("bound runtime view is nil")
+	}
+	result := factorysessions.OpeningBindingResult{Service: bound}
+	if result.Service == nil {
+		t.Fatal("OpeningBindingResult must carry the usable root Service view")
 	}
 	if clock.calls != 0 {
 		t.Fatalf("runtime binding read clock %d times, want no runtime activity", clock.calls)
