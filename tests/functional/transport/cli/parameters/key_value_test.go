@@ -66,6 +66,60 @@ func TestRunKeyValueParametersReachFactoryInvocation(t *testing.T) {
 	assertInvocationArgumentValues(t, arguments, "priority", []string{priorityValue})
 }
 
+// TestRunKeyValuePreservesEqualsInValue proves key=value parameters whose
+// values contain embedded '=' characters (URLs, query strings, encoded forms)
+// reach the factory invocation with the full value intact, not truncated at the
+// first '=' after the key.
+func TestRunKeyValuePreservesEqualsInValue(t *testing.T) {
+	callbackValue := "https://example.com/callback?token=abc123&scope=read%3Dwrite"
+
+	factoryDir := scaffoldNamedKeyValueInvocationFactory(t)
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName:      "processor",
+			WorkstationName: "process",
+			RunType:         workers.MockWorkerRunTypeAccept,
+		}},
+	})
+
+	submissions := &invocationSubmissionObservation{}
+	process := support.BuildProcess(t, serviceedges.Edges{
+		SubmissionRecorder: submissions.observe,
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--factory", factoryPath,
+		"--no-record",
+		"--with-mock-workers", mockWorkersPath,
+		"invoke marker",
+		"--topic=Ship the café résumé plan",
+		"--priority=urgent",
+		"--callback=" + callbackValue,
+	})
+	inputs.WorkingDirectory = t.TempDir()
+
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(embedded-equals key=value invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+
+	records := submissions.snapshot()
+	if len(records) != 1 {
+		t.Fatalf("canonical submissions = %d, want 1; records=%#v", len(records), records)
+	}
+	arguments := records[0].Request.InvocationArguments
+	if arguments == nil {
+		t.Fatal("submitted invocation arguments = nil")
+	}
+	assertInvocationArgumentValues(t, arguments, "callback", []string{callbackValue})
+}
+
 type invocationSubmissionObservation struct {
 	mu      sync.Mutex
 	records []work.FactorySubmissionRecord
@@ -140,6 +194,10 @@ func scaffoldNamedKeyValueInvocationFactory(t *testing.T) string {
 				map[string]any{
 					"name":     "priority",
 					"required": true,
+					"bindings": []any{map[string]any{"kind": "NAMED"}},
+				},
+				map[string]any{
+					"name":     "callback",
 					"bindings": []any{map[string]any{"kind": "NAMED"}},
 				},
 			},
