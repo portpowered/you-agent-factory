@@ -1395,20 +1395,8 @@
       "minimum": 47.31
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/claude/exitfailure",
-      "minimum": 30.41
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex",
       "minimum": 0.68
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex/exitfailure",
-      "minimum": 44.64
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex/progress",
-      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/commandenv",

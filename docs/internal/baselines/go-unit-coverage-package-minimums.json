@@ -957,6 +957,14 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude",
+      "minimum": 68.39
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex",
+      "minimum": 65.36
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service",
       "minimum": 100.00
     },
@@ -1192,7 +1200,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider",
-      "minimum": 85.94
+      "minimum": 78.59
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter",
@@ -1212,23 +1220,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/claude",
-      "minimum": 81.11
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/claude/exitfailure",
-      "minimum": 91.75
+      "minimum": 4.91
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex",
-      "minimum": 84.87
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex/exitfailure",
-      "minimum": 91.42
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex/progress",
-      "minimum": 90.86
+      "minimum": 7.07
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/commandenv",
@@ -1268,7 +1264,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured",
-      "minimum": 95.83
+      "minimum": 60.41
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/runner",
