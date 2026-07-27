@@ -3,6 +3,7 @@ package runtimeopening
 import (
 	"context"
 	"fmt"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -133,6 +134,20 @@ func openRuntime(
 	}
 	if runtimeRecorderFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings runtime recorder factory is required")
+	}
+	var runtimeRecording recordings.RuntimeRecorder
+	sessionRecorderFactory := func(
+		flushInterval time.Duration,
+		loaded factorydefinitions.LoadedFactorySource,
+		now func() time.Time,
+		recordPath string,
+	) (recordings.RuntimeRecorder, error) {
+		recorder, err := runtimeRecorderFactory(flushInterval, loaded, now, recordPath)
+		if err != nil || recorder == nil {
+			return recorder, err
+		}
+		runtimeRecording = recorder
+		return recorder, nil
 	}
 	if durableExecutionFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: durable execution operation is required")
@@ -277,7 +292,7 @@ func openRuntime(
 			mutationOwner.RecordPetriTokenMutations,
 			recordingProjections.ReconstructFactoryWorldState,
 			newRuntimeLedger,
-			runtimeRecorderFactory,
+			sessionRecorderFactory,
 			initialFactorySnapshotFactory,
 			configured.Definition.Directory,
 			root.FactoryRootDir,
@@ -346,6 +361,19 @@ func openRuntime(
 	recordingService := recordingsFactory(startupRuntime.RecordingLedger(), recordingProjections)
 	if recordingService == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings factory returned nil service")
+	}
+	if runtimeRecording != nil {
+		if err := runtimeRecording.BindRecordingService(
+			recordingService,
+			recordings.CanonicalEventScope{
+				FactorySessionID: factorysessions.DefaultSessionID,
+			},
+		); err != nil {
+			return runtimeProducts{}, fmt.Errorf(
+				"construct runtime scope: bind runtime recording: %w",
+				err,
+			)
+		}
 	}
 	if processRuntimeFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions process runtime factory is required")

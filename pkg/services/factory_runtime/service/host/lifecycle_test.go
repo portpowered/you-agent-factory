@@ -44,6 +44,12 @@ type terminalRecording struct {
 	finishedAt    time.Time
 }
 
+func (*terminalRecording) BindRecordingService(
+	recordings.Service,
+	recordings.CanonicalEventScope,
+) error {
+	return nil
+}
 func (*terminalRecording) Start(context.Context)               {}
 func (*terminalRecording) Stop()                               {}
 func (*terminalRecording) RecordEvent(interfaces.FactoryEvent) {}

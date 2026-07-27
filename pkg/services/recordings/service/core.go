@@ -74,25 +74,33 @@ func validAppendEvent(event recordings.CanonicalEvent) bool {
 		!event.RecordedAt.IsZero() &&
 		(event.Scope.FactorySessionID == "" ||
 			strings.TrimSpace(event.Scope.FactorySessionID) != "") &&
-		json.Valid([]byte(event.Payload))
+		json.Valid([]byte(event.Payload)) &&
+		(event.SourceContext == "" || json.Valid([]byte(event.SourceContext)))
 }
 
 func factoryEventFromCanonical(event recordings.CanonicalEvent) factorydefinitions.FactoryEvent {
+	context := factorydefinitions.FactoryEventContext{
+		EventTime: event.RecordedAt,
+		Sequence:  int(event.Sequence),
+		Tick:      event.FactoryTick,
+	}
+	hasSourceContext := json.Valid([]byte(event.SourceContext))
+	if hasSourceContext {
+		_ = json.Unmarshal([]byte(event.SourceContext), &context)
+	}
 	var sessionID *string
 	if event.Scope.FactorySessionID != "" {
 		value := event.Scope.FactorySessionID
 		sessionID = &value
 	}
 	legacy := factorydefinitions.FactoryEvent{
-		Context: factorydefinitions.FactoryEventContext{
-			EventTime: event.RecordedAt,
-			Sequence:  int(event.Sequence),
-			Tick:      event.FactoryTick,
-			SessionID: sessionID,
-		},
+		Context: context,
 		Id:      string(event.ID),
 		Payload: json.RawMessage(event.Payload),
 		Type:    factorydefinitions.FactoryEventType(event.Kind),
+	}
+	if !hasSourceContext && legacy.Context.SessionID == nil {
+		legacy.Context.SessionID = sessionID
 	}
 	legacy.SchemaVersion = factorydefinitions.FactoryEventSchemaVersionV1
 	return legacy
@@ -145,6 +153,7 @@ func canonicalEventFromFactory(
 	event factorydefinitions.FactoryEvent,
 	generationID string,
 ) recordings.CanonicalEvent {
+	sourceContext, _ := json.Marshal(event.Context)
 	scope := recordings.CanonicalEventScope{}
 	if event.Context.SessionID != nil {
 		scope.FactorySessionID = *event.Context.SessionID
@@ -159,9 +168,10 @@ func canonicalEventFromFactory(
 			StreamGenerationID: generationID,
 			Sequence:           sequence,
 		},
-		RecordedAt: event.Context.EventTime,
-		Kind:       recordings.CanonicalEventKind(event.Type),
-		Payload:    string(event.Payload),
+		RecordedAt:    event.Context.EventTime,
+		Kind:          recordings.CanonicalEventKind(event.Type),
+		Payload:       string(event.Payload),
+		SourceContext: string(sourceContext),
 	}
 }
 

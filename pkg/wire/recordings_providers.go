@@ -12,7 +12,7 @@ func provideRecordingsFactory(
 	targets recordings.LiveRecordingTargetPlanner,
 	storage platformreplay.Storage,
 ) factorysessionwire.RecordingsFactory {
-	writer := recordingsservice.NewRecordingSnapshotWriter(storage.WriteFile)
+	writer := recordingsservice.NewReplayRecordingSnapshotWriter(storage.WriteFile)
 	tickers := recordingsservice.NewRecordingFlushTickerFactory()
 	return func(
 		ledger recordings.Ledger,
