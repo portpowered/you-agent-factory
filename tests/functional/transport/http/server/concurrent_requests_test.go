@@ -107,6 +107,75 @@ func TestAPIConcurrentSessionRequestsRemainIsolated(t *testing.T) {
 	}
 }
 
+// TestAPICancelledRequestDoesNotCancelUnrelatedSession proves aborting one in-flight
+// Factory Session HTTP request leaves other sessions queryable with intact identity and status.
+func TestAPICancelledRequestDoesNotCancelUnrelatedSession(t *testing.T) {
+	dir := scaffoldConcurrentRequestsFactory(t)
+	blocking := newBlockingInvocationRunner()
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(t, &edges, blocking, nil)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     edges,
+	})
+	defer server.Stop(t)
+
+	cancelTargetSession := getFactorySession(t, server.URL(), factorysessions.DefaultSessionID)
+	unrelatedSessionID := openFactorySession(t, server.URL(), dir)
+	if cancelTargetSession.Id == unrelatedSessionID {
+		t.Fatalf("cancel target session id %q equals unrelated session id %q", cancelTargetSession.Id, unrelatedSessionID)
+	}
+
+	unrelatedBefore := getFactorySession(t, server.URL(), unrelatedSessionID)
+	unrelatedStatusBefore := getFactorySessionStatus(t, server.URL(), unrelatedSessionID)
+	if unrelatedBefore.Id != unrelatedSessionID {
+		t.Fatalf("unrelated session id before cancel = %q, want %q", unrelatedBefore.Id, unrelatedSessionID)
+	}
+	if unrelatedStatusBefore.RuntimeStatus == "" {
+		t.Fatalf("unrelated session status before cancel missing runtimeStatus")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancelledDone := make(chan error, 1)
+	go func() {
+		cancelledDone <- postBlockingInvocation(ctx, server.URL(), cancelTargetSession.Id, blocking)
+	}()
+
+	select {
+	case <-blocking.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for cancellable invocation to enter flight")
+	}
+
+	cancel()
+
+	select {
+	case err := <-cancelledDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled invocation error = %v, want context.Canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for cancelled invocation to return")
+	}
+
+	unrelatedAfter := getFactorySession(t, server.URL(), unrelatedSessionID)
+	unrelatedStatusAfter := getFactorySessionStatus(t, server.URL(), unrelatedSessionID)
+	if unrelatedAfter.Id != unrelatedSessionID {
+		t.Fatalf("unrelated session id after cancel = %q, want %q", unrelatedAfter.Id, unrelatedSessionID)
+	}
+	if unrelatedStatusAfter.RuntimeStatus == "" {
+		t.Fatalf("unrelated session status after cancel missing runtimeStatus")
+	}
+	if unrelatedStatusAfter.RuntimeStatus != unrelatedStatusBefore.RuntimeStatus {
+		t.Fatalf(
+			"unrelated session runtimeStatus after cancel = %q, want %q",
+			unrelatedStatusAfter.RuntimeStatus,
+			unrelatedStatusBefore.RuntimeStatus,
+		)
+	}
+}
+
 func scaffoldConcurrentRequestsFactory(t *testing.T) string {
 	t.Helper()
 
