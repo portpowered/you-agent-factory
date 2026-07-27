@@ -110,10 +110,20 @@ func TestMCPMissingFactorySessionReturnsCanonicalNotFound(t *testing.T) {
 	}
 }
 
+// TestMCPServerShutdownClosesStdioCleanly proves MCP server shutdown terminates
+// stdio serve cleanly without hung streams or unclean protocol failures.
+func TestMCPServerShutdownClosesStdioCleanly(t *testing.T) {
+	server := startFixtureBackedMCPServer(t)
+
+	assertInitializeHandshake(t, server)
+	assertFixtureBackedMCPServerShutdownClean(t, server)
+}
+
 type fixtureBackedMCPServer struct {
 	t            *testing.T
 	stdin        *os.File
 	stdout       *bufio.Reader
+	stdoutWrite  *os.File
 	serveErr     <-chan error
 	cancel       context.CancelFunc
 	shutdownOnce sync.Once
@@ -167,11 +177,12 @@ func startFixtureBackedMCPServer(t *testing.T) *fixtureBackedMCPServer {
 	}
 
 	return &fixtureBackedMCPServer{
-		t:        t,
-		stdin:    stdinWrite,
-		stdout:   bufio.NewReader(stdoutRead),
-		serveErr: serveErr,
-		cancel:   cancel,
+		t:           t,
+		stdin:       stdinWrite,
+		stdout:      bufio.NewReader(stdoutRead),
+		stdoutWrite: stdoutWrite,
+		serveErr:    serveErr,
+		cancel:      cancel,
 	}
 }
 
@@ -216,5 +227,28 @@ func (s *fixtureBackedMCPServer) shutdown() {
 		}
 	case <-time.After(5 * time.Second):
 		s.t.Fatal("fixture-backed MCP serve did not shut down after stdin closed")
+	}
+}
+
+func assertFixtureBackedMCPServerShutdownClean(t *testing.T, server *fixtureBackedMCPServer) {
+	t.Helper()
+
+	server.shutdownOnce.Do(func() {
+		server.cancel()
+		_ = server.stdin.Close()
+	})
+
+	select {
+	case serveErr := <-server.serveErr:
+		if serveErr != nil && serveErr != io.EOF && !errors.Is(serveErr, context.Canceled) && !strings.Contains(serveErr.Error(), "file already closed") {
+			t.Fatalf("fixture-backed MCP serve shutdown: %v", serveErr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("fixture-backed MCP serve did not shut down after cancel and stdin close")
+	}
+
+	_ = server.stdoutWrite.Close()
+	if _, err := server.stdout.ReadByte(); err != io.EOF {
+		t.Fatalf("read stdout after shutdown = %v, want EOF (no hung stream)", err)
 	}
 }
