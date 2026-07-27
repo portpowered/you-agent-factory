@@ -32,6 +32,38 @@ func TestDetailsLoadsCodexSessionThroughService(t *testing.T) {
 	}
 }
 
+func TestDetailsReconstructsNormalizedCodexJSONLThroughRoot(t *testing.T) {
+	root := writeRichCodexSessionFixture(t, "session-reconstruct-root")
+	svc := newServiceForRoots(t, root, "")
+
+	first, err := svc.Details("codex", providersessions.SessionIDKind, "session-reconstruct-root")
+	if err != nil {
+		t.Fatalf("Details: %v", err)
+	}
+	second, err := svc.Details("codex", providersessions.SessionIDKind, "session-reconstruct-root")
+	if err != nil {
+		t.Fatalf("Details repeat: %v", err)
+	}
+	if first.ProviderSession.ID != "session-reconstruct-root" ||
+		first.Source.RelativePath != "2026/07/27/rollout-session-reconstruct-root.jsonl" {
+		t.Fatalf("detail identity = %#v, want normalized codex session and source", first)
+	}
+	if len(first.Transcript) < 4 || len(first.Parse.FunctionCalls) != 1 || len(first.Parse.Reasoning) != 1 {
+		t.Fatalf("detail = %#v, want transcript, tool, and reasoning facts", first)
+	}
+	if first.Parse.TokenUsage == nil || first.Parse.TokenUsage.TotalTokens == nil ||
+		*first.Parse.TokenUsage.TotalTokens != 130 {
+		t.Fatalf("token usage = %#v, want total 130", first.Parse.TokenUsage)
+	}
+	if first.Transcript[0].Text == nil || !strings.Contains(*first.Transcript[0].Text, "Inspect the failing run") {
+		t.Fatalf("transcript = %#v, want user message text", first.Transcript)
+	}
+	*first.Transcript[0].Text = "mutated"
+	if *second.Transcript[0].Text == "mutated" {
+		t.Fatalf("mutating first inspection affected second inspection transcript")
+	}
+}
+
 func TestInspectLoadsTypedSessionRefThroughService(t *testing.T) {
 	root := writeCodexSessionFixture(t, "session-inspect-1")
 	svc := newServiceForRoots(t, root, "")
@@ -360,6 +392,29 @@ func writeCodexSessionFixture(t *testing.T, sessionID string) string {
 	}
 	path := filepath.Join(sessionDir, "rollout-"+sessionID+".jsonl")
 	if err := os.WriteFile(path, []byte("{\"type\":\"session_meta\"}\n"), 0o600); err != nil {
+		t.Fatalf("write session fixture: %v", err)
+	}
+	return root
+}
+
+func writeRichCodexSessionFixture(t *testing.T, sessionID string) string {
+	t.Helper()
+	root := t.TempDir()
+	sessionDir := filepath.Join(root, "2026", "07", "27")
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatalf("mkdir session fixture: %v", err)
+	}
+	content := strings.Join([]string{
+		`{"timestamp":"2026-05-18T10:00:00Z","type":"turn_context"}`,
+		`{"timestamp":"2026-05-18T10:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Inspect the failing run."}]}}`,
+		`{"timestamp":"2026-05-18T10:00:02Z","type":"response_item","payload":{"type":"reasoning","summary":["Checking tool output"]}}`,
+		`{"timestamp":"2026-05-18T10:00:03Z","type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec_command","arguments":"go test ./pkg/api"}}`,
+		`{"timestamp":"2026-05-18T10:00:04Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-1","output":"ok"}}`,
+		`{"timestamp":"2026-05-18T10:00:05Z","type":"event_msg","payload":{"type":"agent_message","message":"The package tests passed."}}`,
+		`{"timestamp":"2026-05-18T10:00:06Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":25,"reasoning_output_tokens":5,"total_tokens":130}}}}`,
+	}, "\n") + "\n"
+	path := filepath.Join(sessionDir, "rollout-"+sessionID+".jsonl")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("write session fixture: %v", err)
 	}
 	return root

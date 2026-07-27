@@ -72,7 +72,7 @@ func loadDetails(ctx context.Context, files providersessions.FileSystem, walkDir
 		return providersessions.Detail{}, err
 	}
 
-	return providersessions.Detail{
+	return detachDetail(providersessions.Detail{
 		ProviderSession: providersessions.Ref{
 			Provider: providersessions.ProviderCodex,
 			Kind:     providers.SessionIDKind,
@@ -85,7 +85,7 @@ func loadDetails(ctx context.Context, files providersessions.FileSystem, walkDir
 		},
 		Parse:      parsed.Summary,
 		Transcript: parsed.Transcript,
-	}, nil
+	}), nil
 }
 
 type resolvedCodexSessionFile struct {
@@ -342,9 +342,20 @@ func ParseSummary(reader io.Reader) (providersessions.ParseSummary, error) {
 
 // ParseDetails parses a Codex JSONL stream into summary and transcript data.
 func ParseDetails(reader io.Reader) (ParsedDetails, error) {
-	return parseCodexSessionDetails(reader)
+	parsed, err := parseCodexSessionDetails(reader)
+	if err != nil {
+		return ParsedDetails{}, err
+	}
+	return detachParsedDetails(parsed), nil
 }
 
+// Codex JSONL reconstruction preserves source line order for transcript,
+// parse-summary, and turn facts. turn_context opens a new turn; later events
+// without an explicit turn inherit the current turn until the next turn_context.
+// When timestamps are absent, ordering follows JSONL line order only.
+// Mirrored user/assistant messages emitted as both event_msg and response_item
+// message records are deduplicated. Function outputs attach to the earliest
+// matching call_id within the reconstructed stream.
 func parseCodexSessionDetails(reader io.Reader) (ParsedDetails, error) {
 	parser := codexSessionParser{
 		summary: providersessions.ParseSummary{
