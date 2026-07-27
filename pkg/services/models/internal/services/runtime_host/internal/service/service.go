@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
@@ -24,6 +25,10 @@ type service struct {
 	supervisor      supervisorSettings
 	mu              sync.Mutex
 	runtimeSlots    map[string]*supervisedRuntime
+	capacityHolders map[string]int
+	idleUnloadTimers map[string]*time.Timer
+	idleUnloadAfter  time.Duration
+	maxLoadedRuntimes int
 }
 
 var _ runtimehost.Service = (*service)(nil)
@@ -51,15 +56,19 @@ func New(
 		Diagnostics:         diagnostics,
 	}
 	return &service{
-		scopes:          scopes,
-		assets:          assets,
-		processLauncher: processLauncher,
-		hostHTTP:        hostHTTP,
-		hostClock:       hostClock,
-		hostLogger:      hostLogger,
-		hostMetrics:     hostMetrics,
-		supervisor:      supervisor,
-		runtimeSlots:    make(map[string]*supervisedRuntime),
+		scopes:            scopes,
+		assets:            assets,
+		processLauncher:   processLauncher,
+		hostHTTP:          hostHTTP,
+		hostClock:         hostClock,
+		hostLogger:        hostLogger,
+		hostMetrics:       hostMetrics,
+		supervisor:        supervisor,
+		runtimeSlots:      make(map[string]*supervisedRuntime),
+		capacityHolders:   make(map[string]int),
+		idleUnloadTimers:  make(map[string]*time.Timer),
+		idleUnloadAfter:   0,
+		maxLoadedRuntimes: 0,
 	}
 }
 
@@ -157,7 +166,12 @@ func (s *service) EnsureModelHost(
 		return models.EnsureModelHostResult{}, err
 	}
 
+	if err := s.evictIdleRuntimesForCapacity(ctx, request.Scope, request.Name, identity); err != nil {
+		return models.EnsureModelHostResult{}, err
+	}
+
 	slotKey := runtimeSlotKey(request.Scope, request.Name)
+	s.cancelIdleUnload(slotKey)
 	slot := s.runtimeSlot(slotKey)
 	wasReady := slot.isReady()
 	if err := slot.ensureReady(ctx, identity, spec); err != nil {
@@ -176,10 +190,127 @@ func (s *service) EnsureModelHost(
 }
 
 func (s *service) StopModelHost(
-	context.Context,
-	models.StopModelHostRequest,
+	ctx context.Context,
+	request models.StopModelHostRequest,
 ) (models.StopModelHostResult, error) {
-	return models.StopModelHostResult{}, models.ErrUnsupportedOperation
+	if err := request.Validate(); err != nil {
+		return models.StopModelHostResult{}, err
+	}
+	if err := hostContextError(ctx); err != nil {
+		return models.StopModelHostResult{}, err
+	}
+	if s == nil || s.scopes == nil || s.assets == nil {
+		return models.StopModelHostResult{}, models.ErrUnavailable
+	}
+	binding, err := s.scopes.Resolve(runtimescopes.Reference(request.Scope.String()))
+	if err != nil {
+		return models.StopModelHostResult{}, scopeError(err)
+	}
+	inspection, err := s.assets.InspectRuntimeCache(ctx, models.InspectModelAssetsRequest{
+		Scope: request.Scope,
+		Name:  request.Name,
+	})
+	if err != nil {
+		return models.StopModelHostResult{}, err
+	}
+	baseSnapshot := hostSnapshotFromAssets(request.Scope, request.Name, inspection)
+	identity := supervisedIdentityForModel(binding.RuntimeConfig(), request.Name)
+
+	slotKey := runtimeSlotKey(request.Scope, request.Name)
+	s.mu.Lock()
+	if s.slotHasActiveHoldersLocked(slotKey) {
+		s.mu.Unlock()
+		return models.StopModelHostResult{}, capacityExhaustedError(request.Name)
+	}
+	slot := s.runtimeSlots[slotKey]
+	if slot != nil && slot.isLoading() {
+		s.mu.Unlock()
+		return models.StopModelHostResult{}, loadingCapacityExhaustedError(request.Name)
+	}
+	wasLoaded := slot != nil && slot.isReady()
+	s.cancelIdleUnloadLocked(slotKey)
+	s.mu.Unlock()
+
+	if wasLoaded {
+		s.supervisor.Diagnostics.logUnload(identity, "explicit")
+		if err := s.unloadRuntime(ctx, identity, slotKey); err != nil {
+			return models.StopModelHostResult{}, err
+		}
+		snapshot := baseSnapshot
+		snapshot.ReadinessState = models.ReadinessStateReady
+		snapshot.LifecycleState = models.LifecycleStateInstalled
+		return models.StopModelHostResult{
+			Host:    snapshot,
+			Outcome: models.HostStopStopped,
+		}, nil
+	}
+
+	return models.StopModelHostResult{
+		Host:    baseSnapshot,
+		Outcome: models.HostStopAlreadyStopped,
+	}, nil
+}
+
+// Shutdown stops all supervised runtimes and cancels outstanding idle-unload timers.
+func (s *service) Shutdown(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	for _, timer := range s.idleUnloadTimers {
+		timer.Stop()
+	}
+	s.idleUnloadTimers = make(map[string]*time.Timer)
+	slots := make([]*supervisedRuntime, 0, len(s.runtimeSlots))
+	for _, slot := range s.runtimeSlots {
+		slots = append(slots, slot)
+	}
+	s.runtimeSlots = make(map[string]*supervisedRuntime)
+	s.mu.Unlock()
+
+	var firstErr error
+	for _, slot := range slots {
+		if err := slot.stop(ctx); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func (s *service) unloadRuntime(
+	ctx context.Context,
+	identity supervisedIdentity,
+	slotKey string,
+) error {
+	s.mu.Lock()
+	slot := s.runtimeSlots[slotKey]
+	delete(s.runtimeSlots, slotKey)
+	s.cancelIdleUnloadLocked(slotKey)
+	s.mu.Unlock()
+	if slot != nil {
+		return slot.stop(ctx)
+	}
+	return nil
+}
+
+func (s *service) cancelIdleUnload(slotKey string) {
+	s.mu.Lock()
+	s.cancelIdleUnloadLocked(slotKey)
+	s.mu.Unlock()
+}
+
+func (s *service) releaseSlotCapacity(
+	scope models.RuntimeScopeRef,
+	modelName string,
+	runtimeCfg *models.RuntimeConfig,
+) {
+	slotKey := runtimeSlotKey(scope, modelName)
+	identity := supervisedIdentityForModel(runtimeCfg, modelName)
+
+	s.mu.Lock()
+	s.releaseSlotCapacityLocked(slotKey)
+	s.scheduleIdleUnloadIfIdle(slotKey, identity)
+	s.mu.Unlock()
 }
 
 func (s *service) overlaySupervisedReadiness(

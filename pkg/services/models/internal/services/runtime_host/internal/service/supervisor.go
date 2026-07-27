@@ -277,6 +277,39 @@ func (r *supervisedRuntime) isReady() bool {
 	return r.state == supervisedStateReady
 }
 
+func (r *supervisedRuntime) isLoading() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.state == supervisedStateLoading
+}
+
+func (r *supervisedRuntime) isResident() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	switch r.state {
+	case supervisedStateLoading, supervisedStateReady, supervisedStateFailed:
+		return true
+	default:
+		return false
+	}
+}
+
+func (r *supervisedRuntime) stop(ctx context.Context) error {
+	r.mu.Lock()
+	process := r.process
+	r.process = nil
+	r.endpoint = ""
+	r.state = supervisedStateAbsent
+	r.failureClass = hostFailureClassNone
+	r.failureErr = nil
+	r.mu.Unlock()
+
+	if process == nil {
+		return nil
+	}
+	return process.Stop(ctx)
+}
+
 // HTTPHealthChecker probes readiness through HTTP GET on a health endpoint.
 type HTTPHealthChecker struct {
 	Client models.HostHTTPDoer

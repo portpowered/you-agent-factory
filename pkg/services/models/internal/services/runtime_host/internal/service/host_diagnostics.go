@@ -9,6 +9,7 @@ const (
 	metricLoadFailure      = "model_host.load.failure"
 	metricReadinessTimeout = "model_host.readiness.timeout"
 	metricProcessCrash     = "model_host.process.crash"
+	metricUnload           = "model_host.unload"
 )
 
 type hostDiagnostics struct {
@@ -92,6 +93,13 @@ func (d hostDiagnostics) logProcessCrash(identity supervisedIdentity, err error)
 	}
 	d.warn("model host process crashed", fields)
 	d.record(metricProcessCrash, fields)
+}
+
+func (d hostDiagnostics) logUnload(identity supervisedIdentity, reason string) {
+	fields := identityDiagnosticFields(identity)
+	fields["unload_reason"] = strings.TrimSpace(reason)
+	d.info("model host unload", fields)
+	d.record(metricUnload, fields)
 }
 
 func cloneDiagnosticLabels(fields map[string]string) map[string]string {
