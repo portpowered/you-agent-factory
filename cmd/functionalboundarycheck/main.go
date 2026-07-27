@@ -107,7 +107,6 @@ var grandfatheredAggregateProviderTestFiles = map[string]struct{}{
 	"cli_worktree_passthrough_test.go":                   {},
 	"codex_content_test.go":                              {},
 	"codex_worktree_workstation_test.go":                 {},
-	"cursor_provider_command_test.go":                    {},
 	"helpers_long_test.go":                               {},
 	"helpers_test.go":                                    {},
 	"mock_workers_agent_test.go":                         {},
