@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
+	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
@@ -273,7 +275,16 @@ func runFactoryInvocation(
 
 	logPackagedTTSInvocationStart(cfg)
 
-	streamRenderer := invocationFactoryEventRenderer(cfg, presentation)
+	invocationCfg := cfg
+	invokeCtx := ctx
+	if isResponseStreamOutputMode(cfg.InvocationOutputMode) && cfg.Output != nil {
+		var cancel context.CancelFunc
+		invokeCtx, cancel = context.WithCancel(ctx)
+		defer cancel()
+		invocationCfg.Output = responseStreamOutputCancelOnWriteError(cfg.Output, cancel)
+	}
+
+	streamRenderer := invocationFactoryEventRenderer(invocationCfg, presentation)
 	if streamRenderer != nil {
 		defer streamRenderer.stopProgressRendering()
 	}
@@ -289,15 +300,41 @@ func runFactoryInvocation(
 		invocationRequest.ContentProvided = false
 		invocationRequest.PreparedInvocationInput = cfg.PreparedInvocationInput.Clone()
 	}
-	outcome, err := invocation.InvokeFactory(ctx, target, invocationRequest, consume)
+	outcome, err := invocation.InvokeFactory(invokeCtx, target, invocationRequest, consume)
 	if err != nil {
 		return MapInvocationFailure(err)
 	}
 	result := outcome.Result
 	if result.Status != interfaces.InvocationTerminalStatusCompleted {
-		return writeInvocationFailure(cfg, result, streamRenderer)
+		return writeInvocationFailure(invocationCfg, result, streamRenderer)
 	}
-	return writeInvocationSuccess(cfg, result, streamRenderer)
+	return writeInvocationSuccess(invocationCfg, result, streamRenderer)
+}
+
+type responseStreamCancelOnWriteError struct {
+	writer  io.Writer
+	onError func()
+	once    sync.Once
+}
+
+func responseStreamOutputCancelOnWriteError(writer io.Writer, onError context.CancelFunc) io.Writer {
+	if writer == nil || onError == nil {
+		return writer
+	}
+	return &responseStreamCancelOnWriteError{
+		writer: writer,
+		onError: func() {
+			onError()
+		},
+	}
+}
+
+func (writer *responseStreamCancelOnWriteError) Write(payload []byte) (int, error) {
+	written, err := writer.writer.Write(payload)
+	if err != nil {
+		writer.once.Do(writer.onError)
+	}
+	return written, err
 }
 
 func invocationTarget(

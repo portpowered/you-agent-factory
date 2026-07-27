@@ -10,9 +10,12 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/livechild"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -46,6 +49,7 @@ type runtimeSessionState struct {
 	runCancel                 context.CancelFunc
 	eventConsumer             FactoryEventConsumer
 	presentedEventIDs         map[string]struct{}
+	responseEvents            *responseeventstore.SessionResponseEventStore
 }
 
 type startInflightFlight struct {
@@ -220,6 +224,9 @@ type JavaScriptRuntimeService struct {
 	workerSettings      factory.JavaScriptWorkerSettings
 	recordingWriter     recording.PortableRecordingWriter
 	generateSessionID   internalcontracts.SessionIDGenerator
+	liveChildInvocation LiveChildInvocationFactory
+	generateResponseEventID factorysessions.ResponseEventIDGenerator
+	responseStreams     responsestreamservice.Service
 
 	mu            sync.RWMutex
 	sessions      map[string]*runtimeSessionState
@@ -247,6 +254,9 @@ func NewJavaScriptRuntimeService(
 	workerSettings factory.JavaScriptWorkerSettings,
 	recordingWriter recording.PortableRecordingWriter,
 	generateSessionID internalcontracts.SessionIDGenerator,
+	liveChildInvocation LiveChildInvocationFactory,
+	generateResponseEventID factorysessions.ResponseEventIDGenerator,
+	responseStreams responsestreamservice.Service,
 ) *JavaScriptRuntimeService {
 	if generateSessionID == nil {
 		return nil
@@ -265,8 +275,11 @@ func NewJavaScriptRuntimeService(
 		workerPresetIDs:     workerPresetIDs,
 		workerSettings:      workerSettings,
 		recordingWriter:     recordingWriter,
-		generateSessionID:   generateSessionID,
-		persistence:         persistence,
+		generateSessionID:       generateSessionID,
+		liveChildInvocation:       liveChildInvocation,
+		generateResponseEventID:   generateResponseEventID,
+		responseStreams:           responseStreams,
+		persistence:               persistence,
 		sessions:            make(map[string]*runtimeSessionState),
 		startReplay:         make(map[string]startReplayRecord),
 		startInflight:       make(map[string]*startInflightFlight),
@@ -305,7 +318,7 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	if err != nil {
 		return AsyncStartResult{}, err
 	}
-	if err := validateLiveChildProviderExecutor(resolveChildExecutorMode(s.childExecutorMode, normalized), s.providerExecutor); err != nil {
+	if err := validateLiveChildProviderExecutor(resolveChildExecutorMode(s.childExecutorMode, normalized), s.providerExecutor, s.liveChildInvocation); err != nil {
 		return AsyncStartResult{}, err
 	}
 	resolved := prepared.ResolvedSource
@@ -342,6 +355,10 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	reserved.state.startRequest = cloneStartRequest(normalized)
 	reserved.state.resolvedSource = resolved
 	reserved.state.sourceContent = sourceContent
+	if err := s.ensureSessionResponseEventsIfNeeded(reserved.state); err != nil {
+		s.mu.Unlock()
+		return AsyncStartResult{}, err
+	}
 	startState := cloneRuntimeSessionState(reserved.state)
 	s.mu.Unlock()
 	go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt)
@@ -370,7 +387,7 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 	if err != nil {
 		return SyncStartResult{}, err
 	}
-	if err := validateLiveChildProviderExecutor(resolveChildExecutorMode(s.childExecutorMode, normalized), s.providerExecutor); err != nil {
+	if err := validateLiveChildProviderExecutor(resolveChildExecutorMode(s.childExecutorMode, normalized), s.providerExecutor, s.liveChildInvocation); err != nil {
 		return SyncStartResult{}, err
 	}
 	resolved := prepared.ResolvedSource
@@ -394,56 +411,21 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 	stopObservingFactoryEvents := s.observeFactoryEvents(reserved.state, normalized.EventConsumer)
 	defer stopObservingFactoryEvents()
 
-	if hasSyncWait {
-		startedAt := s.now()
-		running := projectRuntimeRunningSessionState(
-			reserved.state.session.SessionID,
-			normalized,
-			resolved,
-			policyResolution,
-			startedAt,
-		)
-		runCtx, runCancel := workflowRunContext(context.Background(), policyResolution.Policy)
-		s.mu.Lock()
-		reserved.state.session = running.session
-		reserved.state.result = running.result
-		reserved.state.events = running.events
-		reserved.state.runCancel = runCancel
-		s.mu.Unlock()
-		s.presentCurrentFactoryEvents(reserved.state.session.SessionID)
-
-		go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt)
-
-		result, err := s.waitSyncCompletion(ctx, reserved.state.session.SessionID, waitTimeout, normalized.Wait.CancelOnTimeout)
-		if err != nil {
-			return SyncStartResult{}, err
-		}
-		s.recordSyncStartReplay(normalized.RequestID, result)
-		return result, nil
-	}
-
-	terminal, err := s.executeImmediateSyncSession(ctx, normalized, resolved, sourceContent, policyResolution, reserved.state.session.SessionID)
-	if err != nil {
-		return SyncStartResult{}, err
-	}
 	s.mu.Lock()
-	candidate := cloneRuntimeSessionState(reserved.state)
-	applyRuntimeSessionFields(&candidate, terminal)
-	candidate.runCancel = nil
-	if err := s.recordCanonicalTerminalState(reserved.state, candidate); err != nil {
+	if err := s.ensureSessionResponseEventsIfNeeded(reserved.state); err != nil {
 		s.mu.Unlock()
 		return SyncStartResult{}, err
 	}
 	s.mu.Unlock()
-	s.presentCurrentFactoryEvents(reserved.state.session.SessionID)
 
-	snapshot, err := s.snapshotSessionState(reserved.state.session.SessionID)
-	if err != nil {
-		return SyncStartResult{}, err
+	if hasSyncWait {
+		return s.startWaitingSyncSession(
+			ctx, reserved, normalized, resolved, sourceContent, policyResolution, waitTimeout,
+		)
 	}
-	result := s.syncStartFromState(snapshot)
-	s.recordSyncStartReplay(normalized.RequestID, result)
-	return result, nil
+	return s.completeImmediateSyncStart(
+		ctx, normalized, resolved, sourceContent, policyResolution, reserved,
+	)
 }
 
 func (s *JavaScriptRuntimeService) GetSession(ctx context.Context, sessionID string) (SessionReadResult, error) {
@@ -841,6 +823,7 @@ func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
 		startRequest:              cloneStartRequestPtr(state.startRequest),
 		resolvedSource:            state.resolvedSource,
 		sourceContent:             state.sourceContent,
+		responseEvents:            state.responseEvents,
 	}
 	if len(state.events) > 0 {
 		cloned.events = make([]json.RawMessage, len(state.events))
@@ -935,10 +918,13 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 	if mode != ChildExecutorModeLive {
 		return hooks
 	}
-	executor := s.providerExecutor
-	hooks.NewChildExecutor = func(sessionID string, records factory.JavaScriptChildRecordSink, policy factory.JavaScriptPolicy) factory.JavaScriptChildExecutor {
+	hooks.NewChildExecutor = func(childSessionID string, records factory.JavaScriptChildRecordSink, policy factory.JavaScriptPolicy) factory.JavaScriptChildExecutor {
+		s.mu.RLock()
+		state := s.sessions[sessionID]
+		s.mu.RUnlock()
+		executor := s.liveChildExecutor(sessionID, state)
 		return livechild.NewRetryingProviderChildExecutor(
-			sessionID,
+			childSessionID,
 			executor,
 			records,
 			policy.MaxRetries,

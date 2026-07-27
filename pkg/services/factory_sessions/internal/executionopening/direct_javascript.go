@@ -244,4 +244,17 @@ func (adapter directJavaScriptLifecycle) ProbeDurableFactorySessionEvents(
 	return err
 }
 
+func (adapter directJavaScriptLifecycle) SubscribeDurableFactoryResponseEvents(
+	ctx context.Context,
+	request factorysessions.ResponseEventSubscriptionRequest,
+) (*factorysessions.ResponseEventCursor, error) {
+	subscriber, ok := adapter.execution.(interface {
+		SubscribeResponseEvents(context.Context, string, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
+	})
+	if !ok {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	return subscriber.SubscribeResponseEvents(ctx, request.SessionID, request)
+}
+
 var _ roles.DirectJavaScriptRunOperation = (*directJavaScriptRunOperation)(nil)

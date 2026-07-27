@@ -23,6 +23,13 @@ import (
 
 const defaultSessionID = "~default"
 
+type runtimeWorkstationService interface {
+	StartWorkstationPool(context.Context, workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error)
+	StopWorkstationPool(context.Context) (workers.WorkstationPoolStopResult, error)
+	DispatchWorkstation(context.Context, workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error)
+	CancelWorkstationDispatch(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
+}
+
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
 type RuntimeFactory struct {
 	quorumPolicy         interfaces.QuorumPolicyService
@@ -109,6 +116,7 @@ func (f *RuntimeFactory) Build(
 	worldStateProjector factory.WorldStateProjector,
 	newRuntimeLedger factory.RuntimeLedgerFactory,
 	loadWorkerExecutors func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error),
+	workerService runtimeWorkstationService,
 	dispatchCompleted func(string),
 ) (*factoryhost.Bundle, error) {
 	if f == nil || f.newID == nil {
@@ -211,6 +219,7 @@ func (f *RuntimeFactory) Build(
 		completionPlanner, petriMutationRecorder, worldStateProjector,
 		dispatchCompleted, logger, structuredLogger, logSink, metricsSink, net, eventHistory,
 		workerExecutors,
+		workerService,
 		f.quorumPolicy,
 		f.outputShaping,
 		f.workPropagation,
@@ -255,6 +264,7 @@ func assembleRuntimeBundle(
 	net *state.Net,
 	eventHistory recordings.RuntimeLedger,
 	workerExecutors map[string]workers.WorkerExecutor,
+	workerService runtimeWorkstationService,
 	quorumPolicy interfaces.QuorumPolicyService,
 	outputShaping interfaces.InvocationOutputShapingService,
 	workPropagation interfaces.WorkPropagationPolicyService,
@@ -295,6 +305,7 @@ func assembleRuntimeBundle(
 		net,
 		runtimeScheduler,
 		workerExecutors,
+		workerService,
 		loadedFactoryCfg,
 		RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), sessionID),
 		runtimeMode,

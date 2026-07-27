@@ -29,7 +29,7 @@ const (
 // TestGeminiGoldenTextSuccess replays a sanitized Gemini text-success transcript
 // through the customer process boundary and proves successful text output with
 // matching public Provider Session, response-event, and invocation-result metadata.
-//golden: docs/temp/functional/provider-sessions/gemini/text-success/manifest.json
+// golden: docs/temp/functional/provider-sessions/gemini/text-success/manifest.json
 func TestGeminiGoldenTextSuccess(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
 	caseDir := filepath.Join(
@@ -107,7 +107,7 @@ func TestGeminiGoldenTextSuccess(t *testing.T) {
 	assertGeminiFinalOnlyPublicResponseEvents(t, responseEvents)
 
 	observed := support.ProviderSessionObservedGoldens{
-		ProviderSession:   observeGeminiProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ProviderSession:  observeGeminiProviderSessionGolden(inferencePayload, loaded.Manifest),
 		ResponseEvents:   observeGeminiResponseEventGoldens(responseEvents),
 		InvocationResult: observeGeminiInvocationResultGolden(inferencePayload, dispatchOutput),
 	}
@@ -123,8 +123,8 @@ func TestGeminiGoldenTextSuccess(t *testing.T) {
 // TestGeminiGoldenRateLimitAndStructuredFailure replays sanitized Gemini rate-limit
 // and structured-failure transcripts through the customer process boundary and
 // proves those public failure classes remain distinct from each other and timeout.
-//golden: docs/temp/functional/provider-sessions/gemini/rate-limit/manifest.json
-//golden: docs/temp/functional/provider-sessions/gemini/structured-failure/manifest.json
+// golden: docs/temp/functional/provider-sessions/gemini/rate-limit/manifest.json
+// golden: docs/temp/functional/provider-sessions/gemini/structured-failure/manifest.json
 func TestGeminiGoldenRateLimitAndStructuredFailure(t *testing.T) {
 	t.Run("rate-limit", func(t *testing.T) {
 		runGeminiFailureGoldenCase(
@@ -151,7 +151,7 @@ func TestGeminiGoldenRateLimitAndStructuredFailure(t *testing.T) {
 // TestGeminiGoldenTimeout replays a sanitized Gemini timeout transcript through
 // the customer process boundary and proves a public timeout outcome distinct from
 // rate-limit throttle and structured non-throttle failure classes.
-//golden: docs/temp/functional/provider-sessions/gemini/timeout/manifest.json
+// golden: docs/temp/functional/provider-sessions/gemini/timeout/manifest.json
 func TestGeminiGoldenTimeout(t *testing.T) {
 	runGeminiFailureGoldenCase(
 		t,
@@ -449,39 +449,10 @@ func runGeminiFailureGoldenCase(
 ) {
 	t.Helper()
 
-	repoRoot := testutil.MustRepoRoot(t)
-	caseDir := filepath.Join(
-		repoRoot,
-		filepath.FromSlash(support.ProviderSessionFixturePath("gemini", caseName)),
-	)
-
-	loaded, err := support.LoadProviderSessionCase(caseDir)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionCase: %v", err)
-	}
-	if loaded.Manifest.ID != manifestID {
-		t.Fatalf("manifest.ID = %q, want %s", loaded.Manifest.ID, manifestID)
-	}
-	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelityFinalOnly {
-		t.Fatalf(
-			"manifest.fidelityClass = %q, want %q",
-			loaded.Manifest.FidelityClass,
-			support.ProviderSessionFidelityFinalOnly,
-		)
-	}
-
-	var request struct {
-		Model string `json:"model"`
-	}
-	if err := json.Unmarshal(loaded.Request, &request); err != nil {
-		t.Fatalf("decode request.json: %v", err)
-	}
-	if request.Model == "" {
-		t.Fatalf("request.json = %#v, want model", request)
-	}
+	loaded, model := loadGeminiFailureGoldenCase(t, caseName, manifestID)
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderGemini, request.Model))
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderGemini, model))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"gemini golden `+caseName+`"}`))
 
 	exitCode := 1
@@ -543,7 +514,7 @@ func runGeminiFailureGoldenCase(
 	}
 
 	observed := support.ProviderSessionObservedGoldens{
-		ProviderSession:   observeGeminiProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ProviderSession:  observeGeminiProviderSessionGolden(inferencePayload, loaded.Manifest),
 		ResponseEvents:   observeGeminiResponseEventGoldens(responseEvents),
 		InvocationResult: observeGeminiFailedInvocationResultGolden(inferencePayload),
 	}
@@ -554,6 +525,42 @@ func runGeminiFailureGoldenCase(
 		}
 		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
 	}
+}
+
+func loadGeminiFailureGoldenCase(
+	t *testing.T,
+	caseName string,
+	manifestID string,
+) (support.ProviderSessionCase, string) {
+	t.Helper()
+	caseDir := filepath.Join(
+		testutil.MustRepoRoot(t),
+		filepath.FromSlash(support.ProviderSessionFixturePath("gemini", caseName)),
+	)
+	loaded, err := support.LoadProviderSessionCase(caseDir)
+	if err != nil {
+		t.Fatalf("LoadProviderSessionCase: %v", err)
+	}
+	if loaded.Manifest.ID != manifestID {
+		t.Fatalf("manifest.ID = %q, want %s", loaded.Manifest.ID, manifestID)
+	}
+	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelityFinalOnly {
+		t.Fatalf(
+			"manifest.fidelityClass = %q, want %q",
+			loaded.Manifest.FidelityClass,
+			support.ProviderSessionFidelityFinalOnly,
+		)
+	}
+	var request struct {
+		Model string `json:"model"`
+	}
+	if err := json.Unmarshal(loaded.Request, &request); err != nil {
+		t.Fatalf("decode request.json: %v", err)
+	}
+	if request.Model == "" {
+		t.Fatalf("request.json = %#v, want model", request)
+	}
+	return loaded, request.Model
 }
 
 func repeatedGeminiCommandResults(

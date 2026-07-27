@@ -1,0 +1,5 @@
+{
+  "prompt": "Process the golden timeout task.",
+  "model": "cursor-fixture-model",
+  "session_id": "session_fixture_cursor_timeout"
+}

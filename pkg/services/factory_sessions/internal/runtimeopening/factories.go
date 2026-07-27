@@ -61,6 +61,7 @@ type FactorySessionExecutionFactory = func(
 	factoryruntime.Clock,
 	map[string]struct{},
 	factoryruntime.JavaScriptWorkerSettings,
+	bool,
 ) (factorysessions.ExecutionService, error)
 
 type RecordingsProjectionFactory = func() recordings.ProjectionService

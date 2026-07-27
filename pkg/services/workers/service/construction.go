@@ -13,6 +13,7 @@ import (
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/construction"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
+	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
@@ -84,6 +85,10 @@ func (s *Service) WithCommandRunners(providerRunner, scriptRunner workers.Comman
 		clone.scriptCommandRunner = scriptRunner
 		clone.scriptCommandInjected = true
 	}
+	// Each opened Factory Runtime owns an independent workstation lifecycle.
+	// Sharing the process-level pool would couple route admission, cancellation,
+	// and terminal stop state across otherwise separate Factory Sessions.
+	clone.workstations = workstationswire.NewService()
 	clone.executorBuilder = rebuildExecutorBuilder(
 		s.executorBuilder,
 		clone.providerFactory,

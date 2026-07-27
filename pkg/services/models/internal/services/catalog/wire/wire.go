@@ -32,6 +32,7 @@ func NewService(
 
 func catalogReadiness(
 	ctx context.Context,
+	_ models.RuntimeScopeRef,
 	_ models.RuntimeScopeConfig,
 	detail models.Detail,
 ) (models.Runtime, error) {

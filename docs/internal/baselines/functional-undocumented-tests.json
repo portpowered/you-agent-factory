@@ -111,18 +111,6 @@
       "name": "TestExportImportSmoke_PreservesNestedFactoryDocsThroughExportImport"
     },
     {
-      "file": "bootstrap_portability/factory_config_portability_long_test.go",
-      "name": "TestFactoryConfigPortability_FlattenInlineScriptBackedFactoryExecutesStandalone"
-    },
-    {
-      "file": "bootstrap_portability/factory_config_portability_long_test.go",
-      "name": "TestFatFactory_LoadOnlyStandaloneFileUsesSharedMappingPath"
-    },
-    {
-      "file": "bootstrap_portability/factory_config_portability_long_test.go",
-      "name": "TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions"
-    },
-    {
       "file": "bootstrap_portability/metadata_contract/factory_metadata_contract_test.go",
       "name": "TestFactoryMetadataContractLoadsLegacyExamplesAndRendersCanonicalHelp"
     },
@@ -141,10 +129,6 @@
     {
       "file": "bootstrap_portability/watcher_current_factory_activation_long_test.go",
       "name": "TestCurrentFactoryActivationFixture_WatchedFileExecutionFollowsActivatedFactory"
-    },
-    {
-      "file": "cli/dynamic_workflows/dynamic_workflow_run_test.go",
-      "name": "TestRunJavaScriptFactoryResponseStreamPublishesCanonicalLifecycle"
     },
     {
       "file": "cli/factory_run/output/failure_test.go",
@@ -319,14 +303,6 @@
       "name": "TestBareRootPrintsConciseHelpWithoutProductEffects"
     },
     {
-      "file": "cli/session/session_enumeration_test.go",
-      "name": "TestSessionEnumeration"
-    },
-    {
-      "file": "cli/session/session_enumeration_test.go",
-      "name": "TestSessionEnumerationJSON"
-    },
-    {
       "file": "cli/session_resume/resume_non_regression_test.go",
       "name": "TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadSemantics"
     },
@@ -463,10 +439,6 @@
       "name": "TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior"
     },
     {
-      "file": "orchestration/javascript/events/javascript_test.go",
-      "name": "TestJavaScriptInvocationEmitsCanonicalPhaseAndCheckpointEvents"
-    },
-    {
       "file": "providers/cli_script_executor_test.go",
       "name": "TestScriptExecutor_ArgTemplating"
     },
@@ -553,10 +525,6 @@
     {
       "file": "providers/mock_workers_agent_test.go",
       "name": "TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary"
-    },
-    {
-      "file": "providers/mock_workers_cli_http_stability_smoke_long_test.go",
-      "name": "TestMockWorkers_CLIServiceModeStartupWorkFileSupportsRepeatedLiveHTTPPollingBeforeCompletion"
     },
     {
       "file": "providers/mock_workers_end_to_end_smoke_test.go",
@@ -679,10 +647,6 @@
       "name": "TestReplayWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelation"
     },
     {
-      "file": "replay_contracts/worker_public_contract_smoke_long_test.go",
-      "name": "TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFieldsPrivate"
-    },
-    {
       "file": "runtime_api/api_batch_submission_boundary_smoke_long_test.go",
       "name": "TestFactoryRequestBatch_PublicBatchShapeStaysAlignedAcrossWatchedFileAndHTTP"
     },
@@ -761,10 +725,6 @@
     {
       "file": "runtime_api/api_inference_events_test.go",
       "name": "TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact"
-    },
-    {
-      "file": "runtime_api/api_inference_events_test.go",
-      "name": "TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents"
     },
     {
       "file": "runtime_api/api_inference_events_test.go",
@@ -853,10 +813,6 @@
     {
       "file": "runtime_api/api_service_config_override_alignment_test.go",
       "name": "TestServiceConfigOverrideAlignment_FunctionalHTTPServerProviderCommandRunner"
-    },
-    {
-      "file": "runtime_api/api_service_config_override_alignment_test.go",
-      "name": "TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner"
     },
     {
       "file": "runtime_api/api_service_mode_observability_smoke_test.go",
@@ -1507,40 +1463,12 @@
       "name": "TestNtoN_TypeMatching"
     },
     {
-      "file": "workflow/multi_output_long_test.go",
-      "name": "TestMultiOutput_NoStopWordsConfigured"
-    },
-    {
-      "file": "workflow/multi_output_long_test.go",
-      "name": "TestMultiOutput_OutputTokensInheritInputLineage"
-    },
-    {
-      "file": "workflow/multi_output_long_test.go",
-      "name": "TestMultiOutput_SecondStopWord"
-    },
-    {
-      "file": "workflow/multi_output_long_test.go",
-      "name": "TestMultiOutput_WithStopWord"
-    },
-    {
-      "file": "workflow/multi_output_long_test.go",
-      "name": "TestMultiOutput_WithoutStopWord"
-    },
-    {
       "file": "workflow/name_propagation_long_test.go",
       "name": "TestNamePropagation_InPromptTemplate"
     },
     {
       "file": "workflow/name_propagation_long_test.go",
       "name": "TestNamePropagation_MarkdownFile"
-    },
-    {
-      "file": "workflow/ralph_loop_long_test.go",
-      "name": "TestRalphLoop_TemplateFieldsResolvePerIteration"
-    },
-    {
-      "file": "workflow/ralph_loop_test.go",
-      "name": "TestRalphLoop_ConvergesOnReviewerAccept"
     },
     {
       "file": "workflow/rejection_path_test.go",
@@ -1559,32 +1487,12 @@
       "name": "TestRejectionPath_WithRejectionArcsRoutesViaArcs"
     },
     {
-      "file": "workflow/repeater_parameterized_long_test.go",
-      "name": "TestRepeater_GuardedLoopBreakerTerminatesRejectedRepeater"
-    },
-    {
-      "file": "workflow/repeater_parameterized_long_test.go",
-      "name": "TestRepeater_RefiresOnRejectedStopsOnAccepted"
-    },
-    {
-      "file": "workflow/repeater_parameterized_long_test.go",
-      "name": "TestRepeater_ResourceReleaseBetweenIterations_ServiceHarness"
-    },
-    {
       "file": "workflow/repeater_parameterized_test.go",
       "name": "TestParameterizedFields_UnresolvedTemplateRoutesToFailure"
     },
     {
       "file": "workflow/repeater_parameterized_test.go",
       "name": "TestParameterizedFields_WorkingDirectoryResolvesFromTags"
-    },
-    {
-      "file": "workflow/repeater_parameterized_test.go",
-      "name": "TestRepeater_ResourceReleaseBetweenIterations"
-    },
-    {
-      "file": "workflow/repeater_parameterized_test.go",
-      "name": "TestRepeater_YieldsBetweenIterations"
     },
     {
       "file": "workflow/review_retry_exhaustion_long_test.go",
@@ -1597,22 +1505,6 @@
     {
       "file": "workflow/review_retry_exhaustion_long_test.go",
       "name": "TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries"
-    },
-    {
-      "file": "workflow/watcher_multichannel_submission_long_test.go",
-      "name": "TestMultiChannelFileWatcher_DefaultSubmission"
-    },
-    {
-      "file": "workflow/watcher_multichannel_submission_long_test.go",
-      "name": "TestMultiChannelFileWatcher_DynamicExecDir"
-    },
-    {
-      "file": "workflow/watcher_multichannel_submission_long_test.go",
-      "name": "TestMultiChannelFileWatcher_ExecutionIDSubmission"
-    },
-    {
-      "file": "workflow/workstation_stopwords_long_test.go",
-      "name": "TestWorkstationStopWords_ThroughCustomerProcess"
     }
   ]
 }

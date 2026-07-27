@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -164,4 +166,57 @@ func TestStartSchedulerSidecarsForRuntime_CronCadenceSubmitsScheduledTicks(t *te
 	fakeClock.Advance(time.Minute)
 	scheduledRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
 	assertCronWorkRequestForWorkstation(t, scheduledRequest, start.Add(time.Minute), cronWS.Name)
+}
+
+func TestStartSchedulerSidecarsForRuntime_ReportsHostedStartFailureWithoutSubmission(t *testing.T) {
+	startErr := errors.New("hosted poller unavailable")
+	hostedPollers := programmableHostedPollers{
+		Start: func(
+			context.Context,
+			*sync.WaitGroup,
+			interfaces.RuntimeConfigLookup,
+			interfaces.FactoryWorkstationConfig,
+			*interfaces.FactoryWorkerConfig,
+			automations.HostedWorkSubmitter,
+		) error {
+			return startErr
+		},
+	}
+	poller := hostedLinearPollerWorkstation()
+	worker := hostedLinearPollerWorker()
+	factoryConfig := &interfaces.FactoryConfig{
+		Workers:      []interfaces.FactoryWorkerConfig{*worker},
+		Workstations: []interfaces.FactoryWorkstationConfig{poller},
+	}
+	runtimeConfig := runtimefixtures.RuntimeConfigLookupFixture{
+		Factory:      factoryConfig,
+		FactoryPath:  t.TempDir(),
+		Workers:      map[string]*interfaces.FactoryWorkerConfig{worker.Name: worker},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
+	}
+	service := newAutomationService(automationFixture{
+		WorkflowID:    "hosted-start-failure",
+		HostedPollers: hostedPollers,
+	})
+	submitted := &recordingSubmitter{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var sidecars sync.WaitGroup
+	err := service.StartSchedulerSidecarsForRuntime(
+		ctx,
+		&sidecars,
+		runtimeConfig.FactoryDir(),
+		factoryConfig,
+		runtimeConfig,
+		submitted.submit,
+	)
+	if !errors.Is(err, automations.ErrSupervisionFailed) || !errors.Is(err, startErr) {
+		t.Fatalf("scheduler start error = %v, want typed supervision failure wrapping %v", err, startErr)
+	}
+	if calls, _ := submitted.snapshot(); calls != 0 {
+		t.Fatalf("canonical Work submissions after failed start = %d, want 0", calls)
+	}
+
+	cancel()
+	sidecars.Wait()
 }

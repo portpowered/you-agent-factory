@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
 )
@@ -68,7 +67,7 @@ func (g localAssetGateway) InspectRuntimeCache(
 	}, nil
 }
 
-func snapshotFromPullResult(result modelassets.PullResult) ReadinessSnapshot {
+func snapshotFromPullResult(result models.PullResult) ReadinessSnapshot {
 	readiness := managedruntime.ReadinessState(strings.TrimSpace(result.ReadinessState))
 	if readiness == "" {
 		readiness = managedruntime.ReadinessStateReady
@@ -102,7 +101,7 @@ func snapshotFromPullResult(result modelassets.PullResult) ReadinessSnapshot {
 	}
 }
 
-func assetPullResultFromService(result modelassets.PullResult, outcome managedruntime.PullOutcome) AssetPullResult {
+func assetPullResultFromService(result models.PullResult, outcome managedruntime.PullOutcome) AssetPullResult {
 	files := make([]PullDownloadedFile, 0, len(result.DownloadedFiles))
 	for _, file := range result.DownloadedFiles {
 		files = append(files, PullDownloadedFile{

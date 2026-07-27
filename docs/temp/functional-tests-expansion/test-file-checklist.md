@@ -72,7 +72,7 @@ intentionally small enough to distribute across many agents.
 
 ### CLI parameter contract
 
-- [ ] `tests/functional/transport/cli/parameters/positional_values_test.go`
+- [x] `tests/functional/transport/cli/parameters/positional_values_test.go`
   - `TestRunAcceptsOnePositionalPrompt` verifies spaces and Unicode survive.
   - `TestRunRejectsExtraPositionalValues` verifies no worker dispatch occurs.
   - `TestOptionalSessionIDUsesDefaultWhenOmitted` verifies default session
@@ -103,7 +103,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIEnvironmentOverridesGlobalConfig` verifies documented precedence.
   - `TestCLIUnsetEnvironmentFallsBackWithoutFabricatingValue` covers absence.
 
-- [ ] `tests/functional/transport/cli/parameters/working_directory_test.go`
+- [x] `tests/functional/transport/cli/parameters/working_directory_test.go`
   - `TestCLIRelativeFactoryPathResolvesFromInvocationDirectory` verifies
     customer working-directory behavior.
   - `TestCLIWorkingDirectoryDoesNotLeakIntoOutput` verifies portable output.
@@ -111,11 +111,13 @@ intentionally small enough to distribute across many agents.
 
 ### CLI output modes and streaming
 
-- [ ] `tests/functional/transport/cli/output/json_result_test.go`
+- [x] `tests/functional/transport/cli/output/json_result_test.go`
   - `TestCLIJSONSuccessDecodesToPublicInvocationResult` verifies schema and
     terminal status.
   - `TestCLIJSONFailureRemainsValidJSON` verifies structured failure output.
   - `TestCLIJSONContainsNoPrivateRuntimeFields` guards the public boundary.
+  - `TestCLIJSONOutputSelectionFailsBeforeProductActivation` verifies invalid
+    output selectors fail before product activation.
 
 - [x] `tests/functional/transport/cli/output/ndjson_stream_test.go`
   - `TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult` verifies
@@ -129,7 +131,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise` covers human mode.
   - `TestCLITextStreamInterruptedRunDoesNotClaimCompletion` covers failure.
 
-- [ ] `tests/functional/transport/cli/output/stream_backpressure_test.go`
+- [x] `tests/functional/transport/cli/output/stream_backpressure_test.go`
   - `TestCLISlowWriterDoesNotReorderResponseEvents` uses a controlled blocking
     writer.
   - `TestCLIWriterFailureCancelsInvocation` verifies output failure cleanup.
@@ -156,17 +158,17 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIWorkShowMissingReturnsNotFound` covers error behavior.
   - `TestCLIWorkVisualizeProducesDeterministicGraph` covers visualization.
 
-- [ ] `tests/functional/transport/cli/commands/session_wiring_test.go`
+- [x] `tests/functional/transport/cli/commands/session_wiring_test.go`
   - `TestCLISessionCreateListShowDelete` covers the basic lifecycle.
   - `TestCLISessionPauseBuffersAndResumeDispatches` covers lifecycle control.
   - `TestCLISessionMissingIDReturnsNotFound` covers show/delete failure.
 
-- [ ] `tests/functional/transport/cli/commands/factory_wiring_test.go`
+- [x] `tests/functional/transport/cli/commands/factory_wiring_test.go`
   - `TestCLIFactoryInitValidateAndQuery` covers generated configuration.
   - `TestCLIFactoryFlattenExpandPreservesMeaning` covers portability.
   - `TestCLIFactoryReplaceCurrentChangesSessionFactory` covers current Factory.
 
-- [ ] `tests/functional/transport/cli/commands/docs_wiring_test.go`
+- [x] `tests/functional/transport/cli/commands/docs_wiring_test.go`
   - `TestCLIDocsListsPackagedTopics` covers discovery.
   - `TestCLIDocsEveryTopicRendersNonEmptyContent` iterates the packaged index.
   - `TestCLIDocsUnknownTopicReturnsActionableFailure` covers errors.
@@ -194,7 +196,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestGeneratedClientDecodesRepresentativeStructuredError`.
   - `TestGeneratedClientAndServerSchemaStayAligned`.
 
-- [ ] `tests/functional/transport/http/server/concurrent_requests_test.go`
+- [x] `tests/functional/transport/http/server/concurrent_requests_test.go`
   - `TestAPIConcurrentSessionRequestsRemainIsolated`.
   - `TestAPICancelledRequestDoesNotCancelUnrelatedSession`.
 
@@ -221,7 +223,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Script workers
 
-- [ ] `tests/functional/workers/script/execution_test.go`
+- [x] `tests/functional/workers/script/execution_test.go`
   - `TestScriptWorkerCompletesWithPublicPrimaryResult`.
   - `TestScriptWorkerNonZeroExitMapsToFailedOutcome`.
   - `TestScriptWorkerCancellationTerminatesChildProcess`.
@@ -286,9 +288,9 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCursorGoldenTextSuccessAndSessionIdentity` covers public metadata.
   - `TestCursorGoldenReadableProviderSessionDetails` covers detail lookup.
 
-- [ ] `tests/functional/workers/inference/cursor/golden_failure_test.go`
-  - `TestCursorGoldenMalformedRecordReturnsStableDiagnostic`.
-  - `TestCursorGoldenProcessFailureAndTimeoutRemainDistinct`.
+- [x] `tests/functional/workers/inference/cursor/golden_failure_test.go`
+  - `TestCursorGoldenMalformedRecordReturnsStableDiagnostic` covers malformed-record diagnostics.
+  - `TestCursorGoldenProcessFailureAndTimeoutRemainDistinct` covers process-failure versus timeout distinction.
 
 - [x] `tests/functional/workers/inference/opencode/golden_test.go`
   - `TestOpenCodeGoldenStructuredSnapshotSuccess`.
@@ -364,7 +366,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestJavaScriptPipelinePassesStageOutputToNextStage` covers data flow.
   - `TestJavaScriptPipelineStopsAfterStageFailure` prevents later dispatch.
 
-- [ ] `tests/functional/orchestration/javascript/composition/stages_test.go`
+- [x] `tests/functional/orchestration/javascript/composition/stages_test.go`
   - `TestJavaScriptNamedStagesExposeOrderedProgress` covers stage identity.
   - `TestJavaScriptEmptyStageProducesDocumentedResult` covers edge behavior.
 
@@ -376,12 +378,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 - [x] `tests/functional/orchestration/javascript/events/javascript_test.go`
 
-- [ ] `tests/functional/orchestration/javascript/composition/for_each_test.go`
+- [x] `tests/functional/orchestration/javascript/composition/for_each_test.go`
   - `TestJavaScriptForEachDispatchesEveryInputOnce` covers cardinality.
   - `TestJavaScriptForEachPreservesInputResultCorrelation` covers identity.
   - `TestJavaScriptForEachEmptyInputDoesNotDispatch` covers empty input.
 
-- [ ] `tests/functional/orchestration/javascript/composition/nested_test.go`
+- [x] `tests/functional/orchestration/javascript/composition/nested_test.go`
   - `TestJavaScriptNestedPipelineParallelCompositionCompletes` covers nesting.
   - `TestJavaScriptNestedFailureNamesChildAndStage` covers diagnostics.
 
@@ -398,12 +400,14 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestJavaScriptUnsupportedReturnValueFailsWithoutPrivateVMDetails` covers
     error safety.
 
-- [ ] `tests/functional/orchestration/javascript/contracts/response_events_test.go`
+- [x] `tests/functional/orchestration/javascript/contracts/response_events_test.go`
   - `TestJavaScriptChildProgressPublishesCanonicalResponseEvents` covers
     message/tool progress.
   - `TestJavaScriptTerminalResultFollowsFinalResponseEvent` covers ordering.
+  - `TestJavaScriptPhaseCheckpointLifecyclePublishesCanonicalFactoryEvents` covers
+    phase and checkpoint event emission.
 
-- [ ] `tests/functional/orchestration/javascript/workers/overrides_test.go`
+- [x] `tests/functional/orchestration/javascript/workers/overrides_test.go`
   - `TestJavaScriptChildrenSelectDifferentProvidersAndModels` covers per-child
     overrides.
   - `TestJavaScriptMockWorkersReplaceOnlyNamedChildren` covers partial mocks.
@@ -414,7 +418,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     policy failure.
   - `TestJavaScriptPolicyFailureDoesNotDispatchExternalWork` covers safety.
 
-- [ ] `tests/functional/orchestration/javascript/durability/resume_test.go`
+- [x] `tests/functional/orchestration/javascript/durability/resume_test.go`
   - `TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren`
     covers durable progress.
   - `TestJavaScriptResumeRestoresCheckpointAndFinalResult` covers state.
@@ -432,7 +436,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPetriConcurrentResultsCorrelateToOriginalWork`.
   - `TestPetriConcurrentFailureDoesNotDuplicateDispatch`.
 
-- [ ] `tests/functional/orchestration/petri/cross/session_compatibility_test.go`
+- [x] `tests/functional/orchestration/petri/cross/session_compatibility_test.go`
   - `TestPetriAndJavaScriptSessionsShareLifecycleControls`.
   - `TestPetriAndJavaScriptSessionsExposeCompatibleStatusFacts`.
 
@@ -451,20 +455,43 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCronDoesNotDoubleFireForOneScheduleBoundary`.
   - `TestCronShutdownPreventsLaterSubmission`.
 
-- [ ] `tests/functional/workstations/repeater/reject_accept_test.go`
-  - `TestRepeaterRejectsThenAcceptsAndStops`.
-  - `TestRepeaterHonorsEachConfiguredStopWord`.
-  - `TestRepeaterLoopBreakerTerminatesNonConvergingWork`.
+- [x] `tests/functional/workstations/repeater/reject_accept_test.go`
+  - `TestRepeater_YieldsBetweenIterations`.
+  - `TestRepeater_ResourceReleaseBetweenIterations`.
+  - `TestRalphLoop_ConvergesOnReviewerAccept`.
+- [x] `tests/functional/workstations/repeater/reject_accept_long_test.go`
+  - `TestRepeater_RefiresOnRejectedStopsOnAccepted`.
+  - `TestRepeater_GuardedLoopBreakerTerminatesRejectedRepeater`.
+  - `TestRepeater_ResourceReleaseBetweenIterations_ServiceHarness`.
+  - `TestWorkstationStopWords_ThroughCustomerProcess`.
+  - `TestMultiOutput_WithStopWord`.
+  - `TestMultiOutput_WithoutStopWord`.
+  - `TestMultiOutput_NoStopWordsConfigured`.
+  - `TestMultiOutput_SecondStopWord`.
+  - `TestMultiOutput_OutputTokensInheritInputLineage`.
+  - `TestRalphLoop_TemplateFieldsResolvePerIteration`.
 
 - [x] `tests/functional/workstations/poller/poller_test.go`
   - `TestPollerCreatesWorkFromExternalItems`.
   - `TestPollerEmptyResultCreatesNoWork`.
   - `TestPollerRecoverableFailureRetriesWithoutDuplicates`.
 
-- [ ] `tests/functional/workstations/watcher/files_test.go`
-  - `TestFileWatcherHandlesSingleSequentialAndConcurrentFiles`.
-  - `TestFileWatcherDoesNotLeakOrDuplicateWork`.
-  - `TestFileWatcherSwitchesWithCurrentFactory`.
+- [x] `tests/functional/workstations/watcher/files_test.go`
+  - `TestWatcherSingleFileCompletesOneWork` verifies one watched seed file
+    completes exactly one Work.
+  - `TestWatcherSequentialFilesAllComplete` verifies sequential multi-file
+    watcher admission.
+  - `TestWatcherConcurrentFilesCompleteWithoutDuplicates` verifies concurrent
+    admission without duplicate Work.
+  - `TestWatcherMixedOutcomesLeaveNoNonTerminalWorkLeak` verifies mixed
+    success/failure settlement leaves no non-terminal Work.
+  - `TestWatcherDefaultChannelSubmission`, `TestWatcherExecutionIDDirectorySubmission`,
+    and `TestWatcherCombinedDefaultAndDynamicExecDirectory` verify multi-channel
+    watched-file ingress paths.
+  - `TestWatcherParentChildBatchFanIn` verifies PARENT_CHILD batch fan-in via
+    watched-file ingress.
+  - `TestWatcherExecutionFollowsCurrentFactorySwitch` verifies watched-file
+    execution follows Current Factory activation.
 
 ## Wave 2 — work
 

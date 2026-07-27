@@ -359,35 +359,9 @@ func javaScriptStartRequest(
 		return factorysessions.StartRequest{}, errors.New("JavaScript Factory orchestrator configuration is required")
 	}
 	js := projection.FactoryCfg.Orchestrator.JavaScript
-	source := factorysessions.Source{}
-	if js.InlineSource != nil {
-		source.Kind = factoryruntime.WorkflowSourceKindInlineWorkflow
-		source.InlineWorkflow = &factorysessions.InlineWorkflowSource{
-			Dialect: js.Dialect, InlineSource: js.InlineSource.Inline, Entrypoint: js.Entrypoint,
-			Metadata: cloneStringMap(js.Metadata), Agents: cloneJavaScriptAgents(js.Agents),
-			ArgsSchema:    append(json.RawMessage(nil), js.ArgsSchema...),
-			DefaultPolicy: append(json.RawMessage(nil), js.DefaultPolicy...),
-		}
-	} else {
-		source.Kind = factoryruntime.WorkflowSourceKindWorkflowFile
-		source.WorkflowFile = strings.TrimSpace(js.SourceRef)
-		if source.WorkflowFile == "" {
-			return factorysessions.StartRequest{}, errors.New("JavaScript Factory workflow sourceRef is required")
-		}
-		if !filepath.IsAbs(source.WorkflowFile) {
-			factoryDir := target.FactoryDir
-			if projection.Session != nil && strings.TrimSpace(projection.Session.FactoryDir) != "" {
-				factoryDir = projection.Session.FactoryDir
-			}
-			source.WorkflowFile = filepath.Join(factoryDir, source.WorkflowFile)
-		}
-		if len(js.DefaultPolicy) > 0 || len(js.ArgsSchema) > 0 || len(js.Agents) > 0 {
-			source.InlineWorkflow = &factorysessions.InlineWorkflowSource{
-				Agents:        cloneJavaScriptAgents(js.Agents),
-				ArgsSchema:    append(json.RawMessage(nil), js.ArgsSchema...),
-				DefaultPolicy: append(json.RawMessage(nil), js.DefaultPolicy...),
-			}
-		}
+	source, err := javaScriptWorkflowSource(js, projection, target)
+	if err != nil {
+		return factorysessions.StartRequest{}, err
 	}
 	args, err := javaScriptInvocationArgs(projection.FactoryCfg, request, js.ArgsSchema, resolver)
 	if err != nil {
@@ -415,6 +389,44 @@ func javaScriptStartRequest(
 		Runtime:         &factorysessions.RuntimeOptions{ChildExecutorMode: childMode},
 		Wait:            &factorysessions.WaitOptions{TimeoutMillis: request.TimeoutMillis},
 	}, nil
+}
+
+func javaScriptWorkflowSource(
+	js *factorydefinitions.FactoryOrchestratorJavaScriptConfig,
+	projection factorysessions.ProjectionContext,
+	target roles.InvocationTarget,
+) (factorysessions.Source, error) {
+	source := factorysessions.Source{}
+	if js.InlineSource != nil {
+		source.Kind = factoryruntime.WorkflowSourceKindInlineWorkflow
+		source.InlineWorkflow = &factorysessions.InlineWorkflowSource{
+			Dialect: js.Dialect, InlineSource: js.InlineSource.Inline, Entrypoint: js.Entrypoint,
+			Metadata: cloneStringMap(js.Metadata), Agents: cloneJavaScriptAgents(js.Agents),
+			ArgsSchema:    append(json.RawMessage(nil), js.ArgsSchema...),
+			DefaultPolicy: append(json.RawMessage(nil), js.DefaultPolicy...),
+		}
+		return source, nil
+	}
+	source.Kind = factoryruntime.WorkflowSourceKindWorkflowFile
+	source.WorkflowFile = strings.TrimSpace(js.SourceRef)
+	if source.WorkflowFile == "" {
+		return factorysessions.Source{}, errors.New("JavaScript Factory workflow sourceRef is required")
+	}
+	if !filepath.IsAbs(source.WorkflowFile) {
+		factoryDir := target.FactoryDir
+		if projection.Session != nil && strings.TrimSpace(projection.Session.FactoryDir) != "" {
+			factoryDir = projection.Session.FactoryDir
+		}
+		source.WorkflowFile = filepath.Join(factoryDir, source.WorkflowFile)
+	}
+	if len(js.DefaultPolicy) > 0 || len(js.ArgsSchema) > 0 || len(js.Agents) > 0 {
+		source.InlineWorkflow = &factorysessions.InlineWorkflowSource{
+			Agents:        cloneJavaScriptAgents(js.Agents),
+			ArgsSchema:    append(json.RawMessage(nil), js.ArgsSchema...),
+			DefaultPolicy: append(json.RawMessage(nil), js.DefaultPolicy...),
+		}
+	}
+	return source, nil
 }
 
 func factoryDefaultPolicyMap(raw json.RawMessage) map[string]any {
