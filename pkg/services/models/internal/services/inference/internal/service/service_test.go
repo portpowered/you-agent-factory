@@ -3,10 +3,12 @@ package service_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
@@ -86,6 +88,7 @@ func TestInvokeModelWithLeaseRejectsUnknownAndExpiredLeases(t *testing.T) {
 	}
 	service := internalservice.New(
 		scopes,
+		availableInferenceAssets{},
 		catalog,
 		host,
 		&recordingInvocationRuntime{},
@@ -121,6 +124,7 @@ func TestInvokeModelWithLeaseRejectsUnknownModelAndUnsupportedOperation(t *testi
 	}
 	service := internalservice.New(
 		scopes,
+		availableInferenceAssets{},
 		catalog,
 		host,
 		&recordingInvocationRuntime{},
@@ -157,7 +161,7 @@ func TestInvokeModelWithLeaseReturnsDetachedCompletedResult(t *testing.T) {
 			Content:     "models-owned-output",
 		}},
 	}
-	service := internalservice.New(scopes, catalog, host, runtime, fixedClock())
+	service := internalservice.New(scopes, availableInferenceAssets{}, catalog, host, runtime, fixedClock())
 
 	result, err := service.InvokeModelWithLease(context.Background(), models.InvokeModelRequest{
 		Scope:     scope,
@@ -194,6 +198,163 @@ func TestInvokeModelWithLeaseReturnsDetachedCompletedResult(t *testing.T) {
 	}
 }
 
+func TestInvokeModelWithLeaseRejectsUnavailableAssets(t *testing.T) {
+	t.Parallel()
+
+	scopes, scope := openInferenceScope(t, "invoke-unavailable-assets", "scoped-model", "generate")
+	catalog := mustCatalog(t, scopes)
+	lease := mustLeaseRef(t, "lease-1")
+	host := &recordingInferenceHost{
+		leases: map[string]models.ModelLease{
+			lease.String(): activeLease(scope, lease, "scoped-model", "worker-1"),
+		},
+	}
+	service := internalservice.New(
+		scopes,
+		&recordingInferenceAssets{
+			inspection: scopedassets.RuntimeCacheInspection{Supported: true},
+		},
+		catalog,
+		host,
+		&recordingInvocationRuntime{},
+		fixedClock(),
+	)
+
+	_, err := service.InvokeModelWithLease(context.Background(), invokeRequest(scope, lease, "worker-1", "scoped-model", "generate"))
+	if !errors.Is(err, models.ErrAssetUnavailable) {
+		t.Fatalf("uninstalled assets = %v, want ErrAssetUnavailable", err)
+	}
+	if host.releaseCalls != 0 {
+		t.Fatalf("lease release calls = %d, want 0 for pre-acceptance failure", host.releaseCalls)
+	}
+
+	service = internalservice.New(
+		scopes,
+		&recordingInferenceAssets{err: fmt.Errorf("%w: scoped-model", models.ErrAssetUnavailable)},
+		catalog,
+		host,
+		&recordingInvocationRuntime{},
+		fixedClock(),
+	)
+	_, err = service.InvokeModelWithLease(context.Background(), invokeRequest(scope, lease, "worker-1", "scoped-model", "generate"))
+	if !errors.Is(err, models.ErrAssetUnavailable) {
+		t.Fatalf("asset inspection error = %v, want ErrAssetUnavailable", err)
+	}
+}
+
+func TestInvokeModelWithLeaseRejectsUnsupportedResponseMode(t *testing.T) {
+	t.Parallel()
+
+	scopes, scope := openInferenceScope(t, "invoke-response-mode", "scoped-model", "generate")
+	catalog := mustCatalog(t, scopes)
+	lease := mustLeaseRef(t, "lease-1")
+	host := &recordingInferenceHost{
+		leases: map[string]models.ModelLease{
+			lease.String(): activeLease(scope, lease, "scoped-model", "worker-1"),
+		},
+	}
+	service := internalservice.New(
+		scopes,
+		availableInferenceAssets{},
+		catalog,
+		host,
+		&recordingInvocationRuntime{},
+		fixedClock(),
+	)
+	request := invokeRequest(scope, lease, "worker-1", "scoped-model", "generate")
+	request.ResponseMode = models.ResponseMode("JSON")
+
+	_, err := service.InvokeModelWithLease(context.Background(), request)
+	if !errors.Is(err, models.ErrUnsupportedResponseMode) {
+		t.Fatalf("unsupported response mode = %v, want ErrUnsupportedResponseMode", err)
+	}
+}
+
+func TestInvokeModelWithLeaseNormalizesRuntimeFailure(t *testing.T) {
+	t.Parallel()
+
+	scopes, scope := openInferenceScope(t, "invoke-failure", "scoped-model", "generate")
+	catalog := mustCatalog(t, scopes)
+	lease := mustLeaseRef(t, "lease-1")
+	host := &recordingInferenceHost{
+		leases: map[string]models.ModelLease{
+			lease.String(): activeLease(scope, lease, "scoped-model", "worker-1"),
+		},
+	}
+	runtime := &recordingInvocationRuntime{invokeErr: models.ErrInferenceFailed}
+	service := internalservice.New(
+		scopes,
+		availableInferenceAssets{},
+		catalog,
+		host,
+		runtime,
+		fixedClock(),
+	)
+
+	result, err := service.InvokeModelWithLease(context.Background(), invokeRequest(scope, lease, "worker-1", "scoped-model", "generate"))
+	if !errors.Is(err, models.ErrInferenceFailed) {
+		t.Fatalf("runtime failure = %v, want ErrInferenceFailed", err)
+	}
+	if result.Invocation.IsZero() ||
+		result.Status != models.ModelInvocationStatusFailed ||
+		result.LeaseDisposition != models.InvocationLeaseReleased {
+		t.Fatalf("result = %#v, want failed released post-acceptance invocation", result)
+	}
+	if host.releaseCalls != 1 {
+		t.Fatalf("lease release calls = %d, want 1", host.releaseCalls)
+	}
+}
+
+func TestInvokeModelFailureOutcomesRemainDistinct(t *testing.T) {
+	t.Parallel()
+
+	failures := []error{
+		models.ErrAssetUnavailable,
+		models.ErrHostRuntimeNotReady,
+		models.ErrHostCapacityExhausted,
+		models.ErrHostLeaseExpired,
+		models.ErrUnsupportedModelOperation,
+		models.ErrInferenceTimeout,
+		models.ErrInferenceFailed,
+	}
+	for _, want := range failures {
+		for _, other := range failures {
+			if want != other && errors.Is(want, other) {
+				t.Fatalf("failure classifications must stay distinct: %v vs %v", want, other)
+			}
+		}
+	}
+
+	scopes, scope := openInferenceScope(t, "invoke-distinct", "scoped-model", "generate")
+	catalog := mustCatalog(t, scopes)
+	lease := mustLeaseRef(t, "lease-1")
+	host := &recordingInferenceHost{
+		leases: map[string]models.ModelLease{
+			lease.String(): activeLease(scope, lease, "scoped-model", "worker-1"),
+		},
+	}
+	service := internalservice.New(
+		scopes,
+		availableInferenceAssets{},
+		catalog,
+		host,
+		&recordingInvocationRuntime{invokeErr: models.ErrInferenceFailed},
+		fixedClock(),
+	)
+	result, err := service.InvokeModelWithLease(context.Background(), invokeRequest(scope, lease, "worker-1", "scoped-model", "generate"))
+	if !errors.Is(err, models.ErrInferenceFailed) {
+		t.Fatalf("normalized failure = %v, want ErrInferenceFailed", err)
+	}
+	for _, other := range failures {
+		if other != models.ErrInferenceFailed && errors.Is(err, other) {
+			t.Fatalf("normalized failure must stay distinct from %v: %v", other, err)
+		}
+	}
+	if result.Status != models.ModelInvocationStatusFailed {
+		t.Fatalf("result status = %q, want FAILED", result.Status)
+	}
+}
+
 func newInferenceService(
 	t *testing.T,
 	issuer string,
@@ -211,6 +372,7 @@ func newInferenceService(
 	}
 	return internalservice.New(
 		scopes,
+		availableInferenceAssets{},
 		mustCatalog(t, scopes),
 		host,
 		&recordingInvocationRuntime{},
@@ -322,6 +484,7 @@ func mustLeaseRef(t *testing.T, value string) models.ModelLeaseRef {
 type recordingInvocationRuntime struct {
 	invokeCalls int
 	content     []models.InferenceContent
+	invokeErr   error
 }
 
 func (runtime *recordingInvocationRuntime) Invoke(
@@ -329,6 +492,9 @@ func (runtime *recordingInvocationRuntime) Invoke(
 	request models.InvokeModelRequest,
 ) ([]models.InferenceContent, error) {
 	runtime.invokeCalls++
+	if runtime.invokeErr != nil {
+		return nil, runtime.invokeErr
+	}
 	if runtime.content != nil {
 		return append([]models.InferenceContent(nil), runtime.content...), nil
 	}
@@ -402,6 +568,79 @@ func (host *recordingInferenceHost) ReleaseModelLease(
 		Lease:   lease,
 		Outcome: models.ModelLeaseReleased,
 	}, nil
+}
+
+type availableInferenceAssets struct{}
+
+var _ scopedassets.Service = availableInferenceAssets{}
+
+func (availableInferenceAssets) PrepareModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PrepareModelAssetsResult, error) {
+	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (availableInferenceAssets) InspectModelAssets(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (models.InspectModelAssetsResult, error) {
+	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (availableInferenceAssets) ResolveRuntimeCache(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (scopedassets.RuntimeCacheLayout, error) {
+	return scopedassets.RuntimeCacheLayout{}, models.ErrUnsupportedOperation
+}
+
+func (availableInferenceAssets) InspectRuntimeCache(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (scopedassets.RuntimeCacheInspection, error) {
+	return scopedassets.RuntimeCacheInspection{
+		Supported: true,
+		Installed: true,
+	}, nil
+}
+
+type recordingInferenceAssets struct {
+	inspection scopedassets.RuntimeCacheInspection
+	err        error
+}
+
+var _ scopedassets.Service = (*recordingInferenceAssets)(nil)
+
+func (assets *recordingInferenceAssets) PrepareModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PrepareModelAssetsResult, error) {
+	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (assets *recordingInferenceAssets) InspectModelAssets(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (models.InspectModelAssetsResult, error) {
+	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (assets *recordingInferenceAssets) ResolveRuntimeCache(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (scopedassets.RuntimeCacheLayout, error) {
+	return scopedassets.RuntimeCacheLayout{}, models.ErrUnsupportedOperation
+}
+
+func (assets *recordingInferenceAssets) InspectRuntimeCache(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (scopedassets.RuntimeCacheInspection, error) {
+	if assets.err != nil {
+		return scopedassets.RuntimeCacheInspection{}, assets.err
+	}
+	return assets.inspection, nil
 }
 
 func TestInputEchoInvocationRuntimeReturnsDetachedContent(t *testing.T) {

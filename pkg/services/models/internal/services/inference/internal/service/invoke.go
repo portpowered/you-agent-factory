@@ -50,3 +50,41 @@ func invokeContextError(ctx context.Context) error {
 	}
 	return nil
 }
+
+func validateInvocationResponseMode(request models.InvokeModelRequest) error {
+	if request.ResponseMode != "" &&
+		request.ResponseMode != models.ResponseModeAudioStream {
+		return models.ErrUnsupportedResponseMode
+	}
+	return nil
+}
+
+func releasesInferenceCapacity(err error) bool {
+	return errors.Is(err, models.ErrInferenceTimeout) ||
+		errors.Is(err, models.ErrInferenceFailed)
+}
+
+func normalizeInvokeError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if releasesInferenceCapacity(err) {
+		return err
+	}
+	return fmt.Errorf("%w: %v", models.ErrInferenceFailed, err)
+}
+
+func failedInvocationResult(
+	request models.InvokeModelRequest,
+	invocation models.ModelInvocationRef,
+) models.InvokeModelResult {
+	return models.InvokeModelResult{
+		Invocation:       invocation,
+		Scope:            request.Scope,
+		Lease:            request.Lease,
+		ModelName:        request.ModelName,
+		Operation:        request.Operation,
+		Status:           models.ModelInvocationStatusFailed,
+		LeaseDisposition: models.InvocationLeaseReleased,
+	}.Clone()
+}

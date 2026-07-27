@@ -8,6 +8,7 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
+	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/internal/service"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
@@ -19,6 +20,7 @@ import (
 // and allocates inference state only; it does not launch subprocesses.
 func NewService(
 	scopes runtimescopes.Service,
+	assets scopedassets.Service,
 	catalog modelcatalog.Service,
 	runtimeHost runtimehost.Service,
 	invocationRuntime inference.InvocationRuntime,
@@ -27,6 +29,12 @@ func NewService(
 	if scopes == nil {
 		return nil, fmt.Errorf(
 			"%w: Models Runtime Scopes service is required",
+			models.ErrInvalidInferenceDependencies,
+		)
+	}
+	if isNilDependency(assets) {
+		return nil, fmt.Errorf(
+			"%w: Models Assets service is required",
 			models.ErrInvalidInferenceDependencies,
 		)
 	}
@@ -54,7 +62,7 @@ func NewService(
 			models.ErrInvalidInferenceDependencies,
 		)
 	}
-	return internalservice.New(scopes, catalog, runtimeHost, invocationRuntime, clock), nil
+	return internalservice.New(scopes, assets, catalog, runtimeHost, invocationRuntime, clock), nil
 }
 
 func isNilDependency(value any) bool {

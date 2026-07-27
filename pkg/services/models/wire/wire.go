@@ -123,6 +123,7 @@ func NewService(
 	}
 	inferenceService, err := inferencewire.NewService(
 		runtimeScopes,
+		assetService,
 		catalogService,
 		runtimeHost,
 		inference.InputEchoInvocationRuntime{},

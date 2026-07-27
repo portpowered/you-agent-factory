@@ -23,12 +23,14 @@ func TestNewServiceRequiresInferenceDependencies(t *testing.T) {
 
 	scopes := testRuntimeScopes(t)
 	catalog := testCatalogService(t, scopes)
+	assets := recordingAssetsService{}
 	runtimeHost := testRuntimeHostService()
 	clock := testInferenceClock{}
 
 	tests := []struct {
 		name            string
 		scopes          runtimescopes.Service
+		assets          scopedassets.Service
 		catalog         modelcatalog.Service
 		runtimeHost     runtimehost.Service
 		invocationRuntime inference.InvocationRuntime
@@ -37,31 +39,36 @@ func TestNewServiceRequiresInferenceDependencies(t *testing.T) {
 		wantInvalidDeps bool
 	}{
 		{
-			name: "valid", scopes: scopes, catalog: catalog,
+			name: "valid", scopes: scopes, assets: assets, catalog: catalog,
 			runtimeHost: runtimeHost, invocationRuntime: inference.InputEchoInvocationRuntime{},
 			clock: clock.Now,
 		},
 		{
-			name: "scopes", catalog: catalog, runtimeHost: runtimeHost,
+			name: "scopes", assets: assets, catalog: catalog, runtimeHost: runtimeHost,
 			invocationRuntime: inference.InputEchoInvocationRuntime{}, clock: clock.Now,
 			wantContains: "Runtime Scopes", wantInvalidDeps: true,
 		},
 		{
-			name: "catalog", scopes: scopes, runtimeHost: runtimeHost,
+			name: "assets", scopes: scopes, catalog: catalog, runtimeHost: runtimeHost,
+			invocationRuntime: inference.InputEchoInvocationRuntime{}, clock: clock.Now,
+			wantContains: "Assets", wantInvalidDeps: true,
+		},
+		{
+			name: "catalog", scopes: scopes, assets: assets, runtimeHost: runtimeHost,
 			invocationRuntime: inference.InputEchoInvocationRuntime{}, clock: clock.Now,
 			wantContains: "Catalog", wantInvalidDeps: true,
 		},
 		{
-			name: "runtime host", scopes: scopes, catalog: catalog,
+			name: "runtime host", scopes: scopes, assets: assets, catalog: catalog,
 			invocationRuntime: inference.InputEchoInvocationRuntime{}, clock: clock.Now,
 			wantContains: "Runtime Host", wantInvalidDeps: true,
 		},
 		{
-			name: "invocation runtime", scopes: scopes, catalog: catalog, runtimeHost: runtimeHost,
+			name: "invocation runtime", scopes: scopes, assets: assets, catalog: catalog, runtimeHost: runtimeHost,
 			clock: clock.Now, wantContains: "invocation runtime", wantInvalidDeps: true,
 		},
 		{
-			name: "clock", scopes: scopes, catalog: catalog, runtimeHost: runtimeHost,
+			name: "clock", scopes: scopes, assets: assets, catalog: catalog, runtimeHost: runtimeHost,
 			invocationRuntime: inference.InputEchoInvocationRuntime{},
 			wantContains: "clock", wantInvalidDeps: true,
 		},
@@ -70,6 +77,7 @@ func TestNewServiceRequiresInferenceDependencies(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			service, err := inferencewire.NewService(
 				test.scopes,
+				test.assets,
 				test.catalog,
 				test.runtimeHost,
 				test.invocationRuntime,
