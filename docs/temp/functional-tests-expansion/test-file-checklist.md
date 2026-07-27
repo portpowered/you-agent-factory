@@ -98,7 +98,7 @@ intentionally small enough to distribute across many agents.
     output.
   - `TestCLIJSONNullAndEmptyValuesRemainDistinct` prevents normalization loss.
 
-- [ ] `tests/functional/transport/cli/parameters/environment_precedence_test.go`
+- [x] `tests/functional/transport/cli/parameters/environment_precedence_test.go`
   - `TestCLIExplicitFlagOverridesEnvironmentDefault` verifies precedence.
   - `TestCLIEnvironmentOverridesGlobalConfig` verifies documented precedence.
   - `TestCLIUnsetEnvironmentFallsBackWithoutFabricatingValue` covers absence.
@@ -175,7 +175,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### HTTP server and protocol mechanics
 
-- [ ] `tests/functional/transport/http/server/startup_shutdown_test.go`
+- [x] `tests/functional/transport/http/server/startup_shutdown_test.go`
   - `TestAPIServerStartsOnConfiguredListenerAndServesStatus`.
   - `TestAPIServerShutdownClosesListenerAndActiveStreams`.
   - `TestAPIServerBindFailureUnwindsStartedLifecycleRoles`.
@@ -249,7 +249,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestProviderAuthRateLimitAndTimeoutRemainDistinct` covers error classes.
   - `TestProviderFailureRedactsPromptEnvironmentAndCredentials` covers safety.
 
-- [ ] `tests/functional/workers/inference/stream_fidelity_test.go`
+- [x] `tests/functional/workers/inference/stream_fidelity_test.go`
   - `TestProviderFullStreamClaimsDeltasAndSnapshotsTruthfully`.
   - `TestProviderPartialStreamDoesNotFabricateMissingDeltas`.
   - `TestProviderSnapshotOnlyEmitsCompletedSnapshotsOnly`.
@@ -346,7 +346,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     resolution.
   - `TestJavaScriptFactoryMissingImportFailsActionably` covers load failure.
 
-- [ ] `tests/functional/orchestration/javascript/loading/named_factory_test.go`
+- [x] `tests/functional/orchestration/javascript/loading/named_factory_test.go`
   - `TestNamedJavaScriptFactoryRunsThroughStandardCLI` covers named resolution.
   - `TestNamedJavaScriptFactoryRunsThroughAPIInvocation` covers HTTP entry.
   - `TestNamedJavaScriptFactoryUsesSameFactorySessionControls` covers pause.
@@ -394,7 +394,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     covers typed request mapping.
   - `TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch` covers error.
 
-- [ ] `tests/functional/orchestration/javascript/contracts/output_mapping_test.go`
+- [x] `tests/functional/orchestration/javascript/contracts/output_mapping_test.go`
   - `TestJavaScriptReturnValueMapsToPrimaryInvocationResult` covers output.
   - `TestJavaScriptStructuredArtifactsMapToPublicResult` covers artifacts.
   - `TestJavaScriptUnsupportedReturnValueFailsWithoutPrivateVMDetails` covers
@@ -447,6 +447,10 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAutomationsCronActivatesThroughRuntimeLifecycle`.
   - `TestAutomationsCronJitterProducesStableSubmissionTiming`.
   - `TestAutomationsCronSkipsMalformedWorkstationAndFiresValid`.
+
+- [x] `tests/functional/automations/filesystem_watcher_root_composition_test.go`
+  - `TestBuildProcessRemainsFilesystemWatcherInertBeforeRuntimeLifecycle`.
+  - `TestAutomationsFilesystemWatcherPreseedsThroughRuntimeLifecycle`.
 
 ## Wave 1 — workstations
 
@@ -694,6 +698,11 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCodexHistoricalInspectionContainmentRejectionThroughRootBuildProcess`.
   - `TestCodexHistoricalInspectionBoundedWalkThroughRootBuildProcess`.
   - `TestCodexHistoricalInspectionCancelledDiscoveryThroughRootBuildProcess`.
+
+- [x] `tests/functional/providers/cursor/historical_inspection_root_test.go`
+  - `TestCursorHistoricalInspectionThroughRootBuildProcess_ReturnsDeterministicNormalizedDetail`.
+  - `TestCursorHistoricalInspectionThroughRootBuildProcess_PropagatesMissingAndContainmentFailures`.
+  - `TestCursorHistoricalInspectionThroughRootBuildProcess_DegradesAdverseNativeDataSafely`.
 
 - [ ] `tests/functional/provider_sessions/details/codex_details_test.go`
   - `TestCodexProviderSessionDetailsLoadFromGoldenMetadata` covers API detail.

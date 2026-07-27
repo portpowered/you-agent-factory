@@ -653,6 +653,39 @@ func (fake *peerRootServiceFake) SummarizePortableArtifact(
 	}, nil
 }
 
+func (fake *peerRootServiceFake) ExportPortableArtifact(
+	ctx context.Context,
+	request recordings.ExportPortableArtifactRequest,
+) (recordings.ExportPortableArtifactResult, error) {
+	if err := ctx.Err(); err != nil {
+		return recordings.ExportPortableArtifactResult{}, recordings.ErrPortableArtifactCancelled
+	}
+	built, err := fake.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
+		RecordingID: request.RecordingID,
+	})
+	if err != nil {
+		return recordings.ExportPortableArtifactResult{}, err
+	}
+	return recordings.ExportPortableArtifactResult{
+		Reference: built.Artifact.Summary.Reference,
+		Artifact:  built.Artifact,
+	}, nil
+}
+
+func (fake *peerRootServiceFake) ReadPortableArtifact(
+	ctx context.Context,
+	request recordings.ReadPortableArtifactRequest,
+) (recordings.ReadPortableArtifactResult, error) {
+	if err := ctx.Err(); err != nil {
+		return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactCancelled
+	}
+	if strings.TrimSpace(string(request.RecordingID)) == "" ||
+		strings.TrimSpace(string(request.Reference)) == "" {
+		return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
+	}
+	return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
+}
+
 func peerValidatePortableArtifact(artifact recordings.PortableArtifact) error {
 	if artifact.SchemaVersion != recordings.PortableArtifactSchemaV1 {
 		return recordings.ErrUnsupportedPortableArtifactSchema

@@ -1,4 +1,4 @@
-package ingest
+package service
 
 import (
 	"io/fs"

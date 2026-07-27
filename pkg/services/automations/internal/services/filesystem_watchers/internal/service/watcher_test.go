@@ -1,4 +1,4 @@
-package ingest
+package service
 
 import (
 	"context"
@@ -10,15 +10,11 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
+	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
@@ -29,130 +25,34 @@ var testWorkRequestIDGenerator work.RequestIDGenerator = func() string {
 	return fmt.Sprintf("test-id-%d", testWorkRequestIdentity.Add(1))
 }
 
-// mockFactory records SubmitWorkRequest calls for test assertions.
-type mockFactory struct {
-	mu           sync.Mutex
-	workRequests []work.WorkRequest
-	submitted    chan struct{}
-	result       work.WorkRequestSubmitResult
-	err          error
-}
-
-func (m *mockFactory) SubmitWorkRequest(_ context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.workRequests = append(m.workRequests, cloneWorkRequest(request))
-	if m.submitted != nil {
-		select {
-		case m.submitted <- struct{}{}:
-		default:
-		}
+func newTestWatcher(
+	dir string,
+	submitter *recordingSubmitter,
+	logger *zap.Logger,
+	workTypes []string,
+	statesByType map[string]map[string]bool,
+	files filesystemwatchers.InputFileSystem,
+	walkDirectory filesystemwatchers.DirectoryWalker,
+) *watcher {
+	if walkDirectory == nil {
+		walkDirectory = filepath.WalkDir
 	}
-	if m.err != nil {
-		return work.WorkRequestSubmitResult{}, m.err
+	if files == nil {
+		files = localInputFiles{}
 	}
-	result := m.result
-	if result.RequestID == "" && result.TraceID == "" && result.WorkID == "" && result.Name == "" &&
-		result.WorkTypeName == "" && !result.Accepted && len(result.Works) == 0 {
-		result = work.WorkRequestSubmitResult{RequestID: request.RequestID, Accepted: true}
+	if logger == nil {
+		logger = zap.NewNop()
 	}
-	return result, nil
-}
-
-func (m *mockFactory) Run(_ context.Context) error { return nil }
-func (m *mockFactory) SubscribeFactoryEvents(_ context.Context, _ *interfaces.FactoryEventReconnectCursor, _ interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
-	return &interfaces.FactoryEventStream{Events: make(chan interfaces.FactoryEvent)}, nil
-}
-func (m *mockFactory) Pause(_ context.Context) error  { return nil }
-func (m *mockFactory) Resume(_ context.Context) error { return nil }
-func (m *mockFactory) Terminate(_ context.Context, _ factory.TerminateRequest) (factory.TerminateResult, error) {
-	return factory.TerminateResult{Outcome: factory.ControlOutcomeAccepted}, nil
-}
-func (m *mockFactory) Observe(_ context.Context, _ factory.ObserveRequest) (factory.ObserveResult, error) {
-	return factory.ObserveResult{}, nil
-}
-func (m *mockFactory) PlanDispatch(_ context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
-	return factory.PlanDispatchResult{
-		Outcome:       factory.DispatchPlanOutcomeAccepted,
-		DispatchID:    req.DispatchID,
-		CorrelationID: req.CorrelationID,
-	}, nil
-}
-func (m *mockFactory) AcceptDispatchResult(_ context.Context, req factory.AcceptDispatchResultRequest) (factory.AcceptDispatchResultResult, error) {
-	return factory.AcceptDispatchResultResult{
-		Outcome:       factory.DispatchPlanOutcomeRetired,
-		DispatchID:    req.DispatchID,
-		CorrelationID: req.CorrelationID,
-	}, nil
-}
-func (m *mockFactory) CaptureCheckpoint(_ context.Context, req factory.CaptureCheckpointRequest) (factory.CaptureCheckpointResult, error) {
-	id := req.CheckpointID
-	if id == "" {
-		id = "checkpoint-stub"
-	}
-	return factory.CaptureCheckpointResult{
-		Outcome: factory.CheckpointOutcomeCaptured,
-		Checkpoint: factory.Checkpoint{
-			CheckpointID:  id,
-			SchemaVersion: 1,
-			StrategyKind:  "runtime",
-			Payload:       []byte(`{}`),
-		},
-	}, nil
-}
-func (m *mockFactory) LoadCheckpoint(_ context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
-	if req.CheckpointID == "" {
-		return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
-	}
-	return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
-}
-func (m *mockFactory) RestoreCheckpoint(_ context.Context, req factory.RestoreCheckpointRequest) (factory.RestoreCheckpointResult, error) {
-	return factory.RestoreCheckpointResult{
-		Outcome:      factory.CheckpointOutcomeRestored,
-		CheckpointID: req.Checkpoint.CheckpointID,
-	}, nil
-}
-func (m *mockFactory) MoveWork(_ context.Context, _ string, _ string, _ work.WorkStateChangeSource, _ string) (work.OperatorMoveResult, error) {
-	return work.OperatorMoveResult{}, errors.New("MoveWork is not implemented in ingest mockFactory")
-}
-
-func (m *mockFactory) GetEngineStateSnapshot(_ context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{}, nil
-}
-func (m *mockFactory) GetFactoryEvents(_ context.Context) ([]interfaces.FactoryEvent, error) {
-	return nil, nil
-}
-func (m *mockFactory) WaitToComplete() <-chan struct{} {
-	return make(chan struct{})
-}
-
-func (m *mockFactory) getWorkRequests() []work.WorkRequest {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := make([]work.WorkRequest, len(m.workRequests))
-	for i := range m.workRequests {
-		out[i] = cloneWorkRequest(m.workRequests[i])
-	}
-	return out
-}
-
-func cloneWorkRequest(request work.WorkRequest) work.WorkRequest {
-	out := request
-	out.Works = make([]work.Work, len(request.Works))
-	for i := range request.Works {
-		out.Works[i] = request.Works[i]
-		if payload, ok := request.Works[i].Payload.([]byte); ok {
-			out.Works[i].Payload = append([]byte(nil), payload...)
-		}
-		if request.Works[i].Tags != nil {
-			out.Works[i].Tags = make(map[string]string, len(request.Works[i].Tags))
-			for key, value := range request.Works[i].Tags {
-				out.Works[i].Tags[key] = value
-			}
-		}
-	}
-	out.Relations = append([]work.WorkRelation(nil), request.Relations...)
-	return out
+	return newWatcher(filesystemwatchers.Config{
+		Dir:               dir,
+		Logger:            logger,
+		KnownWorkTypes:    workTypes,
+		ValidStatesByType: statesByType,
+		Files:             files,
+		WalkDirectory:     walkDirectory,
+		WorkRequestIDs:    testWorkRequestIDGenerator,
+		Submitter:         submitter.Submit,
+	})
 }
 
 func requireFileWatcherIntegration(t *testing.T) {
@@ -186,7 +86,7 @@ func setupMultiChannelDir(t *testing.T) string {
 	return dir
 }
 
-func waitForSubmission(t *testing.T, mf *mockFactory, count int) []work.WorkRequest {
+func waitForSubmission(t *testing.T, mf *recordingSubmitter, count int) []work.WorkRequest {
 	t.Helper()
 	deadline := time.After(5 * time.Second)
 	for {
@@ -202,7 +102,7 @@ func waitForSubmission(t *testing.T, mf *mockFactory, count int) []work.WorkRequ
 	}
 }
 
-func assertNoSubmissionWithin(t *testing.T, mf *mockFactory, duration time.Duration) {
+func assertNoSubmissionWithin(t *testing.T, mf *recordingSubmitter, duration time.Duration) {
 	t.Helper()
 	time.Sleep(duration)
 	if got := len(mf.getWorkRequests()); got != 0 {
@@ -213,10 +113,10 @@ func assertNoSubmissionWithin(t *testing.T, mf *mockFactory, duration time.Durat
 func TestFileWatcher_MDFile(t *testing.T) {
 	requireFileWatcherIntegration(t)
 	dir := setupWatchDir(t)
-	mf := &mockFactory{}
+	mf := &recordingSubmitter{}
 	logger := zap.NewNop()
 
-	fw := NewFileWatcher(dir, mf, logger, nil, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	fw := newTestWatcher(dir, mf, logger, nil, nil, localInputFiles{}, filepath.WalkDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -259,10 +159,10 @@ func TestFileWatcher_MDFile(t *testing.T) {
 func TestFileWatcher_JSONNonBatchWrapsRawPayload(t *testing.T) {
 	requireFileWatcherIntegration(t)
 	dir := setupWatchDir(t)
-	mf := &mockFactory{}
+	mf := &recordingSubmitter{}
 	logger := zap.NewNop()
 
-	fw := NewFileWatcher(dir, mf, logger, nil, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	fw := newTestWatcher(dir, mf, logger, nil, nil, localInputFiles{}, filepath.WalkDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -303,10 +203,10 @@ func TestFileWatcher_JSONNonBatchWrapsRawPayload(t *testing.T) {
 func TestFileWatcher_JSONFallbackPayload(t *testing.T) {
 	requireFileWatcherIntegration(t)
 	dir := setupWatchDir(t)
-	mf := &mockFactory{}
+	mf := &recordingSubmitter{}
 	logger := zap.NewNop()
 
-	fw := NewFileWatcher(dir, mf, logger, nil, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	fw := newTestWatcher(dir, mf, logger, nil, nil, localInputFiles{}, filepath.WalkDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -371,8 +271,8 @@ func TestFileWatcher_JSONFactoryRequestBatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mf := &mockFactory{}
-	fw := NewFileWatcher(dir, mf, zap.NewNop(), []string{"request"}, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	mf := &recordingSubmitter{}
+	fw := newTestWatcher(dir, mf, zap.NewNop(), []string{"request"}, nil, localInputFiles{}, filepath.WalkDir)
 	if err := fw.PreseedInputs(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -415,8 +315,8 @@ func TestFileWatcher_JSONFactoryRequestBatchMapsWorkTypeName(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mf := &mockFactory{}
-	fw := NewFileWatcher(dir, mf, zap.NewNop(), []string{"request"}, map[string]map[string]bool{"request": {"queued": true, "complete": true}}, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	mf := &recordingSubmitter{}
+	fw := newTestWatcher(dir, mf, zap.NewNop(), []string{"request"}, map[string]map[string]bool{"request": {"queued": true, "complete": true}}, localInputFiles{}, filepath.WalkDir)
 
 	if err := fw.PreseedInputs(context.Background()); err != nil {
 		t.Fatal(err)
@@ -459,8 +359,8 @@ func TestFileWatcher_JSONFactoryRequestBatchAcceptsParentChildByWorkName(t *test
 		t.Fatal(err)
 	}
 
-	mf := &mockFactory{}
-	fw := NewFileWatcher(dir, mf, zap.NewNop(), []string{"request"}, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	mf := &recordingSubmitter{}
+	fw := newTestWatcher(dir, mf, zap.NewNop(), []string{"request"}, nil, localInputFiles{}, filepath.WalkDir)
 	if err := fw.PreseedInputs(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -506,8 +406,8 @@ func TestFileWatcher_JSONFactoryRequestBatchMapsStateAndParentChild(t *testing.T
 		t.Fatal(err)
 	}
 
-	mf := &mockFactory{}
-	fw := NewFileWatcher(dir, mf, zap.NewNop(), []string{"request", "story"}, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	mf := &recordingSubmitter{}
+	fw := newTestWatcher(dir, mf, zap.NewNop(), []string{"request", "story"}, nil, localInputFiles{}, filepath.WalkDir)
 	if err := fw.PreseedInputs(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -543,8 +443,8 @@ func TestFileWatcher_JSONFactoryRequestBatchRejectsWorkTypeIDAlias(t *testing.T)
 		t.Fatal(err)
 	}
 
-	mf := &mockFactory{}
-	fw := NewFileWatcher(dir, mf, zap.NewNop(), []string{"request"}, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	mf := &recordingSubmitter{}
+	fw := newTestWatcher(dir, mf, zap.NewNop(), []string{"request"}, nil, localInputFiles{}, filepath.WalkDir)
 	err := fw.PreseedInputs(context.Background())
 	if err == nil {
 		t.Fatal("expected retired work_type_id alias to fail")
@@ -574,8 +474,8 @@ func TestFileWatcher_JSONFactoryRequestBatchRejectsTargetStateAlias(t *testing.T
 		t.Fatal(err)
 	}
 
-	mf := &mockFactory{}
-	fw := NewFileWatcher(dir, mf, zap.NewNop(), []string{"request"}, map[string]map[string]bool{"request": {"waiting": true, "complete": true}}, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	mf := &recordingSubmitter{}
+	fw := newTestWatcher(dir, mf, zap.NewNop(), []string{"request"}, map[string]map[string]bool{"request": {"waiting": true, "complete": true}}, localInputFiles{}, filepath.WalkDir)
 
 	err := fw.PreseedInputs(context.Background())
 	if err == nil {
@@ -606,8 +506,8 @@ func TestFileWatcher_JSONFactoryRequestBatchRejectsConflictingTraceAliases(t *te
 		t.Fatal(err)
 	}
 
-	mf := &mockFactory{}
-	fw := NewFileWatcher(dir, mf, zap.NewNop(), []string{"request"}, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	mf := &recordingSubmitter{}
+	fw := newTestWatcher(dir, mf, zap.NewNop(), []string{"request"}, nil, localInputFiles{}, filepath.WalkDir)
 	err := fw.PreseedInputs(context.Background())
 	if err == nil {
 		t.Fatal("expected conflicting trace aliases to fail")
@@ -644,8 +544,8 @@ func TestFileWatcher_JSONFactoryRequestBatchRejectsConflictingWorkType(t *testin
 		t.Fatal(err)
 	}
 
-	mf := &mockFactory{}
-	fw := NewFileWatcher(dir, mf, zap.NewNop(), []string{"request"}, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	mf := &recordingSubmitter{}
+	fw := newTestWatcher(dir, mf, zap.NewNop(), []string{"request"}, nil, localInputFiles{}, filepath.WalkDir)
 	if err := fw.PreseedInputs(context.Background()); err == nil {
 		t.Fatal("expected conflicting batch work type to fail")
 	}
@@ -672,8 +572,8 @@ func TestFileWatcher_PreseedValidatesAllFilesBeforeSubmitting(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mf := &mockFactory{}
-	fw := NewFileWatcher(dir, mf, zap.NewNop(), []string{"request"}, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	mf := &recordingSubmitter{}
+	fw := newTestWatcher(dir, mf, zap.NewNop(), []string{"request"}, nil, localInputFiles{}, filepath.WalkDir)
 	if err := fw.PreseedInputs(context.Background()); err == nil {
 		t.Fatal("expected invalid preseed batch to fail")
 	}
@@ -688,10 +588,10 @@ func TestFileWatcher_PreseedValidatesAllFilesBeforeSubmitting(t *testing.T) {
 func TestFileWatcher_IgnoresTempFiles(t *testing.T) {
 	requireFileWatcherIntegration(t)
 	dir := setupWatchDir(t)
-	mf := &mockFactory{}
+	mf := &recordingSubmitter{}
 	logger := zap.NewNop()
 
-	fw := NewFileWatcher(dir, mf, logger, nil, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	fw := newTestWatcher(dir, mf, logger, nil, nil, localInputFiles{}, filepath.WalkDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -732,10 +632,10 @@ func TestFileWatcher_KnownWorkTypes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mf := &mockFactory{}
+	mf := &recordingSubmitter{}
 	logger := zap.NewNop()
 
-	fw := NewFileWatcher(dir, mf, logger, []string{"request"}, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	fw := newTestWatcher(dir, mf, logger, []string{"request"}, nil, localInputFiles{}, filepath.WalkDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -791,15 +691,14 @@ func TestIsTempFile(t *testing.T) {
 
 func TestPreseedInputs_UsesInjectedDirectoryWalker(t *testing.T) {
 	walkErr := errors.New("injected walk failure")
-	fw := NewFileWatcher(
+	fw := newTestWatcher(
 		t.TempDir(),
-		&mockFactory{},
+		&recordingSubmitter{},
 		zap.NewNop(),
 		nil,
 		nil,
 		localInputFiles{},
 		func(string, fs.WalkDirFunc) error { return walkErr },
-		testWorkRequestIDGenerator,
 	)
 
 	err := fw.PreseedInputs(context.Background())
@@ -808,11 +707,16 @@ func TestPreseedInputs_UsesInjectedDirectoryWalker(t *testing.T) {
 	}
 }
 
-func TestNewFileWatcher_RequiresDirectoryWalker(t *testing.T) {
+func TestNewWatcher_RequiresDirectoryWalker(t *testing.T) {
 	defer func() {
 		if recovered := recover(); recovered == nil {
-			t.Fatal("NewFileWatcher panic = nil, want missing directory walker failure")
+			t.Fatal("newWatcher panic = nil, want missing directory walker failure")
 		}
 	}()
-	_ = NewFileWatcher(t.TempDir(), &mockFactory{}, zap.NewNop(), nil, nil, localInputFiles{}, nil, testWorkRequestIDGenerator)
+	_ = newWatcher(filesystemwatchers.Config{
+		Dir:            t.TempDir(),
+		Submitter:      (&recordingSubmitter{}).Submit,
+		Files:          localInputFiles{},
+		WorkRequestIDs: testWorkRequestIDGenerator,
+	})
 }

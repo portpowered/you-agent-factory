@@ -231,6 +231,7 @@ func newFailureTestRoot(
 		nil,
 		writer,
 		tickers,
+		nil,
 		clock,
 	)
 }
