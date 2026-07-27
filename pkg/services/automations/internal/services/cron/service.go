@@ -50,6 +50,36 @@ type Service interface {
 		ws interfaces.FactoryWorkstationConfig,
 		nominalAt time.Time,
 	) (CronTickSubmission, error)
+	// ResumeCronScheduleFacts validates detached committed facts on Automations
+	// restart. When authoritative facts already exist, resume must match them.
+	ResumeCronScheduleFacts(
+		identity CronScheduleIdentity,
+		authoritative *CronScheduleFacts,
+		resume *CronScheduleFacts,
+	) (CronScheduleFacts, error)
+	// SubmitDueCronTickWithFacts evaluates one schedule using committed facts,
+	// skips already-submitted nominal fires, and returns updated committed facts.
+	SubmitDueCronTickWithFacts(
+		ctx context.Context,
+		submitter WorkRequestSubmitter,
+		workflowIdentity string,
+		ws interfaces.FactoryWorkstationConfig,
+		facts CronScheduleFacts,
+		evaluatedAt time.Time,
+	) (CronTickSubmission, CronScheduleFacts, error)
+}
+
+// CronScheduleIdentity identifies one cron workstation schedule within a workflow.
+type CronScheduleIdentity struct {
+	WorkflowIdentity string
+	WorkstationName  string
+}
+
+// CronScheduleFacts are durable evaluation facts persisted across Automations restart.
+type CronScheduleFacts struct {
+	Identity               CronScheduleIdentity
+	LastEvaluatedAt        time.Time
+	LastSubmittedNominalAt *time.Time
 }
 
 // CronTickSubmission reports whether cron submitted Work for one logical tick.
