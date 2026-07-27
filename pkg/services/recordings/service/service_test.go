@@ -3,20 +3,21 @@ package service
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
-func TestNewRuntimeRecorderRejectsMissingClockWhenRecordingEnabled(t *testing.T) {
+func TestNewLifecycleRuntimeRecorderRejectsMissingClockWhenRecordingEnabled(t *testing.T) {
 	t.Parallel()
-	recorder, err := NewRuntimeRecorder(nil, 0, nil, nil, "recording.json", nil)
+	recorder, err := NewLifecycleRuntimeRecorder(0, nil, nil, "recording.json", nil)
 	if recorder != nil || err == nil || !strings.Contains(err.Error(), "clock is required") {
-		t.Fatalf("NewRuntimeRecorder = (%#v, %v), want required clock error", recorder, err)
+		t.Fatalf("NewLifecycleRuntimeRecorder = (%#v, %v), want required clock error", recorder, err)
 	}
 }
 
-func TestNewRuntimeRecorderAllowsDisabledRecordingWithoutClock(t *testing.T) {
+func TestNewLifecycleRuntimeRecorderAllowsDisabledRecordingWithoutClock(t *testing.T) {
 	t.Parallel()
-	recorder, err := NewRuntimeRecorder(nil, 0, nil, nil, "", nil)
+	recorder, err := NewLifecycleRuntimeRecorder(time.Second, nil, nil, "", nil)
 	if recorder != nil || err != nil {
-		t.Fatalf("NewRuntimeRecorder disabled = (%#v, %v), want nil, nil", recorder, err)
+		t.Fatalf("NewLifecycleRuntimeRecorder disabled = (%#v, %v), want nil, nil", recorder, err)
 	}
 }
