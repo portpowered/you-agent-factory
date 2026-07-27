@@ -18,7 +18,8 @@ import (
 // Service coordinates Work operations against the runtime registered for a
 // live Factory Session.
 type Service struct {
-	sessions RuntimeResolver
+	sessions    RuntimeResolver
+	stateAccess stateaccess.Service
 }
 
 type RuntimeResolver interface {
@@ -35,7 +36,12 @@ type applicationService struct {
 
 // New constructs the canonical Work application service.
 func New(sessions RuntimeResolver) *Service {
-	return &Service{sessions: sessions}
+	return &Service{
+		sessions: sessions,
+		stateAccess: stateaccesswire.NewService(
+			stateaccesswire.NewRuntimeSessionResolver(liveSessionRuntimeResolver{sessions: sessions}),
+		),
+	}
 }
 
 // NewService constructs the Work root contract for composition. Content staging
@@ -231,28 +237,18 @@ func (s *Service) runtime(sessionID string) (*factorysessions.LiveRuntime, error
 
 // SubmitWorkRequestForSession admits a canonical Work Request to one live session.
 func (s *Service) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	runtime, err := s.runtime(sessionID)
-	if err != nil {
-		return work.WorkRequestSubmitResult{}, err
+	if s == nil || s.stateAccess == nil {
+		return work.WorkRequestSubmitResult{}, fmt.Errorf("Work state access is required")
 	}
-	legacyRuntime, ok := runtime.Factory.(factory.APIFactory)
-	if !ok {
-		return work.WorkRequestSubmitResult{}, fmt.Errorf("legacy Factory Runtime submission is required")
-	}
-	return legacyRuntime.SubmitWorkRequest(ctx, request)
+	return s.stateAccess.SubmitWorkRequestForSession(ctx, sessionID, request)
 }
 
 // MoveWorkForSession applies an API-originated operator move to one live session.
 func (s *Service) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (work.OperatorMoveResult, error) {
-	runtime, err := s.runtime(sessionID)
-	if err != nil {
-		return work.OperatorMoveResult{}, err
+	if s == nil || s.stateAccess == nil {
+		return work.OperatorMoveResult{}, fmt.Errorf("Work state access is required")
 	}
-	mover, ok := runtime.Factory.(factory.WorkMover)
-	if !ok {
-		return work.OperatorMoveResult{}, fmt.Errorf("legacy Factory Runtime work move is required")
-	}
-	return mover.MoveWork(ctx, workID, stateName, work.WorkStateChangeSourceAPI, requestID)
+	return s.stateAccess.MoveWorkForSession(ctx, sessionID, workID, stateName, requestID)
 }
 
 // SubscribeFactoryEventsForSession returns replay followed by live events for

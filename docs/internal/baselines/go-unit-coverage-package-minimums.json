@@ -1107,6 +1107,14 @@
       "minimum": 84.87
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/internal/service",
+      "minimum": 78.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/materialize",
       "minimum": 68.91
     },
