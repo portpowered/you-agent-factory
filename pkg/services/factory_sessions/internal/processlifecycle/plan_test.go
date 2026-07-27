@@ -55,6 +55,11 @@ type blockingPlanComponent struct {
 	waitErr error
 }
 
+type nonWaitablePlanComponent struct{}
+
+func (*nonWaitablePlanComponent) Start(context.Context) error { return nil }
+func (*nonWaitablePlanComponent) Stop(context.Context) error  { return nil }
+
 func (component *blockingPlanComponent) Start(context.Context) error {
 	close(component.started)
 	return nil
@@ -335,6 +340,24 @@ func TestDirectJavaScriptLifecycleJoinsOwnedTransport(t *testing.T) {
 	case <-transport.stopped:
 	default:
 		t.Fatal("terminal completion did not join the owned transport")
+	}
+}
+
+func TestDirectJavaScriptLifecycleRejectsNonWaitableTransport(t *testing.T) {
+	plan, err := BuildDirectJavaScriptLifecyclePlan(
+		&nonWaitablePlanComponent{},
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("BuildDirectJavaScriptLifecyclePlan: %v", err)
+	}
+	err = lifecycle.NewManager().Run(t.Context(), plan)
+	if err == nil || !strings.Contains(err.Error(), "application transport is not waitable") {
+		t.Fatalf("Run error = %v, want non-waitable transport failure", err)
 	}
 }
 
