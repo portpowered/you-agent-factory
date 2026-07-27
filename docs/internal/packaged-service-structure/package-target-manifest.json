@@ -230,6 +230,7 @@
     "pkg/services/provider_sessions/codex",
     "pkg/services/provider_sessions/cursor",
     "pkg/services/provider_sessions/service",
+    "pkg/services/providers",
     "pkg/services/recordings",
     "pkg/services/recordings/artifacts",
     "pkg/services/recordings/events",
@@ -257,6 +258,7 @@
     "pkg/services/workers/executor/agentrun",
     "pkg/services/workers/interface",
     "pkg/services/workers/internal/services/runners",
+    "pkg/services/workers/internal/services/runners/internal/inference",
     "pkg/services/workers/internal/services/runners/internal/script",
     "pkg/services/workers/internal/services/runners/internal/service",
     "pkg/services/workers/internal/services/runners/internal/testkit",
@@ -1321,6 +1323,11 @@
       "destination": "provider_sessions"
     },
     {
+      "packagePath": "pkg/services/providers",
+      "disposition": "retain",
+      "destination": "providers"
+    },
+    {
       "packagePath": "pkg/services/recordings",
       "disposition": "retain",
       "destination": "recordings"
@@ -1452,6 +1459,11 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",
+      "disposition": "retain",
+      "destination": "workers/internal/services/runners"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/inference",
       "disposition": "retain",
       "destination": "workers/internal/services/runners"
     },
