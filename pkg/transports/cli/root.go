@@ -341,12 +341,6 @@ func rejectDeprecatedPortFlag(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func registerDeprecatedPortFlag(cmd *cobra.Command) {
-	var deprecatedPort int
-	cmd.Flags().IntVar(&deprecatedPort, "port", 0, "deprecated; use --server")
-	_ = cmd.Flags().MarkHidden("port")
-}
-
 func (opts *cliDiagnosticsOptions) resolvePolicy(quiet bool) terminalpolicy.Policy {
 	return terminalpolicy.Resolve(terminalpolicy.Options{
 		Quiet:   quiet,

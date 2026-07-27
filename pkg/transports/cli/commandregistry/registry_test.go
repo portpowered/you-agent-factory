@@ -1,10 +1,18 @@
 package commandregistry_test
 
 import (
+	"bytes"
+	"context"
 	"errors"
+	"io/fs"
+	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
+	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/spf13/cobra"
 )
 
@@ -79,3 +87,559 @@ func TestRegistry_AttachRunERejectsNilCommand(t *testing.T) {
 }
 
 func noopRegistryRunE(cmd *cobra.Command, args []string) error { return nil }
+
+func noopSubmitHandler(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
+	return nil
+}
+
+func TestNewSubmitRegistryRequiresCompleteStableHandlerCoverage(t *testing.T) {
+	tests := []struct {
+		name     string
+		handlers commandregistry.SubmitHandlers
+		wantID   string
+	}{
+		{
+			name:     "missing unary",
+			handlers: commandregistry.SubmitHandlers{SubmitBatch: noopSubmitHandler},
+			wantID:   commandregistry.SubmitHandlerID,
+		},
+		{
+			name:     "missing batch",
+			handlers: commandregistry.SubmitHandlers{Submit: noopSubmitHandler},
+			wantID:   commandregistry.SubmitBatchHandlerID,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := commandregistry.NewSubmitRegistry(test.handlers)
+			if err == nil || !strings.Contains(err.Error(), test.wantID) {
+				t.Fatalf("NewSubmitRegistry() error = %v, want stable handler ID %q", err, test.wantID)
+			}
+		})
+	}
+}
+
+func TestSubmitRegistryVerifiesOnlyCanonicalHandlerIDs(t *testing.T) {
+	registry := mustSubmitRegistry(t)
+	manifest := submitRegistryManifest(t)
+	if err := registry.Verify(manifest); err != nil {
+		t.Fatalf("Verify() error = %v", err)
+	}
+	for _, handlerID := range []string{
+		commandregistry.SubmitHandlerID,
+		commandregistry.SubmitBatchHandlerID,
+	} {
+		if _, err := registry.Lookup(handlerID); err != nil {
+			t.Fatalf("Lookup(%q) error = %v", handlerID, err)
+		}
+	}
+	if _, err := registry.Lookup("you.submit.unknown.handler"); err == nil {
+		t.Fatal("Lookup(unknown) error = nil, want rejection")
+	}
+}
+
+func TestSubmitRegistryRejectsInvalidManifestHandlers(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(climanifest.Manifest)
+	}{
+		{
+			name: "unknown",
+			mutate: func(manifest climanifest.Manifest) {
+				record := manifest.Commands["you.submit"]
+				record.Handler.ID = "you.submit.unknown.handler"
+				manifest.Commands[record.ID] = record
+			},
+		},
+		{
+			name: "missing",
+			mutate: func(manifest climanifest.Manifest) {
+				record := manifest.Commands["you.submit"]
+				record.Handler = nil
+				manifest.Commands[record.ID] = record
+			},
+		},
+		{
+			name: "duplicate",
+			mutate: func(manifest climanifest.Manifest) {
+				record := manifest.Commands["you.submit.batch"]
+				record.Handler.ID = commandregistry.SubmitHandlerID
+				manifest.Commands[record.ID] = record
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := submitRegistryManifest(t)
+			test.mutate(manifest)
+			if err := mustSubmitRegistry(t).Verify(manifest); err == nil {
+				t.Fatal("Verify() error = nil, want rejection")
+			}
+		})
+	}
+}
+
+func mustSubmitRegistry(t *testing.T) *commandregistry.SubmitRegistry {
+	t.Helper()
+	registry, err := commandregistry.NewSubmitRegistry(commandregistry.SubmitHandlers{
+		Submit:      noopSubmitHandler,
+		SubmitBatch: noopSubmitHandler,
+	})
+	if err != nil {
+		t.Fatalf("NewSubmitRegistry() error = %v", err)
+	}
+	return registry
+}
+
+func submitRegistryManifest(t *testing.T) climanifest.Manifest {
+	t.Helper()
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		t.Fatalf("RunSubmitFamilyManifest() error = %v", err)
+	}
+	return climanifest.Manifest{
+		FormatVersion: manifest.FormatVersion,
+		RootPath:      manifest.RootPath,
+		Commands: map[string]climanifest.Command{
+			"you.submit":       manifest.Commands["you.submit"],
+			"you.submit.batch": manifest.Commands["you.submit.batch"],
+		},
+	}
+}
+
+func TestUnarySubmitHandlerBuildsFreshConfigFromStableInputs(t *testing.T) {
+	ctx := context.WithValue(context.Background(), submitContextKey{}, "invocation")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := &cobra.Command{Use: "submit"}
+	cmd.SetContext(ctx)
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+
+	local := resolveSubmitInputs(t, map[string]resolvedinput.Value{
+		"you.submit.flag.name":           resolvedinput.StringValue("work-one"),
+		"you.submit.flag.work-type-name": resolvedinput.StringValue("REVIEW"),
+		"you.submit.flag.payload":        resolvedinput.StringValue("payload.json"),
+		"you.submit.flag.session":        resolvedinput.StringValue("session-alpha"),
+	})
+	inherited := resolveSubmitInputs(t, map[string]resolvedinput.Value{
+		"you.flag.server":  resolvedinput.StringValue("HTTPS://FACTORY.EXAMPLE/base/?token=secret"),
+		"you.flag.json":    resolvedinput.BoolValue(true),
+		"you.flag.verbose": resolvedinput.BoolValue(false),
+		"you.flag.debug":   resolvedinput.BoolValue(true),
+	})
+
+	var received []submitcli.SubmitConfig
+	handler := commandregistry.UnarySubmitHandler(func(cfg submitcli.SubmitConfig) error {
+		received = append(received, cfg)
+		return nil
+	})
+	if err := handler(cmd, local, inherited); err != nil {
+		t.Fatalf("handler() error = %v", err)
+	}
+	if len(received) != 1 {
+		t.Fatalf("operation calls = %d, want 1", len(received))
+	}
+	assertUnarySubmitConfig(t, received[0], ctx, &stdout, &stderr)
+
+	secondLocal := resolveSubmitInputs(t, map[string]resolvedinput.Value{
+		"you.submit.flag.name":           resolvedinput.StringValue("work-two"),
+		"you.submit.flag.work-type-name": resolvedinput.StringValue("BUILD"),
+		"you.submit.flag.payload":        resolvedinput.StringValue("payload.md"),
+		"you.submit.flag.session":        resolvedinput.StringValue(""),
+	})
+	if err := handler(cmd, secondLocal, inherited); err != nil {
+		t.Fatalf("second handler() error = %v", err)
+	}
+	if len(received) != 2 || received[0].Name != "work-one" ||
+		received[1].Name != "work-two" || received[1].SessionID != "" {
+		t.Fatalf("invocation configs retained mutable state: %#v", received)
+	}
+}
+
+func assertUnarySubmitConfig(
+	t *testing.T,
+	got submitcli.SubmitConfig,
+	ctx context.Context,
+	stdout, stderr *bytes.Buffer,
+) {
+	t.Helper()
+	if got.Context != ctx || got.Context.Value(submitContextKey{}) != "invocation" {
+		t.Fatal("context was not propagated from the invocation")
+	}
+	if got.Name != "work-one" || got.WorkTypeName != "REVIEW" ||
+		got.Payload != "payload.json" || got.SessionID != "session-alpha" {
+		t.Fatalf("local config = %#v", got)
+	}
+	if got.Server != "https://factory.example/base" {
+		t.Fatalf("server = %q, want normalized URI without query credentials", got.Server)
+	}
+	if !got.JSON || !got.Verbose || !got.Debug {
+		t.Fatalf("inherited modes = JSON:%t Verbose:%t Debug:%t, want all enabled", got.JSON, got.Verbose, got.Debug)
+	}
+	if got.Output != stdout || got.Diagnostics != stderr {
+		t.Fatal("stdout/stderr writers were not propagated")
+	}
+}
+
+func TestUnarySubmitHandlerRejectsInvalidRequiredStableInputsBeforeOperation(t *testing.T) {
+	requiredIDs := []string{
+		"you.submit.flag.name",
+		"you.submit.flag.work-type-name",
+		"you.submit.flag.payload",
+	}
+	for _, inputID := range requiredIDs {
+		for _, invalid := range []struct {
+			name  string
+			value *resolvedinput.Value
+		}{
+			{name: "missing"},
+			{name: "blank", value: submitValuePtr(resolvedinput.StringValue(" \t "))},
+			{name: "wrong type", value: submitValuePtr(resolvedinput.BoolValue(true))},
+		} {
+			t.Run(inputID+"/"+invalid.name, func(t *testing.T) {
+				localValues := validUnaryLocalValues()
+				if invalid.value == nil {
+					delete(localValues, inputID)
+				} else {
+					localValues[inputID] = *invalid.value
+				}
+				calls := 0
+				handler := commandregistry.UnarySubmitHandler(func(submitcli.SubmitConfig) error {
+					calls++
+					return nil
+				})
+				err := handler(
+					&cobra.Command{Use: "submit"},
+					resolveSubmitInputs(t, localValues),
+					validUnaryInheritedInputs(t),
+				)
+				if err == nil || !strings.Contains(err.Error(), inputID) {
+					t.Fatalf("handler() error = %v, want stable input ID %q", err, inputID)
+				}
+				if strings.Contains(err.Error(), "payload-secret") {
+					t.Fatalf("handler() leaked an input value: %v", err)
+				}
+				if calls != 0 {
+					t.Fatalf("operation calls = %d, want 0", calls)
+				}
+			})
+		}
+	}
+}
+
+func TestUnarySubmitHandlerRejectsUnsafeServerWithoutEchoingIt(t *testing.T) {
+	const unsafeServer = "https://user:credential@factory.example"
+	inherited := resolveSubmitInputs(t, map[string]resolvedinput.Value{
+		"you.flag.server":  resolvedinput.StringValue(unsafeServer),
+		"you.flag.json":    resolvedinput.BoolValue(false),
+		"you.flag.verbose": resolvedinput.BoolValue(false),
+		"you.flag.debug":   resolvedinput.BoolValue(false),
+	})
+	calls := 0
+	err := commandregistry.UnarySubmitHandler(func(submitcli.SubmitConfig) error {
+		calls++
+		return nil
+	})(&cobra.Command{Use: "submit"}, resolveSubmitInputs(t, validUnaryLocalValues()), inherited)
+	if err == nil || !strings.Contains(err.Error(), "you.flag.server") {
+		t.Fatalf("handler() error = %v, want stable server input ID", err)
+	}
+	if strings.Contains(err.Error(), unsafeServer) || strings.Contains(err.Error(), "credential") {
+		t.Fatalf("handler() leaked server credentials: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("operation calls = %d, want 0", calls)
+	}
+}
+
+func TestBatchSubmitHandlerBuildsFreshConfigFromStableInputs(t *testing.T) {
+	ctx := context.WithValue(context.Background(), submitContextKey{}, "batch-invocation")
+	var stdin bytes.Buffer
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := &cobra.Command{Use: "batch"}
+	cmd.SetContext(ctx)
+	cmd.SetIn(&stdin)
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	effects := commandregistry.BatchSubmitEffects{
+		FileSystem: batchAdapterFileSystem{},
+		StdinIsTTY: func(got context.Context) bool {
+			return got == ctx
+		},
+	}
+	local := resolveSubmitInputs(t, map[string]resolvedinput.Value{
+		"you.submit.batch.arg.0":        resolvedinput.StringValue("positional.json"),
+		"you.submit.batch.flag.file":    resolvedinput.StringValue("preferred.json"),
+		"you.submit.batch.flag.dry-run": resolvedinput.BoolValue(true),
+		"you.submit.batch.flag.session": resolvedinput.StringValue("session-beta"),
+	})
+	inherited := resolveSubmitInputs(t, map[string]resolvedinput.Value{
+		"you.flag.server":  resolvedinput.StringValue("HTTPS://FACTORY.EXAMPLE/base/?token=secret"),
+		"you.flag.json":    resolvedinput.BoolValue(true),
+		"you.flag.verbose": resolvedinput.BoolValue(false),
+		"you.flag.debug":   resolvedinput.BoolValue(true),
+	})
+
+	var received []submitcli.BatchConfig
+	handler := commandregistry.BatchSubmitHandler(func(cfg submitcli.BatchConfig) error {
+		received = append(received, cfg)
+		return nil
+	}, effects)
+	if err := handler(cmd, local, inherited); err != nil {
+		t.Fatalf("handler() error = %v", err)
+	}
+	if len(received) != 1 {
+		t.Fatalf("operation calls = %d, want 1", len(received))
+	}
+	assertBatchSubmitConfig(t, received[0], ctx, &stdin, &stdout, &stderr)
+
+	secondLocal := resolveSubmitInputs(t, map[string]resolvedinput.Value{
+		"you.submit.batch.arg.0":        resolvedinput.StringValue(""),
+		"you.submit.batch.flag.file":    resolvedinput.StringValue(""),
+		"you.submit.batch.flag.dry-run": resolvedinput.BoolValue(false),
+		"you.submit.batch.flag.session": resolvedinput.StringValue(""),
+	})
+	if err := handler(cmd, secondLocal, inherited); err != nil {
+		t.Fatalf("second handler() error = %v", err)
+	}
+	if len(received) != 2 || len(received[0].Args) != 1 ||
+		len(received[1].Args) != 0 || received[1].FileFlag != "" {
+		t.Fatalf("invocation configs retained mutable state: %#v", received)
+	}
+}
+
+func assertBatchSubmitConfig(
+	t *testing.T,
+	got submitcli.BatchConfig,
+	ctx context.Context,
+	stdin *bytes.Buffer,
+	stdout, stderr *bytes.Buffer,
+) {
+	t.Helper()
+	assertBatchInvocationValues(t, got, ctx)
+	assertBatchInvocationModes(t, got)
+	assertBatchInvocationEffects(t, got, stdin, stdout, stderr)
+}
+
+func assertBatchInvocationValues(t *testing.T, got submitcli.BatchConfig, ctx context.Context) {
+	t.Helper()
+	if got.Context != ctx || got.Context.Value(submitContextKey{}) != "batch-invocation" {
+		t.Fatal("context was not propagated from the invocation")
+	}
+	if len(got.Args) != 1 || got.Args[0] != "positional.json" {
+		t.Fatalf("args = %#v, want positional.json", got.Args)
+	}
+	if got.FileFlag != "preferred.json" {
+		t.Fatalf("file flag = %q, want preferred.json", got.FileFlag)
+	}
+	if !got.DryRun {
+		t.Fatal("dry-run = false, want true")
+	}
+	if got.SessionID != "session-beta" {
+		t.Fatalf("session ID = %q, want session-beta", got.SessionID)
+	}
+	if got.Server != "https://factory.example/base" {
+		t.Fatalf("server = %q, want normalized URI without query credentials", got.Server)
+	}
+}
+
+func assertBatchInvocationModes(t *testing.T, got submitcli.BatchConfig) {
+	t.Helper()
+	if !got.JSON {
+		t.Fatal("JSON = false, want true")
+	}
+	if !got.Verbose {
+		t.Fatal("verbose = false, want true")
+	}
+	if !got.Debug {
+		t.Fatal("debug = false, want true")
+	}
+}
+
+func assertBatchInvocationEffects(
+	t *testing.T,
+	got submitcli.BatchConfig,
+	stdin *bytes.Buffer,
+	stdout, stderr *bytes.Buffer,
+) {
+	t.Helper()
+	if got.Stdin != stdin || got.Output != stdout || got.Diagnostics != stderr {
+		t.Fatal("invocation streams were not propagated")
+	}
+	if got.FileSystem == nil || got.StdinIsTTY == nil || !got.StdinIsTTY() {
+		t.Fatal("batch process effects were not propagated")
+	}
+}
+
+func TestBatchSubmitHandlerRejectsInvalidStableInputsBeforeOperation(t *testing.T) {
+	inputIDs := []string{
+		"you.submit.batch.arg.0",
+		"you.submit.batch.flag.file",
+		"you.submit.batch.flag.dry-run",
+		"you.submit.batch.flag.session",
+		"you.flag.server",
+		"you.flag.json",
+		"you.flag.verbose",
+		"you.flag.debug",
+	}
+	for _, inputID := range inputIDs {
+		t.Run(inputID, func(t *testing.T) {
+			localValues := validBatchLocalValues()
+			inheritedValues := validBatchInheritedValues()
+			if strings.HasPrefix(inputID, "you.submit.batch") {
+				localValues[inputID] = wrongBatchInputType(inputID)
+			} else {
+				inheritedValues[inputID] = wrongBatchInputType(inputID)
+			}
+			calls := 0
+			handler := commandregistry.BatchSubmitHandler(func(submitcli.BatchConfig) error {
+				calls++
+				return nil
+			}, commandregistry.BatchSubmitEffects{
+				FileSystem: batchAdapterFileSystem{},
+				StdinIsTTY: func(context.Context) bool { return false },
+			})
+			err := handler(
+				&cobra.Command{Use: "batch"},
+				resolveSubmitInputs(t, localValues),
+				resolveSubmitInputs(t, inheritedValues),
+			)
+			if err == nil || !strings.Contains(err.Error(), inputID) {
+				t.Fatalf("handler() error = %v, want stable input ID %q", err, inputID)
+			}
+			if calls != 0 {
+				t.Fatalf("operation calls = %d, want 0", calls)
+			}
+		})
+	}
+}
+
+func TestBatchSubmitHandlerRejectsMissingStableInputBeforeOperation(t *testing.T) {
+	localValues := validBatchLocalValues()
+	delete(localValues, "you.submit.batch.flag.file")
+	calls := 0
+	err := commandregistry.BatchSubmitHandler(func(submitcli.BatchConfig) error {
+		calls++
+		return nil
+	}, commandregistry.BatchSubmitEffects{
+		FileSystem: batchAdapterFileSystem{},
+		StdinIsTTY: func(context.Context) bool { return false },
+	})(
+		&cobra.Command{Use: "batch"},
+		resolveSubmitInputs(t, localValues),
+		resolveSubmitInputs(t, validBatchInheritedValues()),
+	)
+	if err == nil || !strings.Contains(err.Error(), "you.submit.batch.flag.file") {
+		t.Fatalf("handler() error = %v, want missing stable input ID", err)
+	}
+	if calls != 0 {
+		t.Fatalf("operation calls = %d, want 0", calls)
+	}
+}
+
+func TestBatchSubmitHandlerRejectsUnsafeServerWithoutEchoingIt(t *testing.T) {
+	const unsafeServer = "https://user:credential@factory.example"
+	inheritedValues := validBatchInheritedValues()
+	inheritedValues["you.flag.server"] = resolvedinput.StringValue(unsafeServer)
+	calls := 0
+	err := commandregistry.BatchSubmitHandler(func(submitcli.BatchConfig) error {
+		calls++
+		return nil
+	}, commandregistry.BatchSubmitEffects{
+		FileSystem: batchAdapterFileSystem{},
+		StdinIsTTY: func(context.Context) bool { return false },
+	})(
+		&cobra.Command{Use: "batch"},
+		resolveSubmitInputs(t, validBatchLocalValues()),
+		resolveSubmitInputs(t, inheritedValues),
+	)
+	if err == nil || !strings.Contains(err.Error(), "you.flag.server") {
+		t.Fatalf("handler() error = %v, want stable server input ID", err)
+	}
+	if strings.Contains(err.Error(), unsafeServer) || strings.Contains(err.Error(), "credential") {
+		t.Fatalf("handler() leaked server credentials: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("operation calls = %d, want 0", calls)
+	}
+}
+
+func validBatchLocalValues() map[string]resolvedinput.Value {
+	return map[string]resolvedinput.Value{
+		"you.submit.batch.arg.0":        resolvedinput.StringValue("batch.json"),
+		"you.submit.batch.flag.file":    resolvedinput.StringValue(""),
+		"you.submit.batch.flag.dry-run": resolvedinput.BoolValue(false),
+		"you.submit.batch.flag.session": resolvedinput.StringValue(""),
+	}
+}
+
+func validBatchInheritedValues() map[string]resolvedinput.Value {
+	return map[string]resolvedinput.Value{
+		"you.flag.server":  resolvedinput.StringValue("http://localhost:7437"),
+		"you.flag.json":    resolvedinput.BoolValue(false),
+		"you.flag.verbose": resolvedinput.BoolValue(false),
+		"you.flag.debug":   resolvedinput.BoolValue(false),
+	}
+}
+
+func wrongBatchInputType(inputID string) resolvedinput.Value {
+	if inputID == "you.submit.batch.flag.dry-run" ||
+		inputID == "you.flag.json" ||
+		inputID == "you.flag.verbose" ||
+		inputID == "you.flag.debug" {
+		return resolvedinput.StringValue("not-a-boolean")
+	}
+	return resolvedinput.BoolValue(true)
+}
+
+type batchAdapterFileSystem struct{}
+
+func (batchAdapterFileSystem) Stat(string) (fs.FileInfo, error) { return nil, nil }
+func (batchAdapterFileSystem) ReadFile(string) ([]byte, error)  { return nil, nil }
+
+type submitContextKey struct{}
+
+func validUnaryLocalValues() map[string]resolvedinput.Value {
+	return map[string]resolvedinput.Value{
+		"you.submit.flag.name":           resolvedinput.StringValue("work"),
+		"you.submit.flag.work-type-name": resolvedinput.StringValue("REVIEW"),
+		"you.submit.flag.payload":        resolvedinput.StringValue("payload-secret.json"),
+		"you.submit.flag.session":        resolvedinput.StringValue(""),
+	}
+}
+
+func validUnaryInheritedInputs(t *testing.T) resolvedinput.Inputs {
+	t.Helper()
+	return resolveSubmitInputs(t, map[string]resolvedinput.Value{
+		"you.flag.server":  resolvedinput.StringValue("http://localhost:7437"),
+		"you.flag.json":    resolvedinput.BoolValue(false),
+		"you.flag.verbose": resolvedinput.BoolValue(false),
+		"you.flag.debug":   resolvedinput.BoolValue(false),
+	})
+}
+
+func resolveSubmitInputs(
+	t *testing.T,
+	values map[string]resolvedinput.Value,
+) resolvedinput.Inputs {
+	t.Helper()
+	definitions := make([]resolvedinput.Definition, 0, len(values))
+	candidates := make([]resolvedinput.Candidate, 0, len(values))
+	for inputID, value := range values {
+		definitions = append(definitions, resolvedinput.Definition{
+			ID: inputID, Kind: value.Kind(),
+			Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag},
+		})
+		candidates = append(candidates, resolvedinput.Candidate{
+			InputID: inputID, Source: resolvedinput.SourceCLIFlag, Value: value,
+		})
+	}
+	inputs, err := resolvedinput.Resolve(definitions, candidates)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	return inputs
+}
+
+func submitValuePtr(value resolvedinput.Value) *resolvedinput.Value { return &value }

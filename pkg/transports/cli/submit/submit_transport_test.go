@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -139,6 +140,32 @@ func TestSubmit_Transport_UnreachableFactory(t *testing.T) {
 	}
 }
 
+func TestSubmit_Transport_PreservesContextCancellation(t *testing.T) {
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"cancelled"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var out bytes.Buffer
+	err := Submit(t, SubmitConfig{
+		Context:      ctx,
+		Name:         "cancelled-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       "http://127.0.0.1:19999",
+		Output:       &out,
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Submit() error = %v, want context.Canceled", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on cancellation", out.String())
+	}
+}
+
 func TestSubmit_Transport_StructuredAPIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -170,8 +197,17 @@ func TestSubmit_Transport_StructuredAPIError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected structured API error")
 	}
-	if got := err.Error(); got != "submission failed (400): workTypeName is required" {
-		t.Fatalf("error = %q, want submission failed (400): workTypeName is required", got)
+	if got := err.Error(); got != "submission failed (400): code=BAD_REQUEST family=BAD_REQUEST" {
+		t.Fatalf("error = %q, want safe typed API fields", got)
+	}
+	var httpErr *SubmissionHTTPError
+	if !errors.As(err, &httpErr) {
+		t.Fatalf("error type = %T, want *SubmissionHTTPError", err)
+	}
+	if httpErr.StatusCode != http.StatusBadRequest ||
+		httpErr.Code != factoryapi.ErrorResponseCodeBADREQUEST ||
+		httpErr.Family != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("typed error = %#v", httpErr)
 	}
 	if out.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty on API failure", out.String())
