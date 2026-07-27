@@ -90,12 +90,19 @@ func (s *Service) Start(ctx context.Context) error {
 	if err != nil {
 		cancel()
 		s.mu.Unlock()
-		return fmt.Errorf("start Factory visualization live view projection: subscribe to Factory events: %w", err)
+		return &liveviewprojection.ProjectionError{
+			Kind:    liveviewprojection.ProjectionErrorInvalidInput,
+			Message: "start Factory visualization live view projection: subscribe to Factory events failed",
+			Cause:   err,
+		}
 	}
 	if stream == nil || stream.Events == nil {
 		cancel()
 		s.mu.Unlock()
-		return errors.New("start Factory visualization live view projection: event source returned an invalid stream")
+		return &liveviewprojection.ProjectionError{
+			Kind:    liveviewprojection.ProjectionErrorInvalidInput,
+			Message: "start Factory visualization live view projection: event source returned an invalid stream",
+		}
 	}
 	s.events = append(s.events[:0], stream.History...)
 	s.advanceCursorLocked(stream.History)

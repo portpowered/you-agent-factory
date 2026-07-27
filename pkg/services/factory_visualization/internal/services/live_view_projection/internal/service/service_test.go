@@ -106,6 +106,7 @@ func event(id string, sequence int) factorydefinitions.FactoryEvent {
 type sourceStub struct {
 	stream        *factorydefinitions.FactoryEventStream
 	subscribeErr  error
+	subscribeHook func()
 	snapshot      *factoryruntime.StateSnapshot
 	snapshotErr   error
 }
@@ -115,6 +116,9 @@ func (s *sourceStub) SubscribeFactoryEvents(
 	*factorydefinitions.FactoryEventReconnectCursor,
 	factorydefinitions.FactoryEventReconnectScope,
 ) (*factorydefinitions.FactoryEventStream, error) {
+	if s.subscribeHook != nil {
+		s.subscribeHook()
+	}
 	return s.stream, s.subscribeErr
 }
 
