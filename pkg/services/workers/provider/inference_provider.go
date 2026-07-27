@@ -819,7 +819,7 @@ func effectiveProviderSession(req workerexecution.ProviderInferenceRequest, resu
 	if session != nil {
 		return session
 	}
-	if (req.ModelProvider == string(modelprovider.ProviderClaude) || req.ModelProvider == string(modelprovider.ProviderOpenCode) || req.ModelProvider == string(modelprovider.ProviderPi)) && req.SessionID != "" {
+	if (req.ModelProvider == string(modelprovider.ProviderClaude) || req.ModelProvider == string(modelprovider.ProviderOpenCode) || req.ModelProvider == string(modelprovider.ProviderPi) || req.ModelProvider == string(modelprovider.ProviderAgy)) && req.SessionID != "" {
 		return &workerexecution.ProviderSessionMetadata{
 			Provider: workerexecution.CanonicalProviderSessionProvider(req.ModelProvider),
 			Kind:     providerSessionKindSessionID,

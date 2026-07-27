@@ -9,7 +9,7 @@ description:
 documentation:
   - kind: homepage
     url: https://agylabs.github.io/agy-demos/
-technicalSupportLevel: not-supported
+technicalSupportLevel: experimental
 implementationAvailability: bundled
 maximumExecutionCapabilities:
   promptSubmission: true

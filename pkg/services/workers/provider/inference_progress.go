@@ -232,11 +232,29 @@ func (p *ScriptWrapProvider) executeAgy(
 		return workerexecution.InferenceResponse{}, providerErr
 	}
 	response := result.Response
+	response.ProviderSession = agyEffectiveProviderSession(req, response.ProviderSession)
 	response.Diagnostics = diagnostics
 	logger.Info("inferencer: request completed",
 		appendProviderSessionLogFields(providerLogFields(req, "output_len", len(response.Content)), response.ProviderSession)...)
 	p.publishOpenCodeCompleted(req.Dispatch.DispatchID, response.ProviderSession, len(result.Drafts) > 0)
 	return response, nil
+}
+
+func agyEffectiveProviderSession(
+	req workerexecution.ProviderInferenceRequest,
+	existing *workerexecution.ProviderSessionMetadata,
+) *workerexecution.ProviderSessionMetadata {
+	if existing != nil && strings.TrimSpace(existing.Provider) != "" {
+		return existing
+	}
+	session := &workerexecution.ProviderSessionMetadata{
+		Provider: workerexecution.CanonicalProviderSessionProvider(req.ModelProvider),
+		Kind:     providerSessionKindSessionID,
+	}
+	if sessionID := strings.TrimSpace(req.SessionID); sessionID != "" {
+		session.ID = sessionID
+	}
+	return session
 }
 
 func (p *ScriptWrapProvider) agyRequestValidationError(req workerexecution.ProviderInferenceRequest, err error) *ProviderError {

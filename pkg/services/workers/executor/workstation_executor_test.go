@@ -486,7 +486,6 @@ func TestWorkstationExecutor_RejectsInterpolatedProviderBeforeExecutionIO(t *tes
 	}{
 		{name: "malformed", resolved: "Not_A_Provider", want: "is invalid"},
 		{name: "unknown", resolved: "missing.provider", want: "is unknown"},
-		{name: "non-selectable", resolved: "agy", want: "is not selectable"},
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
