@@ -342,6 +342,13 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | tests/functional/models/model_invoke/cli_test.go | you-agent-factory/tests/functional/models/model_invoke | TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges | short | tests/functional/models/invoke/cli_test.go | none | none | n/a |
 
+#### `orchestration/petri/cross` (2 scenarios, catch_all=`none`)
+
+| source_path | package | scenario | lane | destination | catch_all | specialty_targets | deletion_only_batch |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| tests/functional/orchestration/petri/cross/session_compatibility_test.go | you-agent-factory/tests/functional/orchestration/petri/cross | TestPetriAndJavaScriptSessionsExposeCompatibleStatusFacts | short | tests/functional/orchestration/petri/cross/session_compatibility_test.go | none | none | n/a |
+| tests/functional/orchestration/petri/cross/session_compatibility_test.go | you-agent-factory/tests/functional/orchestration/petri/cross | TestPetriAndJavaScriptSessionsShareLifecycleControls | short | tests/functional/orchestration/petri/cross/session_compatibility_test.go | none | none | n/a |
+
 #### `operator_settings` (1 scenarios, catch_all=`none`)
 
 | source_path | package | scenario | lane | destination | catch_all | specialty_targets | deletion_only_batch |
@@ -1567,6 +1574,8 @@ exceptions; they do not use deletion-only batch ids (`deletion_only_batch` = `n/
 | tests/functional/config_init/config_init_test.go | you-agent-factory/tests/functional/config_init | TestInit_JSONEmitsStructuredSummary | short | tests/functional/factory/definitions/init_test.go | none | none | n/a |
 | tests/functional/config_init/config_init_test.go | you-agent-factory/tests/functional/config_init | TestInit_UsesProvidedHomeDirWithoutReadingProcessHome | short | tests/functional/factory/definitions/init_test.go | none | none | n/a |
 | tests/functional/models/model_invoke/cli_test.go | you-agent-factory/tests/functional/models/model_invoke | TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges | short | tests/functional/models/invoke/cli_test.go | none | none | n/a |
+| tests/functional/orchestration/petri/cross/session_compatibility_test.go | you-agent-factory/tests/functional/orchestration/petri/cross | TestPetriAndJavaScriptSessionsExposeCompatibleStatusFacts | short | tests/functional/orchestration/petri/cross/session_compatibility_test.go | none | none | n/a |
+| tests/functional/orchestration/petri/cross/session_compatibility_test.go | you-agent-factory/tests/functional/orchestration/petri/cross | TestPetriAndJavaScriptSessionsShareLifecycleControls | short | tests/functional/orchestration/petri/cross/session_compatibility_test.go | none | none | n/a |
 | tests/functional/operator_settings/configcore/operator_config_core_test.go | you-agent-factory/tests/functional/operator_settings/configcore | TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior | short | wrong-layer: package-integration — direct operator_settings service calls without root.BuildProcess / public CLI boundary. Replacement evidence owner: pkg/services/operator_settings package-integration tests. | none | none | n/a |
 | tests/functional/providers/cli_script_executor_test.go | you-agent-factory/tests/functional/providers | TestScriptExecutor_ArgTemplating | short | tests/functional/workers/script/execution_test.go | none | none | n/a |
 | tests/functional/providers/cli_script_executor_test.go | you-agent-factory/tests/functional/providers | TestScriptExecutor_ArgTemplatingWithTags | short | tests/functional/workers/script/execution_test.go | none | none | n/a |

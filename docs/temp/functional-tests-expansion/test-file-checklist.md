@@ -366,7 +366,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestJavaScriptPipelinePassesStageOutputToNextStage` covers data flow.
   - `TestJavaScriptPipelineStopsAfterStageFailure` prevents later dispatch.
 
-- [ ] `tests/functional/orchestration/javascript/composition/stages_test.go`
+- [x] `tests/functional/orchestration/javascript/composition/stages_test.go`
   - `TestJavaScriptNamedStagesExposeOrderedProgress` covers stage identity.
   - `TestJavaScriptEmptyStageProducesDocumentedResult` covers edge behavior.
 
@@ -416,7 +416,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     policy failure.
   - `TestJavaScriptPolicyFailureDoesNotDispatchExternalWork` covers safety.
 
-- [ ] `tests/functional/orchestration/javascript/durability/resume_test.go`
+- [x] `tests/functional/orchestration/javascript/durability/resume_test.go`
   - `TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren`
     covers durable progress.
   - `TestJavaScriptResumeRestoresCheckpointAndFinalResult` covers state.
@@ -434,7 +434,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPetriConcurrentResultsCorrelateToOriginalWork`.
   - `TestPetriConcurrentFailureDoesNotDuplicateDispatch`.
 
-- [ ] `tests/functional/orchestration/petri/cross/session_compatibility_test.go`
+- [x] `tests/functional/orchestration/petri/cross/session_compatibility_test.go`
   - `TestPetriAndJavaScriptSessionsShareLifecycleControls`.
   - `TestPetriAndJavaScriptSessionsExposeCompatibleStatusFacts`.
 
