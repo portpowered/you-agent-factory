@@ -1,4 +1,4 @@
-package ingest
+package service
 
 import (
 	"context"
@@ -14,10 +14,10 @@ import (
 func TestFileWatcher_MultiChannel_DefaultDir(t *testing.T) {
 	requireFileWatcherIntegration(t)
 	dir := setupMultiChannelDir(t)
-	mf := &mockFactory{}
+	mf := &recordingSubmitter{}
 	logger := zap.NewNop()
 
-	fw := NewFileWatcher(dir, mf, logger, []string{"task"}, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	fw := newTestWatcher(dir, mf, logger, []string{"task"}, nil, localInputFiles{}, filepath.WalkDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -49,7 +49,7 @@ func TestFileWatcher_MultiChannel_DefaultDir(t *testing.T) {
 func TestFileWatcher_MultiChannel_ExecutionIDDir(t *testing.T) {
 	requireFileWatcherIntegration(t)
 	dir := setupMultiChannelDir(t)
-	mf := &mockFactory{}
+	mf := &recordingSubmitter{}
 	logger := zap.NewNop()
 
 	execDir := filepath.Join(dir, "task", "exec-123")
@@ -57,7 +57,7 @@ func TestFileWatcher_MultiChannel_ExecutionIDDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fw := NewFileWatcher(dir, mf, logger, []string{"task"}, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	fw := newTestWatcher(dir, mf, logger, []string{"task"}, nil, localInputFiles{}, filepath.WalkDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -86,10 +86,10 @@ func TestFileWatcher_MultiChannel_ExecutionIDDir(t *testing.T) {
 func TestFileWatcher_MultiChannel_BatchDefaultDir(t *testing.T) {
 	requireFileWatcherIntegration(t)
 	dir := setupWatchDir(t)
-	mf := &mockFactory{}
+	mf := &recordingSubmitter{}
 	logger := zap.NewNop()
 
-	fw := NewFileWatcher(dir, mf, logger, []string{"request", "story"}, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	fw := newTestWatcher(dir, mf, logger, []string{"request", "story"}, nil, localInputFiles{}, filepath.WalkDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -143,10 +143,10 @@ func TestFileWatcher_MultiChannel_BatchDefaultDir(t *testing.T) {
 func TestFileWatcher_MultiChannel_DynamicSubdir(t *testing.T) {
 	requireFileWatcherIntegration(t)
 	dir := setupMultiChannelDir(t)
-	mf := &mockFactory{}
+	mf := &recordingSubmitter{}
 	logger := zap.NewNop()
 
-	fw := NewFileWatcher(dir, mf, logger, []string{"task"}, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	fw := newTestWatcher(dir, mf, logger, []string{"task"}, nil, localInputFiles{}, filepath.WalkDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -181,7 +181,7 @@ func TestFileWatcher_MultiChannel_DynamicSubdir(t *testing.T) {
 func TestFileWatcher_MultiChannel_JSONNonBatchUsesExecutionIDDir(t *testing.T) {
 	requireFileWatcherIntegration(t)
 	dir := setupMultiChannelDir(t)
-	mf := &mockFactory{}
+	mf := &recordingSubmitter{}
 	logger := zap.NewNop()
 
 	execDir := filepath.Join(dir, "task", "exec-789")
@@ -189,7 +189,7 @@ func TestFileWatcher_MultiChannel_JSONNonBatchUsesExecutionIDDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fw := NewFileWatcher(dir, mf, logger, []string{"task"}, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	fw := newTestWatcher(dir, mf, logger, []string{"task"}, nil, localInputFiles{}, filepath.WalkDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -221,10 +221,10 @@ func TestFileWatcher_MultiChannel_MultipleWorkTypes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mf := &mockFactory{}
+	mf := &recordingSubmitter{}
 	logger := zap.NewNop()
 
-	fw := NewFileWatcher(dir, mf, logger, []string{"chapter", "page"}, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	fw := newTestWatcher(dir, mf, logger, []string{"chapter", "page"}, nil, localInputFiles{}, filepath.WalkDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -264,10 +264,10 @@ func TestFileWatcher_RejectsDirectWorkTypeDrop(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mf := &mockFactory{}
+	mf := &recordingSubmitter{}
 	logger := zap.NewNop()
 
-	fw := NewFileWatcher(dir, mf, logger, []string{"task"}, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	fw := newTestWatcher(dir, mf, logger, []string{"task"}, nil, localInputFiles{}, filepath.WalkDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -303,10 +303,10 @@ func TestFileWatcher_RejectsDirectWorkTypeDrop(t *testing.T) {
 func TestFileWatcher_MDFile_NameFromFilename(t *testing.T) {
 	requireFileWatcherIntegration(t)
 	dir := setupWatchDir(t)
-	mf := &mockFactory{}
+	mf := &recordingSubmitter{}
 	logger := zap.NewNop()
 
-	fw := NewFileWatcher(dir, mf, logger, nil, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	fw := newTestWatcher(dir, mf, logger, nil, nil, localInputFiles{}, filepath.WalkDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -331,10 +331,10 @@ func TestFileWatcher_MDFile_NameFromFilename(t *testing.T) {
 func TestFileWatcher_JSONNonBatch_NameFromFilename(t *testing.T) {
 	requireFileWatcherIntegration(t)
 	dir := setupWatchDir(t)
-	mf := &mockFactory{}
+	mf := &recordingSubmitter{}
 	logger := zap.NewNop()
 
-	fw := NewFileWatcher(dir, mf, logger, nil, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	fw := newTestWatcher(dir, mf, logger, nil, nil, localInputFiles{}, filepath.WalkDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -369,10 +369,10 @@ func TestFileWatcher_PreseedSkipsDirectWorkTypeDrop(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mf := &mockFactory{}
+	mf := &recordingSubmitter{}
 	logger := zap.NewNop()
 
-	fw := NewFileWatcher(dir, mf, logger, []string{"task"}, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
+	fw := newTestWatcher(dir, mf, logger, []string{"task"}, nil, localInputFiles{}, filepath.WalkDir)
 
 	if err := fw.PreseedInputs(context.Background()); err != nil {
 		t.Fatal(err)
