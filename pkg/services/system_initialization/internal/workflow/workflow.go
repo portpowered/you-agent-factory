@@ -1,4 +1,6 @@
-package systeminitialization
+// Package workflow owns the System Bootstrap initialize and rollback workflow
+// behind the sealed CTR-BOOT root contract.
+package workflow
 
 import (
 	"context"
@@ -10,28 +12,29 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 )
 
 // Initializer is the canonical System Bootstrap workflow implementer. It
 // satisfies the singular peer-facing Service contract without exposing
 // additional Bootstrap authority interfaces to peers.
 type Initializer struct {
-	operatorSettings  OperatorSettings
+	operatorSettings  systeminitialization.OperatorSettings
 	packagedCatalog   factorydefinitions.PackagedFactoryCatalogOperations
 	packagedInstaller factorydefinitions.PackagedFactoryInstaller
-	inspectPath       InspectPath
-	migrationFiles    LegacyFactoryMigrationFileSystem
+	inspectPath       systeminitialization.InspectPath
+	migrationFiles    systeminitialization.LegacyFactoryMigrationFileSystem
 }
 
-var _ Service = (*Initializer)(nil)
+var _ systeminitialization.Service = (*Initializer)(nil)
 
-// New constructs the canonical service from already-selected collaborators.
+// New constructs the canonical workflow from already-selected collaborators.
 func New(
-	operatorSettings OperatorSettings,
+	operatorSettings systeminitialization.OperatorSettings,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	packagedInstaller factorydefinitions.PackagedFactoryInstaller,
-	inspectPath InspectPath,
-	migrationFiles LegacyFactoryMigrationFileSystem,
+	inspectPath systeminitialization.InspectPath,
+	migrationFiles systeminitialization.LegacyFactoryMigrationFileSystem,
 ) (*Initializer, error) {
 	if operatorSettings == nil {
 		return nil, fmt.Errorf("construct system initialization: Operator Settings service is required")
@@ -62,68 +65,68 @@ func New(
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func (initializer *Initializer) Initialize(
 	ctx context.Context,
-	request Request,
-) (Result, error) {
+	request systeminitialization.Request,
+) (systeminitialization.Result, error) {
 	if ctx == nil {
-		return Result{}, fmt.Errorf("initialize system: context is required")
+		return systeminitialization.Result{}, fmt.Errorf("initialize system: context is required")
 	}
 	if err := ctx.Err(); err != nil {
-		return Result{}, fmt.Errorf("initialize system: %w: %w", ErrInitializeCancelled, err)
+		return systeminitialization.Result{}, fmt.Errorf("initialize system: %w: %w", systeminitialization.ErrInitializeCancelled, err)
 	}
 
 	homeDir := strings.TrimSpace(request.HomeDir)
 	if homeDir == "" {
-		return Result{}, fmt.Errorf("%w", ErrMissingHomeDir)
+		return systeminitialization.Result{}, fmt.Errorf("%w", systeminitialization.ErrMissingHomeDir)
 	}
 	if initializer == nil {
-		return Result{}, fmt.Errorf("initialize system: service is required")
+		return systeminitialization.Result{}, fmt.Errorf("initialize system: service is required")
 	}
 	if initializer.operatorSettings == nil {
-		return Result{}, fmt.Errorf("initialize system: Operator Settings service is required")
+		return systeminitialization.Result{}, fmt.Errorf("initialize system: Operator Settings service is required")
 	}
 	if initializer.packagedInstaller == nil {
-		return Result{}, fmt.Errorf("initialize system: Factory Definitions packaged installer is required")
+		return systeminitialization.Result{}, fmt.Errorf("initialize system: Factory Definitions packaged installer is required")
 	}
 	if initializer.packagedCatalog.List == nil || initializer.packagedCatalog.Resolve == nil {
-		return Result{}, fmt.Errorf("initialize system: Factory Definitions packaged catalog is required")
+		return systeminitialization.Result{}, fmt.Errorf("initialize system: Factory Definitions packaged catalog is required")
 	}
 	if initializer.inspectPath == nil {
-		return Result{}, fmt.Errorf("initialize system: inspect path edge is required")
+		return systeminitialization.Result{}, fmt.Errorf("initialize system: inspect path edge is required")
 	}
 	if initializer.migrationFiles == nil {
-		return Result{}, fmt.Errorf("initialize system: legacy Factory migration filesystem is required")
+		return systeminitialization.Result{}, fmt.Errorf("initialize system: legacy Factory migration filesystem is required")
 	}
 
 	definitions, err := resolvePackagedDefinitions(ctx, initializer.packagedCatalog)
 	if err != nil {
-		return Result{}, err
+		return systeminitialization.Result{}, err
 	}
 
 	configPath := operatorsettings.DefaultConfigPath(homeDir)
 	namedFactoriesRoot := factorydefinitions.NamedFactoriesRoot(homeDir)
 	if err := migrateLegacyNamedFactories(homeDir, namedFactoriesRoot, initializer.migrationFiles); err != nil {
-		return Result{}, err
+		return systeminitialization.Result{}, err
 	}
 
 	if err := ensureSystemConfigParentIsDirectory(configPath, initializer.inspectPath); err != nil {
-		return Result{}, err
+		return systeminitialization.Result{}, err
 	}
 
-	systemConfigOutcome := SystemConfigCreated
+	systemConfigOutcome := systeminitialization.SystemConfigCreated
 	settings := initializer.operatorSettings
 	if _, err := initializer.inspectPath(configPath); err == nil {
 		if _, err := settings.LoadFileConfig(configPath); err != nil {
-			return Result{}, fmt.Errorf("read existing operator config %q: %w", configPath, err)
+			return systeminitialization.Result{}, fmt.Errorf("read existing operator config %q: %w", configPath, err)
 		}
-		systemConfigOutcome = SystemConfigSkipped
+		systemConfigOutcome = systeminitialization.SystemConfigSkipped
 	} else if !errors.Is(err, fs.ErrNotExist) {
-		return Result{}, fmt.Errorf("stat operator config %q: %w", configPath, err)
+		return systeminitialization.Result{}, fmt.Errorf("stat operator config %q: %w", configPath, err)
 	} else {
 		if _, err := settings.EnsureLocalBackendScope(configPath); err != nil {
-			return Result{}, fmt.Errorf("create system config at %q: %w", configPath, err)
+			return systeminitialization.Result{}, fmt.Errorf("create system config at %q: %w", configPath, err)
 		}
 		if _, err := settings.LoadFileConfig(configPath); err != nil {
-			return Result{}, fmt.Errorf("validate created operator config %q: %w", configPath, err)
+			return systeminitialization.Result{}, fmt.Errorf("validate created operator config %q: %w", configPath, err)
 		}
 	}
 
@@ -134,10 +137,10 @@ func (initializer *Initializer) Initialize(
 	)
 	packagedFactories := projectPackagedFactoryResults(installed)
 	if err != nil {
-		return Result{}, err
+		return systeminitialization.Result{}, err
 	}
 
-	return Result{
+	return systeminitialization.Result{
 		HomeDir:             homeDir,
 		ConfigPath:          configPath,
 		NamedFactoriesRoot:  namedFactoriesRoot,
@@ -175,17 +178,17 @@ func resolvePackagedDefinitions(
 	return definitions, nil
 }
 
-func projectPackagedFactoryResults(installed []factorydefinitions.PackagedFactoryInstallResult) []PackagedFactoryResult {
-	results := make([]PackagedFactoryResult, 0, len(installed))
+func projectPackagedFactoryResults(installed []factorydefinitions.PackagedFactoryInstallResult) []systeminitialization.PackagedFactoryResult {
+	results := make([]systeminitialization.PackagedFactoryResult, 0, len(installed))
 	for _, result := range installed {
-		results = append(results, PackagedFactoryResult{
-			Name: result.Name, FactoryDir: result.FactoryDir, Outcome: PackagedFactoryOutcome(result.Outcome),
+		results = append(results, systeminitialization.PackagedFactoryResult{
+			Name: result.Name, FactoryDir: result.FactoryDir, Outcome: systeminitialization.PackagedFactoryOutcome(result.Outcome),
 		})
 	}
 	return results
 }
 
-func ensureSystemConfigParentIsDirectory(configPath string, inspectPath InspectPath) error {
+func ensureSystemConfigParentIsDirectory(configPath string, inspectPath systeminitialization.InspectPath) error {
 	parentDir := filepath.Dir(configPath)
 	info, err := inspectPath(parentDir)
 	if err != nil {

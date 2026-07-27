@@ -1,4 +1,4 @@
-package systeminitialization
+package workflow
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 )
 
 type fakeOperatorSettings struct {
@@ -79,7 +80,7 @@ type packagedInstallCall struct {
 
 func newTestInitializer(
 	t *testing.T,
-	settings OperatorSettings,
+	settings systeminitialization.OperatorSettings,
 	installer factorydefinitions.PackagedFactoryInstaller,
 	definitions []factorydefinitions.PackagedDefinition,
 ) *Initializer {
@@ -145,11 +146,11 @@ func TestInit_FreshHomeCreatesOperatorSystemConfig(t *testing.T) {
 	settings := &fakeOperatorSettings{}
 	installer := &fakePackagedInstaller{}
 	homeDir := t.TempDir()
-	result, err := newTestInitializer(t, settings, installer, nil).Initialize(t.Context(), Request{HomeDir: homeDir})
+	result, err := newTestInitializer(t, settings, installer, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
 	if err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
-	if result.SystemConfigOutcome != SystemConfigCreated || len(settings.ensureCalls) != 1 || len(settings.loadCalls) != 1 {
+	if result.SystemConfigOutcome != systeminitialization.SystemConfigCreated || len(settings.ensureCalls) != 1 || len(settings.loadCalls) != 1 {
 		t.Fatalf("result/settings = %#v, %#v, %#v", result, settings.ensureCalls, settings.loadCalls)
 	}
 	if len(installer.calls) != 1 || installer.calls[0].root != result.NamedFactoriesRoot {
@@ -168,7 +169,7 @@ func TestInitializeMigratesLegacyFactoriesBeforePackagedInstallation(t *testing.
 		t.Fatal(err)
 	}
 
-	result, err := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).Initialize(t.Context(), Request{HomeDir: homeDir})
+	result, err := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
 	if err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
@@ -192,7 +193,7 @@ func TestInitializeLegacyFactoryConflictPreservesBothCopies(t *testing.T) {
 		}
 	}
 
-	_, err := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).Initialize(t.Context(), Request{HomeDir: homeDir})
+	_, err := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
 	if err == nil || !strings.Contains(err.Error(), "without overwriting") {
 		t.Fatalf("Initialize() conflict error = %v", err)
 	}
@@ -213,7 +214,7 @@ func TestInitializeRejectsInvalidLegacyCurrentFactoryPointer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).Initialize(t.Context(), Request{HomeDir: homeDir})
+	_, err := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
 	if err == nil || !strings.Contains(err.Error(), "list legacy global Factories") {
 		t.Fatalf("Initialize() error = %v, want legacy inventory guidance", err)
 	}
@@ -224,7 +225,7 @@ func TestInit_ExistingConfigIsSkippedWithoutRewrite(t *testing.T) {
 	settings := &fakeOperatorSettings{}
 	installer := &fakePackagedInstaller{}
 	initializer := newTestInitializer(t, settings, installer, nil)
-	created, err := initializer.Initialize(t.Context(), Request{HomeDir: homeDir})
+	created, err := initializer.Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
 	if err != nil {
 		t.Fatalf("Initialize() setup error = %v", err)
 	}
@@ -236,12 +237,12 @@ func TestInit_ExistingConfigIsSkippedWithoutRewrite(t *testing.T) {
 	settings.loadCalls = nil
 	settings.ensureCalls = nil
 	installer.calls = nil
-	result, err := initializer.Initialize(t.Context(), Request{HomeDir: homeDir})
+	result, err := initializer.Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
 	if err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
 	after, _ := os.ReadFile(configPath)
-	if result.SystemConfigOutcome != SystemConfigSkipped || len(settings.ensureCalls) != 0 || string(after) != string(original) {
+	if result.SystemConfigOutcome != systeminitialization.SystemConfigSkipped || len(settings.ensureCalls) != 0 || string(after) != string(original) {
 		t.Fatalf("result/ensure/content = %#v, %#v, %q", result, settings.ensureCalls, after)
 	}
 }
@@ -262,7 +263,7 @@ func TestInit_RejectsSystemConfigParentThatIsAFile(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	_, err = initializer.Initialize(t.Context(), Request{HomeDir: t.TempDir()})
+	_, err = initializer.Initialize(t.Context(), systeminitialization.Request{HomeDir: t.TempDir()})
 	if err == nil || !strings.Contains(err.Error(), "exists but is not a directory") {
 		t.Fatalf("Initialize() error = %v, want actionable parent-file error", err)
 	}
@@ -289,7 +290,7 @@ func TestInit_PropagatesInjectedConfigInspectionFailure(t *testing.T) {
 	if constructionErr != nil {
 		t.Fatalf("New() error = %v", constructionErr)
 	}
-	_, err = initializer.Initialize(t.Context(), Request{HomeDir: homeDir})
+	_, err = initializer.Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
 	if !errors.Is(err, inspectErr) || !strings.Contains(err.Error(), "stat operator config") {
 		t.Fatalf("Initialize() error = %v, want injected inspection failure", err)
 	}
@@ -300,11 +301,11 @@ func TestInit_PropagatesInjectedConfigInspectionFailure(t *testing.T) {
 
 func TestInit_RejectsEmptyHomeDir(t *testing.T) {
 	_, err := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).
-		Initialize(t.Context(), Request{HomeDir: "  "})
+		Initialize(t.Context(), systeminitialization.Request{HomeDir: "  "})
 	if err == nil {
 		t.Fatal("Initialize(empty home) error = nil")
 	}
-	if !errors.Is(err, ErrMissingHomeDir) {
+	if !errors.Is(err, systeminitialization.ErrMissingHomeDir) {
 		t.Fatalf("Initialize(empty home) error = %v, want ErrMissingHomeDir", err)
 	}
 }
@@ -320,12 +321,12 @@ func TestInit_FreshHomeMaterializesPackagedDefaultFactories(t *testing.T) {
 		Name: "@you/goal", FactoryDir: "goal", Outcome: factorydefinitions.PackagedFactoryInstallCreated,
 	}}}
 	result, err := newTestInitializer(t, &fakeOperatorSettings{}, installer, definitions).
-		Initialize(t.Context(), Request{HomeDir: t.TempDir()})
+		Initialize(t.Context(), systeminitialization.Request{HomeDir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(installer.calls) != 1 || len(installer.calls[0].definitions) != 1 ||
-		len(result.PackagedFactories) != 1 || result.PackagedFactories[0].Outcome != PackagedFactoryCreated {
+		len(result.PackagedFactories) != 1 || result.PackagedFactories[0].Outcome != systeminitialization.PackagedFactoryCreated {
 		t.Fatalf("calls/result = %#v, %#v", installer.calls, result)
 	}
 }
@@ -334,15 +335,15 @@ func TestInit_DoubleRunIsSuccessfulNoOp(t *testing.T) {
 	homeDir := t.TempDir()
 	settings := &fakeOperatorSettings{}
 	installer := &fakePackagedInstaller{}
-	first, err := newTestInitializer(t, settings, installer, nil).Initialize(t.Context(), Request{HomeDir: homeDir})
+	first, err := newTestInitializer(t, settings, installer, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := newTestInitializer(t, settings, installer, nil).Initialize(t.Context(), Request{HomeDir: homeDir})
+	second, err := newTestInitializer(t, settings, installer, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.SystemConfigOutcome != SystemConfigCreated || second.SystemConfigOutcome != SystemConfigSkipped ||
+	if first.SystemConfigOutcome != systeminitialization.SystemConfigCreated || second.SystemConfigOutcome != systeminitialization.SystemConfigSkipped ||
 		len(settings.ensureCalls) != 1 || len(installer.calls) != 2 {
 		t.Fatalf("first/second/settings/install = %#v, %#v, %#v, %#v", first, second, settings, installer.calls)
 	}
@@ -350,7 +351,7 @@ func TestInit_DoubleRunIsSuccessfulNoOp(t *testing.T) {
 
 func TestInit_ConfigCreationFailureReportsActionableError(t *testing.T) {
 	settings := &fakeOperatorSettings{ensureErr: errors.New("write denied")}
-	_, err := newTestInitializer(t, settings, &fakePackagedInstaller{}, nil).Initialize(t.Context(), Request{HomeDir: t.TempDir()})
+	_, err := newTestInitializer(t, settings, &fakePackagedInstaller{}, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: t.TempDir()})
 	if err == nil || !strings.Contains(err.Error(), "create system config") || !strings.Contains(err.Error(), "write denied") {
 		t.Fatalf("Initialize() error = %v", err)
 	}
@@ -358,7 +359,7 @@ func TestInit_ConfigCreationFailureReportsActionableError(t *testing.T) {
 
 func TestInit_FactoryMaterializationFailureReportsActionableError(t *testing.T) {
 	installer := &fakePackagedInstaller{err: errors.New("invalid packaged layout")}
-	_, err := newTestInitializer(t, &fakeOperatorSettings{}, installer, nil).Initialize(t.Context(), Request{HomeDir: t.TempDir()})
+	_, err := newTestInitializer(t, &fakeOperatorSettings{}, installer, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: t.TempDir()})
 	if err == nil || !strings.Contains(err.Error(), "invalid packaged layout") {
 		t.Fatalf("Initialize() error = %v", err)
 	}
@@ -382,7 +383,7 @@ func TestInitializeCatalogFailureReturnsBeforeInstallationOrConfigMutation(t *te
 		t.Fatal(err)
 	}
 
-	_, err = initializer.Initialize(t.Context(), Request{HomeDir: t.TempDir()})
+	_, err = initializer.Initialize(t.Context(), systeminitialization.Request{HomeDir: t.TempDir()})
 	if !errors.Is(err, catalogErr) {
 		t.Fatalf("Initialize() error = %v", err)
 	}

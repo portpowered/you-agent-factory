@@ -45,6 +45,7 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
+	systeminitializationwire "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
@@ -333,7 +334,7 @@ func provideSystemInitializationService(
 	inspectPath systeminitialization.InspectPath,
 	migrationFiles systeminitialization.LegacyFactoryMigrationFileSystem,
 ) (systeminitialization.Service, error) {
-	return systeminitialization.New(
+	return systeminitializationwire.NewService(
 		systeminitialization.OperatorSettingsFunctions{
 			Load:   loadOperatorConfig,
 			Ensure: ensureOperatorBackendScope,
