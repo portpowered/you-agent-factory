@@ -20,7 +20,11 @@ primary-result behavior.
   narrower effect request, use the kit's boundary-specific captured-request
   assertion to prove caller-owned isolation. For inference execution-failure
   conformance, route fixture failures through Models not-handled plus an
-  injected delegate that returns the normalized `ProviderError`.
+  injected delegate that returns the normalized `ProviderError`. Cut existing
+  model-inference composition over through
+  `runnerswire.NewInferenceCompositionRunner` in
+  `pkg/services/workers/service/runtime_options.go` instead of decorator-only
+  local-model wrappers.
 - Selection-aware `you run` schema resolution belongs at the CLI read boundary:
   resolve an already-selected named Factory config path or explicit Factory
   source through the read-only Factory Definitions loader, check cancellation

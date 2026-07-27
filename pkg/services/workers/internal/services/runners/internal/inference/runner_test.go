@@ -48,6 +48,43 @@ func TestRunnerDelegatesToCompositionWhenModelsDeclines(t *testing.T) {
 	}
 }
 
+func TestRunnerCompositionPreservesProviderRunnerIdentityAndDeclinesWithoutModelOperation(t *testing.T) {
+	modelsEdge := &captureModelsService{
+		result: models.LocalInvocationResult{Handled: false},
+	}
+	delegate := &captureDelegateRunner{
+		result: workers.RunnerExecutionResult{Content: "codex output"},
+	}
+	inferenceRunner, err := New(validConfig(), Dependencies{
+		Models:   modelsEdge,
+		Delegate: delegate,
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	request := workers.RunnerExecutionRequest{
+		RunnerID: workers.RunnerIDCodex,
+		Dispatch: work.WorkDispatch{
+			DispatchID:      "dispatch-codex",
+			WorkstationName: "codex-workstation",
+		},
+	}
+	result, err := inferenceRunner.Execute(t.Context(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Content != "codex output" {
+		t.Fatalf("result content = %q, want delegate-owned output", result.Content)
+	}
+	if delegate.Request().RunnerID != workers.RunnerIDCodex {
+		t.Fatalf("delegate runner id = %q, want codex", delegate.Request().RunnerID)
+	}
+	if modelsEdge.Calls() != 1 {
+		t.Fatalf("Models calls = %d, want 1", modelsEdge.Calls())
+	}
+}
+
 func TestRunnerRejectsInvalidBindingsBeforeModelsInvocation(t *testing.T) {
 	tests := []struct {
 		name   string

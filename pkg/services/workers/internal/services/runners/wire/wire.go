@@ -4,6 +4,7 @@ package wire
 import (
 	"errors"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
@@ -70,6 +71,39 @@ func NewInferenceRegistry(
 		Runner:   implementation,
 	}})
 	return service, errors.Join(err, registryErr)
+}
+
+// NewInferenceCompositionRunner resolves one registry-backed Inference Runner
+// that projects managed-runtime invocation ahead of the supplied delegate.
+func NewInferenceCompositionRunner(
+	inner workers.Runner,
+	modelsService runners.InferenceLocalInvoker,
+	worker *interfaces.FactoryWorkerConfig,
+	resources []interfaces.ResourceConfig,
+) workers.Runner {
+	if inner == nil || modelsService == nil || worker == nil {
+		return inner
+	}
+	registry, err := NewInferenceRegistry(
+		runners.InferenceConfig{
+			Worker:    inference.WorkerFromFactory(worker),
+			Resources: inference.ResourcesFromFactory(resources),
+		},
+		runners.InferenceDependencies{
+			Models:   modelsService,
+			Delegate: inner,
+		},
+	)
+	if err != nil {
+		return inner
+	}
+	binding, err := registry.Resolve(runners.ResolutionRequest{
+		Identity: runners.InferenceIdentity,
+	})
+	if err != nil {
+		return inner
+	}
+	return binding.Runner
 }
 
 func snapshotInferenceWorker(worker models.LocalWorker) models.LocalWorker {

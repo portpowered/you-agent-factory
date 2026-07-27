@@ -66,15 +66,22 @@ func (r *runner) Execute(
 		return workers.RunnerExecutionResult{}, err
 	}
 	request = workers.CloneProviderInferenceRequest(request)
-	if err := validateRequest(request); err != nil {
-		return workers.RunnerExecutionResult{}, err
-	}
-	if err := validateModelBindings(request.ModelBindings); err != nil {
-		return workers.RunnerExecutionResult{}, err
+	composition := r.delegate != nil &&
+		request.RunnerID != "" &&
+		request.RunnerID != Identity
+	if !composition {
+		if err := validateRequest(request); err != nil {
+			return workers.RunnerExecutionResult{}, err
+		}
+		if err := validateModelBindings(request.ModelBindings); err != nil {
+			return workers.RunnerExecutionResult{}, err
+		}
 	}
 	invocation := r.localInvocationRequest(request)
-	if err := models.ValidateLocalInvocationRequest(invocation); err != nil {
-		return workers.RunnerExecutionResult{}, badRequest("inference request is invalid", err)
+	if !composition {
+		if err := models.ValidateLocalInvocationRequest(invocation); err != nil {
+			return workers.RunnerExecutionResult{}, badRequest("inference request is invalid", err)
+		}
 	}
 	result, err := r.models.InvokeLocal(ctx, invocation)
 	if !result.Handled {
