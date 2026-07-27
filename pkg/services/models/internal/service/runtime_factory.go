@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -199,10 +201,23 @@ func (o *Root) OpenRuntimeScope(
 }
 
 func (o *Root) CloseRuntimeScope(
-	context.Context,
-	models.CloseRuntimeScopeRequest,
+	ctx context.Context,
+	request models.CloseRuntimeScopeRequest,
 ) (models.CloseRuntimeScopeResult, error) {
-	return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.runtimeScopes == nil {
+		return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
+	}
+	if err := ctx.Err(); err != nil {
+		return models.CloseRuntimeScopeResult{}, err
+	}
+	if request.Scope.IsZero() {
+		return models.CloseRuntimeScopeResult{}, models.ErrRuntimeScopeInvalid
+	}
+	err := o.runtimeScopes.Close(runtimescopes.Reference(request.Scope.String()))
+	if err != nil {
+		return models.CloseRuntimeScopeResult{}, runtimeScopeError(err)
+	}
+	return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
 }
 
 func (o *Root) ListCatalog(
@@ -226,10 +241,26 @@ func (o *Root) GetCatalogModel(
 }
 
 func (o *Root) GetModelReadiness(
-	context.Context,
-	models.GetModelReadinessRequest,
+	ctx context.Context,
+	request models.GetModelReadinessRequest,
 ) (models.GetModelReadinessResult, error) {
-	return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.catalog == nil {
+		return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
+	}
+	return o.catalog.GetModelReadiness(ctx, request)
+}
+
+func runtimeScopeError(err error) error {
+	switch {
+	case errors.Is(err, runtimescopes.ErrScopeForeign):
+		return fmt.Errorf("%w: %v", models.ErrRuntimeScopeForeign, err)
+	case errors.Is(err, runtimescopes.ErrScopeClosed):
+		return fmt.Errorf("%w: %v", models.ErrRuntimeScopeClosed, err)
+	case errors.Is(err, runtimescopes.ErrScopeUnknown):
+		return fmt.Errorf("%w: %v", models.ErrRuntimeScopeStale, err)
+	default:
+		return models.ErrUnavailable
+	}
 }
 
 func (o *Root) PrepareModelAssets(

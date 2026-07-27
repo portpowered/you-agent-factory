@@ -16,6 +16,10 @@ var ErrScopeUnknown = errors.New("models runtime scope is unknown")
 // service instance.
 var ErrScopeForeign = errors.New("models runtime scope is foreign")
 
+// ErrScopeClosed reports a reference that this Runtime Scopes service issued
+// and explicitly closed.
+var ErrScopeClosed = errors.New("models runtime scope is closed")
+
 // Reference is an opaque identifier issued by a Runtime Scopes service.
 type Reference string
 

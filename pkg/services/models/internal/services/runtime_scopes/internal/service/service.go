@@ -16,6 +16,7 @@ type service struct {
 	issuerToken  string
 	nextScopeID  uint64
 	liveBindings map[runtimescopes.Reference]models.RuntimeBinding
+	closedScopes map[runtimescopes.Reference]struct{}
 }
 
 var _ runtimescopes.Service = (*service)(nil)
@@ -25,6 +26,7 @@ func New(issuerID string) runtimescopes.Service {
 	return &service{
 		issuerToken:  opaqueToken("issuer", issuerID),
 		liveBindings: make(map[runtimescopes.Reference]models.RuntimeBinding),
+		closedScopes: make(map[runtimescopes.Reference]struct{}),
 	}
 }
 
@@ -57,7 +59,11 @@ func (s *service) Resolve(ref runtimescopes.Reference) (models.RuntimeBinding, e
 
 	s.mu.RLock()
 	binding, ok := s.liveBindings[ref]
+	_, closed := s.closedScopes[ref]
 	s.mu.RUnlock()
+	if closed {
+		return models.RuntimeBinding{}, fmt.Errorf("%w: reference identifies a closed scope", runtimescopes.ErrScopeClosed)
+	}
 	if !ok {
 		return models.RuntimeBinding{}, fmt.Errorf("%w: reference does not identify a live scope", runtimescopes.ErrScopeUnknown)
 	}
@@ -74,10 +80,14 @@ func (s *service) Close(ref runtimescopes.Reference) error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, closed := s.closedScopes[ref]; closed {
+		return fmt.Errorf("%w: reference identifies a closed scope", runtimescopes.ErrScopeClosed)
+	}
 	if _, ok := s.liveBindings[ref]; !ok {
 		return fmt.Errorf("%w: reference does not identify a live scope", runtimescopes.ErrScopeUnknown)
 	}
 	delete(s.liveBindings, ref)
+	s.closedScopes[ref] = struct{}{}
 	return nil
 }
 

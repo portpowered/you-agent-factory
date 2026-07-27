@@ -5,8 +5,10 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	catalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
@@ -196,6 +198,265 @@ func TestConstructionRejectsMissingRuntimeScopes(t *testing.T) {
 	if err == nil || service != nil {
 		t.Fatalf("NewService(nil) = (%#v, %v), want nil service and error", service, err)
 	}
+}
+
+func TestCatalogOperationsPreserveEveryScopeClassification(t *testing.T) {
+	t.Parallel()
+
+	scopes := newRuntimeScopes(t, "catalog-scope-classifications")
+	foreignScopes := newRuntimeScopes(t, "catalog-scope-foreign")
+	service := newCatalogService(t, scopes)
+	closedRef := openCatalogScope(t, scopes, "closed-model", "generate")
+	if err := scopes.Close(closedRef); err != nil {
+		t.Fatalf("close scope: %v", err)
+	}
+	foreignRef := openCatalogScope(t, foreignScopes, "foreign-model", "generate")
+	stale, err := (models.RuntimeScopeRef{}).Parse("stale-scope")
+	if err != nil {
+		t.Fatalf("parse stale scope: %v", err)
+	}
+
+	tests := []struct {
+		name  string
+		scope models.RuntimeScopeRef
+		want  error
+	}{
+		{name: "missing", want: models.ErrRuntimeScopeInvalid},
+		{name: "closed", scope: publicScope(t, closedRef), want: models.ErrRuntimeScopeClosed},
+		{name: "stale", scope: stale, want: models.ErrRuntimeScopeStale},
+		{name: "foreign", scope: publicScope(t, foreignRef), want: models.ErrRuntimeScopeForeign},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := service.ListCatalog(
+				context.Background(),
+				models.ListModelsRequest{Scope: test.scope},
+			); !errors.Is(err, test.want) {
+				t.Errorf("ListCatalog error = %v, want %v", err, test.want)
+			}
+			if _, err := service.GetCatalogModel(
+				context.Background(),
+				models.GetModelRequest{Scope: test.scope},
+			); !errors.Is(err, test.want) {
+				t.Errorf("GetCatalogModel error = %v, want %v", err, test.want)
+			}
+			if _, err := service.GetModelReadiness(
+				context.Background(),
+				models.GetModelReadinessRequest{Scope: test.scope},
+			); !errors.Is(err, test.want) {
+				t.Errorf("GetModelReadiness error = %v, want %v", err, test.want)
+			}
+		})
+	}
+}
+
+func TestCatalogOperationsKeepOpenScopesIsolatedAfterOneCloses(t *testing.T) {
+	t.Parallel()
+
+	scopes := newRuntimeScopes(t, "catalog-scope-isolation")
+	service := newCatalogService(t, scopes)
+	firstRef := openCatalogScope(t, scopes, "shared-model", "generate")
+	secondRef := openCatalogScope(t, scopes, "shared-model", "embed")
+	firstScope := publicScope(t, firstRef)
+	secondScope := publicScope(t, secondRef)
+
+	first, err := service.GetModelReadiness(context.Background(), models.GetModelReadinessRequest{
+		Scope: firstScope, Name: "shared-model", Operation: "generate",
+	})
+	if err != nil {
+		t.Fatalf("first readiness: %v", err)
+	}
+	second, err := service.GetModelReadiness(context.Background(), models.GetModelReadinessRequest{
+		Scope: secondScope, Name: "shared-model", Operation: "embed",
+	})
+	if err != nil {
+		t.Fatalf("second readiness: %v", err)
+	}
+	if first.Readiness.SupportedOperations[0].Name != "generate" ||
+		second.Readiness.SupportedOperations[0].Name != "embed" {
+		t.Fatalf("readiness crossed scopes: first=%#v second=%#v", first, second)
+	}
+
+	if err := scopes.Close(firstRef); err != nil {
+		t.Fatalf("close first scope: %v", err)
+	}
+	if _, err := service.ListCatalog(
+		context.Background(),
+		models.ListModelsRequest{Scope: firstScope},
+	); !errors.Is(err, models.ErrRuntimeScopeClosed) {
+		t.Fatalf("closed first scope error = %v, want ErrRuntimeScopeClosed", err)
+	}
+	remaining, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: secondScope, Name: "shared-model", Operation: "embed",
+	})
+	if err != nil {
+		t.Fatalf("remaining scope get: %v", err)
+	}
+	if remaining.Model.Operations[0].Name != "embed" {
+		t.Fatalf("remaining scope detail = %#v, want isolated embed operation", remaining)
+	}
+}
+
+func TestCatalogOperationsReturnUnavailableForLiveScopeWithoutCatalog(t *testing.T) {
+	t.Parallel()
+
+	scopes := newRuntimeScopes(t, "catalog-unavailable-all-operations")
+	privateRef, err := scopes.Open(models.RuntimeBinding{
+		RuntimeConfig: func() *models.RuntimeConfig { return nil },
+	})
+	if err != nil {
+		t.Fatalf("open unavailable scope: %v", err)
+	}
+	scope := publicScope(t, privateRef)
+	service := newCatalogService(t, scopes)
+
+	if _, err := service.ListCatalog(
+		context.Background(),
+		models.ListModelsRequest{Scope: scope},
+	); !errors.Is(err, models.ErrUnavailable) || err.Error() != models.ErrUnavailable.Error() {
+		t.Errorf("ListCatalog error = %v, want sanitized ErrUnavailable", err)
+	}
+	if _, err := service.GetCatalogModel(
+		context.Background(),
+		models.GetModelRequest{Scope: scope},
+	); !errors.Is(err, models.ErrUnavailable) || err.Error() != models.ErrUnavailable.Error() {
+		t.Errorf("GetCatalogModel error = %v, want sanitized ErrUnavailable", err)
+	}
+	if _, err := service.GetModelReadiness(
+		context.Background(),
+		models.GetModelReadinessRequest{Scope: scope},
+	); !errors.Is(err, models.ErrUnavailable) || err.Error() != models.ErrUnavailable.Error() {
+		t.Errorf("GetModelReadiness error = %v, want sanitized ErrUnavailable", err)
+	}
+}
+
+func TestCatalogOperationsHonorCancellationBeforeAndDuringReadinessQuery(t *testing.T) {
+	t.Parallel()
+
+	scopes := newRuntimeScopes(t, "catalog-cancellation")
+	queryStarted := make(chan struct{})
+	service, err := catalogwire.NewService(
+		scopes,
+		func(ctx context.Context, _ models.RuntimeConfig, _ models.Detail) (models.Runtime, error) {
+			close(queryStarted)
+			<-ctx.Done()
+			return models.Runtime{}, ctx.Err()
+		},
+	)
+	if err != nil {
+		t.Fatalf("construct Catalog: %v", err)
+	}
+	privateRef := openCatalogScope(t, scopes, "cancel-model", "generate")
+	scope := publicScope(t, privateRef)
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := service.ListCatalog(
+		cancelled,
+		models.ListModelsRequest{Scope: scope},
+	); !errors.Is(err, context.Canceled) {
+		t.Errorf("ListCatalog pre-canceled error = %v, want context.Canceled", err)
+	}
+	if _, err := service.GetCatalogModel(
+		cancelled,
+		models.GetModelRequest{Scope: scope},
+	); !errors.Is(err, context.Canceled) {
+		t.Errorf("GetCatalogModel pre-canceled error = %v, want context.Canceled", err)
+	}
+	if _, err := service.GetModelReadiness(
+		cancelled,
+		models.GetModelReadinessRequest{Scope: scope},
+	); !errors.Is(err, context.Canceled) {
+		t.Errorf("GetModelReadiness pre-canceled error = %v, want context.Canceled", err)
+	}
+
+	ctx, cancelDuring := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() {
+		_, queryErr := service.GetModelReadiness(ctx, models.GetModelReadinessRequest{
+			Scope: scope, Name: "cancel-model", Operation: "generate",
+		})
+		result <- queryErr
+	}()
+	select {
+	case <-queryStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("readiness query did not start")
+	}
+	cancelDuring()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled readiness error = %v, want context.Canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled readiness query did not stop")
+	}
+	if _, err := scopes.Resolve(privateRef); err != nil {
+		t.Fatalf("canceled query changed scope state: %v", err)
+	}
+}
+
+func TestReadinessDependencyFailuresAreSanitizedAsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	scopes := newRuntimeScopes(t, "catalog-readiness-failure")
+	service, err := catalogwire.NewService(
+		scopes,
+		func(context.Context, models.RuntimeConfig, models.Detail) (models.Runtime, error) {
+			return models.Runtime{}, errors.New(`inspect C:\private\model-cache: access denied`)
+		},
+	)
+	if err != nil {
+		t.Fatalf("construct Catalog: %v", err)
+	}
+	scope := publicScope(t, openCatalogScope(t, scopes, "failed-model", "generate"))
+	if _, err := service.GetModelReadiness(
+		context.Background(),
+		models.GetModelReadinessRequest{Scope: scope, Name: "failed-model"},
+	); !errors.Is(err, models.ErrUnavailable) || err.Error() != models.ErrUnavailable.Error() {
+		t.Fatalf("GetModelReadiness error = %v, want sanitized ErrUnavailable", err)
+	}
+}
+
+func newRuntimeScopes(t *testing.T, issuer string) runtimescopes.Service {
+	t.Helper()
+	scopes, err := runtimescopeswire.NewService(func() string { return issuer })
+	if err != nil {
+		t.Fatalf("construct Runtime Scopes: %v", err)
+	}
+	return scopes
+}
+
+func newCatalogService(t *testing.T, scopes runtimescopes.Service) catalog.Service {
+	t.Helper()
+	service, err := catalogwire.NewService(scopes)
+	if err != nil {
+		t.Fatalf("construct Catalog: %v", err)
+	}
+	return service
+}
+
+func openCatalogScope(
+	t *testing.T,
+	scopes runtimescopes.Service,
+	model string,
+	operation string,
+) runtimescopes.Reference {
+	t.Helper()
+	privateRef, err := scopes.Open(models.RuntimeBinding{
+		RuntimeConfig: func() *models.RuntimeConfig {
+			return &models.RuntimeConfig{
+				Workers: []models.RuntimeWorker{catalogWorker("worker", model, operation)},
+			}
+		},
+	})
+	if err != nil {
+		t.Fatalf("open catalog scope: %v", err)
+	}
+	return privateRef
 }
 
 func catalogWorker(name, model, operation string) models.RuntimeWorker {

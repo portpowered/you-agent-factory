@@ -329,6 +329,44 @@ func TestRootGetCatalogModelDelegatesScopedLookup(t *testing.T) {
 	}
 }
 
+func TestRootClosesScopeAndPreservesClosedClassification(t *testing.T) {
+	t.Parallel()
+
+	root := newScopedCatalogRoot(t)
+	opened, err := root.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{
+		Config: models.RuntimeScopeConfig{Runtime: models.RuntimeConfig{
+			Workers: []models.RuntimeWorker{
+				scopedCatalogWorker("worker", "closed-model", "generate"),
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("OpenRuntimeScope: %v", err)
+	}
+	closed, err := root.CloseRuntimeScope(
+		context.Background(),
+		models.CloseRuntimeScopeRequest{Scope: opened.Scope},
+	)
+	if err != nil {
+		t.Fatalf("CloseRuntimeScope: %v", err)
+	}
+	if !closed.Closed || closed.Scope != opened.Scope {
+		t.Fatalf("CloseRuntimeScope = %#v, want closed issued scope", closed)
+	}
+	if _, err := root.CloseRuntimeScope(
+		context.Background(),
+		models.CloseRuntimeScopeRequest{Scope: opened.Scope},
+	); !errors.Is(err, models.ErrRuntimeScopeClosed) {
+		t.Fatalf("repeated CloseRuntimeScope error = %v, want ErrRuntimeScopeClosed", err)
+	}
+	if _, err := root.GetModelReadiness(
+		context.Background(),
+		models.GetModelReadinessRequest{Scope: opened.Scope, Name: "closed-model"},
+	); !errors.Is(err, models.ErrRuntimeScopeClosed) {
+		t.Fatalf("GetModelReadiness closed scope error = %v, want ErrRuntimeScopeClosed", err)
+	}
+}
+
 func newScopedCatalogRoot(t *testing.T) *Root {
 	t.Helper()
 	scopes, err := runtimescopeswire.NewService(func() string { return "catalog-root-test" })

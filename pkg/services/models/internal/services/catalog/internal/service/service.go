@@ -13,15 +13,16 @@ import (
 )
 
 type service struct {
-	scopes runtimescopes.Service
+	scopes    runtimescopes.Service
+	readiness catalog.ReadinessQuery
 }
 
 var _ catalog.Service = (*service)(nil)
 
 // New constructs an inert catalog over the Models-owned Runtime Scopes
 // authority.
-func New(scopes runtimescopes.Service) catalog.Service {
-	return &service{scopes: scopes}
+func New(scopes runtimescopes.Service, readiness catalog.ReadinessQuery) catalog.Service {
+	return &service{scopes: scopes, readiness: readiness}
 }
 
 func (s *service) ListCatalog(
@@ -40,6 +41,9 @@ func (s *service) ListCatalog(
 	)
 	result := models.ListModelsResult{Models: make([]models.Summary, 0, len(entries))}
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return models.ListModelsResult{}, err
+		}
 		result.Models = append(result.Models, stableSummary(entry.Summary))
 	}
 	sort.Slice(result.Models, func(i, j int) bool {
@@ -57,29 +61,78 @@ func (s *service) GetCatalogModel(
 	if err != nil {
 		return models.GetModelResult{}, err
 	}
-	if err := request.Validate(); err != nil {
+	detail, err := catalogDetail(runtimeConfig, request.Name, request.Operation)
+	if err != nil {
 		return models.GetModelResult{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return models.GetModelResult{}, err
+	}
+	return models.GetModelResult{Model: detail}, nil
+}
 
+func (s *service) GetModelReadiness(
+	ctx context.Context,
+	request models.GetModelReadinessRequest,
+) (models.GetModelReadinessResult, error) {
+	runtimeConfig, err := s.resolveRuntimeConfig(ctx, request.Scope)
+	if err != nil {
+		return models.GetModelReadinessResult{}, err
+	}
+	detail, err := catalogDetail(runtimeConfig, request.Name, request.Operation)
+	if err != nil {
+		return models.GetModelReadinessResult{}, err
+	}
+	if s.readiness == nil {
+		return models.GetModelReadinessResult{}, models.ErrUnavailable
+	}
+	readiness, err := s.readiness(ctx, *runtimeConfig, detail.Clone())
+	if err != nil {
+		if contextError := ctx.Err(); contextError != nil {
+			return models.GetModelReadinessResult{}, contextError
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return models.GetModelReadinessResult{}, err
+		}
+		return models.GetModelReadinessResult{}, models.ErrUnavailable
+	}
+	if err := ctx.Err(); err != nil {
+		return models.GetModelReadinessResult{}, err
+	}
+	return models.GetModelReadinessResult{
+		ModelName: detail.Name,
+		Readiness: stableRuntime(readiness),
+	}, nil
+}
+
+func catalogDetail(
+	runtimeConfig *models.RuntimeConfig,
+	name string,
+	operation string,
+) (models.Detail, error) {
+	request := models.GetModelRequest{Name: name, Operation: operation}
+	if err := request.Validate(); err != nil {
+		return models.Detail{}, err
+	}
 	entries := localmodels.BuildCatalogWithRuntime(
 		runtimeConfig,
 		nil,
 		localmodels.DefaultManagedRuntimeSourceResolver(),
 	)
-	entry, ok := entries[localmodels.CanonicalModelName(request.Name)]
+	entry, ok := entries[localmodels.CanonicalModelName(name)]
 	if !ok {
-		return models.GetModelResult{}, fmt.Errorf("%w: %s", models.ErrNotFound, request.Name)
+		return models.Detail{}, fmt.Errorf("%w: %s", models.ErrNotFound, name)
 	}
 	detail := stableDetail(entry.Detail)
-	if operation := request.Operation; operation != "" && !supportsOperation(detail, operation) {
-		return models.GetModelResult{}, fmt.Errorf(
+	if operation != "" && !supportsOperation(detail, operation) {
+		return models.Detail{}, fmt.Errorf(
 			"%w: model %q does not support operation %q",
 			models.ErrUnsupportedOperation,
 			detail.Name,
 			operation,
 		)
 	}
-	return models.GetModelResult{Model: detail}, nil
+	return detail, nil
 }
 
 func (s *service) resolveRuntimeConfig(
@@ -114,11 +167,19 @@ func catalogScopeError(err error) error {
 	switch {
 	case errors.Is(err, runtimescopes.ErrScopeForeign):
 		return fmt.Errorf("%w: %v", models.ErrRuntimeScopeForeign, err)
+	case errors.Is(err, runtimescopes.ErrScopeClosed):
+		return fmt.Errorf("%w: %v", models.ErrRuntimeScopeClosed, err)
 	case errors.Is(err, runtimescopes.ErrScopeUnknown):
 		return fmt.Errorf("%w: %v", models.ErrRuntimeScopeStale, err)
 	default:
 		return models.ErrUnavailable
 	}
+}
+
+func stableRuntime(runtime models.Runtime) models.Runtime {
+	runtime = runtime.Clone()
+	sortOperations(runtime.SupportedOperations)
+	return runtime
 }
 
 func stableSummary(summary models.Summary) models.Summary {
