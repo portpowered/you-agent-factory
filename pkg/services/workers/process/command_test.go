@@ -93,6 +93,21 @@ func TestAdaptCommandRunnerProjectsOnlySubprocessEffectFields(t *testing.T) {
 	}
 }
 
+func TestAdaptCommandRunnerPreservesOnlyImplementedStreamingCapability(t *testing.T) {
+	streamingMethod := func(runner CommandRunner) bool {
+		_, ok := runner.(interface {
+			RunStreaming(context.Context, CommandRequest, OutputChunkObserver) (CommandResult, error)
+		})
+		return ok
+	}
+	if streamingMethod(AdaptCommandRunner(&recordingEffect{})) {
+		t.Fatal("non-streaming platform effect unexpectedly exposes workers streaming")
+	}
+	if !streamingMethod(AdaptCommandRunner(&streamingRecordingEffect{})) {
+		t.Fatal("streaming platform effect does not expose workers streaming")
+	}
+}
+
 func TestLoggingCommandRunnerOwnsWorkCorrelationProjection(t *testing.T) {
 	logger := &recordingLogger{}
 	clock := &sequenceCommandClock{times: []time.Time{
@@ -130,49 +145,29 @@ func TestLoggingCommandRunnerRequiresInjectedClock(t *testing.T) {
 	}
 }
 
-func TestExecCommandRunnerRunStreamingSupportsStreamingAndFallbackEffects(t *testing.T) {
-	t.Run("streaming", func(t *testing.T) {
-		effect := &streamingRecordingEffect{}
-		var chunks []string
-		result, err := (ExecCommandRunner{Runner: effect}).RunStreaming(
-			t.Context(),
-			commandTestRequest(),
-			func(stream string, chunk []byte) {
-				chunks = append(chunks, string(stream)+":"+string(chunk))
-			},
-		)
-		if err != nil {
-			t.Fatalf("RunStreaming() error = %v", err)
-		}
-		if len(effect.chunks) != 1 || string(result.Stdout) != "ok" ||
-			len(chunks) != 2 || chunks[0] != "stderr:warn" || chunks[1] != "stdout:ok" {
-			t.Fatalf("streaming result = %#v chunks = %#v effect = %#v", result, chunks, effect.chunks)
-		}
-	})
+func TestStreamingAdaptedCommandRunnerForwardsStreamingEffect(t *testing.T) {
+	effect := &streamingRecordingEffect{}
+	var chunks []string
+	result, err := (StreamingAdaptedCommandRunner{
+		ExecCommandRunner: ExecCommandRunner{Runner: effect},
+	}).RunStreaming(
+		t.Context(),
+		commandTestRequest(),
+		func(stream string, chunk []byte) {
+			chunks = append(chunks, string(stream)+":"+string(chunk))
+		},
+	)
+	if err != nil {
+		t.Fatalf("RunStreaming() error = %v", err)
+	}
+	if len(effect.chunks) != 1 || string(result.Stdout) != "ok" ||
+		len(chunks) != 2 || chunks[0] != "stderr:warn" || chunks[1] != "stdout:ok" {
+		t.Fatalf("streaming result = %#v chunks = %#v effect = %#v", result, chunks, effect.chunks)
+	}
 
-	t.Run("fallback", func(t *testing.T) {
-		effect := &recordingEffect{result: platformprocess.CommandResult{
-			Stdout: []byte("complete out"),
-			Stderr: []byte("complete err"),
-		}}
-		var chunks []string
-		result, err := (ExecCommandRunner{Runner: effect}).RunStreaming(
-			t.Context(),
-			commandTestRequest(),
-			func(stream string, chunk []byte) {
-				chunks = append(chunks, string(stream)+":"+string(chunk))
-			},
-		)
-		if err != nil {
-			t.Fatalf("RunStreaming() error = %v", err)
-		}
-		if string(result.Stderr) != "complete err" ||
-			len(chunks) != 2 || chunks[0] != "stdout:complete out" || chunks[1] != "stderr:complete err" {
-			t.Fatalf("fallback result = %#v chunks = %#v", result, chunks)
-		}
-	})
-
-	if _, err := (ExecCommandRunner{}).RunStreaming(t.Context(), commandTestRequest(), nil); err == nil {
+	if _, err := (StreamingAdaptedCommandRunner{}).RunStreaming(
+		t.Context(), commandTestRequest(), nil,
+	); err == nil {
 		t.Fatal("RunStreaming() error = nil, want missing process runner")
 	}
 }

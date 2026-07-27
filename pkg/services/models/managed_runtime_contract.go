@@ -82,6 +82,9 @@ type OperationSlot struct {
 }
 
 func cloneOperations(operations []Operation) []Operation {
+	if operations == nil {
+		return nil
+	}
 	cloned := make([]Operation, len(operations))
 	for i, operation := range operations {
 		cloned[i] = operation
@@ -92,6 +95,9 @@ func cloneOperations(operations []Operation) []Operation {
 }
 
 func cloneOperationSlots(slots []OperationSlot) []OperationSlot {
+	if slots == nil {
+		return nil
+	}
 	cloned := make([]OperationSlot, len(slots))
 	for i, slot := range slots {
 		cloned[i] = slot

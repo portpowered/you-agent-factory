@@ -66,14 +66,14 @@ func TestRunCanonicalNamedFlagRegistersFactoryNameCompletion(t *testing.T) {
 		},
 	}
 
-	commands, err := buildRunSubmitProductionCommands(
+	commands, err := buildRunServerProductionCommands(
 		&cliGlobalOptions{},
 		&cliDiagnosticsOptions{},
 		&cliOperatorDefaultsOptions{},
 		options,
 	)
 	if err != nil {
-		t.Fatalf("buildRunSubmitProductionCommands() error = %v", err)
+		t.Fatalf("buildRunServerProductionCommands() error = %v", err)
 	}
 	if commands.Run.Flags().Lookup(cobracompletion.SelectedFactoryFlagName) == nil {
 		t.Fatal("canonical --named flag is missing")
@@ -130,14 +130,14 @@ func TestRunCanonicalNamedSelectionCompletesSignatureInputs(t *testing.T) {
 		},
 	}
 
-	commands, err := buildRunSubmitProductionCommands(
+	commands, err := buildRunServerProductionCommands(
 		&cliGlobalOptions{},
 		&cliDiagnosticsOptions{},
 		&cliOperatorDefaultsOptions{},
 		options,
 	)
 	if err != nil {
-		t.Fatalf("buildRunSubmitProductionCommands() error = %v", err)
+		t.Fatalf("buildRunServerProductionCommands() error = %v", err)
 	}
 	commands.Run.SetContext(startupcli.WithWorkingDirectory(t.Context(), "customer-repo"))
 
@@ -215,14 +215,14 @@ func TestRunCompletionPreservesPositionalInputAfterFlagTerminator(t *testing.T) 
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			commands, err := buildRunSubmitProductionCommands(
+			commands, err := buildRunServerProductionCommands(
 				&cliGlobalOptions{},
 				&cliDiagnosticsOptions{},
 				&cliOperatorDefaultsOptions{},
 				options,
 			)
 			if err != nil {
-				t.Fatalf("buildRunSubmitProductionCommands() error = %v", err)
+				t.Fatalf("buildRunServerProductionCommands() error = %v", err)
 			}
 			var output bytes.Buffer
 			root := &cobra.Command{Use: "you"}

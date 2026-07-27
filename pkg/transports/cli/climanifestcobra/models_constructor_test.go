@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
@@ -505,4 +506,261 @@ func assertMCPResolvedState(
 	if !found || !reflect.DeepEqual(got, want) {
 		t.Fatalf("resolved %s state = %#v, %t; want %#v", inputID, got, found, want)
 	}
+}
+
+func TestNewSubmitFamilyCommandProjectsOnlyCanonicalSubmitFamily(t *testing.T) {
+	command, _ := mustSubmitFamilyCommand(t, nil)
+	if command.Use != "submit" {
+		t.Fatalf("Use = %q, want submit", command.Use)
+	}
+	children := command.Commands()
+	if len(children) != 1 || children[0].Use != "batch [path|-|<inline-json>]" {
+		t.Fatalf("children = %#v, want only batch", submitChildUses(children))
+	}
+	if command.Flags().Lookup("name") == nil ||
+		command.Flags().Lookup("work-type-name") == nil ||
+		command.Flags().Lookup("payload") == nil {
+		t.Fatal("unary local flags were not projected")
+	}
+	batch, _, err := command.Find([]string{"batch"})
+	if err != nil {
+		t.Fatalf("Find(batch) error = %v", err)
+	}
+	if batch.Flags().Lookup("file") == nil || batch.Flags().Lookup("dry-run") == nil {
+		t.Fatal("batch local flags were not projected")
+	}
+}
+
+func TestNewSubmitFamilyCommandUsesManifestPresentationAndStableInputs(t *testing.T) {
+	manifest := submitConstructorManifest(t)
+	submit := manifest.Commands["you.submit"]
+	submit.Documentation.Documentation.Title.CanonicalEnglish = "Manifest unary title"
+	nameFlag := submit.Flags["you.submit.flag.name"]
+	nameFlag.Long = "work-name"
+	submit.Flags[nameFlag.ID] = nameFlag
+	manifest.Commands[submit.ID] = submit
+	batch := manifest.Commands["you.submit.batch"]
+	batch.Visibility = "hidden"
+	manifest.Commands[batch.ID] = batch
+
+	var unaryCalls, batchCalls int
+	handlerRegistry := mustSubmitHandlerRegistry(t, commandregistry.SubmitHandlers{
+		Submit: func(_ *cobra.Command, inputs, inherited resolvedinput.Inputs) error {
+			unaryCalls++
+			assertSubmitString(t, inputs, "you.submit.flag.name", "work-1")
+			assertSubmitString(t, inputs, "you.submit.flag.work-type-name", "REVIEW")
+			assertSubmitString(t, inputs, "you.submit.flag.payload", "payload.md")
+			assertSubmitString(t, inputs, "you.submit.flag.session", "")
+			if _, ok := inherited.Lookup("you.flag.server"); ok {
+				t.Fatal("standalone inherited inputs unexpectedly populated")
+			}
+			return nil
+		},
+		SubmitBatch: func(_ *cobra.Command, inputs, _ resolvedinput.Inputs) error {
+			batchCalls++
+			assertSubmitString(t, inputs, "you.submit.batch.arg.0", "batch.json")
+			dryRun, err := inputs.Bool("you.submit.batch.flag.dry-run")
+			if err != nil || !dryRun {
+				t.Fatalf("dry-run = %t, error = %v", dryRun, err)
+			}
+			return nil
+		},
+	})
+	command, err := climanifestcobra.NewSubmitFamilyCommandFromManifest(manifest, handlerRegistry)
+	if err != nil {
+		t.Fatalf("NewSubmitFamilyCommandFromManifest() error = %v", err)
+	}
+	if command.Short != "Manifest unary title" {
+		t.Fatalf("Short = %q, want manifest title", command.Short)
+	}
+	batchCommand, _, _ := command.Find([]string{"batch"})
+	if !batchCommand.Hidden {
+		t.Fatal("batch Hidden = false, want manifest visibility")
+	}
+
+	command.SetOut(&bytes.Buffer{})
+	command.SetErr(&bytes.Buffer{})
+	command.SetArgs([]string{
+		"--work-name", "work-1",
+		"--work-type-name", "REVIEW",
+		"--payload", "payload.md",
+	})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("Execute(unary) error = %v", err)
+	}
+	command.SetArgs([]string{"batch", "--dry-run", "batch.json"})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("Execute(batch) error = %v", err)
+	}
+	if unaryCalls != 1 || batchCalls != 1 {
+		t.Fatalf("calls unary=%d batch=%d, want 1 each", unaryCalls, batchCalls)
+	}
+}
+
+func TestNewSubmitFamilyCommandRejectsContradictionsBeforeHandlersRun(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*climanifest.Manifest)
+	}{
+		{
+			name: "contradictory root",
+			mutate: func(manifest *climanifest.Manifest) {
+				manifest.RootPath = "submit"
+			},
+		},
+		{
+			name: "missing record",
+			mutate: func(manifest *climanifest.Manifest) {
+				delete(manifest.Commands, "you.submit.batch")
+			},
+		},
+		{
+			name: "extra record",
+			mutate: func(manifest *climanifest.Manifest) {
+				manifest.Commands["you.extra"] = climanifest.Command{ID: "you.extra"}
+			},
+		},
+		{
+			name: "non-runnable",
+			mutate: func(manifest *climanifest.Manifest) {
+				record := manifest.Commands["you.submit"]
+				record.Runnable = false
+				manifest.Commands[record.ID] = record
+			},
+		},
+		{
+			name: "incompatible type",
+			mutate: func(manifest *climanifest.Manifest) {
+				record := manifest.Commands["you.submit"]
+				flag := record.Flags["you.submit.flag.name"]
+				flag.ValueType = "object"
+				record.Flags[flag.ID] = flag
+				manifest.Commands[record.ID] = record
+			},
+		},
+		{
+			name: "incompatible inherited binding",
+			mutate: func(manifest *climanifest.Manifest) {
+				record := manifest.Commands["you.submit"]
+				flag := record.Flags["you.submit.flag.server"]
+				flag.InheritedFromID = "you.flag.missing"
+				record.Flags[flag.ID] = flag
+				manifest.Commands[record.ID] = record
+			},
+		},
+		{
+			name: "unknown handler",
+			mutate: func(manifest *climanifest.Manifest) {
+				record := manifest.Commands["you.submit"]
+				record.Handler.ID = "you.submit.unknown.handler"
+				manifest.Commands[record.ID] = record
+			},
+		},
+		{
+			name: "missing handler",
+			mutate: func(manifest *climanifest.Manifest) {
+				record := manifest.Commands["you.submit"]
+				record.Handler = nil
+				manifest.Commands[record.ID] = record
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			handlerCalls := 0
+			handler := func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
+				handlerCalls++
+				return nil
+			}
+			manifest := submitConstructorManifest(t)
+			test.mutate(&manifest)
+			_, err := climanifestcobra.NewSubmitFamilyCommandFromManifest(
+				manifest,
+				mustSubmitHandlerRegistry(t, commandregistry.SubmitHandlers{
+					Submit: handler, SubmitBatch: handler,
+				}),
+			)
+			if err == nil {
+				t.Fatal("NewSubmitFamilyCommandFromManifest() error = nil, want rejection")
+			}
+			if handlerCalls != 0 {
+				t.Fatalf("handler calls = %d, want zero", handlerCalls)
+			}
+		})
+	}
+}
+
+func TestNewSubmitFamilyCommandRejectsMissingRegistry(t *testing.T) {
+	if _, err := climanifestcobra.NewSubmitFamilyCommandFromManifest(
+		submitConstructorManifest(t),
+		nil,
+	); err == nil {
+		t.Fatal("NewSubmitFamilyCommandFromManifest(nil registry) error = nil, want rejection")
+	}
+}
+
+func mustSubmitFamilyCommand(
+	t *testing.T,
+	handlers *commandregistry.SubmitHandlers,
+) (*cobra.Command, *commandregistry.SubmitRegistry) {
+	t.Helper()
+	selected := commandregistry.SubmitHandlers{
+		Submit: func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
+		SubmitBatch: func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
+			return nil
+		},
+	}
+	if handlers != nil {
+		selected = *handlers
+	}
+	handlerRegistry := mustSubmitHandlerRegistry(t, selected)
+	command, err := climanifestcobra.NewSubmitFamilyCommand(handlerRegistry)
+	if err != nil {
+		t.Fatalf("NewSubmitFamilyCommand() error = %v", err)
+	}
+	return command, handlerRegistry
+}
+
+func mustSubmitHandlerRegistry(
+	t *testing.T,
+	handlers commandregistry.SubmitHandlers,
+) *commandregistry.SubmitRegistry {
+	t.Helper()
+	handlerRegistry, err := commandregistry.NewSubmitRegistry(handlers)
+	if err != nil {
+		t.Fatalf("NewSubmitRegistry() error = %v", err)
+	}
+	return handlerRegistry
+}
+
+func submitConstructorManifest(t *testing.T) climanifest.Manifest {
+	t.Helper()
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		t.Fatalf("RunSubmitFamilyManifest() error = %v", err)
+	}
+	return climanifest.Manifest{
+		FormatVersion: manifest.FormatVersion,
+		RootPath:      manifest.RootPath,
+		Commands: map[string]climanifest.Command{
+			"you.submit":       manifest.Commands["you.submit"],
+			"you.submit.batch": manifest.Commands["you.submit.batch"],
+		},
+	}
+}
+
+func assertSubmitString(t *testing.T, inputs resolvedinput.Inputs, inputID, want string) {
+	t.Helper()
+	got, err := inputs.String(inputID)
+	if err != nil || got != want {
+		t.Fatalf("String(%q) = %q, error = %v, want %q", inputID, got, err, want)
+	}
+}
+
+func submitChildUses(commands []*cobra.Command) string {
+	uses := make([]string, len(commands))
+	for index, command := range commands {
+		uses[index] = command.Use
+	}
+	return strings.Join(uses, ", ")
 }

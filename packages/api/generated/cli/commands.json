@@ -11929,6 +11929,7 @@
             "completion": "none",
             "binding": "",
             "visibility": "visible",
+            "usage": "authored request name for the submitted work (required)",
             "lifecycle": {
               "formatVersion": "1.0.0",
               "itemId": "you.submit.flag.name",
@@ -11953,6 +11954,7 @@
             "completion": "none",
             "binding": "",
             "visibility": "visible",
+            "usage": "path to payload file (.json or .md) (required)",
             "lifecycle": {
               "formatVersion": "1.0.0",
               "itemId": "you.submit.flag.payload",
@@ -11977,6 +11979,7 @@
             "completion": "none",
             "binding": "",
             "visibility": "hidden",
+            "usage": "deprecated; use global --server instead",
             "lifecycle": {
               "formatVersion": "1.0.0",
               "itemId": "you.submit.flag.port",
@@ -12025,6 +12028,7 @@
             "completion": "none",
             "binding": "",
             "visibility": "visible",
+            "usage": "target one live factory session; omit to use the default compatibility session",
             "lifecycle": {
               "formatVersion": "1.0.0",
               "itemId": "you.submit.flag.session",
@@ -12073,6 +12077,7 @@
             "completion": "none",
             "binding": "",
             "visibility": "visible",
+            "usage": "work type name to submit to (required)",
             "lifecycle": {
               "formatVersion": "1.0.0",
               "itemId": "you.submit.flag.work-type-name",
@@ -12309,6 +12314,7 @@
             "completion": "none",
             "binding": "",
             "visibility": "visible",
+            "usage": "validate input and print a summary without sending HTTP",
             "lifecycle": {
               "formatVersion": "1.0.0",
               "itemId": "you.submit.batch.flag.dry-run",
@@ -12333,6 +12339,7 @@
             "completion": "none",
             "binding": "",
             "visibility": "visible",
+            "usage": "read batch JSON from path; use - to read stdin (wins over a positional path)",
             "lifecycle": {
               "formatVersion": "1.0.0",
               "itemId": "you.submit.batch.flag.file",
@@ -12381,6 +12388,7 @@
             "completion": "none",
             "binding": "",
             "visibility": "hidden",
+            "usage": "deprecated; use global --server instead",
             "lifecycle": {
               "formatVersion": "1.0.0",
               "itemId": "you.submit.batch.flag.port",
@@ -12429,6 +12437,7 @@
             "completion": "none",
             "binding": "",
             "visibility": "visible",
+            "usage": "target one live factory session; omit to use the default compatibility session",
             "lifecycle": {
               "formatVersion": "1.0.0",
               "itemId": "you.submit.batch.flag.session",

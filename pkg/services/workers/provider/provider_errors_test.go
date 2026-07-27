@@ -4,6 +4,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -658,6 +659,66 @@ func TestWorkFailureMetadataFromError_ProducesGeneralizedFailureMetadata(t *test
 	}
 	if metadata.Family != workerexecution.WorkFailureFamilyRetryable {
 		t.Fatalf("Family = %q, want %q", metadata.Family, workerexecution.WorkFailureFamilyRetryable)
+	}
+}
+
+func TestProviderFailureBoundaryHelpersPreserveSafeObservableBehavior(t *testing.T) {
+	t.Parallel()
+
+	if got := NormalizeProviderExecutionError(nil); got != nil {
+		t.Fatalf("NormalizeProviderExecutionError(nil) = %#v, want nil", got)
+	}
+	if got := NormalizeProviderExecutionError(errors.New("unclassified failure")); got != nil {
+		t.Fatalf("NormalizeProviderExecutionError(unclassified) = %#v, want nil", got)
+	}
+	deadlineErr := NormalizeProviderExecutionError(context.DeadlineExceeded)
+	if deadlineErr == nil || deadlineErr.Type != workerexecution.WorkFailureTypeTimeout {
+		t.Fatalf("NormalizeProviderExecutionError(deadline) = %#v, want timeout", deadlineErr)
+	}
+
+	if got := SafeProviderFailureDetail(nil); got != nil {
+		t.Fatalf("SafeProviderFailureDetail(nil) = %#v, want nil", got)
+	}
+	providerErr := NewProviderError(
+		workerexecution.WorkFailureTypeAuthFailure,
+		"Authentication failed.",
+		errors.New("secret native output"),
+	)
+	detail := SafeProviderFailureDetail(providerErr)
+	if detail == nil {
+		t.Fatal("SafeProviderFailureDetail(error) = nil, want public detail")
+	}
+	if detail.Reason != workerexecution.WorkFailureTypeAuthFailure || detail.Message != "Provider authentication failed." {
+		t.Fatalf("SafeProviderFailureDetail(error) = %#v, want stable auth detail", detail)
+	}
+	for _, unsafe := range []string{"Authentication failed.", "secret native output"} {
+		if strings.Contains(detail.Message, unsafe) {
+			t.Fatalf("SafeProviderFailureDetail(error) leaked %q: %#v", unsafe, detail)
+		}
+	}
+
+	if got := ClassifyProviderFailure(nil); got != (workerexecution.WorkFailureDecision{}) {
+		t.Fatalf("ClassifyProviderFailure(nil) = %#v, want zero decision", got)
+	}
+	if got := WorkFailureMetadataFromError(nil); got != nil {
+		t.Fatalf("WorkFailureMetadataFromError(nil) = %#v, want nil", got)
+	}
+}
+
+func TestProviderCompatibilityHelpersReportCapabilitiesAndStopTokens(t *testing.T) {
+	t.Parallel()
+
+	runner := NewInferenceProgressPublishingCommandRunner(nil, logging.NoopLogger{})
+	streaming, ok := runner.(interface{ SupportsResponseStreaming() bool })
+	if !ok || !streaming.SupportsResponseStreaming() {
+		t.Fatalf("progress runner = %T, want streaming-capable runner", runner)
+	}
+
+	if !ContainsStopToken("work <promise>COMPLETE</promise>", "<promise>COMPLETE</promise>") {
+		t.Fatal("ContainsStopToken() = false, want exact token match")
+	}
+	if ContainsStopToken("work COMPLETE", "") {
+		t.Fatal("ContainsStopToken() = true for empty token")
 	}
 }
 

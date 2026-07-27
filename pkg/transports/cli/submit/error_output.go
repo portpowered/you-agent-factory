@@ -8,38 +8,93 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-const submitErrorBodyPreviewLimit = 200
+const submitErrorBodyReadLimit = 64 << 10
+
+// SubmissionHTTPError is the safe typed failure returned for a non-201 submit
+// response. Arbitrary server messages are deliberately excluded because they
+// may echo submitted payloads or credentials.
+type SubmissionHTTPError struct {
+	StatusCode int
+	Code       factoryapi.ErrorResponseCode
+	Family     factoryapi.ErrorFamily
+	operation  string
+}
+
+func (e *SubmissionHTTPError) Error() string {
+	details := make([]string, 0, 2)
+	if e.Code != "" {
+		details = append(details, "code="+string(e.Code))
+	}
+	if e.Family != "" {
+		details = append(details, "family="+string(e.Family))
+	}
+	operation := e.operation
+	if operation == "" {
+		operation = "submission"
+	}
+	if len(details) == 0 {
+		return fmt.Sprintf("%s failed (%d)", operation, e.StatusCode)
+	}
+	return fmt.Sprintf("%s failed (%d): %s", operation, e.StatusCode, strings.Join(details, " "))
+}
 
 func submitFailureError(statusCode int, body []byte) error {
-	summary := submitFailureSummary(statusCode, body)
-	workID := submitErrorWorkID(body)
-	if workID == "" {
-		return fmt.Errorf("%s", summary)
-	}
-	return fmt.Errorf("%s workId=%s", summary, workID)
+	return submissionFailureError("submission", statusCode, body)
 }
 
-func submitFailureSummary(statusCode int, body []byte) string {
-	var errResp factoryapi.ErrorResponse
-	if json.Unmarshal(body, &errResp) == nil && strings.TrimSpace(errResp.Message) != "" {
-		return fmt.Sprintf("submission failed (%d): %s", statusCode, strings.TrimSpace(errResp.Message))
+func submissionFailureError(operation string, statusCode int, body []byte) error {
+	var response struct {
+		Code   factoryapi.ErrorResponseCode `json:"code"`
+		Family factoryapi.ErrorFamily       `json:"family"`
 	}
-	preview := strings.TrimSpace(string(body))
-	if preview == "" {
-		return fmt.Sprintf("submission failed (%d)", statusCode)
+	_ = json.Unmarshal(body, &response)
+	return &SubmissionHTTPError{
+		StatusCode: statusCode,
+		Code:       safeSubmitErrorCode(response.Code),
+		Family:     safeSubmitErrorFamily(response.Family),
+		operation:  operation,
 	}
-	if len(preview) > submitErrorBodyPreviewLimit {
-		preview = preview[:submitErrorBodyPreviewLimit] + "..."
-	}
-	return fmt.Sprintf("submission failed (%d): %s", statusCode, preview)
 }
 
-func submitErrorWorkID(body []byte) string {
-	var partial struct {
-		WorkID string `json:"workId"`
+func safeSubmitErrorFamily(value factoryapi.ErrorFamily) factoryapi.ErrorFamily {
+	allowed := []factoryapi.ErrorFamily{
+		factoryapi.ErrorFamilyBadRequest,
+		factoryapi.ErrorFamilyConflict,
+		factoryapi.ErrorFamilyGone,
+		factoryapi.ErrorFamilyInternalServerError,
+		factoryapi.ErrorFamilyNotFound,
 	}
-	if json.Unmarshal(body, &partial) != nil {
-		return ""
+	for _, candidate := range allowed {
+		if value == candidate {
+			return value
+		}
 	}
-	return strings.TrimSpace(partial.WorkID)
+	return ""
+}
+
+func safeSubmitErrorCode(value factoryapi.ErrorResponseCode) factoryapi.ErrorResponseCode {
+	allowed := []factoryapi.ErrorResponseCode{
+		factoryapi.ErrorResponseCodeBADREQUEST,
+		factoryapi.ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT,
+		factoryapi.ErrorResponseCodeFACTORYALREADYEXISTS,
+		factoryapi.ErrorResponseCodeFACTORYNOTIDLE,
+		factoryapi.ErrorResponseCodeFACTORYSESSIONCONFIGLOADFAILED,
+		factoryapi.ErrorResponseCodeFACTORYSESSIONCONTROLREQUESTALREADYAPPLIED,
+		factoryapi.ErrorResponseCodeINTERNALERROR,
+		factoryapi.ErrorResponseCodeINVALIDFACTORY,
+		factoryapi.ErrorResponseCodeINVALIDFACTORYNAME,
+		factoryapi.ErrorResponseCodeINVALIDRESPONSEEVENTCURSOR,
+		factoryapi.ErrorResponseCodeINVALIDRESPONSEEVENTFILTER,
+		factoryapi.ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED,
+		factoryapi.ErrorResponseCodeNOTFOUND,
+		factoryapi.ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND,
+		factoryapi.ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED,
+		factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
+	}
+	for _, candidate := range allowed {
+		if value == candidate {
+			return value
+		}
+	}
+	return ""
 }

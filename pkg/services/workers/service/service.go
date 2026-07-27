@@ -337,7 +337,7 @@ func (s *Service) BuildModelInvocationExecutor(runtimeCfg interfaces.RuntimeConf
 		logging.NewZapLogger(s.logger, s.verbose),
 		s.invocationSkipPermissionsOverride, s.providerOverride,
 		nil, nil, nil, nil, s.clock, s.processEnvironment, s.currentWorkingDirectory,
-		s.runtimeRunnerDecorators(runtimeCfg, factoryCfg, nil, s.clock, s.providerOverride == nil),
+		s.runtimeRunnerDecorators(runtimeCfg, factoryCfg, nil, s.clock, s.providerOverride == nil, nil),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("construct model worker %q: %w", workerName, err)

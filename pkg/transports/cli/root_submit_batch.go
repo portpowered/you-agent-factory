@@ -5,104 +5,25 @@ import (
 	"io"
 	"strings"
 
-	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
-func executeSubmitCommand(
-	cmd *cobra.Command,
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	submitHandler func(submitcli.SubmitConfig) error,
-) error {
-	if submitHandler == nil {
-		return fmt.Errorf("submit service is required")
-	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
-		return err
-	}
-	name, err := commandInputValue[string](values, "you.submit.flag.name")
-	if err != nil {
-		return err
-	}
-	workTypeName, err := commandInputValue[string](values, "you.submit.flag.work-type-name")
-	if err != nil {
-		return err
-	}
-	payload, err := commandInputValue[string](values, "you.submit.flag.payload")
-	if err != nil {
-		return err
-	}
-	sessionID, err := commandInputValue[string](values, "you.submit.flag.session")
-	if err != nil {
-		return err
-	}
-	return submitHandler(submitcli.SubmitConfig{
-		Context: cmd.Context(), Server: globals.server, JSON: globals.json,
-		Name: name, WorkTypeName: workTypeName, Payload: payload, SessionID: sessionID,
-		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
-		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
-	})
-}
-
-func executeSubmitBatchCommand(
-	cmd *cobra.Command,
-	args []string,
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	fileSystem submitcli.BatchInputFileSystem,
-	batchHandler func(submitcli.BatchConfig) error,
-) error {
-	if batchHandler == nil {
-		return fmt.Errorf("submit batch service is required")
-	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
-		return err
-	}
-	fileFlag, err := commandInputValue[string](values, "you.submit.batch.flag.file")
-	if err != nil {
-		return err
-	}
-	dryRun, err := commandInputValue[bool](values, "you.submit.batch.flag.dry-run")
-	if err != nil {
-		return err
-	}
-	sessionID, err := commandInputValue[string](values, "you.submit.batch.flag.session")
-	if err != nil {
-		return err
-	}
-	return batchHandler(submitcli.BatchConfig{
-		Context: cmd.Context(), Server: globals.server, JSON: globals.json,
-		FileFlag: fileFlag, DryRun: dryRun, SessionID: sessionID,
-		Args: args, Stdin: cmd.InOrStdin(), FileSystem: fileSystem,
-		StdinIsTTY: func() bool { return startupcli.StdinIsTTY(cmd.Context()) },
-		Output:     cmd.OutOrStdout(), Verbose: diagnostics.verboseEnabled(),
-		Debug: diagnostics.debug,
-	})
-}
-
-func newRunSubmitFlagBindings() climanifestcobra.RunSubmitFlagBindings {
+func newRunServerFlagBindings() climanifestcobra.RunServerFlagBindings {
 	targets := map[string]any{}
 	stringInputs := []string{
 		"you.run.flag.work", "you.run.flag.dir", "you.run.flag.named",
 		"you.run.flag.factory", "you.run.flag.record", "you.run.flag.replay",
 		"you.run.flag.runtime-log-dir", "you.run.flag.runtime-metrics-dir",
 		"you.run.flag.with-mock-workers", "you.run.flag.output",
-		"you.submit.flag.name", "you.submit.flag.work-type-name",
-		"you.submit.flag.payload", "you.submit.flag.session",
-		"you.submit.batch.flag.file", "you.submit.batch.flag.session",
 	}
 	boolInputs := []string{
 		"you.run.flag.continuously", "you.run.flag.no-record",
 		"you.run.flag.runtime-log-compress", "you.run.flag.runtime-metrics-compress",
 		"you.run.flag.with-server", "you.run.flag.with-site", "you.run.flag.quiet",
-		"you.run.flag.skip-permissions", "you.submit.batch.flag.dry-run",
+		"you.run.flag.skip-permissions",
 	}
 	intInputs := []string{
 		"you.run.flag.runtime-log-max-size-mb", "you.run.flag.runtime-log-max-backups",
@@ -118,7 +39,7 @@ func newRunSubmitFlagBindings() climanifestcobra.RunSubmitFlagBindings {
 	for _, inputID := range intInputs {
 		targets[inputID] = scalarTarget(0)
 	}
-	return climanifestcobra.RunSubmitFlagBindings{LocalTargets: targets}
+	return climanifestcobra.RunServerFlagBindings{LocalTargets: targets}
 }
 
 func applyRunResolvedInputs(cfg runcli.RunConfig, values map[string]any) (runcli.RunConfig, error) {

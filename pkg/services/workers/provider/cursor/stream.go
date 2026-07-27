@@ -56,16 +56,24 @@ func (p *StreamParser) Flush() {
 	p.consumeCompleteLines(true)
 }
 
-func ParseInferenceStreamResult(provider string, stdout []byte) (*InferenceResult, *ParseFailure) {
+func parseInferenceStreamResult(
+	provider string,
+	stdout []byte,
+	requestedSession *workerexecution.ProviderSessionMetadata,
+) (*InferenceResult, *ParseFailure) {
 	parser := NewStreamParser(provider, nil)
 	parser.Consume(stdout)
 	parser.Flush()
 
 	var result *InferenceResult
 	var terminalFailure *ParseFailure
+	session := cloneCursorProviderSession(requestedSession)
 	lines := splitNonEmptyLines(stdout)
 	for _, line := range lines {
-		parsed, ok, failure := parseStreamResultLine(provider, line)
+		if observed := cursorProviderSessionFromStructuredLine(provider, line); observed != nil {
+			session = observed
+		}
+		parsed, ok, failure := parseStreamResultLine(provider, line, session)
 		if failure != nil {
 			result = nil
 			terminalFailure = failure
@@ -80,7 +88,9 @@ func ParseInferenceStreamResult(provider string, stdout []byte) (*InferenceResul
 		return nil, terminalFailure
 	}
 	if result == nil {
-		return nil, resultParseFailure(provider, "cursor stream-json output missing terminal result event", nil)
+		return nil, resultParseFailureWithSession(
+			provider, "cursor stream-json output missing terminal result event", nil, session,
+		)
 	}
 	return result, nil
 }
@@ -200,7 +210,11 @@ func (p *StreamParser) emitResultResponse(resultText string, session *workerexec
 	p.emit(StreamFragmentKindProgress, "Cursor result completed", session)
 }
 
-func parseStreamResultLine(provider string, line string) (*InferenceResult, bool, *ParseFailure) {
+func parseStreamResultLine(
+	provider string,
+	line string,
+	requestedSession *workerexecution.ProviderSessionMetadata,
+) (*InferenceResult, bool, *ParseFailure) {
 	var event map[string]any
 	if err := json.Unmarshal([]byte(line), &event); err != nil {
 		return nil, false, nil
@@ -219,22 +233,78 @@ func parseStreamResultLine(provider string, line string) (*InferenceResult, bool
 		return nil, false, resultParseFailure(provider, fmt.Sprintf("cursor stream-json result event was invalid JSON: %v", err), err)
 	}
 	if payload.Subtype != ResultSubtypeSuccess {
-		return nil, false, resultErrorSubtype(provider, payload)
+		return nil, false, resultErrorSubtypeWithSession(provider, payload, requestedSession)
 	}
 	if payload.IsError {
-		return nil, false, resultErrorSubtype(provider, payload)
+		return nil, false, resultErrorSubtypeWithSession(provider, payload, requestedSession)
 	}
 
 	session := canonicalProviderSession(provider, payload.SessionID)
 	if session == nil {
-		return nil, false, resultParseFailure(provider, "cursor stream-json success result is missing or invalid session_id", nil)
+		session = cloneCursorProviderSession(requestedSession)
+	}
+	if session == nil {
+		return nil, false, resultParseFailure(
+			provider, "cursor stream-json success result is missing or invalid session_id", nil,
+		)
 	}
 
 	return &InferenceResult{
-		Content:          payload.Result,
+		Content:          safeCursorPublishedText(payload.Result),
 		ProviderSession:  session,
 		ResponseMetadata: responseMetadataFromPayload(payload),
 	}, true, nil
+}
+
+func cursorProviderSessionFromStructuredLine(
+	provider string,
+	line string,
+) *workerexecution.ProviderSessionMetadata {
+	var record cursorStreamRecord
+	if json.Unmarshal([]byte(line), &record) != nil {
+		return nil
+	}
+	if !cursorStructuredRecordCarriesSession(record) {
+		return nil
+	}
+	return canonicalProviderSession(provider, record.SessionID)
+}
+
+func cursorStructuredRecordCarriesSession(record cursorStreamRecord) bool {
+	switch strings.TrimSpace(record.Type) {
+	case "system":
+		return strings.TrimSpace(record.Subtype) == "init"
+	case "assistant":
+		return acceptedCursorAssistantRecord(record)
+	case "tool_call":
+		return acceptedCursorToolRecord(record)
+	case ResultTypeResult:
+		return true
+	default:
+		return false
+	}
+}
+
+func acceptedCursorAssistantRecord(record cursorStreamRecord) bool {
+	if record.TimestampMS == nil || strings.TrimSpace(record.ModelCallID) != "" {
+		return false
+	}
+	var message cursorAssistantMessage
+	return json.Unmarshal(record.Message, &message) == nil &&
+		cursorAssistantText(message.Content) != ""
+}
+
+func acceptedCursorToolRecord(record cursorStreamRecord) bool {
+	if strings.TrimSpace(record.CallID) == "" {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(record.Subtype)) {
+	case "started", "completed", "failed", "canceled", "cancelled":
+	default:
+		return false
+	}
+	_, _, _, malformed := decodeCursorToolDetails(record.ToolCall)
+	return !malformed
 }
 
 func splitNonEmptyLines(stdout []byte) []string {
@@ -299,11 +369,8 @@ func streamToolCallName(event map[string]any) string {
 }
 
 func streamResultDiagnostic(subtype, resultText string) string {
-	message := fmt.Sprintf("Cursor result %s", subtype)
-	if strings.TrimSpace(resultText) == "" {
-		return message
-	}
-	return message + ": " + boundedTrimmedText(resultText, PublishedDiagnosticLimit)
+	reason := classifyTerminalFailure(subtype, resultText)
+	return "Cursor reported a failed result: " + cursorFailureGuidance(reason)
 }
 
 func stringField(values map[string]any, key string) string {

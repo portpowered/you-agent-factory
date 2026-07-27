@@ -70,6 +70,13 @@ func TestBuiltInRegistrationsBuildAllSelectableBundledProviders(t *testing.T) {
 	if cursor.Identity() != "cursor" {
 		t.Fatalf("Lookup(cursor alias) identity = %q, want cursor", cursor.Identity())
 	}
+	integration, err := registry.Integration("agent")
+	if err != nil {
+		t.Fatalf("Integration(cursor alias) error = %v", err)
+	}
+	if integration.Identity() != "cursor" {
+		t.Fatalf("Integration(cursor alias) identity = %q, want cursor", integration.Identity())
+	}
 }
 
 func TestNewAcceptsDetachedSchemaValidExternalManifest(t *testing.T) {

@@ -79,6 +79,7 @@ func (s *Service) BuildRuntimeExecutors(
 		modelRecorder,
 		now,
 		providerOverride == nil,
+		inferenceProgressPublisher,
 	)
 	executors := make(map[string]workers.WorkerExecutor, len(factoryConfig.Workers)+len(factoryConfig.Workstations))
 	for _, configured := range factoryConfig.Workers {
@@ -113,7 +114,14 @@ func (s *Service) BuildRuntimeExecutors(
 	return executors, nil
 }
 
-func (s *Service) runtimeRunnerDecorators(runtimeCfg interfaces.RuntimeConfigLookup, factoryCfg *interfaces.FactoryConfig, recorder workers.ModelEventRecorder, now func() time.Time, useRegistryCapabilities bool) []workerconstruction.RunnerDecorator {
+func (s *Service) runtimeRunnerDecorators(
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	factoryCfg *interfaces.FactoryConfig,
+	recorder workers.ModelEventRecorder,
+	now func() time.Time,
+	useRegistryCapabilities bool,
+	progressPublisher workers.ProgressPublisher,
+) []workerconstruction.RunnerDecorator {
 	decorators := make([]workerconstruction.RunnerDecorator, 0, 4)
 	if useRegistryCapabilities && s.providerRegistry != nil {
 		decorators = append(decorators, func(inner workers.Runner, _ *interfaces.FactoryWorkerConfig) workers.Runner {
@@ -125,6 +133,7 @@ func (s *Service) runtimeRunnerDecorators(runtimeCfg interfaces.RuntimeConfigLoo
 					next:      inner,
 					conductor: s.invocationConductor,
 					providers: s.providerRegistry,
+					publish:   progressPublisher,
 				}
 			})
 		}

@@ -14,6 +14,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -143,6 +144,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		runtimeTempFile,
 		zap.NewNop(),
 		time.Now,
+		platformrandom.CryptoSource{},
 		edges.ModelPullMetricsRecorder,
 		factorysessionwire.ModelHostDiagnosticLogger(zap.NewNop()),
 		factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder),

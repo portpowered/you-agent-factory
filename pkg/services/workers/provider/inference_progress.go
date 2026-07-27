@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 
@@ -17,7 +16,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
 	agyadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy"
 	codexprogress "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex/progress"
-	cursorprogress "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor/progress"
 )
 
 const (
@@ -110,15 +108,6 @@ func FailedFragment(dispatchID string, providerSession *workerexecution.Provider
 		Payload:            payload,
 		ProviderSessionRef: workerexecution.CloneProviderSessionMetadata(providerSession),
 	}
-}
-
-// StructuredResponseEvent carries one provider-neutral draft to the
-// session-owned response-event publisher without converting it to a legacy
-// response or progress fragment.
-func StructuredResponseEvent(draft factoryresponseevents.Draft) InferenceProgressFragment {
-	cloned := draft
-	cloned.Payload = append(json.RawMessage(nil), draft.Payload...)
-	return CanonicalDraftFragment(draft.DispatchID, cloned)
 }
 
 // InferenceProgressPublishingCommandRunner publishes internal response-stream
@@ -268,9 +257,6 @@ type progressStreamObserver interface {
 }
 
 func progressStreamIdentity(command string) adapter.Identity {
-	if cursorprogress.IsCommand(command) {
-		return adapter.Identity(modelprovider.ProviderCursor)
-	}
 	if codexprogress.IsCommand(command) {
 		return adapter.Identity(modelprovider.ProviderCodex)
 	}
@@ -282,14 +268,7 @@ func newProgressStreamObserver(
 	publisher InferenceProgressPublisher,
 	logger logging.Logger,
 ) progressStreamObserver {
-	dispatchID := strings.TrimSpace(req.DispatchID)
 	switch progressStreamIdentity(req.Command) {
-	case adapter.Identity(modelprovider.ProviderCursor):
-		return &cursorProgressObserver{
-			stream: cursorprogress.NewResponseEventStream(dispatchID, func(fragment cursorprogress.ProgressFragment) {
-				publisher(inferenceProgressFragmentFromCursor(fragment))
-			}, logger),
-		}
 	case adapter.Identity(modelprovider.ProviderCodex):
 		return &codexProgressObserver{
 			stream: codexprogress.NewProgressStream(req, func(fragment codexprogress.ProgressFragment) {
@@ -299,19 +278,6 @@ func newProgressStreamObserver(
 	default:
 		return nil
 	}
-}
-
-type cursorProgressObserver struct {
-	stream *cursorprogress.ResponseEventStream
-}
-
-func (o *cursorProgressObserver) observe(ctx context.Context, stream string, chunk []byte) bool {
-	o.stream.Observe(ctx, stream, chunk)
-	return true
-}
-
-func (o *cursorProgressObserver) flush(ctx context.Context, result CommandResult, err error) {
-	o.stream.Flush(ctx, cursorprogress.FlushReason(ctx, result.ExitCode, err))
 }
 
 type codexProgressObserver struct {
@@ -324,18 +290,6 @@ func (o *codexProgressObserver) observe(_ context.Context, stream string, chunk 
 
 func (o *codexProgressObserver) flush(_ context.Context, _ CommandResult, _ error) {
 	o.stream.Flush()
-}
-
-func inferenceProgressFragmentFromCursor(fragment cursorprogress.ProgressFragment) InferenceProgressFragment {
-	if fragment.HasCanonicalDraft {
-		return StructuredResponseEvent(fragment.CanonicalDraft)
-	}
-	return InferenceProgressFragment{
-		DispatchID:        fragment.DispatchID,
-		Kind:              fragment.Kind,
-		Payload:           fragment.Payload,
-		ExternalEventType: fragment.ExternalEventType,
-	}
 }
 
 func inferenceProgressFragmentFromCodex(fragment codexprogress.ProgressFragment) InferenceProgressFragment {

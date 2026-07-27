@@ -215,6 +215,9 @@
     "pkg/services/models/internal/local",
     "pkg/services/models/internal/managedruntime",
     "pkg/services/models/internal/service",
+    "pkg/services/models/internal/services/catalog",
+    "pkg/services/models/internal/services/catalog/internal/service",
+    "pkg/services/models/internal/services/catalog/wire",
     "pkg/services/models/internal/services/runtime_scopes",
     "pkg/services/models/internal/services/runtime_scopes/internal/service",
     "pkg/services/models/internal/services/runtime_scopes/wire",
@@ -280,7 +283,6 @@
     "pkg/services/workers/provider/commandenv",
     "pkg/services/workers/provider/conductor",
     "pkg/services/workers/provider/cursor",
-    "pkg/services/workers/provider/cursor/progress",
     "pkg/services/workers/provider/functionaltests",
     "pkg/services/workers/provider/gemini",
     "pkg/services/workers/provider/inferencecontract",
@@ -1244,6 +1246,21 @@
       "destination": "models"
     },
     {
+      "packagePath": "pkg/services/models/internal/services/catalog",
+      "disposition": "retain",
+      "destination": "models/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/catalog/internal/service",
+      "disposition": "retain",
+      "destination": "models/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/catalog/wire",
+      "disposition": "retain",
+      "destination": "models/internal/services/catalog"
+    },
+    {
       "packagePath": "pkg/services/models/internal/services/runtime_scopes",
       "disposition": "retain",
       "destination": "models/internal/services/runtime_scopes"
@@ -1565,11 +1582,6 @@
     },
     {
       "packagePath": "pkg/services/workers/provider/cursor",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/workers/provider/cursor/progress",
       "disposition": "move",
       "destination": "providers/internal/services/execution"
     },

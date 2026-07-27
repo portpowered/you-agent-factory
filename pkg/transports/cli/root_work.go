@@ -195,8 +195,8 @@ func NewRootCommandFromSubcommands(root *cobra.Command, subcommands RootSubcomma
 }
 
 // b12ProductionFamilies is the one shared production-root fan-in for the
-// session, workflow/MCP, and run/submit migrations. Each field is constructed
-// once through its family-local generated/legacy cutover seam.
+// session, workflow/MCP, run/server, and submit migrations. Each field is
+// constructed once through its family-local generated seam.
 type b12ProductionFamilies struct {
 	MCP    *cobra.Command
 	Run    *cobra.Command
@@ -210,16 +210,33 @@ func newB12ProductionFamilies(
 	operatorDefaults *cliOperatorDefaultsOptions,
 	options CommandFactory,
 ) (b12ProductionFamilies, error) {
-	runSubmit := productionRunSubmitCommands(globals, diagnostics, operatorDefaults, options)
+	runServer := productionRunServerCommands(globals, diagnostics, operatorDefaults, options)
+	submitRegistry, err := commandregistry.NewSubmitRegistry(commandregistry.SubmitHandlers{
+		Submit: commandregistry.UnarySubmitHandler(options.SubmitWork),
+		SubmitBatch: commandregistry.BatchSubmitHandler(
+			options.SubmitBatch,
+			commandregistry.BatchSubmitEffects{
+				FileSystem: options.batchInputFileSystem,
+				StdinIsTTY: startupcli.StdinIsTTY,
+			},
+		),
+	})
+	if err != nil {
+		return b12ProductionFamilies{}, err
+	}
+	submitCommand, err := climanifestcobra.NewSubmitFamilyCommand(submitRegistry)
+	if err != nil {
+		return b12ProductionFamilies{}, err
+	}
 	mcpCommand, err := newMCPCommand(options)
 	if err != nil {
 		return b12ProductionFamilies{}, err
 	}
 	return b12ProductionFamilies{
 		MCP:    mcpCommand,
-		Run:    runSubmit.Run,
-		Server: runSubmit.Server,
-		Submit: runSubmit.Submit,
+		Run:    runServer.Run,
+		Server: runServer.Server,
+		Submit: submitCommand,
 	}, nil
 }
 
@@ -246,51 +263,50 @@ func productionRootSubcommands(
 	}
 }
 
-type runSubmitProductionCommands struct {
+type runServerProductionCommands struct {
 	Run    *cobra.Command
 	Server *cobra.Command
-	Submit *cobra.Command
 }
 
-func productionRunSubmitCommands(
+func productionRunServerCommands(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	operatorDefaults *cliOperatorDefaultsOptions,
 	options CommandFactory,
-) runSubmitProductionCommands {
-	commands, err := buildRunSubmitProductionCommands(
+) runServerProductionCommands {
+	commands, err := buildRunServerProductionCommands(
 		globals, diagnostics, operatorDefaults, options,
 	)
 	if err != nil {
-		panic(fmt.Sprintf("build run/submit family commands: %v", err))
+		panic(fmt.Sprintf("build run/server family commands: %v", err))
 	}
 	return commands
 }
 
-func buildRunSubmitProductionCommands(
+func buildRunServerProductionCommands(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	operatorDefaults *cliOperatorDefaultsOptions,
 	options CommandFactory,
-) (runSubmitProductionCommands, error) {
-	registry, bindings, err := newRunSubmitHandlerRegistry(
+) (runServerProductionCommands, error) {
+	registry, bindings, err := newRunServerHandlerRegistry(
 		globals, diagnostics, operatorDefaults, options,
 	)
 	if err != nil {
-		return runSubmitProductionCommands{}, err
+		return runServerProductionCommands{}, err
 	}
-	components, err := climanifestcobra.NewRunSubmitFamilyComponents(registry, bindings)
+	components, err := climanifestcobra.NewRunServerFamilyComponents(registry, bindings)
 	if err != nil {
-		return runSubmitProductionCommands{}, err
+		return runServerProductionCommands{}, err
 	}
 	if err := registerSelectedFactoryNameCompletion(components.Run, options); err != nil {
-		return runSubmitProductionCommands{}, err
+		return runServerProductionCommands{}, err
 	}
 	if err := registerSelectedFactorySignatureCompletion(components.Run, options); err != nil {
-		return runSubmitProductionCommands{}, err
+		return runServerProductionCommands{}, err
 	}
-	return runSubmitProductionCommands{
-		Run: components.Run, Server: components.Server, Submit: components.Submit,
+	return runServerProductionCommands{
+		Run: components.Run, Server: components.Server,
 	}, nil
 }
 
@@ -518,13 +534,13 @@ func writeRunCommandHelp(cmd *cobra.Command, cfg *runcli.RunConfig, rootOptions 
 	return cmd.Help()
 }
 
-func newRunSubmitHandlerRegistry(
+func newRunServerHandlerRegistry(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	operatorDefaults *cliOperatorDefaultsOptions,
 	rootOptions CommandFactory,
-) (*commandregistry.Registry, climanifestcobra.RunSubmitFlagBindings, error) {
-	registry, err := commandregistry.NewRunSubmitRegistry(commandregistry.RunSubmitHandlers{
+) (*commandregistry.Registry, climanifestcobra.RunServerFlagBindings, error) {
+	registry, err := commandregistry.NewRunServerRegistry(commandregistry.RunServerHandlers{
 		Run: commandregistry.CommandHandlers{
 			PreRunE: rejectDeprecatedPortFlag,
 			RunE: func(cmd *cobra.Command, args []string) error {
@@ -541,26 +557,11 @@ func newRunSubmitHandlerRegistry(
 				)
 			},
 		},
-		Submit: commandregistry.CommandHandlers{
-			PreRunE: rejectDeprecatedPortFlag,
-			RunE: func(cmd *cobra.Command, _ []string) error {
-				return executeSubmitCommand(cmd, globals, diagnostics, rootOptions.SubmitWork)
-			},
-		},
-		SubmitBatch: commandregistry.CommandHandlers{
-			PreRunE: rejectDeprecatedPortFlag,
-			RunE: func(cmd *cobra.Command, args []string) error {
-				return executeSubmitBatchCommand(
-					cmd, args, globals, diagnostics,
-					rootOptions.batchInputFileSystem, rootOptions.SubmitBatch,
-				)
-			},
-		},
 	})
 	if err != nil {
-		return nil, climanifestcobra.RunSubmitFlagBindings{}, err
+		return nil, climanifestcobra.RunServerFlagBindings{}, err
 	}
-	return registry, newRunSubmitFlagBindings(), nil
+	return registry, newRunServerFlagBindings(), nil
 }
 
 func productionWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, injected ...CommandFactory) *cobra.Command {

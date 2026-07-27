@@ -65,7 +65,9 @@ func provideProviderRegistry(edges serviceedges.Edges) (*providerregistry.Regist
 		return nil, err
 	}
 	builtIns, err := providerregistry.BuiltInRegistrations(providerregistry.BuiltInDependencies{
-		CommandRunner: commandRunner,
+		CommandRunner:   commandRunner,
+		OperatingSystem: string(resolveWorkersOperatingSystem(edges)),
+		TemporaryFiles:  provideWorkersProviderTemporaryFileSystem(edges),
 	})
 	if err != nil {
 		return nil, err
@@ -78,6 +80,13 @@ func provideProviderRegistry(edges serviceedges.Edges) (*providerregistry.Regist
 		)
 	}
 	return providerregistry.New(registrations...)
+}
+
+func resolveWorkersOperatingSystem(edges serviceedges.Edges) workers.OperatingSystem {
+	if edges.WorkersOperatingSystem != "" {
+		return edges.WorkersOperatingSystem
+	}
+	return workers.OperatingSystem(runtime.GOOS)
 }
 
 // provideWorkersProviderCommandRunner resolves the shared provider CLI runner
@@ -643,10 +652,7 @@ func provideWorkersRuntimeFactory(
 	if executableFiles == nil {
 		executableFiles = platformfilesystem.Local{}
 	}
-	operatingSystem := edges.WorkersOperatingSystem
-	if operatingSystem == "" {
-		operatingSystem = workers.OperatingSystem(runtime.GOOS)
-	}
+	operatingSystem := resolveWorkersOperatingSystem(edges)
 	worktreeFileSystem := edges.WorkersWorktreeFileSystem
 	if worktreeFileSystem == nil {
 		worktreeFileSystem = platformfilesystem.Local{}
@@ -839,10 +845,7 @@ func provideWorkerInvocationFactory(edges serviceedges.Edges) factorysessionwire
 	if executableFiles == nil {
 		executableFiles = platformfilesystem.Local{}
 	}
-	operatingSystem := edges.WorkersOperatingSystem
-	if operatingSystem == "" {
-		operatingSystem = workers.OperatingSystem(runtime.GOOS)
-	}
+	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
 	return func(runner workers.CommandRunner, allocator agypty.PTYAllocator) (workers.InvocationExecutor, error) {
 		return workersservice.NewInvocation(

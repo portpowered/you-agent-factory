@@ -2,10 +2,7 @@ package cursor
 
 import (
 	"encoding/json"
-	"fmt"
-	"regexp"
 	"strings"
-	"unicode"
 
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 
@@ -23,8 +20,6 @@ const (
 	cursorCommandLineTooLongMessage = "Cursor could not start because the rendered command exceeded the operating system command-line limit."
 	cursorUnknownFailureMessage     = "Cursor reported an unsuccessful result."
 )
-
-var unsafeCursorFailureTextPattern = regexp.MustCompile(`(?i)(authorization\s*:|bearer\s+\S+|api[_ -]?key\s*[:=]\s*\S+|password\s*[:=]|secret\s*[:=]|token\s*[:=]|private prompt|user prompt|complete transcript|full transcript|cleanup noise|could not be terminated|failed to terminate process)`)
 
 // FailureInput contains the bounded subprocess surfaces used by Cursor's pure
 // failure parser. Runtime policy is intentionally not part of this contract.
@@ -50,25 +45,23 @@ func ParseProviderFailure(input FailureInput) FailureResult {
 	if payload, ok := terminalFailurePayload(input.Stdout); ok {
 		return failureResultFromPayload(payload)
 	}
-	if result, ok := failureResultFromText(input.Stderr, input.FallbackReason); ok {
+	if input.ExitCode == 124 {
+		return FailureResult{
+			Reason:  workerexecution.WorkFailureTypeTimeout,
+			Message: cursorTimeoutFailureMessage,
+		}
+	}
+	if result, ok := failureResultFromText(input.Stderr); ok {
 		return result
 	}
-	if result, ok := failureResultFromText(input.Stdout, input.FallbackReason); ok {
+	if result, ok := failureResultFromText(input.Stdout); ok {
 		return result
 	}
-	if message := normalizedSafeFailureText(input.FallbackMessage); message != "" {
-		return FailureResult{Reason: normalizedFallbackReason(input.FallbackReason), Message: message}
-	}
-	if reason := normalizedFallbackReason(input.FallbackReason); reason != workerexecution.WorkFailureTypeUnknown {
-		return FailureResult{Reason: reason, Message: cursorFailureGuidance(reason)}
-	}
-	return FailureResult{
-		Reason:  normalizedFallbackReason(input.FallbackReason),
-		Message: fmt.Sprintf("cursor exited with code %d", input.ExitCode),
-	}
+	reason := normalizedFallbackReason(input.FallbackReason)
+	return FailureResult{Reason: reason, Message: cursorFailureGuidance(reason)}
 }
 
-func failureResultFromText(output []byte, fallbackReason workerexecution.WorkFailureType) (FailureResult, bool) {
+func failureResultFromText(output []byte) (FailureResult, bool) {
 	candidates := cursorFailureTextCandidates(output)
 	if len(candidates) == 0 {
 		return FailureResult{}, false
@@ -83,37 +76,22 @@ func failureResultFromText(output []byte, fallbackReason workerexecution.WorkFai
 		workerexecution.WorkFailureTypeInternalServerError,
 	} {
 		for _, candidate := range candidates {
-			if classifyCursorFailureSignal(candidate.normalized) == reason {
-				message := candidate.safe
-				if message == "" {
-					message = cursorFailureGuidance(reason)
-				}
-				return FailureResult{Reason: reason, Message: message}, true
+			if classifyCursorFailureSignal(candidate) == reason {
+				return FailureResult{Reason: reason, Message: cursorFailureGuidance(reason)}, true
 			}
-		}
-	}
-
-	for _, candidate := range candidates {
-		if candidate.safe != "" {
-			return FailureResult{Reason: normalizedFallbackReason(fallbackReason), Message: candidate.safe}, true
 		}
 	}
 	return FailureResult{}, false
 }
 
-type cursorFailureTextCandidate struct {
-	normalized string
-	safe       string
-}
-
-func cursorFailureTextCandidates(output []byte) []cursorFailureTextCandidate {
+func cursorFailureTextCandidates(output []byte) []string {
 	seen := make(map[string]struct{})
-	candidates := make([]cursorFailureTextCandidate, 0)
+	candidates := make([]string, 0)
 	for _, rawLine := range splitNonEmptyLines(output) {
 		if isCursorStructuredRecord(rawLine) {
 			continue
 		}
-		normalized := normalizedCursorFailureText(rawLine)
+		normalized := strings.Join(strings.Fields(rawLine), " ")
 		if normalized == "" || isCursorCleanupNoise(normalized) {
 			continue
 		}
@@ -122,10 +100,7 @@ func cursorFailureTextCandidates(output []byte) []cursorFailureTextCandidate {
 			continue
 		}
 		seen[key] = struct{}{}
-		candidates = append(candidates, cursorFailureTextCandidate{
-			normalized: normalized,
-			safe:       normalizedSafeFailureText(normalized),
-		})
+		candidates = append(candidates, normalized)
 	}
 	return candidates
 }
@@ -185,13 +160,9 @@ func terminalFailurePayload(stdout []byte) (resultPayload, bool) {
 
 func failureResultFromPayload(payload resultPayload) FailureResult {
 	reason := classifyTerminalFailure(payload.Subtype, payload.Result)
-	message := normalizedSafeFailureText(payload.Result)
-	if message == "" {
-		message = cursorFailureGuidance(reason)
-	}
 	return FailureResult{
 		Reason:          reason,
-		Message:         message,
+		Message:         cursorFailureGuidance(reason),
 		ProviderSession: canonicalProviderSession(string(modelprovider.ProviderCursor), payload.SessionID),
 	}
 }
@@ -228,29 +199,6 @@ func containsCursorSignal(signal string, needles ...string) bool {
 		}
 	}
 	return false
-}
-
-func normalizedSafeFailureText(value string) string {
-	normalized := normalizedCursorFailureText(value)
-	if normalized == "" || unsafeCursorFailureTextPattern.MatchString(normalized) {
-		return ""
-	}
-	runes := []rune(normalized)
-	if len(runes) <= FailureMessageLimit {
-		return normalized
-	}
-	return string(runes[:FailureMessageLimit]) + "..."
-}
-
-func normalizedCursorFailureText(value string) string {
-	normalized := strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return ' '
-		}
-		return r
-	}, value)
-	normalized = strings.Join(strings.Fields(normalized), " ")
-	return normalized
 }
 
 func cursorFailureGuidance(reason workerexecution.WorkFailureType) string {

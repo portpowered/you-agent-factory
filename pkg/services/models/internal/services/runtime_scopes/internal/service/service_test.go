@@ -125,11 +125,11 @@ func TestCloseInvalidatesOnlyTheSelectedScope(t *testing.T) {
 	if err := service.Close(firstRef); err != nil {
 		t.Fatalf("Close first scope: %v", err)
 	}
-	if _, err := service.Resolve(firstRef); !errors.Is(err, runtimescopes.ErrScopeUnknown) {
-		t.Fatalf("Resolve closed scope error = %v, want ErrScopeUnknown", err)
+	if _, err := service.Resolve(firstRef); !errors.Is(err, runtimescopes.ErrScopeClosed) {
+		t.Fatalf("Resolve closed scope error = %v, want ErrScopeClosed", err)
 	}
-	if err := service.Close(firstRef); !errors.Is(err, runtimescopes.ErrScopeUnknown) {
-		t.Fatalf("Close closed scope error = %v, want ErrScopeUnknown", err)
+	if err := service.Close(firstRef); !errors.Is(err, runtimescopes.ErrScopeClosed) {
+		t.Fatalf("Close closed scope error = %v, want ErrScopeClosed", err)
 	}
 
 	resolved, err := service.Resolve(secondRef)
