@@ -21,9 +21,11 @@ const (
 	childClaudeLabel   = "child-claude"
 	childMockedLabel   = "child-mocked"
 	childPassthroughLabel = "child-passthrough"
+	unknownOverrideChildLabel = "child-unknown-override"
 
 	mockedChildPrompt      = "mocked child prompt"
 	passthroughChildPrompt = "passthrough child prompt"
+	unknownOverrideModelProvider = "Not_A_Provider"
 
 	perChildProviderModelWorkflow = `return (async function () {
   const codexChild = await agent.run({
@@ -51,6 +53,15 @@ const (
     label: "` + childPassthroughLabel + `",
   });
   return { mocked, passthrough };
+})();`
+
+	unknownWorkerOverrideWorkflow = `return (function () {
+  agent.run({
+    prompt: "use unknown worker provider override",
+    label: "` + unknownOverrideChildLabel + `",
+    modelProvider: "` + unknownOverrideModelProvider + `",
+  });
+  return { ok: true };
 })();`
 
 	mockWorkerAcceptedOutput = "mock worker accepted"
@@ -173,6 +184,50 @@ func TestJavaScriptMockWorkersReplaceOnlyNamedChildren(t *testing.T) {
 		assertPartialMockPassthroughProviderRequests(t, provider.Calls())
 		assertPartialMockPassthroughPrimaryResult(t, started.Result)
 	})
+}
+
+// TestJavaScriptUnknownWorkerOverrideFailsActionably proves configuring an
+// invalid per-child worker override on agent.run fails at the public JavaScript
+// boundary with a customer-readable diagnostic that identifies the bad override,
+// does not emit a successful child dispatch, and does not leak private runtime
+// internals as the primary failure signal.
+func TestJavaScriptUnknownWorkerOverrideFailsActionably(t *testing.T) {
+	t.Parallel()
+
+	dir := support.ScaffoldFactory(t, overridesFactoryConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
+
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		UseMockWorkers:            true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	started := startOverridesWorkflow(
+		t,
+		server.URL(),
+		"javascript-unknown-worker-override",
+		unknownWorkerOverrideWorkflow,
+	)
+	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("session status = %q, want FAILED", started.Status)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0 before override validation", runner.CallCount())
+	}
+
+	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
+		t,
+		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
+	)
+	if len(dispatches.Dispatches) != 0 {
+		t.Fatalf("dispatch count = %d, want 0 for invalid worker override", len(dispatches.Dispatches))
+	}
+
+	assertUnknownWorkerOverrideFailureRecord(t, server.URL(), started.SessionId, started.Result)
 }
 
 func partialNamedJavaScriptMockWorkersConfig() *workers.MockWorkersConfig {
@@ -393,6 +448,66 @@ func assertPartialMockPassthroughChildResult(
 	if strings.Contains(text, mockWorkerAcceptedOutput) {
 		t.Fatalf("child output text = %#v, want provider output not mock-worker accept text", output["text"])
 	}
+}
+
+func assertUnknownWorkerOverrideFailureRecord(
+	t *testing.T,
+	serverURL, sessionID string,
+	result *factoryapi.FactorySessionResult,
+) {
+	t.Helper()
+
+	if result == nil {
+		t.Fatal("result = nil, want failed Factory Session result")
+	}
+	if result.SessionStatus == nil ||
+		*result.SessionStatus != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("result sessionStatus = %#v, want FAILED", result.SessionStatus)
+	}
+	if result.ResultStatus != factoryapi.FactorySessionResultStatusUnavailable {
+		t.Fatalf("result status = %q, want UNAVAILABLE on invalid worker override", result.ResultStatus)
+	}
+	if result.PrimaryResult != nil {
+		t.Fatalf("primary result = %#v, want nil on invalid worker override", result.PrimaryResult)
+	}
+
+	session := readOverridesDurableSession(t, serverURL, sessionID)
+	if session.FailureDetail == nil || strings.TrimSpace(session.FailureDetail.Message) == "" {
+		t.Fatalf("session failureDetail = %#v, want actionable public failure record", session.FailureDetail)
+	}
+	message := session.FailureDetail.Message
+	if !strings.Contains(message, "unsupported effective modelProvider") {
+		t.Fatalf("session failure message = %#v, want unsupported modelProvider diagnostic", message)
+	}
+	if !strings.Contains(message, unknownOverrideModelProvider) {
+		t.Fatalf(
+			"session failure message = %#v, want override value %q",
+			message,
+			unknownOverrideModelProvider,
+		)
+	}
+	for _, leaked := range []string{"stack", "heap", "goja", "VM"} {
+		if strings.Contains(message, leaked) {
+			t.Fatalf("session failure message leaked non-customer detail %q: %q", leaked, message)
+		}
+	}
+}
+
+func readOverridesDurableSession(
+	t *testing.T,
+	serverURL, sessionID string,
+) factoryapi.FactorySessionDurableReadModel {
+	t.Helper()
+
+	response := support.GetJSON[factoryapi.FactorySessionGetResponse](
+		t,
+		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID,
+	)
+	session, err := response.AsFactorySessionDurableReadModel()
+	if err != nil {
+		t.Fatalf("decode durable session read model: %v", err)
+	}
+	return session
 }
 
 func overridesFactoryConfig() map[string]any {
