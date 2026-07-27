@@ -1,35 +1,44 @@
 package live_view_projection_test
 
 import (
+	"errors"
 	"testing"
 
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
-	liveviewprojectionwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/wire"
 )
 
-func TestWireConstructsSingularLiveViewProjectionService(t *testing.T) {
+func TestProjectionErrorMessageAndUnwrap(t *testing.T) {
 	t.Parallel()
 
-	svc, err := liveviewprojectionwire.NewService(nil, nil, nil, nil, nil)
-	if err == nil {
-		t.Fatal("wire.NewService() error = nil, want missing dependency failure")
+	cause := errors.New("underlying")
+	err := &liveviewprojection.ProjectionError{
+		Kind:    liveviewprojection.ProjectionErrorInvalidInput,
+		Message: "invalid subscribe input",
+		Cause:   cause,
 	}
-	if svc != nil {
-		t.Fatal("wire.NewService() returned service with missing dependencies")
+	if err.Error() != "invalid subscribe input" {
+		t.Fatalf("Error() = %q, want invalid subscribe input", err.Error())
+	}
+	if !errors.Is(err, cause) {
+		t.Fatalf("Unwrap() = %v, want %v", errors.Unwrap(err), cause)
 	}
 
-	svc, err = liveviewprojectionwire.NewService(
-		stubSource{},
-		projectionStub{},
-		fixedClock{},
-		stubSink{},
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("wire.NewService() error = %v", err)
+	kindOnly := &liveviewprojection.ProjectionError{Kind: liveviewprojection.ProjectionErrorSnapshotUnavailable}
+	if kindOnly.Error() != string(liveviewprojection.ProjectionErrorSnapshotUnavailable) {
+		t.Fatalf("Error() = %q, want kind fallback", kindOnly.Error())
 	}
-	if svc == nil {
-		t.Fatal("wire.NewService() returned nil")
+}
+
+func TestSinkFuncPresentsView(t *testing.T) {
+	t.Parallel()
+
+	var got liveviewprojection.View
+	sink := liveviewprojection.SinkFunc(func(view liveviewprojection.View) {
+		got = view
+	})
+	want := liveviewprojection.View{RetainedEventCount: 2}
+	sink.PresentFactoryView(want)
+	if got.RetainedEventCount != want.RetainedEventCount {
+		t.Fatalf("PresentFactoryView() retained count = %d, want %d", got.RetainedEventCount, want.RetainedEventCount)
 	}
-	var _ liveviewprojection.Service = svc
 }

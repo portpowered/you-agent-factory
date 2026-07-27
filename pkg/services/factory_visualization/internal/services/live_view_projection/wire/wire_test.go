@@ -1,7 +1,8 @@
-package live_view_projection_test
+package wire
 
 import (
 	"context"
+	"testing"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -66,3 +67,30 @@ func (stubSink) PresentFactoryView(liveviewprojection.View) {}
 type fixedClock struct{}
 
 func (fixedClock) Now() time.Time { return time.Unix(1, 0) }
+
+func TestNewServiceConstructsSingularLiveViewProjectionService(t *testing.T) {
+	t.Parallel()
+
+	svc, err := NewService(nil, nil, nil, nil, nil)
+	if err == nil {
+		t.Fatal("NewService() error = nil, want missing dependency failure")
+	}
+	if svc != nil {
+		t.Fatal("NewService() returned service with missing dependencies")
+	}
+
+	svc, err = NewService(
+		stubSource{},
+		projectionStub{},
+		fixedClock{},
+		stubSink{},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if svc == nil {
+		t.Fatal("NewService() returned nil")
+	}
+	var _ liveviewprojection.Service = svc
+}
