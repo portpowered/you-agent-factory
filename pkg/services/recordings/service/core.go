@@ -12,6 +12,8 @@ import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
+	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
+	artifactsexportwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/wire"
 	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
@@ -27,6 +29,7 @@ type combinedService struct {
 	recordings.Ledger
 	recordings.ProjectionService
 	recordinglifecycle.Service
+	artifactsExport artifactsexport.Service
 	replayService recordingsreplay.Service
 
 	appendMu    sync.Mutex
@@ -283,6 +286,7 @@ func NewService(
 		firstTargetPlanner(targets),
 		nil,
 		nil,
+		nil,
 	)
 }
 
@@ -303,6 +307,7 @@ func NewServiceWithLifecycleEffects(
 	targetPlanner recordings.LiveRecordingTargetPlanner,
 	writer recordings.RecordingSnapshotWriter,
 	tickers recordings.RecordingFlushTickerFactory,
+	publication artifactsexport.PortableArtifactPublication,
 	clocks ...recordings.RecordingClock,
 ) recordings.Service {
 	if ledger == nil || projection == nil {
@@ -314,12 +319,20 @@ func NewServiceWithLifecycleEffects(
 		tickers,
 		clocks...,
 	)
+	if publication == nil {
+		var err error
+		publication, err = NewPortableArtifactPublication()
+		if err != nil {
+			return nil
+		}
+	}
 	return &combinedService{
 		Ledger:            ledger,
 		ProjectionService: projection,
 		Service:           lifecycle,
-		replayService: replaywire.NewService(lifecycle, projection),
-		replayByKey: make(map[string]*factorydefinitions.ReplayArtifact),
+		artifactsExport:   artifactsexportwire.NewService(lifecycle, publication),
+		replayService:     replaywire.NewService(lifecycle, projection),
+		replayByKey:       make(map[string]*factorydefinitions.ReplayArtifact),
 	}
 }
 

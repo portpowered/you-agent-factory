@@ -1047,14 +1047,6 @@
       "name": "TestNormalizers_RejectEveryMissingRequiredScalarFact"
     },
     {
-      "file": "sessions/cli/resolved_session_family_test.go",
-      "name": "TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch"
-    },
-    {
-      "file": "sessions/cli/resolved_session_family_test.go",
-      "name": "TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition"
-    },
-    {
       "file": "smoke/cli_docs_smoke_test.go",
       "name": "TestDocsCommandSmoke_AuthoringFactoriesDescribesMinimalGoalRepeater"
     },
@@ -1080,27 +1072,11 @@
     },
     {
       "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIRejectsFactoryWithoutDefaultHandling"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
       "name": "TestFactoryPromptRun_RealCLIStdinOnlyCleanInvocationStdoutRemainsPipeable"
     },
     {
       "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIWritesPrimaryResultFromPositionalText"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
       "name": "TestFactoryPromptRun_RealCLIWritesPrimaryResultFromStdin"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestNamedFactoryRun_RealCLIResolvesGlobalFactoryFromUnrelatedWorkingDirectory"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestPackagedGoalRun_RealCLIWritesSummaryPrimaryResult"
     },
     {
       "file": "smoke/cli_named_deep_research_smoke_test.go",

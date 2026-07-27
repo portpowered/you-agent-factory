@@ -91,14 +91,14 @@ intentionally small enough to distribute across many agents.
   - `TestRunDuplicateKeyUsesDocumentedPrecedence` covers duplicate input.
   - `TestRunMalformedKeyValueFailsWithoutDispatch` covers missing key/value.
 
-- [ ] `tests/functional/transport/cli/parameters/json_values_test.go`
+- [x] `tests/functional/transport/cli/parameters/json_values_test.go`
   - `TestCLIJSONParameterPreservesNestedObjectAndArray` verifies typed payload
     mapping.
   - `TestCLIInvalidJSONParameterNamesTheParameter` verifies actionable error
     output.
   - `TestCLIJSONNullAndEmptyValuesRemainDistinct` prevents normalization loss.
 
-- [ ] `tests/functional/transport/cli/parameters/environment_precedence_test.go`
+- [x] `tests/functional/transport/cli/parameters/environment_precedence_test.go`
   - `TestCLIExplicitFlagOverridesEnvironmentDefault` verifies precedence.
   - `TestCLIEnvironmentOverridesGlobalConfig` verifies documented precedence.
   - `TestCLIUnsetEnvironmentFallsBackWithoutFabricatingValue` covers absence.
@@ -141,7 +141,7 @@ intentionally small enough to distribute across many agents.
 These files prove command wiring and exit behavior only. Domain depth lives
 under `work/`, `sessions/`, `factory/`, and `product/`.
 
-- [ ] `tests/functional/transport/cli/commands/run_wiring_test.go`
+- [x] `tests/functional/transport/cli/commands/run_wiring_test.go`
   - `TestCLIRunFactoryByPath` covers an authored Factory path.
   - `TestCLIRunNamedFactory` covers packaged/named Factory resolution.
   - `TestCLIRunInvalidFactoryReturnsValidationFailure` covers load failure.
@@ -234,12 +234,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Inference workers — shared contract
 
-- [ ] `tests/functional/workers/inference/selection_test.go`
+- [x] `tests/functional/workers/inference/selection_test.go`
   - `TestExplicitProviderAndModelReachSelectedProviderEdge` covers selection.
   - `TestWorkerProviderOverridesGlobalDefault` covers precedence.
   - `TestUnknownProviderFailsBeforeProcessStart` covers validation.
 
-- [ ] `tests/functional/workers/inference/flags_test.go`
+- [x] `tests/functional/workers/inference/flags_test.go`
   - `TestProviderPermissionWorktreeAndModelFlagsMapToCommand` covers shared
     command metadata.
   - `TestUnsupportedProviderFlagReturnsCapabilityError` covers mismatch.
@@ -280,7 +280,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestClaudeGoldenFullStreamTextSuccess` covers deltas and final snapshot.
   - `TestClaudeGoldenToolLifecycleAndSessionIdentity` covers tools/session.
 
-- [ ] `tests/functional/workers/inference/claude/golden_failure_test.go`
+- [x] `tests/functional/workers/inference/claude/golden_failure_test.go`
   - `TestClaudeGoldenStructuredFailure` covers normalized error metadata.
   - `TestClaudeGoldenTimeoutClosesResponseStream` covers terminal closure.
 
@@ -341,12 +341,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestInlineJavaScriptFactoryRunsFromCLI` covers an inline definition.
   - `TestInlineJavaScriptSyntaxErrorReturnsSourceLocation` covers load failure.
 
-- [ ] `tests/functional/orchestration/javascript/loading/file_javascript_test.go`
+- [x] `tests/functional/orchestration/javascript/loading/file_javascript_test.go`
   - `TestJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot` covers path
     resolution.
   - `TestJavaScriptFactoryMissingImportFailsActionably` covers load failure.
 
-- [ ] `tests/functional/orchestration/javascript/loading/named_factory_test.go`
+- [x] `tests/functional/orchestration/javascript/loading/named_factory_test.go`
   - `TestNamedJavaScriptFactoryRunsThroughStandardCLI` covers named resolution.
   - `TestNamedJavaScriptFactoryRunsThroughAPIInvocation` covers HTTP entry.
   - `TestNamedJavaScriptFactoryUsesSameFactorySessionControls` covers pause.
@@ -389,7 +389,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### JavaScript contracts, policy, and durability
 
-- [ ] `tests/functional/orchestration/javascript/contracts/input_mapping_test.go`
+- [x] `tests/functional/orchestration/javascript/contracts/input_mapping_test.go`
   - `TestJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs`
     covers typed request mapping.
   - `TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch` covers error.
@@ -694,6 +694,11 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCodexHistoricalInspectionContainmentRejectionThroughRootBuildProcess`.
   - `TestCodexHistoricalInspectionBoundedWalkThroughRootBuildProcess`.
   - `TestCodexHistoricalInspectionCancelledDiscoveryThroughRootBuildProcess`.
+
+- [x] `tests/functional/providers/cursor/historical_inspection_root_test.go`
+  - `TestCursorHistoricalInspectionThroughRootBuildProcess_ReturnsDeterministicNormalizedDetail`.
+  - `TestCursorHistoricalInspectionThroughRootBuildProcess_PropagatesMissingAndContainmentFailures`.
+  - `TestCursorHistoricalInspectionThroughRootBuildProcess_DegradesAdverseNativeDataSafely`.
 
 - [ ] `tests/functional/provider_sessions/details/codex_details_test.go`
   - `TestCodexProviderSessionDetailsLoadFromGoldenMetadata` covers API detail.

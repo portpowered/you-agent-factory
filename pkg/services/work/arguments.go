@@ -80,6 +80,7 @@ const (
 	typeHintDirectoryPath = "DIRECTORY_PATH"
 	typeHintNumberString  = "NUMBER_STRING"
 	typeHintBooleanString = "BOOLEAN_STRING"
+	typeHintJSON          = "JSON"
 )
 
 type ArgumentSourceKind string
@@ -676,6 +677,14 @@ func validateArgumentValue(def parameterDefinition, value string) error {
 			return &ArgumentError{
 				Code:      ArgumentErrorCodeStringValidationMismatch,
 				Message:   fmt.Sprintf("parameter %q value %s is not a valid NUMBER_STRING", def.name, argumentValueDiagnostic(def, value)),
+				Parameter: def.name,
+			}
+		}
+	case typeHintJSON:
+		if !json.Valid([]byte(value)) {
+			return &ArgumentError{
+				Code:      ArgumentErrorCodeStringValidationMismatch,
+				Message:   fmt.Sprintf("parameter %q value %s is not valid JSON", def.name, argumentValueDiagnostic(def, value)),
 				Parameter: def.name,
 			}
 		}

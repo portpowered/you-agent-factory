@@ -407,13 +407,27 @@ primary-result behavior.
   placeholder) and must register Integrations constructed inside Workers
   (for example `inferencecontract.ProgressingExternalIntegration`) rather
   than calling `inferencecontract.NewDiscovery` / `NewEventDraft` /
-  `NewResponse` from the functional package. Provider failure normalization
+  `NewResponse` from the functional package.   Provider failure normalization
   (non-zero exit, auth/rate-limit/timeout distinction, and public diagnostic
   redaction) belongs in
   `tests/functional/workers/inference/failure_normalization_test.go`; drive
   command-backed failures through `root.BuildProcess` with
   `serviceedges.Edges{ProviderCommandRunner: ...}` and assert on Work,
-  Factory Event, and Provider Session surfaces only. Script execution-environment
+  Factory Event, and Provider Session surfaces only. Provider and model
+  selection (explicit provider/model edge routing, worker provider precedence
+  over operator defaults, and unknown-provider fail-before-start validation)
+  belongs in `tests/functional/workers/inference/selection_test.go`; drive
+  proofs through `support.RunFactoryToCompletionWithEdgesAndObservations` or
+  `support.BuildProcess` with `serviceedges.Edges{ProviderRegistrations: ...}`
+  and assert on registered integration stats plus public Work outcomes only.
+  Provider command-flag mapping and unsupported-flag capability rejection
+  (skip-permissions policy, resolved worktree names, explicit model values, and
+  pre-start unsupported-capability failures such as workstation `outputSchema`
+  on Gemini) belongs in
+  `tests/functional/workers/inference/flags_test.go`; drive proofs through
+  `support.RunFactoryToCompletionWithEdgesAndObservations` with
+  `serviceedges.Edges{ProviderCommandRunner: ...}` and assert on provider-process
+  command args plus public Work outcomes only. Script execution-environment
   boundary proofs (declared env filtering, missing-executable public failure,
   resource-token template resolution, multi-input ordering, and worktree
   passthrough) belong in
