@@ -58,9 +58,13 @@ func (h *Host) Replace(req instancehost.ReplaceRequest) (factoryruntime.HostedHa
 		return nil, fmt.Errorf("publish replacement factory change: %w", err)
 	}
 
+	if err := h.commitActiveHandle(current, replacementHandle); err != nil {
+		_ = h.lifecycle.Stop(replacementHandle)
+		return nil, err
+	}
+
 	attempt.Commit()
 	committed = true
-	h.swapActiveHandle(current, replacementHandle)
 	return replacementHandle, nil
 }
 
@@ -75,14 +79,17 @@ func adaptSidecarStarter(
 	}
 }
 
-func (h *Host) swapActiveHandle(current, replacement *factoryhost.Handle) {
+func (h *Host) commitActiveHandle(current, replacement *factoryhost.Handle) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if current != nil && current.Bundle != nil {
-		if instanceID := current.Bundle.RuntimeInstanceID; instanceID != "" {
-			if registered, ok := h.handles[instanceID]; ok && registered == current {
-				delete(h.handles, instanceID)
+		instanceID := current.Bundle.RuntimeInstanceID
+		if instanceID != "" {
+			registered, ok := h.handles[instanceID]
+			if !ok || registered != current {
+				return factoryruntime.ErrNotRunning
 			}
+			delete(h.handles, instanceID)
 		}
 	}
 	if replacement != nil && replacement.Bundle != nil {
@@ -90,4 +97,5 @@ func (h *Host) swapActiveHandle(current, replacement *factoryhost.Handle) {
 			h.handles[instanceID] = replacement
 		}
 	}
+	return nil
 }

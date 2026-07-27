@@ -43,6 +43,16 @@ func (h *Host) Start(
 	}
 
 	h.mu.Lock()
+	if existing, ok := h.handles[instanceID]; ok && !existing.Completed() {
+		h.mu.Unlock()
+		if !handle.Completed() {
+			_ = h.lifecycle.Stop(handle)
+		}
+		return nil, fmt.Errorf(
+			"factory runtime instance %s already has an active hosted handle",
+			instanceID,
+		)
+	}
 	h.handles[instanceID] = handle
 	h.mu.Unlock()
 	return handle, nil
@@ -73,16 +83,23 @@ func bundleFromInstance(instance factoryruntime.HostedInstance) (*factoryhost.Bu
 }
 
 func (h *Host) removeHandle(handle *factoryhost.Handle) {
+	_ = h.clearRegisteredHandle(handle)
+}
+
+func (h *Host) clearRegisteredHandle(handle *factoryhost.Handle) bool {
 	if handle == nil || handle.Bundle == nil {
-		return
+		return false
 	}
 	instanceID := handle.Bundle.RuntimeInstanceID
 	if instanceID == "" {
-		return
+		return false
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if registered, ok := h.handles[instanceID]; ok && registered == handle {
-		delete(h.handles, instanceID)
+	registered, ok := h.handles[instanceID]
+	if !ok || registered != handle {
+		return false
 	}
+	delete(h.handles, instanceID)
+	return true
 }

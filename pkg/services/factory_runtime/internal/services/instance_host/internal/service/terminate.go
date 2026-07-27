@@ -12,9 +12,13 @@ func (h *Host) Stop(handle factoryruntime.HostedHandle) error {
 	if err != nil {
 		return err
 	}
-	stopErr := h.lifecycle.Stop(concrete)
-	h.removeHandle(concrete)
-	return stopErr
+	if !h.clearRegisteredHandle(concrete) {
+		if concrete.Completed() {
+			return factoryruntime.ErrAlreadyStopped
+		}
+		return factoryruntime.ErrNotRunning
+	}
+	return h.lifecycle.Stop(concrete)
 }
 
 func (h *Host) classifyStopHandle(handle factoryruntime.HostedHandle) (*factoryhost.Handle, error) {
