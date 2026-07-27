@@ -1,0 +1,5 @@
+{
+  "failureReason": "permanent_bad_request",
+  "message": "Gemini rejected the request.",
+  "ok": false
+}
