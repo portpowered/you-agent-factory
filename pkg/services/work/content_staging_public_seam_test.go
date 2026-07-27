@@ -245,134 +245,145 @@ func TestPublicWorkRootStagingSeamCleansUpStagedAndPartialStages(t *testing.T) {
 	})
 }
 
-func TestPublicWorkRootStagingSeamPreservesPrepareAndValidation(t *testing.T) {
+func assertPreparedMixedMediaParts(
+	t *testing.T,
+	parts []work.WorkContentPart,
+	image work.StageContentResult,
+	document work.StageContentResult,
+) {
+	t.Helper()
+	if len(parts) != 3 {
+		t.Fatalf("prepared parts len = %d, want 3", len(parts))
+	}
+	if parts[0].Type != work.WorkContentPartTypeText || parts[0].Text != "Review this UI." {
+		t.Fatalf("prepared text = %#v", parts[0])
+	}
+	if parts[1].Type != work.WorkContentPartTypeImage || parts[1].URL != image.URL ||
+		parts[1].ContentType != "image/png" {
+		t.Fatalf("prepared image = %#v", parts[1])
+	}
+	if parts[1].Metadata["submissionItemType"] != "image" ||
+		parts[1].Metadata["fileName"] != "customer-name.png" {
+		t.Fatalf("prepared image metadata = %#v", parts[1].Metadata)
+	}
+	if parts[2].Type != work.WorkContentPartTypeBinary || parts[2].URL != document.URL ||
+		parts[2].ContentType != "application/pdf" {
+		t.Fatalf("prepared document = %#v", parts[2])
+	}
+	if parts[2].Metadata["submissionItemType"] != "document" ||
+		parts[2].Metadata["fileName"] != "customer-spec.pdf" {
+		t.Fatalf("prepared document metadata = %#v", parts[2].Metadata)
+	}
+}
+
+func TestPublicWorkRootStagingSeamPreservesPrepareMixedMedia(t *testing.T) {
 	ctx := context.Background()
-
-	t.Run("prepare mixes text and staged media", func(t *testing.T) {
-		staging := newPublicWorkRootStaging(t, nil)
-		image, err := staging.StageContent(ctx, work.StageContentRequest{
-			ItemType:  "image",
-			FileName:  "ui.png",
-			MediaType: "image/png",
-			Content:   []byte("png-bytes"),
-		})
-		if err != nil {
-			t.Fatalf("StageContent image: %v", err)
-		}
-		document, err := staging.StageContent(ctx, work.StageContentRequest{
-			ItemType:  "document",
-			FileName:  "spec.pdf",
-			MediaType: "application/pdf",
-			Content:   []byte("pdf-bytes"),
-		})
-		if err != nil {
-			t.Fatalf("StageContent document: %v", err)
-		}
-
-		parts, err := staging.PrepareContent(ctx, []work.StagedSubmissionItem{
-			{ItemType: "text", Text: "Review this UI."},
-			{
-				ItemType: "image", StagedFileRef: image.StagedFileRef,
-				FileName: "customer-name.png", MediaType: "image/png",
-			},
-			{
-				ItemType: "document", StagedFileRef: document.StagedFileRef,
-				FileName: "customer-spec.pdf", MediaType: "application/pdf",
-			},
-		})
-		if err != nil {
-			t.Fatalf("PrepareContent: %v", err)
-		}
-		if len(parts) != 3 {
-			t.Fatalf("prepared parts len = %d, want 3", len(parts))
-		}
-		if parts[0].Type != work.WorkContentPartTypeText || parts[0].Text != "Review this UI." {
-			t.Fatalf("prepared text = %#v", parts[0])
-		}
-		if parts[1].Type != work.WorkContentPartTypeImage || parts[1].URL != image.URL ||
-			parts[1].ContentType != "image/png" {
-			t.Fatalf("prepared image = %#v", parts[1])
-		}
-		if parts[1].Metadata["submissionItemType"] != "image" ||
-			parts[1].Metadata["fileName"] != "customer-name.png" {
-			t.Fatalf("prepared image metadata = %#v", parts[1].Metadata)
-		}
-		if parts[2].Type != work.WorkContentPartTypeBinary || parts[2].URL != document.URL ||
-			parts[2].ContentType != "application/pdf" {
-			t.Fatalf("prepared document = %#v", parts[2])
-		}
-		if parts[2].Metadata["submissionItemType"] != "document" ||
-			parts[2].Metadata["fileName"] != "customer-spec.pdf" {
-			t.Fatalf("prepared document metadata = %#v", parts[2].Metadata)
-		}
+	staging := newPublicWorkRootStaging(t, nil)
+	image, err := staging.StageContent(ctx, work.StageContentRequest{
+		ItemType:  "image",
+		FileName:  "ui.png",
+		MediaType: "image/png",
+		Content:   []byte("png-bytes"),
 	})
-
-	t.Run("invalid stage requests return typed validation", func(t *testing.T) {
-		tests := []struct {
-			name    string
-			request work.StageContentRequest
-			message string
-		}{
-			{name: "text type", request: work.StageContentRequest{
-				ItemType: "text", FileName: "notes.txt", MediaType: "text/plain", Content: []byte("x"),
-			}, message: "itemType must be one of"},
-			{name: "blank filename", request: work.StageContentRequest{
-				ItemType: "document", FileName: "", MediaType: "application/pdf", Content: []byte("x"),
-			}, message: "fileName must identify a file"},
-			{name: "blank media", request: work.StageContentRequest{
-				ItemType: "document", FileName: "spec.pdf", Content: []byte("x"),
-			}, message: "mediaType must be a non-empty string"},
-			{name: "image media", request: work.StageContentRequest{
-				ItemType: "image", FileName: "ui.png", MediaType: "application/octet-stream", Content: []byte("x"),
-			}, message: "mediaType must start with image/"},
-			{name: "empty payload", request: work.StageContentRequest{
-				ItemType: "document", FileName: "spec.pdf", MediaType: "application/pdf",
-			}, message: "non-empty file payload"},
-		}
-		for _, test := range tests {
-			t.Run(test.name, func(t *testing.T) {
-				staging := newPublicWorkRootStaging(t, nil)
-				_, err := staging.StageContent(ctx, test.request)
-				var validation *work.ContentStagingError
-				if !errors.As(err, &validation) || !strings.Contains(validation.Message, test.message) {
-					t.Fatalf("StageContent error = %v, want ContentStagingError containing %q", err, test.message)
-				}
-			})
-		}
+	if err != nil {
+		t.Fatalf("StageContent image: %v", err)
+	}
+	document, err := staging.StageContent(ctx, work.StageContentRequest{
+		ItemType:  "document",
+		FileName:  "spec.pdf",
+		MediaType: "application/pdf",
+		Content:   []byte("pdf-bytes"),
 	})
+	if err != nil {
+		t.Fatalf("StageContent document: %v", err)
+	}
 
-	t.Run("prepare rejects media-type mismatch", func(t *testing.T) {
-		staging := newPublicWorkRootStaging(t, nil)
-		staged, err := staging.StageContent(ctx, work.StageContentRequest{
-			ItemType:  "image",
-			FileName:  "ui.png",
-			MediaType: "image/png",
-			Content:   []byte("png"),
+	parts, err := staging.PrepareContent(ctx, []work.StagedSubmissionItem{
+		{ItemType: "text", Text: "Review this UI."},
+		{
+			ItemType: "image", StagedFileRef: image.StagedFileRef,
+			FileName: "customer-name.png", MediaType: "image/png",
+		},
+		{
+			ItemType: "document", StagedFileRef: document.StagedFileRef,
+			FileName: "customer-spec.pdf", MediaType: "application/pdf",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PrepareContent: %v", err)
+	}
+	assertPreparedMixedMediaParts(t, parts, image, document)
+}
+
+func TestPublicWorkRootStagingSeamRejectsInvalidStageRequests(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name    string
+		request work.StageContentRequest
+		message string
+	}{
+		{name: "text type", request: work.StageContentRequest{
+			ItemType: "text", FileName: "notes.txt", MediaType: "text/plain", Content: []byte("x"),
+		}, message: "itemType must be one of"},
+		{name: "blank filename", request: work.StageContentRequest{
+			ItemType: "document", FileName: "", MediaType: "application/pdf", Content: []byte("x"),
+		}, message: "fileName must identify a file"},
+		{name: "blank media", request: work.StageContentRequest{
+			ItemType: "document", FileName: "spec.pdf", Content: []byte("x"),
+		}, message: "mediaType must be a non-empty string"},
+		{name: "image media", request: work.StageContentRequest{
+			ItemType: "image", FileName: "ui.png", MediaType: "application/octet-stream", Content: []byte("x"),
+		}, message: "mediaType must start with image/"},
+		{name: "empty payload", request: work.StageContentRequest{
+			ItemType: "document", FileName: "spec.pdf", MediaType: "application/pdf",
+		}, message: "non-empty file payload"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			staging := newPublicWorkRootStaging(t, nil)
+			_, err := staging.StageContent(ctx, test.request)
+			var validation *work.ContentStagingError
+			if !errors.As(err, &validation) || !strings.Contains(validation.Message, test.message) {
+				t.Fatalf("StageContent error = %v, want ContentStagingError containing %q", err, test.message)
+			}
 		})
-		if err != nil {
-			t.Fatalf("StageContent: %v", err)
-		}
-		_, err = staging.PrepareContent(ctx, []work.StagedSubmissionItem{{
-			ItemType:      "image",
-			StagedFileRef: staged.StagedFileRef,
-			FileName:      "ui.png",
-			MediaType:     "audio/wav",
-		}})
-		var validation *work.ContentStagingError
-		if !errors.As(err, &validation) ||
-			!strings.Contains(validation.Message, "mediaType must start with image/") {
-			t.Fatalf("PrepareContent error = %v, want typed image media validation", err)
-		}
+	}
+}
+
+func TestPublicWorkRootStagingSeamPrepareRejectsMediaTypeMismatch(t *testing.T) {
+	ctx := context.Background()
+	staging := newPublicWorkRootStaging(t, nil)
+	staged, err := staging.StageContent(ctx, work.StageContentRequest{
+		ItemType:  "image",
+		FileName:  "ui.png",
+		MediaType: "image/png",
+		Content:   []byte("png"),
 	})
+	if err != nil {
+		t.Fatalf("StageContent: %v", err)
+	}
+	_, err = staging.PrepareContent(ctx, []work.StagedSubmissionItem{{
+		ItemType:      "image",
+		StagedFileRef: staged.StagedFileRef,
+		FileName:      "ui.png",
+		MediaType:     "audio/wav",
+	}})
+	var validation *work.ContentStagingError
+	if !errors.As(err, &validation) ||
+		!strings.Contains(validation.Message, "mediaType must start with image/") {
+		t.Fatalf("PrepareContent error = %v, want typed image media validation", err)
+	}
 }
 
 // TestPublicWorkRootStagingSeamSealsContentStagingCutWithoutMaterializationOrRuntime
 // seals IMP-WORK-02: the nested content_staging capability remains a staging-only
 // ContentStagingService behind CTR-WORK, not the full Work root that owns
-// materialization and state-access.
+// materialization and state-access. It also re-proves issuance, prepare, tamper,
+// and expiry cleanup through the published Work root staging seam.
 func TestPublicWorkRootStagingSeamSealsContentStagingCutWithoutMaterializationOrRuntime(t *testing.T) {
 	ctx := context.Background()
-	staging := newPublicWorkRootStaging(t, nil)
+	clock := &publicSeamClock{now: time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC)}
+	staging := newPublicWorkRootStaging(t, clock)
 
 	if _, ok := any(staging).(work.Service); ok {
 		t.Fatal("content_staging must not satisfy work.Service (materialization/state-access stay out of this cut)")
@@ -398,6 +409,7 @@ func TestPublicWorkRootStagingSeamSealsContentStagingCutWithoutMaterializationOr
 	if resolved.URL != staged.URL {
 		t.Fatalf("resolved URL = %q, want %q", resolved.URL, staged.URL)
 	}
+	stageDir := filepath.Dir(resolved.Path)
 
 	parts, err := staging.PrepareContent(ctx, []work.StagedSubmissionItem{{
 		ItemType: "text", Text: "seal prepare",
@@ -416,10 +428,11 @@ func TestPublicWorkRootStagingSeamSealsContentStagingCutWithoutMaterializationOr
 		t.Fatalf("tampered resolve error = %v, want ErrInvalidStagedContentRef", err)
 	}
 
-	if err := staging.CleanupContent(ctx, staged.StagedFileRef); err != nil {
-		t.Fatalf("CleanupContent: %v", err)
+	clock.now = clock.now.Add(2 * time.Minute)
+	if _, err := staging.ResolveContent(ctx, staged.StagedFileRef); !errors.Is(err, work.ErrStagedContentExpired) {
+		t.Fatalf("expired resolve error = %v, want ErrStagedContentExpired", err)
 	}
-	if _, err := os.Stat(filepath.Dir(resolved.Path)); !os.IsNotExist(err) {
-		t.Fatalf("stage directory still present after cleanup: %v", err)
+	if _, err := os.Stat(stageDir); !os.IsNotExist(err) {
+		t.Fatalf("expired stage directory still present: %v", err)
 	}
 }

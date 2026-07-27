@@ -385,8 +385,9 @@ func validStageContentRequest() work.StageContentRequest {
 // TestNestedContentStagingSealsStagingOnlySurface seals IMP-WORK-02 nested
 // ownership: content_staging remains a ContentStagingService and does not
 // grow into the full Work root that owns materialization and state-access.
+// It also re-proves issuance, tamper, and expiry cleanup on the nested owner.
 func TestNestedContentStagingSealsStagingOnlySurface(t *testing.T) {
-	service, _, _ := newNestedContentStagingForTest(t)
+	service, _, clock := newNestedContentStagingForTest(t)
 	var _ contentstaging.Service = service
 	var _ work.ContentStagingService = service
 	if _, ok := any(service).(work.Service); ok {
@@ -406,10 +407,19 @@ func TestNestedContentStagingSealsStagingOnlySurface(t *testing.T) {
 	if staged.StagedFileRef == "" {
 		t.Fatal("expected opaque staged reference")
 	}
+	resolved, err := service.ResolveContent(ctx, staged.StagedFileRef)
+	if err != nil {
+		t.Fatalf("ResolveContent: %v", err)
+	}
+	stageDir := filepath.Dir(resolved.Path)
 	if _, err := service.ResolveContent(ctx, staged.StagedFileRef+"tampered"); !errors.Is(err, work.ErrInvalidStagedContentRef) {
 		t.Fatalf("tampered resolve error = %v, want ErrInvalidStagedContentRef", err)
 	}
-	if err := service.CleanupContent(ctx, staged.StagedFileRef); err != nil {
-		t.Fatalf("CleanupContent: %v", err)
+	clock.now = clock.now.Add(2 * time.Minute)
+	if _, err := service.ResolveContent(ctx, staged.StagedFileRef); !errors.Is(err, work.ErrStagedContentExpired) {
+		t.Fatalf("expired resolve error = %v, want ErrStagedContentExpired", err)
+	}
+	if _, err := os.Stat(stageDir); !os.IsNotExist(err) {
+		t.Fatalf("expired stage directory still present: %v", err)
 	}
 }
