@@ -415,11 +415,6 @@
     {
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_inference_events_test.go",
-      "target": "TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_inference_events_test.go",
       "target": "TestInferenceEvents_ThinEventSmoke_CapturesThinnedDispatchInferenceSequenceAndReconstructsViews"
     },
     {
@@ -441,6 +436,11 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_model_transport_smoke_test.go",
       "target": "TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned"
+    },
+    {
+      "rule": "deprecated-runtime-api-test",
+      "filePath": "tests/functional/runtime_api/api_model_transport_smoke_test.go",
+      "target": "TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -536,11 +536,6 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_service_config_override_alignment_test.go",
       "target": "TestServiceConfigOverrideAlignment_FunctionalHTTPServerProviderCommandRunner"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_service_config_override_alignment_test.go",
-      "target": "TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -964,11 +959,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/guards_batch/watcher_parent_child_batch_long_test.go",
-      "target": "guards_batch"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/providers/cli_script_executor_test.go",
       "target": "providers"
     },
@@ -1135,11 +1125,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/replay_contracts/short_helpers_test.go",
-      "target": "replay_contracts"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/replay_contracts/worker_public_contract_smoke_long_test.go",
       "target": "replay_contracts"
     },
     {
@@ -1419,16 +1404,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/watcher_multichannel_submission_long_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/watcher_seed_submission_long_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/workflow_modification_long_test.go",
       "target": "workflow"
     },
@@ -1436,11 +1411,6 @@
       "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/bootstrap_portability/metadata_contract/factory_metadata_contract_test.go",
       "target": "bootstrap_portability"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/cli/factory_run/events/events_test.go",
-      "target": "cli"
     },
     {
       "rule": "functional-test-unclassified-domain",
@@ -2933,5 +2903,11 @@
       "target": "pkg/services/workers"
     }
   ],
-  "violations": []
+  "violations": [
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/workers/internal/services/runners",
+      "target": "pkg/services/workers/internal/services/runners/service.go:InferenceLocalInvoker,pkg/services/workers/internal/services/runners/service.go:Service"
+    }
+  ]
 }

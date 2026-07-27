@@ -329,7 +329,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/guards_batch/partial_batch_long_test.go | you-agent-factory/tests/functional/guards_batch | TestPartialBatch_ThrottledProviderFailureWithoutAuthoredGuardEventuallyFails | functionallong | tests/functional/resilience/batch/partial_batch_test.go | guards_batch | none | guards_batch-delete-06-resilience-batch |
 | tests/functional/guards_batch/resource_contention_test.go | you-agent-factory/tests/functional/guards_batch | TestConfigDriven_ResourceContention | short | tests/functional/resources/fairness_long_test.go | guards_batch | none | guards_batch-delete-05-resources-fairness |
 | tests/functional/guards_batch/resource_token_name_test.go | you-agent-factory/tests/functional/guards_batch | TestResourceGated_DispatchTokenName | short | tests/functional/resources/concurrency_test.go | guards_batch | none | guards_batch-delete-04-resources-concurrency |
-| tests/functional/guards_batch/watcher_parent_child_batch_long_test.go | you-agent-factory/tests/functional/guards_batch | TestFileWatcherParentChildBatch_SubmittedFanInSmoke | functionallong | tests/functional/workstations/watcher/files_test.go | guards_batch | none | guards_batch-delete-07-workstations-watcher |
 
 #### `models` (1 scenarios, catch_all=`none`)
 
@@ -763,13 +762,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_FeedbackPropagated | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_SucceedsBeforeLimit | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
-| tests/functional/workflow/watcher_multichannel_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestMultiChannelFileWatcher_DefaultSubmission | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_multichannel_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestMultiChannelFileWatcher_DynamicExecDir | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_multichannel_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestMultiChannelFileWatcher_ExecutionIDSubmission | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_seed_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestFileWatcherFlowConcurrent | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_seed_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestFileWatcherFlowNoTokenLeaks | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_seed_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestFileWatcherFlowSequential | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_seed_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestFileWatcherFlowSingle | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
 | tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationAndReload | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
 | tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationPreservesIndependentWorkflows | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
 | tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationRejectionLoop | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
@@ -1017,7 +1009,8 @@ can execute independently until package ownership reaches zero.
 | `workflow-delete-02-work-routing` | workflow | 7 | work/routing | none |
 | `workflow-delete-03-work-relationships` | workflow | 8 | work/relationships | none |
 | `workflow-delete-04-work-routing-logical` | workflow | 2 | work/routing | none |
-| `workflow-delete-06-workstations-watcher` | workflow | 7 | workstations/watcher | none |
+| `workflow-delete-05-workstations-repeater` | workflow | 13 | workstations/repeater | none |
+| `workflow-delete-06-workstations-watcher` | workflow | 7 | workstations/watcher | consumed |
 | `workflow-delete-07-factory-current` | workflow | 7 | factory/current | none |
 | `workflow-delete-08-guards` | workflow | 5 | guards | none |
 | `workflow-delete-09-orchestration-javascript` | workflow | 2 | orchestration/javascript | none |
@@ -1222,13 +1215,6 @@ Batch execution guidance for later move work:
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_FeedbackPropagated | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_SucceedsBeforeLimit | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
-| tests/functional/workflow/watcher_multichannel_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestMultiChannelFileWatcher_DefaultSubmission | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_multichannel_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestMultiChannelFileWatcher_DynamicExecDir | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_multichannel_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestMultiChannelFileWatcher_ExecutionIDSubmission | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_seed_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestFileWatcherFlowConcurrent | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_seed_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestFileWatcherFlowNoTokenLeaks | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_seed_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestFileWatcherFlowSequential | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_seed_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestFileWatcherFlowSingle | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
 | tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationAndReload | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
 | tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationPreservesIndependentWorkflows | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
 | tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationRejectionLoop | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
@@ -1282,7 +1268,7 @@ ownership reaches zero.
 | `guards_batch-delete-04-resources-concurrency` | guards_batch | 5 | resources | none |
 | `guards_batch-delete-05-resources-fairness` | guards_batch | 1 | resources | none |
 | `guards_batch-delete-06-resilience-batch` | guards_batch | 6 | resilience/batch | none |
-| `guards_batch-delete-07-workstations-watcher` | guards_batch | 1 | workstations/watcher | none |
+| `guards_batch-delete-07-workstations-watcher` | guards_batch | 1 | workstations/watcher | consumed |
 | `bootstrap_portability-delete-01-factory-definitions-init` | bootstrap_portability | 7 | factory/definitions | none |
 | `bootstrap_portability-delete-02-factory-definitions-validation` | bootstrap_portability | 3 | factory/definitions | none |
 | `bootstrap_portability-delete-03-factory-definitions-import-export` | bootstrap_portability | 10 | factory/definitions | none |
@@ -1412,7 +1398,6 @@ Batch execution guidance for later move work:
 | tests/functional/guards_batch/partial_batch_long_test.go | you-agent-factory/tests/functional/guards_batch | TestPartialBatch_ThrottledProviderFailureWithoutAuthoredGuardEventuallyFails | functionallong | tests/functional/resilience/batch/partial_batch_test.go | guards_batch | none | guards_batch-delete-06-resilience-batch |
 | tests/functional/guards_batch/resource_contention_test.go | you-agent-factory/tests/functional/guards_batch | TestConfigDriven_ResourceContention | short | tests/functional/resources/fairness_long_test.go | guards_batch | none | guards_batch-delete-05-resources-fairness |
 | tests/functional/guards_batch/resource_token_name_test.go | you-agent-factory/tests/functional/guards_batch | TestResourceGated_DispatchTokenName | short | tests/functional/resources/concurrency_test.go | guards_batch | none | guards_batch-delete-04-resources-concurrency |
-| tests/functional/guards_batch/watcher_parent_child_batch_long_test.go | you-agent-factory/tests/functional/guards_batch | TestFileWatcherParentChildBatch_SubmittedFanInSmoke | functionallong | tests/functional/workstations/watcher/files_test.go | guards_batch | none | guards_batch-delete-07-workstations-watcher |
 | tests/functional/replay_contracts/canonical_topology_snapshot_projection_test.go | you-agent-factory/tests/functional/replay_contracts | TestCanonicalTopologySnapshotsPreservePublicIdentityAndResourceEvidence | short | tests/functional/events/factory_events/order_and_cursor_test.go | replay_contracts | none | replay_contracts-delete-02-events-factory-events |
 | tests/functional/replay_contracts/replay_event_stream_artifact_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifact | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | artifact-contract-closeout | replay_contracts-delete-01-events-replay |
 | tests/functional/replay_contracts/replay_event_stream_artifact_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifactWithCopiedRootFactoryDefinition | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | artifact-contract-closeout | replay_contracts-delete-01-events-replay |
@@ -1755,7 +1740,8 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `workflow-delete-02-work-routing` | workflow | 7 | work/routing | planned |
 | `workflow-delete-03-work-relationships` | workflow | 8 | work/relationships | planned |
 | `workflow-delete-04-work-routing-logical` | workflow | 2 | work/routing | planned |
-| `workflow-delete-06-workstations-watcher` | workflow | 7 | workstations/watcher | planned |
+| `workflow-delete-05-workstations-repeater` | workflow | 13 | workstations/repeater | planned |
+| `workflow-delete-06-workstations-watcher` | workflow | 7 | workstations/watcher | consumed |
 | `workflow-delete-07-factory-current` | workflow | 7 | factory/current | planned |
 | `workflow-delete-08-guards` | workflow | 5 | guards | planned |
 | `workflow-delete-09-orchestration-javascript` | workflow | 2 | orchestration/javascript | planned |
@@ -1765,7 +1751,7 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `guards_batch-delete-04-resources-concurrency` | guards_batch | 5 | resources | planned |
 | `guards_batch-delete-05-resources-fairness` | guards_batch | 1 | resources | planned |
 | `guards_batch-delete-06-resilience-batch` | guards_batch | 6 | resilience/batch | planned |
-| `guards_batch-delete-07-workstations-watcher` | guards_batch | 1 | workstations/watcher | planned |
+| `guards_batch-delete-07-workstations-watcher` | guards_batch | 1 | workstations/watcher | consumed |
 | `bootstrap_portability-delete-01-factory-definitions-init` | bootstrap_portability | 7 | factory/definitions | planned |
 | `bootstrap_portability-delete-02-factory-definitions-validation` | bootstrap_portability | 3 | factory/definitions | planned |
 | `bootstrap_portability-delete-03-factory-definitions-import-export` | bootstrap_portability | 10 | factory/definitions | planned |
