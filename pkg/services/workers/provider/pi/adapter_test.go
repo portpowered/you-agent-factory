@@ -298,6 +298,22 @@ func TestAdapterClassifyFailureMapsExecutionOutcomes(t *testing.T) {
 			message: "Pi execution timed out.",
 		},
 		{
+			name: "exit 124 with canceled flush",
+			input: adapter.FailureContext{
+				CommandResult: workerprocess.CommandResult{ExitCode: 124},
+				FlushReason:   adapter.FlushReasonCanceled,
+			},
+			message: "Pi execution timed out.",
+		},
+		{
+			name: "deadline exceeded with canceled flush",
+			input: adapter.FailureContext{
+				CommandError: context.DeadlineExceeded,
+				FlushReason:  adapter.FlushReasonCanceled,
+			},
+			message: "Pi execution timed out.",
+		},
+		{
 			name:    "command failure",
 			input:   adapter.FailureContext{CommandResult: workerprocess.CommandResult{ExitCode: 2}},
 			message: "Pi invocation failed.",

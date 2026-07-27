@@ -351,7 +351,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/smoke/cli_submit_batch_smoke_test.go::TestSubmitBatch_RealCLIUpsertsToRunningFactory",
+          "test": "tests/functional/transport/cli/commands/submit_wiring_test.go::TestCLISubmitBatchFile",
           "boundary": "cli"
         }
       ]
