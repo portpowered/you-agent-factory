@@ -1,6 +1,7 @@
 package artifactsexport_test
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -217,7 +218,7 @@ func TestRecordingsRootFailedExportLeavesNoReadablePublicArtifact(t *testing.T) 
 	}); err != nil {
 		t.Fatalf("FinishRecording: %v", err)
 	}
-	_, err = root.ExportPortableArtifact(recordings.ExportPortableArtifactRequest{
+	_, err = root.ExportPortableArtifact(context.Background(), recordings.ExportPortableArtifactRequest{
 		RecordingID: bound.Status.RecordingID,
 	})
 	if !errors.Is(err, recordings.ErrPortableArtifactExportFailed) {
@@ -236,7 +237,7 @@ func TestRecordingsRootFailedExportLeavesNoReadablePublicArtifact(t *testing.T) 
 			t.Fatalf("temporary portable artifact remained after failure: %s", entry.Name())
 		}
 	}
-	_, err = root.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+	_, err = root.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
 		RecordingID: bound.Status.RecordingID,
 		Reference:   recordings.RecordingArtifactReference(destination),
 	})
@@ -286,7 +287,7 @@ func TestRecordingsRootReadPortableArtifactRejectsMissingAndForeignHandles(t *te
 		t.Fatalf("FinishRecording other: %v", err)
 	}
 
-	_, err = root.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+	_, err = root.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
 		RecordingID: owner.Status.RecordingID,
 		Reference:   owner.Status.Artifact,
 	})
@@ -294,7 +295,7 @@ func TestRecordingsRootReadPortableArtifactRejectsMissingAndForeignHandles(t *te
 		t.Fatalf("missing published artifact = %v, want ErrPortableArtifactUnavailable", err)
 	}
 
-	_, err = root.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+	_, err = root.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
 		RecordingID: other.Status.RecordingID,
 		Reference:   owner.Status.Artifact,
 	})
@@ -303,5 +304,83 @@ func TestRecordingsRootReadPortableArtifactRejectsMissingAndForeignHandles(t *te
 	}
 	if strings.Contains(err.Error(), string(owner.Status.Artifact)) {
 		t.Fatalf("foreign handle error leaked owner reference: %v", err)
+	}
+}
+
+func TestRecordingsRootExportCancellationLeavesNoReadableArtifact(t *testing.T) {
+	t.Parallel()
+
+	root := recordingsservice.NewService(
+		&unusedLedger{},
+		recordingsservice.NewProjectionService(),
+	)
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-root-cancel-export"}
+	bound, err := root.BindRecording(recordings.BindRecordingRequest{
+		RecordingID: "recording-root-cancel-export",
+		Artifact:    "artifact:root-cancel-export",
+		Scope:       scope,
+	})
+	if err != nil {
+		t.Fatalf("BindRecording: %v", err)
+	}
+	if _, err := root.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: bound.Status.RecordingID,
+		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
+	}); err != nil {
+		t.Fatalf("FinishRecording: %v", err)
+	}
+	cancelCause := errors.New("operator stopped export")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(cancelCause)
+	_, err = root.ExportPortableArtifact(ctx, recordings.ExportPortableArtifactRequest{
+		RecordingID: bound.Status.RecordingID,
+	})
+	if !errors.Is(err, recordings.ErrPortableArtifactCancelled) ||
+		!errors.Is(err, context.Canceled) ||
+		!errors.Is(err, cancelCause) {
+		t.Fatalf("pre-cancelled root export = %v, want typed cancellation", err)
+	}
+	_, err = root.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
+		RecordingID: bound.Status.RecordingID,
+		Reference:   bound.Status.Artifact,
+	})
+	if !errors.Is(err, recordings.ErrPortableArtifactUnavailable) {
+		t.Fatalf("ReadPortableArtifact after cancelled export = %v, want ErrPortableArtifactUnavailable", err)
+	}
+}
+
+func TestRecordingsRootReadPortableArtifactRejectsCancelledContext(t *testing.T) {
+	t.Parallel()
+
+	root := recordingsservice.NewService(
+		&unusedLedger{},
+		recordingsservice.NewProjectionService(),
+	)
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-root-cancel-read"}
+	bound, err := root.BindRecording(recordings.BindRecordingRequest{
+		RecordingID: "recording-root-cancel-read",
+		Artifact:    "artifact:root-cancel-read",
+		Scope:       scope,
+	})
+	if err != nil {
+		t.Fatalf("BindRecording: %v", err)
+	}
+	if _, err := root.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: bound.Status.RecordingID,
+		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
+	}); err != nil {
+		t.Fatalf("FinishRecording: %v", err)
+	}
+	cancelCause := errors.New("operator stopped read")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(cancelCause)
+	_, err = root.ReadPortableArtifact(ctx, recordings.ReadPortableArtifactRequest{
+		RecordingID: bound.Status.RecordingID,
+		Reference:   bound.Status.Artifact,
+	})
+	if !errors.Is(err, recordings.ErrPortableArtifactCancelled) ||
+		!errors.Is(err, context.Canceled) ||
+		!errors.Is(err, cancelCause) {
+		t.Fatalf("pre-cancelled root read = %v, want typed cancellation", err)
 	}
 }

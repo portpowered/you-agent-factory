@@ -4,6 +4,8 @@
 package artifactsexport
 
 import (
+	"context"
+
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 )
@@ -17,8 +19,8 @@ type SnapshotSource interface {
 // PortableArtifactPublication persists completed portable artifact bytes at a
 // public destination without exposing private lifecycle storage paths.
 type PortableArtifactPublication interface {
-	Publish(destination string, payload []byte) error
-	Read(destination string) ([]byte, error)
+	Publish(context.Context, string, []byte) error
+	Read(context.Context, string) ([]byte, error)
 }
 
 // Service owns portable artifact build, validate, encode, decode, summarize,
@@ -29,6 +31,6 @@ type Service interface {
 	EncodePortableArtifact(recordings.EncodePortableArtifactRequest) (recordings.EncodePortableArtifactResult, error)
 	DecodePortableArtifact(recordings.DecodePortableArtifactRequest) (recordings.DecodePortableArtifactResult, error)
 	SummarizePortableArtifact(recordings.SummarizePortableArtifactRequest) (recordings.SummarizePortableArtifactResult, error)
-	ExportPortableArtifact(recordings.ExportPortableArtifactRequest) (recordings.ExportPortableArtifactResult, error)
-	ReadPortableArtifact(recordings.ReadPortableArtifactRequest) (recordings.ReadPortableArtifactResult, error)
+	ExportPortableArtifact(context.Context, recordings.ExportPortableArtifactRequest) (recordings.ExportPortableArtifactResult, error)
+	ReadPortableArtifact(context.Context, recordings.ReadPortableArtifactRequest) (recordings.ReadPortableArtifactResult, error)
 }

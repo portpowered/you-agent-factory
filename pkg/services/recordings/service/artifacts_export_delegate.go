@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -35,13 +37,15 @@ func (service *combinedService) SummarizePortableArtifact(
 }
 
 func (service *combinedService) ExportPortableArtifact(
+	ctx context.Context,
 	request recordings.ExportPortableArtifactRequest,
 ) (recordings.ExportPortableArtifactResult, error) {
-	return service.artifactsExport.ExportPortableArtifact(request)
+	return service.artifactsExport.ExportPortableArtifact(ctx, request)
 }
 
 func (service *combinedService) ReadPortableArtifact(
+	ctx context.Context,
 	request recordings.ReadPortableArtifactRequest,
 ) (recordings.ReadPortableArtifactResult, error) {
-	return service.artifactsExport.ReadPortableArtifact(request)
+	return service.artifactsExport.ReadPortableArtifact(ctx, request)
 }

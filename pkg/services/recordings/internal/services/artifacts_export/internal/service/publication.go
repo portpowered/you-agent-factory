@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/fs"
@@ -71,9 +72,12 @@ func NewOSPublication() (*Publication, error) {
 	)
 }
 
-func (publication *Publication) Publish(destination string, payload []byte) error {
+func (publication *Publication) Publish(ctx context.Context, destination string, payload []byte) error {
 	if publication == nil {
 		return fmt.Errorf("portable artifact publisher is required")
+	}
+	if err := publicationContextErr(ctx); err != nil {
+		return err
 	}
 	if len(payload) == 0 {
 		return fmt.Errorf("portable artifact payload is required")
@@ -81,6 +85,9 @@ func (publication *Publication) Publish(destination string, payload []byte) erro
 	dir := filepath.Dir(destination)
 	if err := publication.operations.makeDirectories(dir, 0o700); err != nil {
 		return fmt.Errorf("create portable artifact directory: %w", err)
+	}
+	if err := publicationContextErr(ctx); err != nil {
+		return err
 	}
 	temporary, err := publication.operations.createTemporaryFile(
 		dir,
@@ -95,9 +102,17 @@ func (publication *Publication) Publish(destination string, payload []byte) erro
 		_ = temporary.Close()
 		return fmt.Errorf("secure temporary portable artifact: %w", err)
 	}
+	if err := publicationContextErr(ctx); err != nil {
+		_ = temporary.Close()
+		return err
+	}
 	if _, err := temporary.Write(payload); err != nil {
 		_ = temporary.Close()
 		return fmt.Errorf("write temporary portable artifact: %w", err)
+	}
+	if err := publicationContextErr(ctx); err != nil {
+		_ = temporary.Close()
+		return err
 	}
 	if err := temporary.Sync(); err != nil {
 		_ = temporary.Close()
@@ -106,15 +121,35 @@ func (publication *Publication) Publish(destination string, payload []byte) erro
 	if err := temporary.Close(); err != nil {
 		return fmt.Errorf("close temporary portable artifact: %w", err)
 	}
+	if err := publicationContextErr(ctx); err != nil {
+		return err
+	}
 	if err := publication.operations.renamePath(temporaryPath, destination); err != nil {
 		return fmt.Errorf("publish portable artifact: %w", err)
 	}
 	return nil
 }
 
-func (publication *Publication) Read(destination string) ([]byte, error) {
+func (publication *Publication) Read(ctx context.Context, destination string) ([]byte, error) {
 	if publication == nil {
 		return nil, fmt.Errorf("portable artifact publisher is required")
 	}
-	return publication.operations.readFile(destination)
+	if err := publicationContextErr(ctx); err != nil {
+		return nil, err
+	}
+	payload, err := publication.operations.readFile(destination)
+	if err != nil {
+		return nil, err
+	}
+	if err := publicationContextErr(ctx); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+func publicationContextErr(ctx context.Context) error {
+	if ctx == nil {
+		return nil
+	}
+	return ctx.Err()
 }

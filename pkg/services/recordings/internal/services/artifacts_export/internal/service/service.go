@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -119,8 +120,12 @@ func (service *Service) SummarizePortableArtifact(
 }
 
 func (service *Service) ExportPortableArtifact(
+	ctx context.Context,
 	request recordings.ExportPortableArtifactRequest,
 ) (recordings.ExportPortableArtifactResult, error) {
+	if err := portableArtifactContextError(ctx); err != nil {
+		return recordings.ExportPortableArtifactResult{}, err
+	}
 	if service.publication == nil {
 		return recordings.ExportPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
 	}
@@ -128,6 +133,9 @@ func (service *Service) ExportPortableArtifact(
 		RecordingID: request.RecordingID,
 	})
 	if err != nil {
+		return recordings.ExportPortableArtifactResult{}, err
+	}
+	if err := portableArtifactContextError(ctx); err != nil {
 		return recordings.ExportPortableArtifactResult{}, err
 	}
 	encoded, err := service.EncodePortableArtifact(recordings.EncodePortableArtifactRequest{
@@ -140,7 +148,14 @@ func (service *Service) ExportPortableArtifact(
 	if destination == "" {
 		return recordings.ExportPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
 	}
-	if err := service.publication.Publish(destination, encoded.Payload); err != nil {
+	if err := service.publication.Publish(ctx, destination, encoded.Payload); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return recordings.ExportPortableArtifactResult{}, fmt.Errorf(
+				"%w: %w",
+				recordings.ErrPortableArtifactCancelled,
+				errors.Join(err, ctx.Err(), context.Cause(ctx)),
+			)
+		}
 		return recordings.ExportPortableArtifactResult{}, fmt.Errorf(
 			"%w: %w",
 			recordings.ErrPortableArtifactExportFailed,
@@ -154,8 +169,12 @@ func (service *Service) ExportPortableArtifact(
 }
 
 func (service *Service) ReadPortableArtifact(
+	ctx context.Context,
 	request recordings.ReadPortableArtifactRequest,
 ) (recordings.ReadPortableArtifactResult, error) {
+	if err := portableArtifactContextError(ctx); err != nil {
+		return recordings.ReadPortableArtifactResult{}, err
+	}
 	if service.publication == nil || service.snapshots == nil {
 		return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
 	}
@@ -173,12 +192,22 @@ func (service *Service) ReadPortableArtifact(
 	if snapshot.Status.Artifact != request.Reference {
 		return recordings.ReadPortableArtifactResult{}, recordings.ErrForeignPortableArtifact
 	}
-	payload, err := service.publication.Read(destination)
+	payload, err := service.publication.Read(ctx, destination)
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return recordings.ReadPortableArtifactResult{}, fmt.Errorf(
+				"%w: %w",
+				recordings.ErrPortableArtifactCancelled,
+				errors.Join(err, ctx.Err(), context.Cause(ctx)),
+			)
+		}
 		if errors.Is(err, os.ErrNotExist) {
 			return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
 		}
 		return recordings.ReadPortableArtifactResult{}, recordings.ErrInvalidPortableArtifact
+	}
+	if err := portableArtifactContextError(ctx); err != nil {
+		return recordings.ReadPortableArtifactResult{}, err
 	}
 	decoded, err := service.DecodePortableArtifact(recordings.DecodePortableArtifactRequest{
 		Payload: payload,
@@ -190,6 +219,17 @@ func (service *Service) ReadPortableArtifact(
 		return recordings.ReadPortableArtifactResult{}, recordings.ErrForeignPortableArtifact
 	}
 	return recordings.ReadPortableArtifactResult{Artifact: decoded.Artifact}, nil
+}
+
+func portableArtifactContextError(ctx context.Context) error {
+	if ctx == nil || ctx.Err() == nil {
+		return nil
+	}
+	return fmt.Errorf(
+		"%w: %w",
+		recordings.ErrPortableArtifactCancelled,
+		errors.Join(ctx.Err(), context.Cause(ctx)),
+	)
 }
 
 func portableArtifactSummary(

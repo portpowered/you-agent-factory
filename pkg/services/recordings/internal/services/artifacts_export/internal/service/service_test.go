@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -191,7 +192,7 @@ func TestExportPortableArtifactFailedPublishLeavesNoPartialPublicArtifact(t *tes
 			Events: []recordings.CanonicalEvent{event},
 		},
 	}, publication)
-	_, err = service.ExportPortableArtifact(recordings.ExportPortableArtifactRequest{
+	_, err = service.ExportPortableArtifact(context.Background(), recordings.ExportPortableArtifactRequest{
 		RecordingID: "recording-failed-export",
 	})
 	if !errors.Is(err, recordings.ErrPortableArtifactExportFailed) {
@@ -209,7 +210,7 @@ func TestExportPortableArtifactFailedPublishLeavesNoPartialPublicArtifact(t *tes
 			t.Fatalf("temporary portable artifact remained after failure: %s", entry.Name())
 		}
 	}
-	_, err = service.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+	_, err = service.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
 		RecordingID: "recording-failed-export",
 		Reference:   recordings.RecordingArtifactReference(destination),
 	})
@@ -251,7 +252,7 @@ func TestExportPortableArtifactPublishesCompleteReadableArtifact(t *testing.T) {
 			Events: []recordings.CanonicalEvent{event},
 		},
 	}, publication)
-	exported, err := service.ExportPortableArtifact(recordings.ExportPortableArtifactRequest{
+	exported, err := service.ExportPortableArtifact(context.Background(), recordings.ExportPortableArtifactRequest{
 		RecordingID: "recording-export-success",
 	})
 	if err != nil {
@@ -260,7 +261,7 @@ func TestExportPortableArtifactPublishesCompleteReadableArtifact(t *testing.T) {
 	if exported.Reference != recordings.RecordingArtifactReference(destination) {
 		t.Fatalf("export reference = %q, want %q", exported.Reference, destination)
 	}
-	read, err := service.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+	read, err := service.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
 		RecordingID: "recording-export-success",
 		Reference:   exported.Reference,
 	})
@@ -292,7 +293,7 @@ func TestReadPortableArtifactRejectsMissingRecordingAndHandle(t *testing.T) {
 	}
 	service := artifactsexportservice.New(snapshotSourceFake{snapshot: snapshot}, publication)
 
-	_, err = service.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+	_, err = service.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
 		RecordingID: "recording-missing-read",
 		Reference:   "artifact:missing-read",
 	})
@@ -300,7 +301,7 @@ func TestReadPortableArtifactRejectsMissingRecordingAndHandle(t *testing.T) {
 		t.Fatalf("missing published artifact = %v, want ErrPortableArtifactUnavailable", err)
 	}
 
-	_, err = service.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+	_, err = service.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
 		RecordingID: "recording-absent",
 		Reference:   "artifact:missing-read",
 	})
@@ -354,14 +355,14 @@ func TestReadPortableArtifactRejectsForeignHandle(t *testing.T) {
 		"recording-other": otherSnapshot,
 	}
 	service := artifactsexportservice.New(snapshotSourceMapFake{snapshots: snapshots}, publication)
-	exported, err := service.ExportPortableArtifact(recordings.ExportPortableArtifactRequest{
+	exported, err := service.ExportPortableArtifact(context.Background(), recordings.ExportPortableArtifactRequest{
 		RecordingID: "recording-owner",
 	})
 	if err != nil {
 		t.Fatalf("ExportPortableArtifact: %v", err)
 	}
 
-	_, err = service.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+	_, err = service.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
 		RecordingID: "recording-other",
 		Reference:   exported.Reference,
 	})
@@ -369,7 +370,7 @@ func TestReadPortableArtifactRejectsForeignHandle(t *testing.T) {
 		t.Fatalf("foreign handle by reference = %v, want ErrForeignPortableArtifact", err)
 	}
 
-	_, err = service.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+	_, err = service.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
 		RecordingID: "recording-owner",
 		Reference:   "artifact:other-handle",
 	})
@@ -399,7 +400,7 @@ func TestReadPortableArtifactErrorsOmitPrivatePaths(t *testing.T) {
 	}
 	service := artifactsexportservice.New(snapshotSourceFake{snapshot: snapshot}, publication)
 
-	_, err = service.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+	_, err = service.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
 		RecordingID: "recording-private-read-error",
 		Reference:   "artifact:foreign-handle",
 	})
@@ -411,7 +412,7 @@ func TestReadPortableArtifactErrorsOmitPrivatePaths(t *testing.T) {
 		t.Fatalf("foreign handle error leaked private path: %v", err)
 	}
 
-	_, err = service.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+	_, err = service.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
 		RecordingID: "recording-private-read-error",
 		Reference:   "artifact:reported-read-error",
 	})
@@ -420,6 +421,229 @@ func TestReadPortableArtifactErrorsOmitPrivatePaths(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), privateServiceTarget) {
 		t.Fatalf("missing artifact error leaked private path: %v", err)
+	}
+}
+
+func TestExportPortableArtifactRejectsPreCancelledContext(t *testing.T) {
+	t.Parallel()
+
+	finalizedAt := time.Unix(1_700_000_000, 0).UTC()
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-cancel-export"}
+	publication, err := artifactsexportservice.NewOSPublication()
+	if err != nil {
+		t.Fatalf("NewOSPublication: %v", err)
+	}
+	service := artifactsexportservice.New(snapshotSourceFake{
+		snapshot: recordinglifecycle.Snapshot{
+			Status: recordings.RecordingStatusFacts{
+				RecordingID: "recording-cancel-export",
+				Artifact:    "artifact:cancel-export",
+				Scope:       scope,
+				State:       recordings.RecordingFinalized,
+				FinalizedAt: &finalizedAt,
+			},
+		},
+	}, publication)
+	cancelCause := errors.New("operator stopped export")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(cancelCause)
+
+	_, err = service.ExportPortableArtifact(ctx, recordings.ExportPortableArtifactRequest{
+		RecordingID: "recording-cancel-export",
+	})
+	if !errors.Is(err, recordings.ErrPortableArtifactCancelled) ||
+		!errors.Is(err, context.Canceled) ||
+		!errors.Is(err, cancelCause) {
+		t.Fatalf("pre-cancelled export = %v, want typed cancellation", err)
+	}
+}
+
+func TestExportPortableArtifactCancellationDuringPublishLeavesNoPublicArtifact(t *testing.T) {
+	t.Parallel()
+
+	finalizedAt := time.Unix(1_700_000_000, 0).UTC()
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-inflight-cancel-export"}
+	event := recordings.CanonicalEvent{
+		ID: "event-inflight-cancel-export", Kind: "WORK_REQUEST",
+		Sequence: 0,
+		Scope:    scope,
+		Cursor: recordings.CanonicalEventCursor{
+			StreamGenerationID: "generation-inflight-cancel-export",
+			Sequence:           0,
+		},
+		RecordedAt: time.Unix(1_700_000_000, 0).UTC(),
+		Payload:    "{}",
+	}
+	destination := filepath.Join(t.TempDir(), "public-export.json")
+	cancelCause := errors.New("operator stopped export")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	publication, err := artifactsexportservice.NewPublication(
+		os.MkdirAll,
+		func(dir, pattern string) (artifactsexportservice.PublicationTemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		os.Remove,
+		func(string, string) error {
+			cancel(cancelCause)
+			return context.Canceled
+		},
+		os.ReadFile,
+	)
+	if err != nil {
+		t.Fatalf("NewPublication: %v", err)
+	}
+	service := artifactsexportservice.New(snapshotSourceFake{
+		snapshot: recordinglifecycle.Snapshot{
+			Status: recordings.RecordingStatusFacts{
+				RecordingID: "recording-inflight-cancel-export",
+				Artifact:    recordings.RecordingArtifactReference(destination),
+				Scope:       scope,
+				State:       recordings.RecordingFinalized,
+				FinalizedAt: &finalizedAt,
+			},
+			Events: []recordings.CanonicalEvent{event},
+		},
+	}, publication)
+	_, err = service.ExportPortableArtifact(ctx, recordings.ExportPortableArtifactRequest{
+		RecordingID: "recording-inflight-cancel-export",
+	})
+	if !errors.Is(err, recordings.ErrPortableArtifactCancelled) ||
+		!errors.Is(err, context.Canceled) ||
+		!errors.Is(err, cancelCause) {
+		t.Fatalf("in-flight cancelled export = %v, want typed cancellation", err)
+	}
+	if _, err := os.Stat(destination); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("public destination stat = %v, want not exist", err)
+	}
+	entries, err := os.ReadDir(filepath.Dir(destination))
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	for _, entry := range entries {
+		if strings.Contains(entry.Name(), ".tmp") {
+			t.Fatalf("temporary portable artifact remained after cancellation: %s", entry.Name())
+		}
+	}
+	_, err = service.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
+		RecordingID: "recording-inflight-cancel-export",
+		Reference:   recordings.RecordingArtifactReference(destination),
+	})
+	if !errors.Is(err, recordings.ErrPortableArtifactUnavailable) {
+		t.Fatalf("ReadPortableArtifact after cancelled export = %v, want ErrPortableArtifactUnavailable", err)
+	}
+}
+
+func TestReadPortableArtifactRejectsPreCancelledContext(t *testing.T) {
+	t.Parallel()
+
+	finalizedAt := time.Unix(1_700_000_000, 0).UTC()
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-cancel-read"}
+	publication, err := artifactsexportservice.NewOSPublication()
+	if err != nil {
+		t.Fatalf("NewOSPublication: %v", err)
+	}
+	service := artifactsexportservice.New(snapshotSourceFake{
+		snapshot: recordinglifecycle.Snapshot{
+			Status: recordings.RecordingStatusFacts{
+				RecordingID: "recording-cancel-read",
+				Artifact:    "artifact:cancel-read",
+				Scope:       scope,
+				State:       recordings.RecordingFinalized,
+				FinalizedAt: &finalizedAt,
+			},
+		},
+	}, publication)
+	cancelCause := errors.New("operator stopped read")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(cancelCause)
+
+	_, err = service.ReadPortableArtifact(ctx, recordings.ReadPortableArtifactRequest{
+		RecordingID: "recording-cancel-read",
+		Reference:   "artifact:cancel-read",
+	})
+	if !errors.Is(err, recordings.ErrPortableArtifactCancelled) ||
+		!errors.Is(err, context.Canceled) ||
+		!errors.Is(err, cancelCause) {
+		t.Fatalf("pre-cancelled read = %v, want typed cancellation", err)
+	}
+}
+
+func TestReadPortableArtifactCancellationDuringReadDoesNotReturnPartialArtifact(t *testing.T) {
+	t.Parallel()
+
+	finalizedAt := time.Unix(1_700_000_000, 0).UTC()
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-inflight-cancel-read"}
+	event := recordings.CanonicalEvent{
+		ID: "event-inflight-cancel-read", Kind: "WORK_REQUEST",
+		Sequence: 0,
+		Scope:    scope,
+		Cursor: recordings.CanonicalEventCursor{
+			StreamGenerationID: "generation-inflight-cancel-read",
+			Sequence:           0,
+		},
+		RecordedAt: time.Unix(1_700_000_000, 0).UTC(),
+		Payload:    "{}",
+	}
+	destination := filepath.Join(t.TempDir(), "public-read.json")
+	publication, err := artifactsexportservice.NewOSPublication()
+	if err != nil {
+		t.Fatalf("NewOSPublication: %v", err)
+	}
+	service := artifactsexportservice.New(snapshotSourceFake{
+		snapshot: recordinglifecycle.Snapshot{
+			Status: recordings.RecordingStatusFacts{
+				RecordingID: "recording-inflight-cancel-read",
+				Artifact:    recordings.RecordingArtifactReference(destination),
+				Scope:       scope,
+				State:       recordings.RecordingFinalized,
+				FinalizedAt: &finalizedAt,
+			},
+			Events: []recordings.CanonicalEvent{event},
+		},
+	}, publication)
+	if _, err := service.ExportPortableArtifact(context.Background(), recordings.ExportPortableArtifactRequest{
+		RecordingID: "recording-inflight-cancel-read",
+	}); err != nil {
+		t.Fatalf("ExportPortableArtifact: %v", err)
+	}
+	cancelCause := errors.New("operator stopped read")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	blockingPublication, err := artifactsexportservice.NewPublication(
+		os.MkdirAll,
+		func(dir, pattern string) (artifactsexportservice.PublicationTemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		os.Remove,
+		os.Rename,
+		func(string) ([]byte, error) {
+			cancel(cancelCause)
+			return nil, context.Canceled
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewPublication: %v", err)
+	}
+	service = artifactsexportservice.New(snapshotSourceFake{
+		snapshot: recordinglifecycle.Snapshot{
+			Status: recordings.RecordingStatusFacts{
+				RecordingID: "recording-inflight-cancel-read",
+				Artifact:    recordings.RecordingArtifactReference(destination),
+				Scope:       scope,
+				State:       recordings.RecordingFinalized,
+				FinalizedAt: &finalizedAt,
+			},
+			Events: []recordings.CanonicalEvent{event},
+		},
+	}, blockingPublication)
+
+	_, err = service.ReadPortableArtifact(ctx, recordings.ReadPortableArtifactRequest{
+		RecordingID: "recording-inflight-cancel-read",
+		Reference:   recordings.RecordingArtifactReference(destination),
+	})
+	if !errors.Is(err, recordings.ErrPortableArtifactCancelled) ||
+		!errors.Is(err, context.Canceled) ||
+		!errors.Is(err, cancelCause) {
+		t.Fatalf("in-flight cancelled read = %v, want typed cancellation", err)
 	}
 }
 

@@ -561,6 +561,10 @@ var (
 	// ErrForeignPortableArtifact reports a public artifact handle that is not
 	// owned by the selected recording export scope.
 	ErrForeignPortableArtifact = errors.New("foreign portable recording artifact handle")
+
+	// ErrPortableArtifactCancelled reports cancellation of an in-flight portable
+	// artifact close, export, or read before publication or decode completes.
+	ErrPortableArtifactCancelled = errors.New("portable recording artifact operation cancelled")
 )
 
 // PortableArtifactIntegrity contains the completed artifact digest. Digest is
@@ -761,10 +765,10 @@ type Service interface {
 	SummarizePortableArtifact(SummarizePortableArtifactRequest) (SummarizePortableArtifactResult, error)
 	// ExportPortableArtifact closes one finalized recording and atomically
 	// publishes its completed portable artifact to the public reference.
-	ExportPortableArtifact(ExportPortableArtifactRequest) (ExportPortableArtifactResult, error)
+	ExportPortableArtifact(context.Context, ExportPortableArtifactRequest) (ExportPortableArtifactResult, error)
 	// ReadPortableArtifact reads and validates one published portable artifact
 	// from its public reference.
-	ReadPortableArtifact(ReadPortableArtifactRequest) (ReadPortableArtifactResult, error)
+	ReadPortableArtifact(context.Context, ReadPortableArtifactRequest) (ReadPortableArtifactResult, error)
 }
 
 // ProjectionService is the legacy runtime projection composition capability.

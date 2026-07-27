@@ -654,8 +654,12 @@ func (fake *peerRootServiceFake) SummarizePortableArtifact(
 }
 
 func (fake *peerRootServiceFake) ExportPortableArtifact(
+	ctx context.Context,
 	request recordings.ExportPortableArtifactRequest,
 ) (recordings.ExportPortableArtifactResult, error) {
+	if err := ctx.Err(); err != nil {
+		return recordings.ExportPortableArtifactResult{}, recordings.ErrPortableArtifactCancelled
+	}
 	built, err := fake.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
 		RecordingID: request.RecordingID,
 	})
@@ -669,8 +673,12 @@ func (fake *peerRootServiceFake) ExportPortableArtifact(
 }
 
 func (fake *peerRootServiceFake) ReadPortableArtifact(
+	ctx context.Context,
 	request recordings.ReadPortableArtifactRequest,
 ) (recordings.ReadPortableArtifactResult, error) {
+	if err := ctx.Err(); err != nil {
+		return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactCancelled
+	}
 	if strings.TrimSpace(string(request.RecordingID)) == "" ||
 		strings.TrimSpace(string(request.Reference)) == "" {
 		return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
