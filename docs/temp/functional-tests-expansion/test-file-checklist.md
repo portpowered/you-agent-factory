@@ -339,7 +339,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### JavaScript composition primitives
 
-- [ ] `tests/functional/orchestration/javascript/composition/agent_test.go`
+- [x] `tests/functional/orchestration/javascript/composition/agent_test.go`
   - `TestJavaScriptAgentReturnsUnaryResult` covers one child dispatch.
   - `TestJavaScriptAgentFailureReturnsStableFailureRecord` covers error.
 

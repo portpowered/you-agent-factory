@@ -139,7 +139,19 @@
   (with `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage`) so
   `functional-boundary-check` stays unavoidable through the nested
   `test-functional-coverage` call, and the lane uploads Markdown, coverage
-  JSON, profile, and command log on success and failure. Prove default
+  JSON, profile, and command log on success and failure.
+  JavaScript agent composition functional coverage belongs in
+  `tests/functional/orchestration/javascript/composition/agent_test.go`:
+  drive sync Factory Session execution through
+  `tests/functional/internal/support.StartFunctionalAPIServer` with
+  `UseMockWorkers: true` and a recording `edges.Edges.ProviderCommandRunner`,
+  assert unary child results on `result.primaryResult`, and prove stable
+  `FAILED` dispatch records via the `fail:` fake-child prompt prefix without
+  live provider execution. Catalog metadata infers domain `orchestration` and
+  subsection `javascript/composition` from the path; every top-level `Test*`
+  needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
+  Prove default
   `functional-test-viz` wiring (boundary first, single coverage with profile
   + JSON under `.artifacts/functional-test-viz/`, Markdown generator) with
   dry-run / stubbed Make wrapper smoke under
