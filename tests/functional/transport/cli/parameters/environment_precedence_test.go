@@ -2,6 +2,7 @@ package parameters_test
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -67,6 +68,78 @@ func TestCLIExplicitFlagOverridesEnvironmentDefault(t *testing.T) {
 		resolvedinput.SourceEnvironment,
 		"environment-model",
 	)
+}
+
+// TestCLIEnvironmentOverridesGlobalConfig proves environment variables override
+// conflicting global operator config for the same documented operator setting,
+// with the environment-resolved value observable at the CLI resolution edge and
+// the file value not selected.
+func TestCLIEnvironmentOverridesGlobalConfig(t *testing.T) {
+	home := t.TempDir()
+	writeOperatorConfig(t, home, []byte(
+		`{"defaults":{"workerModelProvider":"codex","workerModel":"file-model"}}`,
+	))
+
+	var observation cliobservation.Result
+	process := support.BuildProcess(t, serviceedges.Edges{
+		CLIObserver: cliobservation.Capture(&observation),
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you",
+		"docs", "agents",
+	})
+	inputs.Input.Env = append(os.Environ(),
+		"HOME="+home,
+		"USERPROFILE="+home,
+		operatorsettings.EnvDefaultWorkerModelProvider+"=gemini",
+		operatorsettings.EnvDefaultWorkerModel+"=environment-model",
+	)
+	inputs.Input.WorkingDirectory = home
+
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(docs agents with operator defaults) error = %v", err)
+	}
+
+	assertResolvedOperatorDefault(
+		t,
+		observation.ResolvedInputs,
+		"you.flag.default-worker-model-provider",
+		"gemini",
+		resolvedinput.SourceEnvironment,
+	)
+	assertResolvedOperatorDefault(
+		t,
+		observation.ResolvedInputs,
+		"you.flag.default-worker-model",
+		"environment-model",
+		resolvedinput.SourceEnvironment,
+	)
+	assertOperatorDefaultNotFromSource(
+		t,
+		observation.ResolvedInputs,
+		"you.flag.default-worker-model-provider",
+		resolvedinput.SourceOperatorConfig,
+		"codex",
+	)
+	assertOperatorDefaultNotFromSource(
+		t,
+		observation.ResolvedInputs,
+		"you.flag.default-worker-model",
+		resolvedinput.SourceOperatorConfig,
+		"file-model",
+	)
+}
+
+func writeOperatorConfig(t *testing.T, homeDir string, payload []byte) {
+	t.Helper()
+	configDir := filepath.Join(homeDir, ".you-agent-factory")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatalf("mkdir operator config directory: %v", err)
+	}
+	configPath := filepath.Join(configDir, "config.json")
+	if err := os.WriteFile(configPath, payload, 0o600); err != nil {
+		t.Fatalf("write operator config: %v", err)
+	}
 }
 
 func assertResolvedOperatorDefault(
