@@ -70,14 +70,17 @@ func TestRootCatalogTypedFailuresMatchPrivateCatalog(t *testing.T) {
 
 	assertGetErrorIs(t, root, providers.GetProviderRequest{}, providers.ErrInvalidID)
 	assertGetErrorIs(t, root, providers.GetProviderRequest{ID: providers.IDClaude + "-stale"}, providers.ErrUnknownProvider)
-	assertGetErrorIs(t, root, providers.GetProviderRequest{ID: providers.IDAgy}, providers.ErrProviderUnavailable)
 
 	list, err := root.ListProviders(context.Background(), providers.ListProvidersRequest{})
 	if err != nil {
 		t.Fatalf("ListProviders() = %v", err)
 	}
-	if _, ok := indexProviders(list.Providers)[providers.IDAgy]; !ok {
-		t.Fatal("ListProviders() missing unavailable agy provider")
+	agy, ok := indexProviders(list.Providers)[providers.IDAgy]
+	if !ok {
+		t.Fatal("ListProviders() missing agy provider")
+	}
+	if agy.Availability != providers.AvailabilitySelectable {
+		t.Fatalf("agy availability = %q, want selectable", agy.Availability)
 	}
 }
 

@@ -35,7 +35,14 @@ func TestRootCatalogDelegation_FulfillsPublishedListAndGet(t *testing.T) {
 	}
 
 	assertGetErrorIs(t, root, providers.GetProviderRequest{}, providers.ErrInvalidID)
-	assertGetErrorIs(t, root, providers.GetProviderRequest{ID: providers.IDAgy}, providers.ErrProviderUnavailable)
+
+	agy, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.IDAgy})
+	if err != nil {
+		t.Fatalf("GetProvider(agy) = %v", err)
+	}
+	if agy.Provider.Availability != providers.AvailabilitySelectable {
+		t.Fatalf("agy availability = %q, want selectable", agy.Provider.Availability)
+	}
 }
 
 func TestRootCatalogDelegation_ConstructionIsInert(t *testing.T) {
