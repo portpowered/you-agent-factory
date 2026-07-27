@@ -175,7 +175,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### HTTP server and protocol mechanics
 
-- [ ] `tests/functional/transport/http/server/startup_shutdown_test.go`
+- [x] `tests/functional/transport/http/server/startup_shutdown_test.go`
   - `TestAPIServerStartsOnConfiguredListenerAndServesStatus`.
   - `TestAPIServerShutdownClosesListenerAndActiveStreams`.
   - `TestAPIServerBindFailureUnwindsStartedLifecycleRoles`.
@@ -249,7 +249,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestProviderAuthRateLimitAndTimeoutRemainDistinct` covers error classes.
   - `TestProviderFailureRedactsPromptEnvironmentAndCredentials` covers safety.
 
-- [ ] `tests/functional/workers/inference/stream_fidelity_test.go`
+- [x] `tests/functional/workers/inference/stream_fidelity_test.go`
   - `TestProviderFullStreamClaimsDeltasAndSnapshotsTruthfully`.
   - `TestProviderPartialStreamDoesNotFabricateMissingDeltas`.
   - `TestProviderSnapshotOnlyEmitsCompletedSnapshotsOnly`.
@@ -447,6 +447,10 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAutomationsCronActivatesThroughRuntimeLifecycle`.
   - `TestAutomationsCronJitterProducesStableSubmissionTiming`.
   - `TestAutomationsCronSkipsMalformedWorkstationAndFiresValid`.
+- [x] `tests/functional/automations/filesystem_watcher_root_composition_test.go`
+  - `TestBuildProcessRemainsFilesystemWatcherInertBeforeRuntimeLifecycle`.
+  - `TestAutomationsFilesystemWatcherPreseedsThroughRuntimeLifecycle`.
+
 - [x] `tests/functional/automations/filesystem_watcher_root_composition_test.go`
   - `TestBuildProcessRemainsFilesystemWatcherInertBeforeRuntimeLifecycle`.
   - `TestAutomationsFilesystemWatcherPreseedsThroughRuntimeLifecycle`.

@@ -1,7 +1,9 @@
 package runtime_api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -62,6 +64,17 @@ func TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure(t *testing
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	host := startFunctionalServerWithArgs(t, dir, false, nil, withWorkerCommands(generatedRESTStreamingRunner{}, nil))
 
+	opened := postJSON[factoryapi.OpenFactorySessionResponse](
+		t,
+		host.URL()+"/factory-sessions",
+		factoryapi.OpenFactorySessionRequest{FolderPath: dir},
+		"open a dedicated Factory Session for generated REST streaming",
+	)
+	if opened.Session == nil || opened.Session.Id == "" {
+		t.Fatalf("opened Factory Session = %#v, want a public session ID", opened)
+	}
+	streamSessionID := opened.Session.Id
+
 	responseStarted := make(chan struct{}, 1)
 	httpClient := &http.Client{Transport: responseStartedRoundTripper{
 		started: responseStarted,
@@ -78,16 +91,16 @@ func TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure(t *testing
 	}
 	result := make(chan callResult, 1)
 	go func() {
-		response, callErr := adapter.GetFactoryResponseEventsBySessionID(context.Background(), "~default", nil)
+		response, callErr := adapter.GetFactoryResponseEventsBySessionID(context.Background(), streamSessionID, nil)
 		result <- callResult{response: response, err: callErr}
 	}()
 
-	traceID := submitGeneratedWork(t, host.URL(), factoryapi.SubmitWorkRequest{
+	traceID := submitGeneratedWorkToSession(t, host.URL(), streamSessionID, factoryapi.SubmitWorkRequest{
 		Name:         stringPtr("generated-rest-client-success"),
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "generated REST client success"},
 	})
-	waitForGeneratedWorkComplete(t, host.URL(), traceID, generatedRESTClientSmokeTimeout)
+	waitForGeneratedWorkCompleteInSession(t, host.URL(), streamSessionID, traceID, generatedRESTClientSmokeTimeout)
 	select {
 	case <-responseStarted:
 	case <-time.After(generatedRESTClientSmokeTimeout):
@@ -105,7 +118,7 @@ func TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure(t *testing
 		t.Fatalf("generated API error = %#v, want NOT_FOUND/RESPONSE_EVENT_SESSION_NOT_FOUND", failure.JSON404)
 	}
 
-	closeDefaultFactorySession(t, host.URL())
+	closeFactorySession(t, host.URL(), streamSessionID)
 
 	var success callResult
 	select {
@@ -226,20 +239,46 @@ func assertGeneratedRESTContextError(
 	}
 }
 
-func closeDefaultFactorySession(t *testing.T, baseURL string) {
+func submitGeneratedWorkToSession(t *testing.T, baseURL, sessionID string, req factoryapi.SubmitWorkRequest) string {
 	t.Helper()
-	request, err := http.NewRequest(http.MethodDelete, strings.TrimSuffix(baseURL, "/")+"/factory-sessions/~default", nil)
+	if req.Name == nil || *req.Name == "" {
+		req.Name = stringPtr("generated-api-submit")
+	}
+	body, err := json.Marshal(req)
 	if err != nil {
-		t.Fatalf("build close default Factory Session request: %v", err)
+		t.Fatalf("marshal generated submit request: %v", err)
 	}
-	response, err := http.DefaultClient.Do(request)
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/work"
+	resp, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
-		t.Fatalf("close default Factory Session: %v", err)
+		t.Fatalf("POST %s: %v", endpoint, err)
 	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusNoContent {
-		t.Fatalf("close default Factory Session status = %d, want 204", response.StatusCode)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST %s status = %d, want 201", endpoint, resp.StatusCode)
 	}
+	var out factoryapi.SubmitWorkResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode generated submit response: %v", err)
+	}
+	return out.TraceId
+}
+
+func waitForGeneratedWorkCompleteInSession(t *testing.T, baseURL, sessionID, traceID string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/work"
+	for time.Now().Before(deadline) {
+		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, endpoint)
+		for _, item := range work.Results {
+			if stringPointerValue(item.TraceId) == traceID && generatedWorkPlaceID(item) == "task:complete" {
+				return
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, endpoint)
+	t.Fatalf("timed out waiting for trace %q at task:complete in session %q; last work response: %#v", traceID, sessionID, work)
 }
 
 type countingRoundTripper struct {

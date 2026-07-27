@@ -325,6 +325,18 @@
   metadata infers domain `transport` and subsection `cli/parameters` from the
   path; every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+  HTTP API server startup/shutdown functional coverage belongs in
+  `tests/functional/transport/http/server/startup_shutdown_test.go`: prove
+  configured `--server` loopback listeners serve non-empty `GET /status`
+  readiness after start through `support.StartFunctionalAPIServer`, prove
+  shutdown closes the listener and terminates active public streams (including
+  in-flight Factory Session invocations) without leaking ports, and prove bind
+  failure through `platformhttpserver.NewStarter` on `edges.Edges.APIServerStarter`
+  reports `SERVER_BIND_FAILED` with zero browser/readiness side effects and
+  rebound availability on the requested address. Catalog metadata infers domain
+  `transport` and subsection `http/server` from the path; every top-level
+  `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
   CLI JSON parameter values functional coverage belongs in
   `tests/functional/transport/cli/parameters/json_values_test.go`: prove nested
   JSON object and array named parameters reach canonical `InvocationArguments`
@@ -650,6 +662,21 @@ Wave 0 functional-tests-expansion planning authority lives under
   plus public Work outcomes only. Catalog metadata infers domain `workers` and
   subsection `inference` from the path; every top-level `Test*` needs a
   customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+- Workers inference provider stream-fidelity functional coverage belongs in
+  `tests/functional/workers/inference/stream_fidelity_test.go`: prove full-stream
+  providers publish truthful message deltas and completed snapshots (native-stream
+  delivery, no final-only fabrication), partial-stream providers do not fabricate
+  missing message deltas, snapshot-only providers emit completed snapshots only
+  (zero deltas, no final-only), and final-only providers emit only the terminal
+  completed message (`FINAL_ONLY` / `NATIVE_FINAL`, zero message deltas). Drive
+  proofs through `support.RunFactoryToCompletionWithEdgesAndResponseEvents` with
+  sanitized FND-006 provider-session goldens replayed via
+  `serviceedges.Edges{ProviderCommandRunner: ...}` (and OpenCode snapshot-only
+  executable-locator edges when required) and assert on public
+  `FactoryResponseEvent` provenance plus terminal Work outcomes only. Catalog
+  metadata infers domain `workers` and subsection `inference` from the path;
+  every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
 
 - `tests/functional/automations/` owns root.BuildProcess evidence for packaged
   Automations cron scheduling and filesystem watcher preseed. Keep cron workstation

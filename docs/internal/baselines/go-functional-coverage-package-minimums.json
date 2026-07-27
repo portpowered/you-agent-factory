@@ -1367,12 +1367,30 @@
       "minimum": 53.55
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/internal/service",
+      "minimum": 73.50
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire",
+      "minimum": 76.90
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/materialize",
       "minimum": 13.10
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
-      "minimum": 30.63
+      "minimum": 7.37
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers",
