@@ -30,7 +30,7 @@ const (
 // TestOpenCodeGoldenStructuredSnapshotSuccess replays a sanitized OpenCode
 // structured-snapshot transcript through the customer process boundary and
 // proves successful structured snapshot outcomes with matching public metadata.
-//golden: docs/temp/functional/provider-sessions/opencode/structured-snapshot-success/manifest.json
+// golden: docs/temp/functional/provider-sessions/opencode/structured-snapshot-success/manifest.json
 func TestOpenCodeGoldenStructuredSnapshotSuccess(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
 	caseDir := filepath.Join(
@@ -88,9 +88,9 @@ func TestOpenCodeGoldenStructuredSnapshotSuccess(t *testing.T) {
 		t,
 		dir,
 		serviceedges.Edges{
-			ProviderCommandRunner:      runner,
-			WorkersExecutableLocator:   fixedExecutableLocator{path: executablePath},
-			WorkersResolveSymlinks:     identityResolveSymlinks,
+			ProviderCommandRunner:    runner,
+			WorkersExecutableLocator: fixedExecutableLocator{path: executablePath},
+			WorkersResolveSymlinks:   identityResolveSymlinks,
 		},
 		30*time.Second,
 	)
@@ -123,24 +123,18 @@ func TestOpenCodeGoldenStructuredSnapshotSuccess(t *testing.T) {
 	}
 
 	observed := support.ProviderSessionObservedGoldens{
-		ProviderSession:   observeOpenCodeProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ProviderSession:  observeOpenCodeProviderSessionGolden(inferencePayload, loaded.Manifest),
 		ResponseEvents:   observeOpenCodeResponseEventGoldens(responseEvents),
 		InvocationResult: observeOpenCodeInvocationResultGolden(inferencePayload, dispatchOutput),
 	}
-	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
-		var updated *support.ProviderSessionGoldensUpdatedError
-		if errors.As(err, &updated) {
-			t.Fatalf("%v", err)
-		}
-		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
-	}
+	compareOpenCodeGoldens(t, loaded, observed)
 }
 
 // TestOpenCodeGoldenFinalOnlyFallback replays a sanitized OpenCode final-only
 // transcript through the customer process boundary and proves authoritative
 // terminal success without fabricated streaming deltas or structured snapshot
 // lifecycle events.
-//golden: docs/temp/functional/provider-sessions/opencode/final-only-fallback/manifest.json
+// golden: docs/temp/functional/provider-sessions/opencode/final-only-fallback/manifest.json
 func TestOpenCodeGoldenFinalOnlyFallback(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
 	caseDir := filepath.Join(
@@ -201,9 +195,9 @@ func TestOpenCodeGoldenFinalOnlyFallback(t *testing.T) {
 		t,
 		dir,
 		serviceedges.Edges{
-			ProviderCommandRunner:      runner,
-			WorkersExecutableLocator:   fixedExecutableLocator{path: executablePath},
-			WorkersResolveSymlinks:     identityResolveSymlinks,
+			ProviderCommandRunner:    runner,
+			WorkersExecutableLocator: fixedExecutableLocator{path: executablePath},
+			WorkersResolveSymlinks:   identityResolveSymlinks,
 		},
 		30*time.Second,
 	)
@@ -232,24 +226,18 @@ func TestOpenCodeGoldenFinalOnlyFallback(t *testing.T) {
 	assertOpenCodeFinalOnlyPublicResponseEvents(t, responseEvents)
 
 	observed := support.ProviderSessionObservedGoldens{
-		ProviderSession:   observeOpenCodeProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ProviderSession:  observeOpenCodeProviderSessionGolden(inferencePayload, loaded.Manifest),
 		ResponseEvents:   observeOpenCodeResponseEventGoldens(responseEvents),
 		InvocationResult: observeOpenCodeInvocationResultGolden(inferencePayload, dispatchOutput),
 	}
-	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
-		var updated *support.ProviderSessionGoldensUpdatedError
-		if errors.As(err, &updated) {
-			t.Fatalf("%v", err)
-		}
-		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
-	}
+	compareOpenCodeGoldens(t, loaded, observed)
 }
 
 // TestOpenCodeGoldenStructuredFailureAndTimeout replays sanitized OpenCode
 // structured-failure and timeout transcripts through the customer process
 // boundary and proves those public failure classes remain distinct.
-//golden: docs/temp/functional/provider-sessions/opencode/structured-failure/manifest.json
-//golden: docs/temp/functional/provider-sessions/opencode/timeout/manifest.json
+// golden: docs/temp/functional/provider-sessions/opencode/structured-failure/manifest.json
+// golden: docs/temp/functional/provider-sessions/opencode/timeout/manifest.json
 func TestOpenCodeGoldenStructuredFailureAndTimeout(t *testing.T) {
 	t.Run("structured-failure", func(t *testing.T) {
 		runOpenCodeFailureGoldenCase(
@@ -344,13 +332,7 @@ func runOpenCodeFailureGoldenCase(
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
 	}
-	if wantReason != factoryapi.WorkFailureTypeTimeout {
-		if runner.CallCount() != 3 {
-			t.Fatalf("provider command runner calls = %d, want discovery probes plus one invocation", runner.CallCount())
-		}
-	} else if runner.CallCount() < 4 {
-		t.Fatalf("provider command runner calls = %d, want discovery probes plus retryable timeout attempts", runner.CallCount())
-	}
+	assertOpenCodeFailureRunnerCalls(t, runner.CallCount(), wantReason)
 
 	inferencePayload := openCodeGoldenFailedInferenceObservation(t, events)
 	if inferencePayload.FailureDetail == nil {
@@ -371,16 +353,39 @@ func runOpenCodeFailureGoldenCase(
 	assertOpenCodeFailureDoesNotLeakSensitiveOutput(t, events, responseEvents)
 
 	observed := support.ProviderSessionObservedGoldens{
-		ProviderSession:   observeOpenCodeProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ProviderSession:  observeOpenCodeProviderSessionGolden(inferencePayload, loaded.Manifest),
 		ResponseEvents:   observeOpenCodeResponseEventGoldens(responseEvents),
 		InvocationResult: observeOpenCodeFailedInvocationResultGolden(inferencePayload),
 	}
+	compareOpenCodeGoldens(t, loaded, observed)
+}
+
+func compareOpenCodeGoldens(
+	t *testing.T,
+	loaded support.ProviderSessionCase,
+	observed support.ProviderSessionObservedGoldens,
+) {
+	t.Helper()
 	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
 		var updated *support.ProviderSessionGoldensUpdatedError
 		if errors.As(err, &updated) {
 			t.Fatalf("%v", err)
 		}
 		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
+	}
+}
+
+func assertOpenCodeFailureRunnerCalls(
+	t *testing.T,
+	callCount int,
+	wantReason factoryapi.WorkFailureType,
+) {
+	t.Helper()
+	if wantReason != factoryapi.WorkFailureTypeTimeout && callCount != 3 {
+		t.Fatalf("provider command runner calls = %d, want discovery probes plus one invocation", callCount)
+	}
+	if wantReason == factoryapi.WorkFailureTypeTimeout && callCount < 4 {
+		t.Fatalf("provider command runner calls = %d, want discovery probes plus retryable timeout attempts", callCount)
 	}
 }
 
@@ -398,8 +403,8 @@ func assertOpenCodeFailureDoesNotLeakSensitiveOutput(
 		"responseBody",
 	}
 	encoded, err := json.Marshal(struct {
-		Events          []factoryapi.FactoryEvent
-		ResponseEvents  []factoryapi.FactoryResponseEvent
+		Events         []factoryapi.FactoryEvent
+		ResponseEvents []factoryapi.FactoryResponseEvent
 	}{events, responseEvents})
 	if err != nil {
 		t.Fatalf("marshal observed events: %v", err)
@@ -641,13 +646,13 @@ func observeOpenCodeResponseEventGoldens(events []factoryapi.FactoryResponseEven
 				continue
 			}
 			record := map[string]any{
-				"type":         "message.completed",
-				"eventId":      event.EventId,
+				"type":             "message.completed",
+				"eventId":          event.EventId,
 				"factorySessionId": event.FactorySessionId,
-				"runId":        event.RunId,
-				"itemId":       openCodeGoldenItemID(event),
-				"text":         text,
-				"finishReason": "stop",
+				"runId":            event.RunId,
+				"itemId":           openCodeGoldenItemID(event),
+				"text":             text,
+				"finishReason":     "stop",
 			}
 			records = append(records, mustMarshalJSON(record))
 		case factoryapi.FactoryResponseEventKindTool:

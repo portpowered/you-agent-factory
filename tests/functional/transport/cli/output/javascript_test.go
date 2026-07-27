@@ -1,4 +1,4 @@
-package events
+package output_test
 
 import (
 	"context"

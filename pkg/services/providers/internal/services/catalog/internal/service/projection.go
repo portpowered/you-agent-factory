@@ -1,24 +1,70 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+type publishedProviderCatalog struct {
+	Providers []publishedProviderManifest `json:"providers"`
+}
+
+type publishedProviderManifest struct {
+	ID                         string                         `json:"id"`
+	Aliases                    []string                       `json:"aliases"`
+	DisplayName                publishedLocalizedValue        `json:"displayName"`
+	Discovery                  publishedDiscovery             `json:"discovery"`
+	TechnicalSupportLevel      string                         `json:"technicalSupportLevel"`
+	ImplementationAvailability string                         `json:"implementationAvailability"`
+	MaximumExecution           publishedExecutionCapabilities `json:"maximumExecutionCapabilities"`
+	MaximumResponse            publishedResponseCapabilities  `json:"maximumResponseFidelityCapabilities"`
+}
+
+type publishedLocalizedValue struct {
+	Value string `json:"value"`
+}
+
+type publishedDiscovery struct {
+	ConfigurationKeys []string `json:"configurationKeys"`
+	EndpointKinds     []string `json:"endpointKinds"`
+	ExecutableNames   []string `json:"executableNames"`
+}
+
+type publishedExecutionCapabilities struct {
+	PromptSubmission bool `json:"promptSubmission"`
+	ImageInput       bool `json:"imageInput"`
+	SessionResume    bool `json:"sessionResume"`
+	StructuredOutput bool `json:"structuredOutput"`
+}
+
+type publishedResponseCapabilities struct {
+	NativeStreaming    bool `json:"nativeStreaming"`
+	MessageDeltas      bool `json:"messageDeltas"`
+	MessageSnapshots   bool `json:"messageSnapshots"`
+	ReasoningSummaries bool `json:"reasoningSummaries"`
+	ToolLifecycle      bool `json:"toolLifecycle"`
+	ToolOutputDeltas   bool `json:"toolOutputDeltas"`
+	FileChanges        bool `json:"fileChanges"`
+	Plans              bool `json:"plans"`
+	Usage              bool `json:"usage"`
+	StableItemIDs      bool `json:"stableItemIds"`
+	ProviderReconnect  bool `json:"providerReconnect"`
+}
+
 func projectPublishedCatalog() ([]providers.Descriptor, error) {
-	catalog, err := modelproviders.Catalog()
-	if err != nil {
-		return nil, err
+	var catalog publishedProviderCatalog
+	if err := json.Unmarshal(modelproviders.CatalogJSON(), &catalog); err != nil {
+		return nil, fmt.Errorf("parse embedded provider catalog: %w", err)
 	}
 	return projectManifests(catalog.Providers)
 }
 
-func projectManifests(manifests []factoryapi.ProviderManifest) ([]providers.Descriptor, error) {
+func projectManifests(manifests []publishedProviderManifest) ([]providers.Descriptor, error) {
 	descriptors := make([]providers.Descriptor, 0, len(manifests))
 	for _, manifest := range manifests {
 		descriptor, err := projectManifest(manifest)
@@ -34,19 +80,27 @@ func projectManifests(manifests []factoryapi.ProviderManifest) ([]providers.Desc
 }
 
 // ProjectManifestsForTest projects manifests for focused catalog characterization tests.
-func ProjectManifestsForTest(manifests []factoryapi.ProviderManifest) ([]providers.Descriptor, error) {
-	return projectManifests(manifests)
+func ProjectManifestsForTest(manifests any) ([]providers.Descriptor, error) {
+	encoded, err := json.Marshal(manifests)
+	if err != nil {
+		return nil, err
+	}
+	var published []publishedProviderManifest
+	if err := json.Unmarshal(encoded, &published); err != nil {
+		return nil, err
+	}
+	return projectManifests(published)
 }
 
-func projectManifest(manifest factoryapi.ProviderManifest) (providers.Descriptor, error) {
-	canonicalID := canonicalProvidersID(manifest.Id)
+func projectManifest(manifest publishedProviderManifest) (providers.Descriptor, error) {
+	canonicalID := canonicalProvidersID(manifest.ID)
 	if err := canonicalID.Validate(); err != nil {
-		return providers.Descriptor{}, fmt.Errorf("project provider %q: %w", manifest.Id, err)
+		return providers.Descriptor{}, fmt.Errorf("project provider %q: %w", manifest.ID, err)
 	}
 	availability := projectAvailability(manifest)
 	return providers.Descriptor{
 		ID:            canonicalID,
-		Aliases:       projectAliases(manifest.Id, manifest.Aliases, canonicalID),
+		Aliases:       projectAliases(manifest.ID, manifest.Aliases, canonicalID),
 		DisplayName:   localizedValue(manifest.DisplayName),
 		Availability:  availability,
 		Readiness:     projectReadiness(availability),
@@ -88,16 +142,15 @@ func projectAliases(manifestID string, aliases []string, canonical providers.ID)
 	return collected
 }
 
-func projectAvailability(manifest factoryapi.ProviderManifest) providers.Availability {
+func projectAvailability(manifest publishedProviderManifest) providers.Availability {
 	switch manifest.TechnicalSupportLevel {
-	case factoryapi.ProviderTechnicalSupportLevelNotSupported:
+	case "not-supported":
 		return providers.AvailabilityNotSupported
 	}
 	switch manifest.ImplementationAvailability {
-	case factoryapi.ProviderImplementationAvailabilityCatalogOnly:
+	case "catalog-only":
 		return providers.AvailabilityCatalogOnly
-	case factoryapi.ProviderImplementationAvailabilityBundled,
-		factoryapi.ProviderImplementationAvailabilityExternallySupplied:
+	case "bundled", "externally-supplied":
 		return providers.AvailabilitySelectable
 	default:
 		return providers.AvailabilitySupportedButUnavailable
@@ -113,10 +166,10 @@ func projectReadiness(availability providers.Availability) providers.Readiness {
 	}
 }
 
-func projectStaticPrerequisites(manifest factoryapi.ProviderManifest) []providers.Prerequisite {
+func projectStaticPrerequisites(manifest publishedProviderManifest) []providers.Prerequisite {
 	displayName := localizedValue(manifest.DisplayName)
 	if displayName == "" {
-		displayName = strings.TrimSpace(manifest.Id)
+		displayName = strings.TrimSpace(manifest.ID)
 	}
 	prerequisites := make([]providers.Prerequisite, 0,
 		len(manifest.Discovery.ConfigurationKeys)+
@@ -132,7 +185,7 @@ func projectStaticPrerequisites(manifest factoryapi.ProviderManifest) []provider
 		})
 	}
 	for _, kind := range manifest.Discovery.EndpointKinds {
-		kindName := strings.TrimSpace(string(kind))
+		kindName := strings.TrimSpace(kind)
 		prerequisites = append(prerequisites, providers.Prerequisite{
 			Kind:        providers.PrerequisiteConfiguration,
 			Name:        kindName,
@@ -169,9 +222,9 @@ func prerequisiteSortKey(prerequisite providers.Prerequisite) string {
 	}, "\x00")
 }
 
-func projectCapabilities(manifest factoryapi.ProviderManifest) []providers.Capability {
-	execution := manifest.MaximumExecutionCapabilities
-	response := manifest.MaximumResponseFidelityCapabilities
+func projectCapabilities(manifest publishedProviderManifest) []providers.Capability {
+	execution := manifest.MaximumExecution
+	response := manifest.MaximumResponse
 	capabilities := make([]providers.Capability, 0, len(allProviderCapabilities()))
 	appendIf := func(enabled bool, capability providers.Capability) {
 		if enabled {
@@ -191,12 +244,12 @@ func projectCapabilities(manifest factoryapi.ProviderManifest) []providers.Capab
 	appendIf(response.FileChanges, providers.CapabilityFileChanges)
 	appendIf(response.Plans, providers.CapabilityPlans)
 	appendIf(response.Usage, providers.CapabilityUsage)
-	appendIf(response.StableItemIds, providers.CapabilityStableItemIDs)
+	appendIf(response.StableItemIDs, providers.CapabilityStableItemIDs)
 	appendIf(response.ProviderReconnect, providers.CapabilityProviderReconnect)
 	return capabilities
 }
 
-func localizedValue(value factoryapi.NameValue) string {
+func localizedValue(value publishedLocalizedValue) string {
 	return strings.TrimSpace(value.Value)
 }
 

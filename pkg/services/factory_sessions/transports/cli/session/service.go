@@ -1,10 +1,6 @@
 package session
 
-import (
-	"fmt"
-
-	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
-)
+import "fmt"
 
 // Service exposes Factory Session CLI command operations to Cobra composition.
 type Service interface {
@@ -49,19 +45,6 @@ func Bind(ops Operations) Service {
 		create:         ops.Create,
 		delete:         ops.Delete,
 	}
-}
-
-// New constructs the Sessions CLI service from accepted transport dependencies.
-func New(transport clihttp.Protocol, prepare RequestPreparation) Service {
-	return Bind(Operations{
-		List:           NewList(transport, prepare),
-		Show:           NewShow(transport),
-		Pause:          NewPause(transport),
-		Resume:         NewResume(transport),
-		ListDispatches: NewDispatches(transport),
-		Create:         NewCreate(transport),
-		Delete:         NewDelete(transport),
-	})
 }
 
 func (service *service) List(cfg ListConfig) error {
