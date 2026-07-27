@@ -1303,7 +1303,7 @@
       "fromOwner": "factory_visualization",
       "toOwner": "factory_runtime",
       "class": "command",
-      "evidence": "pkg/services/factory_visualization -\u003e pkg/services/factory_runtime"
+      "evidence": "pkg/services/factory_visualization/internal/services/live_view_projection -\u003e pkg/services/factory_runtime"
     },
     {
       "fromOwner": "factory_visualization",
@@ -1316,6 +1316,12 @@
       "toOwner": "recordings",
       "class": "event",
       "evidence": "pkg/services/factory_visualization/internal/services/activation_lifecycle -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "recordings",
+      "class": "event",
+      "evidence": "pkg/services/factory_visualization/internal/services/live_view_projection/internal/service -\u003e pkg/services/recordings"
     },
     {
       "fromOwner": "initializer",
@@ -3505,6 +3511,24 @@
     },
     {
       "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle/wire",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/live_view_projection",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/live_view_projection/internal/service",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/live_view_projection/wire",
       "disposition": "retain",
       "destination": "factory_visualization",
       "destinationKind": "owner"

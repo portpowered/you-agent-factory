@@ -238,6 +238,9 @@
     "pkg/services/factory_visualization/internal/services/activation_lifecycle",
     "pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service",
     "pkg/services/factory_visualization/internal/services/activation_lifecycle/wire",
+    "pkg/services/factory_visualization/internal/services/live_view_projection",
+    "pkg/services/factory_visualization/internal/services/live_view_projection/internal/service",
+    "pkg/services/factory_visualization/internal/services/live_view_projection/wire",
     "pkg/services/models",
     "pkg/services/models/internal/artifacts",
     "pkg/services/models/internal/catalog",
@@ -1435,6 +1438,21 @@
       "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle/wire",
       "disposition": "retain",
       "destination": "factory_visualization/internal/services/activation_lifecycle"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/live_view_projection",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/live_view_projection"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/live_view_projection/internal/service",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/live_view_projection"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/live_view_projection/wire",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/live_view_projection"
     },
     {
       "packagePath": "pkg/services/models",
