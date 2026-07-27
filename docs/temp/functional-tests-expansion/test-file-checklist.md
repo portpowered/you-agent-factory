@@ -300,7 +300,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestKiroGoldenAuthAndStructuredFailure`.
   - `TestKiroGoldenTimeout`.
 
-- [ ] `tests/functional/workers/inference/pi/golden_test.go`
+- [x] `tests/functional/workers/inference/pi/golden_test.go`
   - `TestPiGoldenTextSuccess`.
   - `TestPiGoldenStructuredFailure`.
   - `TestPiGoldenTimeout`.
