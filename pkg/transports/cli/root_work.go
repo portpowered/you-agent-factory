@@ -8,7 +8,6 @@ import (
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
@@ -31,14 +30,13 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 	if err != nil {
 		panic(fmt.Sprintf("build representative handler registry: %v", err))
 	}
-	sessionRegistry, sessionBindings, err := newSessionHandlerRegistry(globals, diagnostics, options)
+	sessionRegistry, err := newSessionHandlerRegistry(diagnostics, options)
 	if err != nil {
 		panic(fmt.Sprintf("build session handler registry: %v", err))
 	}
 	root, err := newGenericRepresentativeFamily(
 		registry,
 		sessionRegistry,
-		sessionBindings,
 		representativeSourceValues(options),
 		func(inputs resolvedinput.Inputs) error {
 			return applyRepresentativeResolvedInputs(
@@ -75,7 +73,6 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 func newGenericRepresentativeFamily(
 	representativeRegistry *commandregistry.Registry,
 	sessionRegistry *commandregistry.Registry,
-	sessionBindings climanifestcobra.SessionFamilyBindings,
 	sourceValues climanifestcobra.SourceCandidateProvider,
 	rootInputs climanifestcobra.ResolvedInputsBinding,
 ) (*cobra.Command, error) {
@@ -91,101 +88,41 @@ func newGenericRepresentativeFamily(
 		manifest.Commands[commandID] = record
 	}
 	handlers := make(climanifestcobra.CobraHandlerRegistry)
-	for commandID, record := range manifest.Commands {
+	rootRecord, err := manifest.CommandByID("you")
+	if err != nil {
+		return nil, err
+	}
+	rootHandlers, err := representativeRegistry.LookupHandlers(rootRecord.ID)
+	if err != nil {
+		return nil, err
+	}
+	handlers[rootRecord.Handler.ID] = productionGenericCobraHandler(rootHandlers)
+
+	resolvedHandlers := make(climanifestcobra.ResolvedCobraHandlerRegistry)
+	for _, record := range sessionManifest.Commands {
 		if !record.Runnable {
 			continue
 		}
-		registry := sessionRegistry
-		if commandID == "you" {
-			registry = representativeRegistry
-		}
-		registered, lookupErr := registry.LookupHandlers(commandID)
+		registered, lookupErr := sessionRegistry.LookupHandlers(record.Handler.ID)
 		if lookupErr != nil {
 			return nil, lookupErr
 		}
-		handlers[record.Handler.ID] = productionGenericCobraHandler(
-			commandID,
-			registered,
-		)
-	}
-	inputs := make(climanifestcobra.InputBindingRegistry)
-	for inputID, binding := range sessionInputBindings(sessionBindings) {
-		inputs[inputID] = binding
+		resolvedHandlers[record.Handler.ID] = registered.ResolvedRunE
 	}
 	root, err := climanifestcobra.NewCommandTree(manifest, climanifestcobra.GenericBindings{
-		CobraHandlers: handlers,
-		Inputs:        inputs,
-		SourceValues:  sourceValues,
-		RootInputs:    rootInputs,
+		CobraHandlers:         handlers,
+		ResolvedCobraHandlers: resolvedHandlers,
+		SourceValues:          sourceValues,
+		RootInputs:            rootInputs,
 	})
 	if err != nil {
 		return nil, err
 	}
 	root.SilenceUsage = true
-	applySessionGenericFlagUsages(root, manifest, sessionBindings.FlagUsages)
 	return root, nil
 }
 
-func sessionInputBindings(
-	bindings climanifestcobra.SessionFamilyBindings,
-) climanifestcobra.InputBindingRegistry {
-	targets := map[string]any{
-		"you.session.create.flag.dir":              &bindings.Create.Dir,
-		"you.session.create.flag.init-new-factory": &bindings.Create.InitNewFactory,
-		"you.session.create.flag.port":             &bindings.Create.Port,
-		"you.session.create.flag.target-kind":      &bindings.Create.TargetKind,
-		"you.session.create.flag.target-name":      &bindings.Create.TargetName,
-		"you.session.create.flag.validate-only":    &bindings.Create.ValidateOnly,
-		"you.session.delete.flag.port":             &bindings.Delete.Port,
-		"you.session.dispatches.flag.phase":        &bindings.Dispatches.Phase,
-		"you.session.dispatches.flag.status":       &bindings.Dispatches.Status,
-		"you.session.list.flag.port":               &bindings.List.Port,
-		"you.session.list.flag.scope":              &bindings.List.Scope,
-	}
-	result := make(climanifestcobra.InputBindingRegistry, len(targets))
-	for inputID, target := range targets {
-		stableID, bindingTarget := inputID, target
-		result[stableID] = func(value any) error {
-			return assignRepresentativeGenericValue(
-				map[string]any{stableID: value},
-				stableID,
-				bindingTarget,
-			)
-		}
-	}
-	return result
-}
-
-func applySessionGenericFlagUsages(
-	root *cobra.Command,
-	manifest climanifest.Manifest,
-	usages map[string]string,
-) {
-	for commandID, record := range manifest.Commands {
-		if !strings.HasPrefix(commandID, "you.session") {
-			continue
-		}
-		command, _, err := root.Find(strings.Fields(strings.TrimPrefix(record.Path, "you ")))
-		if err != nil || command == nil {
-			continue
-		}
-		for _, flag := range record.Flags {
-			if flag.Scope == "inherited" {
-				continue
-			}
-			usage := usages[commandID+"."+flag.Long]
-			if usage == "" {
-				usage = usages[flag.Long]
-			}
-			if registered := command.Flags().Lookup(flag.Long); registered != nil && usage != "" {
-				registered.Usage = usage
-			}
-		}
-	}
-}
-
 func productionGenericCobraHandler(
-	commandID string,
 	handlers commandregistry.CommandHandlers,
 ) climanifestcobra.CobraHandler {
 	return func(
@@ -194,26 +131,12 @@ func productionGenericCobraHandler(
 		values map[string]any,
 		_ resolvedinput.Inputs,
 	) error {
-		if genericSessionUsesDeprecatedPort(commandID) {
-			if err := rejectDeprecatedPortFlag(cmd, args); err != nil {
-				return err
-			}
-		}
 		if handlers.PreRunE != nil {
 			if err := handlers.PreRunE(cmd, args); err != nil {
 				return err
 			}
 		}
 		return handlers.RunE(cmd, args)
-	}
-}
-
-func genericSessionUsesDeprecatedPort(commandID string) bool {
-	switch commandID {
-	case "you.session.show", "you.session.pause", "you.session.resume", "you.session.dispatches":
-		return true
-	default:
-		return false
 	}
 }
 
@@ -254,36 +177,6 @@ func applyRepresentativeResolvedInputs(
 	globals.json = jsonOutput
 	globals.server = server
 	diagnostics.verbose = verbose
-	return nil
-}
-
-func assignRepresentativeGenericValue(values map[string]any, inputID string, target any) error {
-	value, exists := values[inputID]
-	if !exists {
-		return nil
-	}
-	switch typed := target.(type) {
-	case *bool:
-		resolved, ok := value.(bool)
-		if !ok || typed == nil {
-			return fmt.Errorf("input %q has incompatible boolean binding", inputID)
-		}
-		*typed = resolved
-	case *string:
-		resolved, ok := value.(string)
-		if !ok || typed == nil {
-			return fmt.Errorf("input %q has incompatible string binding", inputID)
-		}
-		*typed = resolved
-	case *int:
-		resolved, ok := value.(int)
-		if !ok || typed == nil {
-			return fmt.Errorf("input %q has incompatible integer binding", inputID)
-		}
-		*typed = resolved
-	default:
-		return fmt.Errorf("input %q has unsupported production binding", inputID)
-	}
 	return nil
 }
 
@@ -335,6 +228,9 @@ func newB12ProductionFamilies(
 	if err != nil {
 		return b12ProductionFamilies{}, err
 	}
+	if err := preserveSubmitArgumentCompatibility(submitCommand); err != nil {
+		return b12ProductionFamilies{}, err
+	}
 	mcpCommand, err := newMCPCommand(options)
 	if err != nil {
 		return b12ProductionFamilies{}, err
@@ -345,6 +241,52 @@ func newB12ProductionFamilies(
 		Server: runServer.Server,
 		Submit: submitCommand,
 	}, nil
+}
+
+// preserveSubmitArgumentCompatibility keeps the established public Cobra
+// argument shape while the isolated Submit constructor retains manifest-owned
+// argument resolution. The canonical batch resolver must run before its
+// relationship validation, even though the production root leaves Args unset.
+func preserveSubmitArgumentCompatibility(submit *cobra.Command) error {
+	if submit == nil {
+		return fmt.Errorf("preserve submit argument compatibility: submit command is required")
+	}
+	submit.Args = nil
+	submit.Long = strings.TrimPrefix(submit.Long, submit.Short+"\n\n")
+	submit.Example = ""
+	for _, flagName := range []string{"name", "payload", "work-type-name"} {
+		flag := submit.Flags().Lookup(flagName)
+		if flag == nil {
+			return fmt.Errorf("preserve submit argument compatibility: flag %q is required", flagName)
+		}
+		delete(flag.Annotations, cobra.BashCompOneRequiredFlag)
+		delete(flag.Annotations, "infinite-you/required")
+	}
+
+	batch, _, err := submit.Find([]string{"batch"})
+	if err != nil {
+		return fmt.Errorf("preserve submit argument compatibility: find batch command: %w", err)
+	}
+	if batch == nil {
+		return fmt.Errorf("preserve submit argument compatibility: batch command is required")
+	}
+	batch.Long = strings.TrimPrefix(batch.Long, batch.Short+"\n\n")
+	resolveArguments := batch.Args
+	if resolveArguments == nil {
+		return fmt.Errorf("preserve submit argument compatibility: batch argument resolver is required")
+	}
+	validateInputs := batch.PreRunE
+	batch.Args = nil
+	batch.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if err := resolveArguments(cmd, args); err != nil {
+			return err
+		}
+		if validateInputs != nil {
+			return validateInputs(cmd, args)
+		}
+		return nil
+	}
+	return nil
 }
 
 func productionRootSubcommands(
@@ -964,13 +906,5 @@ func newRepresentativeHandlerRegistry(
 			policy := diagnostics.resolvePolicy(false)
 			return runFactoryWithOptions(cmd, defaultcmd.OOTBRunConfig(rootOptions.runDefaults), nil, globals, operatorDefaults, policy, rootOptions, true)
 		},
-		SessionShowRunE: commandregistry.SessionShowRunE(commandregistry.SessionShowBinding{
-			Server:            &globals.server,
-			JSON:              &globals.json,
-			Verbose:           diagnostics.verboseEnabled,
-			Debug:             &diagnostics.debug,
-			DiagnosticsWriter: diagnostics.writer,
-			ShowSession:       rootOptions.ShowSession,
-		}),
 	})
 }
