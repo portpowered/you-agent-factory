@@ -379,6 +379,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/automations/filesystem_watcher_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsFilesystemWatcherPreseedsThroughRuntimeLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/automations/filesystem_watcher_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/filesystem_watcher_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestBuildProcessRemainsFilesystemWatcherInertBeforeRuntimeLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/automations/filesystem_watcher_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/bootstrap_portability/agent_factory_export_import_fixture_test.go",
       "package": "you-agent-factory/tests/functional/bootstrap_portability",
       "scenario": "TestAgentFactoryExportImportFixture_AuthoredLayoutInterpolatesProjectSpecificPromptContent",
@@ -1794,6 +1814,36 @@
       "scenario": "TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch",
       "lane": "short",
       "destination": "tests/functional/orchestration/javascript/contracts/input_mapping_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/contracts/output_mapping_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
+      "scenario": "TestJavaScriptReturnValueMapsToPrimaryInvocationResult",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/contracts/output_mapping_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/contracts/output_mapping_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
+      "scenario": "TestJavaScriptStructuredArtifactsMapToPublicResult",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/contracts/output_mapping_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/contracts/output_mapping_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
+      "scenario": "TestJavaScriptUnsupportedReturnValueFailsWithoutPrivateVMDetails",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/contracts/output_mapping_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -6843,14 +6893,14 @@
       "workflow": 44,
       "workstations": 29
     },
-    "customer_top_level_Test_scenarios": 661,
-    "files_with_customer_Test": 226,
+    "customer_top_level_Test_scenarios": 666,
+    "files_with_customer_Test": 228,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 95,
-    "lane_short": 566,
+    "lane_short": 571,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
       "you-agent-factory/tests/functional/bootstrap_portability": 25,
@@ -6991,15 +7041,15 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T22:30:00Z",
-    "story": "ft-wave1-http-startup-shutdown-mergeability-rebase5",
-    "live_customer_scenarios": 661,
-    "ledger_rows": 661,
+    "audited_at_utc": "2026-07-27T22:40:00Z",
+    "story": "ft-wave1-http-startup-shutdown-mergeability-rebase6",
+    "live_customer_scenarios": 666,
+    "ledger_rows": 666,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 566,
+    "lane_short": 571,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,

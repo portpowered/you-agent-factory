@@ -1,4 +1,4 @@
-package ingest
+package service
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"go.uber.org/zap"
+	"github.com/jonboulle/clockwork"
 )
 
 type scriptedEventWatcher struct {
@@ -49,10 +49,10 @@ func TestFileWatcher_InjectedEventProcessesAfterDirectoryRegistration(t *testing
 		t.Fatal(err)
 	}
 
-	factory := &mockFactory{submitted: make(chan struct{}, 1)}
+	submitter := &recordingSubmitter{submitted: make(chan struct{}, 1)}
 	watcher := newScriptedEventWatcher()
-	fw := NewFileWatcher(dir, factory, zap.NewNop(), nil, nil, localInputFiles{}, filepath.WalkDir, testWorkRequestIDGenerator)
-	fw.newWatcher = func() (fileEventWatcher, error) { return watcher, nil }
+	clock := clockwork.NewFakeClock()
+	fw := newDebouncedTestWatcher(dir, submitter, clock, watcher)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -60,25 +60,19 @@ func TestFileWatcher_InjectedEventProcessesAfterDirectoryRegistration(t *testing
 
 	waitForRegisteredDirectory(t, watcher.added, dir)
 	watcher.events <- fsnotify.Event{Name: path, Op: fsnotify.Create}
+	advanceDebounce(t, clock)
 	select {
-	case <-factory.submitted:
+	case <-submitter.submitted:
 	case <-time.After(time.Second):
 		t.Fatal("injected file event was not submitted")
 	}
-	requests := factory.getWorkRequests()
+	requests := submitter.getWorkRequests()
 	if got := string(requests[0].Works[0].Payload.([]byte)); got != string(content) {
 		t.Fatalf("payload = %q, want %q", got, content)
 	}
 
 	cancel()
-	select {
-	case err := <-done:
-		if err != context.Canceled {
-			t.Fatalf("Watch returned %v, want context canceled", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("Watch did not stop after cancellation")
-	}
+	waitForWatchDone(t, done)
 }
 
 func waitForRegisteredDirectory(t *testing.T, added <-chan string, want string) {
