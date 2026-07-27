@@ -3450,6 +3450,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/providers",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/recordings",
       "disposition": "retain",
       "destination": "recordings",

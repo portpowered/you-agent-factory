@@ -230,6 +230,7 @@
     "pkg/services/provider_sessions/codex",
     "pkg/services/provider_sessions/cursor",
     "pkg/services/provider_sessions/service",
+    "pkg/services/providers",
     "pkg/services/recordings",
     "pkg/services/recordings/artifacts",
     "pkg/services/recordings/events",
@@ -1319,6 +1320,11 @@
       "packagePath": "pkg/services/provider_sessions/service",
       "disposition": "retain",
       "destination": "provider_sessions"
+    },
+    {
+      "packagePath": "pkg/services/providers",
+      "disposition": "retain",
+      "destination": "providers"
     },
     {
       "packagePath": "pkg/services/recordings",
