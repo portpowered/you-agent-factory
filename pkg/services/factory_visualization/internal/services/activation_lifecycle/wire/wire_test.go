@@ -92,6 +92,59 @@ func TestNewServiceConstructsActivationLifecycleOwner(t *testing.T) {
 	}
 }
 
+func TestNewServiceExplicitRequestActivation(t *testing.T) {
+	t.Parallel()
+
+	subscribeCalls := 0
+	presentCalls := 0
+	source := wireSourceStub{subscribeHook: func() { subscribeCalls++ }}
+	service, err := activationlifecyclewire.NewService(
+		source,
+		wireProjectionStub{},
+		wireClock{},
+		wireSinkFunc(func(activationlifecycle.View) { presentCalls++ }),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = service.Activate(context.Background(), activationlifecycle.ActivateRequest{})
+	if err == nil {
+		t.Fatal("zero-value Activate: error = nil, want missing-parameters failure")
+	}
+	if subscribeCalls != 0 || presentCalls != 0 {
+		t.Fatal("zero-value Activate must not subscribe or present")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result, err := service.Activate(ctx, activationlifecycle.ActivateRequest{
+		Mode: activationlifecycle.ActivateModeRetainedThenLive,
+	})
+	if err != nil {
+		t.Fatalf("Activate RETAINED_THEN_LIVE: error = %v", err)
+	}
+	if result.State != activationlifecycle.LifecycleStateStarted {
+		t.Fatalf("Activate state = %q, want %q", result.State, activationlifecycle.LifecycleStateStarted)
+	}
+	if subscribeCalls != 1 {
+		t.Fatalf("subscribe calls = %d, want 1 after explicit Activate", subscribeCalls)
+	}
+
+	_, err = service.Activate(ctx, activationlifecycle.ActivateRequest{
+		Mode: activationlifecycle.ActivateModeRetainedThenLive,
+	})
+	if err == nil {
+		t.Fatal("repeat Activate: error = nil, want already-activated failure")
+	}
+
+	cancel()
+	if _, err := service.StopDrain(context.Background(), activationlifecycle.StopDrainRequest{}); err != nil {
+		t.Fatalf("StopDrain: error = %v", err)
+	}
+}
+
 type wireSinkFunc func(activationlifecycle.View)
 
 func (f wireSinkFunc) PresentFactoryView(view activationlifecycle.View) { f(view) }

@@ -200,6 +200,12 @@ func TestServiceRootLifecycleInertConstructionAndTypedActivate(t *testing.T) {
 		t.Fatal("missing-parameter Activate must not subscribe")
 	}
 
+	_, err = root.Activate(context.Background(), ActivateRequest{Mode: ActivateMode("UNSUPPORTED")})
+	requireServiceLifecycleError(t, err, LifecycleErrorMissingParameters, "Activate unsupported mode")
+	if subscribeCalls != 0 {
+		t.Fatal("unsupported-mode Activate must not subscribe")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	result, err := root.Activate(ctx, ActivateRequest{Mode: ActivateModeRetainedThenLive})
