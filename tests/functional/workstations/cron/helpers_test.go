@@ -9,6 +9,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -28,6 +29,17 @@ func withSubmissionRecorder(recorder recordings.SubmissionRecorder) cronRuntimeO
 
 func withClock(clock platformclock.Source) cronRuntimeOption {
 	return func(cfg *support.FunctionalAPIServerConfig) { cfg.Edges.Clock = clock }
+}
+
+func withWorkerCommands(providerRunner, scriptRunner platformprocess.CommandRunner) cronRuntimeOption {
+	return func(cfg *support.FunctionalAPIServerConfig) {
+		cfg.Edges.ProviderCommandRunner = providerRunner
+		cfg.Edges.ScriptCommandRunner = scriptRunner
+	}
+}
+
+func withoutMockWorkers() cronRuntimeOption {
+	return func(cfg *support.FunctionalAPIServerConfig) { cfg.UseMockWorkers = false }
 }
 
 func startCronServer(t *testing.T, factoryDir string, options ...cronRuntimeOption) *cronServer {
@@ -111,6 +123,66 @@ func cronDefaultExpiryTerminalOutputConfig(schedule string) map[string]any {
 				"cron":     map[string]any{"schedule": schedule, "triggerAtStart": true},
 				"inputs":   []map[string]string{{"workType": "signal", "state": "init"}},
 				"outputs":  []map[string]string{{"workType": "task", "state": "complete"}},
+			},
+		},
+	}
+}
+
+func cronShutdownFactoryConfig(schedule string) map[string]any {
+	return map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]string{{"name": "cron-worker"}},
+		"workstations": []map[string]any{
+			{
+				"name":     "shutdown-poll",
+				"behavior": "CRON",
+				"worker":   "cron-worker",
+				"cron": map[string]any{
+					"schedule":       schedule,
+					"triggerAtStart": true,
+					"expiryWindow":   "10s",
+				},
+				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
+			},
+		},
+	}
+}
+
+func cronImplicitFailureFactoryConfig(schedule string) map[string]any {
+	return map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]string{{"name": "cron-worker"}},
+		"workstations": []map[string]any{
+			{
+				"name":     "fail-cron",
+				"behavior": "CRON",
+				"worker":   "cron-worker",
+				"cron": map[string]any{
+					"schedule":       schedule,
+					"triggerAtStart": true,
+					"expiryWindow":   "10s",
+				},
+				"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
 			},
 		},
 	}
@@ -478,6 +550,37 @@ func waitForTokenInPlaceByParent(
 
 	t.Fatalf("timed out waiting for token in %s with parent %q", placeID, parentID)
 	return publicWorkObservation{}
+}
+
+func assertCronServerStops(t *testing.T, fs *cronServer) {
+	t.Helper()
+
+	select {
+	case <-fs.Done():
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("cron functional server did not exit after explicit cancellation")
+	}
+}
+
+func assertNoCronSubmissionsAfterShutdown(
+	t *testing.T,
+	submissions <-chan work.FactorySubmissionRecord,
+	workstation string,
+	stableFor time.Duration,
+) {
+	t.Helper()
+
+	deadline := time.After(stableFor)
+	for {
+		select {
+		case record := <-submissions:
+			if record.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation] == workstation {
+				t.Fatalf("cron submitted after shutdown for workstation %q: %#v", workstation, record)
+			}
+		case <-deadline:
+			return
+		}
+	}
 }
 
 func assertNoAdditionalCronSubmissionForNominalAt(

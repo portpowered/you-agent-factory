@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -145,4 +147,68 @@ func TestCronDoesNotDoubleFireForOneScheduleBoundary(t *testing.T) {
 	assertNoCronDispatchForWorkstation(t, fs, "poll-terminal-output")
 	assertNoTokensInPlace(t, fs, "task:complete")
 	assertCronTimeWorkRetainedInCanonicalHistory(t, fs, firstRecord.Request.WorkID, "poll-terminal-output")
+}
+
+// TestCronShutdownPreventsLaterSubmission proves orderly process shutdown stops cron
+// schedule polling so advancing the injected clock past a later boundary does not
+// create new time-work submissions after the customer server lifecycle has ended.
+func TestCronShutdownPreventsLaterSubmission(t *testing.T) {
+	start := time.Date(2026, time.April, 18, 15, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	dir := support.ScaffoldFactory(t, cronShutdownFactoryConfig("* * * * *"))
+
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 32)
+	fs := startCronServer(t, dir, withSubmissionRecorder(func(record work.FactorySubmissionRecord) {
+		observedSubmissions <- record
+	}), withClock(fakeClock))
+
+	startupRecord := waitForCronSubmissionFromWorkstation(t, observedSubmissions, "shutdown-poll", start, time.Second)
+	assertCronSubmissionRecord(t, startupRecord, "shutdown-poll", start)
+	waitForCronDispatch(t, fs, "shutdown-poll", startupRecord.Request.WorkID, time.Second)
+
+	fs.Stop(t)
+	assertCronServerStops(t, fs)
+
+	laterFire := start.Add(time.Minute)
+	fakeClock.Advance(time.Minute)
+	assertNoAdditionalCronSubmissionForNominalAt(t, observedSubmissions, "shutdown-poll", laterFire, 500*time.Millisecond)
+	assertNoCronSubmissionsAfterShutdown(t, observedSubmissions, "shutdown-poll", 200*time.Millisecond)
+}
+
+// TestCronImplicitFailureRoutingMovesFailedCronWorkIntoFailedState proves cron
+// workstation failures route public task Work into the failed state with observable
+// error evidence when the bound worker invocation fails at an injected schedule boundary.
+func TestCronImplicitFailureRoutingMovesFailedCronWorkIntoFailedState(t *testing.T) {
+	start := time.Date(2026, time.April, 18, 14, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	dir := support.ScaffoldFactory(t, cronImplicitFailureFactoryConfig("* * * * *"))
+	support.WriteAgentConfig(t, dir, "cron-worker", `---
+type: MODEL_WORKER
+executorProvider: codex-cli
+modelProvider: openai
+model: gpt-5.4
+stopToken: COMPLETE
+---
+Fail the cron task.
+`)
+
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 32)
+	fs := startCronServer(t, dir, withoutMockWorkers(), withSubmissionRecorder(func(record work.FactorySubmissionRecord) {
+		observedSubmissions <- record
+	}), withClock(fakeClock), withWorkerCommands(testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stderr:   []byte("cron worker unavailable"),
+		ExitCode: 1,
+	}), nil))
+
+	startupRecord := waitForCronSubmissionFromWorkstation(t, observedSubmissions, "fail-cron", start, time.Second)
+	assertCronSubmissionRecord(t, startupRecord, "fail-cron", start)
+	waitForCronDispatch(t, fs, "fail-cron", startupRecord.Request.WorkID, time.Second)
+
+	failedToken := waitForTokenInPlaceByParent(t, fs, "task:failed", startupRecord.Request.WorkID, time.Second)
+	if got := support.StringPointerValue(failedToken.Work.WorkTypeName); got != "task" {
+		t.Fatalf("failed cron output work type = %q, want task", got)
+	}
+	if failedToken.LastError == "" {
+		t.Fatalf("failed cron Work observation = %#v, want last error evidence", failedToken)
+	}
 }
