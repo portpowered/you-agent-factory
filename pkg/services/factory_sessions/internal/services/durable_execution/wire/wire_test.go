@@ -98,6 +98,29 @@ func TestNewServiceRoutesControlThroughOwner(t *testing.T) {
 	}
 }
 
+func TestNewServiceRoutesResumeThroughOwner(t *testing.T) {
+	t.Parallel()
+
+	stub := &resumeSpy{}
+	service, err := durableexecutionwire.NewService(stub)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	resumed, err := service.ResumeInterruptedSession(
+		context.Background(),
+		"sess-resume",
+		factorysessions.DurableResumeRequest{RequestID: "req-resume"},
+	)
+	if err != nil || resumed.SessionID != "sess-resume" ||
+		resumed.Status != string(factorysessions.LifecycleStatusResuming) {
+		t.Fatalf("ResumeInterruptedSession = (%#v, %v), want published durable resume result", resumed, err)
+	}
+	if stub.resumeCalls != 1 {
+		t.Fatalf("resume calls = %d, want 1", stub.resumeCalls)
+	}
+}
+
 func TestNewServiceRoutesRestartReadsThroughOwner(t *testing.T) {
 	t.Parallel()
 
@@ -207,6 +230,23 @@ func (s *executionSpy) StartSync(context.Context, factorysessions.StartRequest) 
 func (s *executionSpy) GetSession(context.Context, string) (factorysessions.SessionReadResult, error) {
 	s.calls++
 	return factorysessions.SessionReadResult{SessionID: "sess-1"}, nil
+}
+
+type resumeSpy struct {
+	factorysessions.ExecutionService
+	resumeCalls int
+}
+
+func (s *resumeSpy) ResumeInterruptedSession(
+	_ context.Context,
+	sessionID string,
+	_ factorysessions.DurableResumeRequest,
+) (factorysessions.AsyncStartResult, error) {
+	s.resumeCalls++
+	return factorysessions.AsyncStartResult{
+		SessionID: sessionID,
+		Status:    string(factorysessions.LifecycleStatusResuming),
+	}, nil
 }
 
 type controlSpy struct {
