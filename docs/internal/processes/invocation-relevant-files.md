@@ -14,6 +14,11 @@ primary-result behavior.
   SessionRef against the resolved provider, bound ordered progress and metadata
   deterministically, redact request-derived and sensitive native diagnostics,
   and suppress the entire result whenever the adapter returns an error.
+- Compose Providers Catalog and Execution as required sibling capabilities
+  behind one `providers.Service`. Validate adapter registrations at construction
+  through Catalog's side-effect-free canonical identity resolver, reject aliases
+  and unknown IDs before publishing the root, and reserve request-time Catalog
+  lookup for live readiness/selectability so construction remains inert.
 - Parent-private Runner implementations that expose subprocess progress should
   consume an injected streaming command capability, serialize publication only
   within each invocation, and build terminal diagnostics from the command

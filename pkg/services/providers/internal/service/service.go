@@ -19,23 +19,17 @@ type Service struct {
 
 var _ providers.Service = (*Service)(nil)
 
-// New constructs an inert Providers root facade over the supplied catalog.
+// New constructs an inert Providers root facade over its two private sibling
+// capabilities.
 func New(
 	catalogService catalog.Service,
-	executionServices ...execution.Service,
+	executionService execution.Service,
 ) (providers.Service, error) {
 	if catalogService == nil {
 		return nil, fmt.Errorf("construct Providers: catalog is required")
 	}
-	if len(executionServices) > 1 {
-		return nil, fmt.Errorf("construct Providers: exactly one execution service is allowed")
-	}
-	var executionService execution.Service
-	if len(executionServices) == 1 {
-		if executionServices[0] == nil {
-			return nil, fmt.Errorf("construct Providers: execution is required")
-		}
-		executionService = executionServices[0]
+	if executionService == nil {
+		return nil, fmt.Errorf("construct Providers: execution is required")
 	}
 	return &Service{catalog: catalogService, execution: executionService}, nil
 }
@@ -58,11 +52,5 @@ func (s *Service) Execute(
 	ctx context.Context,
 	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
-	if s.execution != nil {
-		return s.execution.Execute(ctx, request)
-	}
-	if err := request.Validate(); err != nil {
-		return providers.ExecuteResult{}, err
-	}
-	return providers.ExecuteResult{}, providers.ErrExecuteFailed
+	return s.execution.Execute(ctx, request)
 }

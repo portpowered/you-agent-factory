@@ -22,7 +22,7 @@ import (
 func TestNew_RejectsNilCatalog(t *testing.T) {
 	t.Parallel()
 
-	service, err := providerservice.New(nil)
+	service, err := providerservice.New(nil, &stubExecution{})
 	if err == nil || service != nil {
 		t.Fatalf("New(nil) = (%v, %v), want error", service, err)
 	}
@@ -36,18 +36,13 @@ func TestNewRejectsInvalidExecutionComposition(t *testing.T) {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
 	var nilExecution execution.Service
-	for _, executionServices := range [][]execution.Service{
-		{nilExecution},
-		{&stubExecution{}, &stubExecution{}},
-	} {
-		service, constructionErr := providerservice.New(catalogService, executionServices...)
-		if constructionErr == nil || service != nil {
-			t.Fatalf(
-				"New() = (%v, %v), want invalid execution composition error",
-				service,
-				constructionErr,
-			)
-		}
+	service, constructionErr := providerservice.New(catalogService, nilExecution)
+	if constructionErr == nil || service != nil {
+		t.Fatalf(
+			"New() = (%v, %v), want invalid execution composition error",
+			service,
+			constructionErr,
+		)
 	}
 }
 
@@ -58,7 +53,11 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService)
+	executionService, err := executionwire.NewService(catalogService)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	root, err := providerservice.New(catalogService, executionService)
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -132,6 +131,47 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 	}
 }
 
+func TestRootDelegatesTypedExecutionFailure(t *testing.T) {
+	t.Parallel()
+
+	catalogService, err := catalogwire.NewService()
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	executionService, err := executionwire.NewService(
+		catalogService,
+		execution.Registration{
+			Provider: providers.IDCodex,
+			Attempt: func(
+				context.Context,
+				providers.ExecuteRequest,
+			) (providers.ExecuteResult, error) {
+				return providers.ExecuteResult{}, providers.ExecuteFailure{
+					Kind: providers.ExecuteFailureKindAuthentication,
+				}
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	root, err := providerservice.New(catalogService, executionService)
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	_, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: "attempt-auth",
+	})
+	var failure providers.ExecuteFailure
+	if !errors.Is(executeErr, providers.ErrExecuteFailed) ||
+		!errors.As(executeErr, &failure) ||
+		failure.Kind != providers.ExecuteFailureKindAuthentication {
+		t.Fatalf("Execute() error = %#v, want authentication ExecuteFailure", executeErr)
+	}
+}
+
 func TestRootCatalogTypedFailuresMatchPrivateCatalog(t *testing.T) {
 	t.Parallel()
 
@@ -184,7 +224,7 @@ func TestRootCatalogProbeFailureMatchesPrivateCatalog(t *testing.T) {
 	assertGetErrorIs(t, root, providers.GetProviderRequest{ID: providers.IDCodex}, providers.ErrProviderUnavailable)
 }
 
-func TestRootExecuteRemainsUnimplemented(t *testing.T) {
+func TestRootExecuteUsesBoundExecutionWithoutARegisteredAdapter(t *testing.T) {
 	t.Parallel()
 
 	root := mustRootService(t)
@@ -194,8 +234,8 @@ func TestRootExecuteRemainsUnimplemented(t *testing.T) {
 		AttemptID:   "attempt-1",
 		UserMessage: "hello",
 	})
-	if !errors.Is(err, providers.ErrExecuteFailed) {
-		t.Fatalf("Execute() error = %v, want ErrExecuteFailed", err)
+	if !errors.Is(err, providers.ErrProviderUnavailable) {
+		t.Fatalf("Execute() error = %v, want ErrProviderUnavailable", err)
 	}
 
 	_, err = root.Execute(context.Background(), providers.ExecuteRequest{
@@ -209,7 +249,14 @@ func TestRootExecuteRemainsUnimplemented(t *testing.T) {
 func TestRootConstructionIsInert(t *testing.T) {
 	t.Parallel()
 
-	root, err := providerswire.NewService()
+	probeCalls := 0
+	root, err := providerswire.NewService(catalogwire.WithProbeQuery(func(
+		context.Context,
+		providers.Descriptor,
+	) (catalog.ProbeFacts, error) {
+		probeCalls++
+		return catalog.ProbeFacts{}, nil
+	}))
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -217,6 +264,54 @@ func TestRootConstructionIsInert(t *testing.T) {
 		t.Fatal("NewService() returned nil")
 	}
 	var _ providers.Service = root
+	if probeCalls != 0 {
+		t.Fatalf("construction probe calls = %d, want 0", probeCalls)
+	}
+}
+
+func TestRegisteredCompositionIsInert(t *testing.T) {
+	t.Parallel()
+
+	probeCalls := 0
+	adapterCalls := 0
+	catalogService, err := catalogwire.NewService(catalogwire.WithProbeQuery(func(
+		context.Context,
+		providers.Descriptor,
+	) (catalog.ProbeFacts, error) {
+		probeCalls++
+		return catalog.ProbeFacts{}, nil
+	}))
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	executionService, err := executionwire.NewService(
+		catalogService,
+		execution.Registration{
+			Provider: providers.IDCodex,
+			Attempt: func(
+				context.Context,
+				providers.ExecuteRequest,
+			) (providers.ExecuteResult, error) {
+				adapterCalls++
+				return providers.ExecuteResult{}, nil
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	root, err := providerservice.New(catalogService, executionService)
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+	if root == nil || probeCalls != 0 || adapterCalls != 0 {
+		t.Fatalf(
+			"registered construction = (%v, %d probes, %d attempts), want inert root",
+			root,
+			probeCalls,
+			adapterCalls,
+		)
+	}
 }
 
 func TestPackageBoundary_AvoidsWorkersProviderInternals(t *testing.T) {

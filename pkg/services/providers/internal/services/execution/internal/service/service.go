@@ -30,6 +30,21 @@ func New(
 		if err := registration.Provider.Validate(); err != nil {
 			return nil, fmt.Errorf("construct Providers Execution: %w", err)
 		}
+		canonical, err := catalogService.ResolveProviderID(registration.Provider)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"construct Providers Execution: adapter provider %q: %w",
+				registration.Provider,
+				err,
+			)
+		}
+		if canonical != registration.Provider {
+			return nil, fmt.Errorf(
+				"construct Providers Execution: adapter provider %q must use canonical id %q",
+				registration.Provider,
+				canonical,
+			)
+		}
 		if registration.Attempt == nil {
 			return nil, fmt.Errorf(
 				"construct Providers Execution: adapter for %q is required",

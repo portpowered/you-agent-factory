@@ -56,6 +56,22 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 				{Provider: providers.IDCodex, Attempt: validAttempt},
 			},
 		},
+		{
+			name:    "unknown provider",
+			catalog: mustCatalog(t),
+			registrations: []execution.Registration{{
+				Provider: "missing",
+				Attempt:  validAttempt,
+			}},
+		},
+		{
+			name:    "non-canonical alias",
+			catalog: mustCatalog(t),
+			registrations: []execution.Registration{{
+				Provider: "cursor",
+				Attempt:  validAttempt,
+			}},
+		},
 	}
 
 	for _, test := range tests {
@@ -955,6 +971,10 @@ type recordingCatalog struct {
 		context.Context,
 		providers.GetProviderRequest,
 	) (providers.GetProviderResult, error)
+}
+
+func (*recordingCatalog) ResolveProviderID(id providers.ID) (providers.ID, error) {
+	return id, nil
 }
 
 func (*recordingCatalog) ListProviders(
