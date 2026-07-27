@@ -72,7 +72,7 @@ intentionally small enough to distribute across many agents.
 
 ### CLI parameter contract
 
-- [ ] `tests/functional/transport/cli/parameters/positional_values_test.go`
+- [x] `tests/functional/transport/cli/parameters/positional_values_test.go`
   - `TestRunAcceptsOnePositionalPrompt` verifies spaces and Unicode survive.
   - `TestRunRejectsExtraPositionalValues` verifies no worker dispatch occurs.
   - `TestOptionalSessionIDUsesDefaultWhenOmitted` verifies default session

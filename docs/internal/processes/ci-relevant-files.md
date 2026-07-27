@@ -229,6 +229,17 @@
   `transport` and subsection `cli/output` from the path. Every top-level `Test*`
   needs a customer-readable Go doc so `functionaltestmetadata` stays
   viz-compatible.
+  CLI positional parameter values functional coverage belongs in
+  `tests/functional/transport/cli/parameters/positional_values_test.go`: prove
+  one `you run --factory` positional prompt with spaces and Unicode survives on
+  `CLIObserver` `Parse.Positionals`, prove surplus prompt positionals against a
+  single-slot `invocationSignature` fail with
+  `INVOCATION_ARGUMENT_POSITIONAL_OVERFLOW` and zero provider dispatch, and
+  prove `you session pause` default versus explicit session targeting through
+  mock HTTP request paths at the public `support.BuildProcess` boundary. Catalog
+  metadata infers domain `transport` and subsection `cli/parameters` from the
+  path; every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
   CLI docs command wiring functional coverage belongs in
   `tests/functional/transport/cli/commands/docs_wiring_test.go`: prove packaged
   topic discovery, index-driven non-empty topic rendering, and actionable

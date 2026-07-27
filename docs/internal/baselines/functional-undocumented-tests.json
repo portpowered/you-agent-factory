@@ -131,10 +131,6 @@
       "name": "TestCurrentFactoryActivationFixture_WatchedFileExecutionFollowsActivatedFactory"
     },
     {
-      "file": "cli/factory_run/events/events_test.go",
-      "name": "TestSuccessfulInvocationEmitsCanonicalNDJSON"
-    },
-    {
       "file": "cli/factory_run/output/failure_test.go",
       "name": "TestInvocationFailureOutputContracts"
     },
@@ -451,10 +447,6 @@
       "name": "TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior"
     },
     {
-      "file": "orchestration/javascript/events/javascript_test.go",
-      "name": "TestJavaScriptInvocationEmitsCanonicalPhaseAndCheckpointEvents"
-    },
-    {
       "file": "providers/cli_script_executor_test.go",
       "name": "TestScriptExecutor_ArgTemplating"
     },
@@ -667,10 +659,6 @@
       "name": "TestReplayWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelation"
     },
     {
-      "file": "replay_contracts/worker_public_contract_smoke_long_test.go",
-      "name": "TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFieldsPrivate"
-    },
-    {
       "file": "runtime_api/api_batch_submission_boundary_smoke_long_test.go",
       "name": "TestFactoryRequestBatch_PublicBatchShapeStaysAlignedAcrossWatchedFileAndHTTP"
     },
@@ -752,10 +740,6 @@
     },
     {
       "file": "runtime_api/api_inference_events_test.go",
-      "name": "TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents"
-    },
-    {
-      "file": "runtime_api/api_inference_events_test.go",
       "name": "TestInferenceEvents_ThinEventSmoke_CapturesThinnedDispatchInferenceSequenceAndReconstructsViews"
     },
     {
@@ -765,6 +749,10 @@
     {
       "file": "runtime_api/api_model_local_inference_long_test.go",
       "name": "TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio"
+    },
+    {
+      "file": "runtime_api/api_model_transport_smoke_test.go",
+      "name": "TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork"
     },
     {
       "file": "runtime_api/api_model_transport_smoke_test.go",
@@ -841,10 +829,6 @@
     {
       "file": "runtime_api/api_service_config_override_alignment_test.go",
       "name": "TestServiceConfigOverrideAlignment_FunctionalHTTPServerProviderCommandRunner"
-    },
-    {
-      "file": "runtime_api/api_service_config_override_alignment_test.go",
-      "name": "TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner"
     },
     {
       "file": "runtime_api/api_service_mode_observability_smoke_test.go",
