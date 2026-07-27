@@ -7,7 +7,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
@@ -65,7 +64,20 @@ func TestConcurrentBatchIngressProjectsWhileDispatchBlocked_ServiceModeWorkerPoo
 		t.Fatalf("SubmitWorkRequest concurrent batch: %v", err)
 	}
 
-	waitForConcurrentBatchProjection(t, h.Factory, history, batchRequest.RequestID, "work-concurrent-ingress")
+	if !workRequestRecorded(history, batchRequest.RequestID) {
+		t.Fatalf("WORK_REQUEST not recorded before submit returned; work requests=%#v", history.WorkRequests)
+	}
+	snap, err := h.Factory.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if !snapshotObservesWork(snap, "work-concurrent-ingress") {
+		t.Fatalf(
+			"submit returned before work became observable; work requests=%#v marking tokens=%#v",
+			history.WorkRequests,
+			snap.Marking.Tokens,
+		)
+	}
 
 	close(executor.release)
 	h.cancel()
@@ -73,44 +85,6 @@ func TestConcurrentBatchIngressProjectsWhileDispatchBlocked_ServiceModeWorkerPoo
 	case <-h.errCh:
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for service-mode runtime to stop")
-	}
-}
-
-func waitForConcurrentBatchProjection(
-	t *testing.T,
-	f factory.Factory,
-	history *recordingfixtures.ScriptedRuntimeLedger,
-	requestID string,
-	workID string,
-) {
-	t.Helper()
-
-	deadline := time.After(2 * time.Second)
-	for {
-		if workRequestRecorded(history, requestID) {
-			snap, err := f.GetEngineStateSnapshot(context.Background())
-			if err != nil {
-				t.Fatalf("GetEngineStateSnapshot: %v", err)
-			}
-			if snapshotObservesWork(snap, workID) {
-				return
-			}
-		}
-
-		select {
-		case <-deadline:
-			snap, err := f.GetEngineStateSnapshot(context.Background())
-			if err != nil {
-				t.Fatalf("GetEngineStateSnapshot: %v", err)
-			}
-			t.Fatalf(
-				"timed out waiting for concurrent batch projection while dispatch blocked; work requests=%#v marking tokens=%#v",
-				history.WorkRequests,
-				snap.Marking.Tokens,
-			)
-		default:
-			time.Sleep(10 * time.Millisecond)
-		}
 	}
 }
 

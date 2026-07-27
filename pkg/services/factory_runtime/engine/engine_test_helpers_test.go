@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"testing"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
@@ -32,6 +34,21 @@ func (m *mockSubsystem) Execute(ctx context.Context, snap *interfaces.EngineStat
 
 func submitWorkRequests(ctx context.Context, engine *FactoryEngine, reqs []work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
 	return engine.SubmitWorkRequest(ctx, work.WorkRequestFromSubmitRequests(reqs))
+}
+
+func waitForEngineRunLoopActive(t *testing.T, engine *FactoryEngine, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		engine.mu.Lock()
+		active := engine.runLoopActive
+		engine.mu.Unlock()
+		if active {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for engine run loop to become active")
 }
 
 type testSubmissionHook struct {
