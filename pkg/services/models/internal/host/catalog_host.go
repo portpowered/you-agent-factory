@@ -10,7 +10,6 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
 
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
@@ -230,7 +229,7 @@ func (h *CatalogHost) Pull(
 	pullResult, err := h.assetPuller.PullModel(ctx, runtimeCfg, modelName)
 	if err != nil {
 		readiness := pullResult.Snapshot
-		var pullErr *modelassets.PullError
+		var pullErr *models.PullError
 		if errors.As(err, &pullErr) {
 			readiness = managedRuntimePullSnapshot(runtimeCfg, entry, pullErr.Result)
 		}
@@ -672,7 +671,7 @@ func modelScopedResource(runtimeCfg *models.RuntimeConfig, modelName string) *mo
 func managedRuntimePullSnapshot(
 	runtimeCfg *models.RuntimeConfig,
 	entry localmodels.CatalogEntry,
-	result modelassets.PullResult,
+	result models.PullResult,
 ) ReadinessSnapshot {
 	identity := Identity{
 		Name:     strings.TrimSpace(result.ModelName),

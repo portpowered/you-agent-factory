@@ -1,6 +1,6 @@
 //go:build functionallong
 
-package replay_contracts
+package script_test
 
 import (
 	"encoding/json"
@@ -21,6 +21,9 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFieldsPrivate
+// proves script-wrap workers execute through the public contract while keeping
+// runtime-only worker fields out of flattened and replay-recorded factory JSON.
 func TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFieldsPrivate(t *testing.T) {
 	support.SkipLongFunctional(t, "slow worker public-contract replay sweep")
 
@@ -59,14 +62,14 @@ func TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFie
 		},
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	assertReplaySessionPlaces(t, support.ListDefaultSessionWork(t, server.URL()), map[string]int{
+	assertSessionPlaces(t, support.ListDefaultSessionWork(t, server.URL()), map[string]int{
 		"task:complete": 1, "task:init": 0, "task:failed": 0,
 	})
 	assertWorkerPublicContractProviderRequest(t, runner)
 	server.Stop(t)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
-	runStarted := requireFactoryOnlyRunStartedPayload(t, testutil.GeneratedFactoryEvents(t, artifact.Events))
+	runStarted := requireRunStartedFactoryPayload(t, testutil.GeneratedFactoryEvents(t, artifact.Events))
 	runStartedJSON, err := json.Marshal(runStarted.Factory)
 	if err != nil {
 		t.Fatalf("marshal run-started factory: %v", err)
@@ -81,6 +84,26 @@ func TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFie
 		stringPointerValue(recordedWorker.StopToken) != stringPointerValue(flattenedWorker.StopToken) {
 		t.Fatalf("flattened and recorded public worker payloads diverged\nflattened: %#v\nrecorded:  %#v", flattenedWorker, recordedWorker)
 	}
+}
+
+func requireRunStartedFactoryPayload(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.RunRequestEventPayload {
+	t.Helper()
+
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeRunRequest {
+			continue
+		}
+		payload, err := event.Payload.AsRunRequestEventPayload()
+		if err != nil {
+			t.Fatalf("decode run-request payload %q: %v", event.Id, err)
+		}
+		if payload.Factory.WorkTypes == nil || len(*payload.Factory.WorkTypes) == 0 {
+			t.Fatalf("run-request payload factory missing work types: %#v", payload.Factory)
+		}
+		return payload
+	}
+	t.Fatalf("recorded events missing RUN_REQUEST: %#v", factoryEventTypes(events))
+	return factoryapi.RunRequestEventPayload{}
 }
 
 func assertWorkerPublicContractProviderRequest(t *testing.T, runner *testutil.ProviderCommandRunner) {

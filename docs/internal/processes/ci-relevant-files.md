@@ -163,8 +163,20 @@
   blocking `Provider.Infer` until public `inFlightDispatches` reaches the fan-out
   size, release children to assert declared input-order results and documented
   partial-failure shaping on `/factory-sessions/{id}/results?mode=final` and
-  `/dispatches` without wall-clock sleeps. JavaScript staged composition
+  `/dispatches` without wall-clock sleeps. JavaScript for-each composition
   functional coverage belongs in
+  `tests/functional/orchestration/javascript/composition/for_each_test.go`:
+  drive sync Factory Session execution through
+  `tests/functional/internal/support.StartFunctionalAPIServer` with
+  `UseMockWorkers: true` and a recording `edges.Edges.ProviderCommandRunner`,
+  use single-stage `pipeline(items, worker)` (no `next` callback) to prove
+  per-input child dispatch cardinality, input/result correlation on public
+  dispatch listings and `result.primaryResult`, and empty `items = []`
+  completion with zero child dispatches without live provider execution.
+  Catalog metadata infers domain `orchestration` and subsection
+  `javascript/composition` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  JavaScript staged composition functional coverage belongs in
   `tests/functional/orchestration/javascript/composition/stages_test.go`:
   drive sync Factory Session execution through
   `tests/functional/internal/support.StartFunctionalAPIServer` with
@@ -226,6 +238,32 @@
   failures, and assert private-runtime key exclusion at the public CLI boundary.
   Output-selection conflicts use instrumented `edges.Edges` to prove zero
   product side effects before activation. Catalog metadata infers domain
+  `transport` and subsection `cli/output` from the path. Every top-level `Test*`
+  needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
+  CLI positional parameter values functional coverage belongs in
+  `tests/functional/transport/cli/parameters/positional_values_test.go`: prove
+  one `you run --factory` positional prompt with spaces and Unicode survives on
+  `CLIObserver` `Parse.Positionals`, prove surplus prompt positionals against a
+  single-slot `invocationSignature` fail with
+  `INVOCATION_ARGUMENT_POSITIONAL_OVERFLOW` and zero provider dispatch, and
+  prove `you session pause` default versus explicit session targeting through
+  mock HTTP request paths at the public `support.BuildProcess` boundary. Catalog
+  metadata infers domain `transport` and subsection `cli/parameters` from the
+  path; every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
+  CLI response-stream backpressure functional coverage belongs in
+  `tests/functional/transport/cli/output/stream_backpressure_test.go`:
+  invoke `support.BuildProcess` with a gated or mid-stream-failing stdout writer
+  on `you --json run … --output response-stream`, prove NDJSON Factory Event
+  order and terminal `invocation_result` placement survive slow stdout drains,
+  and prove stdout writer failure ends the invocation unsuccessfully while
+  cancelling in-flight mock-worker external work through
+  `edges.Edges.ProviderCommandRunner` with a runner that blocks until its
+  context is cancelled. Response-stream stdout write failures cancel the
+  invocation through `pkg/transports/cli/run/factory_invocation_input.go`, and
+  worker-pool shutdown cancels in-flight executor contexts through
+  `pkg/services/factory_runtime/runtime/worker_pool.go`. Catalog metadata infers domain
   `transport` and subsection `cli/output` from the path. Every top-level `Test*`
   needs a customer-readable Go doc so `functionaltestmetadata` stays
   viz-compatible.
@@ -484,3 +522,10 @@ Wave 0 functional-tests-expansion planning authority lives under
   `ProviderSessionLoadError` naming case id, role (`request`, `process`, `stdout`,
   `stderr`, `expected-provider-session`, `expected-response-events`,
   `expected-invocation-result`), and path—never silent skip.
+  Cursor failure goldens under `docs/temp/functional/provider-sessions/cursor/`
+  (`malformed-record`, `process-failure`, `timeout`) replay through
+  `tests/functional/workers/inference/cursor/golden_failure_test.go`. Use
+  `stdout.txt` when fixtures include non-JSON stream lines; `.jsonl` loaders
+  reject invalid JSON per line. Retryable timeout cases must queue multiple
+  identical `ProviderCommandRunner` results so retries do not fall through to
+  the default mock.

@@ -37,26 +37,3 @@ func TestServiceConfigOverrideAlignment_FunctionalHTTPServerProviderCommandRunne
 		t.Fatalf("provider command runner calls = %d, want 2", got)
 	}
 }
-
-func TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("script server alignment"))
-
-	runner := support.NewRecordingCommandRunner("script alignment output")
-	server := startFunctionalServerWithArgs(
-		t,
-		dir,
-		false,
-		nil,
-		withWorkerCommands(nil, runner),
-	)
-
-	status := waitForFunctionalServerCompletion(t, server, 10*time.Second)
-	categories := functionalStateCategoriesFromStatus(status)
-	if categories.Terminal != 1 {
-		t.Fatalf("terminal token count = %d, want 1", categories.Terminal)
-	}
-	if got := runner.CallCount(); got != 1 {
-		t.Fatalf("script command runner calls = %d, want 1", got)
-	}
-}

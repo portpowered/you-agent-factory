@@ -64,6 +64,9 @@
     "pkg/platform/stdio",
     "pkg/root",
     "pkg/services/automations",
+    "pkg/services/automations/internal/services/reconciliation",
+    "pkg/services/automations/internal/services/reconciliation/internal/service",
+    "pkg/services/automations/internal/services/reconciliation/wire",
     "pkg/services/automations/service",
     "pkg/services/automations/timework",
     "pkg/services/edges",
@@ -211,13 +214,15 @@
     "pkg/services/factory_visualization/internal/contracts",
     "pkg/services/models",
     "pkg/services/models/internal/artifacts",
-    "pkg/services/models/internal/assets",
     "pkg/services/models/internal/catalog",
     "pkg/services/models/internal/host",
     "pkg/services/models/internal/inference",
     "pkg/services/models/internal/local",
     "pkg/services/models/internal/managedruntime",
     "pkg/services/models/internal/service",
+    "pkg/services/models/internal/services/assets",
+    "pkg/services/models/internal/services/assets/internal/service",
+    "pkg/services/models/internal/services/assets/wire",
     "pkg/services/models/internal/services/catalog",
     "pkg/services/models/internal/services/catalog/internal/service",
     "pkg/services/models/internal/services/catalog/wire",
@@ -506,6 +511,21 @@
       "packagePath": "pkg/services/automations",
       "disposition": "retain",
       "destination": "automations"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/reconciliation",
+      "disposition": "retain",
+      "destination": "automations/internal/services/reconciliation"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/reconciliation/internal/service",
+      "disposition": "retain",
+      "destination": "automations/internal/services/reconciliation"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/reconciliation/wire",
+      "disposition": "retain",
+      "destination": "automations/internal/services/reconciliation"
     },
     {
       "packagePath": "pkg/services/automations/service",
@@ -1243,11 +1263,6 @@
       "destination": "models"
     },
     {
-      "packagePath": "pkg/services/models/internal/assets",
-      "disposition": "move",
-      "destination": "models/internal/services/assets"
-    },
-    {
       "packagePath": "pkg/services/models/internal/catalog",
       "disposition": "move",
       "destination": "models/internal/services/catalog"
@@ -1276,6 +1291,21 @@
       "packagePath": "pkg/services/models/internal/service",
       "disposition": "retain",
       "destination": "models"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/assets",
+      "disposition": "retain",
+      "destination": "models/internal/services/assets"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/assets/internal/service",
+      "disposition": "retain",
+      "destination": "models/internal/services/assets"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/assets/wire",
+      "disposition": "retain",
+      "destination": "models/internal/services/assets"
     },
     {
       "packagePath": "pkg/services/models/internal/services/catalog",

@@ -2316,6 +2316,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/automations/internal/services/reconciliation",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/reconciliation/internal/service",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/reconciliation/wire",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/automations/service",
       "disposition": "retain",
       "destination": "automations",
@@ -3336,12 +3354,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/models/internal/assets",
-      "disposition": "retain",
-      "destination": "models",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/models/internal/catalog",
       "disposition": "retain",
       "destination": "models",
@@ -3373,6 +3385,24 @@
     },
     {
       "packagePath": "pkg/services/models/internal/service",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/assets",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/assets/internal/service",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/assets/wire",
       "disposition": "retain",
       "destination": "models",
       "destinationKind": "owner"

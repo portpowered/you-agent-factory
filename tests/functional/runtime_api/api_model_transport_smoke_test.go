@@ -3,7 +3,9 @@ package runtime_api
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -19,6 +21,65 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork confirms model pull returns a configured legacy cache hit without upstream network requests.
+func TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork(t *testing.T) {
+	dir := support.ScaffoldFactory(t, localCachedModelTransportSmokeConfig())
+	cacheDirectory := t.TempDir()
+	revision := "cached-revision"
+	modelDirectory := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M", revision)
+	if err := os.MkdirAll(modelDirectory, 0o755); err != nil {
+		t.Fatalf("create cached model directory: %v", err)
+	}
+	assetBody := []byte("cached-model-asset")
+	checksum := fmt.Sprintf("%x", sha256.Sum256(assetBody))
+	files := []string{"omnivoice-base-Q4_K_M.gguf", "omnivoice-tokenizer-Q4_K_M.gguf"}
+	for _, name := range files {
+		if err := os.WriteFile(filepath.Join(modelDirectory, name), assetBody, 0o644); err != nil {
+			t.Fatalf("write cached model asset %s: %v", name, err)
+		}
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"modelName": "OMNIVOICE_Q4_K_M",
+		"revision":  revision,
+		"files": []map[string]any{
+			{"path": files[0], "bytes": len(assetBody), "sha256": checksum},
+			{"path": files[1], "bytes": len(assetBody), "sha256": checksum},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal cached model metadata: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M", ".managed-cache.json"),
+		metadata,
+		0o644,
+	); err != nil {
+		t.Fatalf("write cached model metadata: %v", err)
+	}
+
+	network := &rejectingModelAssetHTTP{}
+	environment := append(os.Environ(), "INFINITE_YOU_OMNIVOICE_CACHE_DIR="+cacheDirectory)
+	server := startFunctionalServer(t, dir, false, withEnvironment(environment), func(config *support.FunctionalAPIServerConfig) {
+		config.Edges.ModelAssetHTTPClient = network
+	})
+
+	pull := postJSON[factoryapi.ModelPullResponse](
+		t,
+		server.URL()+"/models/OMNIVOICE_Q4_K_M/pull",
+		nil,
+		"cached asset pull",
+	)
+	if pull.Outcome != factoryapi.ModelPullOutcomeALREADYPRESENT ||
+		pull.CachePath != modelDirectory ||
+		pull.Revision != revision ||
+		len(pull.DownloadedFiles) != len(files) {
+		t.Fatalf("cached asset pull = %#v, want legacy cache hit", pull)
+	}
+	if network.Calls() != 0 {
+		t.Fatalf("cached asset pull made %d upstream requests, want none", network.Calls())
+	}
+}
 
 func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t *testing.T) {
 	dir := support.ScaffoldFactory(t, providerBackedModelTransportSmokeConfig())
@@ -112,6 +173,48 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 	assertUnsupportedModelInvocationRejected(t, server.URL())
 }
 
+func localCachedModelTransportSmokeConfig() map[string]any {
+	return map[string]any{
+		"name": "cached-local-model-transport",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"resources": []map[string]any{{
+			"name":       "omnivoice-cache",
+			"type":       "MODEL",
+			"capacity":   1,
+			"model":      "OMNIVOICE_Q4_K_M",
+			"backend":    "LLAMACPP",
+			"loadPolicy": "ON_DEMAND",
+		}},
+		"workers": []map[string]any{{
+			"name":          "tts-worker",
+			"type":          "MODEL_WORKER",
+			"model":         "OMNIVOICE_Q4_K_M",
+			"modelProvider": "CODEX",
+			"modelLocality": "LOCAL",
+			"command":       "unused-local-runtime",
+			"resources": []map[string]any{{
+				"name": "omnivoice-cache", "capacity": 1,
+			}},
+			"operations": []map[string]any{{
+				"name": "TTS",
+				"inputs": []map[string]any{{
+					"name": "text", "contentTypes": []string{"TEXT"}, "required": true,
+				}},
+				"outputs": []map[string]any{{
+					"name": "audio", "contentTypes": []string{"AUDIO"},
+				}},
+			}},
+		}},
+	}
+}
+
 func assertUnsupportedModelInvocationRejected(t *testing.T, serverURL string) {
 	t.Helper()
 	unsupportedBody, err := json.Marshal(factoryapi.ModelInvocationRequest{Operation: "EMBED"})
@@ -195,6 +298,24 @@ type modelTransportSmokeProvider struct {
 	mu       sync.Mutex
 	calls    []workerexecution.ProviderInferenceRequest
 	response workerexecution.InferenceResponse
+}
+
+type rejectingModelAssetHTTP struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (client *rejectingModelAssetHTTP) Do(*http.Request) (*http.Response, error) {
+	client.mu.Lock()
+	client.calls++
+	client.mu.Unlock()
+	return nil, fmt.Errorf("unexpected model asset network request")
+}
+
+func (client *rejectingModelAssetHTTP) Calls() int {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.calls
 }
 
 func (p *modelTransportSmokeProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
