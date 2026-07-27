@@ -34,7 +34,7 @@ func TestAgentExecutor_ModelOperationOutputUsesCanonicalWorkContent(t *testing.T
 				}},
 			},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -60,33 +60,19 @@ func TestAgentExecutor_ModelOperationOutputUsesCanonicalWorkContent(t *testing.T
 	}
 }
 
-func TestAgentExecutor_RetryableFailureResumesProviderSession(t *testing.T) {
+func TestAgentExecutor_RetryableFailureDoesNotRetryInExecutor(t *testing.T) {
 	const sessionID = "675f9238-5f05-456c-9a9f-f8fe486f49e4"
 	provider := &agentMockProvider{
-		errors: []error{
-			workerprovider.NewProviderErrorWithSession(
-				workerexecution.WorkFailureTypeInternalServerError,
-				"temporarily unavailable",
-				nil,
-				&workerexecution.ProviderSessionMetadata{
-					Provider: string(modelprovider.ProviderKiro),
-					Kind:     providerSessionKindSessionID,
-					ID:       sessionID,
-				},
-			),
+		err: workerprovider.NewProviderErrorWithSession(
+			workerexecution.WorkFailureTypeInternalServerError,
+			"temporarily unavailable",
 			nil,
-		},
-		responses: []workerexecution.InferenceResponse{
-			{},
-			{
-				Content: "Recovered. COMPLETE",
-				ProviderSession: &workerexecution.ProviderSessionMetadata{
-					Provider: string(modelprovider.ProviderKiro),
-					Kind:     providerSessionKindSessionID,
-					ID:       sessionID,
-				},
+			&workerexecution.ProviderSessionMetadata{
+				Provider: string(modelprovider.ProviderKiro),
+				Kind:     providerSessionKindSessionID,
+				ID:       sessionID,
 			},
-		},
+		),
 	}
 	executor := NewAgentExecutor(
 		staticRuntimeConfig{
@@ -97,10 +83,7 @@ func TestAgentExecutor_RetryableFailureResumesProviderSession(t *testing.T) {
 		provider,
 		nil,
 		time.Now,
-		deterministicRetryRandom,
 	)
-	executor.retryConfig.sleep = func(context.Context, time.Duration) error { return nil }
-	executor.retryConfig.jitter = func(time.Duration) (time.Duration, error) { return 0, nil }
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -113,20 +96,11 @@ func TestAgentExecutor_RetryableFailureResumesProviderSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if provider.callCount != 2 {
-		t.Fatalf("provider call count = %d, want 2", provider.callCount)
+	if provider.callCount != 1 {
+		t.Fatalf("provider call count = %d, want 1", provider.callCount)
 	}
-	if provider.lastReq.SessionID != sessionID {
-		t.Fatalf("retry SessionID = %q, want %q", provider.lastReq.SessionID, sessionID)
-	}
-	if !containsRunnerCapability(
-		provider.lastReq.RequiredOptionalCapabilities,
-		workerexecution.RunnerOptionalCapabilitySessionResume,
-	) {
-		t.Fatalf(
-			"retry capabilities = %#v, want session resume",
-			provider.lastReq.RequiredOptionalCapabilities,
-		)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.ProviderSession == nil || result.ProviderSession.ID != sessionID {
 		t.Fatalf("result Provider Session = %#v, want %q", result.ProviderSession, sessionID)
@@ -213,7 +187,7 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 				SessionID:     "session-1",
 			},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	inputToken := factoryruntime.RuntimeToken{
 		ID: "token-1",

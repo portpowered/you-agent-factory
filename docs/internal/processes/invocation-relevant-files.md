@@ -2046,3 +2046,8 @@ response-stream output.
   progress before returning the single normalized failure, preserve the
   Providers error as a cause, and let caller context cancellation or deadline
   win any concurrent provider failure classification; the Runner never retries.
+- Agent dispatch cutover routes model/agent/inference workers through
+  `construction.Service.WithAgentRunnerCutover(true)`, which resolves the
+  registered parent-private Agent Runner over `providersroot.NewService` and
+  skips conductor/registry-capability runner decorators. Retire executor-level
+  `inferWithRetry`; caller-owned retry remains outside the Runner boundary.

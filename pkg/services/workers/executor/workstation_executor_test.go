@@ -108,7 +108,6 @@ func TestWorkstationExecutorCarriesCanonicalLegacyProviderThroughInference(t *te
 				provider,
 				nil,
 				time.Now,
-				deterministicRetryRandom,
 			)
 			workstation := newTestWorkstationExecutor(runtimeConfig, agent)
 			workstation.ResolveRunnerSelection = providers.ResolveRunnerSelection

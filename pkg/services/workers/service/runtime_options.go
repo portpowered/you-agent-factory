@@ -123,7 +123,7 @@ func (s *Service) runtimeRunnerDecorators(
 	progressPublisher workers.ProgressPublisher,
 ) []workerconstruction.RunnerDecorator {
 	decorators := make([]workerconstruction.RunnerDecorator, 0, 4)
-	if useRegistryCapabilities && s.providerRegistry != nil {
+	if useRegistryCapabilities && s.providerRegistry != nil && !s.agentDispatchUsesRegisteredRunner {
 		decorators = append(decorators, func(inner workers.Runner, _ *interfaces.FactoryWorkerConfig) workers.Runner {
 			return registryCapabilityRunner{next: inner, providers: s.providerRegistry}
 		})
