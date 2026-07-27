@@ -15,9 +15,12 @@ import (
 )
 
 const (
-	typeScriptSuccessResult     = "<TYPESCRIPT_SUCCESS>"
-	typeScriptSyntaxErrorSource = "type FailureMarker = string;\nworkflow.final(\"ok\");\nphase(\"setup\";\n"
-	typeScriptSyntaxErrorLine   = 3
+	typeScriptSuccessResult              = "<TYPESCRIPT_SUCCESS>"
+	typeScriptSyntaxErrorSource          = "type FailureMarker = string;\nworkflow.final(\"ok\");\nphase(\"setup\";\n"
+	typeScriptSyntaxErrorLine            = 3
+	typeScriptSourceMapSyntaxErrorSource = "interface Ignored {\n  prompt: string;\n}\nworkflow.final(\"ok\");\nphase(\"setup\";\n"
+	typeScriptSourceMapAuthoredLine      = 5
+	typeScriptSourceMapEmittedLine       = 2
 )
 
 // TestTypeScriptFactoryTranspilesAndRuns proves a supported file-backed
@@ -101,6 +104,46 @@ func TestTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic(t *testing.T) {
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
 
+// TestTypeScriptSourceMapReportsAuthoredLocation proves a file-backed
+// TypeScript Factory failure diagnostic reports the customer-authored .ts
+// source line via source-map remapping rather than only the emitted JavaScript
+// line after TypeScript stripping.
+func TestTypeScriptSourceMapReportsAuthoredLocation(t *testing.T) {
+	t.Parallel()
+
+	dir := scaffoldFileBackedTypeScriptFactoryWithSourceMapSyntaxError(t)
+	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run",
+		"--factory", filepath.Join(dir, "factory.json"),
+		"--with-mock-workers", mockWorkersPath,
+		"--output", "primary",
+		"--no-record",
+		"hello",
+	})
+	homeDir := t.TempDir()
+	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = dir
+
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	err := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}).Execute(inputs.Input)
+	assertTypeScriptSourceMapFailureOutcome(
+		t,
+		err,
+		inputs.Stdout(),
+		inputs.Stderr(),
+		typeScriptSourceMapAuthoredLine,
+		typeScriptSourceMapEmittedLine,
+	)
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0 for TypeScript source-map failure before dispatch", runner.CallCount())
+	}
+	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+}
+
 func scaffoldFileBackedTypeScriptFactory(t *testing.T) string {
 	t.Helper()
 
@@ -169,6 +212,39 @@ func scaffoldFileBackedTypeScriptFactoryWithSyntaxError(t *testing.T) string {
 	return dir
 }
 
+func scaffoldFileBackedTypeScriptFactoryWithSourceMapSyntaxError(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "typescript-source-map-syntax-error",
+		"invocationSignature": map[string]any{
+			"parameters": []any{map[string]any{
+				"name": "prompt", "required": false,
+				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+			}},
+		},
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"sourceRef": "workflow.ts",
+				"argsSchema": map[string]any{
+					"type":                 "object",
+					"properties":           map[string]any{"prompt": map[string]any{"type": "string"}},
+					"additionalProperties": false,
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(
+		filepath.Join(dir, "workflow.ts"),
+		[]byte(typeScriptSourceMapSyntaxErrorSource),
+		0o600,
+	); err != nil {
+		t.Fatalf("write TypeScript workflow entry: %v", err)
+	}
+	return dir
+}
+
 func assertTypeScriptTypeOrSyntaxFailureOutcome(
 	t *testing.T,
 	runErr error,
@@ -194,6 +270,32 @@ func assertTypeScriptTypeOrSyntaxFailureOutcome(
 	}
 	if !strings.Contains(failureText, fmt.Sprintf("line %d", wantLine)) {
 		t.Fatalf("failure output = %q, want authored source line %d indicator", failureText, wantLine)
+	}
+}
+
+func assertTypeScriptSourceMapFailureOutcome(
+	t *testing.T,
+	runErr error,
+	stdout string,
+	stderr string,
+	wantAuthoredLine int,
+	wantEmittedLine int,
+) {
+	t.Helper()
+
+	assertTypeScriptTypeOrSyntaxFailureOutcome(t, runErr, stdout, stderr, wantAuthoredLine)
+	if wantAuthoredLine == wantEmittedLine {
+		t.Fatalf("source-map scenario must use different authored and emitted line numbers; got %d", wantAuthoredLine)
+	}
+
+	failureText := strings.Join([]string{runErr.Error(), stderr}, "\n")
+	remappedSuffix := fmt.Sprintf("(line %d, column", wantAuthoredLine)
+	if !strings.Contains(failureText, remappedSuffix) {
+		t.Fatalf(
+			"failure output = %q, want remapped authored TypeScript location suffix %q",
+			failureText,
+			remappedSuffix,
+		)
 	}
 }
 

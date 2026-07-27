@@ -229,13 +229,34 @@ func validateResolvedSourceContent(
 		ArgsSchema: resolution.ArgsSchema,
 	})
 	if validationResult.HasIssues() {
-		return validationErrorFromSourceIssues(validationResult.Issues)
+		return validationErrorFromSourceIssues(remapWrappedValidationIssues(validationResult.Issues, loaded))
 	}
 	return nil
 }
 
 func wrapWorkflowSourceForValidation(source string) string {
 	return "(function(){\n" + source + "\n})()"
+}
+
+func remapWrappedValidationIssues(
+	issues []factory.WorkflowValidationIssue,
+	loaded factory.WorkflowValidationLoadedSource,
+) []factory.WorkflowValidationIssue {
+	if len(issues) == 0 {
+		return issues
+	}
+	out := make([]factory.WorkflowValidationIssue, len(issues))
+	for i, issue := range issues {
+		out[i] = issue
+		line := issue.Line
+		if line > 1 {
+			line--
+		}
+		if line > 0 {
+			out[i].Line = loaded.RemapLine(line)
+		}
+	}
+	return out
 }
 
 func validateStartArgs(args map[string]any) error {
