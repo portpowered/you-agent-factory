@@ -11,4 +11,5 @@ import (
 // runtime configuration held by the Models Runtime Scopes authority.
 type Service interface {
 	ListCatalog(context.Context, models.ListModelsRequest) (models.ListModelsResult, error)
+	GetCatalogModel(context.Context, models.GetModelRequest) (models.GetModelResult, error)
 }

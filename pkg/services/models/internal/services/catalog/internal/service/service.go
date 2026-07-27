@@ -28,26 +28,9 @@ func (s *service) ListCatalog(
 	ctx context.Context,
 	request models.ListModelsRequest,
 ) (models.ListModelsResult, error) {
-	if err := ctx.Err(); err != nil {
-		return models.ListModelsResult{}, err
-	}
-	if request.Scope.IsZero() {
-		return models.ListModelsResult{}, models.ErrRuntimeScopeInvalid
-	}
-	if s == nil || s.scopes == nil {
-		return models.ListModelsResult{}, models.ErrUnavailable
-	}
-
-	binding, err := s.scopes.Resolve(runtimescopes.Reference(request.Scope.String()))
+	runtimeConfig, err := s.resolveRuntimeConfig(ctx, request.Scope)
 	if err != nil {
-		return models.ListModelsResult{}, catalogScopeError(err)
-	}
-	if binding.RuntimeConfig == nil {
-		return models.ListModelsResult{}, models.ErrUnavailable
-	}
-	runtimeConfig := binding.RuntimeConfig()
-	if runtimeConfig == nil {
-		return models.ListModelsResult{}, models.ErrUnavailable
+		return models.ListModelsResult{}, err
 	}
 
 	entries := localmodels.BuildCatalogWithRuntime(
@@ -64,6 +47,67 @@ func (s *service) ListCatalog(
 			localmodels.CanonicalModelName(result.Models[j].Name)
 	})
 	return result, nil
+}
+
+func (s *service) GetCatalogModel(
+	ctx context.Context,
+	request models.GetModelRequest,
+) (models.GetModelResult, error) {
+	runtimeConfig, err := s.resolveRuntimeConfig(ctx, request.Scope)
+	if err != nil {
+		return models.GetModelResult{}, err
+	}
+	if err := request.Validate(); err != nil {
+		return models.GetModelResult{}, err
+	}
+
+	entries := localmodels.BuildCatalogWithRuntime(
+		runtimeConfig,
+		nil,
+		localmodels.DefaultManagedRuntimeSourceResolver(),
+	)
+	entry, ok := entries[localmodels.CanonicalModelName(request.Name)]
+	if !ok {
+		return models.GetModelResult{}, fmt.Errorf("%w: %s", models.ErrNotFound, request.Name)
+	}
+	detail := stableDetail(entry.Detail)
+	if operation := request.Operation; operation != "" && !supportsOperation(detail, operation) {
+		return models.GetModelResult{}, fmt.Errorf(
+			"%w: model %q does not support operation %q",
+			models.ErrUnsupportedOperation,
+			detail.Name,
+			operation,
+		)
+	}
+	return models.GetModelResult{Model: detail}, nil
+}
+
+func (s *service) resolveRuntimeConfig(
+	ctx context.Context,
+	scope models.RuntimeScopeRef,
+) (*models.RuntimeConfig, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if scope.IsZero() {
+		return nil, models.ErrRuntimeScopeInvalid
+	}
+	if s == nil || s.scopes == nil {
+		return nil, models.ErrUnavailable
+	}
+
+	binding, err := s.scopes.Resolve(runtimescopes.Reference(scope.String()))
+	if err != nil {
+		return nil, catalogScopeError(err)
+	}
+	if binding.RuntimeConfig == nil {
+		return nil, models.ErrUnavailable
+	}
+	runtimeConfig := binding.RuntimeConfig()
+	if runtimeConfig == nil {
+		return nil, models.ErrUnavailable
+	}
+	return runtimeConfig, nil
 }
 
 func catalogScopeError(err error) error {
@@ -86,6 +130,62 @@ func stableSummary(summary models.Summary) models.Summary {
 	})
 	sortOperations(summary.ManagedRuntime.SupportedOperations)
 	return summary
+}
+
+func stableDetail(detail models.Detail) models.Detail {
+	detail = detail.Clone()
+	detail.Summary = stableSummary(detail.Summary)
+	if len(detail.Sources) == 0 {
+		detail.Sources = sourceMetadata(detail.ManagedRuntime.Diagnostics)
+	}
+	for i := range detail.Capabilities {
+		sortOperations(detail.Capabilities[i].Operations)
+		sort.Strings(detail.Capabilities[i].ResourceNames)
+	}
+	sort.Slice(detail.Capabilities, func(i, j int) bool {
+		return detail.Capabilities[i].Worker < detail.Capabilities[j].Worker
+	})
+	sort.Slice(detail.Sources, func(i, j int) bool {
+		left, right := detail.Sources[i], detail.Sources[j]
+		if left.Provider != right.Provider {
+			return left.Provider < right.Provider
+		}
+		if left.Reference != right.Reference {
+			return left.Reference < right.Reference
+		}
+		return left.Revision < right.Revision
+	})
+	return detail
+}
+
+func sourceMetadata(diagnostics map[string]string) []models.SourceMetadata {
+	provider := diagnostics["sourceKind"]
+	reference := diagnostics["sourceId"]
+	revision := diagnostics["revision"]
+	if provider == "" && reference == "" && revision == "" {
+		return nil
+	}
+	return []models.SourceMetadata{{
+		Provider:  provider,
+		Reference: reference,
+		Revision:  revision,
+	}}
+}
+
+func supportsOperation(detail models.Detail, requested string) bool {
+	for _, operation := range detail.Operations {
+		if operation.Name == requested {
+			return true
+		}
+	}
+	for _, capability := range detail.Capabilities {
+		for _, operation := range capability.Operations {
+			if operation.Name == requested {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func sortOperations(operations []models.Operation) {

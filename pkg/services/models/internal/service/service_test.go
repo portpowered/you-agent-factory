@@ -288,6 +288,47 @@ func TestRootListCatalogReturnsStableDetachedScopedProjection(t *testing.T) {
 	assertScopedCatalog(t, afterMutation)
 }
 
+func TestRootGetCatalogModelDelegatesScopedLookup(t *testing.T) {
+	t.Parallel()
+
+	root := newScopedCatalogRoot(t)
+	opened, err := root.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{
+		Config: models.RuntimeScopeConfig{Runtime: models.RuntimeConfig{
+			Workers: []models.RuntimeWorker{
+				scopedCatalogWorker("summarizer", "scoped-model", "summarize"),
+				scopedCatalogWorker("generator", "SCOPED-MODEL", "generate"),
+			},
+			Resources: []models.RuntimeResource{
+				scopedCatalogResource("zeta-cache", "scoped-model", "MODELSCOPE"),
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("OpenRuntimeScope: %v", err)
+	}
+
+	got, err := root.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: opened.Scope, Name: " scoped-model ", Operation: "generate",
+	})
+	if err != nil {
+		t.Fatalf("GetCatalogModel: %v", err)
+	}
+	if localmodels.CanonicalModelName(got.Model.Name) != "SCOPED-MODEL" ||
+		len(got.Model.Operations) != 2 ||
+		got.Model.Operations[0].Name != "generate" ||
+		len(got.Model.Sources) != 1 ||
+		got.Model.Sources[0].Provider != localmodels.ManagedRuntimeSourceKindManagedMirror {
+		t.Fatalf("GetCatalogModel = %#v, want delegated stable scoped detail", got)
+	}
+
+	_, err = root.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: opened.Scope, Name: "scoped-model", Operation: "embed",
+	})
+	if !errors.Is(err, models.ErrUnsupportedOperation) {
+		t.Fatalf("unsupported GetCatalogModel error = %v, want ErrUnsupportedOperation", err)
+	}
+}
+
 func newScopedCatalogRoot(t *testing.T) *Root {
 	t.Helper()
 	scopes, err := runtimescopeswire.NewService(func() string { return "catalog-root-test" })

@@ -216,10 +216,13 @@ func (o *Root) ListCatalog(
 }
 
 func (o *Root) GetCatalogModel(
-	context.Context,
-	models.GetModelRequest,
+	ctx context.Context,
+	request models.GetModelRequest,
 ) (models.GetModelResult, error) {
-	return models.GetModelResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.catalog == nil {
+		return models.GetModelResult{}, models.ErrUnsupportedOperation
+	}
+	return o.catalog.GetCatalogModel(ctx, request)
 }
 
 func (o *Root) GetModelReadiness(
