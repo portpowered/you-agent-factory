@@ -109,14 +109,6 @@ func validateRequest(request workers.RunnerExecutionRequest) error {
 		strings.TrimSpace(request.UserMessage) == "" {
 		return badRequest("agent prompt is required", nil)
 	}
-	for _, capability := range request.RequiredOptionalCapabilities {
-		if capability == workers.RunnerOptionalCapabilityImageInput {
-			return &workers.UnsupportedRunnerCapabilityError{
-				RunnerID:   request.RunnerID,
-				Capability: capability,
-			}
-		}
-	}
 	return nil
 }
 
@@ -130,6 +122,7 @@ func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRe
 		Model:              request.Model,
 		SystemPrompt:       request.SystemPrompt,
 		UserMessage:        request.UserMessage,
+		InputTokens:        cloneInputTokens(request.InputTokens),
 		OutputSchema:       request.OutputSchema,
 		WorkingDirectory:   request.WorkingDirectory,
 		Worktree:           request.Worktree,
@@ -339,6 +332,13 @@ func cloneMetadata(values map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func cloneInputTokens(values []any) []any {
+	if values == nil {
+		return nil
+	}
+	return append([]any(nil), values...)
 }
 
 func badRequest(message string, cause error) error {

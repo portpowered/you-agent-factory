@@ -184,27 +184,32 @@ func TestExecuteFailureAcceptsPointerExecuteFailure(t *testing.T) {
 	}
 }
 
-func TestExecuteRejectsUnsupportedCapability(t *testing.T) {
+func TestExecuteForwardsInputTokensToProviders(t *testing.T) {
 	t.Parallel()
 
-	runner, err := New(&providersFake{}, noopPublisher)
+	fake := &providersFake{}
+	runner, err := New(fake, noopPublisher)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 
+	tokens := []any{"image-token"}
 	_, err = runner.Execute(t.Context(), workers.RunnerExecutionRequest{
 		Dispatch: work.WorkDispatch{
 			DispatchID: "dispatch-capability",
 		},
 		RunnerID:    string(providers.IDCodex),
 		UserMessage: "user",
+		InputTokens: tokens,
 		RequiredOptionalCapabilities: []workers.RunnerOptionalCapability{
 			workers.RunnerOptionalCapabilityImageInput,
 		},
 	})
-	var unsupported *workers.UnsupportedRunnerCapabilityError
-	if !errors.As(err, &unsupported) {
-		t.Fatalf("Execute() error = %v, want UnsupportedRunnerCapabilityError", err)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if len(fake.request.InputTokens) != 1 || fake.request.InputTokens[0] != "image-token" {
+		t.Fatalf("Providers.ExecuteRequest.InputTokens = %#v", fake.request.InputTokens)
 	}
 }
 

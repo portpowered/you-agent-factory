@@ -106,12 +106,13 @@ func TestAgentRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
 	failure.UserMessage = agentFixtureExecutionFailure
 
 	testkit.Run(t, testkit.Subject{
-		Runner:             binding.Runner,
-		ValidRequest:       valid,
-		InvalidRequest:     invalid,
-		UnsupportedRequest: unsupported,
-		FailureRequest:     failure,
-		ExpectedResult:     expectedAgentResult(),
+		Runner:                    binding.Runner,
+		ValidRequest:              valid,
+		InvalidRequest:            invalid,
+		UnsupportedRequest:        unsupported,
+		FailureRequest:            failure,
+		ExpectedResult:            expectedAgentResult(),
+		SkipUnsupportedCapability: true,
 		AssertCaptured: func(t *testing.T) {
 			t.Helper()
 			assertAgentProviderRequest(t, fake.Request())
@@ -330,6 +331,9 @@ func assertAgentProviderRequest(t *testing.T, request providers.ExecuteRequest) 
 		WorkstationName:  "execute-goal",
 		SystemPrompt:     "system fixture",
 		UserMessage:      "user fixture",
+		InputTokens: []any{map[string]any{
+			"nested": []any{"original"},
+		}},
 		OutputSchema:     `{"type":"object"}`,
 		WorkingDirectory: "C:/fixture/work",
 		Worktree:         "C:/fixture/worktree",

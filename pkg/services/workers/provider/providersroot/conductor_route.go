@@ -77,6 +77,7 @@ func invocationRequestFromExecute(
 		Model:            strings.TrimSpace(request.Model),
 		SystemPrompt:     request.SystemPrompt,
 		UserMessage:      request.UserMessage,
+		InputTokens:      cloneInputTokens(request.InputTokens),
 		OutputSchema:     request.OutputSchema,
 		WorkingDirectory:   request.WorkingDirectory,
 		Worktree:             request.Worktree,

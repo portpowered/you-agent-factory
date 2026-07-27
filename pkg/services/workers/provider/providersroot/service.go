@@ -127,6 +127,7 @@ func inferenceRequest(request providers.ExecuteRequest) workers.ProviderInferenc
 		ModelProvider:      modelProviderForProviderIdentity(providerID),
 		SystemPrompt:       request.SystemPrompt,
 		UserMessage:        request.UserMessage,
+		InputTokens:        cloneInputTokens(request.InputTokens),
 		OutputSchema:       request.OutputSchema,
 		WorkingDirectory:   request.WorkingDirectory,
 		Worktree:           request.Worktree,
@@ -287,6 +288,13 @@ func cloneMetadata(values map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func cloneInputTokens(values []any) []any {
+	if values == nil {
+		return nil
+	}
+	return append([]any(nil), values...)
 }
 
 func mergeMetadata(base, overlay map[string]string) map[string]string {

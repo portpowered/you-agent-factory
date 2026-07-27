@@ -89,6 +89,7 @@ type ExecuteRequest struct {
 	Model            string
 	SystemPrompt     string
 	UserMessage      string
+	InputTokens      []any
 	OutputSchema     string
 	ResumeSession    *SessionRef
 	WorkingDirectory   string
@@ -124,6 +125,9 @@ func (request ExecuteRequest) Clone() ExecuteRequest {
 	cloned.EnvVars = cloneStringMap(request.EnvVars)
 	if request.ProcessEnvironment != nil {
 		cloned.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
+	}
+	if request.InputTokens != nil {
+		cloned.InputTokens = append([]any(nil), request.InputTokens...)
 	}
 	return cloned
 }
