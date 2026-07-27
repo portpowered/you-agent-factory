@@ -531,6 +531,10 @@ Wave 0 functional-tests-expansion planning authority lives under
   the default mock.
 
 - `tests/functional/automations/` owns root.BuildProcess evidence for packaged
-  Automations cron scheduling. Keep cron workstation factories explicit with
-  `"behavior": "CRON"` and observe submissions through `serviceedges.Edges.SubmissionRecorder`
-  on `support.StartFunctionalAPIServer`, matching the runtime_api cron smoke helpers.
+  Automations cron scheduling and filesystem watcher preseed. Keep cron workstation
+  factories explicit with `"behavior": "CRON"` and observe submissions through
+  `serviceedges.Edges.SubmissionRecorder` on `support.StartFunctionalAPIServer`,
+  matching the runtime_api cron smoke helpers. For filesystem watchers, scaffold
+  factories with workstation `inputs`, seed `inputs/<workType>/default/` before
+  `StartFunctionalAPIServer`, and assert preseed submissions through the same
+  recorder seam rather than importing parent-private `filesystem_watchers` packages.
