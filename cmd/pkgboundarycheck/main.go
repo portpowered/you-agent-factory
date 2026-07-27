@@ -171,7 +171,7 @@ var convergedServiceSubpackageRoots = map[string]string{
 	"pkg/services/workers/invocation":                           "workers",
 	"pkg/services/workers/prompting":                            "workers",
 	"pkg/services/workers/provider":                             "workers",
-	"pkg/services/workers/services/hosted_logic":                "workers",
+	"pkg/services/automations/internal/services/hosted_sources": "automations",
 	"pkg/services/workers/services/testing":                     "workers",
 }
 
@@ -247,8 +247,8 @@ var approvedPeerServiceContractImports = map[string]struct{}{
 	"pkg/platform/pty\x00github.com/portpowered/infinite-you/pkg/services/workers/agypty":                                                          {},
 	"pkg/services/edges\x00" + providersLeafEffectContractImport:                                                                                   {},
 	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                                    {},
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic":                                         {},
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear":                                  {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/automations":                                         {},
+	"pkg/wire\x00github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire": {},
 	"pkg/services/factory_runtime\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                          {},
 	"pkg/services/factory_runtime/build\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                    {},
 	"pkg/services/factory_runtime/service\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                  {},
@@ -272,8 +272,7 @@ var publicExternalEffectContractImports = map[string]struct{}{
 	providersLeafEffectContractImport:                                                       {},
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty":                       {},
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":   {},
-	"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic":        {},
-	"github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear": {},
+	"github.com/portpowered/infinite-you/pkg/services/automations":        {},
 }
 
 const (

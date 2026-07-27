@@ -28,8 +28,6 @@ func TestWorkersCompletedEffectInjectionsHaveNoOwnerFallbacks(t *testing.T) {
 		"provider/agy/adapter.go":                         {[]byte("os.Stat("), []byte("exec.LookPath(")},
 		"prompting/prompt_docs.go":                        {[]byte("os.Stat"), []byte("os.ReadFile"), []byte("filepath.WalkDir")},
 		"worktree/prepare.go":                             {[]byte("time.Since")},
-		"services/hosted_logic/config.go":                 {[]byte("defaultHTTPClient"), []byte("http.Client{")},
-		"services/hosted_logic/linear/linear.go":          {[]byte("func ResolveSecretRef"), []byte("http.Client{")},
 	}
 
 	for relative, forbidden := range checks {

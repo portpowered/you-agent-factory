@@ -54,7 +54,7 @@ func PrepareRuntime(
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	loadReplay recordings.ReplayArtifactLoader,
 	replayClockFactory ReplayClockFactory,
-	hostedPollersFactory WorkerHostedPollersFactory,
+	hostedPollersFactory AutomationHostedSourcesFactory,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
@@ -154,7 +154,7 @@ func PrepareRuntime(
 	}
 	if hostedPollersFactory == nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf(
-			"Workers hosted pollers factory is required",
+			"Automations hosted sources factory is required",
 		)
 	}
 	selectedClock, clockErr := clockForReplay(

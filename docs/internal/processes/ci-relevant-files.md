@@ -700,3 +700,8 @@ Wave 0 functional-tests-expansion planning authority lives under
   factories with workstation `inputs`, seed `inputs/<workType>/default/` before
   `StartFunctionalAPIServer`, and assert preseed submissions through the same
   recorder seam rather than importing parent-private `filesystem_watchers` packages.
+
+- `tests/functional/automations/hosted_sources_root_composition_test.go` owns
+  root.BuildProcess inert-construction evidence for Automations hosted Linear
+  polling. Assert zero `SubmissionRecorder` submissions after `support.BuildProcess`
+  before runtime lifecycle starts, matching the cron inert-construction pattern.

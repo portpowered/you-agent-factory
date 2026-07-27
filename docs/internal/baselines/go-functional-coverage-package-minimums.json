@@ -145,6 +145,22 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear",
+      "minimum": 1.25
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/service",
+      "minimum": 8.88
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation",
       "exception": {
         "kind": "measurement",
@@ -1765,14 +1781,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/service",
       "minimum": 65.14
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic",
-      "minimum": 8.88
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear",
-      "minimum": 1.25
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/services/inference",
