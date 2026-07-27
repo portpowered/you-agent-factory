@@ -133,6 +133,18 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/internal/service",
+      "minimum": 70.30
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation",
       "exception": {
         "kind": "measurement",
@@ -371,10 +383,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/engine",
       "minimum": 87.14
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/internal/service",
-      "minimum": 70.30
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
