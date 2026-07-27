@@ -2,6 +2,8 @@ package process_test
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -44,5 +46,47 @@ func TestCLIValidationFailureExitCode(t *testing.T) {
 				t.Fatalf("exit code = %d, want documented validation-failure exit 1", result.ExitCode)
 			}
 		})
+	}
+}
+
+// TestCLIWorkerFailureExitCode proves a terminal worker failure exits the
+// documented runtime-failure code through the public built you CLI process.
+func TestCLIWorkerFailureExitCode(t *testing.T) {
+	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	session := harness.NewSession(t).WithNoExternalServer(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	initOutcome := initializeOperatorConfig(t, ctx, session, "worker-failure-exit-config-init")
+	configBody := []byte(`{
+  "defaults": {
+    "workerModelProvider": "codex",
+    "workerModel": "gpt-5-codex"
+  }
+}`)
+	if err := os.WriteFile(initOutcome.ConfigPath, configBody, 0o600); err != nil {
+		t.Fatalf("WriteFile(%q): %v", initOutcome.ConfigPath, err)
+	}
+
+	mockWorkersPath := writeRejectingGoalMockWorkers(t)
+	args := append([]string{}, session.RuntimeLogDirFlags()...)
+	args = append(args, session.ServerFlags()...)
+	args = append(args,
+		"run",
+		"--named", "@you/goal",
+		"--with-mock-workers",
+		"--no-record",
+		"--quiet",
+		mockWorkersPath,
+		fmt.Sprintf("worker-failure-exit-%d", time.Now().UnixNano()),
+	)
+
+	result, err := session.Run(ctx, args...)
+	if err == nil {
+		t.Fatalf("worker failure result = %#v; want process failure", result)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("exit code = %d, want documented worker-failure exit 1", result.ExitCode)
 	}
 }
