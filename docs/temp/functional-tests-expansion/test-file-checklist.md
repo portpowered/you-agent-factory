@@ -180,7 +180,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIServerShutdownClosesListenerAndActiveStreams`.
   - `TestAPIServerBindFailureUnwindsStartedLifecycleRoles`.
 
-- [ ] `tests/functional/transport/http/server/routing_test.go`
+- [x] `tests/functional/transport/http/server/routing_test.go`
   - `TestAPIRoutesEveryOpenAPIOperationToNon404Handler` uses the operation
     inventory with safe requests.
   - `TestAPIUnknownRouteReturnsStructuredNotFound`.
