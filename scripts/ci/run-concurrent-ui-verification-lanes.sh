@@ -7,7 +7,7 @@ make_bin="${MAKE_BIN:-make}"
 
 coverage_lane_label="UI Coverage"
 browser_lane_label="UI Browser Integration"
-coverage_target="run-sharded-ui-coverage"
+coverage_target="test-ui-coverage"
 browser_target="ui-integration-test"
 
 coverage_log="${artifact_root}/ui-coverage.log"
