@@ -156,12 +156,11 @@ func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessi
 	if s.sessionsRoot != nil {
 		projection, err := s.sessionsRoot.GetFactorySession(r.Context(), decodeGetFactorySessionRequest(sessionID))
 		if err != nil {
-			if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
-				s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+			if s.writeSessionsRootError(w, string(sessionID), err) {
 				return
 			}
 			s.logger.Error("get factory session failed", zap.Error(err))
-			s.writeError(w, http.StatusInternalServerError, "failed to get factory session", "INTERNAL_ERROR")
+			s.writeSessionsRootErrorOrInternal(w, string(sessionID), err, "failed to get factory session")
 			return
 		}
 		s.writeJSON(w, http.StatusOK, factorysession.SessionResponseToAPI(projection))
@@ -440,12 +439,11 @@ func (s *Server) writeOpenFactorySessionRejected(w http.ResponseWriter, err erro
 func (s *Server) CloseFactorySession(w http.ResponseWriter, r *http.Request, sessionID string) {
 	if s.sessionsRoot != nil {
 		if err := s.sessionsRoot.CloseFactorySession(r.Context(), sessionID); err != nil {
-			if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
-				s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+			if s.writeSessionsRootError(w, sessionID, err) {
 				return
 			}
 			s.logger.Error("close factory session failed", zap.Error(err), zap.String("session_id", sessionID))
-			s.writeError(w, http.StatusInternalServerError, "failed to close factory session", "INTERNAL_ERROR")
+			s.writeSessionsRootErrorOrInternal(w, sessionID, err, "failed to close factory session")
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -839,10 +837,11 @@ func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.
 	if s.sessionsRoot != nil {
 		result, err := s.sessionsRoot.StartAsync(r.Context(), raw)
 		if err != nil {
-			if s.writeDurableExecutionError(w, err) {
+			if s.writeSessionsRootError(w, "", err) {
 				return
 			}
-			s.writeError(w, http.StatusInternalServerError, "durable factory session execution failed", "INTERNAL_ERROR")
+			s.logger.Error("durable factory session async start failed", zap.Error(err))
+			s.writeSessionsRootErrorOrInternal(w, "", err, "durable factory session execution failed")
 			return
 		}
 		s.writeJSON(w, http.StatusOK, factorysession.AsyncStartResponseToAPI(result))
@@ -881,10 +880,11 @@ func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.R
 	if s.sessionsRoot != nil {
 		result, err := s.sessionsRoot.StartSync(r.Context(), raw)
 		if err != nil {
-			if s.writeDurableExecutionError(w, err) {
+			if s.writeSessionsRootError(w, "", err) {
 				return
 			}
-			s.writeError(w, http.StatusInternalServerError, "durable factory session execution failed", "INTERNAL_ERROR")
+			s.logger.Error("durable factory session sync start failed", zap.Error(err))
+			s.writeSessionsRootErrorOrInternal(w, "", err, "durable factory session execution failed")
 			return
 		}
 		s.writeJSON(w, http.StatusOK, factorysession.SyncStartResponseToAPI(result))
@@ -1004,24 +1004,7 @@ func (s *Server) mergeScopedFactorySessionList(
 }
 
 func (s *Server) writeDurableSessionReadError(w http.ResponseWriter, err error) bool {
-	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) {
-		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
-		return true
-	}
-	if errors.Is(err, factorysessionexecution.ErrDispatchNotFound) {
-		s.writeError(w, http.StatusNotFound, "factory session dispatch not found", "NOT_FOUND")
-		return true
-	}
-	if errors.Is(err, factorysessionexecution.ErrArtifactNotFound) {
-		s.writeError(w, http.StatusNotFound, "factory session artifact not found", "NOT_FOUND")
-		return true
-	}
-	var validationErr *factorysessionexecution.ExecutionValidationError
-	if errors.As(err, &validationErr) {
-		s.writeError(w, http.StatusBadRequest, validationErr.Message, "BAD_REQUEST")
-		return true
-	}
-	return false
+	return s.writeSessionsRootError(w, "", err)
 }
 
 func (s *Server) writeDurableSessionListError(w http.ResponseWriter, err error) {

@@ -74,6 +74,7 @@ func TestHandlerFromRoot_ListFactorySessionsInvokesSessionsRoot(t *testing.T) {
 
 type httpSessionsRootFake struct {
 	sessions     map[string]factorysessions.SessionProjection
+	getSession   func(context.Context, string) (factorysessions.SessionProjection, error)
 	listReads    func(context.Context) ([]factorysessions.ReadProjection, error)
 	listSessions func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
 	onOpen       func(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error)
@@ -96,7 +97,10 @@ func (fake *httpSessionsRootFake) ListFactorySessions(ctx context.Context) ([]fa
 	return fake.listReads(ctx)
 }
 
-func (fake *httpSessionsRootFake) GetFactorySession(_ context.Context, sessionID string) (factorysessions.SessionProjection, error) {
+func (fake *httpSessionsRootFake) GetFactorySession(ctx context.Context, sessionID string) (factorysessions.SessionProjection, error) {
+	if fake.getSession != nil {
+		return fake.getSession(ctx, sessionID)
+	}
 	if projection, ok := fake.sessions[sessionID]; ok {
 		return projection, nil
 	}

@@ -98,7 +98,7 @@ func (s *Server) finishRootLifecycleControl(
 	err error,
 ) {
 	if err != nil {
-		if s.writeDurableLifecycleControlError(w, sessionID, err) {
+		if s.writeSessionsRootError(w, sessionID, err) {
 			return
 		}
 		s.logger.Error("factory session lifecycle control failed",
@@ -106,7 +106,7 @@ func (s *Server) finishRootLifecycleControl(
 			zap.String("session_id", sessionID),
 			zap.String("operation", operation),
 		)
-		s.writeError(w, http.StatusInternalServerError, "factory session lifecycle control failed", "INTERNAL_ERROR")
+		s.writeSessionsRootErrorOrInternal(w, sessionID, err, "factory session lifecycle control failed")
 		return
 	}
 	s.writeLifecycleControlSuccess(w, factorysession.LifecycleControlResponseToAPI(result))
