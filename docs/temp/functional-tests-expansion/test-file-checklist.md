@@ -383,7 +383,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestJavaScriptForEachPreservesInputResultCorrelation` covers identity.
   - `TestJavaScriptForEachEmptyInputDoesNotDispatch` covers empty input.
 
-- [ ] `tests/functional/orchestration/javascript/composition/nested_test.go`
+- [x] `tests/functional/orchestration/javascript/composition/nested_test.go`
   - `TestJavaScriptNestedPipelineParallelCompositionCompletes` covers nesting.
   - `TestJavaScriptNestedFailureNamesChildAndStage` covers diagnostics.
 
@@ -404,6 +404,8 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestJavaScriptChildProgressPublishesCanonicalResponseEvents` covers
     message/tool progress.
   - `TestJavaScriptTerminalResultFollowsFinalResponseEvent` covers ordering.
+  - `TestJavaScriptPhaseCheckpointLifecyclePublishesCanonicalFactoryEvents` covers
+    phase and checkpoint event emission.
 
 - [x] `tests/functional/orchestration/javascript/workers/overrides_test.go`
   - `TestJavaScriptChildrenSelectDifferentProvidersAndModels` covers per-child

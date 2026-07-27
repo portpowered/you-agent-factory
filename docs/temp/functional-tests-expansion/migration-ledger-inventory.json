@@ -1811,6 +1811,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/orchestration/javascript/composition/nested_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
+      "scenario": "TestJavaScriptNestedFailureNamesChildAndStage",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/composition/nested_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/composition/nested_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
+      "scenario": "TestJavaScriptNestedPipelineParallelCompositionCompletes",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/composition/nested_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/orchestration/javascript/composition/stages_test.go",
       "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
       "scenario": "TestJavaScriptEmptyStageProducesDocumentedResult",
@@ -1861,21 +1881,11 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/orchestration/javascript/events/javascript_test.go",
-      "package": "you-agent-factory/tests/functional/orchestration/javascript/events",
-      "scenario": "TestJavaScriptInvocationEmitsCanonicalPhaseAndCheckpointEvents",
+      "source_path": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
+      "scenario": "TestJavaScriptPhaseCheckpointLifecyclePublishesCanonicalFactoryEvents",
       "lane": "short",
-      "destination": "tests/functional/orchestration/javascript/events/javascript_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/orchestration/javascript/events/javascript_test.go",
-      "package": "you-agent-factory/tests/functional/orchestration/javascript/events",
-      "scenario": "TestJavaScriptInvocationWithServerJoinsListenerAfterTerminalResult",
-      "lane": "short",
-      "destination": "tests/functional/orchestration/javascript/events/javascript_test.go",
+      "destination": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -6486,7 +6496,7 @@
     "by_catch_all": {
       "bootstrap_portability": 27,
       "guards_batch": 28,
-      "none": 310,
+      "none": 311,
       "replay_contracts": 24,
       "runtime_api": 106,
       "smoke": 86,
@@ -6501,7 +6511,7 @@
       "models": 5,
       "observability": 9,
       "operator_settings": 1,
-      "orchestration": 26,
+      "orchestration": 28,
       "product": 10,
       "providers": 46,
       "replay_contracts": 24,
@@ -6515,14 +6525,14 @@
       "workflow": 51,
       "workstations": 20
     },
-    "customer_top_level_Test_scenarios": 629,
+    "customer_top_level_Test_scenarios": 630,
     "files_with_customer_Test": 200,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 117,
-    "lane_short": 512,
+    "lane_short": 513,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
       "you-agent-factory/tests/functional/bootstrap_portability": 25,
@@ -6544,7 +6554,7 @@
       "you-agent-factory/tests/functional/models/model_list": 2,
       "you-agent-factory/tests/functional/observability/coverage": 9,
       "you-agent-factory/tests/functional/operator_settings/configcore": 1,
-      "you-agent-factory/tests/functional/orchestration/javascript/composition": 9,
+      "you-agent-factory/tests/functional/orchestration/javascript/composition": 11,
       "you-agent-factory/tests/functional/orchestration/javascript/durability": 3,
       "you-agent-factory/tests/functional/orchestration/petri/cross": 2,
       "you-agent-factory/tests/functional/orchestration/petri/dispatch": 3,
@@ -6657,13 +6667,13 @@
   "completeness_audit": {
     "audited_at_utc": "2026-07-27T16:45:00Z",
     "story": "ft-wave1-petri-session-compatibility-mergeability",
-    "live_customer_scenarios": 629,
-    "ledger_rows": 629,
+    "live_customer_scenarios": 630,
+    "ledger_rows": 630,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 512,
+    "lane_short": 513,
     "lane_functionallong": 118,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
