@@ -161,6 +161,17 @@ func TestSchedulerSourceObservationAttachesBeforeStartEffectInitialization(t *te
 	sidecars.Wait()
 }
 
+func TestProductionRootUsesScriptPollersOwner(t *testing.T) {
+	t.Parallel()
+
+	service := NewService(
+		zap.NewNop(), clockwork.NewFakeClock(), nil, "workflow-script-pollers", "", nil, nil, nil,
+	)
+	if service.scriptPollers == nil {
+		t.Fatal("expected script pollers owner on production Automations root")
+	}
+}
+
 func TestProductionRootUsesSchedulerReconciliationOwner(t *testing.T) {
 	t.Parallel()
 

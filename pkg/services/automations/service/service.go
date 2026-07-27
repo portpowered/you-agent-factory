@@ -9,6 +9,8 @@ import (
 	"github.com/jonboulle/clockwork"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
+	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
+	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -32,6 +34,7 @@ type Service struct {
 	resolveTemplates  workers.TemplateFieldResolver
 	executionPolicy   factorydefinitions.WorkstationExecutionPolicyService
 	reconciler        reconciliation.Service
+	scriptPollers     scriptpollers.Service
 	schedulerMu       sync.Mutex
 	schedulerSources  map[automations.SourceIdentity]*schedulerSource
 }
@@ -60,7 +63,18 @@ func New(
 		schedulerSources:  make(map[automations.SourceIdentity]*schedulerSource),
 	}
 	service.reconciler = service.newSchedulerReconciler()
+	service.scriptPollers = service.newScriptPollers()
 	return service
+}
+
+func (s *Service) newScriptPollers() scriptpollers.Service {
+	return scriptpollerswire.NewService(scriptpollers.Dependencies{
+		Logger:           s.pollerLogger,
+		Clock:            s.supervisorClock,
+		CommandRunner:    s.commandRunner,
+		ResolveTemplates: s.resolveTemplates,
+		ExecutionPolicy:  s.executionPolicy,
+	})
 }
 
 // NewService constructs the Automations root contract for composition.
