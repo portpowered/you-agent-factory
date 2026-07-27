@@ -28,7 +28,7 @@ func assembleRuntimeProducts(
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	workService work.Service,
 	workerService workers.Service,
-	modelService models.Service,
+	modelsBind modelsRuntimeBind,
 	providerSessions providersessions.Service,
 	startup factoryruntime.HostedInstance,
 	lifecycle roles.LifecycleRuntime,
@@ -52,7 +52,7 @@ func assembleRuntimeProducts(
 		FactoryRuntime: factoryRuntime, FactoryDefinitions: factoryDefinitions,
 		WorkflowPreview: workflowPreview,
 		FactorySessions: factorySessionGateway, SessionInvocation: sessionInvocation,
-		SessionExecution: factorySessionGateway, Work: workService, Models: modelService,
+		SessionExecution: factorySessionGateway, Work: workService, Models: modelsBind.Root,
 		Workers: workerService, ProviderSessions: providerSessions,
 		WorkerPrompts: workerPrompts, Logger: resources.Logger,
 	}
@@ -74,5 +74,6 @@ func assembleRuntimeProducts(
 			Execution: factorySessionGateway, WorkflowPreview: workflowPreview,
 			Resources: resources,
 		},
+		modelsScope: modelsBind.Scope,
 	}
 }

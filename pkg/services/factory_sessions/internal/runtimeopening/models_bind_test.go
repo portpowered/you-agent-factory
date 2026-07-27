@@ -3,8 +3,13 @@ package runtimeopening
 import (
 	"context"
 	"testing"
+	"time"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"go.uber.org/zap"
 )
 
 type recordingModelsService struct {
@@ -208,3 +213,68 @@ func TestBindModelsRuntimeScopeOpensDetachedScopeWithoutForRuntime(t *testing.T)
 		t.Fatalf("scope runtime factory directory = %q, want %q", got.Runtime.FactoryDirectory, runtimeConfig.FactoryDirectory)
 	}
 }
+
+func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *testing.T) {
+	t.Parallel()
+
+	root := &recordingModelsService{}
+	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:test:assembled")
+	if err != nil {
+		t.Fatalf("parse Models scope: %v", err)
+	}
+
+	opened := assembleRuntimeProducts(
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		modelsRuntimeBind{Root: root, Scope: scope},
+		nil,
+		inertHostedInstance{},
+		nil,
+		nil,
+		nil,
+		nil,
+		"/factory",
+		"runtime-1",
+		"backend-1",
+	)
+
+	if opened.application.HTTP.Models != root {
+		t.Fatal("opened application runtime did not retain the process-scoped Models root")
+	}
+	if opened.modelsScope != scope {
+		t.Fatalf("opened Models scope = %q, want %q", opened.modelsScope.String(), scope.String())
+	}
+	if root.forRuntimeCalls != 0 {
+		t.Fatalf("ForRuntime calls = %d, want 0", root.forRuntimeCalls)
+	}
+}
+
+type inertHostedInstance struct{}
+
+func (inertHostedInstance) RuntimeService() factoryruntime.Service { return nil }
+func (inertHostedInstance) Directory() string                      { return "" }
+func (inertHostedInstance) FolderDirectory() string                { return "" }
+func (inertHostedInstance) BackendScope() string                   { return "" }
+func (inertHostedInstance) StartTime() time.Time                   { return time.Time{} }
+func (inertHostedInstance) LoadedRuntimeConfig() factoryruntime.LoadedConfig {
+	return nil
+}
+func (inertHostedInstance) CanonicalEvents() []factorydefinitions.FactoryEvent { return nil }
+func (inertHostedInstance) AddEventTypeRecorder(func(factorydefinitions.FactoryEventType)) {
+}
+func (inertHostedInstance) StreamGeneration() string { return "" }
+func (inertHostedInstance) RuntimeLogger() *zap.Logger {
+	return zap.NewNop()
+}
+func (inertHostedInstance) RuntimeMetrics() factoryruntime.MetricsEmitter { return nil }
+func (inertHostedInstance) RuntimeDiagnostics() factoryruntime.RuntimeLogDiagnostics {
+	return factoryruntime.RuntimeLogDiagnostics{}
+}
+func (inertHostedInstance) RecordingLedger() recordings.Ledger { return nil }
+func (inertHostedInstance) CloseArtifacts() error              { return nil }

@@ -373,7 +373,7 @@ func openRuntime(
 		workflowPreview,
 		workDomain,
 		serviceService,
-		selectedModels,
+		modelsBind,
 		providerSessions,
 		startupRuntime,
 		sessionRuntime,
@@ -384,6 +384,5 @@ func openRuntime(
 		configured.Runtime.RuntimeInstanceID,
 		configured.Session.BackendScopeID,
 	)
-	opened.modelsScope = modelsBind.Scope
 	return opened, nil
 }
