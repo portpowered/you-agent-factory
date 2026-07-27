@@ -3,6 +3,9 @@ package commands_test
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,6 +31,12 @@ const (
 	submitWiringUnavailableWorkName  = "unavailable-task"
 	submitWiringUnavailableWorkType  = "task"
 	submitWiringUnavailableServer      = "http://127.0.0.1:1"
+
+	submitWiringBackendErrorRequestID        = "cli-submit-wiring-backend-error"
+	submitWiringBackendErrorWorkName         = "backend-error-task"
+	submitWiringBackendErrorWorkType         = "task"
+	submitWiringBackendErrorUnsafeMessage    = "payload-secret access-token-secret"
+	submitWiringBackendErrorUnsafeCredential = "sk-proj-secret123"
 )
 
 // TestCLISubmitBatchInlineJSON proves you submit batch accepts inline canonical
@@ -194,6 +203,88 @@ func TestCLISubmitUnavailableServer(t *testing.T) {
 	} {
 		if strings.Contains(output, marker) {
 			t.Fatalf("submit batch output must not contain success acknowledgment marker %q:\n%s", marker, output)
+		}
+	}
+}
+
+// TestCLISubmitBackendErrorPreservesPublicMessage proves you submit batch exits
+// non-success and preserves the public backend error's safe typed fields when
+// the Factory Session server rejects the batch request.
+func TestCLISubmitBackendErrorPreservesPublicMessage(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI submit wiring")
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Errorf("request method = %s, want PUT", r.Method)
+		}
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, fmt.Sprintf(`{
+			"message":%q,
+			"code":"BAD_REQUEST",
+			"family":"BAD_REQUEST",
+			"workId":%q
+		}`, submitWiringBackendErrorUnsafeMessage, submitWiringBackendErrorUnsafeCredential))
+	}))
+	t.Cleanup(server.Close)
+
+	binaryPath := buildYouCLIBinary(t)
+	inlineBatch := fmt.Sprintf(
+		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":%q,"payload":{"title":"Backend error wiring"}}]}`,
+		submitWiringBackendErrorRequestID,
+		submitWiringBackendErrorWorkName,
+		submitWiringBackendErrorWorkType,
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	submitCmd := exec.CommandContext(
+		ctx,
+		binaryPath,
+		"--server", server.URL,
+		"submit", "batch",
+		inlineBatch,
+	)
+	submitCmd.Dir = t.TempDir()
+
+	submitOut, err := submitCmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("you submit batch unexpectedly succeeded against backend error:\n%s", submitOut)
+	}
+
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("you submit batch error = %v, want *exec.ExitError", err)
+	}
+	if exitErr.ExitCode() != 1 {
+		t.Fatalf("you submit batch exit code = %d, want 1", exitErr.ExitCode())
+	}
+
+	output := string(submitOut)
+	for _, marker := range []string{
+		"batch submission failed (400)",
+		"code=BAD_REQUEST",
+		"family=BAD_REQUEST",
+	} {
+		if !strings.Contains(output, marker) {
+			t.Fatalf("submit batch output missing public backend error marker %q:\n%s", marker, output)
+		}
+	}
+
+	for _, leaked := range []string{
+		submitWiringBackendErrorUnsafeMessage,
+		"access-token",
+		submitWiringBackendErrorUnsafeCredential,
+		"requestId: " + submitWiringBackendErrorRequestID,
+		"traceId:",
+		"work count:",
+	} {
+		if strings.Contains(output, leaked) {
+			t.Fatalf("submit batch output must not contain %q:\n%s", leaked, output)
 		}
 	}
 }
