@@ -237,6 +237,15 @@ PRD with behavioral acceptance criteria.
 
 The Plan should be generally verbose enough such that the model won't screw up your intentions. 
 
+Every submitted implementation idea must explicitly include this delivery
+contract in its payload: implementation and review loop until all required CI
+is terminal and passing, every blocking PR conversation comment is addressed,
+merge conflicts are resolved, the PR is merged, and only then may the Factory
+work complete. Opening a PR, making it review-ready, or obtaining green CI
+without merge is not completion. Shared-file churn is not an admission blocker;
+the worker must rebase or reconcile the shared files as part of this delivery
+loop.
+
 
 
 ### Work Batch Guidance
@@ -251,7 +260,8 @@ Prefer batches that move forward in vertical slices:
 * PDF export when the active phase calls for PDF work
 * starter content pages
 
-- you should try to plan work in a dependency ordered way otherwise the code will stomp on each other
+- use dependency ordering for real semantic prerequisites; shared-file churn by
+  itself does not require serializing otherwise independent work
 - for example when initiating the project, do one work item to setup the project, then do the others that depend on the initial subject. 
 
 

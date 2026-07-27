@@ -219,12 +219,7 @@ func FinalizeArtifacts(bundle *Bundle, clock factory.Clock) error {
 	}
 	var errs []error
 	if bundle.Recording != nil {
-		bundle.Recording.Stop()
-		bundle.Recording.Finish(clock.Now().UTC())
-		if err := bundle.Recording.Flush(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := bundle.Recording.Err(); err != nil {
+		if err := bundle.Recording.Finalize(clock.Now().UTC()); err != nil {
 			errs = append(errs, err)
 		}
 	}

@@ -3456,6 +3456,60 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/providers/internal/service",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/catalog",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/catalog/internal/service",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/catalog/wire",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/service",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/wire",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/testutil/execution",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/wire",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/recordings",
       "disposition": "retain",
       "destination": "recordings",
@@ -3499,6 +3553,24 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/projection_query/wire",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/recording_lifecycle",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/recording_lifecycle/internal/service",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/recording_lifecycle/wire",
       "disposition": "retain",
       "destination": "recordings",
       "destinationKind": "owner"

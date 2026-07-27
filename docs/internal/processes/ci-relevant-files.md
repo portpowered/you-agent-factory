@@ -139,7 +139,35 @@
   (with `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage`) so
   `functional-boundary-check` stays unavoidable through the nested
   `test-functional-coverage` call, and the lane uploads Markdown, coverage
-  JSON, profile, and command log on success and failure. Prove default
+  JSON, profile, and command log on success and failure.
+  JavaScript agent composition functional coverage belongs in
+  `tests/functional/orchestration/javascript/composition/agent_test.go`:
+  drive sync Factory Session execution through
+  `tests/functional/internal/support.StartFunctionalAPIServer` with
+  `UseMockWorkers: true` and a recording `edges.Edges.ProviderCommandRunner`,
+  assert unary child results on `result.primaryResult`, and prove stable
+  `FAILED` dispatch records via the `fail:` fake-child prompt prefix without
+  live provider execution. JavaScript pipeline composition functional coverage
+  belongs in
+  `tests/functional/orchestration/javascript/composition/pipeline_test.go`:
+  use `pipeline(items, worker, next?)` with at least two stages so stage-two
+  prompts depend on stage-one child output, and assert stage-output data flow
+  on `result.primaryResult` and the Factory Session dispatch listing without
+  live provider execution. JavaScript parallel composition functional coverage
+  belongs in
+  `tests/functional/orchestration/javascript/composition/parallel_test.go`:
+  drive async Factory Session execution through
+  `tests/functional/internal/support.StartFunctionalAPIServer` with
+  `WaitForServiceModeRuntime: true` and a controllable
+  `edges.Edges.ProviderOverride`, prove concurrent external child dispatch by
+  blocking `Provider.Infer` until public `inFlightDispatches` reaches the fan-out
+  size, release children to assert declared input-order results and documented
+  partial-failure shaping on `/factory-sessions/{id}/results?mode=final` and
+  `/dispatches` without wall-clock sleeps. Catalog metadata infers domain
+  `orchestration` and subsection `javascript/composition` from the path; every
+  top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
+  stays viz-compatible.
+  Prove default
   `functional-test-viz` wiring (boundary first, single coverage with profile
   + JSON under `.artifacts/functional-test-viz/`, Markdown generator) with
   dry-run / stubbed Make wrapper smoke under
@@ -163,9 +191,13 @@ Wave 0 functional-tests-expansion planning authority lives under
   consume its rows and deletion-only batch ids). The Inventory companion
   `migration-ledger-inventory.json` mirrors the same required row fields for
   tooling. Destination topology remains `test-file-checklist.md`; ownership
-  rules remain `plan.md`. `cmd/migrationledgercheck` validates live
+  rules remain `plan.md`.   `cmd/migrationledgercheck` validates live
   `tests/functional` inventory coverage, checklist destination validity, and
-  lane preservation against the companion JSON.
+  lane preservation against the companion JSON. When a deletion-only batch is
+  fully consumed (all scenarios owned by destination cells with
+  `deletion_only_batch: n/a`), remove its id from
+  `internal/migrationledgercheck.ExpectedDeletionOnlyBatches` and mark the
+  batch `released` in `migration-ledger.md`.
   `make pkg-structure` enforces the domain-mirrored functional layout
   `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
   unclassified scenario packages are blocking, while existing nonconforming

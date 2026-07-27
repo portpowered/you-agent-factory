@@ -1,0 +1,16 @@
+{
+  "argv": [
+    "kiro-cli",
+    "chat",
+    "--no-interactive",
+    "--trust-all-tools"
+  ],
+  "provider": "kiro",
+  "model": "kiro-auto",
+  "exitCode": 124,
+  "stdoutStream": true,
+  "stderrStream": true,
+  "workingDirectoryRole": "factory-root",
+  "timeoutCancelClass": "timeout",
+  "terminalErrorClass": "none"
+}

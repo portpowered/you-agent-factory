@@ -78,7 +78,7 @@ func NewInferenceRegistry(
 // that projects managed-runtime invocation ahead of the supplied delegate.
 func NewInferenceCompositionRunner(
 	inner workers.Runner,
-	modelsService runners.InferenceLocalInvoker,
+	modelsService inference.LocalInvoker,
 	modelsScope models.RuntimeScopeRef,
 	worker *interfaces.FactoryWorkerConfig,
 	resources []interfaces.ResourceConfig,

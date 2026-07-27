@@ -16,7 +16,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
-	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationservice "github.com/portpowered/infinite-you/pkg/services/automations/service"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -532,10 +531,6 @@ func provideRecordingsProjectionFactory() factorysessionwire.RecordingsProjectio
 	return recordingsservice.NewProjectionService
 }
 
-func provideRecordingsFactory() factorysessionwire.RecordingsFactory {
-	return recordingsservice.NewService
-}
-
 func provideRuntimeLedgerFactory() factorysessionwire.RuntimeLedgerFactory {
 	return func() factoryruntime.RuntimeLedgerFactory {
 		return func(topology recordings.InitialStructureSource, now func() time.Time, definitions factorydefinitions.RuntimeDefinitionLookup) recordings.RuntimeEventLedger {
@@ -571,7 +566,6 @@ func provideLoadedFactorySnapshotCapturer() factorydefinitions.LoadedFactorySnap
 }
 
 func provideRuntimeRecorderFactory(
-	storage platformreplay.Storage,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 ) recordings.RuntimeRecorderFactory {
 	return func(
@@ -580,8 +574,7 @@ func provideRuntimeRecorderFactory(
 		now func() time.Time,
 		recordPath string,
 	) (recordings.RuntimeRecorder, error) {
-		return recordingsservice.NewRuntimeRecorder(
-			storage,
+		return recordingsservice.NewLifecycleRuntimeRecorder(
 			flushInterval,
 			loaded,
 			now,

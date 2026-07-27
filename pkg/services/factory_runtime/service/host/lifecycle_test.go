@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"go.uber.org/zap"
 )
 
@@ -35,6 +36,69 @@ func TestFinalizeArtifacts_RequiresClock(t *testing.T) {
 	err := factoryhost.FinalizeArtifacts(&factoryhost.Bundle{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "clock is required") {
 		t.Fatalf("FinalizeArtifacts() error = %v, want required clock error", err)
+	}
+}
+
+type terminalRecording struct {
+	finalizeCalls int
+	finishedAt    time.Time
+}
+
+func (*terminalRecording) BindRecordingService(
+	recordings.Service,
+	recordings.CanonicalEventScope,
+) error {
+	return nil
+}
+func (*terminalRecording) Start(context.Context)               {}
+func (*terminalRecording) Stop()                               {}
+func (*terminalRecording) RecordEvent(interfaces.FactoryEvent) {}
+func (*terminalRecording) RecordError(error)                   {}
+func (*terminalRecording) Finish(time.Time)                    {}
+func (*terminalRecording) Flush() error                        { return nil }
+func (*terminalRecording) Err() error                          { return nil }
+func (r *terminalRecording) Finalize(finishedAt time.Time) error {
+	r.finalizeCalls++
+	r.finishedAt = finishedAt
+	return nil
+}
+
+var _ recordings.RuntimeRecorder = (*terminalRecording)(nil)
+
+func TestStopDelegatesEveryRuntimeOutcomeToRecordingFinalization(t *testing.T) {
+	t.Parallel()
+
+	finishedAt := time.Date(2026, 7, 27, 19, 0, 0, 0, time.UTC)
+	tests := map[string]error{
+		"normal completion":   nil,
+		"caller cancellation": context.Canceled,
+		"runtime crash":       errors.New("runtime crashed"),
+	}
+	for name, runErr := range tests {
+		t.Run(name, func(t *testing.T) {
+			recording := &terminalRecording{}
+			handle := &factoryhost.Handle{
+				Bundle:  &factoryhost.Bundle{Recording: recording},
+				RunDone: make(chan struct{}),
+			}
+			handle.SetRunResult(runErr)
+
+			err := factoryhost.Stop(handle, clockwork.NewFakeClockAt(finishedAt))
+			if runErr != nil && !errors.Is(err, runErr) {
+				t.Fatalf("Stop error = %v, want run error %v", err, runErr)
+			}
+			if runErr == nil && err != nil {
+				t.Fatalf("Stop error = %v, want nil", err)
+			}
+			if recording.finalizeCalls != 1 || !recording.finishedAt.Equal(finishedAt) {
+				t.Fatalf(
+					"recording finalization = (%d, %s), want one call at %s",
+					recording.finalizeCalls,
+					recording.finishedAt,
+					finishedAt,
+				)
+			}
+		})
 	}
 }
 
