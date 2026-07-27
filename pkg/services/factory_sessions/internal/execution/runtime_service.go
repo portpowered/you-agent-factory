@@ -318,7 +318,7 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	if err != nil {
 		return AsyncStartResult{}, err
 	}
-	if err := validateLiveChildProviderExecutor(resolveChildExecutorMode(s.childExecutorMode, normalized), s.providerExecutor); err != nil {
+	if err := validateLiveChildProviderExecutor(resolveChildExecutorMode(s.childExecutorMode, normalized), s.providerExecutor, s.liveChildInvocation); err != nil {
 		return AsyncStartResult{}, err
 	}
 	resolved := prepared.ResolvedSource
@@ -387,7 +387,7 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 	if err != nil {
 		return SyncStartResult{}, err
 	}
-	if err := validateLiveChildProviderExecutor(resolveChildExecutorMode(s.childExecutorMode, normalized), s.providerExecutor); err != nil {
+	if err := validateLiveChildProviderExecutor(resolveChildExecutorMode(s.childExecutorMode, normalized), s.providerExecutor, s.liveChildInvocation); err != nil {
 		return SyncStartResult{}, err
 	}
 	resolved := prepared.ResolvedSource

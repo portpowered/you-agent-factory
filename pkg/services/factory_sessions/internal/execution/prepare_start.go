@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-func validateLiveChildProviderExecutor(mode string, executor workers.InvocationExecutor) error {
-	if mode == ChildExecutorModeLive && executor == nil {
+func validateLiveChildProviderExecutor(mode string, executor workers.InvocationExecutor, liveChildInvocation LiveChildInvocationFactory) error {
+	if mode == ChildExecutorModeLive && executor == nil && liveChildInvocation == nil {
 		return NewValidationError("runtime.childExecutorMode", "worker invocation executor is required for live child execution")
 	}
 	return nil

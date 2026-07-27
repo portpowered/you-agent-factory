@@ -370,7 +370,7 @@ func NewJavaScriptExecutionService(
 		return nil, NewValidationError("childValues", "Factory Runtime JavaScript child values are required")
 	}
 	childExecutorMode = normalizeChildExecutorMode(childExecutorMode)
-	if childExecutorMode == ChildExecutorModeLive && executor == nil {
+	if childExecutorMode == ChildExecutorModeLive && executor == nil && liveChildInvocation == nil {
 		return nil, NewValidationError("runtime.childExecutorMode", "worker invocation executor is required for live child execution")
 	}
 	if recordingWriter == nil {

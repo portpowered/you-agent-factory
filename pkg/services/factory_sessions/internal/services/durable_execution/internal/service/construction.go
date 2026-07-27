@@ -40,7 +40,7 @@ func NewDurable(
 		return nil, err
 	}
 	childExecutorMode := factorysessions.ChildExecutorModeFake
-	if executor != nil {
+	if executor != nil || liveChildInvocation != nil {
 		childExecutorMode = factorysessions.ChildExecutorModeLive
 	}
 	execution, err := factorysessionexecution.NewJavaScriptExecutionService(

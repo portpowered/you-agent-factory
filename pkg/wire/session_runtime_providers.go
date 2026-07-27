@@ -477,20 +477,18 @@ func provideFactorySessionExecutionFactory(
 		clock factoryruntime.Clock,
 		workerPresetIDs map[string]struct{},
 		workerSettings factoryruntime.JavaScriptWorkerSettings,
+		mockWorkersEnabled bool,
 	) (factorysessions.ExecutionService, error) {
 		executor := workerinvocation.NewExecutor(provider)
 		var liveChildInvocation factorysessionwire.LiveChildInvocationFactory
-		if executor == nil && invocation != nil && adaptRunner != nil && allocator != nil && edges.ProviderCommandRunner != nil {
-			liveChild, err := invocation(adaptRunner(edges.ProviderCommandRunner), allocator)
-			if err != nil {
-				return nil, err
-			}
-			executor = liveChild
-			if invocationWithProgress != nil {
-				runner := adaptRunner(edges.ProviderCommandRunner)
-				liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
-					return invocationWithProgress(runner, allocator, publisher)
-				}
+		if !mockWorkersEnabled &&
+			invocationWithProgress != nil &&
+			adaptRunner != nil &&
+			allocator != nil &&
+			edges.ProviderCommandRunner != nil {
+			runner := adaptRunner(edges.ProviderCommandRunner)
+			liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
+				return invocationWithProgress(runner, allocator, publisher)
 			}
 		}
 		return factorysessionwire.NewDurableExecution(
