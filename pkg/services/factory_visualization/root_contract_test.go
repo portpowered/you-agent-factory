@@ -275,6 +275,45 @@ func (f *fakeRootPeer) StopDrain(
 	return factoryvisualization.StopDrainResult{State: f.state}, nil
 }
 
+func requireLifecycleError(
+	t *testing.T,
+	err error,
+	kind factoryvisualization.LifecycleErrorKind,
+	label string,
+) {
+	t.Helper()
+	var lifeErr *factoryvisualization.LifecycleError
+	if !errors.As(err, &lifeErr) || lifeErr.Kind != kind {
+		t.Fatalf("%s: error = %v, want %s", label, err, kind)
+	}
+}
+
+func requireProjectionError(
+	t *testing.T,
+	err error,
+	kind factoryvisualization.ProjectionErrorKind,
+	label string,
+) {
+	t.Helper()
+	var projErr *factoryvisualization.ProjectionError
+	if !errors.As(err, &projErr) || projErr.Kind != kind {
+		t.Fatalf("%s: error = %v, want %s", label, err, kind)
+	}
+}
+
+func requirePresentationError(
+	t *testing.T,
+	err error,
+	kind factoryvisualization.PresentationErrorKind,
+	label string,
+) {
+	t.Helper()
+	var presErr *factoryvisualization.PresentationError
+	if !errors.As(err, &presErr) || presErr.Kind != kind {
+		t.Fatalf("%s: error = %v, want %s", label, err, kind)
+	}
+}
+
 func TestRootContractFakePeerInertNotActivated(t *testing.T) {
 	t.Parallel()
 
@@ -285,13 +324,7 @@ func TestRootContractFakePeerInertNotActivated(t *testing.T) {
 	if err == nil {
 		t.Fatal("Join on inert Root: error = nil, want not-activated failure")
 	}
-	var lifeErr *factoryvisualization.LifecycleError
-	if !errors.As(err, &lifeErr) {
-		t.Fatalf("Join on inert Root: error = %T (%v), want *LifecycleError", err, err)
-	}
-	if lifeErr.Kind != factoryvisualization.LifecycleErrorNotActivated {
-		t.Fatalf("Join on inert Root: kind = %q, want %q", lifeErr.Kind, factoryvisualization.LifecycleErrorNotActivated)
-	}
+	requireLifecycleError(t, err, factoryvisualization.LifecycleErrorNotActivated, "Join on inert Root")
 	if peer.subscribed || peer.presented {
 		t.Fatal("inert Root peer must not subscribe or present after Join")
 	}
@@ -305,16 +338,12 @@ func TestRootLifecycleActivateSuccessAndTypedFailures(t *testing.T) {
 
 	peer := &fakeRootPeer{state: factoryvisualization.LifecycleStateInert}
 	var root factoryvisualization.Root = peer
-
 	if peer.subscribed || peer.presented {
 		t.Fatal("constructed Root peer must remain inert before Activate")
 	}
 
 	_, err := root.Activate(context.Background(), factoryvisualization.ActivateRequest{})
-	var lifeErr *factoryvisualization.LifecycleError
-	if !errors.As(err, &lifeErr) || lifeErr.Kind != factoryvisualization.LifecycleErrorMissingParameters {
-		t.Fatalf("Activate missing parameters: error = %v, want MissingParameters", err)
-	}
+	requireLifecycleError(t, err, factoryvisualization.LifecycleErrorMissingParameters, "Activate missing parameters")
 	if peer.subscribed || peer.presented || peer.state != factoryvisualization.LifecycleStateInert {
 		t.Fatal("missing-parameter Activate must leave peer inert")
 	}
@@ -335,9 +364,7 @@ func TestRootLifecycleActivateSuccessAndTypedFailures(t *testing.T) {
 	_, err = root.Activate(context.Background(), factoryvisualization.ActivateRequest{
 		Mode: factoryvisualization.ActivateModeRetainedThenLive,
 	})
-	if !errors.As(err, &lifeErr) || lifeErr.Kind != factoryvisualization.LifecycleErrorAlreadyActivated {
-		t.Fatalf("Activate already activated: error = %v, want AlreadyActivated", err)
-	}
+	requireLifecycleError(t, err, factoryvisualization.LifecycleErrorAlreadyActivated, "Activate already activated")
 
 	joinResult, err := root.Join(context.Background(), factoryvisualization.JoinRequest{})
 	if err != nil {
@@ -381,10 +408,7 @@ func TestRootLiveProjectionSuccessAndTypedFailures(t *testing.T) {
 	var root factoryvisualization.Root = peer
 
 	_, err := root.Observe(context.Background(), factoryvisualization.ObserveRequest{})
-	var projErr *factoryvisualization.ProjectionError
-	if !errors.As(err, &projErr) || projErr.Kind != factoryvisualization.ProjectionErrorInvalidInput {
-		t.Fatalf("Observe missing parameters: error = %v, want InvalidInput", err)
-	}
+	requireProjectionError(t, err, factoryvisualization.ProjectionErrorInvalidInput, "Observe missing parameters")
 
 	neg := -1
 	_, err = root.Observe(context.Background(), factoryvisualization.ObserveRequest{
@@ -393,26 +417,20 @@ func TestRootLiveProjectionSuccessAndTypedFailures(t *testing.T) {
 			AfterSequence: &neg,
 		},
 	})
-	if !errors.As(err, &projErr) || projErr.Kind != factoryvisualization.ProjectionErrorInvalidInput {
-		t.Fatalf("Observe invalid reconnect: error = %v, want InvalidInput", err)
-	}
+	requireProjectionError(t, err, factoryvisualization.ProjectionErrorInvalidInput, "Observe invalid reconnect")
 
 	peer.observeSnapshotOK = false
 	_, err = root.Observe(context.Background(), factoryvisualization.ObserveRequest{
 		Mode: factoryvisualization.ObserveModeRetainedThenLive,
 	})
-	if !errors.As(err, &projErr) || projErr.Kind != factoryvisualization.ProjectionErrorSnapshotUnavailable {
-		t.Fatalf("Observe unavailable snapshot: error = %v, want SnapshotUnavailable", err)
-	}
+	requireProjectionError(t, err, factoryvisualization.ProjectionErrorSnapshotUnavailable, "Observe unavailable snapshot")
 
 	peer.observeSnapshotOK = true
 	peer.observeReconstructOK = false
 	_, err = root.Observe(context.Background(), factoryvisualization.ObserveRequest{
 		Mode: factoryvisualization.ObserveModeRetainedThenLive,
 	})
-	if !errors.As(err, &projErr) || projErr.Kind != factoryvisualization.ProjectionErrorReconstructionFailed {
-		t.Fatalf("Observe reconstruction failure: error = %v, want ReconstructionFailed", err)
-	}
+	requireProjectionError(t, err, factoryvisualization.ProjectionErrorReconstructionFailed, "Observe reconstruction failure")
 
 	peer.observeReconstructOK = true
 	result, err := root.Observe(context.Background(), factoryvisualization.ObserveRequest{
@@ -421,11 +439,8 @@ func TestRootLiveProjectionSuccessAndTypedFailures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Observe valid path: error = %v", err)
 	}
-	if result.View.TickCount != 7 {
-		t.Fatalf("Observe TickCount = %d, want 7", result.View.TickCount)
-	}
-	if result.View.RetainedEventCount != 2 {
-		t.Fatalf("Observe RetainedEventCount = %d, want 2", result.View.RetainedEventCount)
+	if result.View.TickCount != 7 || result.View.RetainedEventCount != 2 {
+		t.Fatalf("Observe view = %#v, want tick 7 retained 2", result.View)
 	}
 	if !result.View.ObservedAt.Equal(observedAt) {
 		t.Fatalf("Observe ObservedAt = %v, want %v", result.View.ObservedAt, observedAt)
@@ -442,22 +457,30 @@ func TestRootPresentationDrainSuccessAndTypedFailures(t *testing.T) {
 	var root factoryvisualization.Root = peer
 
 	_, err := root.OpenPresentation(context.Background(), factoryvisualization.OpenPresentationRequest{})
-	var presErr *factoryvisualization.PresentationError
-	if !errors.As(err, &presErr) || presErr.Kind != factoryvisualization.PresentationErrorInvalidInput {
-		t.Fatalf("OpenPresentation missing parameters: error = %v, want InvalidInput", err)
-	}
+	requirePresentationError(t, err, factoryvisualization.PresentationErrorInvalidInput, "OpenPresentation missing parameters")
 
+	assertPeerPresentationSuccessDrain(t, root, peer)
+	assertPeerPresentationTypedFailures(t, root)
+
+	if peer.subscribed {
+		t.Fatal("presentation/drain must not require Activate subscription ownership on the peer")
+	}
+}
+
+func assertPeerPresentationSuccessDrain(
+	t *testing.T,
+	root factoryvisualization.Root,
+	peer *fakeRootPeer,
+) {
+	t.Helper()
 	opened, err := root.OpenPresentation(context.Background(), factoryvisualization.OpenPresentationRequest{
 		Mode: factoryvisualization.PresentationDeliveryLossless,
 	})
 	if err != nil {
 		t.Fatalf("OpenPresentation lossless: error = %v", err)
 	}
-	if opened.SessionID == "" {
-		t.Fatal("OpenPresentation must return a session id")
-	}
-	if opened.Mode != factoryvisualization.PresentationDeliveryLossless {
-		t.Fatalf("OpenPresentation mode = %q, want lossless", opened.Mode)
+	if opened.SessionID == "" || opened.Mode != factoryvisualization.PresentationDeliveryLossless {
+		t.Fatalf("OpenPresentation result = %#v, want lossless session", opened)
 	}
 
 	progress, err := root.PresentProgress(context.Background(), factoryvisualization.PresentProgressRequest{
@@ -467,22 +490,16 @@ func TestRootPresentationDrainSuccessAndTypedFailures(t *testing.T) {
 			{Payload: []byte("two")},
 		},
 	})
-	if err != nil {
-		t.Fatalf("PresentProgress: error = %v", err)
-	}
-	if progress.AcceptedCount != 2 {
-		t.Fatalf("PresentProgress AcceptedCount = %d, want 2", progress.AcceptedCount)
+	if err != nil || progress.AcceptedCount != 2 {
+		t.Fatalf("PresentProgress: result=%#v err=%v", progress, err)
 	}
 
 	finalized, err := root.FinalizePresentation(context.Background(), factoryvisualization.FinalizePresentationRequest{
 		SessionID: opened.SessionID,
 		Terminal:  &factoryvisualization.TerminalWrite{Payload: []byte("done")},
 	})
-	if err != nil {
-		t.Fatalf("FinalizePresentation: error = %v", err)
-	}
-	if !finalized.Finalized || !finalized.ProgressSeen {
-		t.Fatalf("FinalizePresentation result = %#v, want finalized with progress", finalized)
+	if err != nil || !finalized.Finalized || !finalized.ProgressSeen {
+		t.Fatalf("FinalizePresentation result = %#v err=%v", finalized, err)
 	}
 	session := peer.presentations[opened.SessionID]
 	if len(session.records) != 3 {
@@ -496,10 +513,14 @@ func TestRootPresentationDrainSuccessAndTypedFailures(t *testing.T) {
 		SessionID: opened.SessionID,
 		Records:   []factoryvisualization.ProgressRecord{{Payload: []byte("late")}},
 	})
-	if !errors.As(err, &presErr) || presErr.Kind != factoryvisualization.PresentationErrorEnqueueAfterClose {
-		t.Fatalf("PresentProgress after finalize: error = %v, want EnqueueAfterClose", err)
-	}
+	requirePresentationError(t, err, factoryvisualization.PresentationErrorEnqueueAfterClose, "PresentProgress after finalize")
+}
 
+func assertPeerPresentationTypedFailures(
+	t *testing.T,
+	root factoryvisualization.Root,
+) {
+	t.Helper()
 	bestEffort, err := root.OpenPresentation(context.Background(), factoryvisualization.OpenPresentationRequest{
 		Mode: factoryvisualization.PresentationDeliveryBestEffort,
 	})
@@ -519,19 +540,191 @@ func TestRootPresentationDrainSuccessAndTypedFailures(t *testing.T) {
 		SessionID: bestEffort.SessionID,
 		Records:   []factoryvisualization.ProgressRecord{{Payload: []byte("c")}},
 	})
-	if !errors.As(err, &presErr) || presErr.Kind != factoryvisualization.PresentationErrorBackpressureRejected {
-		t.Fatalf("PresentProgress backpressure: error = %v, want BackpressureRejected", err)
-	}
+	requirePresentationError(t, err, factoryvisualization.PresentationErrorBackpressureRejected, "PresentProgress backpressure")
 
 	_, err = root.FinalizePresentation(context.Background(), factoryvisualization.FinalizePresentationRequest{
 		SessionID: bestEffort.SessionID,
 		Terminal:  nil,
 	})
-	if !errors.As(err, &presErr) || presErr.Kind != factoryvisualization.PresentationErrorFinalizeWithoutWriter {
-		t.Fatalf("FinalizePresentation without terminal: error = %v, want FinalizeWithoutWriter", err)
+	requirePresentationError(t, err, factoryvisualization.PresentationErrorFinalizeWithoutWriter, "FinalizePresentation without terminal")
+}
+
+// TestRootContractInvariants_AllSlicesThroughSingularRoot seals the Factory
+// Visualization root-contract packet for IMP-VIS unlock: lifecycle, live
+// projection, and presentation/drain slices are reachable through one named
+// Root, a peer-shaped consumer exercises success and typed-failure paths using
+// only the root package (no Recordings ledger storage, Runtime Petri/JS
+// internals, or transport codec/writer types), construction stays inert until
+// Activate, and no second peer-facing Visualization authority is required.
+func TestRootContractInvariants_AllSlicesThroughSingularRoot(t *testing.T) {
+	t.Parallel()
+
+	observedAt := time.Date(2026, time.July, 24, 3, 55, 0, 0, time.UTC)
+	peer := &fakeRootPeer{
+		state:                factoryvisualization.LifecycleStateInert,
+		observeSnapshotOK:    true,
+		observeReconstructOK: true,
+		observeView: factoryvisualization.ProjectedView{
+			TickCount:          11,
+			RetainedEventCount: 4,
+			ObservedAt:         observedAt,
+		},
+	}
+	var root factoryvisualization.Root = peer
+	ctx := context.Background()
+
+	assertSealedLifecycleSlice(t, root, peer, ctx)
+	assertSealedLiveProjectionSlice(t, root, peer, observedAt, ctx)
+	assertSealedPresentationDrainSlice(t, root, ctx)
+
+	stopped, err := root.StopDrain(ctx, factoryvisualization.StopDrainRequest{})
+	if err != nil {
+		t.Fatalf("lifecycle StopDrain success: %v", err)
+	}
+	if stopped.State != factoryvisualization.LifecycleStateStopped {
+		t.Fatalf("lifecycle StopDrain state = %q, want %q", stopped.State, factoryvisualization.LifecycleStateStopped)
+	}
+	if peer.subscribed {
+		t.Fatal("StopDrain must clear subscription ownership on the peer")
 	}
 
-	if peer.subscribed {
-		t.Fatal("presentation/drain must not require Activate subscription ownership on the peer")
+	// Compile-time singular-authority proof: concrete Service remains the one
+	// production Root implementer for the sealed slices.
+	var _ factoryvisualization.Root = (*factoryvisualization.Service)(nil)
+}
+
+func assertSealedLifecycleSlice(
+	t *testing.T,
+	root factoryvisualization.Root,
+	peer *fakeRootPeer,
+	ctx context.Context,
+) {
+	t.Helper()
+	_, err := root.Join(ctx, factoryvisualization.JoinRequest{})
+	requireLifecycleError(t, err, factoryvisualization.LifecycleErrorNotActivated, "lifecycle inert Join")
+	if peer.subscribed || peer.presented || peer.state != factoryvisualization.LifecycleStateInert {
+		t.Fatal("constructed Root must remain inert until explicit Activate")
 	}
+
+	_, err = root.Activate(ctx, factoryvisualization.ActivateRequest{})
+	requireLifecycleError(t, err, factoryvisualization.LifecycleErrorMissingParameters, "lifecycle Activate missing parameters")
+	if peer.subscribed || peer.presented || peer.state != factoryvisualization.LifecycleStateInert {
+		t.Fatal("missing-parameter Activate must leave Root inert")
+	}
+
+	activated, err := root.Activate(ctx, factoryvisualization.ActivateRequest{
+		Mode: factoryvisualization.ActivateModeRetainedThenLive,
+	})
+	if err != nil {
+		t.Fatalf("lifecycle Activate success: %v", err)
+	}
+	if activated.State != factoryvisualization.LifecycleStateStarted {
+		t.Fatalf("lifecycle Activate state = %q, want %q", activated.State, factoryvisualization.LifecycleStateStarted)
+	}
+	_, err = root.Activate(ctx, factoryvisualization.ActivateRequest{
+		Mode: factoryvisualization.ActivateModeRetainedThenLive,
+	})
+	requireLifecycleError(t, err, factoryvisualization.LifecycleErrorAlreadyActivated, "lifecycle Activate already activated")
+}
+
+func assertSealedLiveProjectionSlice(
+	t *testing.T,
+	root factoryvisualization.Root,
+	peer *fakeRootPeer,
+	observedAt time.Time,
+	ctx context.Context,
+) {
+	t.Helper()
+	_, err := root.Observe(ctx, factoryvisualization.ObserveRequest{})
+	requireProjectionError(t, err, factoryvisualization.ProjectionErrorInvalidInput, "live-projection invalid input")
+
+	peer.observeSnapshotOK = false
+	_, err = root.Observe(ctx, factoryvisualization.ObserveRequest{
+		Mode: factoryvisualization.ObserveModeRetainedThenLive,
+	})
+	requireProjectionError(t, err, factoryvisualization.ProjectionErrorSnapshotUnavailable, "live-projection snapshot unavailable")
+
+	peer.observeSnapshotOK = true
+	peer.observeReconstructOK = false
+	_, err = root.Observe(ctx, factoryvisualization.ObserveRequest{
+		Mode: factoryvisualization.ObserveModeRetainedThenLive,
+	})
+	requireProjectionError(t, err, factoryvisualization.ProjectionErrorReconstructionFailed, "live-projection reconstruction failed")
+
+	peer.observeReconstructOK = true
+	observed, err := root.Observe(ctx, factoryvisualization.ObserveRequest{
+		Mode: factoryvisualization.ObserveModeRetainedThenLive,
+	})
+	if err != nil {
+		t.Fatalf("live-projection Observe success: %v", err)
+	}
+	if observed.View.TickCount != 11 || observed.View.RetainedEventCount != 4 {
+		t.Fatalf("live-projection view = %#v, want tick 11 retained 4", observed.View)
+	}
+	if !observed.View.ObservedAt.Equal(observedAt) {
+		t.Fatalf("live-projection ObservedAt = %v, want %v", observed.View.ObservedAt, observedAt)
+	}
+}
+
+func assertSealedPresentationDrainSlice(
+	t *testing.T,
+	root factoryvisualization.Root,
+	ctx context.Context,
+) {
+	t.Helper()
+	opened, err := root.OpenPresentation(ctx, factoryvisualization.OpenPresentationRequest{
+		Mode: factoryvisualization.PresentationDeliveryLossless,
+	})
+	if err != nil {
+		t.Fatalf("presentation OpenPresentation success: %v", err)
+	}
+	progress, err := root.PresentProgress(ctx, factoryvisualization.PresentProgressRequest{
+		SessionID: opened.SessionID,
+		Records: []factoryvisualization.ProgressRecord{
+			{Payload: []byte("seal-one")},
+			{Payload: []byte("seal-two")},
+		},
+	})
+	if err != nil || progress.AcceptedCount != 2 {
+		t.Fatalf("presentation PresentProgress success: result=%#v err=%v", progress, err)
+	}
+	finalized, err := root.FinalizePresentation(ctx, factoryvisualization.FinalizePresentationRequest{
+		SessionID: opened.SessionID,
+		Terminal:  &factoryvisualization.TerminalWrite{Payload: []byte("seal-done")},
+	})
+	if err != nil || !finalized.Finalized || !finalized.ProgressSeen {
+		t.Fatalf("presentation FinalizePresentation success: result=%#v err=%v", finalized, err)
+	}
+	_, err = root.PresentProgress(ctx, factoryvisualization.PresentProgressRequest{
+		SessionID: opened.SessionID,
+		Records:   []factoryvisualization.ProgressRecord{{Payload: []byte("late")}},
+	})
+	requirePresentationError(t, err, factoryvisualization.PresentationErrorEnqueueAfterClose, "presentation enqueue after close")
+
+	bestEffort, err := root.OpenPresentation(ctx, factoryvisualization.OpenPresentationRequest{
+		Mode: factoryvisualization.PresentationDeliveryBestEffort,
+	})
+	if err != nil {
+		t.Fatalf("presentation OpenPresentation best-effort: %v", err)
+	}
+	if _, err := root.PresentProgress(ctx, factoryvisualization.PresentProgressRequest{
+		SessionID: bestEffort.SessionID,
+		Records: []factoryvisualization.ProgressRecord{
+			{Payload: []byte("a")},
+			{Payload: []byte("b")},
+		},
+	}); err != nil {
+		t.Fatalf("presentation fill best-effort capacity: %v", err)
+	}
+	_, err = root.PresentProgress(ctx, factoryvisualization.PresentProgressRequest{
+		SessionID: bestEffort.SessionID,
+		Records:   []factoryvisualization.ProgressRecord{{Payload: []byte("c")}},
+	})
+	requirePresentationError(t, err, factoryvisualization.PresentationErrorBackpressureRejected, "presentation backpressure")
+
+	_, err = root.FinalizePresentation(ctx, factoryvisualization.FinalizePresentationRequest{
+		SessionID: bestEffort.SessionID,
+		Terminal:  nil,
+	})
+	requirePresentationError(t, err, factoryvisualization.PresentationErrorFinalizeWithoutWriter, "presentation finalize without writer")
 }

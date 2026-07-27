@@ -154,6 +154,14 @@ func TestServiceReportsProjectionReadFailureWithoutStoppingSubscription(t *testi
 	}
 }
 
+func requireServiceLifecycleError(t *testing.T, err error, kind LifecycleErrorKind, label string) {
+	t.Helper()
+	var lifeErr *LifecycleError
+	if !errors.As(err, &lifeErr) || lifeErr.Kind != kind {
+		t.Fatalf("%s: error = %v, want %s", label, err, kind)
+	}
+}
+
 func TestServiceRootLifecycleInertConstructionAndTypedActivate(t *testing.T) {
 	t.Parallel()
 
@@ -181,18 +189,13 @@ func TestServiceRootLifecycleInertConstructionAndTypedActivate(t *testing.T) {
 	}
 
 	_, err = root.Join(context.Background(), JoinRequest{})
-	var lifeErr *LifecycleError
-	if !errors.As(err, &lifeErr) || lifeErr.Kind != LifecycleErrorNotActivated {
-		t.Fatalf("Join before Activate: error = %v, want NotActivated", err)
-	}
+	requireServiceLifecycleError(t, err, LifecycleErrorNotActivated, "Join before Activate")
 	if subscribeCalls != 0 || presentCalls != 0 {
 		t.Fatal("Join before Activate must not subscribe or present")
 	}
 
 	_, err = root.Activate(context.Background(), ActivateRequest{})
-	if !errors.As(err, &lifeErr) || lifeErr.Kind != LifecycleErrorMissingParameters {
-		t.Fatalf("Activate missing parameters: error = %v, want MissingParameters", err)
-	}
+	requireServiceLifecycleError(t, err, LifecycleErrorMissingParameters, "Activate missing parameters")
 	if subscribeCalls != 0 {
 		t.Fatal("missing-parameter Activate must not subscribe")
 	}
@@ -211,9 +214,7 @@ func TestServiceRootLifecycleInertConstructionAndTypedActivate(t *testing.T) {
 	}
 
 	_, err = root.Activate(ctx, ActivateRequest{Mode: ActivateModeRetainedThenLive})
-	if !errors.As(err, &lifeErr) || lifeErr.Kind != LifecycleErrorAlreadyActivated {
-		t.Fatalf("Activate already activated: error = %v, want AlreadyActivated", err)
-	}
+	requireServiceLifecycleError(t, err, LifecycleErrorAlreadyActivated, "Activate already activated")
 
 	cancel()
 	if _, err := root.StopDrain(context.Background(), StopDrainRequest{}); err != nil {
@@ -299,6 +300,21 @@ func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
 func TestServiceRootPresentationDrainSuccessAndTypedFailures(t *testing.T) {
 	t.Parallel()
 
+	service := mustNewRootPresentationService(t)
+	var root Root = service
+
+	_, err := root.OpenPresentation(context.Background(), OpenPresentationRequest{})
+	var presErr *PresentationError
+	if !errors.As(err, &presErr) || presErr.Kind != PresentationErrorInvalidInput {
+		t.Fatalf("OpenPresentation missing parameters: error = %v, want InvalidInput", err)
+	}
+
+	assertServicePresentationSuccessDrain(t, root, service)
+	assertServicePresentationTypedFailures(t, root, service)
+}
+
+func mustNewRootPresentationService(t *testing.T) *Service {
+	t.Helper()
 	live := make(chan factorydefinitions.FactoryEvent)
 	service, err := New(
 		&sourceStub{
@@ -313,21 +329,17 @@ func TestServiceRootPresentationDrainSuccessAndTypedFailures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	var root Root = service
+	return service
+}
 
-	_, err = root.OpenPresentation(context.Background(), OpenPresentationRequest{})
-	var presErr *PresentationError
-	if !errors.As(err, &presErr) || presErr.Kind != PresentationErrorInvalidInput {
-		t.Fatalf("OpenPresentation missing parameters: error = %v, want InvalidInput", err)
-	}
-
+func assertServicePresentationSuccessDrain(t *testing.T, root Root, service *Service) {
+	t.Helper()
 	opened, err := root.OpenPresentation(context.Background(), OpenPresentationRequest{
 		Mode: PresentationDeliveryLossless,
 	})
 	if err != nil {
 		t.Fatalf("OpenPresentation: error = %v", err)
 	}
-
 	progress, err := root.PresentProgress(context.Background(), PresentProgressRequest{
 		SessionID: opened.SessionID,
 		Records: []ProgressRecord{
@@ -341,7 +353,6 @@ func TestServiceRootPresentationDrainSuccessAndTypedFailures(t *testing.T) {
 	if progress.AcceptedCount != 2 {
 		t.Fatalf("PresentProgress AcceptedCount = %d, want 2", progress.AcceptedCount)
 	}
-
 	finalized, err := root.FinalizePresentation(context.Background(), FinalizePresentationRequest{
 		SessionID: opened.SessionID,
 		Terminal:  &TerminalWrite{Payload: []byte("omega")},
@@ -352,22 +363,23 @@ func TestServiceRootPresentationDrainSuccessAndTypedFailures(t *testing.T) {
 	if !finalized.Finalized || !finalized.ProgressSeen {
 		t.Fatalf("FinalizePresentation result = %#v", finalized)
 	}
-
-	session := service.presentations[opened.SessionID]
-	got := session.writer.String()
-	want := "alpha\nbeta\nomega\n"
-	if got != want {
-		t.Fatalf("drained presentation = %q, want %q", got, want)
+	got := service.presentations[opened.SessionID].writer.String()
+	if got != "alpha\nbeta\nomega\n" {
+		t.Fatalf("drained presentation = %q, want alpha/beta/omega", got)
 	}
-
 	_, err = root.PresentProgress(context.Background(), PresentProgressRequest{
 		SessionID: opened.SessionID,
 		Records:   []ProgressRecord{{Payload: []byte("late")}},
 	})
+	var presErr *PresentationError
 	if !errors.As(err, &presErr) || presErr.Kind != PresentationErrorEnqueueAfterClose {
 		t.Fatalf("PresentProgress after finalize: error = %v, want EnqueueAfterClose", err)
 	}
+}
 
+func assertServicePresentationTypedFailures(t *testing.T, root Root, service *Service) {
+	t.Helper()
+	var presErr *PresentationError
 	bestEffort, err := root.OpenPresentation(context.Background(), OpenPresentationRequest{
 		Mode: PresentationDeliveryBestEffort,
 	})
@@ -381,7 +393,6 @@ func TestServiceRootPresentationDrainSuccessAndTypedFailures(t *testing.T) {
 		t.Fatalf("FinalizePresentation without terminal: error = %v, want FinalizeWithoutWriter", err)
 	}
 
-	// Backpressure: block the Visualization-owned writer so best-effort backlog fills.
 	blocked, err := root.OpenPresentation(context.Background(), OpenPresentationRequest{
 		Mode: PresentationDeliveryBestEffort,
 	})
@@ -389,23 +400,31 @@ func TestServiceRootPresentationDrainSuccessAndTypedFailures(t *testing.T) {
 		t.Fatalf("OpenPresentation blocked best-effort: error = %v", err)
 	}
 	blockedSession := service.presentations[blocked.SessionID]
-	gate := make(chan struct{})
+	writer := newGatedPresentationWriter()
 	blockedSession.mu.Lock()
 	_ = blockedSession.output.CloseAndDrain()
-	blockedSession.output = newBestEffortOutput(writerFunc(func(p []byte) (int, error) {
-		<-gate
-		return len(p), nil
-	}))
+	blockedSession.output = newBestEffortOutput(writer)
 	blockedSession.closed = false
 	blockedSession.finalized = false
 	blockedSession.mu.Unlock()
+
+	// Occupy the consumer on a blocked write before filling the bounded queue so
+	// capacity enqueues cannot race a free slot into the overflow PresentProgress.
+	if _, err := root.PresentProgress(context.Background(), PresentProgressRequest{
+		SessionID: blocked.SessionID,
+		Records:   []ProgressRecord{{Payload: []byte("block")}},
+	}); err != nil {
+		writer.release()
+		t.Fatalf("seed blocked write: %v", err)
+	}
+	waitForPresentationWriteAttempt(t, writer)
 
 	for i := 0; i < defaultProgressQueueCapacity; i++ {
 		if _, err := root.PresentProgress(context.Background(), PresentProgressRequest{
 			SessionID: blocked.SessionID,
 			Records:   []ProgressRecord{{Payload: []byte("x")}},
 		}); err != nil {
-			close(gate)
+			writer.release()
 			t.Fatalf("fill backlog item %d: %v", i, err)
 		}
 	}
@@ -413,15 +432,11 @@ func TestServiceRootPresentationDrainSuccessAndTypedFailures(t *testing.T) {
 		SessionID: blocked.SessionID,
 		Records:   []ProgressRecord{{Payload: []byte("overflow")}},
 	})
-	close(gate)
+	writer.release()
 	if !errors.As(err, &presErr) || presErr.Kind != PresentationErrorBackpressureRejected {
 		t.Fatalf("PresentProgress backpressure: error = %v, want BackpressureRejected", err)
 	}
 }
-
-type writerFunc func([]byte) (int, error)
-
-func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
 
 func event(id string, sequence int) factorydefinitions.FactoryEvent {
 	return factorydefinitions.FactoryEvent{

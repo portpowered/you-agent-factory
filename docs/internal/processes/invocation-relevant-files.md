@@ -563,13 +563,16 @@ response-stream output.
 
 - Canonical Factory Event vocabulary and sequence context:
   `pkg/services/factory_definitions/contracts/factory_events.go`
-- Peer-facing Factory Visualization presentation/drain root contracts
-  (`OpenPresentation` / `PresentProgress` / `FinalizePresentation` /
-  `ClosePresentation` on `factory_visualization.Root`) live in
-  `pkg/services/factory_visualization/root_contract.go`. Peers use plain
-  request/result/`PresentationError` vocabulary; transports must not treat
+- Peer-facing Factory Visualization root contracts live on the singular
+  `factory_visualization.Root` in
+  `pkg/services/factory_visualization/root_contract.go`: request-activated
+  lifecycle (`Activate` / `Join` / `StopDrain`), live projection (`Observe`),
+  and presentation/drain (`OpenPresentation` / `PresentProgress` /
+  `FinalizePresentation` / `ClosePresentation`). Peers use plain
+  request/result/typed-error vocabulary only; transports must not treat
   `io.Writer`, queue capacity, backpressure, or final-write ordering as their
-  policy source of truth on that seam.
+  policy source of truth on that seam. Characterization proof:
+  `TestRootContractInvariants_AllSlicesThroughSingularRoot`.
 - Shared ordered output serialization and final-once terminal write helpers
   (transport-shaped, non-authority):
   `pkg/services/factory_visualization/factory_event_stream.go`,
