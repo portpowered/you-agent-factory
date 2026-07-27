@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	sessionPauseWiringRequestID = "cli-session-pause-wiring"
-	sessionPauseWiringWorkName  = "paused-task"
+	sessionPauseWiringRequestID   = "cli-session-pause-wiring"
+	sessionPauseWiringWorkName    = "paused-task"
+	sessionWiringMissingSessionID = "dur-sess-missing-999"
 )
 
 // TestCLISessionCreateListShowDelete proves you session create, list, show, and
@@ -241,6 +242,42 @@ func TestCLISessionPauseBuffersAndResumeDispatches(t *testing.T) {
 	waitForWorkStateViaCLI(t, ctx, binaryPath, factoryDir, baseURL, workID, "complete", 30*time.Second)
 }
 
+// TestCLISessionMissingIDReturnsNotFound proves you session show and delete against
+// an unknown session ID exit non-success with actionable not-found diagnostics and
+// no false success session payload through the public CLI wiring boundary.
+func TestCLISessionMissingIDReturnsNotFound(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI session wiring")
+	}
+
+	factoryDir := support.ScaffoldFactory(t, sessionWiringFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	serverPort := portFromServerURL(t, baseURL)
+	binaryPath := buildYouCLIBinary(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	showOut, err := runYouCLI(ctx, binaryPath, factoryDir, baseURL,
+		"--json",
+		"session", "show", sessionWiringMissingSessionID,
+	)
+	assertCLISessionNotFoundFailure(t, "show", showOut, err, sessionWiringMissingSessionID, false)
+
+	deleteOut, err := runYouCLI(ctx, binaryPath, factoryDir, "",
+		"--json",
+		"session", "delete", sessionWiringMissingSessionID,
+		"--port", fmt.Sprintf("%d", serverPort),
+	)
+	assertCLISessionNotFoundFailure(t, "delete", deleteOut, err, sessionWiringMissingSessionID, true)
+}
+
 func sessionWiringFactoryConfig() map[string]any {
 	return map[string]any{
 		"name": "cli-session-wiring",
@@ -319,6 +356,54 @@ func sessionWiringListContains(
 
 func bytesTrimSpace(raw []byte) []byte {
 	return []byte(strings.TrimSpace(string(raw)))
+}
+
+func assertCLISessionNotFoundFailure(
+	t *testing.T,
+	operation string,
+	output []byte,
+	err error,
+	sessionID string,
+	expectDeleteConfirmation bool,
+) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatalf("you session %s unexpectedly succeeded:\n%s", operation, output)
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("you session %s error = %v, want *exec.ExitError", operation, err)
+	}
+	if exitErr.ExitCode() == 0 {
+		t.Fatalf("you session %s exit code = 0, want non-zero", operation)
+	}
+
+	text := string(output)
+	if !strings.Contains(strings.ToLower(text), "not found") {
+		t.Fatalf("session %s missing not-found diagnostic:\n%s", operation, text)
+	}
+	if !strings.Contains(text, sessionID) {
+		t.Fatalf("session %s missing session id %q in diagnostic:\n%s", operation, sessionID, text)
+	}
+
+	if expectDeleteConfirmation {
+		var deleted struct {
+			SessionID string `json:"sessionId"`
+		}
+		if json.Unmarshal(bytesTrimSpace(output), &deleted) == nil && deleted.SessionID != "" {
+			t.Fatalf("session delete must not emit success confirmation payload:\n%s", text)
+		}
+		return
+	}
+
+	var shown factoryapi.FactorySession
+	if json.Unmarshal(bytesTrimSpace(output), &shown) == nil && strings.TrimSpace(shown.Id) != "" {
+		t.Fatalf("session show must not emit a success session payload:\n%s", text)
+	}
+	if strings.Contains(text, `"id"`) && strings.Contains(text, `"runtime"`) {
+		t.Fatalf("session show must not emit a success session payload:\n%s", text)
+	}
 }
 
 type sessionWiringBatchSubmitJSON struct {
