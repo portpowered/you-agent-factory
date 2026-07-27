@@ -597,6 +597,9 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/transport/cli/commands/run_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIRunNamedFactory | short | tests/functional/transport/cli/commands/run_wiring_test.go | none | none | n/a |
 | tests/functional/orchestration/javascript/loading/inline_javascript_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestInlineJavaScriptFactoryRunsFromCLI | short | tests/functional/orchestration/javascript/loading/inline_javascript_test.go | none | none | n/a |
 | tests/functional/orchestration/javascript/loading/inline_javascript_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestInlineJavaScriptSyntaxErrorReturnsSourceLocation | short | tests/functional/orchestration/javascript/loading/inline_javascript_test.go | none | none | n/a |
+| tests/functional/orchestration/javascript/loading/named_factory_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestNamedJavaScriptFactoryRunsThroughStandardCLI | short | tests/functional/orchestration/javascript/loading/named_factory_test.go | none | none | n/a |
+| tests/functional/orchestration/javascript/loading/named_factory_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestNamedJavaScriptFactoryRunsThroughAPIInvocation | short | tests/functional/orchestration/javascript/loading/named_factory_test.go | none | none | n/a |
+| tests/functional/orchestration/javascript/loading/named_factory_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestNamedJavaScriptFactoryUsesSameFactorySessionControls | short | tests/functional/orchestration/javascript/loading/named_factory_test.go | none | none | n/a |
 | tests/functional/smoke/cli_named_deep_research_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedDeepResearchCLI_DefaultInvocationReturnsLeadSynthesis | short | tests/functional/factory/packaged/deep_research/invocation_test.go | smoke | none | smoke-delete-05-factory-packaged |
 | tests/functional/smoke/cli_named_deep_research_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedDeepResearchCLI_InvokesConfiguredBoundedResearchWithApprovedFlags | short | tests/functional/factory/packaged/deep_research/invocation_test.go | smoke | none | smoke-delete-05-factory-packaged |
 | tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalInvocationParity_EmptyInputRejectedWithStableCode | short | tests/functional/factory/packaged/cross/package_cli_api_test.go | smoke | none | smoke-delete-06-factory-packaged-cross |
@@ -703,7 +706,7 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/work/cli/resolved_work_family_test.go | you-agent-factory/tests/functional/work/cli | TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs | short | tests/functional/transport/cli/commands/work_wiring_test.go | none | none | n/a |
 | tests/functional/work/visualization/dependency_graph_test.go | you-agent-factory/tests/functional/work/visualization | TestDependencyGraphVisualization_RendersCompleteEscapedFlowchart | short | wrong-layer: unit — calls pkg/services/work graph helpers directly without root.BuildProcess or CLI visualize command. Replacement evidence owner: pkg/services/work unit tests. | none | none | n/a |
 
-#### `workflow` (66 scenarios, catch_all=`workflow`)
+#### `workflow` (64 scenarios, catch_all=`workflow`)
 
 | source_path | package | scenario | lane | destination | catch_all | specialty_targets | deletion_only_batch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -713,8 +716,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/orchestration/petri/dispatch/simple_run_test.go | you-agent-factory/tests/functional/orchestration/petri/dispatch | TestPetriSingleWorkerRunCompletesAtQuiescence | short | tests/functional/orchestration/petri/dispatch/simple_run_test.go | none | none | n/a |
 | tests/functional/orchestration/petri/dispatch/simple_run_test.go | you-agent-factory/tests/functional/orchestration/petri/dispatch | TestPetriWorkerErrorReturnsFailedTerminalOutcome | short | tests/functional/orchestration/petri/dispatch/simple_run_test.go | none | none | n/a |
 | tests/functional/orchestration/petri/dispatch/simple_run_test.go | you-agent-factory/tests/functional/orchestration/petri/dispatch | TestPetriInvocationInputAndOutputMapping | short | tests/functional/orchestration/petri/dispatch/simple_run_test.go | none | none | n/a |
-| tests/functional/workflow/cli_ralph_init_smoke_test.go | you-agent-factory/tests/functional/workflow | TestIntegrationSmoke_RalphInitScaffoldCompletesFromGeneratedLoop | short | tests/functional/orchestration/javascript/loading/named_factory_test.go | workflow | none | workflow-delete-09-orchestration-javascript |
-| tests/functional/workflow/cli_ralph_init_smoke_test.go | you-agent-factory/tests/functional/workflow | TestIntegrationSmoke_RalphInitScaffoldExhaustsNonConvergingLoop | short | tests/functional/orchestration/javascript/loading/named_factory_test.go | workflow | none | workflow-delete-09-orchestration-javascript |
 | tests/functional/workflow/code_review_loop_long_test.go | you-agent-factory/tests/functional/workflow | TestCodeReviewLoop | functionallong | tests/functional/factory/packaged/review/invocation_test.go | workflow | none | workflow-delete-01-orchestration-dispatch |
 | tests/functional/workflow/config_driven_retry_loop_breaker_test.go | you-agent-factory/tests/functional/workflow | TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit | short | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/config_driven_retry_loop_breaker_test.go | you-agent-factory/tests/functional/workflow | TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries | short | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
@@ -998,7 +999,7 @@ can execute independently until package ownership reaches zero.
 | `workflow-delete-06-workstations-watcher` | workflow | 7 | workstations/watcher | consumed |
 | `workflow-delete-07-factory-current` | workflow | 7 | factory/current | none |
 | `workflow-delete-08-guards` | workflow | 5 | guards | none |
-| `workflow-delete-09-orchestration-javascript` | workflow | 2 | orchestration/javascript | none |
+| `workflow-delete-09-orchestration-javascript` | workflow | 1 | orchestration/javascript | none |
 
 #### smoke plan
 
@@ -1060,6 +1061,9 @@ Batch execution guidance for later move work:
 | tests/functional/transport/cli/commands/run_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIRunNamedFactory | short | tests/functional/transport/cli/commands/run_wiring_test.go | none | none | n/a |
 | tests/functional/orchestration/javascript/loading/inline_javascript_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestInlineJavaScriptFactoryRunsFromCLI | short | tests/functional/orchestration/javascript/loading/inline_javascript_test.go | none | none | n/a |
 | tests/functional/orchestration/javascript/loading/inline_javascript_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestInlineJavaScriptSyntaxErrorReturnsSourceLocation | short | tests/functional/orchestration/javascript/loading/inline_javascript_test.go | none | none | n/a |
+| tests/functional/orchestration/javascript/loading/named_factory_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestNamedJavaScriptFactoryRunsThroughStandardCLI | short | tests/functional/orchestration/javascript/loading/named_factory_test.go | none | none | n/a |
+| tests/functional/orchestration/javascript/loading/named_factory_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestNamedJavaScriptFactoryRunsThroughAPIInvocation | short | tests/functional/orchestration/javascript/loading/named_factory_test.go | none | none | n/a |
+| tests/functional/orchestration/javascript/loading/named_factory_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestNamedJavaScriptFactoryUsesSameFactorySessionControls | short | tests/functional/orchestration/javascript/loading/named_factory_test.go | none | none | n/a |
 | tests/functional/smoke/cli_named_deep_research_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedDeepResearchCLI_DefaultInvocationReturnsLeadSynthesis | short | tests/functional/factory/packaged/deep_research/invocation_test.go | smoke | none | smoke-delete-05-factory-packaged |
 | tests/functional/smoke/cli_named_deep_research_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedDeepResearchCLI_InvokesConfiguredBoundedResearchWithApprovedFlags | short | tests/functional/factory/packaged/deep_research/invocation_test.go | smoke | none | smoke-delete-05-factory-packaged |
 | tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalInvocationParity_EmptyInputRejectedWithStableCode | short | tests/functional/factory/packaged/cross/package_cli_api_test.go | smoke | none | smoke-delete-06-factory-packaged-cross |
@@ -1147,8 +1151,6 @@ Batch execution guidance for later move work:
 | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | you-agent-factory/tests/functional/orchestration/petri/dispatch | TestPetriIndependentWorkDispatchesConcurrently | short | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | none | none | n/a |
 | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | you-agent-factory/tests/functional/orchestration/petri/dispatch | TestPetriConcurrentResultsCorrelateToOriginalWork | short | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | none | none | n/a |
 | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | you-agent-factory/tests/functional/orchestration/petri/dispatch | TestPetriConcurrentFailureDoesNotDuplicateDispatch | short | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | none | none | n/a |
-| tests/functional/workflow/cli_ralph_init_smoke_test.go | you-agent-factory/tests/functional/workflow | TestIntegrationSmoke_RalphInitScaffoldCompletesFromGeneratedLoop | short | tests/functional/orchestration/javascript/loading/named_factory_test.go | workflow | none | workflow-delete-09-orchestration-javascript |
-| tests/functional/workflow/cli_ralph_init_smoke_test.go | you-agent-factory/tests/functional/workflow | TestIntegrationSmoke_RalphInitScaffoldExhaustsNonConvergingLoop | short | tests/functional/orchestration/javascript/loading/named_factory_test.go | workflow | none | workflow-delete-09-orchestration-javascript |
 | tests/functional/workflow/code_review_loop_long_test.go | you-agent-factory/tests/functional/workflow | TestCodeReviewLoop | functionallong | tests/functional/factory/packaged/review/invocation_test.go | workflow | none | workflow-delete-01-orchestration-dispatch |
 | tests/functional/workflow/config_driven_retry_loop_breaker_test.go | you-agent-factory/tests/functional/workflow | TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit | short | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/config_driven_retry_loop_breaker_test.go | you-agent-factory/tests/functional/workflow | TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries | short | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
@@ -1696,7 +1698,7 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `workflow-delete-06-workstations-watcher` | workflow | 7 | workstations/watcher | consumed |
 | `workflow-delete-07-factory-current` | workflow | 7 | factory/current | planned |
 | `workflow-delete-08-guards` | workflow | 5 | guards | planned |
-| `workflow-delete-09-orchestration-javascript` | workflow | 2 | orchestration/javascript | planned |
+| `workflow-delete-09-orchestration-javascript` | workflow | 1 | orchestration/javascript | planned |
 | `guards_batch-delete-01-work-relationships` | guards_batch | 8 | work/relationships | planned |
 | `guards_batch-delete-02-guards-global` | guards_batch | 3 | guards | planned |
 | `guards_batch-delete-04-resources-concurrency` | guards_batch | 5 | resources | planned |
