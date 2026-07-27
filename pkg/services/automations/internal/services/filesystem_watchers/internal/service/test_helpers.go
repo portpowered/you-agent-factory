@@ -37,6 +37,12 @@ func (m *recordingSubmitter) getWorkRequests() []work.WorkRequest {
 	return out
 }
 
+func (m *recordingSubmitter) submitCallCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.workRequests)
+}
+
 func cloneWorkRequest(request work.WorkRequest) work.WorkRequest {
 	out := request
 	out.Works = make([]work.Work, len(request.Works))
