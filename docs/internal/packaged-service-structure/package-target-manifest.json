@@ -131,6 +131,9 @@
     "pkg/services/factory_runtime/internal/services/dispatch_planning",
     "pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
     "pkg/services/factory_runtime/internal/services/dispatch_planning/wire",
+    "pkg/services/factory_runtime/internal/services/instance_host",
+    "pkg/services/factory_runtime/internal/services/instance_host/internal/service",
+    "pkg/services/factory_runtime/internal/services/instance_host/wire",
     "pkg/services/factory_runtime/javascript",
     "pkg/services/factory_runtime/metrics",
     "pkg/services/factory_runtime/orchestratorcontract",
@@ -857,6 +860,21 @@
       "packagePath": "pkg/services/factory_runtime/internal/services/dispatch_planning/wire",
       "disposition": "retain",
       "destination": "factory_runtime/internal/services/dispatch_planning"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/instance_host",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/instance_host"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/instance_host/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/instance_host"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/instance_host/wire",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/instance_host"
     },
     {
       "packagePath": "pkg/services/factory_runtime/javascript",

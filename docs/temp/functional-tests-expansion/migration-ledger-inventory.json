@@ -1779,6 +1779,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/orchestration/javascript/contracts/input_mapping_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
+      "scenario": "TestJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/contracts/input_mapping_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/contracts/input_mapping_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
+      "scenario": "TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/contracts/input_mapping_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
       "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
       "scenario": "TestJavaScriptChildProgressPublishesCanonicalResponseEvents",
@@ -6753,14 +6773,14 @@
       "workflow": 44,
       "workstations": 29
     },
-    "customer_top_level_Test_scenarios": 652,
-    "files_with_customer_Test": 221,
+    "customer_top_level_Test_scenarios": 654,
+    "files_with_customer_Test": 222,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 95,
-    "lane_short": 557,
+    "lane_short": 559,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
       "you-agent-factory/tests/functional/bootstrap_portability": 25,
@@ -6901,15 +6921,15 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T21:45:00Z",
-    "story": "ft-wave1-http-startup-shutdown-mergeability-rebase2",
-    "live_customer_scenarios": 652,
-    "ledger_rows": 652,
+    "audited_at_utc": "2026-07-27T22:05:00Z",
+    "story": "ft-wave1-http-startup-shutdown-mergeability-rebase3",
+    "live_customer_scenarios": 654,
+    "ledger_rows": 654,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 557,
+    "lane_short": 559,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
