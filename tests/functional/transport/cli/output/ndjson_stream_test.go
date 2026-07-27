@@ -110,6 +110,41 @@ func TestCLINDJSONSequenceIsMonotonic(t *testing.T) {
 	}
 }
 
+// TestCLINDJSONFailureEndsWithOneTerminalResult proves a deterministic terminal
+// invocation failure under CLI NDJSON response-stream mode ends with exactly one
+// failed InvocationResult and emits no stream records after that terminal record.
+func TestCLINDJSONFailureEndsWithOneTerminalResult(t *testing.T) {
+	stdout := runGoalResponseStreamFailure(t)
+	records := decodeNDJSONRecords(t, stdout)
+
+	if len(records) < 2 {
+		t.Fatalf("NDJSON records = %d, want Factory Events followed by one terminal invocation result\nstdout:\n%s", len(records), stdout)
+	}
+
+	invocationResultCount := 0
+	invocationResultIndex := -1
+	for index, record := range records {
+		switch record.RecordType {
+		case factoryEventRecordType:
+			if invocationResultCount != 0 {
+				t.Fatalf("Factory Event record %d follows terminal invocation result", index)
+			}
+		case invocationResultType:
+			invocationResultCount++
+			invocationResultIndex = index
+		default:
+			t.Fatalf("record %d has unsupported recordType %q", index, record.RecordType)
+		}
+	}
+	if invocationResultCount != 1 {
+		t.Fatalf("invocation_result record count = %d, want exactly 1", invocationResultCount)
+	}
+	if invocationResultIndex != len(records)-1 {
+		t.Fatalf("invocation_result record index = %d, want terminal index %d", invocationResultIndex, len(records)-1)
+	}
+	assertFailedInvocationResultRecord(t, records[invocationResultIndex], invocationResultIndex)
+}
+
 type ndjsonRecord struct {
 	RecordType string
 	Payload    json.RawMessage
@@ -208,6 +243,20 @@ func assertInvocationResultRecord(t *testing.T, record ndjsonRecord, index int) 
 	}
 }
 
+func assertFailedInvocationResultRecord(t *testing.T, record ndjsonRecord, index int) {
+	t.Helper()
+	var response factoryapi.InvocationResponse
+	if err := json.Unmarshal(record.Payload, &response); err != nil {
+		t.Fatalf("decode invocation result record %d: %v\nline: %s", index, err, record.Raw)
+	}
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want %q", response.Status, factoryapi.InvocationTerminalStatusFailed)
+	}
+	if response.ErrorCode == nil || response.Message == nil {
+		t.Fatalf("failed InvocationResponse lacks error detail: %#v", response)
+	}
+}
+
 func privatePayloadKey(value any) string {
 	switch value := value.(type) {
 	case map[string]any:
@@ -267,4 +316,43 @@ func runGoalResponseStream(t *testing.T) string {
 		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
 	}
 	return inputs.Stdout()
+}
+
+func runGoalResponseStreamFailure(t *testing.T) string {
+	t.Helper()
+	homeDir := t.TempDir()
+	support.InstallPackagedFactory(t, homeDir, goalFactoryName)
+	mockWorkersPath := support.WriteMockWorkersConfig(t, rejectingGoalMockWorkers())
+	args := []string{
+		"you", "--json", "run", "--named", goalFactoryName,
+		"--with-mock-workers", mockWorkersPath,
+		"--no-record", "--output", "response-stream",
+		"deterministic terminal failure",
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err == nil {
+		t.Fatalf("Process.Execute(%v) error = nil, want terminal invocation failure\nstdout:\n%s\nstderr:\n%s", args, inputs.Stdout(), inputs.Stderr())
+	}
+	if inputs.Stdout() == "" {
+		t.Fatalf("stdout empty, want NDJSON stream ending in failed invocation_result\nstderr:\n%s", inputs.Stderr())
+	}
+	return inputs.Stdout()
+}
+
+func rejectingGoalMockWorkers() *workers.MockWorkersConfig {
+	exitCode := 7
+	return &workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName:      "goal-executor",
+			WorkstationName: "execute-goal",
+			RunType:         workers.MockWorkerRunTypeReject,
+			RejectConfig: &workers.MockWorkerRejectConfig{
+				Stderr:   "deterministic worker rejection",
+				ExitCode: &exitCode,
+			},
+		}},
+	}
 }
