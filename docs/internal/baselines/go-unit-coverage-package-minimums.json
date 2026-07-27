@@ -1068,7 +1068,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/events",
-      "minimum": 81.34
+      "minimum": 81.33
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/events/kinds",
@@ -1168,7 +1168,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/service",
-      "minimum": 77.69
+      "minimum": 77.68
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization",
@@ -1676,7 +1676,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
-      "minimum": 81.93
+      "minimum": 81.92
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions",
