@@ -271,7 +271,7 @@ func transformExportStatement(stmt *js.ExportStmt) ([]string, []exportAssignment
 		}
 	}
 	if stmt.Default {
-		return []string{fmt.Sprintf("exports.default = %s;", declExpressionString(stmt.Decl))}, nil, nil
+		return transformDefaultExportDecl(stmt.Decl)
 	}
 	switch decl := stmt.Decl.(type) {
 	case *js.VarDecl:
@@ -293,6 +293,31 @@ func transformExportStatement(stmt *js.ExportStmt) ([]string, []exportAssignment
 			Code:    CodeUnsupportedLoader,
 			Message: "unsupported export declaration in factory-relative workflow module",
 		}
+	}
+}
+
+func transformDefaultExportDecl(decl js.IExpr) ([]string, []exportAssignment, *Issue) {
+	switch node := decl.(type) {
+	case *js.FuncDecl:
+		name := ""
+		if node.Name != nil {
+			name = string(node.Name.Name())
+		}
+		if name != "" {
+			return []string{fmt.Sprintf("%s; exports.default = %s;", declString(node), name)}, nil, nil
+		}
+		return []string{fmt.Sprintf("exports.default = %s;", declString(node))}, nil, nil
+	case *js.ClassDecl:
+		name := ""
+		if node.Name != nil {
+			name = string(node.Name.Data)
+		}
+		if name != "" {
+			return []string{fmt.Sprintf("%s; exports.default = %s;", classDeclString(node), name)}, nil, nil
+		}
+		return []string{fmt.Sprintf("exports.default = %s;", classDeclString(node))}, nil, nil
+	default:
+		return []string{fmt.Sprintf("exports.default = %s;", declExpressionString(decl))}, nil, nil
 	}
 }
 
@@ -455,6 +480,12 @@ func stmtString(stmt js.IStmt) string {
 }
 
 func declString(decl *js.FuncDecl) string {
+	var buf strings.Builder
+	decl.JS(&buf)
+	return strings.TrimSpace(buf.String())
+}
+
+func classDeclString(decl *js.ClassDecl) string {
 	var buf strings.Builder
 	decl.JS(&buf)
 	return strings.TrimSpace(buf.String())

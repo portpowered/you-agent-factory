@@ -327,6 +327,82 @@ workflow.final(importedDefault);`
 	}
 }
 
+func TestBundleFactoryRelativeImportsNamedDefaultFunctionLocalBindingExecutes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "default-fn.js"),
+		[]byte(`export default function helper() { return "OK"; }
+export const tag = typeof helper;`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write default-fn module: %v", err)
+	}
+	entry := `import helper, { tag } from "./lib/default-fn.js";
+workflow.final(helper() + ":" + tag);`
+	reader := FileSourceReader(dir, bundleTestFileSystem{})
+
+	bundled, issues := BundleFactoryRelativeImports("workflow.js", entry, reader)
+	if len(issues) > 0 {
+		t.Fatalf("bundle issues = %#v, want none", issues)
+	}
+	if strings.Contains(bundled, "exports.default = function helper") {
+		t.Fatalf("bundled source = %q, want local function declaration before exports.default assignment", bundled)
+	}
+	if !strings.Contains(bundled, "function helper()") || !strings.Contains(bundled, "exports.default = helper;") {
+		t.Fatalf("bundled source = %q, want function helper declaration and exports.default = helper", bundled)
+	}
+	finalValue, err := executeBundledWorkflowFinalForTest(t, bundled)
+	if err != nil {
+		t.Fatalf("execute bundled source: %v", err)
+	}
+	if finalValue != "OK:function" {
+		t.Fatalf("workflow.final value = %q, want OK:function", finalValue)
+	}
+}
+
+func TestBundleFactoryRelativeImportsNamedDefaultClassLocalBindingExecutes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "default-class.js"),
+		[]byte(`export default class Widget { static tag() { return "widget"; } }
+export const tag = Widget.tag();`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write default-class module: %v", err)
+	}
+	entry := `import Widget, { tag } from "./lib/default-class.js";
+workflow.final(new Widget().constructor.tag() + ":" + tag);`
+	reader := FileSourceReader(dir, bundleTestFileSystem{})
+
+	bundled, issues := BundleFactoryRelativeImports("workflow.js", entry, reader)
+	if len(issues) > 0 {
+		t.Fatalf("bundle issues = %#v, want none", issues)
+	}
+	if strings.Contains(bundled, "exports.default = class Widget") {
+		t.Fatalf("bundled source = %q, want local class declaration before exports.default assignment", bundled)
+	}
+	if !strings.Contains(bundled, "class Widget") || !strings.Contains(bundled, "exports.default = Widget;") {
+		t.Fatalf("bundled source = %q, want class Widget declaration and exports.default = Widget", bundled)
+	}
+	finalValue, err := executeBundledWorkflowFinalForTest(t, bundled)
+	if err != nil {
+		t.Fatalf("execute bundled source: %v", err)
+	}
+	if finalValue != "widget:widget" {
+		t.Fatalf("workflow.final value = %q, want widget:widget", finalValue)
+	}
+}
+
 func TestLoadBundlesNestedRelativeImportChainExecutes(t *testing.T) {
 	t.Parallel()
 

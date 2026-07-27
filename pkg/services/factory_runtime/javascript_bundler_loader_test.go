@@ -354,6 +354,56 @@ workflow.final(importedDefault);`
 	}
 }
 
+func TestLoad_BundlesNamedDefaultFunctionLocalBindingExecutes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "default-fn.js"),
+		[]byte(`export default function helper() { return "OK"; }
+export const tag = typeof helper;`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write default-fn module: %v", err)
+	}
+	entry := `import helper, { tag } from "./lib/default-fn.js";
+workflow.final(helper() + ":" + tag);`
+	reader := factory.NewWorkflowSourceReader(dir, localWorkflowSourceFiles{})
+
+	loaded, issues := validationLoaderWorkflows.LoadSource(factory.WorkflowValidationLoadRequest{
+		SourceRef:    "workflow.js",
+		Content:      entry,
+		FactoryRoot:  dir,
+		BundleReader: reader,
+	})
+	if len(issues) > 0 {
+		t.Fatalf("load issues = %#v, want none", issues)
+	}
+	if strings.Contains(loaded.ExecutableSource, "exports.default = function helper") {
+		t.Fatalf("executable source = %q, want local function declaration before exports.default assignment", loaded.ExecutableSource)
+	}
+
+	outcome, err := validationLoaderWorkflows.Run(t.Context(), factory.JavaScriptRuntimeRequest{
+		Source:    loaded.ExecutableSource,
+		SourceRef: "workflow.js",
+		SessionID: "session-named-default-function",
+		Args:      json.RawMessage(`{}`),
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}, factory.JavaScriptRuntimeHooks{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !outcome.OK {
+		t.Fatalf("Run() failure = %#v", outcome.Failure)
+	}
+	if string(outcome.Value.JSON) != `"OK:function"` {
+		t.Fatalf("primary result = %s, want \"OK:function\"", outcome.Value.JSON)
+	}
+}
+
 func TestLoad_BundlesCircularRelativeImportReturnsUnsupportedLoader(t *testing.T) {
 	t.Parallel()
 
