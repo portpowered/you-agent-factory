@@ -24,6 +24,7 @@ func provideFactoryDefinitionsFactory(
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) factorysessionwire.FactoryDefinitionsFactory {
 	return func(
 		sessionHost factorysessions.DefinitionHost,
@@ -63,6 +64,7 @@ func provideFactoryDefinitionsFactory(
 			packagedCatalog,
 			packagedInstaller,
 			requiredToolChecker,
+			orchestratorValidator,
 		)
 		if definitions == nil {
 			return nil

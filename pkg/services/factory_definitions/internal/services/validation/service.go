@@ -35,8 +35,9 @@ type Service interface {
 // validation does not construct Runtime/Petri implementations or choose host
 // filesystem adapters.
 type Dependencies struct {
-	Operations          factorycontracts.DefinitionValidationOperation
-	Effective           factorycontracts.EffectiveDefinitionValidationOperation
-	LoadCanonical       factorycontracts.CanonicalFactoryJSONLoader
-	RequiredToolChecker factorycontracts.RequiredToolChecker
+	Operations            factorycontracts.DefinitionValidationOperation
+	Effective             factorycontracts.EffectiveDefinitionValidationOperation
+	LoadCanonical         factorycontracts.CanonicalFactoryJSONLoader
+	RequiredToolChecker   factorycontracts.RequiredToolChecker
+	OrchestratorValidator factorycontracts.OrchestratorDefinitionValidator
 }

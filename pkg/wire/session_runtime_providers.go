@@ -221,12 +221,19 @@ func provideWorkflowPreviewOperation(
 	return workflows
 }
 
+func provideOrchestratorDefinitionValidator(
+	workflows factoryruntime.JavaScriptWorkflows,
+) factorydefinitions.OrchestratorDefinitionValidator {
+	return factoryruntimeservice.NewOrchestratorDefinitionValidator(workflows)
+}
+
 func provideFactoryDefinitionValidationService(
 	workflows factoryruntime.JavaScriptWorkflows,
 	loader *factoryloading.Loader,
+	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) *factoryvalidation.Service {
 	return factoryvalidation.New(
-		factoryruntimeservice.NewOrchestratorDefinitionValidator(workflows),
+		orchestratorValidator,
 		loader.LoadSourceFromCanonicalJSON,
 	)
 }

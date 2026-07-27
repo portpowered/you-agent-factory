@@ -88,14 +88,16 @@ func newValidationServiceWithConfig(
 	t *testing.T,
 	cfg *factorycontracts.FactoryConfig,
 	checker factorycontracts.RequiredToolChecker,
+	orchestratorValidator factorycontracts.OrchestratorDefinitionValidator,
 ) validationservice.Service {
 	t.Helper()
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(orchestratorValidator)
 	svc, err := validationwire.NewService(validationservice.Dependencies{
-		Operations:          validator,
-		Effective:           validator,
-		LoadCanonical:       stubLoadCanonicalForConfig(cfg),
-		RequiredToolChecker: checker,
+		Operations:            validator,
+		Effective:             validator,
+		LoadCanonical:         stubLoadCanonicalForConfig(cfg),
+		RequiredToolChecker:   checker,
+		OrchestratorValidator: orchestratorValidator,
 	})
 	if err != nil {
 		t.Fatalf("validationwire.NewService: %v", err)
@@ -135,7 +137,7 @@ func validPetriFactoryConfig() *factorycontracts.FactoryConfig {
 
 func TestValidationService_RejectsMissingDependencies(t *testing.T) {
 	t.Parallel()
-	if svc := validationserviceimpl.New(nil, nil, nil, nil); svc != nil {
+	if svc := validationserviceimpl.New(nil, nil, nil, nil, nil); svc != nil {
 		t.Fatal("expected nil service when dependencies are missing")
 	}
 	if _, err := validationwire.NewService(validationservice.Dependencies{}); err == nil {
@@ -229,7 +231,7 @@ func TestValidationService_ValidEffectiveDefinitionSucceeds(t *testing.T) {
 func TestValidationService_WiredStructuralValidationSucceedsForValidPetriFactory(t *testing.T) {
 	t.Parallel()
 
-	svc := newValidationServiceWithConfig(t, validPetriFactoryConfig(), nil)
+	svc := newValidationServiceWithConfig(t, validPetriFactoryConfig(), nil, nil)
 	result, err := svc.ValidateStructuralFactoryDefinition(
 		context.Background(),
 		factoryroot.ValidateStructuralFactoryDefinitionRequest{
@@ -250,7 +252,7 @@ func TestValidationService_WiredStructuralValidationReturnsTypedDuplicateWorkerT
 
 	cfg := validPetriFactoryConfig()
 	cfg.Workers = append(cfg.Workers, workerconfig.Config{Name: "worker-a"})
-	svc := newValidationServiceWithConfig(t, cfg, nil)
+	svc := newValidationServiceWithConfig(t, cfg, nil, nil)
 
 	_, err := svc.ValidateStructuralFactoryDefinition(
 		context.Background(),
@@ -287,7 +289,7 @@ func TestValidationService_WiredTopologyValidationReturnsTypedDanglingPlaceTarge
 		WorkTypeName: "task",
 		StateName:    "bogus",
 	}}
-	svc := newValidationServiceWithConfig(t, cfg, nil)
+	svc := newValidationServiceWithConfig(t, cfg, nil, nil)
 
 	_, err := svc.ValidateStructuralFactoryDefinition(
 		context.Background(),
@@ -337,7 +339,7 @@ func TestValidationService_WiredRequiredToolValidationSucceedsWhenCheckerReports
 	}
 	svc := newValidationServiceWithConfig(t, cfg, wiredStubRequiredToolChecker{
 		"present-tool": {},
-	})
+	}, nil)
 
 	result, err := svc.ValidateStructuralFactoryDefinition(
 		context.Background(),
@@ -372,7 +374,7 @@ func TestValidationService_WiredRequiredToolValidationReturnsTypedMissingToolTar
 			FailureKind: factorycontracts.RequiredToolFailureKindMissing,
 			Err:         errors.New(`required tool "Missing helper" command "missing-tool" was not found on PATH`),
 		},
-	})
+	}, nil)
 
 	_, err := svc.ValidateStructuralFactoryDefinition(
 		context.Background(),
@@ -399,5 +401,98 @@ func TestValidationService_WiredRequiredToolValidationReturnsTypedMissingToolTar
 	}
 	if !found {
 		t.Fatalf("validation targets = %#v, want typed missing required-tool target", validationFailure.Validation.Targets)
+	}
+}
+
+type wiredStubOrchestratorValidator struct {
+	targets []factorycontracts.ValidationTarget
+}
+
+func (s wiredStubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
+	_ context.Context,
+	_ *factorycontracts.FactoryOrchestratorJavaScriptConfig,
+	_ factorycontracts.WorkflowSourceReader,
+) []factorycontracts.ValidationTarget {
+	return append([]factorycontracts.ValidationTarget(nil), s.targets...)
+}
+
+func TestValidationService_WiredOrchestratorValidationReturnsTypedUnsupportedKindTarget(t *testing.T) {
+	t.Parallel()
+
+	cfg := validPetriFactoryConfig()
+	cfg.Orchestrator = &factorycontracts.FactoryOrchestratorConfig{Kind: "LEGACY"}
+	svc := newValidationServiceWithConfig(t, cfg, nil, nil)
+
+	_, err := svc.ValidateStructuralFactoryDefinition(
+		context.Background(),
+		factoryroot.ValidateStructuralFactoryDefinitionRequest{
+			Canonical: []byte(`{"name":"structural-validation"}`),
+			Profile:   factoryroot.ValidationProfileTopology,
+		},
+	)
+	var validationFailure *factoryroot.FactoryDefinitionValidationFailure
+	if !errors.As(err, &validationFailure) {
+		t.Fatalf("error = %v, want FactoryDefinitionValidationFailure", err)
+	}
+	if !errors.Is(err, factoryroot.ErrFactoryDefinitionValidationFailed) {
+		t.Fatalf("error = %v, want %v", err, factoryroot.ErrFactoryDefinitionValidationFailed)
+	}
+	found := false
+	for _, target := range validationFailure.Validation.Targets {
+		if target.Code == factoryvalidation.CodeOrchestratorUnsupportedKind &&
+			target.Severity == factorycontracts.ValidationSeverityError &&
+			target.Subject.Type == factorycontracts.ValidationSubjectTypeFactory {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("validation targets = %#v, want unsupported orchestrator kind target", validationFailure.Validation.Targets)
+	}
+}
+
+func TestValidationService_WiredOrchestratorValidationMergesRuntimeValidatorTargets(t *testing.T) {
+	t.Parallel()
+
+	cfg := &factorycontracts.FactoryConfig{
+		Name: "javascript-orchestrator",
+		Orchestrator: &factorycontracts.FactoryOrchestratorConfig{
+			Kind: factorycontracts.OrchestratorKindJavaScript,
+			JavaScript: &factorycontracts.FactoryOrchestratorJavaScriptConfig{
+				SourceRef:  "factory/workflows/review.js",
+				Entrypoint: "main",
+			},
+		},
+	}
+	svc := newValidationServiceWithConfig(t, cfg, nil, wiredStubOrchestratorValidator{targets: []factorycontracts.ValidationTarget{{
+		Code:     "factory.orchestrator.javascript.invalidPolicy",
+		Severity: factorycontracts.ValidationSeverityError,
+		Message:  "invalid default policy",
+		Subject: factorycontracts.ValidationSubject{
+			Type:     factorycontracts.ValidationSubjectTypeFactory,
+			ID:       "factory",
+			Location: factorycontracts.ValidationSubjectLocationDefinition,
+		},
+		Path: "factory.orchestrator.javascript.defaultPolicy",
+	}}})
+
+	_, err := svc.ValidateStructuralFactoryDefinition(
+		context.Background(),
+		factoryroot.ValidateStructuralFactoryDefinitionRequest{
+			Canonical: []byte(`{"name":"javascript-orchestrator"}`),
+			Profile:   factoryroot.ValidationProfileTopology,
+		},
+	)
+	var validationFailure *factoryroot.FactoryDefinitionValidationFailure
+	if !errors.As(err, &validationFailure) {
+		t.Fatalf("error = %v, want FactoryDefinitionValidationFailure", err)
+	}
+	found := false
+	for _, target := range validationFailure.Validation.Targets {
+		if target.Code == "factory.orchestrator.javascript.invalidPolicy" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("validation targets = %#v, want runtime orchestrator validator target", validationFailure.Validation.Targets)
 	}
 }

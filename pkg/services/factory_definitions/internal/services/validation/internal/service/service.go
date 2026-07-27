@@ -9,6 +9,7 @@ import (
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/orchestrator"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/requiredtools"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/structural"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/topology"
@@ -20,7 +21,8 @@ type Service struct {
 	operations        factorycontracts.DefinitionValidationOperation
 	effective         factorycontracts.EffectiveDefinitionValidationOperation
 	loadCanonical     factorycontracts.CanonicalFactoryJSONLoader
-	requiredToolChecker factorycontracts.RequiredToolChecker
+	requiredToolChecker     factorycontracts.RequiredToolChecker
+	orchestratorValidator   factorycontracts.OrchestratorDefinitionValidator
 }
 
 var _ validationservice.Service = (*Service)(nil)
@@ -31,15 +33,17 @@ func New(
 	effective factorycontracts.EffectiveDefinitionValidationOperation,
 	loadCanonical factorycontracts.CanonicalFactoryJSONLoader,
 	requiredToolChecker factorycontracts.RequiredToolChecker,
+	orchestratorValidator factorycontracts.OrchestratorDefinitionValidator,
 ) *Service {
 	if operations == nil || effective == nil || loadCanonical == nil {
 		return nil
 	}
 	return &Service{
-		operations:          operations,
-		effective:           effective,
-		loadCanonical:       loadCanonical,
-		requiredToolChecker: requiredToolChecker,
+		operations:            operations,
+		effective:             effective,
+		loadCanonical:         loadCanonical,
+		requiredToolChecker:   requiredToolChecker,
+		orchestratorValidator: orchestratorValidator,
 	}
 }
 
@@ -74,6 +78,7 @@ func (s *Service) ValidateStructuralFactoryDefinition(
 		structural.Validate(cfg),
 		topology.Validate(cfg),
 		requiredtools.Validate(cfg, s.requiredToolChecker),
+		orchestrator.Validate(ctx, cfg, s.orchestratorValidator, nil),
 		profileResult,
 	)
 	return finishStructuralResult(result)

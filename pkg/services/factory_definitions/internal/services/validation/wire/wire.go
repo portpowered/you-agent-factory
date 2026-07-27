@@ -28,6 +28,7 @@ func NewService(deps validationservice.Dependencies) (validationservice.Service,
 		deps.Effective,
 		deps.LoadCanonical,
 		deps.RequiredToolChecker,
+		deps.OrchestratorValidator,
 	)
 	if service == nil {
 		return nil, fmt.Errorf("construct Factory Definitions validation: implementation rejected its dependencies")
