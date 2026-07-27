@@ -14,7 +14,10 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const claudeGoldenStructuredFailureCase = "structured-failure"
+const (
+	claudeGoldenStructuredFailureCase = "structured-failure"
+	claudeGoldenTimeoutCase           = "timeout"
+)
 
 // TestClaudeGoldenStructuredFailure replays a sanitized Claude structured-failure
 // transcript through the customer process boundary and proves public Factory
@@ -37,6 +40,139 @@ func TestClaudeGoldenStructuredFailure(t *testing.T) {
 
 	observed := replayClaudeStructuredFailureGoldenCase(t, loaded)
 	assertProviderSessionGoldensMatch(t, loaded, observed)
+}
+
+// TestClaudeGoldenTimeoutClosesResponseStream replays a sanitized Claude timeout
+// transcript through the customer process boundary and proves the public response
+// stream reaches a closed terminal state without inventing a successful message,
+// invocation outcome, or other fabricated success metadata.
+//
+//golden: docs/temp/functional/provider-sessions/claude/timeout/manifest.json
+func TestClaudeGoldenTimeoutClosesResponseStream(t *testing.T) {
+	loaded := loadClaudeGoldenCase(t, claudeGoldenTimeoutCase)
+	if loaded.Manifest.ID != "claude-timeout" {
+		t.Fatalf("manifest.ID = %q, want claude-timeout", loaded.Manifest.ID)
+	}
+	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelityFinalOnly {
+		t.Fatalf(
+			"manifest.fidelityClass = %q, want %q",
+			loaded.Manifest.FidelityClass,
+			support.ProviderSessionFidelityFinalOnly,
+		)
+	}
+
+	observed := replayClaudeTimeoutGoldenCase(t, loaded)
+	assertProviderSessionGoldensMatch(t, loaded, observed)
+}
+
+func replayClaudeTimeoutGoldenCase(
+	t *testing.T,
+	loaded support.ProviderSessionCase,
+) support.ProviderSessionObservedGoldens {
+	t.Helper()
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
+		support.BuildModelWorkerConfig(modelprovider.ProviderClaude, loaded.Process.Model),
+		"stopToken: COMPLETE",
+		"skipPermissions: true\nstopToken: COMPLETE",
+		1,
+	))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"claude golden timeout"}`))
+
+	exitCode := 124
+	if loaded.Process.ExitCode != nil {
+		exitCode = *loaded.Process.ExitCode
+	}
+	timeoutResult := platformprocess.CommandResult{
+		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
+		Stderr:   []byte(loaded.Stderr),
+		ExitCode: exitCode,
+	}
+	runner := testutil.NewProviderCommandRunner(
+		timeoutResult,
+		timeoutResult,
+		timeoutResult,
+	)
+
+	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		30*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
+		t.Fatalf("completed work = %d, want 0", got)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
+	}
+	if runner.CallCount() < 1 {
+		t.Fatalf("Claude command runner calls = %d, want at least 1", runner.CallCount())
+	}
+
+	inferencePayload := claudeGoldenFailedInferenceObservationWithReason(
+		t,
+		events,
+		factoryapi.WorkFailureTypeTimeout,
+	)
+	if inferencePayload.Outcome != factoryapi.InferenceOutcomeFailed {
+		t.Fatalf("inference outcome = %q, want FAILED", inferencePayload.Outcome)
+	}
+	if inferencePayload.FailureDetail == nil {
+		t.Fatal("inference response missing failure detail")
+	}
+	if inferencePayload.FailureDetail.Reason != factoryapi.WorkFailureTypeTimeout {
+		t.Fatalf(
+			"failure reason = %q, want TIMEOUT (runner calls=%d)",
+			inferencePayload.FailureDetail.Reason,
+			runner.CallCount(),
+		)
+	}
+	if inferencePayload.FailureDetail.Message != "Claude request timed out." {
+		t.Fatalf("failure message = %q, want Claude request timed out.", inferencePayload.FailureDetail.Message)
+	}
+	if inferencePayload.Response != nil && strings.Contains(*inferencePayload.Response, "COMPLETE") {
+		t.Fatalf(
+			"timeout must not treat COMPLETE-bearing output as success: %q",
+			*inferencePayload.Response,
+		)
+	}
+	assertClaudeGoldenResponseStreamClosesWithoutSuccess(t, responseEvents)
+
+	return observeClaudeFailedProviderSessionGoldens(t, inferencePayload, responseEvents)
+}
+
+func assertClaudeGoldenResponseStreamClosesWithoutSuccess(
+	t *testing.T,
+	responseEvents []factoryapi.FactoryResponseEvent,
+) {
+	t.Helper()
+
+	if len(responseEvents) == 0 {
+		t.Fatal("response stream missing events; want closed terminal stream")
+	}
+	last := responseEvents[len(responseEvents)-1]
+	if last.Phase != factoryapi.FactoryResponseEventPhaseFailed {
+		t.Fatalf("terminal response event phase = %q, want FAILED", last.Phase)
+	}
+	for _, event := range responseEvents {
+		if event.Phase == factoryapi.FactoryResponseEventPhaseCompleted {
+			switch event.Kind {
+			case factoryapi.FactoryResponseEventKindMessage:
+				t.Fatalf("response stream invented successful terminal message: %#v", event)
+			case factoryapi.FactoryResponseEventKindRun:
+				payload, err := event.Payload.AsFactoryResponseEventRunPayload()
+				if err != nil {
+					t.Fatalf("decode RUN response event: %v", err)
+				}
+				if payload.Status != nil && *payload.Status == "completed" {
+					t.Fatalf("response stream invented successful run completion: %#v", event)
+				}
+			}
+		}
+	}
 }
 
 func replayClaudeStructuredFailureGoldenCase(
@@ -108,6 +244,18 @@ func claudeGoldenFailedInferenceObservation(
 	t *testing.T,
 	events []factoryapi.FactoryEvent,
 ) factoryapi.InferenceResponseEventPayload {
+	return claudeGoldenFailedInferenceObservationWithReason(
+		t,
+		events,
+		factoryapi.WorkFailureTypePermanentBadRequest,
+	)
+}
+
+func claudeGoldenFailedInferenceObservationWithReason(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	wantReason factoryapi.WorkFailureType,
+) factoryapi.InferenceResponseEventPayload {
 	t.Helper()
 
 	var (
@@ -125,11 +273,14 @@ func claudeGoldenFailedInferenceObservation(
 		if payload.Outcome != factoryapi.InferenceOutcomeFailed {
 			continue
 		}
+		if payload.FailureDetail == nil || payload.FailureDetail.Reason != wantReason {
+			continue
+		}
 		inferencePayload = payload
 		foundInference = true
 	}
 	if !foundInference {
-		t.Fatal("missing failed INFERENCE_RESPONSE in factory events")
+		t.Fatalf("missing failed INFERENCE_RESPONSE with reason %q in factory events", wantReason)
 	}
 	return inferencePayload
 }
