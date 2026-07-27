@@ -2946,6 +2946,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/services/dispatch_planning",
       "disposition": "retain",
       "destination": "factory_runtime",
@@ -3145,6 +3151,12 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/wire",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"

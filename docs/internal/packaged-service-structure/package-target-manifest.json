@@ -146,6 +146,7 @@
     "pkg/services/factory_runtime/internal/orchestrators/javascript/validation",
     "pkg/services/factory_runtime/internal/orchestrators/petri",
     "pkg/services/factory_runtime/internal/rootobservation",
+    "pkg/services/factory_runtime/internal/service",
     "pkg/services/factory_runtime/internal/services/dispatch_planning",
     "pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
     "pkg/services/factory_runtime/internal/services/dispatch_planning/wire",
@@ -176,6 +177,7 @@
     "pkg/services/factory_runtime/tooling/javascript/callbehavior",
     "pkg/services/factory_runtime/tooling/javascript/catalog",
     "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
+    "pkg/services/factory_runtime/wire",
     "pkg/services/factory_sessions",
     "pkg/services/factory_sessions/internal/applicationopening",
     "pkg/services/factory_sessions/internal/artifactprojection",
@@ -1001,6 +1003,11 @@
       "destination": "factory_runtime"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/services/dispatch_planning",
       "disposition": "retain",
       "destination": "factory_runtime/internal/services/dispatch_planning"
@@ -1149,6 +1156,11 @@
       "packagePath": "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
       "disposition": "move",
       "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/wire",
+      "disposition": "retain",
+      "destination": "factory_runtime"
     },
     {
       "packagePath": "pkg/services/factory_sessions",

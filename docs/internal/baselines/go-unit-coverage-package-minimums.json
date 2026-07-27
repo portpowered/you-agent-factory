@@ -491,6 +491,10 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/service",
+      "minimum": 45.45
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning",
       "exception": {
         "kind": "measurement",
@@ -627,6 +631,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/symbolidentity",
       "minimum": 97.11
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire",
+      "minimum": 78.57
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions",
