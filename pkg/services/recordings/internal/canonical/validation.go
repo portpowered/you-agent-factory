@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"strings"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	factoryeventkinds "github.com/portpowered/infinite-you/pkg/services/recordings/events/kinds"
 )
 
 // ValidAppendEvent reports whether event carries the identity, kind, timestamp,
@@ -14,6 +16,9 @@ import (
 func ValidAppendEvent(event recordings.CanonicalEvent) bool {
 	return strings.TrimSpace(string(event.ID)) != "" &&
 		strings.TrimSpace(string(event.Kind)) != "" &&
+		factoryeventkinds.IsPublicEmittableFactoryEventKind(
+			factorydefinitions.FactoryEventType(event.Kind),
+		) &&
 		!event.RecordedAt.IsZero() &&
 		(event.Scope.FactorySessionID == "" ||
 			strings.TrimSpace(event.Scope.FactorySessionID) != "") &&

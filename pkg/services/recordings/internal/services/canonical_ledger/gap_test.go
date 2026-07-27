@@ -207,7 +207,7 @@ func appendOverflowEvent(t *testing.T, svc canonicalledger.Service, sequence int
 		Event: recordings.CanonicalEvent{
 			ID:         recordings.CanonicalEventID("overflow-" + strconv.Itoa(sequence)),
 			RecordedAt: recordedAt,
-			Kind:       "OVERFLOW_TEST",
+			Kind:       recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeWorkRequest),
 			Payload:    `{"retained":true}`,
 		},
 	})
