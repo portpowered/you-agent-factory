@@ -354,6 +354,10 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !requestAcceptsJSONContentType(r.Header.Get("Content-Type")) {
+		s.writeUnsupportedMediaTypeError(w)
+		return
+	}
 	req, err := decodeOpenFactorySessionBody(r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {

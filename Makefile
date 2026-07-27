@@ -87,7 +87,7 @@ BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependen
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
 COMPATIBILITY_ALIAS_CHECK_ROOT ?= .
 RETIRED_SURFACE_CHECK_ROOT ?= .
-LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure package-target-manifest-check packaged-factory-source-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode
+LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode
 
 define run_verification_step
 	@printf '%s\n' "==> $(2) [make $(1)]"
@@ -143,7 +143,7 @@ endef
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure package-target-manifest-check packaged-factory-source-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check logging-boundary-check ownership-inventory-check
+.PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check logging-boundary-check ownership-inventory-check
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
 .PHONY: compatibility-alias-check retired-surface-check readme-check deadcode dashboard-verify
 
@@ -539,6 +539,9 @@ package-target-manifest-check:
 
 packaged-factory-source-check:
 	$(GO) run ./cmd/packagedfactorysourcecheck -root .
+
+packaged-factory-consumption-check:
+	$(GO) run ./cmd/packagedfactoryconsumptioncheck -root .
 
 packaged-factory-catalog-generate:
 	$(GO) run ./cmd/packagedfactorycataloggenerate -root .
