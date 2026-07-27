@@ -587,9 +587,9 @@
       "deletion_only_batch": "bootstrap_portability-delete-05-factory-current"
     },
     {
-      "source_path": "tests/functional/cli/dynamic_workflows/dynamic_workflow_run_test.go",
-      "package": "you-agent-factory/tests/functional/cli/dynamic_workflows",
-      "scenario": "TestRunJavaScriptFactoryResponseStreamPublishesCanonicalLifecycle",
+      "source_path": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
+      "scenario": "TestJavaScriptChildProgressPublishesCanonicalResponseEvents",
       "lane": "short",
       "destination": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
       "catch_all": "none",
@@ -597,9 +597,9 @@
       "deletion_only_batch": "workflow-delete-09-orchestration-javascript"
     },
     {
-      "source_path": "tests/functional/cli/dynamic_workflows/dynamic_workflow_run_test.go",
-      "package": "you-agent-factory/tests/functional/cli/dynamic_workflows",
-      "scenario": "TestRunJavaScriptFactoryWithMockWorkersUsesFakeChildExecutor",
+      "source_path": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
+      "scenario": "TestJavaScriptTerminalResultFollowsFinalResponseEvent",
       "lane": "short",
       "destination": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
       "catch_all": "none",

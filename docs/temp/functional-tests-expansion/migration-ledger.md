@@ -227,8 +227,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 
 | source_path | package | scenario | lane | destination | catch_all | specialty_targets | deletion_only_batch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| tests/functional/cli/dynamic_workflows/dynamic_workflow_run_test.go | you-agent-factory/tests/functional/cli/dynamic_workflows | TestRunJavaScriptFactoryResponseStreamPublishesCanonicalLifecycle | short | tests/functional/orchestration/javascript/contracts/response_events_test.go | none | none | n/a |
-| tests/functional/cli/dynamic_workflows/dynamic_workflow_run_test.go | you-agent-factory/tests/functional/cli/dynamic_workflows | TestRunJavaScriptFactoryWithMockWorkersUsesFakeChildExecutor | short | tests/functional/orchestration/javascript/contracts/response_events_test.go | none | none | n/a |
 | tests/functional/transport/cli/output/ndjson_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult | short | tests/functional/transport/cli/output/ndjson_stream_test.go | none | none | n/a |
 | tests/functional/transport/cli/output/ndjson_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLINDJSONFailureEndsWithOneTerminalResult | short | tests/functional/transport/cli/output/ndjson_stream_test.go | none | none | n/a |
 | tests/functional/transport/cli/output/ndjson_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLINDJSONSequenceIsMonotonic | short | tests/functional/transport/cli/output/ndjson_stream_test.go | none | none | n/a |
@@ -349,6 +347,13 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | source_path | package | scenario | lane | destination | catch_all | specialty_targets | deletion_only_batch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | tests/functional/operator_settings/configcore/operator_config_core_test.go | you-agent-factory/tests/functional/operator_settings/configcore | TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior | short | wrong-layer: package-integration — direct operator_settings service calls without root.BuildProcess / public CLI boundary. Replacement evidence owner: pkg/services/operator_settings package-integration tests. | none | none | n/a |
+
+#### `orchestration` (2 scenarios, catch_all=`none`)
+
+| source_path | package | scenario | lane | destination | catch_all | specialty_targets | deletion_only_batch |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| tests/functional/orchestration/javascript/contracts/response_events_test.go | you-agent-factory/tests/functional/orchestration/javascript/contracts | TestJavaScriptChildProgressPublishesCanonicalResponseEvents | short | tests/functional/orchestration/javascript/contracts/response_events_test.go | none | none | workflow-delete-09-orchestration-javascript |
+| tests/functional/orchestration/javascript/contracts/response_events_test.go | you-agent-factory/tests/functional/orchestration/javascript/contracts | TestJavaScriptTerminalResultFollowsFinalResponseEvent | short | tests/functional/orchestration/javascript/contracts/response_events_test.go | none | none | n/a |
 
 #### `providers` (46 scenarios, catch_all=`none`)
 
@@ -1505,8 +1510,6 @@ exceptions; they do not use deletion-only batch ids (`deletion_only_batch` = `n/
 | tests/functional/acceptance/provider_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestProviderPosture_Absent_UnresolvedDefaultRejectsWithDocumentedGuidance | short | tests/functional/factory/packaged/catalog/override_test.go | none | test-built-cli-acceptance | n/a |
 | tests/functional/acceptance/provider_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestProviderPosture_Configured_ExplicitHomeConfigEnablesNamedGoalSuccessPath | short | tests/functional/factory/packaged/catalog/override_test.go | none | test-built-cli-acceptance | n/a |
 | tests/functional/acceptance/provider_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestProviderPosture_Discovered_EnvDefaultResolvesWithoutFileProvider | short | tests/functional/factory/packaged/catalog/override_test.go | none | test-built-cli-acceptance | n/a |
-| tests/functional/cli/dynamic_workflows/dynamic_workflow_run_test.go | you-agent-factory/tests/functional/cli/dynamic_workflows | TestRunJavaScriptFactoryResponseStreamPublishesCanonicalLifecycle | short | tests/functional/orchestration/javascript/contracts/response_events_test.go | none | none | n/a |
-| tests/functional/cli/dynamic_workflows/dynamic_workflow_run_test.go | you-agent-factory/tests/functional/cli/dynamic_workflows | TestRunJavaScriptFactoryWithMockWorkersUsesFakeChildExecutor | short | tests/functional/orchestration/javascript/contracts/response_events_test.go | none | none | n/a |
 | tests/functional/transport/cli/output/ndjson_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult | short | tests/functional/transport/cli/output/ndjson_stream_test.go | none | none | n/a |
 | tests/functional/transport/cli/output/ndjson_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLINDJSONFailureEndsWithOneTerminalResult | short | tests/functional/transport/cli/output/ndjson_stream_test.go | none | none | n/a |
 | tests/functional/transport/cli/output/ndjson_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLINDJSONSequenceIsMonotonic | short | tests/functional/transport/cli/output/ndjson_stream_test.go | none | none | n/a |

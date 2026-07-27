@@ -1469,7 +1469,7 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/cli/dynamic_workflows/dynamic_workflow_run_test.go",
+      "filePath": "tests/functional/cli/factory_run/events/events_test.go",
       "target": "cli"
     },
     {
