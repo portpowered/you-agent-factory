@@ -196,7 +196,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestGeneratedClientDecodesRepresentativeStructuredError`.
   - `TestGeneratedClientAndServerSchemaStayAligned`.
 
-- [ ] `tests/functional/transport/http/server/concurrent_requests_test.go`
+- [x] `tests/functional/transport/http/server/concurrent_requests_test.go`
   - `TestAPIConcurrentSessionRequestsRemainIsolated`.
   - `TestAPICancelledRequestDoesNotCancelUnrelatedSession`.
 

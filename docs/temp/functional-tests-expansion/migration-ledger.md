@@ -356,7 +356,7 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/orchestration/javascript/contracts/response_events_test.go | you-agent-factory/tests/functional/orchestration/javascript/contracts | TestJavaScriptChildProgressPublishesCanonicalResponseEvents | short | tests/functional/orchestration/javascript/contracts/response_events_test.go | none | none | workflow-delete-09-orchestration-javascript |
 | tests/functional/orchestration/javascript/contracts/response_events_test.go | you-agent-factory/tests/functional/orchestration/javascript/contracts | TestJavaScriptTerminalResultFollowsFinalResponseEvent | short | tests/functional/orchestration/javascript/contracts/response_events_test.go | none | none | n/a |
 
-#### `providers` (46 scenarios, catch_all=`none`)
+#### `providers` (45 scenarios, catch_all=`none`)
 
 | source_path | package | scenario | lane | destination | catch_all | specialty_targets | deletion_only_batch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -404,7 +404,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/providers/mock_workers_agent_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace | short | tests/functional/workers/mock/replacement_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_agent_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput | short | tests/functional/workers/mock/replacement_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_agent_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary | short | tests/functional/workers/mock/replacement_test.go | none | none | n/a |
-| tests/functional/providers/mock_workers_cli_http_stability_smoke_long_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_CLIServiceModeStartupWorkFileSupportsRepeatedLiveHTTPPollingBeforeCompletion | functionallong | tests/functional/transport/http/server/concurrent_requests_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_end_to_end_smoke_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials | short | tests/functional/workers/mock/replacement_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_script_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect | short | tests/functional/workers/script/execution_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_script_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_ScriptDefaultAcceptProducesSuccessfulScriptResult | short | tests/functional/workers/script/execution_test.go | none | none | n/a |
@@ -1442,7 +1441,7 @@ exceptions; they do not use deletion-only batch ids (`deletion_only_batch` = `n/
 | `config_init` | 8 | 8 | 0 | none |
 | `models` | 1 | 1 | 0 | none |
 | `operator_settings` | 1 | 0 | 1 | none |
-| `providers` | 46 | 46 | 0 | `script-timeout-companion-smoke-100` (1 scenario) |
+| `providers` | 45 | 45 | 0 | `script-timeout-companion-smoke-100` (1 scenario) |
 | `sessionparity` | 13 | 0 | 13 | none |
 | `work` | 1 | 0 | 1 | none |
 | **Total** | **142** | **99** | **43** | |
@@ -1604,7 +1603,6 @@ exceptions; they do not use deletion-only batch ids (`deletion_only_batch` = `n/
 | tests/functional/providers/mock_workers_agent_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace | short | tests/functional/workers/mock/replacement_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_agent_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput | short | tests/functional/workers/mock/replacement_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_agent_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary | short | tests/functional/workers/mock/replacement_test.go | none | none | n/a |
-| tests/functional/providers/mock_workers_cli_http_stability_smoke_long_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_CLIServiceModeStartupWorkFileSupportsRepeatedLiveHTTPPollingBeforeCompletion | functionallong | tests/functional/transport/http/server/concurrent_requests_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_end_to_end_smoke_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials | short | tests/functional/workers/mock/replacement_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_script_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect | short | tests/functional/workers/script/execution_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_script_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_ScriptDefaultAcceptProducesSuccessfulScriptResult | short | tests/functional/workers/script/execution_test.go | none | none | n/a |
