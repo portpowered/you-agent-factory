@@ -89,6 +89,7 @@ var supportedInvocationTypeHints = []string{
 	interfaces.InvocationParameterTypeHintDirectoryPath,
 	interfaces.InvocationParameterTypeHintNumberString,
 	interfaces.InvocationParameterTypeHintBooleanString,
+	interfaces.InvocationParameterTypeHintJSON,
 }
 
 var supportedInvocationValueModes = []string{

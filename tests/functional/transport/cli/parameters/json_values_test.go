@@ -3,8 +3,10 @@ package parameters_test
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -65,6 +67,89 @@ func TestCLIJSONParameterPreservesNestedObjectAndArray(t *testing.T) {
 	}
 	assertInvocationArgumentJSON(t, arguments, "metadata", metadataValue)
 	assertInvocationArgumentJSON(t, arguments, "items", itemsValue)
+}
+
+// TestCLIInvalidJSONParameterNamesTheParameter proves invalid JSON for a named
+// factory parameter is rejected with an actionable diagnostic that names the
+// parameter before any worker provider dispatch can start.
+func TestCLIInvalidJSONParameterNamesTheParameter(t *testing.T) {
+	validItemsValue := `[{"id":1,"label":"alpha"}]`
+	invalidMetadataValue := `{not-json`
+
+	factoryDir := scaffoldJSONInvocationFactory(t)
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName:      "processor",
+			WorkstationName: "process",
+			RunType:         workers.MockWorkerRunTypeAccept,
+		}},
+	})
+
+	support.UpdateFactoryConfig(t, factoryDir, func(cfg map[string]any) {
+		signature, ok := cfg["invocationSignature"].(map[string]any)
+		if !ok {
+			t.Fatal("factory config missing invocationSignature")
+		}
+		parameters, ok := signature["parameters"].([]any)
+		if !ok {
+			t.Fatal("factory config missing invocationSignature.parameters")
+		}
+		for _, raw := range parameters {
+			parameter, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			switch parameter["name"] {
+			case "metadata", "items":
+				parameter["typeHint"] = work.InvocationParameterTypeHintJSON
+			}
+		}
+	})
+
+	submissions := &invocationSubmissionObservation{}
+	providerRunner := testutil.NewProviderCommandRunner()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		SubmissionRecorder:    submissions.observe,
+		ProviderCommandRunner: providerRunner,
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--factory", factoryPath,
+		"--no-record",
+		"--with-mock-workers", mockWorkersPath,
+		"invoke marker",
+		"--metadata=" + invalidMetadataValue,
+		"--items=" + validItemsValue,
+	})
+	inputs.WorkingDirectory = t.TempDir()
+
+	executeErr := process.Execute(inputs.Input)
+	if executeErr == nil {
+		t.Fatalf(
+			"Process.Execute(invalid JSON parameter) succeeded; stdout:\n%s\nstderr:\n%s",
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+
+	diagnostic := executeErr.Error() + "\n" + inputs.Stderr()
+	for _, want := range []string{
+		string(work.ArgumentErrorCodeStringValidationMismatch),
+		`parameter "metadata"`,
+		"is not valid JSON",
+	} {
+		if !strings.Contains(diagnostic, want) {
+			t.Fatalf("invalid JSON diagnostic missing %q:\n%s", want, diagnostic)
+		}
+	}
+	if records := submissions.snapshot(); len(records) != 0 {
+		t.Fatalf("canonical submissions = %d, want 0; records=%#v", len(records), records)
+	}
+	if providerRunner.CallCount() != 0 {
+		t.Fatalf("provider dispatch calls = %d, want 0", providerRunner.CallCount())
+	}
 }
 
 func assertInvocationArgumentJSON(
