@@ -68,12 +68,12 @@ func (initializer *Initializer) Initialize(
 		return Result{}, fmt.Errorf("initialize system: context is required")
 	}
 	if err := ctx.Err(); err != nil {
-		return Result{}, fmt.Errorf("initialize system: %w", err)
+		return Result{}, fmt.Errorf("initialize system: %w: %w", ErrInitializeCancelled, err)
 	}
 
 	homeDir := strings.TrimSpace(request.HomeDir)
 	if homeDir == "" {
-		return Result{}, fmt.Errorf("home directory is required")
+		return Result{}, fmt.Errorf("%w", ErrMissingHomeDir)
 	}
 	if initializer == nil {
 		return Result{}, fmt.Errorf("initialize system: service is required")

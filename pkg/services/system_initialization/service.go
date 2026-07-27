@@ -66,10 +66,11 @@ type Result struct {
 // implementation subpackages, or pkg/initializer lifecycle types.
 type Service interface {
 	// Initialize applies Bootstrap-owned initialization intent and returns
-	// customer-visible created/skipped outcomes. Typed validation and
-	// cancellation failures are published on this root seam; partial-failure
-	// rollback facts are published as additive typed outcomes on the same
-	// Service rather than through a second peer-facing Bootstrap interface.
+	// customer-visible created/skipped outcomes. Missing or blank home-directory
+	// intent fails with ErrMissingHomeDir; cancelled context fails with
+	// ErrInitializeCancelled. Partial-failure rollback facts are published as
+	// additive typed outcomes on the same Service rather than through a second
+	// peer-facing Bootstrap interface.
 	Initialize(context.Context, Request) (Result, error)
 }
 
