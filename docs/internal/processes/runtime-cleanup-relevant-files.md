@@ -729,7 +729,14 @@ keep catalog methods on the singular `Service` rather than elevating
 `NamedFactoryCatalog` as a peer-facing authority, and extend the same
 external fake-peer characterization test with representative success and
 distinct typed invalid-name vs missing outcomes (`ErrInvalidNamedFactoryName`
-vs `ErrNamedFactoryNotFound`). Authoring slices similarly stay on the
+vs `ErrNamedFactoryNotFound`). Validate slices mirror the same pattern in
+`definition/validate_equivalence_test.go`: owner-local `newRootValidateServiceForPeer`
+construction, `peerExerciseRootValidateSuccess` / `peerExerciseRootValidateTypedFailures`
+helpers that accept only `factoryroot.Service`, shared cross-path fixtures
+(`CrossPathValidAlphaFactoryJSON` / `CrossPathInvalidFactoryJSON`), distinct
+`ErrInvalidFactoryDefinitionPayload` vs `FactoryDefinitionValidationFailure`
+with CTR-DEF characterization codes, and effective success via alpha fixture
+plus required DEFAULT handling work type. Authoring slices similarly stay on the
 singular `Service` with prepare/flatten/expand/create/replace request
 shapes that omit filesystem effects and mapping codecs; publish
 `ErrMalformedFactoryLayoutPayload` and `AtomicFactoryWriteFailure`
