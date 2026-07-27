@@ -203,6 +203,13 @@ func TestContentStagingOwnsPersistenceSignedResolutionAndCleanup(t *testing.T) {
 	if _, err := os.Stat(filepath.Dir(resolved.Path)); !os.IsNotExist(err) {
 		t.Fatalf("cleaned stage directory stat error = %v, want not-exist", err)
 	}
+	_, err = service.ResolveContent(ctx, staged.StagedFileRef)
+	if !errors.Is(err, work.ErrStagedContentNotFound) {
+		t.Fatalf("post-cleanup ResolveContent error = %v, want ErrStagedContentNotFound", err)
+	}
+	if err := service.CleanupContent(ctx, staged.StagedFileRef); err != nil {
+		t.Fatalf("idempotent CleanupContent: %v", err)
+	}
 }
 
 func TestContentStagingRejectsTamperedExpiredAndMissingReferences(t *testing.T) {

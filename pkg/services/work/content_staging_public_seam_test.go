@@ -201,6 +201,24 @@ func TestPublicWorkRootStagingSeamCleansUpStagedAndPartialStages(t *testing.T) {
 		if _, err := os.Stat(stageDir); !os.IsNotExist(err) {
 			t.Fatalf("cleaned stage directory stat = %v, want not-exist", err)
 		}
+		_, err = staging.ResolveContent(ctx, staged.StagedFileRef)
+		if !errors.Is(err, work.ErrStagedContentNotFound) {
+			t.Fatalf("post-cleanup ResolveContent error = %v, want ErrStagedContentNotFound", err)
+		}
+	})
+
+	t.Run("cleanup is idempotent", func(t *testing.T) {
+		staging := newPublicWorkRootStaging(t, nil)
+		staged, err := staging.StageContent(ctx, validRequest)
+		if err != nil {
+			t.Fatalf("StageContent: %v", err)
+		}
+		if err := staging.CleanupContent(ctx, staged.StagedFileRef); err != nil {
+			t.Fatalf("first CleanupContent: %v", err)
+		}
+		if err := staging.CleanupContent(ctx, staged.StagedFileRef); err != nil {
+			t.Fatalf("second CleanupContent: %v", err)
+		}
 	})
 
 	t.Run("partial stage cleanup on write failure", func(t *testing.T) {
