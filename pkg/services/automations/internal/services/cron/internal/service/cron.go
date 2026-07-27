@@ -22,10 +22,10 @@ func (*service) ParseCronJitter(cronConfig *interfaces.CronConfig) (time.Duratio
 	}
 	jitter, err := time.ParseDuration(cronConfig.Jitter)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("%w: %v", croncontract.ErrInvalidJitter, err)
 	}
 	if jitter < 0 {
-		return 0, fmt.Errorf("duration must be non-negative")
+		return 0, fmt.Errorf("%w: duration must be non-negative", croncontract.ErrInvalidJitter)
 	}
 	return jitter, nil
 }
@@ -33,16 +33,16 @@ func (*service) ParseCronJitter(cronConfig *interfaces.CronConfig) (time.Duratio
 func (s *service) ParseCronExpiryWindow(cronConfig *interfaces.CronConfig, scheduleWindow time.Duration) (time.Duration, error) {
 	if cronConfig == nil || cronConfig.ExpiryWindow == "" {
 		if scheduleWindow <= 0 {
-			return 0, fmt.Errorf("schedule window default must be positive")
+			return 0, fmt.Errorf("%w: schedule window default must be positive", croncontract.ErrInvalidExpiryWindow)
 		}
 		return scheduleWindow, nil
 	}
 	expiryWindow, err := time.ParseDuration(cronConfig.ExpiryWindow)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("%w: %v", croncontract.ErrInvalidExpiryWindow, err)
 	}
 	if expiryWindow <= 0 {
-		return 0, fmt.Errorf("duration must be positive")
+		return 0, fmt.Errorf("%w: duration must be positive", croncontract.ErrInvalidExpiryWindow)
 	}
 	return expiryWindow, nil
 }
@@ -115,10 +115,10 @@ func (s *service) BuildCronTimeMetadata(input croncontract.CronTimeInput) (cronc
 		return croncontract.CronTimeMetadata{}, fmt.Errorf("workstation name is required")
 	}
 	if input.MaxJitter < 0 {
-		return croncontract.CronTimeMetadata{}, fmt.Errorf("max jitter must be non-negative")
+		return croncontract.CronTimeMetadata{}, fmt.Errorf("%w: max jitter must be non-negative", croncontract.ErrInvalidJitter)
 	}
 	if input.ExpiryWindow <= 0 {
-		return croncontract.CronTimeMetadata{}, fmt.Errorf("expiry window must be positive")
+		return croncontract.CronTimeMetadata{}, fmt.Errorf("%w: expiry window must be positive", croncontract.ErrInvalidExpiryWindow)
 	}
 
 	nominalAt := input.NominalAt.UTC()

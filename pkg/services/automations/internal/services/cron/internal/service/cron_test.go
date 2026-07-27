@@ -65,6 +65,176 @@ func TestParseCronTiming_DefaultsJitterAndExpiryWindowFromSchedule(t *testing.T)
 	}
 }
 
+func TestParseCronTiming_UsesExplicitExpiryWindow(t *testing.T) {
+	svc := testCronService()
+	nominalAt := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
+	timing, err := svc.ParseCronTiming(&interfaces.CronConfig{
+		Schedule:     "*/5 * * * *",
+		ExpiryWindow: "2m",
+	}, nominalAt)
+	if err != nil {
+		t.Fatalf("ParseCronTiming: %v", err)
+	}
+	if timing.ExpiryWindow != 2*time.Minute {
+		t.Fatalf("expiry window = %s, want explicit 2m", timing.ExpiryWindow)
+	}
+}
+
+func TestDeterministicCronJitter_ZeroMaxJitterReturnsZero(t *testing.T) {
+	svc := testCronService()
+	nominalAt := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
+	if got := svc.DeterministicCronJitter("factory/main", "daily-refresh", nominalAt, 0); got != 0 {
+		t.Fatalf("jitter = %s, want 0 for zero max jitter", got)
+	}
+}
+
+func TestDeterministicCronJitter_StableForEquivalentInputs(t *testing.T) {
+	svc := testCronService()
+	nominalAt := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
+	maxJitter := 30 * time.Second
+
+	var first time.Duration
+	for i := 0; i < 5; i++ {
+		got := svc.DeterministicCronJitter("factory/main", "daily-refresh", nominalAt, maxJitter)
+		if got < 0 || got > maxJitter {
+			t.Fatalf("jitter = %s, want within [0,%s]", got, maxJitter)
+		}
+		if i == 0 {
+			first = got
+			continue
+		}
+		if got != first {
+			t.Fatalf("jitter changed across repeated evaluation: first=%s got=%s", first, got)
+		}
+	}
+}
+
+func TestDeterministicCronJitter_DiffersAcrossDistinctInputs(t *testing.T) {
+	svc := testCronService()
+	nominalAt := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
+	maxJitter := time.Minute
+
+	first := svc.DeterministicCronJitter("factory/main", "daily-refresh", nominalAt, maxJitter)
+	second := svc.DeterministicCronJitter("factory/main", "weekly-refresh", nominalAt, maxJitter)
+	if first == second {
+		t.Fatalf("expected distinct jitter for distinct workstation names, both got %s", first)
+	}
+}
+
+func TestParseCronJitter_RejectsInvalidConfiguration(t *testing.T) {
+	svc := testCronService()
+	for _, test := range []struct {
+		name   string
+		jitter string
+	}{
+		{name: "negative", jitter: "-1s"},
+		{name: "unparseable", jitter: "not-a-duration"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := svc.ParseCronJitter(&interfaces.CronConfig{Jitter: test.jitter})
+			if err == nil || !errors.Is(err, cron.ErrInvalidJitter) {
+				t.Fatalf("error = %v, want typed ErrInvalidJitter", err)
+			}
+		})
+	}
+}
+
+func TestParseCronExpiryWindow_RejectsInvalidConfiguration(t *testing.T) {
+	svc := testCronService()
+	for _, test := range []struct {
+		name         string
+		expiryWindow string
+		scheduleWin  time.Duration
+	}{
+		{name: "zero explicit", expiryWindow: "0s", scheduleWin: time.Minute},
+		{name: "negative explicit", expiryWindow: "-1m", scheduleWin: time.Minute},
+		{name: "unparseable explicit", expiryWindow: "not-a-duration", scheduleWin: time.Minute},
+		{name: "non-positive default schedule window", expiryWindow: "", scheduleWin: 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := svc.ParseCronExpiryWindow(&interfaces.CronConfig{ExpiryWindow: test.expiryWindow}, test.scheduleWin)
+			if err == nil || !errors.Is(err, cron.ErrInvalidExpiryWindow) {
+				t.Fatalf("error = %v, want typed ErrInvalidExpiryWindow", err)
+			}
+		})
+	}
+}
+
+func TestBuildCronTimeMetadata_RejectsInvalidTimingConfiguration(t *testing.T) {
+	svc := testCronService()
+	nominalAt := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
+	base := cron.CronTimeInput{
+		WorkflowIdentity: "factory/main",
+		WorkstationName:  "daily-refresh",
+		NominalAt:        nominalAt,
+		MaxJitter:        5 * time.Second,
+		ExpiryWindow:     time.Minute,
+	}
+
+	for _, test := range []struct {
+		name  string
+		input cron.CronTimeInput
+		want  error
+	}{
+		{
+			name:  "negative max jitter",
+			input: func() cron.CronTimeInput { in := base; in.MaxJitter = -time.Second; return in }(),
+			want:  cron.ErrInvalidJitter,
+		},
+		{
+			name:  "zero expiry window",
+			input: func() cron.CronTimeInput { in := base; in.ExpiryWindow = 0; return in }(),
+			want:  cron.ErrInvalidExpiryWindow,
+		},
+		{
+			name:  "negative expiry window",
+			input: func() cron.CronTimeInput { in := base; in.ExpiryWindow = -time.Minute; return in }(),
+			want:  cron.ErrInvalidExpiryWindow,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := svc.BuildCronTimeMetadata(test.input)
+			if err == nil || !errors.Is(err, test.want) {
+				t.Fatalf("error = %v, want %v", err, test.want)
+			}
+		})
+	}
+}
+
+func TestCronTimeWorkRequest_InvalidTimingConfigPerformsNoWorkSubmission(t *testing.T) {
+	svc := testCronService()
+	nominalAt := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
+	for _, test := range []struct {
+		name string
+		cron *interfaces.CronConfig
+		want error
+	}{
+		{
+			name: "negative jitter",
+			cron: &interfaces.CronConfig{Schedule: "* * * * *", Jitter: "-1s"},
+			want: cron.ErrInvalidJitter,
+		},
+		{
+			name: "zero expiry window",
+			cron: &interfaces.CronConfig{Schedule: "* * * * *", ExpiryWindow: "0s"},
+			want: cron.ErrInvalidExpiryWindow,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req, _, err := svc.CronTimeWorkRequest("factory/main", interfaces.FactoryWorkstationConfig{
+				Name: "daily-refresh",
+				Cron: test.cron,
+			}, nominalAt)
+			if err == nil || !errors.Is(err, test.want) {
+				t.Fatalf("error = %v, want %v", err, test.want)
+			}
+			if req.RequestID != "" || len(req.Works) > 0 {
+				t.Fatalf("expected no Work submission, got request=%+v", req)
+			}
+		})
+	}
+}
+
 func TestParseCronTiming_InvalidScheduleIncludesValue(t *testing.T) {
 	svc := testCronService()
 	_, err := svc.ParseCronTiming(&interfaces.CronConfig{Schedule: "not a cron"}, time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC))
