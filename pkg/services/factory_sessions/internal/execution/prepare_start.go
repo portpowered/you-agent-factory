@@ -184,16 +184,29 @@ func resolveStartSourceWithResolution(
 }
 
 func applyInlineFactoryDeclaration(resolution *factory.WorkflowSourceResolution, source Source) {
-	if resolution == nil || source.Kind != factory.WorkflowSourceKindInlineWorkflow || source.InlineWorkflow == nil {
+	if resolution == nil || source.InlineWorkflow == nil {
 		return
 	}
 	inline := source.InlineWorkflow
-	if sourceRef := strings.TrimSpace(inline.Metadata["sourceRef"]); sourceRef != "" {
-		resolution.SourceRef = sourceRef
+	switch source.Kind {
+	case factory.WorkflowSourceKindInlineWorkflow:
+		if sourceRef := strings.TrimSpace(inline.Metadata["sourceRef"]); sourceRef != "" {
+			resolution.SourceRef = sourceRef
+		}
+		resolution.Agents = cloneJavaScriptAgents(inline.Agents)
+		resolution.ArgsSchema = append(json.RawMessage(nil), inline.ArgsSchema...)
+		resolution.DefaultPolicy = append(json.RawMessage(nil), inline.DefaultPolicy...)
+	case factory.WorkflowSourceKindWorkflowFile:
+		if len(inline.Agents) > 0 {
+			resolution.Agents = cloneJavaScriptAgents(inline.Agents)
+		}
+		if len(inline.ArgsSchema) > 0 {
+			resolution.ArgsSchema = append(json.RawMessage(nil), inline.ArgsSchema...)
+		}
+		if len(inline.DefaultPolicy) > 0 {
+			resolution.DefaultPolicy = append(json.RawMessage(nil), inline.DefaultPolicy...)
+		}
 	}
-	resolution.Agents = cloneJavaScriptAgents(inline.Agents)
-	resolution.ArgsSchema = append(json.RawMessage(nil), inline.ArgsSchema...)
-	resolution.DefaultPolicy = append(json.RawMessage(nil), inline.DefaultPolicy...)
 }
 
 func validateResolvedSourceContent(

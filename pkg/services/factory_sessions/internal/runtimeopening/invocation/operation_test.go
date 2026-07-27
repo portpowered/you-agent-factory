@@ -13,6 +13,36 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestJavaScriptStartRequestPreservesWorkflowFileDefaultPolicy(t *testing.T) {
+	factoryDir := t.TempDir()
+	defaultPolicy := json.RawMessage(`{"allowedModels":["gpt-allowed"],"mode":"READ_ONLY"}`)
+	cfg := &factorydefinitions.FactoryConfig{
+		Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
+			Kind: factorydefinitions.OrchestratorKindJavaScript,
+			JavaScript: &factorydefinitions.FactoryOrchestratorJavaScriptConfig{
+				SourceRef:     "workflow.js",
+				DefaultPolicy: defaultPolicy,
+			},
+		},
+	}
+	projection := factorysessions.ProjectionContext{
+		FactoryCfg: cfg,
+		Session:    &factorysessions.ScopedLiveSessionSummary{FactoryDir: factoryDir},
+	}
+	started, err := javaScriptStartRequest(projection, roles.InvocationTarget{
+		FactoryDir: factoryDir,
+	}, factorysessions.InvocationRequest{}, invocationInputResolver{}, func() string { return "session-policy-test" })
+	if err != nil {
+		t.Fatalf("javaScriptStartRequest: %v", err)
+	}
+	if started.Source.Kind != factoryruntime.WorkflowSourceKindWorkflowFile {
+		t.Fatalf("source kind = %q, want WORKFLOW_FILE", started.Source.Kind)
+	}
+	if started.Source.InlineWorkflow == nil || string(started.Source.InlineWorkflow.DefaultPolicy) != string(defaultPolicy) {
+		t.Fatalf("inline workflow overlay = %#v, want factory defaultPolicy preserved", started.Source.InlineWorkflow)
+	}
+}
+
 func TestJavaScriptStartRequestUsesDefinitionAndNormalizedArguments(t *testing.T) {
 	factoryDir := t.TempDir()
 	requestID := "request-deep-research"
@@ -89,11 +119,29 @@ func TestJavaScriptInvocationResultDecodesCanonicalWorkContent(t *testing.T) {
 	result := javaScriptInvocationResult("request-1", factorysessions.ResultReadResult{
 		SessionID: "session-1", SessionStatus: factorysessions.LifecycleStatusSucceeded,
 		ResultStatus: factorysessions.ResultStatusFinal, PrimaryResult: primary,
-	})
+	}, nil)
 	if result.Status != factorydefinitions.InvocationTerminalStatusCompleted || result.ErrorCode != "" {
 		t.Fatalf("result = %#v, want completed", result)
 	}
 	if len(result.PrimaryResult) != 1 || result.PrimaryResult[0].Text != "research complete" {
 		t.Fatalf("primary result = %#v", result.PrimaryResult)
+	}
+}
+
+func TestJavaScriptInvocationResultFallsBackToSessionFailureWhenResultUnavailable(t *testing.T) {
+	policyMessage := `policy denied: model "gpt-denied" is not listed in allowedModels (label="denied-model")`
+	result := javaScriptInvocationResult("request-1", factorysessions.ResultReadResult{
+		SessionID:     "session-1",
+		SessionStatus: factorysessions.LifecycleStatusFailed,
+		ResultStatus:  factorysessions.ResultStatusUnavailable,
+	}, &factorysessions.FailureSummary{
+		Reason:  "POLICY_DENIED",
+		Message: policyMessage,
+	})
+	if result.Status != factorydefinitions.InvocationTerminalStatusFailed {
+		t.Fatalf("status = %q, want FAILED", result.Status)
+	}
+	if result.Message != policyMessage {
+		t.Fatalf("message = %q, want %q", result.Message, policyMessage)
 	}
 }
