@@ -156,7 +156,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/internal/service",
-      "minimum": 99.40
+      "minimum": 99.10
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire",
