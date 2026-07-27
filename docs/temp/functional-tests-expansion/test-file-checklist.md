@@ -223,7 +223,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Script workers
 
-- [ ] `tests/functional/workers/script/execution_test.go`
+- [x] `tests/functional/workers/script/execution_test.go`
   - `TestScriptWorkerCompletesWithPublicPrimaryResult`.
   - `TestScriptWorkerNonZeroExitMapsToFailedOutcome`.
   - `TestScriptWorkerCancellationTerminatesChildProcess`.
