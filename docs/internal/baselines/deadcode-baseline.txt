@@ -312,8 +312,12 @@ tests/functional/internal/support/process.go: unreachable func: ProcessCommand.A
 tests/functional/internal/support/process_api_server.go: unreachable func: ProcessAPIServer.Ready
 tests/functional/internal/support/process_factory.go: unreachable func: RunFactoryToCompletion
 tests/functional/internal/support/process_factory.go: unreachable func: RunFactoryToCompletionWithEdges
+tests/functional/internal/support/provider.go: unreachable func: CursorProviderSuccessStdout
 tests/functional/internal/support/provider.go: unreachable func: ProviderErrorCommandResult
 tests/functional/internal/support/workdir.go: unreachable func: WithWorkingDirectory
+tests/functional/providers/helpers_test.go: unreachable func: assertProviderArgsPrompt
+tests/functional/providers/helpers_test.go: unreachable func: assertProviderStdin
+tests/functional/providers/helpers_test.go: unreachable func: cursorMergedPrompt
 tests/functional/providers/helpers_test.go: unreachable func: requireRuntimeLogPath
 tests/functional/replay_contracts/replay_process_test.go: unreachable func: assertReplayPlaceCounts
 tests/functional/replay_contracts/replay_process_test.go: unreachable func: observeReplayThroughRoot

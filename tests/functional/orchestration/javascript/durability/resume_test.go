@@ -63,16 +63,7 @@ func TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren(t 
 		t.Fatalf("pre-resume dispatch count = %d, want 2", len(beforeDispatches.Dispatches))
 	}
 
-	resumeResponse := resumeJavaScriptSession(t, baseURL, sessionID)
-	if resumeResponse.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
-		t.Fatalf("resume operation = %q, want RESUME", resumeResponse.Operation)
-	}
-	if resumeResponse.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
-		t.Fatalf("resume outcome = %q, want ACCEPTED", resumeResponse.Outcome)
-	}
-	if resumeResponse.SessionId != sessionID {
-		t.Fatalf("resume sessionId = %q, want %q", resumeResponse.SessionId, sessionID)
-	}
+	assertAcceptedJavaScriptResume(t, resumeJavaScriptSession(t, baseURL, sessionID), sessionID)
 
 	after := waitForDurableJavaScriptSessionStatus(
 		t,
@@ -405,6 +396,23 @@ func resumeJavaScriptSession(
 		baseURL+"/factory-sessions/"+sessionID+"/resume",
 		factoryapi.FactorySessionLifecycleControlRequest{},
 	)
+}
+
+func assertAcceptedJavaScriptResume(
+	t *testing.T,
+	response factoryapi.FactorySessionLifecycleControlResponse,
+	sessionID string,
+) {
+	t.Helper()
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
+		t.Fatalf("resume operation = %q, want RESUME", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("resume outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.SessionId != sessionID {
+		t.Fatalf("resume sessionId = %q, want %q", response.SessionId, sessionID)
+	}
 }
 
 func resumeJavaScriptSessionExpectingInvalidState(
