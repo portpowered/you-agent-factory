@@ -307,7 +307,7 @@ func readSessionResolvedGlobals(inputs resolvedinput.Inputs) (sessionResolvedGlo
 		return sessionResolvedGlobals{}, err
 	}
 	return sessionResolvedGlobals{
-		server: server, json: jsonOutput, verbose: verbose, debug: debug,
+		server: server, json: jsonOutput, verbose: verbose || debug, debug: debug,
 	}, nil
 }
 

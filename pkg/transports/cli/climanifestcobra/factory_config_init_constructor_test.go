@@ -2,16 +2,23 @@ package climanifestcobra_test
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
 	"io"
+	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/spf13/cobra"
 )
 
@@ -387,6 +394,200 @@ func TestSessionResolvedHandlersRejectInvalidInputsBeforeOperation(t *testing.T)
 	}
 }
 
+func TestSessionResolvedCreatePreservesHumanOutputAndDebugDiagnostics(t *testing.T) {
+	var requests []factoryapi.OpenFactorySessionRequest
+	protocol := newSessionCreateTestProtocol(t, &requests)
+	services := commandregistry.SessionResolvedServices{
+		CreateSession: sessioncli.NewCreate(protocol),
+		Diagnostics:   func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() },
+	}
+
+	stdout, stderr, err := executeResolvedSessionWithOutput(
+		t, services,
+		"--debug", "session", "create", "--dir", "/workspace/fleet",
+		"--init-new-factory",
+		"--target-kind", "named", "--target-name", "alpha",
+	)
+	if err != nil {
+		t.Fatalf("human create Execute() error = %v", err)
+	}
+	if !strings.Contains(stdout, "Opened factory session session-alpha") {
+		t.Fatalf("human create stdout = %q", stdout)
+	}
+	if !strings.Contains(stderr, "session create request") ||
+		!strings.Contains(stderr, "session create response") {
+		t.Fatalf("debug create stderr = %q, want request and response diagnostics", stderr)
+	}
+	assertNamedCreateRequest(t, requests)
+}
+
+func TestSessionResolvedCreatePreservesJSONAndValidationOnly(t *testing.T) {
+	var requests []factoryapi.OpenFactorySessionRequest
+	protocol := newSessionCreateTestProtocol(t, &requests)
+	services := commandregistry.SessionResolvedServices{
+		CreateSession: sessioncli.NewCreate(protocol),
+		Diagnostics:   func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() },
+	}
+
+	stdout, stderr, err := executeResolvedSessionWithOutput(
+		t, services,
+		"--json", "session", "create", "--dir", "/workspace/fleet",
+		"--validate-only",
+	)
+	if err != nil {
+		t.Fatalf("JSON create Execute() error = %v", err)
+	}
+	var response factoryapi.OpenFactorySessionResponse
+	if err := json.Unmarshal([]byte(stdout), &response); err != nil {
+		t.Fatalf("decode JSON create output: %v\n%s", err, stdout)
+	}
+	if response.Session == nil || response.Session.Id != "session-alpha" {
+		t.Fatalf("JSON create response = %#v", response)
+	}
+	if stderr != "" {
+		t.Fatalf("non-diagnostic create stderr = %q", stderr)
+	}
+	if len(requests) != 1 || requests[0].ValidateOnly == nil || !*requests[0].ValidateOnly {
+		t.Fatalf("validate-only create request = %#v", requests)
+	}
+}
+
+func TestSessionResolvedCreateRejectsConflictBeforeOperation(t *testing.T) {
+	calls := 0
+	services := commandregistry.SessionResolvedServices{
+		CreateSession: func(sessioncli.CreateConfig) error {
+			calls++
+			return nil
+		},
+	}
+	stdout, _, err := executeResolvedSessionWithOutput(
+		t, services,
+		"session", "create", "--dir", "/workspace/fleet",
+		"--init-new-factory", "--validate-only",
+	)
+	if err == nil {
+		t.Fatal("mutually exclusive create flags error = nil")
+	}
+	if calls != 0 {
+		t.Fatalf("create operation calls = %d, want 0", calls)
+	}
+	if stdout != "" {
+		t.Fatalf("create validation stdout = %q, want empty", stdout)
+	}
+}
+
+func TestSessionResolvedDeletePreservesExecutableBehavior(t *testing.T) {
+	var deletedPaths []string
+	protocol := newSessionTestHTTPProtocol(t, func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodDelete {
+			t.Fatalf("request method = %s, want DELETE", request.Method)
+		}
+		deletedPaths = append(deletedPaths, request.URL.Path)
+		return sessionTestResponse(http.StatusNoContent, ""), nil
+	})
+	services := commandregistry.SessionResolvedServices{
+		DeleteSession: sessioncli.NewDelete(protocol),
+		Diagnostics:   func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() },
+	}
+
+	stdout, stderr, err := executeResolvedSessionWithOutput(
+		t, services, "--verbose", "session", "delete", "session/beta",
+	)
+	if err != nil {
+		t.Fatalf("human delete Execute() error = %v", err)
+	}
+	if stdout != "Closed factory session session/beta\n" {
+		t.Fatalf("human delete stdout = %q", stdout)
+	}
+	if !strings.Contains(stderr, "session delete request") ||
+		!strings.Contains(stderr, "session delete response") {
+		t.Fatalf("verbose delete stderr = %q, want request and response diagnostics", stderr)
+	}
+
+	stdout, stderr, err = executeResolvedSessionWithOutput(
+		t, services, "--json", "session", "delete", "session-beta",
+	)
+	if err != nil {
+		t.Fatalf("JSON delete Execute() error = %v", err)
+	}
+	var result sessioncli.DeleteResult
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("decode JSON delete output: %v\n%s", err, stdout)
+	}
+	if result.SessionID != "session-beta" {
+		t.Fatalf("JSON delete result = %#v", result)
+	}
+	if stderr != "" {
+		t.Fatalf("non-diagnostic delete stderr = %q", stderr)
+	}
+	if len(deletedPaths) != 2 ||
+		deletedPaths[0] != "/factory-sessions/session%2Fbeta" ||
+		deletedPaths[1] != "/factory-sessions/session-beta" {
+		t.Fatalf("delete paths = %#v", deletedPaths)
+	}
+}
+
+func TestSessionResolvedCreateDeletePreserveOperationFailures(t *testing.T) {
+	operationFailure := errors.New("operation failed")
+	tests := []struct {
+		name     string
+		args     []string
+		services commandregistry.SessionResolvedServices
+		want     error
+	}{
+		{
+			name: "create failure",
+			args: []string{"session", "create", "--dir", "/workspace/fleet"},
+			services: commandregistry.SessionResolvedServices{
+				CreateSession: func(sessioncli.CreateConfig) error { return operationFailure },
+			},
+			want: operationFailure,
+		},
+		{
+			name: "delete cancellation",
+			args: []string{"session", "delete", "session-beta"},
+			services: commandregistry.SessionResolvedServices{
+				DeleteSession: func(sessioncli.DeleteConfig) error { return context.Canceled },
+			},
+			want: context.Canceled,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stdout, _, err := executeResolvedSessionWithOutput(t, test.services, test.args...)
+			if !errors.Is(err, test.want) {
+				t.Fatalf("Execute() error = %v, want %v", err, test.want)
+			}
+			if stdout != "" {
+				t.Fatalf("failure stdout = %q, want empty", stdout)
+			}
+		})
+	}
+
+	calls := 0
+	services := commandregistry.SessionResolvedServices{
+		DeleteSession: func(sessioncli.DeleteConfig) error {
+			calls++
+			return nil
+		},
+	}
+	for _, args := range [][]string{
+		{"session", "delete"},
+		{"session", "delete", "one", "two"},
+	} {
+		stdout, _, err := executeResolvedSessionWithOutput(t, services, args...)
+		if err == nil {
+			t.Fatalf("delete args %v error = nil", args)
+		}
+		if stdout != "" {
+			t.Fatalf("delete args %v stdout = %q, want empty", args, stdout)
+		}
+	}
+	if calls != 0 {
+		t.Fatalf("invalid delete operation calls = %d, want 0", calls)
+	}
+}
+
 func TestSessionCompatibilityInputsRetainResolvedProvenance(t *testing.T) {
 	defaultLocal, defaultInherited := observeSessionCreateInputs(
 		t, "session", "create", "--dir", "fleet",
@@ -482,6 +683,16 @@ func executeResolvedSession(
 	args ...string,
 ) error {
 	t.Helper()
+	_, _, err := executeResolvedSessionWithOutput(t, services, args...)
+	return err
+}
+
+func executeResolvedSessionWithOutput(
+	t *testing.T,
+	services commandregistry.SessionResolvedServices,
+	args ...string,
+) (string, string, error) {
+	t.Helper()
 	manifest := mustSessionManifest(t)
 	registry, err := commandregistry.NewSessionResolvedRegistry(manifest, services)
 	if err != nil {
@@ -491,10 +702,91 @@ func executeResolvedSession(
 	if err != nil {
 		t.Fatalf("NewSessionFamilyCommandFromManifest() error = %v", err)
 	}
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
+	var stdout, stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
 	root.SetArgs(args)
-	return root.Execute()
+	err = root.Execute()
+	return stdout.String(), stderr.String(), err
+}
+
+type sessionTestDoer func(*http.Request) (*http.Response, error)
+
+func (do sessionTestDoer) Do(request *http.Request) (*http.Response, error) {
+	return do(request)
+}
+
+type sessionTestClock struct{}
+
+func (sessionTestClock) Now() time.Time { return time.Unix(1, 0) }
+
+func newSessionTestHTTPProtocol(
+	t *testing.T,
+	do sessionTestDoer,
+) clihttp.Protocol {
+	t.Helper()
+	protocol, err := clihttp.NewProtocol(do, sessionTestClock{})
+	if err != nil {
+		t.Fatalf("NewProtocol() error = %v", err)
+	}
+	return protocol
+}
+
+func newSessionCreateTestProtocol(
+	t *testing.T,
+	requests *[]factoryapi.OpenFactorySessionRequest,
+) clihttp.Protocol {
+	t.Helper()
+	return newSessionTestHTTPProtocol(t, func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodPost || request.URL.Path != "/factory-sessions" {
+			t.Fatalf("request = %s %s", request.Method, request.URL.Path)
+		}
+		var payload factoryapi.OpenFactorySessionRequest
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode create request: %v", err)
+		}
+		*requests = append(*requests, payload)
+		return sessionTestResponse(http.StatusOK, `{
+			"session": {
+				"id": "session-alpha",
+				"project": "alpha",
+				"factoryDir": "/workspace/fleet/alpha",
+				"folderPath": "/workspace/fleet",
+				"isDefault": false,
+				"target": {"kind": "named", "name": "alpha"}
+			}
+		}`), nil
+	})
+}
+
+func assertNamedCreateRequest(
+	t *testing.T,
+	requests []factoryapi.OpenFactorySessionRequest,
+) {
+	t.Helper()
+	if len(requests) != 1 {
+		t.Fatalf("create request count = %d, want 1", len(requests))
+	}
+	request := requests[0]
+	if request.FolderPath != "/workspace/fleet" {
+		t.Fatalf("create folder path = %q", request.FolderPath)
+	}
+	if request.InitNewFactory == nil || !*request.InitNewFactory {
+		t.Fatalf("create initNewFactory = %#v, want true", request.InitNewFactory)
+	}
+	if request.Target == nil ||
+		request.Target.Kind != factoryapi.FactorySessionTargetRefKindNamed ||
+		request.Target.Name == nil || *request.Target.Name != "alpha" {
+		t.Fatalf("create target = %#v, want named alpha", request.Target)
+	}
+}
+
+func sessionTestResponse(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     make(http.Header),
+	}
 }
 
 func assertDefaultResolvedCreate(

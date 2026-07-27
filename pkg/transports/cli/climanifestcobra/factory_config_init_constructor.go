@@ -77,6 +77,7 @@ func NewSessionFamilyCommandFromManifest(
 	if err != nil {
 		return nil, fmt.Errorf("build session family command: %w", err)
 	}
+	root.SilenceUsage = true
 	return root, nil
 }
 
