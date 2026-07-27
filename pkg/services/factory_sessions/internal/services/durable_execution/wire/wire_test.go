@@ -50,14 +50,59 @@ func TestNewServiceDefersRuntimeEffectsUntilInvocation(t *testing.T) {
 	}
 }
 
+func TestNewServiceRoutesDurableStartThroughOwner(t *testing.T) {
+	t.Parallel()
+
+	stub := &executionSpy{}
+	service, err := durableexecutionwire.NewService(stub)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	asyncStarted, err := service.StartAsync(context.Background(), factorysessions.DurableStartRequest{
+		RequestID: "req-async",
+	})
+	if err != nil || asyncStarted.SessionID != "sess-1" || asyncStarted.Status != string(factorysessions.LifecycleStatusRunning) {
+		t.Fatalf("StartAsync = (%#v, %v), want published durable async start result", asyncStarted, err)
+	}
+
+	syncStarted, err := service.StartSync(context.Background(), factorysessions.DurableStartRequest{
+		RequestID: "req-sync",
+	})
+	if err != nil || syncStarted.SessionID != "sess-sync" || syncStarted.SyncOutcome != factorysessions.SyncOutcome("COMPLETED") {
+		t.Fatalf("StartSync = (%#v, %v), want published durable sync start result", syncStarted, err)
+	}
+	if stub.startAsyncCalls != 1 || stub.startSyncCalls != 1 {
+		t.Fatalf("start calls = async %d sync %d, want 1 each", stub.startAsyncCalls, stub.startSyncCalls)
+	}
+}
+
 type executionSpy struct {
 	factorysessions.ExecutionService
-	calls int
+	calls           int
+	startAsyncCalls int
+	startSyncCalls  int
 }
 
 func (s *executionSpy) StartAsync(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
 	s.calls++
-	return factorysessions.AsyncStartResult{SessionID: "sess-1"}, nil
+	s.startAsyncCalls++
+	return factorysessions.AsyncStartResult{
+		SessionID: "sess-1",
+		Status:    string(factorysessions.LifecycleStatusRunning),
+	}, nil
+}
+
+func (s *executionSpy) StartSync(context.Context, factorysessions.StartRequest) (factorysessions.SyncStartResult, error) {
+	s.calls++
+	s.startSyncCalls++
+	return factorysessions.SyncStartResult{
+		AsyncStartResult: factorysessions.AsyncStartResult{
+			SessionID: "sess-sync",
+			Status:    string(factorysessions.LifecycleStatusSucceeded),
+		},
+		SyncOutcome: factorysessions.SyncOutcome("COMPLETED"),
+	}, nil
 }
 
 func (s *executionSpy) GetSession(context.Context, string) (factorysessions.SessionReadResult, error) {
