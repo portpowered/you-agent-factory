@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -225,6 +226,84 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	}}); !errors.Is(err, providersessions.ErrSessionNotFound) {
 		t.Fatalf("Inspect() = %v, want ErrSessionNotFound", err)
 	}
+}
+
+func TestNewForRootsServesPublishedInspectPeerBehavior(t *testing.T) {
+	t.Parallel()
+
+	codexRoot := writeCodexSessionFixture(t, "wire-inspect-1")
+	service, err := NewForRoots(
+		platformfilesystem.Local{},
+		filepath.WalkDir,
+		filepath.EvalSymlinks,
+		filepath.WalkDir,
+		filepath.EvalSymlinks,
+		sql.Open,
+		codexRoot,
+		t.TempDir(),
+	)
+	if err != nil {
+		t.Fatalf("NewForRoots() error = %v", err)
+	}
+	var root providersessions.Service = service
+	ref := providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providersessions.SessionIDKind,
+		ID:       "wire-inspect-1",
+	}
+
+	result, err := root.Inspect(providersessions.InspectRequest{Session: ref})
+	if err != nil {
+		t.Fatalf("Inspect() = %v", err)
+	}
+	if result.Session != ref {
+		t.Fatalf("InspectResult.Session = %#v, want %#v", result.Session, ref)
+	}
+	if strings.TrimSpace(result.Source.RelativePath) == "" {
+		t.Fatalf("InspectResult.Source.RelativePath empty")
+	}
+}
+
+func TestNewForRootsReturnsUnsupportedProviderForUnknownProvider(t *testing.T) {
+	t.Parallel()
+
+	service, err := NewForRoots(
+		platformfilesystem.Local{},
+		filepath.WalkDir,
+		filepath.EvalSymlinks,
+		filepath.WalkDir,
+		filepath.EvalSymlinks,
+		sql.Open,
+		t.TempDir(),
+		t.TempDir(),
+	)
+	if err != nil {
+		t.Fatalf("NewForRoots() error = %v", err)
+	}
+	var root providersessions.Service = service
+
+	_, err = root.Inspect(providersessions.InspectRequest{Session: providers.SessionRef{
+		Provider: "openai",
+		Kind:     providersessions.SessionIDKind,
+		ID:       "session-1",
+	}})
+	if !errors.Is(err, providersessions.ErrUnsupportedProvider) {
+		t.Fatalf("Inspect() = %v, want ErrUnsupportedProvider", err)
+	}
+}
+
+func writeCodexSessionFixture(t *testing.T, sessionID string) string {
+	t.Helper()
+	root := t.TempDir()
+	sessionDir := filepath.Join(root, "2026", "07", "16")
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatalf("mkdir session fixture: %v", err)
+	}
+	path := filepath.Join(sessionDir, "rollout-"+sessionID+".jsonl")
+	if err := os.WriteFile(path, []byte("{\"type\":\"session_meta\"}\n"), 0o600); err != nil {
+		t.Fatalf("write session fixture: %v", err)
+	}
+	return root
 }
 
 func TestNewForRootsRejectsMissingProcessEdges(t *testing.T) {
