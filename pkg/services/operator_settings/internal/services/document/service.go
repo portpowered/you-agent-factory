@@ -14,6 +14,10 @@ import (
 // the operator document behind the parent-private boundary.
 type Service interface {
 	LoadDocument(operatorsettings.LoadDocumentRequest) (operatorsettings.LoadDocumentResult, error)
+	MergeDocumentProviderModel(
+		operatorsettings.Document,
+		operatorsettings.DocumentProviderModelUpdate,
+	) (operatorsettings.Document, error)
 	ApplyDocumentUpdate(
 		operatorsettings.ApplyDocumentUpdateRequest,
 	) (operatorsettings.ApplyDocumentUpdateResult, error)

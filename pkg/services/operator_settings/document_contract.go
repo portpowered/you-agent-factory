@@ -1,6 +1,7 @@
 package operatorsettings
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -235,6 +236,15 @@ type ApplyDocumentUpdateResult struct {
 type PersistDocumentRequest struct {
 	Path     string
 	Document Document
+}
+
+// DocumentOwner is the parent-private document capability consumed by
+// ConfigDocumentService. Wire injects the nested document owner implementation.
+type DocumentOwner interface {
+	LoadDocument(LoadDocumentRequest) (LoadDocumentResult, error)
+	MergeDocumentProviderModel(Document, DocumentProviderModelUpdate) (Document, error)
+	ApplyDocumentUpdate(ApplyDocumentUpdateRequest) (ApplyDocumentUpdateResult, error)
+	PersistDocument(context.Context, PersistDocumentRequest) error
 }
 
 // Validate checks request fields whose validity does not depend on storage state.

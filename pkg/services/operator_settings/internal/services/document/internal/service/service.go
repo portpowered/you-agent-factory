@@ -53,6 +53,16 @@ func (service *Service) LoadDocument(
 	return service.loadDocument(request)
 }
 
+func (service *Service) MergeDocumentProviderModel(
+	document operatorsettings.Document,
+	update operatorsettings.DocumentProviderModelUpdate,
+) (operatorsettings.Document, error) {
+	if service == nil {
+		return operatorsettings.Document{}, errDocumentOwnerUnavailable
+	}
+	return service.mergeProviderModelUpdate(document, update)
+}
+
 func (service *Service) ApplyDocumentUpdate(
 	request operatorsettings.ApplyDocumentUpdateRequest,
 ) (operatorsettings.ApplyDocumentUpdateResult, error) {

@@ -61,14 +61,14 @@ func TestConfigDocumentServicePersist_PreCommitFailuresPreserveDestination(t *te
 		shortWrite bool
 		want       string
 	}{
-		{name: "directory", filePhase: "mkdir", want: "create operator config directory"},
-		{name: "temporary file", tempPhase: "create", want: "create operator config temp file"},
-		{name: "write", tempPhase: "write", want: "write operator config temp file"},
+		{name: "directory", filePhase: "mkdir", want: "create operator document directory"},
+		{name: "temporary file", tempPhase: "create", want: "create operator document temp file"},
+		{name: "write", tempPhase: "write", want: "write operator document temp file"},
 		{name: "short write", shortWrite: true, want: "short write"},
-		{name: "sync", tempPhase: "sync", want: "sync operator config temp file"},
-		{name: "close", tempPhase: "close", want: "close operator config temp file"},
-		{name: "permissions", filePhase: "chmod", want: "set operator config temp file permissions"},
-		{name: "replacement", filePhase: "rename", want: "replace operator config with temp file"},
+		{name: "sync", tempPhase: "sync", want: "sync operator document temp file"},
+		{name: "close", tempPhase: "close", want: "close operator document temp file"},
+		{name: "permissions", filePhase: "chmod", want: "set operator document temp file permissions"},
+		{name: "replacement", filePhase: "rename", want: "replace operator document with temp file"},
 	}
 	for _, phase := range phases {
 		phase := phase
