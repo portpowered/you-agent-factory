@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
@@ -141,11 +142,15 @@ func assertKiroFailureCompletion(
 	want integrationFailureCase,
 ) {
 	t.Helper()
-	if writer.closes != 1 || writer.completion.Response() != nil || len(writer.events) != 0 {
+	if writer.closes != 1 || writer.completion.Response() != nil || len(writer.events) != 1 {
 		t.Fatalf(
-			"completion = %#v, closes = %d, events = %#v; want one failed close",
+			"completion = %#v, closes = %d, events = %#v; want one failed close with one error event",
 			writer.completion, writer.closes, writer.events,
 		)
+	}
+	draft := writer.events[0].Draft()
+	if draft.Kind != workerexecution.KindError || draft.Phase != workerexecution.PhaseFailed {
+		t.Fatalf("failure event = %#v, want synthesized error.failed", draft)
 	}
 	failure := writer.completion.Failure()
 	if failure == nil ||

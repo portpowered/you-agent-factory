@@ -1019,22 +1019,12 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/providers/cli_worktree_passthrough_test.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/providers/codex_content_test.go",
       "target": "providers"
     },
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/providers/codex_worktree_workstation_test.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/providers/cursor_provider_command_test.go",
       "target": "providers"
     },
     {
@@ -1279,11 +1269,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_submit_batch_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/cli_work_move_smoke_test.go",
       "target": "smoke"
     },
@@ -1360,11 +1345,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/service_pipeline_config_helpers_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/stateless_execution_long_test.go",
       "target": "smoke"
     },
     {

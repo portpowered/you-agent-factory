@@ -168,8 +168,12 @@ func TestRegistrySelectedKiroFailureClosesExactlyOnce(t *testing.T) {
 			failure.Message(),
 		)
 	}
-	if len(destination.events) != 0 {
-		t.Fatalf("failure events = %#v, want none", destination.events)
+	if len(destination.events) != 1 {
+		t.Fatalf("failure events = %#v, want one synthesized error event", destination.events)
+	}
+	draft := destination.events[0].Draft()
+	if draft.Kind != workers.KindError || draft.Phase != workers.PhaseFailed {
+		t.Fatalf("failure event = %#v, want synthesized error.failed", draft)
 	}
 }
 

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "gemini-rate-limit",
+  "provider": "gemini",
+  "providerVersion": "fixture-1",
+  "fidelityClass": "final-only",
+  "case": "rate-limit",
+  "stdoutFile": "stdout.txt",
+  "stderrFile": "stderr.txt",
+  "requestFile": "request.json",
+  "processFile": "process.json",
+  "expectedProviderSessionFile": "expected-provider-session.json",
+  "expectedResponseEventsFile": "expected-response-events.ndjson",
+  "expectedInvocationResultFile": "expected-invocation-result.json",
+  "normalizedFields": [
+    "eventId",
+    "recordedAt",
+    "factorySessionId",
+    "runId",
+    "itemId"
+  ],
+  "sanitizerVersion": 1,
+  "source": "sanitized-provider-exec"
+}

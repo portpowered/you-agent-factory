@@ -10,26 +10,34 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
+func projectPublishedCatalog() ([]providers.Descriptor, error) {
+	var catalog publishedProviderCatalog
+	if err := json.Unmarshal(modelproviders.CatalogJSON(), &catalog); err != nil {
+		return nil, fmt.Errorf("parse published provider catalog: %w", err)
+	}
+	return projectManifests(catalog.Providers)
+}
+
 type publishedProviderCatalog struct {
 	Providers []publishedProviderManifest `json:"providers"`
 }
 
 type publishedProviderManifest struct {
-	ID                         string                         `json:"id"`
-	Aliases                    []string                       `json:"aliases"`
-	DisplayName                publishedLocalizedValue        `json:"displayName"`
-	Discovery                  publishedDiscovery             `json:"discovery"`
-	TechnicalSupportLevel      string                         `json:"technicalSupportLevel"`
-	ImplementationAvailability string                         `json:"implementationAvailability"`
-	MaximumExecution           publishedExecutionCapabilities `json:"maximumExecutionCapabilities"`
-	MaximumResponse            publishedResponseCapabilities  `json:"maximumResponseFidelityCapabilities"`
+	Aliases                             []string                       `json:"aliases"`
+	Discovery                           publishedProviderDiscovery     `json:"discovery"`
+	DisplayName                         publishedNameValue             `json:"displayName"`
+	ID                                  string                         `json:"id"`
+	ImplementationAvailability          string                         `json:"implementationAvailability"`
+	MaximumExecutionCapabilities        publishedExecutionCapabilities `json:"maximumExecutionCapabilities"`
+	MaximumResponseFidelityCapabilities publishedResponseCapabilities  `json:"maximumResponseFidelityCapabilities"`
+	TechnicalSupportLevel               string                         `json:"technicalSupportLevel"`
 }
 
-type publishedLocalizedValue struct {
+type publishedNameValue struct {
 	Value string `json:"value"`
 }
 
-type publishedDiscovery struct {
+type publishedProviderDiscovery struct {
 	ConfigurationKeys []string `json:"configurationKeys"`
 	EndpointKinds     []string `json:"endpointKinds"`
 	ExecutableNames   []string `json:"executableNames"`
@@ -56,14 +64,6 @@ type publishedResponseCapabilities struct {
 	ProviderReconnect  bool `json:"providerReconnect"`
 }
 
-func projectPublishedCatalog() ([]providers.Descriptor, error) {
-	var catalog publishedProviderCatalog
-	if err := json.Unmarshal(modelproviders.CatalogJSON(), &catalog); err != nil {
-		return nil, fmt.Errorf("parse embedded provider catalog: %w", err)
-	}
-	return projectManifests(catalog.Providers)
-}
-
 func projectManifests(manifests []publishedProviderManifest) ([]providers.Descriptor, error) {
 	descriptors := make([]providers.Descriptor, 0, len(manifests))
 	for _, manifest := range manifests {
@@ -77,19 +77,6 @@ func projectManifests(manifests []publishedProviderManifest) ([]providers.Descri
 		return descriptors[i].ID.String() < descriptors[j].ID.String()
 	})
 	return descriptors, nil
-}
-
-// ProjectManifestsForTest projects manifests for focused catalog characterization tests.
-func ProjectManifestsForTest(manifests any) ([]providers.Descriptor, error) {
-	encoded, err := json.Marshal(manifests)
-	if err != nil {
-		return nil, err
-	}
-	var published []publishedProviderManifest
-	if err := json.Unmarshal(encoded, &published); err != nil {
-		return nil, err
-	}
-	return projectManifests(published)
 }
 
 func projectManifest(manifest publishedProviderManifest) (providers.Descriptor, error) {
@@ -223,8 +210,8 @@ func prerequisiteSortKey(prerequisite providers.Prerequisite) string {
 }
 
 func projectCapabilities(manifest publishedProviderManifest) []providers.Capability {
-	execution := manifest.MaximumExecution
-	response := manifest.MaximumResponse
+	execution := manifest.MaximumExecutionCapabilities
+	response := manifest.MaximumResponseFidelityCapabilities
 	capabilities := make([]providers.Capability, 0, len(allProviderCapabilities()))
 	appendIf := func(enabled bool, capability providers.Capability) {
 		if enabled {
@@ -249,7 +236,7 @@ func projectCapabilities(manifest publishedProviderManifest) []providers.Capabil
 	return capabilities
 }
 
-func localizedValue(value publishedLocalizedValue) string {
+func localizedValue(value publishedNameValue) string {
 	return strings.TrimSpace(value.Value)
 }
 

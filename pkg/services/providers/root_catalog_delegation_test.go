@@ -53,7 +53,7 @@ func TestRootCatalogDelegation_ConstructionIsInert(t *testing.T) {
 		Provider:  providers.IDCodex,
 		AttemptID: "root-delegation-attempt",
 	})
-	if !errors.Is(err, providers.ErrExecuteFailed) {
-		t.Fatalf("Execute() error = %v, want ErrExecuteFailed until IMP-PROV-02", err)
+	if !errors.Is(err, providers.ErrProviderUnavailable) {
+		t.Fatalf("Execute() error = %v, want ErrProviderUnavailable without an adapter", err)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -177,11 +178,7 @@ func (r *runner) completeExecution(
 			workers.ScriptFailureTypeProcessError,
 			finished,
 		))
-		return failureResult(result, diagnostics), executionFailure(
-			"script command execution failed",
-			runErr,
-			diagnostics,
-		)
+		return failureResult(result, diagnostics), commandStartFailure(runErr, diagnostics)
 	}
 	if result.ExitCode != 0 {
 		r.record(scriptFailureEvent(
@@ -194,6 +191,7 @@ func (r *runner) completeExecution(
 			finished,
 		))
 		return failureResult(result, diagnostics), executionFailure(
+			workers.WorkFailureTypeInternalServerError,
 			nonZeroExitMessage(result),
 			nil,
 			diagnostics,
@@ -253,13 +251,27 @@ func timeoutFailure(cause error, diagnostics *workers.WorkDiagnostics) error {
 	return failure
 }
 
+func commandStartFailure(
+	runErr error,
+	diagnostics *workers.WorkDiagnostics,
+) error {
+	failureType := workers.WorkFailureTypeInternalServerError
+	message := "script command execution failed"
+	if errors.Is(runErr, exec.ErrNotFound) {
+		failureType = workers.WorkFailureTypeMissingExecutable
+		message = "Script executable could not be found."
+	}
+	return executionFailure(failureType, message, runErr, diagnostics)
+}
+
 func executionFailure(
+	failureType workers.WorkFailureType,
 	message string,
 	cause error,
 	diagnostics *workers.WorkDiagnostics,
 ) error {
 	failure := workers.NewProviderError(
-		workers.WorkFailureTypeInternalServerError,
+		failureType,
 		message,
 		cause,
 	)
@@ -415,13 +427,6 @@ func effectiveWorkDir(request workers.RunnerExecutionRequest) string {
 		return request.WorkingDirectory
 	}
 	return request.Worktree
-}
-
-func mergedEnvironment(base []string, overrides map[string]string) []string {
-	return platformprocess.MergeCommandEnv(
-		base,
-		platformprocess.CommandEnvEntriesFromMap(overrides),
-	)
 }
 
 func resolveFactoryScripts(factoryDirectory string, values []string) []string {

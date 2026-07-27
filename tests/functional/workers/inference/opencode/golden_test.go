@@ -32,33 +32,12 @@ const (
 // proves successful structured snapshot outcomes with matching public metadata.
 // golden: docs/temp/functional/provider-sessions/opencode/structured-snapshot-success/manifest.json
 func TestOpenCodeGoldenStructuredSnapshotSuccess(t *testing.T) {
-	repoRoot := testutil.MustRepoRoot(t)
-	caseDir := filepath.Join(
-		repoRoot,
-		filepath.FromSlash(support.ProviderSessionFixturePath("opencode", openCodeStructuredSnapshotGoldenCase)),
+	loaded, request := loadOpenCodeGoldenCase(
+		t,
+		openCodeStructuredSnapshotGoldenCase,
+		"opencode-structured-snapshot-success",
+		support.ProviderSessionFidelitySnapshotOnly,
 	)
-
-	loaded, err := support.LoadProviderSessionCase(caseDir)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionCase: %v", err)
-	}
-	if loaded.Manifest.ID != "opencode-structured-snapshot-success" {
-		t.Fatalf("manifest.ID = %q, want opencode-structured-snapshot-success", loaded.Manifest.ID)
-	}
-	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelitySnapshotOnly {
-		t.Fatalf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, support.ProviderSessionFidelitySnapshotOnly)
-	}
-
-	var request struct {
-		Model     string `json:"model"`
-		SessionID string `json:"session_id"`
-	}
-	if err := json.Unmarshal(loaded.Request, &request); err != nil {
-		t.Fatalf("decode request.json: %v", err)
-	}
-	if request.Model == "" || request.SessionID == "" {
-		t.Fatalf("request.json = %#v, want model and session_id", request)
-	}
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
@@ -127,7 +106,13 @@ func TestOpenCodeGoldenStructuredSnapshotSuccess(t *testing.T) {
 		ResponseEvents:   observeOpenCodeResponseEventGoldens(responseEvents),
 		InvocationResult: observeOpenCodeInvocationResultGolden(inferencePayload, dispatchOutput),
 	}
-	compareOpenCodeGoldens(t, loaded, observed)
+	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
+		var updated *support.ProviderSessionGoldensUpdatedError
+		if errors.As(err, &updated) {
+			t.Fatalf("%v", err)
+		}
+		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
+	}
 }
 
 // TestOpenCodeGoldenFinalOnlyFallback replays a sanitized OpenCode final-only
@@ -136,33 +121,12 @@ func TestOpenCodeGoldenStructuredSnapshotSuccess(t *testing.T) {
 // lifecycle events.
 // golden: docs/temp/functional/provider-sessions/opencode/final-only-fallback/manifest.json
 func TestOpenCodeGoldenFinalOnlyFallback(t *testing.T) {
-	repoRoot := testutil.MustRepoRoot(t)
-	caseDir := filepath.Join(
-		repoRoot,
-		filepath.FromSlash(support.ProviderSessionFixturePath("opencode", openCodeFinalOnlyFallbackGoldenCase)),
+	loaded, request := loadOpenCodeGoldenCase(
+		t,
+		openCodeFinalOnlyFallbackGoldenCase,
+		"opencode-final-only-fallback",
+		support.ProviderSessionFidelityFinalOnly,
 	)
-
-	loaded, err := support.LoadProviderSessionCase(caseDir)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionCase: %v", err)
-	}
-	if loaded.Manifest.ID != "opencode-final-only-fallback" {
-		t.Fatalf("manifest.ID = %q, want opencode-final-only-fallback", loaded.Manifest.ID)
-	}
-	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelityFinalOnly {
-		t.Fatalf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, support.ProviderSessionFidelityFinalOnly)
-	}
-
-	var request struct {
-		Model     string `json:"model"`
-		SessionID string `json:"session_id"`
-	}
-	if err := json.Unmarshal(loaded.Request, &request); err != nil {
-		t.Fatalf("decode request.json: %v", err)
-	}
-	if request.Model == "" || request.SessionID == "" {
-		t.Fatalf("request.json = %#v, want model and session_id", request)
-	}
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
@@ -230,7 +194,13 @@ func TestOpenCodeGoldenFinalOnlyFallback(t *testing.T) {
 		ResponseEvents:   observeOpenCodeResponseEventGoldens(responseEvents),
 		InvocationResult: observeOpenCodeInvocationResultGolden(inferencePayload, dispatchOutput),
 	}
-	compareOpenCodeGoldens(t, loaded, observed)
+	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
+		var updated *support.ProviderSessionGoldensUpdatedError
+		if errors.As(err, &updated) {
+			t.Fatalf("%v", err)
+		}
+		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
+	}
 }
 
 // TestOpenCodeGoldenStructuredFailureAndTimeout replays sanitized OpenCode
@@ -271,33 +241,12 @@ func runOpenCodeFailureGoldenCase(
 ) {
 	t.Helper()
 
-	repoRoot := testutil.MustRepoRoot(t)
-	caseDir := filepath.Join(
-		repoRoot,
-		filepath.FromSlash(support.ProviderSessionFixturePath("opencode", caseName)),
+	loaded, request := loadOpenCodeGoldenCase(
+		t,
+		caseName,
+		manifestID,
+		fidelityClass,
 	)
-
-	loaded, err := support.LoadProviderSessionCase(caseDir)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionCase: %v", err)
-	}
-	if loaded.Manifest.ID != manifestID {
-		t.Fatalf("manifest.ID = %q, want %s", loaded.Manifest.ID, manifestID)
-	}
-	if loaded.Manifest.FidelityClass != fidelityClass {
-		t.Fatalf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, fidelityClass)
-	}
-
-	var request struct {
-		Model     string `json:"model"`
-		SessionID string `json:"session_id"`
-	}
-	if err := json.Unmarshal(loaded.Request, &request); err != nil {
-		t.Fatalf("decode request.json: %v", err)
-	}
-	if request.Model == "" || request.SessionID == "" {
-		t.Fatalf("request.json = %#v, want model and session_id", request)
-	}
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
@@ -332,7 +281,13 @@ func runOpenCodeFailureGoldenCase(
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
 	}
-	assertOpenCodeFailureRunnerCalls(t, runner.CallCount(), wantReason)
+	if wantReason != factoryapi.WorkFailureTypeTimeout {
+		if runner.CallCount() != 3 {
+			t.Fatalf("provider command runner calls = %d, want discovery probes plus one invocation", runner.CallCount())
+		}
+	} else if runner.CallCount() < 4 {
+		t.Fatalf("provider command runner calls = %d, want discovery probes plus retryable timeout attempts", runner.CallCount())
+	}
 
 	inferencePayload := openCodeGoldenFailedInferenceObservation(t, events)
 	if inferencePayload.FailureDetail == nil {
@@ -357,15 +312,6 @@ func runOpenCodeFailureGoldenCase(
 		ResponseEvents:   observeOpenCodeResponseEventGoldens(responseEvents),
 		InvocationResult: observeOpenCodeFailedInvocationResultGolden(inferencePayload),
 	}
-	compareOpenCodeGoldens(t, loaded, observed)
-}
-
-func compareOpenCodeGoldens(
-	t *testing.T,
-	loaded support.ProviderSessionCase,
-	observed support.ProviderSessionObservedGoldens,
-) {
-	t.Helper()
 	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
 		var updated *support.ProviderSessionGoldensUpdatedError
 		if errors.As(err, &updated) {
@@ -375,18 +321,40 @@ func compareOpenCodeGoldens(
 	}
 }
 
-func assertOpenCodeFailureRunnerCalls(
+type openCodeGoldenRequest struct {
+	Model     string `json:"model"`
+	SessionID string `json:"session_id"`
+}
+
+func loadOpenCodeGoldenCase(
 	t *testing.T,
-	callCount int,
-	wantReason factoryapi.WorkFailureType,
-) {
+	caseName string,
+	manifestID string,
+	fidelityClass string,
+) (support.ProviderSessionCase, openCodeGoldenRequest) {
 	t.Helper()
-	if wantReason != factoryapi.WorkFailureTypeTimeout && callCount != 3 {
-		t.Fatalf("provider command runner calls = %d, want discovery probes plus one invocation", callCount)
+	caseDir := filepath.Join(
+		testutil.MustRepoRoot(t),
+		filepath.FromSlash(support.ProviderSessionFixturePath("opencode", caseName)),
+	)
+	loaded, err := support.LoadProviderSessionCase(caseDir)
+	if err != nil {
+		t.Fatalf("LoadProviderSessionCase: %v", err)
 	}
-	if wantReason == factoryapi.WorkFailureTypeTimeout && callCount < 4 {
-		t.Fatalf("provider command runner calls = %d, want discovery probes plus retryable timeout attempts", callCount)
+	if loaded.Manifest.ID != manifestID {
+		t.Fatalf("manifest.ID = %q, want %s", loaded.Manifest.ID, manifestID)
 	}
+	if loaded.Manifest.FidelityClass != fidelityClass {
+		t.Fatalf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, fidelityClass)
+	}
+	var request openCodeGoldenRequest
+	if err := json.Unmarshal(loaded.Request, &request); err != nil {
+		t.Fatalf("decode request.json: %v", err)
+	}
+	if request.Model == "" || request.SessionID == "" {
+		t.Fatalf("request.json = %#v, want model and session_id", request)
+	}
+	return loaded, request
 }
 
 func assertOpenCodeFailureDoesNotLeakSensitiveOutput(

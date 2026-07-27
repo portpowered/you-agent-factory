@@ -35,15 +35,15 @@
       ]
     },
     {
-      "test": "tests/functional/smoke/cli_submit_batch_smoke_test.go::TestSubmitBatch_RealCLIUpsertsToRunningFactory",
-      "stableIds": [
-        "cli/you.submit.batch"
-      ]
-    },
-    {
       "test": "tests/functional/smoke/cli_work_move_smoke_test.go::TestWorkMove_RealCLIMovesSubmittedWork",
       "stableIds": [
         "cli/you.work.move"
+      ]
+    },
+    {
+      "test": "tests/functional/transport/cli/commands/submit_wiring_test.go::TestCLISubmitBatchFile",
+      "stableIds": [
+        "cli/you.submit.batch"
       ]
     },
     {

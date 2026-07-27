@@ -23,7 +23,7 @@
     { "packagePath": "pkg/services/recordings/replay", "fileCount": 19, "owner": "recording-maintainers", "removalReason": "Split replay ingestion, validation, and execution responsibilities." },
     { "packagePath": "pkg/services/work", "fileCount": 42, "owner": "work-maintainers", "removalReason": "Continue extracting Work capabilities into focused child packages." },
     { "packagePath": "pkg/services/workers", "fileCount": 30, "owner": "worker-maintainers", "removalReason": "Continue extracting worker policy and execution capabilities." },
-    { "packagePath": "pkg/transports/cli", "fileCount": 20, "owner": "cli-maintainers", "removalReason": "Move command behavior into focused command packages." },
+    { "packagePath": "pkg/transports/cli", "fileCount": 19, "owner": "cli-maintainers", "removalReason": "Move command behavior into focused command packages." },
     { "packagePath": "pkg/transports/cli/baseline", "fileCount": 20, "owner": "cli-maintainers", "removalReason": "Consolidate baseline command fixtures and split durable behaviors." },
     { "packagePath": "pkg/transports/cli/cliinputs", "fileCount": 16, "owner": "cli-maintainers", "removalReason": "Consolidate input parsing cases or extract stable input domains." },
     { "packagePath": "pkg/transports/cli/factory", "fileCount": 21, "owner": "cli-maintainers", "removalReason": "Split factory commands by lifecycle responsibility." },

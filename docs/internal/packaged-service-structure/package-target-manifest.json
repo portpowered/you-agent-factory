@@ -238,6 +238,10 @@
     "pkg/services/providers/internal/services/catalog",
     "pkg/services/providers/internal/services/catalog/internal/service",
     "pkg/services/providers/internal/services/catalog/wire",
+    "pkg/services/providers/internal/services/execution",
+    "pkg/services/providers/internal/services/execution/internal/service",
+    "pkg/services/providers/internal/services/execution/wire",
+    "pkg/services/providers/internal/testutil/execution",
     "pkg/services/providers/wire",
     "pkg/services/recordings",
     "pkg/services/recordings/artifacts",
@@ -247,6 +251,9 @@
     "pkg/services/recordings/internal/services/projection_query",
     "pkg/services/recordings/internal/services/projection_query/internal/service",
     "pkg/services/recordings/internal/services/projection_query/wire",
+    "pkg/services/recordings/internal/services/recording_lifecycle",
+    "pkg/services/recordings/internal/services/recording_lifecycle/internal/service",
+    "pkg/services/recordings/internal/services/recording_lifecycle/wire",
     "pkg/services/recordings/projections",
     "pkg/services/recordings/projections/dashboard",
     "pkg/services/recordings/replay",
@@ -1371,6 +1378,26 @@
       "destination": "providers/internal/services/catalog"
     },
     {
+      "packagePath": "pkg/services/providers/internal/services/execution",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/service",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/wire",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/testutil/execution",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
       "packagePath": "pkg/services/providers/wire",
       "disposition": "retain",
       "destination": "providers"
@@ -1414,6 +1441,21 @@
       "packagePath": "pkg/services/recordings/internal/services/projection_query/wire",
       "disposition": "retain",
       "destination": "recordings/internal/services/projection_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/recording_lifecycle",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/recording_lifecycle"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/recording_lifecycle/internal/service",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/recording_lifecycle"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/recording_lifecycle/wire",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/recording_lifecycle"
     },
     {
       "packagePath": "pkg/services/recordings/projections",

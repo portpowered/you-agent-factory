@@ -33,13 +33,12 @@ func TestNewInferenceRegistryIsInertAndResolvesDetachedMetadata(t *testing.T) {
 	}
 	config.Worker.Model = "mutated"
 	config.Resources[0].Name = "mutated"
-	mutatedModels := &inferenceConformanceModels{
+	dependencies.Models = &inferenceConformanceModels{
 		calls: &invokeCalls,
 		onInvoke: func() {
 			t.Fatal("mutated dependency was retained")
 		},
 	}
-	dependencies.Models = mutatedModels.InvokeLocal
 	assertInferenceEffectCalls(t, "construction", &invokeCalls, 0)
 
 	first, err := registry.Resolve(runners.ResolutionRequest{
@@ -237,11 +236,11 @@ func (delegate *inferenceConformanceDelegate) Execute(
 }
 
 func inferenceDependencies(
-	modelsEdge *inferenceConformanceModels,
+	modelsEdge inference.LocalInvoker,
 	delegate workers.Runner,
 ) runners.InferenceDependencies {
 	return runners.InferenceDependencies{
-		Models:   modelsEdge.InvokeLocal,
+		Models:   modelsEdge,
 		Delegate: delegate,
 	}
 }

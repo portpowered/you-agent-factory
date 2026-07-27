@@ -342,16 +342,12 @@ func resolveInferenceRunner(
 	factoryCfg *factorydefinitions.FactoryConfig,
 	workerCfg *factorydefinitions.FactoryWorkerConfig,
 ) workers.Runner {
-	if modelsService == nil {
-		return inner
-	}
-	invoke := runners.InferenceLocalInvoker(modelsService.InvokeLocal)
 	if factoryCfg == nil {
-		return runnerswire.NewInferenceCompositionRunner(inner, invoke, workerCfg, nil)
+		return runnerswire.NewInferenceCompositionRunner(inner, modelsService, workerCfg, nil)
 	}
 	return runnerswire.NewInferenceCompositionRunner(
 		inner,
-		invoke,
+		modelsService,
 		workerCfg,
 		factoryCfg.Resources,
 	)

@@ -42,11 +42,11 @@ func classifyPiRetryFailure(input adapter.FailureContext) adapter.FailureResult 
 }
 
 func classifyPiExecutionFailure(input adapter.FailureContext) adapter.FailureResult {
-	if errors.Is(input.CommandError, context.Canceled) || input.FlushReason == adapter.FlushReasonCanceled {
-		return normalizedFailureResult(workerexecution.WorkFailureTypeUnknown, "Pi execution was canceled.", nil)
-	}
 	if errors.Is(input.CommandError, context.DeadlineExceeded) || input.CommandResult.ExitCode == 124 {
 		return normalizedFailureResult(workerexecution.WorkFailureTypeTimeout, "Pi execution timed out.", nil)
+	}
+	if errors.Is(input.CommandError, context.Canceled) || input.FlushReason == adapter.FlushReasonCanceled {
+		return normalizedFailureResult(workerexecution.WorkFailureTypeUnknown, "Pi execution was canceled.", nil)
 	}
 	if input.CommandError != nil || input.CommandResult.ExitCode != 0 {
 		return normalizedFailureResult(workerexecution.WorkFailureTypeUnknown, "Pi invocation failed.", nil)
