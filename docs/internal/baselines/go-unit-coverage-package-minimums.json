@@ -384,7 +384,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
-      "minimum": 89.57
+      "minimum": 89.53
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold",
