@@ -116,10 +116,7 @@ func (s *Server) requireFactoryDefinitionAPI(w http.ResponseWriter) (apisurface.
 }
 
 func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, params factoryapi.ListFactorySessionsParams) {
-	raw, err := factorysession.ListSessionsRequestFromAPI(params)
-	if err == nil {
-		raw, err = s.sessionRequests.PrepareListSessions(raw)
-	}
+	raw, err := decodeListFactorySessionsRequest(params, s.sessionRequests)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 		return
@@ -157,7 +154,7 @@ func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessi
 	}
 
 	if s.sessionsRoot != nil {
-		projection, err := s.sessionsRoot.GetFactorySession(r.Context(), string(sessionID))
+		projection, err := s.sessionsRoot.GetFactorySession(r.Context(), decodeGetFactorySessionRequest(sessionID))
 		if err != nil {
 			if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
 				s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")

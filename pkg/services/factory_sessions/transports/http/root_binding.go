@@ -52,10 +52,7 @@ func (noopRequestPreparation) PrepareInterruptDispatch(request factorysessions.I
 	return request, nil
 }
 func (noopRequestPreparation) PrepareListSessions(request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error) {
-	if request.Scope == "" {
-		request.Scope = factorysessions.DefaultSessionListScope
-	}
-	return request, nil
+	return normalizeListSessionsScope(request)
 }
 func (noopRequestPreparation) PrepareResult(request factorysessions.ResultRequest) (factorysessions.ResultRequest, error) {
 	return request, nil
