@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,16 +16,14 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/goal"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const (
 	runWiringWorkTypeName              = "prompt-task"
 	runWiringNamedFactoryName          = "alpha"
-	runWiringNamedFactoryWorkID          = "run-wiring-named-factory-work"
 	runWiringPackagedGoalSummaryResult = "mock worker accepted"
 )
 
@@ -40,7 +37,7 @@ func TestCLIRunNamedFactory(t *testing.T) {
 	t.Run("named_from_unrelated_working_directory", func(t *testing.T) {
 		homeDir := t.TempDir()
 		sourceDir := support.ScaffoldFactory(t, runWiringFactoryConfig())
-		namedFactoryDir := support.CreateNamedFactory(
+		support.CreateNamedFactory(
 			t,
 			homeDir,
 			sourceDir,
@@ -49,12 +46,6 @@ func TestCLIRunNamedFactory(t *testing.T) {
 		)
 
 		prompt := fmt.Sprintf("functional-run-wiring-named-%d", time.Now().UnixNano())
-		testutil.WriteSeedRequest(t, namedFactoryDir, work.SubmitRequest{
-			WorkID:     runWiringNamedFactoryWorkID,
-			WorkTypeID: runWiringWorkTypeName,
-			TraceID:    "run-wiring-named-factory-trace",
-			Payload:    []byte(prompt),
-		})
 
 		port, err := reserveRunWiringLocalTCPPort()
 		if err != nil {
@@ -75,11 +66,10 @@ func TestCLIRunNamedFactory(t *testing.T) {
 			"--named", runWiringNamedFactoryName,
 			"--with-mock-workers",
 			"--no-record",
-			"--with-server",
 			"--server", baseURL,
-			"--continuously",
 			"--quiet",
 			mockWorkersPath,
+			prompt,
 		)
 		cmd.Dir = unrelatedWorkingDir
 		cmd.Env = runWiringCustomerHomeEnvironment(homeDir)
@@ -88,48 +78,28 @@ func TestCLIRunNamedFactory(t *testing.T) {
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 
-		if err := cmd.Start(); err != nil {
-			t.Fatalf("start you run --named %s: %v", runWiringNamedFactoryName, err)
-		}
-
-		waitCh := make(chan error, 1)
-		go func() {
-			waitCh <- cmd.Wait()
-		}()
-
-		item, err := waitForRunWiringNamedFactoryWorkComplete(
-			ctx,
-			baseURL,
-			runWiringWorkTypeName,
-			runWiringNamedFactoryWorkID,
-			20*time.Second,
-		)
-		if err != nil {
-			if waitErr := <-waitCh; waitErr != nil {
-				t.Fatalf(
-					"wait for completed named-factory work: %v\nyou run --named: %v\nstdout:\n%s\nstderr:\n%s",
-					err,
-					waitErr,
-					stdout.String(),
-					stderr.String(),
-				)
-			}
+		if err := cmd.Run(); err != nil {
 			t.Fatalf(
-				"wait for completed named-factory work: %v\nstdout:\n%s\nstderr:\n%s",
+				"you run --named %s: %v\nstdout:\n%s\nstderr:\n%s",
+				runWiringNamedFactoryName,
 				err,
 				stdout.String(),
 				stderr.String(),
 			)
 		}
-		if runWiringStringPointerValue(item.WorkTypeName) != runWiringWorkTypeName {
-			t.Fatalf("work type = %q, want %q", runWiringStringPointerValue(item.WorkTypeName), runWiringWorkTypeName)
+		if got := stdout.String(); got != runWiringPackagedGoalSummaryResult {
+			t.Fatalf(
+				"stdout = %q, want summary primary result %q",
+				got,
+				runWiringPackagedGoalSummaryResult,
+			)
 		}
-		if !runWiringWorkContentIncludes(item, runWiringPackagedGoalSummaryResult) {
-			t.Fatalf("work content = %#v, want mock worker result", item.Content)
+		if strings.Contains(stdout.String(), prompt) {
+			t.Fatalf("stdout echoed submitted prompt text %q", prompt)
 		}
-
-		cancel()
-		_ = <-waitCh
+		if stderr.Len() != 0 {
+			t.Fatalf("stderr = %q, want empty stderr on successful named run", stderr.String())
+		}
 	})
 
 	t.Run("packaged_goal_summary_primary_result", func(t *testing.T) {
@@ -292,6 +262,8 @@ func TestCLIRunFactoryByPath(t *testing.T) {
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty stderr on successful path run", stderr.String())
 	}
+
+	functionalevidence.Covers(t, "cli/you.run")
 }
 
 func runWiringFactoryConfigWithoutDefault() map[string]any {
@@ -432,121 +404,4 @@ func reserveRunWiringLocalTCPPort() (int, error) {
 		return 0, fmt.Errorf("unexpected listener address type %T", listener.Addr())
 	}
 	return addr.Port, nil
-}
-
-func waitForRunWiringNamedFactoryWorkComplete(
-	ctx context.Context,
-	baseURL string,
-	workTypeName string,
-	wantWorkID string,
-	timeout time.Duration,
-) (factoryapi.Work, error) {
-	client := &http.Client{Timeout: 2 * time.Second}
-	deadline := time.Now().Add(timeout)
-	var lastResults []factoryapi.Work
-
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-			return factoryapi.Work{}, ctx.Err()
-		default:
-		}
-
-		req, err := http.NewRequestWithContext(
-			ctx,
-			http.MethodGet,
-			support.DefaultSessionWorkURL(baseURL, "/work"),
-			nil,
-		)
-		if err != nil {
-			return factoryapi.Work{}, err
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			select {
-			case <-ctx.Done():
-				return factoryapi.Work{}, ctx.Err()
-			case <-time.After(10 * time.Millisecond):
-				continue
-			}
-		}
-
-		var workList factoryapi.ListWorkResponse
-		decodeErr := json.NewDecoder(resp.Body).Decode(&workList)
-		_ = resp.Body.Close()
-		if decodeErr != nil {
-			return factoryapi.Work{}, decodeErr
-		}
-		if resp.StatusCode != http.StatusOK {
-			return factoryapi.Work{}, fmt.Errorf("GET /work status = %d", resp.StatusCode)
-		}
-		lastResults = append(lastResults[:0], workList.Results...)
-
-		for _, item := range workList.Results {
-			if runWiringStringPointerValue(item.WorkTypeName) != workTypeName {
-				continue
-			}
-			if runWiringWorkStateName(item.State) != "complete" {
-				continue
-			}
-			if runWiringWorkStateType(item.State) != factoryapi.WorkStateTypeTERMINAL {
-				continue
-			}
-			if runWiringStringPointerValue(item.WorkId) != wantWorkID {
-				continue
-			}
-			return item, nil
-		}
-
-		select {
-		case <-ctx.Done():
-			return factoryapi.Work{}, ctx.Err()
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
-
-	lastResultsJSON, _ := json.Marshal(lastResults)
-	return factoryapi.Work{}, fmt.Errorf(
-		"timed out waiting for completed %q work %q; last results: %s",
-		workTypeName,
-		wantWorkID,
-		lastResultsJSON,
-	)
-}
-
-func runWiringWorkContentIncludes(item factoryapi.Work, wantText string) bool {
-	if item.Content == nil {
-		return false
-	}
-	for _, part := range *item.Content {
-		textPart, err := part.AsWorkTextContentPart()
-		if err != nil {
-			continue
-		}
-		if textPart.Text == wantText {
-			return true
-		}
-	}
-	return false
-}
-
-func runWiringWorkStateName(state *factoryapi.WorkState) string {
-	if state == nil {
-		return ""
-	}
-	return state.Name
-}
-
-func runWiringWorkStateType(state *factoryapi.WorkState) factoryapi.WorkStateType {
-	if state == nil {
-		return ""
-	}
-	return state.Type
-}
-
-func runWiringStringPointerValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }
