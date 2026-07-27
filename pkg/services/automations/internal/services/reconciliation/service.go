@@ -10,8 +10,38 @@ import (
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 )
 
-// Service computes detached convergence outcomes without applying source
-// effects. Lifecycle supervision remains a separate explicit operation.
+// Service owns detached reconciliation decisions and explicit source
+// lifecycle operations. Only lifecycle commands can apply supervision effects.
 type Service interface {
 	Reconcile(context.Context, automations.ReconcileRequest) (automations.ReconcileResult, error)
+	StartSource(context.Context, automations.StartSourceRequest) (automations.StartSourceResult, error)
+	StopSource(context.Context, automations.StopSourceRequest) (automations.StopSourceResult, error)
+	WaitSource(context.Context, automations.WaitSourceRequest) (automations.WaitSourceResult, error)
+	SourceStatus(context.Context, automations.SourceStatusRequest) (automations.SourceStatusResult, error)
+}
+
+// Effects applies source-specific lifecycle effects without owning
+// reconciliation policy. Wait observes one already-started transition; it must
+// not activate or stop a source.
+type Effects struct {
+	Start func(context.Context, StartEffect) error
+	Stop  func(context.Context, StopEffect) error
+	Wait  func(context.Context, WaitEffect) (automations.SourceObservation, error)
+}
+
+// StartEffect identifies the one logical source activation to apply.
+type StartEffect struct {
+	Kind        string
+	Observation automations.SourceObservation
+}
+
+// StopEffect identifies the one logical source deactivation to apply.
+type StopEffect struct {
+	Observation automations.SourceObservation
+}
+
+// WaitEffect identifies the transition whose latest observation is requested.
+type WaitEffect struct {
+	Desired     automations.DesiredLifecycleState
+	Observation automations.SourceObservation
 }

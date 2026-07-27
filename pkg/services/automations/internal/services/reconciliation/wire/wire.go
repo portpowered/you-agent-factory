@@ -6,8 +6,12 @@ import (
 	reconciliationservice "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/internal/service"
 )
 
-// NewService constructs an inert reconciliation service. Reconciliation is
-// pure and therefore has no effect dependencies to inject.
-func NewService() reconciliation.Service {
-	return reconciliationservice.New()
+// NewService constructs an inert reconciliation service with optional narrow
+// lifecycle effects. Construction never invokes the supplied functions.
+func NewService(effects ...reconciliation.Effects) reconciliation.Service {
+	var supervision reconciliation.Effects
+	if len(effects) > 0 {
+		supervision = effects[0]
+	}
+	return reconciliationservice.New(supervision)
 }

@@ -7,18 +7,27 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 )
 
-type service struct{}
+type service struct {
+	effects reconciliation.Effects
+
+	recordsMu sync.RWMutex
+	records   map[identityKey]*sourceRecord
+}
 
 var _ reconciliation.Service = (*service)(nil)
 
 // New constructs an inert deterministic reconciliation service.
-func New() reconciliation.Service {
-	return &service{}
+func New(effects reconciliation.Effects) reconciliation.Service {
+	return &service{
+		effects: effects,
+		records: make(map[identityKey]*sourceRecord),
+	}
 }
 
 func (*service) Reconcile(
