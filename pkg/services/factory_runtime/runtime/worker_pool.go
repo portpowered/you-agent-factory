@@ -191,11 +191,13 @@ func validObservationScope(scope factory.ObservationScope) bool {
 }
 
 type workerPool struct {
-	runners  map[string]*workerRunner
-	resultCh chan workerexecution.WorkResult
-	logger   logging.Logger
-	mu       sync.RWMutex
-	clock    factory.Clock
+	runners   map[string]*workerRunner
+	resultCh  chan workerexecution.WorkResult
+	logger    logging.Logger
+	mu        sync.RWMutex
+	clock     factory.Clock
+	runCtx    context.Context
+	runCancel context.CancelFunc
 }
 
 func newWorkerPool(logger logging.Logger, clock factory.Clock) *workerPool {
@@ -239,17 +241,37 @@ func (p *workerPool) Dispatch(workerType string, dispatch work.WorkDispatch) boo
 func (p *workerPool) ResultCh() <-chan workerexecution.WorkResult { return p.resultCh }
 
 func (p *workerPool) Start() {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	p.mu.Lock()
+	if p.runCancel == nil {
+		p.runCtx, p.runCancel = context.WithCancel(context.Background())
+	}
+	runCtx := p.runCtx
+	runners := make([]*workerRunner, 0, len(p.runners))
 	for _, runner := range p.runners {
+		runner.runCtx = runCtx
+		runners = append(runners, runner)
+	}
+	p.mu.Unlock()
+	for _, runner := range runners {
 		runner.Start()
 	}
 }
 
 func (p *workerPool) Stop() {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	p.mu.Lock()
+	cancel := p.runCancel
+	p.runCancel = nil
+	p.runCtx = nil
+	runners := make([]*workerRunner, 0, len(p.runners))
 	for _, runner := range p.runners {
+		runner.runCtx = nil
+		runners = append(runners, runner)
+	}
+	p.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	for _, runner := range runners {
 		runner.Stop()
 	}
 }
@@ -262,6 +284,7 @@ type workerRunner struct {
 	resultCh   chan<- workerexecution.WorkResult
 	stopOnce   sync.Once
 	clock      factory.Clock
+	runCtx     context.Context
 }
 
 func newWorkerRunner(
@@ -329,7 +352,11 @@ func (r *workerRunner) execute(dispatch work.WorkDispatch) (result workerexecuti
 			"worker_type", r.workerType,
 			"transition_id", dispatch.TransitionID,
 			"dispatch_id", dispatch.DispatchID)...)
-	result, err := r.executor.Execute(context.Background(), dispatch)
+	execCtx := context.Background()
+	if r.runCtx != nil {
+		execCtx = r.runCtx
+	}
+	result, err := r.executor.Execute(execCtx, dispatch)
 	elapsed := r.clock.Now().Sub(start)
 	if err != nil {
 		r.logger.Error("runner: execution error",
