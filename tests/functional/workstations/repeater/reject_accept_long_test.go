@@ -8,7 +8,9 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -33,4 +35,213 @@ func TestRepeater_RefiresOnRejectedStopsOnAccepted(t *testing.T) {
 		t.Errorf("exec-worker call count = %d, want 3 reject-then-accept iterations", provider.CallCount("exec-worker"))
 	}
 	assertRepeaterWorkStates(t, listed, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
+}
+
+// TestWorkstationStopWords_ThroughCustomerProcess proves that each configured
+// stop word accepts or rejects Work through the customer process boundary,
+// including factory-json, frontmatter, and workstation override policies.
+func TestWorkstationStopWords_ThroughCustomerProcess(t *testing.T) {
+	support.SkipLongFunctional(t, "slow workstation stop-word customer-boundary sweep")
+
+	tests := []struct {
+		name        string
+		fixture     string
+		title       string
+		response    string
+		wantPlace   string
+		emptyPlaces []string
+	}{
+		{
+			name: "FactoryJSON_Success", fixture: "workstation_stopwords_factory_dir",
+			title: "factory stop word success", response: "Work completed successfully. COMPLETE",
+			wantPlace: "task:complete", emptyPlaces: []string{"task:init", "task:failed"},
+		},
+		{
+			name: "FactoryJSON_SecondWord", fixture: "workstation_stopwords_factory_dir",
+			title: "factory stop word second", response: "All tasks finished. DONE",
+			wantPlace: "task:complete", emptyPlaces: []string{"task:init", "task:failed"},
+		},
+		{
+			name: "FactoryJSON_Failure", fixture: "workstation_stopwords_factory_dir",
+			title: "factory stop word failure", response: "I tried but could not finish the work",
+			wantPlace: "task:failed", emptyPlaces: []string{"task:init", "task:complete"},
+		},
+		{
+			name: "Frontmatter_Success", fixture: "workstation_stopwords_frontmatter_dir",
+			title: "frontmatter stop word success", response: "Work completed successfully. COMPLETE",
+			wantPlace: "task:complete", emptyPlaces: []string{"task:init", "task:failed"},
+		},
+		{
+			name: "Frontmatter_SecondWord", fixture: "workstation_stopwords_frontmatter_dir",
+			title: "frontmatter stop word second", response: "All tasks finished. DONE",
+			wantPlace: "task:complete", emptyPlaces: []string{"task:init", "task:failed"},
+		},
+		{
+			name: "Frontmatter_Failure", fixture: "workstation_stopwords_frontmatter_dir",
+			title: "frontmatter stop word failure", response: "I tried but could not finish the work",
+			wantPlace: "task:failed", emptyPlaces: []string{"task:init", "task:complete"},
+		},
+		{
+			name: "Override_StationAcceptsWorkerRejects", fixture: "workstation_stopwords_override_dir",
+			title: "station overrides worker", response: "The work is finished. STATION_COMPLETE",
+			wantPlace: "task:complete", emptyPlaces: []string{"task:init", "task:failed"},
+		},
+		{
+			name: "Override_StationRejectsWorkerAccepts", fixture: "workstation_stopwords_override_dir",
+			title: "station rejects worker accepts", response: "The work is done. WORKER_COMPLETE",
+			wantPlace: "task:failed", emptyPlaces: []string{"task:init", "task:complete"},
+		},
+		{
+			name: "Override_BothMatch", fixture: "workstation_stopwords_override_dir",
+			title: "both match", response: "WORKER_COMPLETE and STATION_COMPLETE",
+			wantPlace: "task:complete", emptyPlaces: []string{"task:failed"},
+		},
+		{
+			name: "Override_NeitherMatch", fixture: "workstation_stopwords_override_dir",
+			title: "neither match", response: "I tried but could not finish the work",
+			wantPlace: "task:failed", emptyPlaces: []string{"task:complete"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, test.fixture))
+			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"`+test.title+`"}`))
+			provider := testutil.NewMockProvider(
+				workerexecution.InferenceResponse{Content: test.response},
+			)
+
+			_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
+			if got := support.CountWorkAtCustomerState(listed, test.wantPlace); got != 1 {
+				t.Errorf("%s token count = %d, want 1", test.wantPlace, got)
+			}
+			for _, placeID := range test.emptyPlaces {
+				if got := support.CountWorkAtCustomerState(listed, placeID); got != 0 {
+					t.Errorf("%s token count = %d, want 0", placeID, got)
+				}
+			}
+		})
+	}
+}
+
+// TestMultiOutput_WithStopWord proves that multi-output fan-out completes plan
+// and task Work when the planner output includes a configured stop word.
+func TestMultiOutput_WithStopWord(t *testing.T) {
+	support.SkipLongFunctional(t, "slow multi-output stop-word workflow sweep")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_dir"))
+	testutil.WriteSeedFile(t, dir, "request", []byte(`{"title": "Multi-output with stop word"}`))
+
+	provider := testutil.NewMockProvider(
+		workerexecution.InferenceResponse{Content: "Here is the plan and tasks. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
+	)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertRepeaterWorkStates(t, listed, map[string]int{
+		"plan:complete": 1, "task:complete": 1, "request:init": 0, "request:failed": 0,
+	})
+}
+
+// TestMultiOutput_WithoutStopWord proves that missing a required stop word
+// fails the request Work and leaves downstream plan and task Work uninitiated.
+func TestMultiOutput_WithoutStopWord(t *testing.T) {
+	support.SkipLongFunctional(t, "slow multi-output failure routing sweep")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_dir"))
+	testutil.WriteSeedFile(t, dir, "request", []byte(`{"title": "Multi-output without stop word"}`))
+
+	provider := testutil.NewMockProvider(
+		workerexecution.InferenceResponse{Content: "I tried but could not finish"},
+	)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertRepeaterWorkStates(t, listed, map[string]int{
+		"request:failed": 1, "plan:init": 0, "task:init": 0, "plan:complete": 0, "task:complete": 0,
+	})
+}
+
+// TestMultiOutput_NoStopWordsConfigured proves that multi-output fan-out still
+// completes plan and task Work when no stop words are configured on the factory.
+func TestMultiOutput_NoStopWordsConfigured(t *testing.T) {
+	support.SkipLongFunctional(t, "slow multi-output no-stopword harness sweep")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_no_stopwords_dir"))
+	testutil.WriteSeedFile(t, dir, "request", []byte(`{"title": "Multi-output no stop words"}`))
+
+	provider := testutil.NewMockProvider(
+		workerexecution.InferenceResponse{Content: "planner output COMPLETE"},
+		workerexecution.InferenceResponse{Content: "finisher output COMPLETE"},
+		workerexecution.InferenceResponse{Content: "finisher output COMPLETE"},
+	)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertRepeaterWorkStates(t, listed, map[string]int{
+		"plan:complete": 1, "task:complete": 1, "request:init": 0, "request:failed": 0,
+	})
+}
+
+// TestMultiOutput_SecondStopWord proves that an alternate configured stop word
+// also accepts multi-output fan-out and completes plan and task Work.
+func TestMultiOutput_SecondStopWord(t *testing.T) {
+	support.SkipLongFunctional(t, "slow multi-output alternate stop-word sweep")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_dir"))
+	testutil.WriteSeedFile(t, dir, "request", []byte(`{"title": "Second stop word"}`))
+
+	provider := testutil.NewMockProvider(
+		workerexecution.InferenceResponse{Content: "All tasks generated. DONE"},
+		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
+	)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertRepeaterWorkStates(t, listed, map[string]int{"plan:complete": 1, "task:complete": 1})
+}
+
+// TestMultiOutput_OutputTokensInheritInputLineage proves that successful
+// multi-output fan-out preserves input trace identity on completed plan and
+// task Work observed through the public list surface.
+func TestMultiOutput_OutputTokensInheritInputLineage(t *testing.T) {
+	support.SkipLongFunctional(t, "slow multi-output lineage propagation sweep")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_dir"))
+
+	inputTraceID := "trace-lineage-test"
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "request",
+		Payload:    []byte(`{"title": "Lineage test"}`),
+		TraceID:    inputTraceID,
+	})
+
+	provider := testutil.NewMockProvider(
+		workerexecution.InferenceResponse{Content: "Plan generated. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
+	)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ProviderOverride: provider,
+	}, 10*time.Second)
+	assertRepeaterWorkStates(t, listed, map[string]int{"plan:complete": 1, "task:complete": 1})
+	assertListedLineage(t, listed, map[string]string{"plan": inputTraceID, "task": inputTraceID})
+}
+
+func assertListedLineage(t *testing.T, response factoryapi.ListWorkResponse, wants map[string]string) {
+	t.Helper()
+	seen := map[string]bool{}
+	for _, item := range response.Results {
+		if item.State == nil || item.State.Name != "complete" || item.WorkTypeName == nil {
+			continue
+		}
+		want, ok := wants[*item.WorkTypeName]
+		if !ok {
+			continue
+		}
+		if item.TraceId == nil || *item.TraceId != want {
+			t.Errorf("%s complete trace ID = %#v, want %q", *item.WorkTypeName, item.TraceId, want)
+		}
+		seen[*item.WorkTypeName] = true
+	}
+	for workType := range wants {
+		if !seen[workType] {
+			t.Errorf("listed Work missing %s:complete", workType)
+		}
+	}
 }
