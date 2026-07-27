@@ -144,7 +144,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIRunNamedFactory` covers packaged/named Factory resolution.
   - `TestCLIRunInvalidFactoryReturnsValidationFailure` covers load failure.
 
-- [ ] `tests/functional/transport/cli/commands/submit_wiring_test.go`
+- [x] `tests/functional/transport/cli/commands/submit_wiring_test.go`
   - `TestCLISubmitBatchInlineJSON` covers inline canonical batch input.
   - `TestCLISubmitBatchFile` covers a file path.
   - `TestCLISubmitUnavailableServer` covers connection failure and exit code.
@@ -226,7 +226,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestScriptWorkerNonZeroExitMapsToFailedOutcome`.
   - `TestScriptWorkerCancellationTerminatesChildProcess`.
 
-- [ ] `tests/functional/workers/script/environment_test.go`
+- [x] `tests/functional/workers/script/environment_test.go`
   - `TestScriptWorkerReceivesDeclaredEnvironmentOnly`.
   - `TestScriptWorkerMissingExecutableFailsActionably`.
 
@@ -269,7 +269,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCodexGoldenStructuredFailure` replays a non-zero structured failure.
   - `TestCodexGoldenTimeoutHasNoFalseTerminalMessage` covers timeout.
 
-- [ ] `tests/functional/workers/inference/claude/golden_success_test.go`
+- [x] `tests/functional/workers/inference/claude/golden_success_test.go`
   - `TestClaudeGoldenFullStreamTextSuccess` covers deltas and final snapshot.
   - `TestClaudeGoldenToolLifecycleAndSessionIdentity` covers tools/session.
 
@@ -300,7 +300,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestKiroGoldenAuthAndStructuredFailure`.
   - `TestKiroGoldenTimeout`.
 
-- [ ] `tests/functional/workers/inference/pi/golden_test.go`
+- [x] `tests/functional/workers/inference/pi/golden_test.go`
   - `TestPiGoldenTextSuccess`.
   - `TestPiGoldenStructuredFailure`.
   - `TestPiGoldenTimeout`.
@@ -342,7 +342,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### JavaScript composition primitives
 
-- [ ] `tests/functional/orchestration/javascript/composition/agent_test.go`
+- [x] `tests/functional/orchestration/javascript/composition/agent_test.go`
   - `TestJavaScriptAgentReturnsUnaryResult` covers one child dispatch.
   - `TestJavaScriptAgentFailureReturnsStableFailureRecord` covers error.
 
@@ -354,7 +354,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestJavaScriptNamedStagesExposeOrderedProgress` covers stage identity.
   - `TestJavaScriptEmptyStageProducesDocumentedResult` covers edge behavior.
 
-- [ ] `tests/functional/orchestration/javascript/composition/parallel_test.go`
+- [x] `tests/functional/orchestration/javascript/composition/parallel_test.go`
   - `TestJavaScriptParallelDispatchesChildrenConcurrently` observes active
     external calls without sleeps.
   - `TestJavaScriptParallelPreservesDeclaredResultOrdering` covers determinism.

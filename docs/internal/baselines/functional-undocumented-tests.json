@@ -520,27 +520,11 @@
     },
     {
       "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptExecutorDropsResourceTokensFromArgTemplates"
-    },
-    {
-      "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptExecutorOrdersMultipleInputsByWorkstationConfigWithResources"
-    },
-    {
-      "file": "providers/cli_template_resolution_long_test.go",
       "name": "TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates"
     },
     {
       "file": "providers/cli_template_resolution_long_test.go",
       "name": "TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates"
-    },
-    {
-      "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptWrapDropsResourceTokensFromWorkstationTemplates"
-    },
-    {
-      "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptWrapOrdersMultipleInputsByWorkstationConfigWithResources"
     },
     {
       "file": "providers/cli_timeout_cleanup_smoke_test.go",
@@ -1305,10 +1289,6 @@
     {
       "file": "smoke/cli_run_mode_compat_smoke_test.go",
       "name": "TestRunModeCompat_RealCLIOperatorContinuousRunReportsStartupOutputWithoutQuiet"
-    },
-    {
-      "file": "smoke/cli_submit_batch_smoke_test.go",
-      "name": "TestSubmitBatch_RealCLIUpsertsToRunningFactory"
     },
     {
       "file": "smoke/cli_work_move_smoke_test.go",

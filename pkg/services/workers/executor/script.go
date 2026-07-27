@@ -246,8 +246,10 @@ func scriptWorkResult(
 	if errors.As(executionErr, &providerErr) {
 		// Preserve the established workstation retry boundary: ordinary script
 		// exit and process failures are terminal Work results, while timeouts
-		// retain their explicit retryable metadata.
-		if providerErr.Type == workers.WorkFailureTypeTimeout {
+		// retain their explicit retryable metadata. Missing-executable metadata
+		// is terminal and is surfaced for public dispatch failure details.
+		if providerErr.Type == workers.WorkFailureTypeTimeout ||
+			providerErr.Type == workers.WorkFailureTypeMissingExecutable {
 			result.FailureMetadata = &workers.WorkFailureMetadata{
 				Family: providerErr.Family,
 				Type:   providerErr.Type,

@@ -379,7 +379,14 @@ primary-result behavior.
   `tests/functional/workers/inference/failure_normalization_test.go`; drive
   command-backed failures through `root.BuildProcess` with
   `serviceedges.Edges{ProviderCommandRunner: ...}` and assert on Work,
-  Factory Event, and Provider Session surfaces only.
+  Factory Event, and Provider Session surfaces only. Script execution-environment
+  boundary proofs (declared env filtering, missing-executable public failure,
+  resource-token template resolution, multi-input ordering, and worktree
+  passthrough) belong in
+  `tests/functional/workers/script/environment_test.go`; drive them through
+  `root.BuildProcess` with `serviceedges.Edges{ScriptCommandRunner: ...}` or
+  `ProviderCommandRunner` as appropriate and assert only on external command
+  effects plus public Work / Factory Event outcomes.
 - Wire supplies that same registry to the Workers runtime for routed provider
   selection, conductor composition, manifest-maximum capability checks, and
   executable-prerequisite preflight, and to Factory Sessions through the narrow
