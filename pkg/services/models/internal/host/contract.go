@@ -207,11 +207,14 @@ func ManagedRuntimeFromSnapshot(snapshot ReadinessSnapshot) managedruntime.Runti
 	if snapshot.FailureClass != FailureClassNone {
 		diagnostics["failureClass"] = string(snapshot.FailureClass)
 	}
-	operations := make([]managedruntime.Operation, len(snapshot.Identity.SupportedOperations))
-	for index, operation := range snapshot.Identity.SupportedOperations {
-		operations[index] = operation
-		operations[index].Inputs = cloneOperationSlots(operation.Inputs)
-		operations[index].Outputs = cloneOperationSlots(operation.Outputs)
+	var operations []managedruntime.Operation
+	if snapshot.Identity.SupportedOperations != nil {
+		operations = make([]managedruntime.Operation, len(snapshot.Identity.SupportedOperations))
+		for index, operation := range snapshot.Identity.SupportedOperations {
+			operations[index] = operation
+			operations[index].Inputs = cloneOperationSlots(operation.Inputs)
+			operations[index].Outputs = cloneOperationSlots(operation.Outputs)
+		}
 	}
 	return managedruntime.Runtime{
 		Identity: snapshot.Identity.Name, ReadinessState: snapshot.ReadinessState,
@@ -221,6 +224,9 @@ func ManagedRuntimeFromSnapshot(snapshot ReadinessSnapshot) managedruntime.Runti
 }
 
 func cloneOperationSlots(slots []managedruntime.OperationSlot) []managedruntime.OperationSlot {
+	if slots == nil {
+		return nil
+	}
 	cloned := make([]managedruntime.OperationSlot, len(slots))
 	for index, slot := range slots {
 		cloned[index] = slot

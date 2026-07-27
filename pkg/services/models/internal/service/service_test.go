@@ -329,6 +329,216 @@ func TestRootGetCatalogModelDelegatesScopedLookup(t *testing.T) {
 	}
 }
 
+func TestRootCatalogMatchesDirectPrivateCatalogBehavior(t *testing.T) {
+	t.Parallel()
+
+	scopes, err := runtimescopeswire.NewService(func() string { return "parent-parity-test" })
+	if err != nil {
+		t.Fatalf("construct Runtime Scopes: %v", err)
+	}
+	currentReadiness := models.Runtime{
+		ReadinessState: models.ReadinessStateMissing,
+		LifecycleState: models.LifecycleStateNotInstalled,
+		Diagnostics:    map[string]string{"observation": "initial"},
+	}
+	privateCatalog, err := catalogwire.NewService(
+		scopes,
+		func(context.Context, models.RuntimeConfig, models.Detail) (models.Runtime, error) {
+			return currentReadiness.Clone(), nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("construct Catalog: %v", err)
+	}
+	root := &Root{runtimeScopes: scopes, catalog: privateCatalog}
+	opened := openScopedCatalogModel(t, root, "parity-model", "generate")
+
+	directList, err := privateCatalog.ListCatalog(
+		context.Background(),
+		models.ListModelsRequest{Scope: opened.Scope},
+	)
+	if err != nil {
+		t.Fatalf("direct ListCatalog: %v", err)
+	}
+	rootList, err := root.ListCatalog(context.Background(), models.ListModelsRequest{Scope: opened.Scope})
+	if err != nil || !reflect.DeepEqual(rootList, directList) {
+		t.Fatalf("root ListCatalog = (%#v, %v), want direct result %#v", rootList, err, directList)
+	}
+
+	getRequest := models.GetModelRequest{
+		Scope: opened.Scope, Name: " parity-model ", Operation: "generate",
+	}
+	directModel, err := privateCatalog.GetCatalogModel(context.Background(), getRequest)
+	if err != nil {
+		t.Fatalf("direct GetCatalogModel: %v", err)
+	}
+	rootModel, err := root.GetCatalogModel(context.Background(), getRequest)
+	if err != nil || !reflect.DeepEqual(rootModel, directModel) {
+		t.Fatalf("root GetCatalogModel = (%#v, %v), want direct result %#v", rootModel, err, directModel)
+	}
+
+	assertRootReadinessMatchesPrivate(t, root, privateCatalog, opened.Scope, currentReadiness)
+	currentReadiness.ReadinessState = models.ReadinessStateReady
+	currentReadiness.LifecycleState = models.LifecycleStateInstalled
+	currentReadiness.Diagnostics["observation"] = "transitioned"
+	assertRootReadinessMatchesPrivate(t, root, privateCatalog, opened.Scope, currentReadiness)
+}
+
+func TestRootCatalogMatchesDirectPrivateCatalogFailures(t *testing.T) {
+	t.Parallel()
+
+	scopes, err := runtimescopeswire.NewService(func() string { return "parent-error-parity-test" })
+	if err != nil {
+		t.Fatalf("construct Runtime Scopes: %v", err)
+	}
+	readinessErr := error(nil)
+	privateCatalog, err := catalogwire.NewService(
+		scopes,
+		func(context.Context, models.RuntimeConfig, models.Detail) (models.Runtime, error) {
+			return models.Runtime{}, readinessErr
+		},
+	)
+	if err != nil {
+		t.Fatalf("construct Catalog: %v", err)
+	}
+	root := &Root{runtimeScopes: scopes, catalog: privateCatalog}
+	opened := openScopedCatalogModel(t, root, "parity-model", "generate")
+
+	assertCatalogGetFailureParity(t, root, privateCatalog, models.GetModelRequest{
+		Scope: opened.Scope, Name: "missing-model",
+	}, models.ErrNotFound)
+	assertCatalogGetFailureParity(t, root, privateCatalog, models.GetModelRequest{
+		Scope: opened.Scope, Name: "parity-model", Operation: "embed",
+	}, models.ErrUnsupportedOperation)
+	assertCatalogListFailureParity(
+		t, root, privateCatalog, context.Background(), models.RuntimeScopeRef{}, models.ErrRuntimeScopeInvalid,
+	)
+
+	unavailableRef, err := scopes.Open(models.RuntimeBinding{
+		RuntimeConfig: func() *models.RuntimeConfig { return nil },
+	})
+	if err != nil {
+		t.Fatalf("open unavailable scope: %v", err)
+	}
+	unavailableScope, err := (models.RuntimeScopeRef{}).Parse(string(unavailableRef))
+	if err != nil {
+		t.Fatalf("parse unavailable scope: %v", err)
+	}
+	assertCatalogListFailureParity(
+		t, root, privateCatalog, context.Background(), unavailableScope, models.ErrUnavailable,
+	)
+
+	if _, err := root.CloseRuntimeScope(
+		context.Background(),
+		models.CloseRuntimeScopeRequest{Scope: opened.Scope},
+	); err != nil {
+		t.Fatalf("close parity scope: %v", err)
+	}
+	assertCatalogListFailureParity(
+		t, root, privateCatalog, context.Background(), opened.Scope, models.ErrRuntimeScopeClosed,
+	)
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	assertCatalogListFailureParity(t, root, privateCatalog, canceled, unavailableScope, context.Canceled)
+}
+
+func TestScopedCatalogPreservesCompatibilityBehavior(t *testing.T) {
+	t.Parallel()
+
+	runtimeConfig := models.RuntimeConfig{
+		Workers: []models.RuntimeWorker{
+			scopedCatalogWorker("compatibility-worker", "compatibility-model", "generate"),
+		},
+	}
+	entry := localmodels.BuildCatalogWithRuntime(
+		&runtimeConfig,
+		nil,
+		localmodels.DefaultManagedRuntimeSourceResolver(),
+	)[localmodels.CanonicalModelName("compatibility-model")]
+	currentReadiness := entry.Detail.ManagedRuntime.Clone()
+	host := &compatibilityParityHost{snapshot: readinessSnapshot(currentReadiness)}
+	compatibility, err := NewService(
+		func() *models.RuntimeConfig { return &runtimeConfig },
+		host,
+		constructionAssetPuller{},
+		zap.NewNop(),
+		time.Now,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("construct compatibility service: %v", err)
+	}
+
+	scopes, err := runtimescopeswire.NewService(func() string { return "compatibility-parity-test" })
+	if err != nil {
+		t.Fatalf("construct Runtime Scopes: %v", err)
+	}
+	privateCatalog, err := catalogwire.NewService(
+		scopes,
+		func(context.Context, models.RuntimeConfig, models.Detail) (models.Runtime, error) {
+			return currentReadiness.Clone(), nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("construct Catalog: %v", err)
+	}
+	root := &Root{runtimeScopes: scopes, catalog: privateCatalog}
+	opened, err := root.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{
+		Config: models.RuntimeScopeConfig{Runtime: runtimeConfig},
+	})
+	if err != nil {
+		t.Fatalf("OpenRuntimeScope: %v", err)
+	}
+
+	legacyList, err := compatibility.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("compatibility ListModels: %v", err)
+	}
+	scopedList, err := root.ListCatalog(
+		context.Background(),
+		models.ListModelsRequest{Scope: opened.Scope},
+	)
+	if err != nil || !reflect.DeepEqual(legacyList.Results, scopedList.Models) {
+		t.Fatalf("catalog list parity = (legacy %#v, scoped %#v, %v)", legacyList.Results, scopedList.Models, err)
+	}
+
+	legacyDetail, err := compatibility.GetModel(context.Background(), "compatibility-model")
+	if err != nil {
+		t.Fatalf("compatibility GetModel: %v", err)
+	}
+	scopedDetail, err := root.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: opened.Scope, Name: "compatibility-model", Operation: "generate",
+	})
+	if err != nil {
+		t.Fatalf("GetCatalogModel: %v", err)
+	}
+	scopedCompatibilityFields := scopedDetail.Model.Clone()
+	scopedCompatibilityFields.Sources = nil
+	if !reflect.DeepEqual(legacyDetail, scopedCompatibilityFields) {
+		t.Fatalf("catalog get parity = (legacy %#v, scoped %#v)", legacyDetail, scopedCompatibilityFields)
+	}
+
+	currentReadiness.ReadinessState = models.ReadinessStateReady
+	currentReadiness.LifecycleState = models.LifecycleStateInstalled
+	host.snapshot = readinessSnapshot(currentReadiness)
+	legacyReadiness, err := compatibility.InspectRuntime(context.Background(), "compatibility-model")
+	if err != nil {
+		t.Fatalf("compatibility InspectRuntime: %v", err)
+	}
+	scopedReadiness, err := root.GetModelReadiness(context.Background(), models.GetModelReadinessRequest{
+		Scope: opened.Scope, Name: "compatibility-model", Operation: "generate",
+	})
+	if err != nil || !reflect.DeepEqual(legacyReadiness, scopedReadiness.Readiness) {
+		t.Fatalf(
+			"readiness parity = (legacy %#v, scoped %#v, %v)",
+			legacyReadiness,
+			scopedReadiness.Readiness,
+			err,
+		)
+	}
+}
+
 func TestRootClosesScopeAndPreservesClosedClassification(t *testing.T) {
 	t.Parallel()
 
@@ -364,6 +574,107 @@ func TestRootClosesScopeAndPreservesClosedClassification(t *testing.T) {
 		models.GetModelReadinessRequest{Scope: opened.Scope, Name: "closed-model"},
 	); !errors.Is(err, models.ErrRuntimeScopeClosed) {
 		t.Fatalf("GetModelReadiness closed scope error = %v, want ErrRuntimeScopeClosed", err)
+	}
+}
+
+type compatibilityParityHost struct {
+	constructionModelHost
+	snapshot modelhost.ReadinessSnapshot
+}
+
+func (host *compatibilityParityHost) InspectReadiness(
+	context.Context,
+	*models.RuntimeConfig,
+	string,
+) (modelhost.ReadinessSnapshot, error) {
+	return host.snapshot, nil
+}
+
+func readinessSnapshot(runtime models.Runtime) modelhost.ReadinessSnapshot {
+	return modelhost.ReadinessSnapshot{
+		Identity: modelhost.Identity{
+			Name:                runtime.Identity,
+			Locality:            runtime.Locality,
+			SupportedOperations: runtime.SupportedOperations,
+		},
+		ReadinessState: runtime.ReadinessState,
+		LifecycleState: runtime.LifecycleState,
+		Diagnostics:    runtime.Diagnostics,
+	}
+}
+
+func openScopedCatalogModel(t *testing.T, root *Root, name, operation string) models.OpenRuntimeScopeResult {
+	t.Helper()
+	opened, err := root.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{
+		Config: models.RuntimeScopeConfig{Runtime: models.RuntimeConfig{
+			Workers: []models.RuntimeWorker{scopedCatalogWorker("worker", name, operation)},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("OpenRuntimeScope: %v", err)
+	}
+	return opened
+}
+
+func assertRootReadinessMatchesPrivate(
+	t *testing.T,
+	root *Root,
+	privateCatalog interface {
+		GetModelReadiness(context.Context, models.GetModelReadinessRequest) (models.GetModelReadinessResult, error)
+	},
+	scope models.RuntimeScopeRef,
+	want models.Runtime,
+) {
+	t.Helper()
+	request := models.GetModelReadinessRequest{Scope: scope, Name: "parity-model", Operation: "generate"}
+	direct, err := privateCatalog.GetModelReadiness(context.Background(), request)
+	if err != nil {
+		t.Fatalf("direct GetModelReadiness: %v", err)
+	}
+	got, err := root.GetModelReadiness(context.Background(), request)
+	if err != nil || !reflect.DeepEqual(got, direct) {
+		t.Fatalf("root GetModelReadiness = (%#v, %v), want direct result %#v", got, err, direct)
+	}
+	if got.Readiness.ReadinessState != want.ReadinessState ||
+		got.Readiness.LifecycleState != want.LifecycleState ||
+		got.Readiness.Diagnostics["observation"] != want.Diagnostics["observation"] {
+		t.Fatalf("root readiness = %#v, want current facts %#v", got.Readiness, want)
+	}
+}
+
+func assertCatalogGetFailureParity(
+	t *testing.T,
+	root *Root,
+	privateCatalog interface {
+		GetCatalogModel(context.Context, models.GetModelRequest) (models.GetModelResult, error)
+	},
+	request models.GetModelRequest,
+	want error,
+) {
+	t.Helper()
+	_, directErr := privateCatalog.GetCatalogModel(context.Background(), request)
+	_, rootErr := root.GetCatalogModel(context.Background(), request)
+	if !errors.Is(directErr, want) || !errors.Is(rootErr, want) {
+		t.Fatalf("GetCatalogModel errors = (direct %v, root %v), want %v", directErr, rootErr, want)
+	}
+}
+
+func assertCatalogListFailureParity(
+	t *testing.T,
+	root *Root,
+	privateCatalog interface {
+		ListCatalog(context.Context, models.ListModelsRequest) (models.ListModelsResult, error)
+	},
+	ctx context.Context,
+	scope models.RuntimeScopeRef,
+	want error,
+) {
+	t.Helper()
+	request := models.ListModelsRequest{Scope: scope}
+	_, directErr := privateCatalog.ListCatalog(ctx, request)
+	_, rootErr := root.ListCatalog(ctx, request)
+	if !errors.Is(directErr, want) || !errors.Is(rootErr, want) {
+		t.Fatalf("ListCatalog errors = (direct %v, root %v), want %v", directErr, rootErr, want)
 	}
 }
 
