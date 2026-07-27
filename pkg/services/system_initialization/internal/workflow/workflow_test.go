@@ -192,6 +192,92 @@ func TestInitializeFreshHomeReturnsTypedCreatedResultsThroughPeerRoots(t *testin
 	}
 }
 
+func TestInitializeRepeatInvocationReportsSkippedOutcomesForSystemConfigAndPackagedFactories(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	definitions := []factorydefinitions.PackagedDefinition{{
+		Name:    "@you/goal",
+		JSON:    []byte(`{}`),
+		Formats: []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON},
+	}}
+	settings := &fakeOperatorSettings{}
+	installer := &repeatAwarePackagedInstaller{}
+	initializer := newTestInitializer(t, settings, installer, definitions)
+
+	first, err := initializer.Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
+	if err != nil {
+		t.Fatalf("first Initialize() error = %v", err)
+	}
+	configAfterFirst, err := os.ReadFile(first.ConfigPath)
+	if err != nil {
+		t.Fatalf("read config after first Initialize() = %v", err)
+	}
+
+	second, err := initializer.Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
+	if err != nil {
+		t.Fatalf("second Initialize() error = %v", err)
+	}
+	configAfterSecond, err := os.ReadFile(first.ConfigPath)
+	if err != nil {
+		t.Fatalf("read config after second Initialize() = %v", err)
+	}
+
+	if first.SystemConfigOutcome != systeminitialization.SystemConfigCreated ||
+		second.SystemConfigOutcome != systeminitialization.SystemConfigSkipped {
+		t.Fatalf("system config outcomes = %#v then %#v, want created then skipped", first, second)
+	}
+	if len(first.PackagedFactories) != 1 ||
+		first.PackagedFactories[0].Outcome != systeminitialization.PackagedFactoryCreated ||
+		len(second.PackagedFactories) != 1 ||
+		second.PackagedFactories[0].Name != "@you/goal" ||
+		second.PackagedFactories[0].Outcome != systeminitialization.PackagedFactorySkipped {
+		t.Fatalf(
+			"packaged factory outcomes = %#v then %#v, want created then skipped",
+			first.PackagedFactories,
+			second.PackagedFactories,
+		)
+	}
+	if string(configAfterFirst) != string(configAfterSecond) {
+		t.Fatalf("operator config changed on repeat: before %q after %q", configAfterFirst, configAfterSecond)
+	}
+	if len(settings.ensureCalls) != 1 {
+		t.Fatalf("Operator Settings ensureCalls = %#v, want one create on first run only", settings.ensureCalls)
+	}
+	if len(settings.loadCalls) != 2 {
+		t.Fatalf("Operator Settings loadCalls = %#v, want load on both invocations", settings.loadCalls)
+	}
+	if installer.calls != 2 {
+		t.Fatalf("packaged installer calls = %d, want one per invocation", installer.calls)
+	}
+}
+
+type repeatAwarePackagedInstaller struct {
+	calls int
+}
+
+func (installer *repeatAwarePackagedInstaller) EnsurePackagedFactories(
+	_ context.Context,
+	root string,
+	definitions []factorydefinitions.PackagedDefinition,
+) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
+	installer.calls++
+	outcome := factorydefinitions.PackagedFactoryInstallCreated
+	if installer.calls > 1 {
+		outcome = factorydefinitions.PackagedFactoryInstallSkipped
+	}
+	results := make([]factorydefinitions.PackagedFactoryInstallResult, 0, len(definitions))
+	for _, definition := range definitions {
+		results = append(results, factorydefinitions.PackagedFactoryInstallResult{
+			Name:       definition.Name,
+			FactoryDir: strings.TrimPrefix(definition.Name, "@you/"),
+			Outcome:    outcome,
+		})
+	}
+	_ = root
+	return results, nil
+}
+
 func TestInit_FreshHomeCreatesOperatorSystemConfig(t *testing.T) {
 	settings := &fakeOperatorSettings{}
 	installer := &fakePackagedInstaller{}
