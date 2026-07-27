@@ -13,6 +13,10 @@ Use this map when changing the public REST contract.
   `pkg/services/recordings/transports/http`. The adapter consumes the accepted
   `recordings.Service` root only; fake-root tests inject a focused root fake
   without constructing ledger, lifecycle, replay, or artifact-export graphs.
+  Event subscribe/history decode and SSE encoding live in
+  `event_subscribe_mapping.go` and `handlers_events.go`; map reconnect query
+  params into `recordings.SubscribeRequest` before `SubscribeFrom`, and encode
+  detached `recordings.CanonicalEvent` values through `FactoryEventToAPI`.
   Package-boundary tests must prove the adapter does not import
   `pkg/services/recordings/internal/**`.
 - Factory Session CLI request construction, rendering, diagnostics, and

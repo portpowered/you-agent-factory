@@ -11,7 +11,8 @@ import (
 type rootFake struct {
 	recordings.Service
 
-	subscribeFrom func(
+	streamGenerationID string
+	subscribeFrom      func(
 		context.Context,
 		recordings.SubscribeRequest,
 	) (recordings.SubscribeResult, error)
