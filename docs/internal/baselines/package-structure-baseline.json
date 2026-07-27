@@ -2469,11 +2469,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/automations/timework",
-      "target": "pkg/services/automations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/authoredlayout",
       "target": "pkg/services/factory_definitions"
     },

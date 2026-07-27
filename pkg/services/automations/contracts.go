@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/services/automations/timework"
+	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -446,7 +446,9 @@ func unavailableRootError(op string) *Error {
 }
 
 var (
-	ValidateCronSchedule  = timework.ValidateCronSchedule
-	ParseCronJitter       = timework.ParseCronJitter
-	ParseCronExpiryWindow = timework.ParseCronExpiryWindow
+	cronService = cronwire.NewService()
+
+	ValidateCronSchedule  = cronService.ValidateCronSchedule
+	ParseCronJitter       = cronService.ParseCronJitter
+	ParseCronExpiryWindow = cronService.ParseCronExpiryWindow
 )

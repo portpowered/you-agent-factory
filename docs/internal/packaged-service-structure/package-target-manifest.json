@@ -64,11 +64,13 @@
     "pkg/platform/stdio",
     "pkg/root",
     "pkg/services/automations",
+    "pkg/services/automations/internal/services/cron",
+    "pkg/services/automations/internal/services/cron/internal/service",
+    "pkg/services/automations/internal/services/cron/wire",
     "pkg/services/automations/internal/services/reconciliation",
     "pkg/services/automations/internal/services/reconciliation/internal/service",
     "pkg/services/automations/internal/services/reconciliation/wire",
     "pkg/services/automations/service",
-    "pkg/services/automations/timework",
     "pkg/services/edges",
     "pkg/services/factory_definitions",
     "pkg/services/factory_definitions/authoredlayout",
@@ -516,6 +518,21 @@
       "destination": "automations"
     },
     {
+      "packagePath": "pkg/services/automations/internal/services/cron",
+      "disposition": "retain",
+      "destination": "automations/internal/services/cron"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/cron/internal/service",
+      "disposition": "retain",
+      "destination": "automations/internal/services/cron"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/cron/wire",
+      "disposition": "retain",
+      "destination": "automations/internal/services/cron"
+    },
+    {
       "packagePath": "pkg/services/automations/internal/services/reconciliation",
       "disposition": "retain",
       "destination": "automations/internal/services/reconciliation"
@@ -534,11 +551,6 @@
       "packagePath": "pkg/services/automations/service",
       "disposition": "retain",
       "destination": "automations"
-    },
-    {
-      "packagePath": "pkg/services/automations/timework",
-      "disposition": "move",
-      "destination": "automations/internal/services/cron"
     },
     {
       "packagePath": "pkg/services/edges",
