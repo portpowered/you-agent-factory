@@ -31,7 +31,7 @@ const (
 // TestAgyGoldenFinalOnlySuccess replays a sanitized Agy final-only-success
 // transcript through the customer process boundary and proves public final-only
 // success without fabricated streaming deltas or structured snapshot events.
-//golden: docs/temp/functional/provider-sessions/agy/final-only-success/manifest.json
+// golden: docs/temp/functional/provider-sessions/agy/final-only-success/manifest.json
 func TestAgyGoldenFinalOnlySuccess(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
 	caseDir := filepath.Join(
@@ -120,7 +120,7 @@ func TestAgyGoldenFinalOnlySuccess(t *testing.T) {
 	assertAgyFinalOnlyPublicResponseEvents(t, responseEvents)
 
 	observed := support.ProviderSessionObservedGoldens{
-		ProviderSession:   observeAgyProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ProviderSession:  observeAgyProviderSessionGolden(inferencePayload, loaded.Manifest),
 		ResponseEvents:   observeAgyResponseEventGoldens(responseEvents),
 		InvocationResult: observeAgyInvocationResultGolden(inferencePayload, dispatchOutput),
 	}
@@ -136,7 +136,7 @@ func TestAgyGoldenFinalOnlySuccess(t *testing.T) {
 // TestAgyGoldenStructuredFailure replays a sanitized Agy structured-failure
 // transcript through the customer process boundary and proves a public
 // structured auth failure outcome distinct from timeout or silent success.
-//golden: docs/temp/functional/provider-sessions/agy/structured-failure/manifest.json
+// golden: docs/temp/functional/provider-sessions/agy/structured-failure/manifest.json
 func TestAgyGoldenStructuredFailure(t *testing.T) {
 	runAgyFailureGoldenCase(
 		t,
@@ -151,7 +151,7 @@ func TestAgyGoldenStructuredFailure(t *testing.T) {
 // TestAgyGoldenTimeout replays a sanitized Agy timeout transcript through the
 // customer process boundary and proves a public timeout outcome distinct from
 // structured auth failure or silent success.
-//golden: docs/temp/functional/provider-sessions/agy/timeout/manifest.json
+// golden: docs/temp/functional/provider-sessions/agy/timeout/manifest.json
 func TestAgyGoldenTimeout(t *testing.T) {
 	runAgyFailureGoldenCase(
 		t,
@@ -173,33 +173,7 @@ func runAgyFailureGoldenCase(
 ) {
 	t.Helper()
 
-	repoRoot := testutil.MustRepoRoot(t)
-	caseDir := filepath.Join(
-		repoRoot,
-		filepath.FromSlash(support.ProviderSessionFixturePath("agy", caseName)),
-	)
-
-	loaded, err := support.LoadProviderSessionCase(caseDir)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionCase: %v", err)
-	}
-	if loaded.Manifest.ID != manifestID {
-		t.Fatalf("manifest.ID = %q, want %s", loaded.Manifest.ID, manifestID)
-	}
-	if loaded.Manifest.FidelityClass != fidelityClass {
-		t.Fatalf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, fidelityClass)
-	}
-
-	var request struct {
-		Model     string `json:"model"`
-		SessionID string `json:"session_id"`
-	}
-	if err := json.Unmarshal(loaded.Request, &request); err != nil {
-		t.Fatalf("decode request.json: %v", err)
-	}
-	if request.Model == "" || request.SessionID == "" {
-		t.Fatalf("request.json = %#v, want model and session_id", request)
-	}
+	loaded, request := loadAgyGoldenCase(t, caseName, manifestID, fidelityClass)
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
@@ -263,7 +237,7 @@ func runAgyFailureGoldenCase(
 	assertAgyFailureDoesNotLeakSensitiveOutput(t, events, responseEvents)
 
 	observed := support.ProviderSessionObservedGoldens{
-		ProviderSession:   observeAgyProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ProviderSession:  observeAgyProviderSessionGolden(inferencePayload, loaded.Manifest),
 		ResponseEvents:   observeAgyResponseEventGoldens(responseEvents),
 		InvocationResult: observeAgyFailedInvocationResultGolden(inferencePayload),
 	}
@@ -274,6 +248,42 @@ func runAgyFailureGoldenCase(
 		}
 		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
 	}
+}
+
+type agyGoldenRequest struct {
+	Model     string `json:"model"`
+	SessionID string `json:"session_id"`
+}
+
+func loadAgyGoldenCase(
+	t *testing.T,
+	caseName string,
+	manifestID string,
+	fidelityClass string,
+) (support.ProviderSessionCase, agyGoldenRequest) {
+	t.Helper()
+	caseDir := filepath.Join(
+		testutil.MustRepoRoot(t),
+		filepath.FromSlash(support.ProviderSessionFixturePath("agy", caseName)),
+	)
+	loaded, err := support.LoadProviderSessionCase(caseDir)
+	if err != nil {
+		t.Fatalf("LoadProviderSessionCase: %v", err)
+	}
+	if loaded.Manifest.ID != manifestID {
+		t.Fatalf("manifest.ID = %q, want %s", loaded.Manifest.ID, manifestID)
+	}
+	if loaded.Manifest.FidelityClass != fidelityClass {
+		t.Fatalf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, fidelityClass)
+	}
+	var request agyGoldenRequest
+	if err := json.Unmarshal(loaded.Request, &request); err != nil {
+		t.Fatalf("decode request.json: %v", err)
+	}
+	if request.Model == "" || request.SessionID == "" {
+		t.Fatalf("request.json = %#v, want model and session_id", request)
+	}
+	return loaded, request
 }
 
 func assertAgyFailureDoesNotLeakSensitiveOutput(

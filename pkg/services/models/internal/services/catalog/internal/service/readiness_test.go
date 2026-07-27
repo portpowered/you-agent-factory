@@ -20,7 +20,7 @@ func TestGetModelReadinessReportsCurrentDetachedTransitions(t *testing.T) {
 	queryIndex := 0
 	service, err := catalogwire.NewService(
 		scopes,
-		func(_ context.Context, _ models.RuntimeScopeConfig, detail models.Detail) (models.Runtime, error) {
+		func(_ context.Context, _ models.RuntimeScopeRef, _ models.RuntimeScopeConfig, detail models.Detail) (models.Runtime, error) {
 			if detail.Name != "scoped-model" {
 				t.Fatalf("readiness detail name = %q, want canonical scoped-model", detail.Name)
 			}
@@ -63,7 +63,7 @@ func TestGetModelReadinessValidatesIdentityAndOperationBeforeQuery(t *testing.T)
 	queryCount := 0
 	service, err := catalogwire.NewService(
 		scopes,
-		func(context.Context, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+		func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
 			queryCount++
 			return models.Runtime{
 				ReadinessState: models.ReadinessStateUnsupported,

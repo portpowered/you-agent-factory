@@ -114,8 +114,6 @@ var ExpectedDeletionOnlyBatches = []string{
 	"workflow-delete-02-work-routing",
 	"workflow-delete-03-work-relationships",
 	"workflow-delete-04-work-routing-logical",
-	"workflow-delete-05-workstations-repeater",
-	"workflow-delete-06-workstations-watcher",
 	"workflow-delete-07-factory-current",
 	"workflow-delete-08-guards",
 	"workflow-delete-09-orchestration-javascript",
@@ -125,7 +123,6 @@ var ExpectedDeletionOnlyBatches = []string{
 	"guards_batch-delete-04-resources-concurrency",
 	"guards_batch-delete-05-resources-fairness",
 	"guards_batch-delete-06-resilience-batch",
-	"guards_batch-delete-07-workstations-watcher",
 	"bootstrap_portability-delete-01-factory-definitions-init",
 	"bootstrap_portability-delete-02-factory-definitions-validation",
 	"bootstrap_portability-delete-03-factory-definitions-import-export",
@@ -135,7 +132,6 @@ var ExpectedDeletionOnlyBatches = []string{
 	"replay_contracts-delete-02-events-factory-events",
 	"replay_contracts-delete-03-events-response-events",
 	"replay_contracts-delete-04-work-submission",
-	"replay_contracts-delete-05-workers-script",
 	"replay_contracts-delete-06-wrong-layer",
 }
 

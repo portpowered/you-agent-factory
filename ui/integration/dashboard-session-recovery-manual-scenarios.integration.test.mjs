@@ -7,8 +7,10 @@ import {
   expectNoBrowserErrors,
   initialEditableFactoryDefinitionVersion,
   openDashboardWithSeededCheckpoint,
+  readyTimeoutMs,
   resolvedDefaultFactorySessionID,
   startFactoryApiServer,
+  waitForDashboardWidgetPicker,
   waitForDurableCheckpoint,
 } from "./browser-test-harness.mjs";
 import {
@@ -51,15 +53,20 @@ describe.concurrent("dashboard session recovery manual scenarios", () => {
             }),
         );
 
-        await waitForDurableCheckpoint("restart cursor reuse", async () => {
-          const urls = await network.readEventStreamURLs();
-          return urls.some((url) =>
-            eventStreamHasCursor(url, "manual-restart-event-5"),
-          );
-        });
+        await waitForDurableCheckpoint(
+          "restart cursor reuse",
+          async () => {
+            const urls = await network.readEventStreamURLs();
+            return urls.some((url) =>
+              eventStreamHasCursor(url, "manual-restart-event-5"),
+            );
+          },
+          readyTimeoutMs,
+        );
 
         await network.resetEventStreamURLs();
         await browserPage.page.reload({ waitUntil: "domcontentloaded" });
+        await waitForDashboardWidgetPicker(browserPage.page, readyTimeoutMs);
 
         await waitForDurableCheckpoint(
           "second restart cursor reuse",
@@ -69,6 +76,7 @@ describe.concurrent("dashboard session recovery manual scenarios", () => {
               eventStreamHasCursor(url, "manual-restart-event-5"),
             );
           },
+          readyTimeoutMs,
         );
 
         const syncPreflightReads = network.captured.syncPreflightReads;

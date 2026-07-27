@@ -14,7 +14,6 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationservice "github.com/portpowered/infinite-you/pkg/services/automations/service"
@@ -40,7 +39,6 @@ import (
 	recordingartifacts "github.com/portpowered/infinite-you/pkg/services/recordings/artifacts"
 	recordingsservice "github.com/portpowered/infinite-you/pkg/services/recordings/service"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workservice "github.com/portpowered/infinite-you/pkg/services/work/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
@@ -463,6 +461,12 @@ func provideFactorySessionExecutionFactory(
 	stores factorysessionwire.RuntimePersistenceStoreFactory,
 	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
+	responseEventIDs factorysessions.ResponseEventIDGenerator,
+	invocation factorysessionwire.WorkerInvocationFactory,
+	invocationWithProgress factorysessionwire.WorkerInvocationWithProgressFactory,
+	allocator agypty.PTYAllocator,
+	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
+	edges serviceedges.Edges,
 ) factorysessionwire.FactorySessionExecutionFactory {
 	return func(
 		projectRoot string,
@@ -471,12 +475,25 @@ func provideFactorySessionExecutionFactory(
 		clock factoryruntime.Clock,
 		workerPresetIDs map[string]struct{},
 		workerSettings factoryruntime.JavaScriptWorkerSettings,
+		mockWorkersEnabled bool,
 	) (factorysessions.ExecutionService, error) {
+		executor := workerinvocation.NewExecutor(provider)
+		var liveChildInvocation factorysessionwire.LiveChildInvocationFactory
+		if !mockWorkersEnabled &&
+			invocationWithProgress != nil &&
+			adaptRunner != nil &&
+			allocator != nil &&
+			edges.ProviderCommandRunner != nil {
+			runner := adaptRunner(edges.ProviderCommandRunner)
+			liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
+				return invocationWithProgress(runner, allocator, publisher)
+			}
+		}
 		return factorysessionwire.NewDurableExecution(
 			projectRoot,
 			persistencePolicy,
 			stores,
-			workerinvocation.NewExecutor(provider),
+			executor,
 			clock,
 			syncWaits,
 			factorycheckpointsummary.New(),
@@ -485,6 +502,8 @@ func provideFactorySessionExecutionFactory(
 			workerSettings,
 			recordingWriter,
 			sessionIDs,
+			liveChildInvocation,
+			responseEventIDs,
 		)
 	}
 }
@@ -819,6 +838,37 @@ func provideWorkersLocalRuntimeHooksFactory() factorysessionwire.WorkersLocalRun
 	return workersservice.LocalRuntimeHooks
 }
 
+func provideWorkerInvocationWithProgressFactory(edges serviceedges.Edges) factorysessionwire.WorkerInvocationWithProgressFactory {
+	commandClock := edges.Clock
+	if commandClock == nil {
+		commandClock = platformclock.Real{}
+	}
+	resolveSymlinks := edges.WorkersResolveSymlinks
+	if resolveSymlinks == nil {
+		resolveSymlinks = filepath.EvalSymlinks
+	}
+	executableLocator := edges.WorkersExecutableLocator
+	if executableLocator == nil {
+		executableLocator = platformprocess.HostExecutableLocator{}
+	}
+	executableInspector := edges.WorkersExecutablePathInspector
+	if executableInspector == nil {
+		executableInspector = platformfilesystem.Local{}
+	}
+	executableFiles := edges.WorkersExecutableFileReader
+	if executableFiles == nil {
+		executableFiles = platformfilesystem.Local{}
+	}
+	operatingSystem := resolveWorkersOperatingSystem(edges)
+	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
+	return func(runner workers.CommandRunner, allocator agypty.PTYAllocator, publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
+		return workersservice.NewInvocationWithProgress(
+			runner, commandClock, allocator, resolveSymlinks,
+			executableLocator, executableInspector, executableFiles, operatingSystem, publisher, temporaryFiles,
+		)
+	}
+}
+
 func provideWorkerInvocationFactory(edges serviceedges.Edges) factorysessionwire.WorkerInvocationFactory {
 	commandClock := edges.Clock
 	if commandClock == nil {
@@ -881,141 +931,5 @@ func provideProviderFromCommandRunnerFactory(
 			runner, commandClock, allocator, resolveSymlinks,
 			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,
 		)
-	}
-}
-
-func provideSessionExecutionOpeningFactory(
-	runtimes *factorysessionwire.RuntimeOpeningFactory,
-	edges serviceedges.Edges,
-	build factorysessionwire.StandaloneSessionExecutionFactory,
-	invocation factorysessionwire.WorkerInvocationFactory,
-	resolveClock factoryruntime.ClockResolver,
-	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
-	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
-	paths factorysessionwire.ExecutionOpeningFileSystem,
-	allocator agypty.PTYAllocator,
-	logger *zap.Logger,
-) (*factorysessionwire.ExecutionOpeningFactory, error) {
-	workerEdges, err := withStandaloneWorkerProductionEdges(edges)
-	if err != nil {
-		return nil, err
-	}
-	return factorysessionwire.NewExecutionOpeningFactory(
-		runtimes, projectRuntimeOpeningExternalEffects(workerEdges), adaptRunner(workerEdges.ProviderCommandRunner), allocator,
-		build, invocation, resolveClock, artifactRoots, adaptRunner, paths, logger,
-	)
-}
-
-func provideInvocationOperation(
-	openRuntime *factorysessionwire.RuntimeOpeningFactory,
-	edges serviceedges.Edges,
-	workingDirectory platformfilesystem.WorkingDirectory,
-	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
-	artifactExporter models.InvocationArtifactExporter,
-	modelTimeout factorysessions.ModelInvocationTimeout,
-	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
-	generateSessionID factorysessions.SessionIDGenerator,
-) (factorysessionwire.InvocationOperation, error) {
-	return factorysessionwire.NewInvocationOperation(
-		openRuntime,
-		projectRuntimeOpeningExternalEffects(edges),
-		workingDirectory,
-		resolveCurrentDir,
-		artifactExporter,
-		modelTimeout,
-		artifactRoots,
-		generateSessionID,
-	)
-}
-
-// projectRuntimeOpeningExternalEffects is the sole selection from the process
-// edge aggregate into the effects consumed by Factory Session runtime opening.
-func projectRuntimeOpeningExternalEffects(edges serviceedges.Edges) factorysessionwire.RuntimeOpeningExternalEffects {
-	return factorysessionwire.RuntimeOpeningExternalEffects{
-		Clock:                     edges.Clock,
-		ProviderOverride:          edges.ProviderOverride,
-		ModelPullMetricsRecorder:  edges.ModelPullMetricsRecorder,
-		InvocationMetricsRecorder: edges.InvocationMetricsRecorder,
-		ProviderCommandRunner:     edges.ProviderCommandRunner,
-		ScriptCommandRunner:       edges.ScriptCommandRunner,
-		SubmissionRecorder:        edges.SubmissionRecorder,
-		DispatchRecorder:          edges.DispatchRecorder,
-		RuntimeHostObserver:       edges.RuntimeHostObserver,
-		HostedClock:               edges.HostedClock,
-		HostedHTTPClient:          edges.HostedHTTPClient,
-		HostedSecretResolver:      edges.HostedSecretResolver,
-		HostedLinearEndpoint:      edges.HostedLinearEndpoint,
-	}
-}
-
-func withStandaloneWorkerProductionEdges(overrides serviceedges.Edges) (serviceedges.Edges, error) {
-	commandRunner, err := providePlatformProcessCommandRunner(overrides)
-	if err != nil {
-		return serviceedges.Edges{}, err
-	}
-	return serviceedges.Merge(serviceedges.Edges{
-		ProviderCommandRunner: commandRunner,
-		ScriptCommandRunner:   commandRunner,
-	}, overrides), nil
-}
-
-func provideAgyPTYAllocator(edges serviceedges.Edges) (agypty.PTYAllocator, error) {
-	clock := edges.AgyPTYClock
-	if clock == nil {
-		clock = platformclock.Real{}
-	}
-	host := edges.AgyPTYHost
-	if host == nil {
-		host = platformpty.NewHost()
-	}
-	return agypty.NewAllocator(host, clock)
-}
-
-func provideWorkerCommandRunnerAdapter() factorysessionwire.WorkerCommandRunnerAdapter {
-	return workerprocess.AdaptCommandRunner
-}
-
-func provideWorkRequestIDGenerator(edges serviceedges.Edges) work.RequestIDGenerator {
-	if edges.WorkRequestIDGenerator != nil {
-		return edges.WorkRequestIDGenerator
-	}
-	return uuid.NewString
-}
-
-func provideFactorySessionRuntimeInstanceIDGenerator(edges serviceedges.Edges) factorysessions.RuntimeInstanceIDGenerator {
-	if edges.FactorySessionRuntimeInstanceIDGenerator != nil {
-		return edges.FactorySessionRuntimeInstanceIDGenerator
-	}
-	return uuid.NewString
-}
-
-func provideFactorySessionIDGenerator(edges serviceedges.Edges) factorysessions.SessionIDGenerator {
-	if edges.FactorySessionIDGenerator != nil {
-		return edges.FactorySessionIDGenerator
-	}
-	return uuid.NewString
-}
-
-func provideFactorySessionResponseEventIDGenerator(edges serviceedges.Edges) factorysessions.ResponseEventIDGenerator {
-	if edges.FactorySessionResponseEventIDGenerator != nil {
-		return edges.FactorySessionResponseEventIDGenerator
-	}
-	return uuid.NewString
-}
-
-func provideWorkSubmittedFileReader(edges serviceedges.Edges) work.SubmittedFileReader {
-	if edges.WorkSubmittedFileReader != nil {
-		return edges.WorkSubmittedFileReader
-	}
-	return os.ReadFile
-}
-
-func provideWorkFactory(
-	readFile work.SubmittedFileReader,
-	contentStaging work.ContentStagingService,
-	contentMaterializer work.ContentMaterializer,
-) factorysessionwire.WorkFactory {
-	return func(runtimes work.RuntimeResolver) work.Service {
-		return workservice.NewService(runtimes, readFile, contentStaging, contentMaterializer)
 	}
 }

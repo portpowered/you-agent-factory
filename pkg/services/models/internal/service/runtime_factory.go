@@ -4,15 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
+	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	"go.uber.org/zap"
@@ -21,19 +20,6 @@ import (
 // Root retains the process-wide external effect ports of the injected Models
 // service. It is inert until it is bound to a Factory Session runtime.
 type Root struct {
-	assetPlatform   localmodels.HostPlatform
-	assetHTTP       modelassets.HTTPDoer
-	assetEndpoints  modelassets.Endpoints
-	assetMkdirAll   modelassets.MakeDirectories
-	assetStat       modelassets.InspectPath
-	assetHome       modelassets.ResolveHomeDirectory
-	assetWriteFile  modelassets.WriteFile
-	assetRename     modelassets.RenamePath
-	assetRemove     modelassets.RemovePath
-	assetReadFile   modelassets.ReadFile
-	assetReadDir    modelassets.ReadDirectory
-	assetCreate     modelassets.CreateFile
-	assetOpen       modelassets.OpenFile
 	processLauncher modelhost.ProcessLauncher
 	hostHTTP        modelhost.HTTPDoer
 	hostClock       modelhost.Clock
@@ -43,6 +29,7 @@ type Root struct {
 	runtimeTempDir  localmodels.TempDirectory
 	runtimeTempFile localmodels.CreateTempFile
 	runtimeScopes   runtimescopes.Service
+	assets          scopedassets.Service
 	runtimeMu       sync.RWMutex
 	runtimeByScope  map[models.RuntimeScopeRef]models.Service
 	catalog         modelcatalog.Service
@@ -53,19 +40,6 @@ var _ models.Service = (*Root)(nil)
 
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func NewRoot(
-	assetPlatform localmodels.HostPlatform,
-	assetHTTP modelassets.HTTPDoer,
-	assetEndpoints modelassets.Endpoints,
-	assetMkdirAll modelassets.MakeDirectories,
-	assetStat modelassets.InspectPath,
-	assetHome modelassets.ResolveHomeDirectory,
-	assetWriteFile modelassets.WriteFile,
-	assetRename modelassets.RenamePath,
-	assetRemove modelassets.RemovePath,
-	assetReadFile modelassets.ReadFile,
-	assetReadDir modelassets.ReadDirectory,
-	assetCreate modelassets.CreateFile,
-	assetOpen modelassets.OpenFile,
 	processLauncher modelhost.ProcessLauncher,
 	hostHTTP modelhost.HTTPDoer,
 	hostClock modelhost.Clock,
@@ -76,17 +50,9 @@ func NewRoot(
 	runtimeTempFile localmodels.CreateTempFile,
 	runtimeScopes runtimescopes.Service,
 	catalogService modelcatalog.Service,
+	assetService scopedassets.Service,
 	processDependencies ...models.ProcessDependencies,
 ) (*Root, error) {
-	if strings.TrimSpace(assetPlatform.OperatingSystem) == "" || strings.TrimSpace(assetPlatform.Architecture) == "" {
-		return nil, missingDependencyError("model asset host platform")
-	}
-	if assetHTTP == nil {
-		return nil, missingDependencyError("model asset HTTP client")
-	}
-	if assetEndpoints.BaseURL == "" || assetEndpoints.APIBaseURL == "" {
-		return nil, missingDependencyError("model asset endpoints")
-	}
 	if processLauncher == nil {
 		return nil, missingDependencyError("model host process launcher")
 	}
@@ -111,16 +77,14 @@ func NewRoot(
 	if runtimeTempFile == nil {
 		return nil, missingDependencyError("model runtime temporary file creator")
 	}
-	if assetMkdirAll == nil || assetStat == nil || assetHome == nil || assetWriteFile == nil ||
-		assetRename == nil || assetRemove == nil || assetReadFile == nil || assetReadDir == nil ||
-		assetCreate == nil || assetOpen == nil {
-		return nil, missingDependencyError("model asset cache operations")
-	}
 	if runtimeScopes == nil {
 		return nil, missingDependencyError("Models Runtime Scopes service")
 	}
 	if catalogService == nil {
 		return nil, missingDependencyError("Models Catalog service")
+	}
+	if assetService == nil {
+		return nil, missingDependencyError("Models Assets service")
 	}
 	process := models.ProcessDependencies{}
 	if len(processDependencies) > 0 {
@@ -133,14 +97,10 @@ func NewRoot(
 		return nil, missingDependencyError("Models process clock")
 	}
 	return &Root{
-		assetPlatform: assetPlatform, assetHTTP: assetHTTP, assetEndpoints: assetEndpoints,
-		assetMkdirAll: assetMkdirAll, assetStat: assetStat, assetHome: assetHome,
-		assetWriteFile: assetWriteFile, assetRename: assetRename, assetRemove: assetRemove,
-		assetReadFile: assetReadFile, assetReadDir: assetReadDir, assetCreate: assetCreate, assetOpen: assetOpen,
 		processLauncher: processLauncher, hostHTTP: hostHTTP, hostClock: hostClock,
 		runtimeRunner: runtimeRunner, runtimeHTTP: runtimeHTTP,
 		runtimeInspect: runtimeInspect, runtimeTempDir: runtimeTempDir, runtimeTempFile: runtimeTempFile,
-		runtimeScopes: runtimeScopes, catalog: catalogService,
+		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
 		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
 		process:        process,
 	}, nil
@@ -154,18 +114,26 @@ func (o *Root) ForRuntime(binding models.RuntimeBinding) (models.Service, error)
 	if err := models.ValidateRuntimeBinding(binding); err != nil {
 		return nil, err
 	}
-	return o.runtimeForBinding(binding)
-}
-
-func (o *Root) runtimeForBinding(binding models.RuntimeBinding) (models.Service, error) {
-	assets, err := localmodels.NewAssetPuller(
-		binding.CacheDirectory, o.assetPlatform, o.assetHTTP, o.assetEndpoints,
-		o.assetMkdirAll, o.assetStat, o.assetHome, o.assetWriteFile, o.assetRename,
-		o.assetRemove, o.assetReadFile, o.assetReadDir, o.assetCreate, o.assetOpen,
-	)
+	assets, err := localmodels.NewDeferredScopedAssetPuller(o.assets, func() (models.RuntimeScopeRef, error) {
+		if binding.RuntimeConfig() == nil {
+			return models.RuntimeScopeRef{}, models.ErrUnavailable
+		}
+		privateScope, openErr := o.runtimeScopes.Open(binding)
+		if openErr != nil {
+			return models.RuntimeScopeRef{}, openErr
+		}
+		return (models.RuntimeScopeRef{}).Parse(string(privateScope))
+	})
 	if err != nil {
 		return nil, err
 	}
+	return o.runtimeForBindingWithAssets(binding, assets)
+}
+
+func (o *Root) runtimeForBindingWithAssets(
+	binding models.RuntimeBinding,
+	assets localmodels.AssetPuller,
+) (models.Service, error) {
 	localRuntime, err := localmodels.NewOmniVoiceRuntime(
 		o.runtimeRunner, o.runtimeHTTP, o.runtimeInspect, o.runtimeTempDir, o.runtimeTempFile,
 	)
@@ -276,10 +244,13 @@ func runtimeScopeError(err error) error {
 }
 
 func (o *Root) PrepareModelAssets(
-	context.Context,
-	models.PrepareModelAssetsRequest,
+	ctx context.Context,
+	request models.PrepareModelAssetsRequest,
 ) (models.PrepareModelAssetsResult, error) {
-	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.assets == nil {
+		return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
+	}
+	return o.assets.PrepareModelAssets(ctx, request)
 }
 
 func (o *Root) PullModelForScope(
@@ -297,10 +268,13 @@ func (o *Root) PullModelForScope(
 }
 
 func (o *Root) InspectModelAssets(
-	context.Context,
-	models.InspectModelAssetsRequest,
+	ctx context.Context,
+	request models.InspectModelAssetsRequest,
 ) (models.InspectModelAssetsResult, error) {
-	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.assets == nil {
+		return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
+	}
+	return o.assets.InspectModelAssets(ctx, request)
 }
 
 func (o *Root) RemoveModelAssets(
@@ -402,7 +376,13 @@ func (o *Root) InvokeLocal(
 }
 
 func (o *Root) scopedRuntime(scope models.RuntimeScopeRef) (models.Service, error) {
-	return o.scopedRuntimeWithBuilder(scope, o.runtimeForBinding)
+	return o.scopedRuntimeWithBuilder(scope, func(binding models.RuntimeBinding) (models.Service, error) {
+		assets, err := localmodels.NewScopedAssetPuller(o.assets, scope)
+		if err != nil {
+			return nil, err
+		}
+		return o.runtimeForBindingWithAssets(binding, assets)
+	})
 }
 
 func (o *Root) scopedRuntimeWithBuilder(

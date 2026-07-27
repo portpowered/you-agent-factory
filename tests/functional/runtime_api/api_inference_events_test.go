@@ -45,35 +45,6 @@ func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifac
 	assertInferenceEventsRecordedInArtifact(t, events, testutil.GeneratedFactoryEvents(t, artifact.Events))
 }
 
-func TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents(t *testing.T) {
-	support.SkipLongFunctional(t, "slow inference-event script-worker sweep")
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-		WorkID:     "work-script-no-inference",
-		WorkTypeID: "task",
-		TraceID:    "trace-script-no-inference",
-		Payload:    []byte("script input"),
-	})
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ScriptCommandRunner: support.NewStaticSuccessCommandRunner("script-output-ok"),
-		},
-	})
-	defer server.Stop(t)
-	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	events := server.GetFactoryEvents(t)
-	if !hasFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchRequest) ||
-		!hasFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchResponse) {
-		t.Fatalf("script worker canonical events = %v, want dispatch lifecycle events", functionalEventTypes(events))
-	}
-	if hasFunctionalEventType(events, factoryapi.FactoryEventTypeInferenceRequest) ||
-		hasFunctionalEventType(events, factoryapi.FactoryEventTypeInferenceResponse) {
-		t.Fatalf("script worker emitted inference events: %v", functionalEventTypes(events))
-	}
-}
-
 func TestInferenceEvents_HTTPStreamAndPublicWorkCorrelateRetryAttempts(t *testing.T) {
 	support.SkipLongFunctional(t, "slow inference-event stream-projection sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))

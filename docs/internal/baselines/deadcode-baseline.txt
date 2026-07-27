@@ -110,6 +110,10 @@ pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithResul
 pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithResultBufferDrainObserver
 pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithTokenTransformer
 pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithWorkstationResponseRecorder
+pkg/services/factory_runtime/runtime/dispatch_result_hook.go: unreachable func: workerPoolDispatchResultHook.HasBufferedResults
+pkg/services/factory_runtime/runtime/dispatch_result_hook.go: unreachable func: workerPoolDispatchResultHook.HasPendingResults
+pkg/services/factory_runtime/runtime/dispatch_result_hook.go: unreachable func: workerPoolDispatchResultHook.SetOnBufferedResult
+pkg/services/factory_runtime/runtime/dispatch_result_hook.go: unreachable func: workerPoolDispatchResultHook.SignalBufferedResults
 pkg/services/factory_runtime/runtime/factory.go: unreachable func: WorkflowContext
 pkg/services/factory_runtime/runtime/factory_event_history_test.go: unreachable func: assertBatchRequestReplayEvents
 pkg/services/factory_runtime/runtime/factory_event_history_test.go: unreachable func: assertDispatchResponseCount
@@ -189,9 +193,6 @@ pkg/services/factory_sessions/transports/cli/sessionexecution/run.go: unreachabl
 pkg/services/factory_sessions/transports/cli/sessionexecution/run.go: unreachable func: writeResultFailureHuman
 pkg/services/factory_sessions/transports/mcp/inventory_boundary.go: unreachable func: VerifyProjectedMCPBoundaryInventories
 pkg/services/factory_sessions/transports/mcp/registry_test.go: unreachable func: writeWorkflow
-pkg/services/models/internal/assets/runtime_config_test.go: unreachable func: projectTestModelsOperationSlots
-pkg/services/models/internal/assets/runtime_config_test.go: unreachable func: projectTestModelsOperations
-pkg/services/models/internal/assets/runtime_config_test.go: unreachable func: projectTestModelsResources
 pkg/services/models/internal/host/contract.go: unreachable func: cloneOperations
 pkg/services/models/transports/cli/non_ready_invoke_test.go: unreachable func: nonReadyLocalModelFactoryConfig
 pkg/services/provider_sessions/codex/detail.go: unreachable func: ParseSummary
@@ -316,6 +317,9 @@ tests/functional/internal/support/process_factory.go: unreachable func: RunFacto
 tests/functional/internal/support/provider.go: unreachable func: CursorProviderSuccessStdout
 tests/functional/internal/support/provider.go: unreachable func: ProviderErrorCommandResult
 tests/functional/internal/support/workdir.go: unreachable func: WithWorkingDirectory
+tests/functional/orchestration/javascript/events/events_test.go: unreachable func: decodeNDJSONRecords
+tests/functional/orchestration/javascript/events/events_test.go: unreachable func: mapKeys
+tests/functional/providers/helpers_test.go: unreachable func: assertCursorProviderCompleted
 tests/functional/providers/helpers_test.go: unreachable func: assertProviderArgsPrompt
 tests/functional/providers/helpers_test.go: unreachable func: assertProviderStdin
 tests/functional/providers/helpers_test.go: unreachable func: cursorMergedPrompt

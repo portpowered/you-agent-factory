@@ -8,7 +8,6 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
@@ -46,12 +45,12 @@ func (s *Service) RemoveModelAssets(
 }
 
 // PullModel starts or reports managed-runtime pull materialization for one model.
-func (s *Service) PullModel(ctx context.Context, modelName string) (modelassets.PullResult, error) {
+func (s *Service) PullModel(ctx context.Context, modelName string) (models.PullResult, error) {
 	if s == nil {
-		return modelassets.PullResult{}, fmt.Errorf("factory service runtime is not available")
+		return models.PullResult{}, fmt.Errorf("factory service runtime is not available")
 	}
 	if err := models.ValidatePullModelRequest(models.PullModelRequest{Name: modelName}); err != nil {
-		return modelassets.PullResult{}, err
+		return models.PullResult{}, err
 	}
 	started := s.now()
 	host := s.modelHost()
@@ -74,10 +73,10 @@ func (s *Service) pullWithModelHost(
 	ctx context.Context,
 	host modelhost.Host,
 	modelName string,
-) (modelassets.PullResult, error) {
+) (models.PullResult, error) {
 	runtimeCfg := s.runtimeConfig()
 	if runtimeCfg == nil {
-		return modelassets.PullResult{}, fmt.Errorf("factory service runtime is not available")
+		return models.PullResult{}, fmt.Errorf("factory service runtime is not available")
 	}
 	snapshot, err := host.Pull(ctx, runtimeCfg, modelName)
 	result := modelPullResultFromSnapshot(snapshot)
@@ -96,7 +95,7 @@ func (s *Service) pullWithModelHost(
 		if name == "" {
 			name = strings.TrimSpace(modelName)
 		}
-		return result, fmt.Errorf("%w: model %q is not a local model", modelassets.ErrPullUnsupported, name)
+		return result, fmt.Errorf("%w: model %q is not a local model", models.ErrPullUnsupported, name)
 	}
 
 	pullOutcome, readiness := localmodels.ClassifyPullFailure(err)
@@ -112,21 +111,21 @@ func (s *Service) pullWithModelHost(
 	if strings.TrimSpace(result.LifecycleState) == "" {
 		result.LifecycleState = string(managedruntime.LifecycleStateNotInstalled)
 	}
-	return result, &modelassets.PullError{Result: result, Cause: err}
+	return result, &models.PullError{Result: result, Cause: err}
 }
 
 func isUnsupportedModelHostPull(err error) bool {
-	if errors.Is(err, modelhost.ErrUnsupportedRuntime) || errors.Is(err, modelassets.ErrPullUnsupported) {
+	if errors.Is(err, modelhost.ErrUnsupportedRuntime) || errors.Is(err, models.ErrPullUnsupported) {
 		return true
 	}
 	var readinessErr *modelhost.ReadinessError
 	return errors.As(err, &readinessErr) && errors.Is(readinessErr.Cause, modelhost.ErrUnsupportedRuntime)
 }
 
-func modelPullResultFromSnapshot(snapshot modelhost.PullSnapshot) modelassets.PullResult {
-	files := make([]modelassets.DownloadedFile, 0, len(snapshot.DownloadedFiles))
+func modelPullResultFromSnapshot(snapshot modelhost.PullSnapshot) models.PullResult {
+	files := make([]models.DownloadedFile, 0, len(snapshot.DownloadedFiles))
 	for _, file := range snapshot.DownloadedFiles {
-		files = append(files, modelassets.DownloadedFile{
+		files = append(files, models.DownloadedFile{
 			Path:   file.Path,
 			Bytes:  file.Bytes,
 			SHA256: file.SHA256,
@@ -136,7 +135,7 @@ func modelPullResultFromSnapshot(snapshot modelhost.PullSnapshot) modelassets.Pu
 	if locality == "" {
 		locality = managedruntime.LocalityLocal
 	}
-	return modelassets.PullResult{
+	return models.PullResult{
 		ModelName:          strings.TrimSpace(snapshot.Identity.Name),
 		ProviderLocality:   string(locality),
 		Outcome:            strings.TrimSpace(snapshot.LegacyOutcome),
@@ -159,7 +158,7 @@ func (s *Service) modelAssetPuller() localmodels.AssetPuller {
 	return s.assetPuller
 }
 
-func (s *Service) recordManagedRuntimePull(modelName string, result modelassets.PullResult, err error, elapsed time.Duration) {
+func (s *Service) recordManagedRuntimePull(modelName string, result models.PullResult, err error, elapsed time.Duration) {
 	labels := map[string]string{"model_name": strings.TrimSpace(modelName)}
 	s.recordModelPullMetric(modelPullMetricAttempts, labels)
 	if err != nil {
@@ -169,7 +168,7 @@ func (s *Service) recordManagedRuntimePull(modelName string, result modelassets.
 			"readiness_state": readiness,
 		})
 		s.recordModelPullMetric(modelPullMetricFailure, failureLabels)
-		if errors.Is(err, modelassets.ErrSourceFetchFailed) || pullOutcome == "SOURCE_FETCH_FAILED" {
+		if errors.Is(err, models.ErrSourceFetchFailed) || pullOutcome == "SOURCE_FETCH_FAILED" {
 			s.recordModelPullMetric(modelPullMetricSourceFailure, failureLabels)
 		}
 		if logger := s.logger(); logger != nil {

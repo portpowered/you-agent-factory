@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "owner": "factory_runtime",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript",
+      "filePath": "pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go",
+      "targetRoot": "pkg/services/factory_runtime",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "replace the concrete service subpackage import with the owning service root contract, an owner-local test, or root.BuildProcess"
+    },
+    {
+      "owner": "workers",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/workers/service",
+      "filePath": "pkg/services/factory_sessions/internal/runtimeopening/durable_provider_test.go",
+      "targetRoot": "pkg/services/workers",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "replace the concrete service subpackage import with the owning service root contract, an owner-local test, or root.BuildProcess"
+    }
+  ]
+}

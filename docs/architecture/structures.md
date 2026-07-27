@@ -183,11 +183,11 @@ flowchart LR
         currentModelService[[pkg/services/models/internal/service]]
         currentModelHost[[pkg/services/models/internal/host]]
         currentLocalModels[[pkg/services/models/internal/local]]
-        currentModelAssets[[pkg/services/models/internal/assets]]
+        currentModelAssets[[pkg/services/models/internal/services/assets]]
 
         currentModelService --> currentModelHost
         currentModelHost --> currentLocalModels
-        currentModelHost --> currentModelAssets
+        currentModelService --> currentModelAssets
     end
 
     subgraph currentPersistence[Current persistence and platform infrastructure]

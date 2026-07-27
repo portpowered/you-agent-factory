@@ -67,6 +67,7 @@ func newConfiguredJavaScriptRuntimeService(config javaScriptRuntimeServiceConfig
 		workflows, workflows, workflows,
 		nil, factory.JavaScriptWorkerSettings{}, mustTestRecordingWriter(),
 		testSessionIDGenerator,
+		nil, nil, nil,
 	)
 }
 
@@ -1408,11 +1409,16 @@ func testApplicationPersistencePolicies(t *testing.T, projectRoot string) {
 func testExecutionServiceChildExecutorHelpers(t *testing.T) {
 	t.Helper()
 
-	if err := validateLiveChildProviderExecutor(ChildExecutorModeLive, nil); err == nil {
-		t.Fatal("validateLiveChildProviderExecutor(live,nil) error = nil, want validation error")
+	if err := validateLiveChildProviderExecutor(ChildExecutorModeLive, nil, nil); err == nil {
+		t.Fatal("validateLiveChildProviderExecutor(live,nil,nil) error = nil, want validation error")
 	}
-	if err := validateLiveChildProviderExecutor(ChildExecutorModeFake, nil); err != nil {
-		t.Fatalf("validateLiveChildProviderExecutor(fake,nil) error = %v", err)
+	if err := validateLiveChildProviderExecutor(ChildExecutorModeLive, nil, func(workerexecution.ProgressPublisher) (workerexecution.InvocationExecutor, error) {
+		return nil, nil
+	}); err != nil {
+		t.Fatalf("validateLiveChildProviderExecutor(live,nil,liveChildInvocation) error = %v", err)
+	}
+	if err := validateLiveChildProviderExecutor(ChildExecutorModeFake, nil, nil); err != nil {
+		t.Fatalf("validateLiveChildProviderExecutor(fake,nil,nil) error = %v", err)
 	}
 
 	smoke := SmokeLiveChildProvider()

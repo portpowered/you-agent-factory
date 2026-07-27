@@ -64,6 +64,16 @@ collaborators and return an empty root-owned result on any validation,
 resolution, rejection, or completeness failure so partial bindings never
 escape.
 
+Models asset source selection, cache inspection, verified preparation, and
+private local-runtime cache layout all belong to the single parent-private
+`pkg/services/models/internal/services/assets` service. Compatibility adapters
+receive that already-constructed service plus an opaque Models runtime scope;
+they must not reconstruct an asset puller or its filesystem/network effects.
+When a Factory Session runtime configuration is intentionally unavailable until
+assembly completes, resolve and memoize the immutable Models scope on first
+asset use, retrying a pre-assembly unavailable result instead of snapshotting a
+nil configuration permanently.
+
 When this recursive shape adds measured Go packages, register every package in
 both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
 `docs/internal/baselines/go-functional-coverage-package-minimums.json` in

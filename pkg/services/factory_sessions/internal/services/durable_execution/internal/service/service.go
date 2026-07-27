@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -12,6 +13,25 @@ import (
 // the established execution contract during the package migration.
 type Service struct {
 	factorysessions.ExecutionService
+}
+
+// SubscribeResponseEvents forwards durable-session response-event subscriptions
+// to the underlying JavaScript runtime when that capability is present.
+func (s *Service) SubscribeResponseEvents(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ResponseEventSubscriptionRequest,
+) (*factorysessions.ResponseEventCursor, error) {
+	if s == nil || s.ExecutionService == nil {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	subscriber, ok := s.ExecutionService.(interface {
+		SubscribeResponseEvents(context.Context, string, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
+	})
+	if !ok {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	return subscriber.SubscribeResponseEvents(ctx, sessionID, request)
 }
 
 // New constructs an inert durable execution capability around an explicitly

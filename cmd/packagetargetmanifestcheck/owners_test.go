@@ -47,12 +47,12 @@ func TestMapCommittedOwnerPackageCoversAllThirteenOwners(t *testing.T) {
 
 	providersSeen := false
 	for _, row := range rows {
-		root, _, ok := splitDestination(row.Destination)
-		if ok && root == "providers" {
-			providersSeen = true
-			if row.Disposition != DispositionMove {
-				t.Fatalf("providers extraction %q disposition = %q, want move", row.PackagePath, row.Disposition)
-			}
+		if _, extracted := mapProvidersExtraction(row.PackagePath); !extracted {
+			continue
+		}
+		providersSeen = true
+		if row.Disposition != DispositionMove {
+			t.Fatalf("providers extraction %q disposition = %q, want move", row.PackagePath, row.Disposition)
 		}
 	}
 	if !providersSeen {

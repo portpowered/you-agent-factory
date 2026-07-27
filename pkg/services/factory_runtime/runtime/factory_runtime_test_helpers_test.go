@@ -37,6 +37,7 @@ type testFactoryConfig struct {
 	net                       *state.Net
 	scheduler                 scheduler.Scheduler
 	workerExecutors           map[string]workers.WorkerExecutor
+	workerService             workstationExecutionBoundary
 	runtimeConfig             interfaces.RuntimeDefinitionLookup
 	workflowContext           *factory_context.FactoryContext
 	runtimeMode               interfaces.RuntimeMode
@@ -60,8 +61,12 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 		cfg.eventHistory = &recordingfixtures.ScriptedRuntimeLedger{}
 	}
 	var identity atomic.Int64
+	workerService := cfg.workerService
+	if workerService == nil {
+		workerService = &testWorkstationBoundary{}
+	}
 	return New(
-		cfg.net, cfg.scheduler, cfg.workerExecutors, cfg.runtimeConfig,
+		cfg.net, cfg.scheduler, cfg.workerExecutors, workerService, cfg.runtimeConfig,
 		cfg.workflowContext, cfg.runtimeMode, cfg.logger, cfg.clock,
 		cfg.inlineDispatch, cfg.eventHistory, nil,
 		nil, nil, cfg.submissionHooks,
@@ -103,6 +108,77 @@ func withWorkerExecutor(workerType string, executor workers.WorkerExecutor) test
 		}
 		cfg.workerExecutors[workerType] = executor
 	}
+}
+
+func withWorkerService(service workstationExecutionBoundary) testFactoryOption {
+	return func(cfg *testFactoryConfig) { cfg.workerService = service }
+}
+
+type testWorkstationBoundary struct {
+	routes map[string]workers.WorkstationRequestExecutor
+}
+
+func (b *testWorkstationBoundary) StartWorkstationPool(
+	_ context.Context,
+	request workers.WorkstationPoolStartRequest,
+) (workers.WorkstationPoolStartResult, error) {
+	b.routes = make(map[string]workers.WorkstationRequestExecutor, len(request.Bindings))
+	for _, binding := range request.Bindings {
+		b.routes[binding.RoleName] = binding.Executor
+	}
+	return workers.WorkstationPoolStartResult{
+		Outcome: workers.WorkstationPoolLifecycleOutcomeStarted,
+	}, nil
+}
+
+func (*testWorkstationBoundary) StopWorkstationPool(
+	context.Context,
+) (workers.WorkstationPoolStopResult, error) {
+	return workers.WorkstationPoolStopResult{
+		Outcome: workers.WorkstationPoolLifecycleOutcomeStopped,
+	}, nil
+}
+
+func (b *testWorkstationBoundary) DispatchWorkstation(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+) (workers.WorkstationDispatchResult, error) {
+	executor := b.routes[request.WorkstationName]
+	if executor == nil {
+		result := workerexecution.WorkResult{
+			DispatchID:   request.Execution.Dispatch.DispatchID,
+			TransitionID: request.Execution.Dispatch.TransitionID,
+			Outcome:      workerexecution.OutcomeFailed,
+			Error:        fmt.Sprintf("no executor registered for worker type %q", request.Execution.WorkerType),
+		}
+		return workers.WorkstationDispatchResult{
+			DispatchID:      result.DispatchID,
+			WorkstationName: request.WorkstationName,
+			TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+			Result:          result,
+		}, nil
+	}
+	result, err := executor.Execute(ctx, request.Execution)
+	terminal := workers.WorkstationDispatchTerminalOutcomeCompleted
+	if err != nil || result.Outcome == workerexecution.OutcomeFailed {
+		terminal = workers.WorkstationDispatchTerminalOutcomeFailed
+	}
+	return workers.WorkstationDispatchResult{
+		DispatchID:      request.Execution.Dispatch.DispatchID,
+		WorkstationName: request.WorkstationName,
+		TerminalOutcome: terminal,
+		Result:          result,
+	}, err
+}
+
+func (*testWorkstationBoundary) CancelWorkstationDispatch(
+	_ context.Context,
+	request workers.WorkstationDispatchCancelRequest,
+) (workers.WorkstationDispatchCancelResult, error) {
+	return workers.WorkstationDispatchCancelResult{
+		DispatchID: request.DispatchID,
+		Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
+	}, nil
 }
 
 func withRuntimeConfig(value interfaces.RuntimeDefinitionLookup) testFactoryOption {
@@ -954,13 +1030,13 @@ func assertPausedSubmissionNotApplied(t *testing.T, f factory.Factory) {
 func observeNextBufferedResult(t *testing.T, f factory.Factory) <-chan struct{} {
 	t.Helper()
 	impl, ok := f.(*factoryImpl)
-	if !ok || impl.dispatchHook == nil {
-		t.Fatal("test factory does not expose a worker-pool dispatch hook")
+	if !ok || impl.dispatchFlow == nil {
+		t.Fatal("test factory does not expose a canonical dispatch result hook")
 	}
 	written := make(chan struct{})
 	var once sync.Once
 	notify := func() { once.Do(func() { close(written) }) }
-	impl.dispatchHook.SetOnBufferedResult(notify)
+	impl.dispatchFlow.SetOnBufferedResult(notify)
 	return written
 }
 

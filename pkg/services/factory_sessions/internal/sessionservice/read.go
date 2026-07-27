@@ -56,6 +56,24 @@ func (s *Service) SubscribeFactoryResponseEvents(
 	}
 }
 
+// SubscribeDurableFactoryResponseEvents opens one durable-session response-event
+// cursor through the bound durable execution implementation.
+func (s *Service) SubscribeDurableFactoryResponseEvents(
+	ctx context.Context,
+	request factorysessions.ResponseEventSubscriptionRequest,
+) (*factorysessions.ResponseEventCursor, error) {
+	if s == nil || s.durable == nil {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	subscriber, ok := s.durable.(interface {
+		SubscribeResponseEvents(context.Context, string, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
+	})
+	if !ok {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	return subscriber.SubscribeResponseEvents(ctx, request.SessionID, request)
+}
+
 // ListFactorySessions returns live workspace session summaries through control-plane read policy.
 func (s *Service) ListFactorySessions(ctx context.Context) ([]factorysessions.ReadProjection, error) {
 	if s == nil || s.host == nil {

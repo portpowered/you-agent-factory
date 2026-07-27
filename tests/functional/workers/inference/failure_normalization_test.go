@@ -15,19 +15,19 @@ import (
 )
 
 const (
-	codexAuthFailureStderr = `ERROR: unexpected status 401 Unauthorized {"type":"authentication_error","message":"invalid api key"}`
+	codexAuthFailureStderr     = `ERROR: unexpected status 401 Unauthorized {"type":"authentication_error","message":"invalid api key"}`
 	codexThrottleFailureStderr = "ERROR: selected model is at capacity"
-	codexTimeoutFailureStderr = "request timed out after waiting for provider response"
+	codexTimeoutFailureStderr  = "request timed out after waiting for provider response"
 )
 
 const providerExitNormalizationSessionID = "provider-exit-normalization-session"
 
 const (
-	failureRedactionPromptNeedle       = "probe-prompt-redaction-9f3a7c"
-	failureRedactionEnvKey             = "FACTORY_PROBE_SECRET"
-	failureRedactionEnvNeedle          = "probe-env-redaction-8e2b1d"
-	failureRedactionCredentialEnvKey   = "OPENAI_API_KEY"
-	failureRedactionCredentialNeedle   = "sk-probe-credential-redaction-7d4c0b"
+	failureRedactionPromptNeedle     = "probe-prompt-redaction-9f3a7c"
+	failureRedactionEnvKey           = "FACTORY_PROBE_SECRET"
+	failureRedactionEnvNeedle        = "probe-env-redaction-8e2b1d"
+	failureRedactionCredentialEnvKey = "OPENAI_API_KEY"
+	failureRedactionCredentialNeedle = "sk-probe-credential-redaction-7d4c0b"
 )
 
 // TestProviderNonZeroExitMapsToPublicFailure proves a provider process that exits
@@ -334,9 +334,9 @@ func assertPublicProviderFailureSurfacesRedactSensitiveMaterial(
 	}
 
 	publicObservation, err := json.Marshal(struct {
-		Session       factoryapi.FactorySession              `json:"session"`
-		Work          factoryapi.ListWorkResponse            `json:"work"`
-		FailureEvents []factoryapi.FactoryEvent              `json:"failureEvents"`
+		Session       factoryapi.FactorySession                `json:"session"`
+		Work          factoryapi.ListWorkResponse              `json:"work"`
+		FailureEvents []factoryapi.FactoryEvent                `json:"failureEvents"`
 		Inference     factoryapi.InferenceResponseEventPayload `json:"inferenceFailure"`
 	}{
 		Session:       session,
@@ -353,10 +353,20 @@ func assertPublicProviderFailureSurfacesRedactSensitiveMaterial(
 			t.Fatalf("public provider failure surfaces leaked %q: %s", needle, payload)
 		}
 	}
+	failureObservation, err := json.Marshal(struct {
+		FailureEvents []factoryapi.FactoryEvent                `json:"failureEvents"`
+		Inference     factoryapi.InferenceResponseEventPayload `json:"inferenceFailure"`
+	}{
+		FailureEvents: failureEvents,
+		Inference:     failure,
+	})
+	if err != nil {
+		t.Fatalf("marshal public provider failure events: %v", err)
+	}
 	if err := support.ValidateProviderSessionFixtureContent(
 		"failure-normalization-redaction",
 		"public-provider-failure-surfaces",
-		publicObservation,
+		failureObservation,
 	); err != nil {
 		t.Fatalf("public provider failure surfaces failed sanitization: %v", err)
 	}

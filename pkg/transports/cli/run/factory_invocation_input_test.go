@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -326,4 +327,30 @@ func TestObserveInvocationRejection_AmbiguousInputRecordsStructuredLogAndMetrics
 	if got := snapshotCleanInvocationMetrics(); got != (CleanInvocationMetricsSnapshot{Attempts: 1, AmbiguityRejected: 1}) {
 		t.Fatalf("metrics = %#v", got)
 	}
+}
+
+func TestResponseStreamOutputCancelOnWriteErrorCancelsInvocationContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	writeErr := errors.New("broken stdout pipe")
+	writer := responseStreamOutputCancelOnWriteError(errorWriter{err: writeErr}, cancel)
+	if _, err := writer.Write([]byte("record")); !errors.Is(err, writeErr) {
+		t.Fatalf("Write() error = %v, want %v", err, writeErr)
+	}
+	select {
+	case <-ctx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for invocation cancellation after stdout write failure")
+	}
+}
+
+type errorWriter struct {
+	err error
+}
+
+func (writer errorWriter) Write([]byte) (int, error) {
+	return 0, writer.err
 }
