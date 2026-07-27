@@ -147,10 +147,6 @@
       "name": "TestRunJavaScriptFactoryResponseStreamPublishesCanonicalLifecycle"
     },
     {
-      "file": "transport/cli/output/javascript_test.go",
-      "name": "TestJavaScriptInvocationEmitsCanonicalPhaseAndCheckpointEvents"
-    },
-    {
       "file": "cli/factory_run/output/failure_test.go",
       "name": "TestInvocationFailureOutputContracts"
     },
@@ -467,6 +463,10 @@
       "name": "TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior"
     },
     {
+      "file": "orchestration/javascript/events/javascript_test.go",
+      "name": "TestJavaScriptInvocationEmitsCanonicalPhaseAndCheckpointEvents"
+    },
+    {
       "file": "providers/cli_script_executor_test.go",
       "name": "TestScriptExecutor_ArgTemplating"
     },
@@ -527,6 +527,10 @@
       "name": "TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates"
     },
     {
+      "file": "providers/cli_template_resolution_long_test.go",
+      "name": "TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates"
+    },
+    {
       "file": "providers/cli_timeout_cleanup_smoke_test.go",
       "name": "TestIntegrationSmoke_ProcessTreeHelper"
     },
@@ -537,22 +541,6 @@
     {
       "file": "providers/cli_timeout_cleanup_smoke_test.go",
       "name": "TestIntegrationSmoke_TimeoutRequeuesWorkAndSucceedsOnLaterAttempt"
-    },
-    {
-      "file": "providers/codex/process_harness_test.go",
-      "name": "TestRootBuiltProcessExecutesThroughSharedSupport"
-    },
-    {
-      "file": "providers/codex_content_test.go",
-      "name": "TestCodexContentDispatch_MixedContentEmitsOrderedImageArgs"
-    },
-    {
-      "file": "providers/codex_content_test.go",
-      "name": "TestCodexContentDispatch_TextOnlyContentDoesNotEmitImageArgs"
-    },
-    {
-      "file": "providers/codex_worktree_workstation_test.go",
-      "name": "TestCodexWorktreeWorkstationDispatch_MaterializesCheckoutAndOmitsCLIWorktreeFlag"
     },
     {
       "file": "providers/mock_workers_agent_test.go",

@@ -260,10 +260,15 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Inference workers — golden-backed provider variants
 
-- [ ] `tests/functional/workers/inference/codex/golden_success_test.go`
+- [x] `tests/functional/workers/inference/codex/golden_success_test.go`
   - `TestCodexGoldenTextAndToolSuccess` replays `codex/message-tool-success`.
   - `TestCodexGoldenDerivesProviderSessionAndResponseEvents` compares all public
     metadata goldens.
+
+- [x] `tests/functional/workers/inference/codex/worktree_workstation_test.go`
+  - `TestCodexWorktreeWorkstationDispatch_MaterializesCheckoutAndOmitsCLIWorktreeFlag`
+    proves named worktree checkout materialization and omits the CLI `--worktree`
+    flag.
 
 - [ ] `tests/functional/workers/inference/codex/golden_failure_test.go`
   - `TestCodexGoldenStructuredFailure` replays a non-zero structured failure.

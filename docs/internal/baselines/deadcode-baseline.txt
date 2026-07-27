@@ -316,6 +316,7 @@ tests/functional/internal/support/process_factory.go: unreachable func: RunFacto
 tests/functional/internal/support/provider.go: unreachable func: CursorProviderSuccessStdout
 tests/functional/internal/support/provider.go: unreachable func: ProviderErrorCommandResult
 tests/functional/internal/support/workdir.go: unreachable func: WithWorkingDirectory
+tests/functional/providers/helpers_test.go: unreachable func: assertCursorProviderCompleted
 tests/functional/providers/helpers_test.go: unreachable func: assertProviderArgsPrompt
 tests/functional/providers/helpers_test.go: unreachable func: assertProviderStdin
 tests/functional/providers/helpers_test.go: unreachable func: cursorMergedPrompt

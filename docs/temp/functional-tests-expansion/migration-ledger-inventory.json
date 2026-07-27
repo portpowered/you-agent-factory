@@ -2191,6 +2191,16 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
+      "package": "you-agent-factory/tests/functional/providers",
+      "scenario": "TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates",
+      "lane": "functionallong",
+      "destination": "tests/functional/workers/inference/cursor/golden_success_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/providers/cli_timeout_cleanup_smoke_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestIntegrationSmoke_ProcessTreeHelper",
@@ -2228,46 +2238,6 @@
       "destination": "tests/functional/workers/inference/process_cleanup_test.go",
       "catch_all": "none",
       "specialty_targets": "script-timeout-companion-smoke-100",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/providers/codex/process_harness_test.go",
-      "package": "you-agent-factory/tests/functional/providers/codex",
-      "scenario": "TestRootBuiltProcessExecutesThroughSharedSupport",
-      "lane": "short",
-      "destination": "tests/functional/workers/inference/codex/golden_success_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/providers/codex_content_test.go",
-      "package": "you-agent-factory/tests/functional/providers",
-      "scenario": "TestCodexContentDispatch_MixedContentEmitsOrderedImageArgs",
-      "lane": "short",
-      "destination": "tests/functional/workers/inference/codex/golden_success_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/providers/codex_content_test.go",
-      "package": "you-agent-factory/tests/functional/providers",
-      "scenario": "TestCodexContentDispatch_TextOnlyContentDoesNotEmitImageArgs",
-      "lane": "short",
-      "destination": "tests/functional/workers/inference/codex/golden_success_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/providers/codex_worktree_workstation_test.go",
-      "package": "you-agent-factory/tests/functional/providers",
-      "scenario": "TestCodexWorktreeWorkstationDispatch_MaterializesCheckoutAndOmitsCLIWorktreeFlag",
-      "lane": "short",
-      "destination": "tests/functional/workers/inference/codex/golden_success_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
       "deletion_only_batch": "n/a"
     },
     {
@@ -5251,6 +5221,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/workers/inference/codex/golden_success_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/codex",
+      "scenario": "TestCodexGoldenDerivesProviderSessionAndResponseEvents",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/codex/golden_success_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/codex/golden_success_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/codex",
+      "scenario": "TestCodexGoldenTextAndToolSuccess",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/codex/golden_success_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/codex/worktree_workstation_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/codex",
+      "scenario": "TestCodexWorktreeWorkstationDispatch_MaterializesCheckoutAndOmitsCLIWorktreeFlag",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/codex/worktree_workstation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/workers/inference/cursor/golden_success_test.go",
       "package": "you-agent-factory/tests/functional/workers/inference/cursor",
       "scenario": "TestCursorGoldenReadableProviderSessionDetails",
@@ -6161,6 +6161,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/workers/inference/gemini/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/gemini",
+      "scenario": "TestGeminiGoldenRateLimitAndStructuredFailure",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/gemini/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/gemini/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/gemini",
+      "scenario": "TestGeminiGoldenTextSuccess",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/gemini/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/gemini/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/gemini",
+      "scenario": "TestGeminiGoldenTimeout",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/gemini/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/workers/inference/kiro/golden_test.go",
       "package": "you-agent-factory/tests/functional/workers/inference/kiro",
       "scenario": "TestKiroGoldenTextSuccess",
@@ -6221,7 +6251,7 @@
       "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-27T14:53:22Z",
+  "scanned_at_utc": "2026-07-27T15:30:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 27,
@@ -6255,14 +6285,14 @@
       "workflow": 64,
       "workstations": 7
     },
-    "customer_top_level_Test_scenarios": 603,
+    "customer_top_level_Test_scenarios": 606,
     "files_with_customer_Test": 200,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
-    "lane_functionallong": 117,
-    "lane_short": 486,
+    "lane_functionallong": 118,
+    "lane_short": 488,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
       "you-agent-factory/tests/functional/bootstrap_portability": 25,
@@ -6394,16 +6424,16 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T15:35:00Z",
-    "story": "ft-wave1-script-environment-mergeability",
-    "live_customer_scenarios": 603,
-    "ledger_rows": 603,
+    "audited_at_utc": "2026-07-27T16:00:00Z",
+    "story": "ft-wave1-codex-golden-success-mergeability",
+    "live_customer_scenarios": 606,
+    "ledger_rows": 606,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 486,
-    "lane_functionallong": 117,
+    "lane_short": 488,
+    "lane_functionallong": 118,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
     "validator": "go run ./cmd/migrationledgercheck"
