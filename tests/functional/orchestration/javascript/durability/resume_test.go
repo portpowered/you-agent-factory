@@ -201,6 +201,98 @@ func TestJavaScriptResumeRestoresCheckpointAndFinalResult(t *testing.T) {
 	assertResumableTwoStepFinalPrimaryResult(t, result, workflowName)
 }
 
+// TestJavaScriptCorruptCheckpointFailsActionably proves that resuming a durable
+// JavaScript Factory Session with a corrupt persisted checkpoint fails through the
+// public lifecycle boundary with a customer-readable invalid-state rejection,
+// leaves the interrupted session inspectable without a successful terminal
+// outcome, and does not hang or leak private JavaScript VM internals.
+func TestJavaScriptCorruptCheckpointFailsActionably(t *testing.T) {
+	const workflowName = "resumable-two-step-fake-children"
+	projectRoot := setupJavaScriptDurabilityResumeWorkflowFixture(t, workflowName)
+	provider := newJavaScriptDurabilityResumeBlockingProvider(workflowName)
+
+	seedServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: projectRoot,
+		Edges:      serviceedges.Edges{ProviderOverride: provider},
+	})
+	seedURL := strings.TrimSuffix(seedServer.URL(), "/")
+	sessionID := startInterruptedJavaScriptDurabilitySession(t, seedURL, provider, workflowName)
+	waitForPersistedJavaScriptDurabilitySnapshot(t, projectRoot, sessionID)
+
+	before := readDurableJavaScriptSession(t, seedURL, sessionID)
+	if before.Status != factoryapi.FactorySessionDurableLifecycleStatusInterrupted {
+		t.Fatalf("pre-corruption status = %q, want INTERRUPTED", before.Status)
+	}
+	if before.Lifecycle == nil || before.Lifecycle.InterruptedAt == nil {
+		t.Fatalf("pre-corruption lifecycle = %#v, want interruptedAt", before.Lifecycle)
+	}
+	seedServer.Stop(t)
+
+	corruptJavaScriptDurableSessionCheckpointKind(t, projectRoot, sessionID)
+
+	resumeServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: projectRoot,
+		Edges:      serviceedges.Edges{ProviderOverride: provider},
+	})
+	baseURL := strings.TrimSuffix(resumeServer.URL(), "/")
+
+	interrupted := readDurableJavaScriptSession(t, baseURL, sessionID)
+	if interrupted.Status != factoryapi.FactorySessionDurableLifecycleStatusInterrupted {
+		t.Fatalf("post-corruption status = %q, want INTERRUPTED", interrupted.Status)
+	}
+	if interrupted.Lifecycle == nil || interrupted.Lifecycle.InterruptedAt == nil {
+		t.Fatalf("post-corruption lifecycle = %#v, want interruptedAt", interrupted.Lifecycle)
+	}
+	callsBeforeResume := provider.callCount()
+
+	resumeResponse := resumeJavaScriptSessionExpectingInvalidState(t, baseURL, sessionID)
+	if resumeResponse.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
+		t.Fatalf("resume operation = %q, want RESUME", resumeResponse.Operation)
+	}
+	if resumeResponse.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeInvalidState {
+		t.Fatalf("resume outcome = %q, want INVALID_STATE", resumeResponse.Outcome)
+	}
+	if resumeResponse.SessionId != sessionID {
+		t.Fatalf("resume sessionId = %q, want %q", resumeResponse.SessionId, sessionID)
+	}
+	if resumeResponse.Status != factoryapi.FactorySessionDurableLifecycleStatusInterrupted {
+		t.Fatalf("resume status = %q, want INTERRUPTED", resumeResponse.Status)
+	}
+	if resumeResponse.Detail == nil {
+		t.Fatal("resume detail unexpectedly missing")
+	}
+	detail := strings.ToLower(*resumeResponse.Detail)
+	if !strings.Contains(detail, "checkpoint") {
+		t.Fatalf("resume detail = %q, want customer-readable checkpoint diagnostic", *resumeResponse.Detail)
+	}
+	for _, leaked := range []string{"checkpointstate", "v8", "heap", "stack frame", "goroutine"} {
+		if strings.Contains(detail, leaked) {
+			t.Fatalf("resume detail leaked private internals: %q", *resumeResponse.Detail)
+		}
+	}
+
+	after := readDurableJavaScriptSession(t, baseURL, sessionID)
+	if after.Status != factoryapi.FactorySessionDurableLifecycleStatusInterrupted {
+		t.Fatalf("post-resume status = %q, want INTERRUPTED unchanged", after.Status)
+	}
+	if after.Lifecycle == nil || after.Lifecycle.InterruptedAt == nil {
+		t.Fatalf("post-resume lifecycle = %#v, want interruptedAt continuity", after.Lifecycle)
+	}
+	if after.Lifecycle.ResumedAt != nil {
+		t.Fatalf("resumedAt = %v, want nil after failed resume", after.Lifecycle.ResumedAt)
+	}
+	if after.ResultSummary != nil && after.ResultSummary.ResultStatus == factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("post-resume resultSummary = %#v, want no successful terminal outcome", after.ResultSummary)
+	}
+	if provider.callCount() != callsBeforeResume {
+		t.Fatalf(
+			"provider infer calls = %d, want %d (no resume execution after corrupt checkpoint)",
+			provider.callCount(),
+			callsBeforeResume,
+		)
+	}
+}
+
 func setupJavaScriptDurabilityResumeWorkflowFixture(t *testing.T, workflowName string) string {
 	t.Helper()
 
@@ -313,6 +405,96 @@ func resumeJavaScriptSession(
 		baseURL+"/factory-sessions/"+sessionID+"/resume",
 		factoryapi.FactorySessionLifecycleControlRequest{},
 	)
+}
+
+func resumeJavaScriptSessionExpectingInvalidState(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+) factoryapi.FactorySessionLifecycleControlResponse {
+	t.Helper()
+
+	payload, err := json.Marshal(factoryapi.FactorySessionLifecycleControlRequest{})
+	if err != nil {
+		t.Fatalf("marshal resume request: %v", err)
+	}
+	endpoint := baseURL + "/factory-sessions/" + sessionID + "/resume"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read POST %s response: %v", endpoint, err)
+	}
+	if response.StatusCode != http.StatusConflict {
+		t.Fatalf("POST %s status = %d, want 409\n%s", endpoint, response.StatusCode, body)
+	}
+	var decoded factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("decode POST %s response: %v\n%s", endpoint, err, body)
+	}
+	return decoded
+}
+
+func waitForPersistedJavaScriptDurabilitySnapshot(t *testing.T, projectRoot, sessionID string) {
+	t.Helper()
+
+	path := javaScriptDurableSessionPersistencePath(projectRoot, sessionID)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		raw, err := os.ReadFile(path)
+		if err == nil && len(raw) > 0 {
+			var probe struct {
+				CheckpointSummary *struct{} `json:"CheckpointSummary"`
+			}
+			if json.Unmarshal(raw, &probe) == nil && probe.CheckpointSummary != nil {
+				return
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("persisted interrupted snapshot not ready at %s", path)
+}
+
+func javaScriptDurableSessionPersistencePath(projectRoot, sessionID string) string {
+	return filepath.Join(projectRoot, ".you-agent-factory", "durable-sessions", sessionID+".json")
+}
+
+func corruptJavaScriptDurableSessionCheckpointKind(t *testing.T, projectRoot, sessionID string) {
+	t.Helper()
+
+	path := javaScriptDurableSessionPersistencePath(projectRoot, sessionID)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read durable session snapshot %s: %v", path, err)
+	}
+	var snapshot map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &snapshot); err != nil {
+		t.Fatalf("unmarshal durable session snapshot: %v", err)
+	}
+	checkpointRaw, ok := snapshot["CheckpointSummary"]
+	if !ok {
+		t.Fatal("durable session snapshot missing CheckpointSummary")
+	}
+	var checkpointSummary map[string]any
+	if err := json.Unmarshal(checkpointRaw, &checkpointSummary); err != nil {
+		t.Fatalf("unmarshal checkpointSummary: %v", err)
+	}
+	checkpointSummary["kind"] = "invalid-checkpoint-kind"
+	encodedCheckpoint, err := json.Marshal(checkpointSummary)
+	if err != nil {
+		t.Fatalf("marshal checkpointSummary: %v", err)
+	}
+	snapshot["checkpointSummary"] = encodedCheckpoint
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("marshal durable session snapshot: %v", err)
+	}
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		t.Fatalf("write corrupt durable session snapshot %s: %v", path, err)
+	}
 }
 
 func listJavaScriptSessionDispatches(
