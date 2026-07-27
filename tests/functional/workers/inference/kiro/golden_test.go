@@ -20,6 +20,7 @@ const (
 	kiroGoldenTextSuccessCase       = "text-success"
 	kiroGoldenAuthFailureCase       = "auth-failure"
 	kiroGoldenStructuredFailureCase = "structured-failure"
+	kiroGoldenTimeoutCase           = "timeout"
 )
 
 // TestKiroGoldenTextSuccess replays a sanitized Kiro text-success transcript through
@@ -161,6 +162,138 @@ func TestKiroGoldenAuthAndStructuredFailure(t *testing.T) {
 	})
 }
 
+// TestKiroGoldenTimeout replays a sanitized Kiro timeout transcript through the
+// customer process boundary and proves a public timeout outcome distinct from
+// successful text completion, with matching Provider Session, response-event,
+// and invocation-result metadata.
+//golden: docs/temp/functional/provider-sessions/kiro/timeout/manifest.json
+func TestKiroGoldenTimeout(t *testing.T) {
+	repoRoot := testutil.MustRepoRoot(t)
+	caseDir := filepath.Join(
+		repoRoot,
+		filepath.FromSlash(support.ProviderSessionFixturePath("kiro", kiroGoldenTimeoutCase)),
+	)
+
+	loaded, err := support.LoadProviderSessionCase(caseDir)
+	if err != nil {
+		t.Fatalf("LoadProviderSessionCase: %v", err)
+	}
+	if loaded.Manifest.ID != "kiro-timeout" {
+		t.Fatalf("manifest.ID = %q, want kiro-timeout", loaded.Manifest.ID)
+	}
+	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelityFinalOnly {
+		t.Fatalf(
+			"manifest.fidelityClass = %q, want %q",
+			loaded.Manifest.FidelityClass,
+			support.ProviderSessionFidelityFinalOnly,
+		)
+	}
+
+	var request struct {
+		Model     string `json:"model"`
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(loaded.Request, &request); err != nil {
+		t.Fatalf("decode request.json: %v", err)
+	}
+	if request.Model == "" {
+		t.Fatalf("request.json = %#v, want model", request)
+	}
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
+		support.BuildModelWorkerConfig(modelprovider.ProviderKiro, request.Model),
+		"stopToken: COMPLETE",
+		"skipPermissions: true\nstopToken: COMPLETE",
+		1,
+	))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"kiro golden timeout"}`))
+
+	exitCode := 124
+	if loaded.Process.ExitCode != nil {
+		exitCode = *loaded.Process.ExitCode
+	}
+	timeoutResult := platformprocess.CommandResult{
+		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
+		Stderr:   []byte(loaded.Stderr),
+		ExitCode: exitCode,
+	}
+	runner := testutil.NewProviderCommandRunner(
+		timeoutResult,
+		timeoutResult,
+		timeoutResult,
+		timeoutResult,
+	)
+
+	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		30*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
+		t.Fatalf("completed work = %d, want 0; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
+	}
+	if runner.CallCount() < 1 {
+		t.Fatalf("provider command runner calls = %d, want at least 1", runner.CallCount())
+	}
+
+	inferencePayload := kiroGoldenFailedInferenceObservationWithReason(t, events, factoryapi.WorkFailureTypeTimeout)
+	if inferencePayload.Outcome != factoryapi.InferenceOutcomeFailed {
+		t.Fatalf("inference outcome = %q, want FAILED", inferencePayload.Outcome)
+	}
+	if inferencePayload.FailureDetail == nil {
+		t.Fatal("inference response missing failure detail")
+	}
+	if inferencePayload.FailureDetail.Reason != factoryapi.WorkFailureTypeTimeout {
+		t.Fatalf("failure reason = %q, want TIMEOUT (runner calls=%d)", inferencePayload.FailureDetail.Reason, runner.CallCount())
+	}
+	if inferencePayload.FailureDetail.Message != "provider invocation timed out" {
+		t.Fatalf("failure message = %q, want provider invocation timed out", inferencePayload.FailureDetail.Message)
+	}
+	if inferencePayload.Response != nil && strings.Contains(*inferencePayload.Response, "COMPLETE") {
+		t.Fatalf("timeout inference response = %q, must not treat COMPLETE-bearing stdout as success", *inferencePayload.Response)
+	}
+	assertKiroGoldenDispatchDoesNotTreatTimeoutStdoutAsSuccess(t, events)
+
+	observed := support.ProviderSessionObservedGoldens{
+		ProviderSession:   observeKiroProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ResponseEvents:   observeKiroResponseEventGoldens(responseEvents),
+		InvocationResult: observeKiroFailedInvocationResultGolden(inferencePayload),
+	}
+	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
+		var updated *support.ProviderSessionGoldensUpdatedError
+		if errors.As(err, &updated) {
+			t.Fatalf("%v", err)
+		}
+		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
+	}
+}
+
+func assertKiroGoldenDispatchDoesNotTreatTimeoutStdoutAsSuccess(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch response: %v", err)
+		}
+		if payload.Output != nil && strings.Contains(*payload.Output, "COMPLETE") {
+			t.Fatalf("dispatch output = %q, must not treat COMPLETE-bearing stdout as success on timeout", *payload.Output)
+		}
+	}
+}
+
 func runKiroFailureGoldenCase(
 	t *testing.T,
 	caseName string,
@@ -300,6 +433,14 @@ func kiroGoldenFailedInferenceObservation(
 	t *testing.T,
 	events []factoryapi.FactoryEvent,
 ) factoryapi.InferenceResponseEventPayload {
+	return kiroGoldenFailedInferenceObservationWithReason(t, events, "")
+}
+
+func kiroGoldenFailedInferenceObservationWithReason(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	wantReason factoryapi.WorkFailureType,
+) factoryapi.InferenceResponseEventPayload {
 	t.Helper()
 
 	var (
@@ -317,10 +458,16 @@ func kiroGoldenFailedInferenceObservation(
 		if payload.Outcome != factoryapi.InferenceOutcomeFailed {
 			continue
 		}
+		if wantReason != "" && payload.FailureDetail != nil && payload.FailureDetail.Reason != wantReason {
+			continue
+		}
 		inferencePayload = payload
 		foundInference = true
 	}
 	if !foundInference {
+		if wantReason != "" {
+			t.Fatalf("missing failed INFERENCE_RESPONSE with reason %q in factory events", wantReason)
+		}
 		t.Fatal("missing failed INFERENCE_RESPONSE in factory events")
 	}
 	return inferencePayload
