@@ -142,7 +142,7 @@ func (s *service) RunScriptPoller(
 			return fmt.Errorf("script poller submitter is not available")
 		}
 		if err := submitter(ctx, request); err != nil {
-			return fmt.Errorf("script poller submit failed: %w", err)
+			return scriptpollers.SubmitFailedError(err)
 		}
 	}
 	return fmt.Errorf("script poller exited unexpectedly")
