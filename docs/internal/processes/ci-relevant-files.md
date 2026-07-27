@@ -496,6 +496,18 @@ Wave 0 functional-tests-expansion planning authority lives under
   The package's passive embedded-filesystem tests run in `make test-maintenance`,
   matching the repository-boundary checker that protects its authored data
   ownership.
+- `cmd/packagedfactoryconsumptioncheck` owns the static consumption gate for
+  shipped first-party Factory definition bytes. Keep it in the default
+  `make lint` aggregation: production Go may import
+  `packages/packaged-factories` only from the embed package itself and
+  `internal/packagedfactorycatalog`, and may call
+  `packagedfactorycatalog.LoadPublishedDefinitionCatalog` only from the
+  approved wiring and catalog-projection files
+  (`pkg/wire/profiles.go`, `pkg/transports/http/handlers_models.go`,
+  `pkg/services/factory_definitions/packages/goal/prompt_drift.go`). Factory
+  Definitions list/resolve/install must continue to consume detached catalog
+  bytes through `PackagedFactoryCatalogOperations` rather than alternate embed
+  or filesystem paths.
   Public Go packages under `packages/` are not selected by the default unit
   lane. Classify passive publication boundaries explicitly in
   `internal/testlanes` and list them in `make test-maintenance`; the
