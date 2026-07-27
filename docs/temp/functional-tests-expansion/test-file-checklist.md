@@ -354,7 +354,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestJavaScriptNamedStagesExposeOrderedProgress` covers stage identity.
   - `TestJavaScriptEmptyStageProducesDocumentedResult` covers edge behavior.
 
-- [ ] `tests/functional/orchestration/javascript/composition/parallel_test.go`
+- [x] `tests/functional/orchestration/javascript/composition/parallel_test.go`
   - `TestJavaScriptParallelDispatchesChildrenConcurrently` observes active
     external calls without sleeps.
   - `TestJavaScriptParallelPreservesDeclaredResultOrdering` covers determinism.
