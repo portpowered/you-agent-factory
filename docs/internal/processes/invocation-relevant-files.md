@@ -66,6 +66,14 @@ primary-result behavior.
   decoder, and final-result handling. Close a temporary prompt before command
   launch, make removal safe under concurrent terminal signals, and clean an
   exact created path immediately when preparation fails before a command exists.
+- A native-streaming integration should keep decode state invocation-local,
+  publish each provider-neutral draft through the response writer in observed
+  subprocess order, and use the parsed terminal record only for the authoritative
+  completion. Guard the publication callback so the first writer failure stops
+  later publication and prevents a terminal close; successful, malformed,
+  failed, canceled, and timed-out paths must otherwise reach at most one close.
+  Exercise the same integration concurrently under `go test -race` so decoder
+  state, writer state, and cleanup remain isolated per invocation.
 - Final-only provider integrations should keep native final stdout as response
   content and derive resumable Provider Session metadata only from explicit
   structured fields that satisfy the provider's identifier contract. If a

@@ -1,13 +1,18 @@
 package cursor
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
 func TestParseInferenceResult_Success(t *testing.T) {
@@ -271,4 +276,231 @@ func TestSuccessStdoutJSON(t *testing.T) {
 	if payload.Result != "hello" || payload.SessionID != "sess-1" {
 		t.Fatalf("payload = %#v", payload)
 	}
+}
+
+func TestIntegrationPublishesCursorStreamInOrderAndClosesOnce(t *testing.T) {
+	stdout := []byte(strings.Join([]string{
+		`{"type":"system","subtype":"init","session_id":"cursor-integration"}`,
+		`{"type":"assistant","timestamp_ms":1,"message":{"role":"assistant","content":[{"type":"text","text":"Plan " }]},"session_id":"cursor-integration"}`,
+		`{"type":"tool_call","subtype":"started","call_id":"call-1","tool_call":{"readToolCall":{"args":{"path":"README.md"}}},"session_id":"cursor-integration"}`,
+		`{"type":"tool_call","subtype":"completed","call_id":"call-1","tool_call":{"readToolCall":{"result":{"success":{"bytes":12}}}},"session_id":"cursor-integration"}`,
+		`{"type":"result","subtype":"success","is_error":false,"result":"Plan done","session_id":"cursor-integration"}`,
+	}, "\n"))
+	runner := &cursorIntegrationRunner{
+		chunks: [][]byte{stdout[:83], stdout[83:211], stdout[211:]},
+		result: workerprocess.CommandResult{Stdout: stdout},
+	}
+	writer := &cursorIntegrationWriter{}
+	integration := NewIntegration(IntegrationDependencies{
+		CommandRunner: runner, OperatingSystem: "linux",
+	})
+	if integration.Identity() != "cursor" {
+		t.Fatalf("Identity() = %q, want cursor", integration.Identity())
+	}
+	discovery, err := integration.Discover(context.Background())
+	if err != nil || discovery.Readiness() != inference.ReadinessReady {
+		t.Fatalf("Discover() = %#v, %v; want ready", discovery, err)
+	}
+	request := inference.NewInvocationRequest(inference.InvocationInput{
+		InvocationID: "inv-cursor-stream",
+		UserMessage:  "inspect the repository",
+	})
+	capabilities, err := integration.Capabilities(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Capabilities() error = %v", err)
+	}
+	assertCursorIntegrationCapabilities(t, capabilities, integration.MaximumCapabilities())
+
+	err = integration.Invoke(context.Background(), request, writer)
+	if err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+
+	assertCursorIntegrationEvents(t, writer)
+	if writer.completion.Response() == nil || writer.completion.Response().Content() != "Plan done" {
+		t.Fatalf("completion = %#v, want authoritative Plan done response", writer.completion)
+	}
+	if session := writer.completion.Response().ProviderSession(); session == nil || session.ID() != "cursor-integration" {
+		t.Fatalf("provider session = %#v, want cursor-integration", session)
+	}
+}
+
+func assertCursorIntegrationCapabilities(
+	t *testing.T,
+	capabilities inference.CapabilitySet,
+	maximum inference.CapabilitySet,
+) {
+	t.Helper()
+	for _, required := range []inference.Capability{
+		inference.CapabilityPromptSubmission, inference.CapabilitySessionResume,
+		inference.CapabilityNativeStreaming, inference.CapabilityMessageSnapshots,
+		inference.CapabilityToolLifecycle, inference.CapabilityToolOutputDeltas,
+		inference.CapabilityUsage, inference.CapabilityStableItemIDs,
+	} {
+		if !capabilities.Has(required) || !maximum.Has(required) {
+			t.Fatalf("capabilities = %v maximum = %v, want %q", capabilities.Values(), maximum.Values(), required)
+		}
+	}
+	if capabilities.Has(inference.CapabilityMessageDeltas) {
+		t.Fatalf("capabilities = %v, must preserve manifest without message_deltas advertisement", capabilities.Values())
+	}
+}
+
+func assertCursorIntegrationEvents(t *testing.T, writer *cursorIntegrationWriter) {
+	t.Helper()
+	if writer.closeCalls != 1 || writer.writeAfterClose != 0 {
+		t.Fatalf("writer close calls = %d, writes after close = %d; want 1 and 0", writer.closeCalls, writer.writeAfterClose)
+	}
+	if len(writer.events) != 7 {
+		t.Fatalf("events = %#v, want run boundaries around session, assistant, tool lifecycle, and terminal snapshot", writer.events)
+	}
+	wantKinds := []workerexecution.Kind{
+		workerexecution.KindRun, workerexecution.KindSession, workerexecution.KindMessage,
+		workerexecution.KindTool, workerexecution.KindTool, workerexecution.KindMessage,
+		workerexecution.KindRun,
+	}
+	for index, event := range writer.events {
+		draft := event.Draft()
+		if draft.Kind != wantKinds[index] || draft.RunID != "inv-cursor-stream" {
+			t.Fatalf("event[%d] = %#v, want kind %q and correlated run", index, draft, wantKinds[index])
+		}
+	}
+}
+
+func TestIntegrationWriterBackpressureStopsPublicationWithoutClosing(t *testing.T) {
+	stdout := []byte(
+		`{"type":"assistant","timestamp_ms":1,"message":{"content":[{"type":"text","text":"private draft"}]},"session_id":"cursor-backpressure"}` + "\n" +
+			`{"type":"result","subtype":"success","is_error":false,"result":"done","session_id":"cursor-backpressure"}`,
+	)
+	writerErr := errors.New("writer backpressure")
+	writer := &cursorIntegrationWriter{writeErr: writerErr}
+
+	err := NewIntegration(IntegrationDependencies{
+		CommandRunner:   &cursorIntegrationRunner{chunks: [][]byte{stdout}, result: workerprocess.CommandResult{Stdout: stdout}},
+		OperatingSystem: "linux",
+	}).Invoke(context.Background(), inference.NewInvocationRequest(inference.InvocationInput{
+		InvocationID: "inv-cursor-backpressure", UserMessage: "run",
+	}), writer)
+
+	if !errors.Is(err, writerErr) {
+		t.Fatalf("Invoke() error = %v, want writer backpressure", err)
+	}
+	if len(writer.events) != 0 || writer.closeCalls != 0 || writer.writeCalls != 1 {
+		t.Fatalf("writer = %#v, want one rejected write, no accepted events, and no close", writer)
+	}
+}
+
+func TestIntegrationMalformedOrIncompleteStreamClosesWithSafeFailure(t *testing.T) {
+	for _, stdout := range [][]byte{
+		[]byte(`{"type":"assistant","timestamp_ms":1,"message":{"content":[{"type":"text","text":"private prompt /Users/alice/key"}]}}`),
+		[]byte(`{"type":"result","subtype":"success","is_error":false,"result":"private prompt","session_id":`),
+	} {
+		writer := &cursorIntegrationWriter{}
+		err := NewIntegration(IntegrationDependencies{
+			CommandRunner: &cursorIntegrationRunner{
+				chunks: [][]byte{stdout}, result: workerprocess.CommandResult{Stdout: stdout},
+			},
+			OperatingSystem: "linux",
+		}).Invoke(context.Background(), inference.NewInvocationRequest(inference.InvocationInput{
+			InvocationID: "inv-cursor-invalid-stream", UserMessage: "secret request",
+		}), writer)
+		if err != nil {
+			t.Fatalf("Invoke() error = %v", err)
+		}
+		if writer.closeCalls != 1 || writer.completion.Failure() == nil {
+			t.Fatalf("writer = %#v, want one failed close", writer)
+		}
+		message := writer.completion.Failure().Message()
+		for _, unsafe := range []string{"private prompt", "/Users/alice", "secret request"} {
+			if strings.Contains(message, unsafe) {
+				t.Fatalf("failure message leaked %q: %q", unsafe, message)
+			}
+		}
+	}
+}
+
+func TestIntegrationConcurrentInvocationsKeepPublicationAndClosureIsolated(t *testing.T) {
+	const invocations = 16
+	stdout := SuccessStdoutJSON("done", "cursor-concurrent")
+	integration := NewIntegration(IntegrationDependencies{
+		CommandRunner:   &cursorIntegrationRunner{chunks: [][]byte{stdout}, result: workerprocess.CommandResult{Stdout: stdout}},
+		OperatingSystem: "linux",
+	})
+
+	var wait sync.WaitGroup
+	errorsByInvocation := make(chan error, invocations)
+	for index := 0; index < invocations; index++ {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			writer := &cursorIntegrationWriter{}
+			err := integration.Invoke(context.Background(), inference.NewInvocationRequest(inference.InvocationInput{
+				InvocationID: "inv-cursor-concurrent", UserMessage: "run",
+			}), writer)
+			if err == nil && writer.closeCalls != 1 {
+				err = errors.New("writer was not closed exactly once")
+			}
+			errorsByInvocation <- err
+		}()
+	}
+	wait.Wait()
+	close(errorsByInvocation)
+	for err := range errorsByInvocation {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+type cursorIntegrationRunner struct {
+	chunks [][]byte
+	result workerprocess.CommandResult
+	err    error
+}
+
+func (r *cursorIntegrationRunner) Run(context.Context, workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
+	return r.result, r.err
+}
+
+func (r *cursorIntegrationRunner) RunStreaming(
+	_ context.Context,
+	_ workerprocess.CommandRequest,
+	observe workerprocess.OutputChunkObserver,
+) (workerprocess.CommandResult, error) {
+	for _, chunk := range r.chunks {
+		observe(workerprocess.OutputStreamStdout, append([]byte(nil), chunk...))
+	}
+	return r.result, r.err
+}
+
+type cursorIntegrationWriter struct {
+	mu              sync.Mutex
+	events          []inference.EventDraft
+	completion      inference.Completion
+	writeErr        error
+	writeCalls      int
+	closeCalls      int
+	writeAfterClose int
+}
+
+func (w *cursorIntegrationWriter) WriteEvent(_ context.Context, event inference.EventDraft) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.writeCalls++
+	if w.closeCalls > 0 {
+		w.writeAfterClose++
+	}
+	if w.writeErr != nil {
+		return w.writeErr
+	}
+	w.events = append(w.events, event)
+	return nil
+}
+
+func (w *cursorIntegrationWriter) Close(_ context.Context, completion inference.Completion) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.closeCalls++
+	w.completion = completion
+	return nil
 }
