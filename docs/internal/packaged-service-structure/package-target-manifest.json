@@ -257,6 +257,7 @@
     "pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
     "pkg/services/provider_sessions/internal/services/cursor_reader/wire",
     "pkg/services/provider_sessions/service",
+    "pkg/services/provider_sessions/wire",
     "pkg/services/providers",
     "pkg/services/providers/internal/service",
     "pkg/services/providers/internal/services/catalog",
@@ -1514,6 +1515,11 @@
       "destination": "provider_sessions"
     },
     {
+      "packagePath": "pkg/services/provider_sessions/wire",
+      "disposition": "retain",
+      "destination": "provider_sessions"
+    },
+    {
       "packagePath": "pkg/services/providers",
       "disposition": "retain",
       "destination": "providers"
@@ -1556,7 +1562,7 @@
     {
       "packagePath": "pkg/services/providers/internal/testutil/execution",
       "disposition": "retain",
-      "destination": "providers/internal/services/execution"
+      "destination": "providers"
     },
     {
       "packagePath": "pkg/services/providers/wire",

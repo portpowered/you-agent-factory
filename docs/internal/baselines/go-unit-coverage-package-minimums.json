@@ -836,7 +836,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization",
-      "minimum": 66.23
+      "minimum": 66.16
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts",
@@ -1037,6 +1037,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service",
       "minimum": 94.11
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire",
+      "minimum": 100.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers",
