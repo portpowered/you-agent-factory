@@ -134,7 +134,6 @@ var ExpectedDeletionOnlyBatches = []string{
 	"replay_contracts-delete-02-events-factory-events",
 	"replay_contracts-delete-03-events-response-events",
 	"replay_contracts-delete-04-work-submission",
-	"replay_contracts-delete-05-workers-script",
 	"replay_contracts-delete-06-wrong-layer",
 }
 

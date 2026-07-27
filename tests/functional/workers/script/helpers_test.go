@@ -255,3 +255,53 @@ func assertDispatchOutput(t *testing.T, events []factoryapi.FactoryEvent, want s
 	}
 	t.Fatalf("Factory Event history has no dispatch response: %#v", events)
 }
+
+func assertDispatchErrorContains(t *testing.T, events []factoryapi.FactoryEvent, want string) {
+	t.Helper()
+	for _, payload := range dispatchResponses(t, events) {
+		if payload.Error != nil && strings.Contains(*payload.Error, want) {
+			return
+		}
+	}
+	t.Fatalf("dispatch responses do not contain error %q", want)
+}
+
+func hasFactoryEventType(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) bool {
+	for _, event := range events {
+		if event.Type == eventType {
+			return true
+		}
+	}
+	return false
+}
+
+func factoryEventTypes(events []factoryapi.FactoryEvent) []factoryapi.FactoryEventType {
+	types := make([]factoryapi.FactoryEventType, 0, len(events))
+	for _, event := range events {
+		types = append(types, event.Type)
+	}
+	return types
+}
+
+func stringPointerValue[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
+}
+
+func dispatchResponses(t *testing.T, events []factoryapi.FactoryEvent) []factoryapi.DispatchResponseEventPayload {
+	t.Helper()
+	var responses []factoryapi.DispatchResponseEventPayload
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch response: %v", err)
+		}
+		responses = append(responses, payload)
+	}
+	return responses
+}

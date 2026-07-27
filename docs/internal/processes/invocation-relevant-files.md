@@ -420,7 +420,13 @@ primary-result behavior.
   `tests/functional/workers/script/environment_test.go`; drive them through
   `root.BuildProcess` with `serviceedges.Edges{ScriptCommandRunner: ...}` or
   `ProviderCommandRunner` as appropriate and assert only on external command
-  effects plus public Work / Factory Event outcomes.
+  effects plus public Work / Factory Event outcomes. Script execution-outcome
+  proofs (successful primary result, non-zero-exit failure, and cancellation
+  termination) belong in
+  `tests/functional/workers/script/execution_test.go`; drive them through
+  `support.RunFactoryToCompletionWithEdgesAndObservations` with a replaced
+  `ScriptCommandRunner` and assert on Work customer states plus dispatch
+  response events via the shared `helpers_test.go` assertions.
 - Wire supplies that same registry to the Workers runtime for routed provider
   selection, conductor composition, manifest-maximum capability checks, and
   executable-prerequisite preflight, and to Factory Sessions through the narrow
