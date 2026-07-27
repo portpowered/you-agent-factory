@@ -140,6 +140,22 @@
   `functional-boundary-check` stays unavoidable through the nested
   `test-functional-coverage` call, and the lane uploads Markdown, coverage
   JSON, profile, and command log on success and failure.
+  JavaScript file-backed loading functional coverage belongs in
+  `tests/functional/orchestration/javascript/loading/file_javascript_test.go`:
+  drive sync Factory Session execution through `support.BuildProcess` +
+  `support.FakeInputs` with `you --json run`, `--factory`, and
+  `--with-mock-workers`; scaffold file-backed factories with
+  `orchestrator.javascript.sourceRef` and workflow modules beside
+  `factory.json`; prove factory-relative ES module imports resolve under the
+  Factory root with a terminal `COMPLETED` primary result that reflects the
+  imported module contribution and zero provider dispatch; prove missing
+  factory-relative imports fail before work starts with customer-stable
+  `workflow.source.notFound` diagnostics that name the missing path without
+  private VM stack frames or live provider execution. Substitute external
+  effects only through `edges.Edges`. Catalog metadata infers domain
+  `orchestration` and subsection `javascript/loading` from the path; every
+  top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
+  stays viz-compatible.
   JavaScript agent composition functional coverage belongs in
   `tests/functional/orchestration/javascript/composition/agent_test.go`:
   drive sync Factory Session execution through
@@ -249,6 +265,17 @@
   `INVOCATION_ARGUMENT_POSITIONAL_OVERFLOW` and zero provider dispatch, and
   prove `you session pause` default versus explicit session targeting through
   mock HTTP request paths at the public `support.BuildProcess` boundary. Catalog
+  metadata infers domain `transport` and subsection `cli/parameters` from the
+  path; every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
+  CLI key=value parameter mapping functional coverage belongs in
+  `tests/functional/transport/cli/parameters/key_value_test.go`: prove repeated
+  `--key=value` tokens reach canonical `InvocationArguments` through
+  `SubmissionRecorder`, prove values with embedded `=` survive intact, prove
+  duplicate keys on REPEATED parameters append in CLI observation order, and
+  prove malformed shapes (missing value, bare `key=value` without `--`) fail
+  with stable diagnostics and zero provider dispatch through
+  `ProviderCommandRunner` at the public `support.BuildProcess` boundary. Catalog
   metadata infers domain `transport` and subsection `cli/parameters` from the
   path; every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.

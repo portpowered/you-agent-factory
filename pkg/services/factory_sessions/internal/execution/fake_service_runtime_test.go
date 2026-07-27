@@ -2132,6 +2132,11 @@ func testRuntimeMetadataAndSourceValidationBranches(t *testing.T) {
 	if err := validationErrorFromSourceIssues([]factory.WorkflowValidationIssue{{Message: "bad source", Line: 3, Column: 5}}); err == nil || err.Error() != "bad source (line 3, column 5)" {
 		t.Fatalf("validationErrorFromSourceIssues(location) = %v", err)
 	}
+	if err := validationErrorFromSourceIssues([]factory.WorkflowValidationIssue{
+		{Code: factory.WorkflowValidationCodeImportNotFound, Message: "missing module"},
+	}); err == nil || err.Error() != "[workflow.source.notFound] missing module" {
+		t.Fatalf("validationErrorFromSourceIssues(code) = %v", err)
+	}
 	if err := validationErrorFromSourceIssues([]factory.WorkflowValidationIssue{{}}); err == nil || err.Error() != "workflow source validation failed" {
 		t.Fatalf("validationErrorFromSourceIssues(default message) = %v", err)
 	}

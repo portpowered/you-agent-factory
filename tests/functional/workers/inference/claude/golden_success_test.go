@@ -4,7 +4,6 @@ package claude
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -44,18 +43,6 @@ func TestClaudeGoldenToolLifecycleAndSessionIdentity(t *testing.T) {
 	loaded := loadClaudeGoldenCase(t, "tool-lifecycle-session-identity")
 	observed := replayClaudeGoldenCase(t, loaded)
 	assertProviderSessionGoldensMatch(t, loaded, observed)
-}
-
-func loadClaudeGoldenCase(t *testing.T, caseName string) support.ProviderSessionCase {
-	t.Helper()
-
-	repoRoot := testutil.MustRepoRoot(t)
-	caseDir := filepath.Join(repoRoot, filepath.FromSlash(support.ProviderSessionFixturePath("claude", caseName)))
-	loaded, err := support.LoadProviderSessionCase(caseDir)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionCase(%q): %v", caseName, err)
-	}
-	return loaded
 }
 
 func replayClaudeGoldenCase(t *testing.T, loaded support.ProviderSessionCase) support.ProviderSessionObservedGoldens {
@@ -135,71 +122,5 @@ func observeProviderSessionGoldens(
 		ProviderSession:   providerSessionRaw,
 		ResponseEvents:   responseEventRecords,
 		InvocationResult: invocationResult,
-	}
-}
-
-func successfulInferenceResponsePayload(
-	t *testing.T,
-	events []factoryapi.FactoryEvent,
-) (factoryapi.InferenceResponseEventPayload, bool) {
-	t.Helper()
-
-	var payload factoryapi.InferenceResponseEventPayload
-	found := false
-	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
-			continue
-		}
-		response, err := event.Payload.AsInferenceResponseEventPayload()
-		if err != nil {
-			t.Fatalf("decode INFERENCE_RESPONSE %q: %v", event.Id, err)
-		}
-		if response.Outcome != factoryapi.InferenceOutcomeSucceeded {
-			continue
-		}
-		payload = response
-		found = true
-	}
-	return payload, found
-}
-
-type claudeInvocationResultGoldenView struct {
-	OK      bool   `json:"ok"`
-	Content string `json:"content,omitempty"`
-}
-
-func claudeInvocationResultGolden(
-	inferenceResponse factoryapi.InferenceResponseEventPayload,
-) claudeInvocationResultGoldenView {
-	content := ""
-	if inferenceResponse.Response != nil {
-		content = strings.TrimSpace(*inferenceResponse.Response)
-	}
-	return claudeInvocationResultGoldenView{
-		OK:      inferenceResponse.Outcome == factoryapi.InferenceOutcomeSucceeded,
-		Content: content,
-	}
-}
-
-func marshalProviderSessionGoldenJSON(value any) (json.RawMessage, error) {
-	if value == nil {
-		return json.RawMessage("null"), nil
-	}
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return nil, err
-	}
-	return json.RawMessage(encoded), nil
-}
-
-func assertProviderSessionGoldensMatch(
-	t *testing.T,
-	loaded support.ProviderSessionCase,
-	observed support.ProviderSessionObservedGoldens,
-) {
-	t.Helper()
-
-	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
-		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
 	}
 }

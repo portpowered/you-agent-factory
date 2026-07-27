@@ -233,6 +233,9 @@
     "pkg/services/models/internal/services/catalog",
     "pkg/services/models/internal/services/catalog/internal/service",
     "pkg/services/models/internal/services/catalog/wire",
+    "pkg/services/models/internal/services/runtime_host",
+    "pkg/services/models/internal/services/runtime_host/internal/service",
+    "pkg/services/models/internal/services/runtime_host/wire",
     "pkg/services/models/internal/services/runtime_scopes",
     "pkg/services/models/internal/services/runtime_scopes/internal/service",
     "pkg/services/models/internal/services/runtime_scopes/wire",
@@ -1369,6 +1372,21 @@
       "packagePath": "pkg/services/models/internal/services/catalog/wire",
       "disposition": "retain",
       "destination": "models/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_host",
+      "disposition": "retain",
+      "destination": "models/internal/services/runtime_host"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_host/internal/service",
+      "disposition": "retain",
+      "destination": "models/internal/services/runtime_host"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/runtime_host/wire",
+      "disposition": "retain",
+      "destination": "models/internal/services/runtime_host"
     },
     {
       "packagePath": "pkg/services/models/internal/services/runtime_scopes",
