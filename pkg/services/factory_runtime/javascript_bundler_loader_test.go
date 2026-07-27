@@ -110,6 +110,63 @@ workflow.final(constants.successResult);`
 	}
 }
 
+func TestLoad_BundlesNestedRelativeImportChainExecutes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "leaf.js"),
+		[]byte(`export const leaf = "LEAF";`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write leaf module: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "mid.js"),
+		[]byte(`import { leaf } from "./leaf.js";
+export const mid = leaf + "-MID";`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write mid module: %v", err)
+	}
+	entry := `import { mid } from "./lib/mid.js";
+workflow.final(mid);`
+	reader := factory.NewWorkflowSourceReader(dir, localWorkflowSourceFiles{})
+
+	loaded, issues := validationLoaderWorkflows.LoadSource(factory.WorkflowValidationLoadRequest{
+		SourceRef:    "workflow.js",
+		Content:      entry,
+		FactoryRoot:  dir,
+		BundleReader: reader,
+	})
+	if len(issues) > 0 {
+		t.Fatalf("load issues = %#v, want none", issues)
+	}
+	if !strings.Contains(loaded.ExecutableSource, "const {leaf} = __factoryRequire(\"lib/leaf.js\");") {
+		t.Fatalf("executable source = %q, want nested import bindings inside mid module wrapper", loaded.ExecutableSource)
+	}
+
+	outcome, err := validationLoaderWorkflows.Run(t.Context(), factory.JavaScriptRuntimeRequest{
+		Source:    loaded.ExecutableSource,
+		SourceRef: "workflow.js",
+		SessionID: "session-nested-import-chain",
+		Args:      json.RawMessage(`{}`),
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}, factory.JavaScriptRuntimeHooks{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !outcome.OK {
+		t.Fatalf("Run() failure = %#v", outcome.Failure)
+	}
+	if string(outcome.Value.JSON) != `"LEAF-MID"` {
+		t.Fatalf("primary result = %s, want \"LEAF-MID\"", outcome.Value.JSON)
+	}
+}
+
 func TestLoad_BundlesDefaultExportRelativeImportExecutes(t *testing.T) {
 	t.Parallel()
 

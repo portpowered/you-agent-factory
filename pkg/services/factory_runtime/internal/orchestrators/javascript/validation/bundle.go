@@ -165,12 +165,16 @@ func emitBundledExecutable(modules map[string]bundledModule, entrySourceRef stri
 		}
 		out.WriteString("__modules[")
 		out.WriteString(jsStringLiteral(sourceRef))
-		out.WriteString("]=(function(exports){\n")
+		out.WriteString("]=(function(exports, __factoryRequire){\n")
+		for _, imp := range module.imports {
+			out.WriteString(importBindingLine(imp))
+			out.WriteString("\n")
+		}
 		out.WriteString(module.body)
 		if module.body != "" {
 			out.WriteString("\n")
 		}
-		out.WriteString("return exports;\n})({});\n")
+		out.WriteString("return exports;\n})({}, __factoryRequire);\n")
 	}
 	emitDependencies(entrySourceRef)
 

@@ -326,6 +326,95 @@ workflow.final(importedDefault);`
 	}
 }
 
+func TestLoadBundlesNestedRelativeImportChainExecutes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "leaf.js"),
+		[]byte(`export const leaf = "LEAF";`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write leaf module: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "mid.js"),
+		[]byte(`import { leaf } from "./leaf.js";
+export const mid = leaf + "-MID";`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write mid module: %v", err)
+	}
+	entry := `import { mid } from "./lib/mid.js";
+workflow.final(mid);`
+	reader := FileSourceReader(dir, bundleTestFileSystem{})
+
+	loaded, issues := Load(LoadRequest{
+		SourceRef:    "workflow.js",
+		Content:      entry,
+		FactoryRoot:  dir,
+		BundleReader: reader,
+	})
+	if len(issues) > 0 {
+		t.Fatalf("load issues = %#v, want none", issues)
+	}
+	if !strings.Contains(loaded.ExecutableSource, "const {leaf} = __factoryRequire(\"lib/leaf.js\");") {
+		t.Fatalf("executable source = %q, want nested import bindings inside mid module wrapper", loaded.ExecutableSource)
+	}
+	finalValue, err := executeBundledWorkflowFinalForTest(t, loaded.ExecutableSource)
+	if err != nil {
+		t.Fatalf("execute bundled source: %v", err)
+	}
+	if finalValue != "LEAF-MID" {
+		t.Fatalf("workflow.final value = %q, want LEAF-MID", finalValue)
+	}
+}
+
+func TestBundleFactoryRelativeImportsNestedImportChainExecutes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "leaf.js"),
+		[]byte(`export const leaf = "LEAF";`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write leaf module: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "mid.js"),
+		[]byte(`import { leaf } from "./leaf.js";
+export const mid = leaf + "-MID";`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write mid module: %v", err)
+	}
+	entry := `import { mid } from "./lib/mid.js";
+workflow.final(mid);`
+	reader := FileSourceReader(dir, bundleTestFileSystem{})
+
+	bundled, issues := BundleFactoryRelativeImports("workflow.js", entry, reader)
+	if len(issues) > 0 {
+		t.Fatalf("bundle issues = %#v, want none", issues)
+	}
+	if !strings.Contains(bundled, "const {leaf} = __factoryRequire(\"lib/leaf.js\");") {
+		t.Fatalf("bundled source = %q, want nested import bindings inside mid module wrapper", bundled)
+	}
+	finalValue, err := executeBundledWorkflowFinalForTest(t, bundled)
+	if err != nil {
+		t.Fatalf("execute bundled source: %v", err)
+	}
+	if finalValue != "LEAF-MID" {
+		t.Fatalf("workflow.final value = %q, want LEAF-MID", finalValue)
+	}
+}
+
 func TestBundleFactoryRelativeImportsMissingModuleReturnsNotFound(t *testing.T) {
 	t.Parallel()
 
