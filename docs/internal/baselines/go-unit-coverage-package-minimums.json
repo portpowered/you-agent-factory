@@ -871,6 +871,10 @@
       "minimum": 94.11
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers",
+      "minimum": 72.85
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings",
       "minimum": 83.56
     },
