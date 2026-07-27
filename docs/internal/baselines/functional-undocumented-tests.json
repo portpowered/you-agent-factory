@@ -951,10 +951,6 @@
       "name": "TestSubmitRuntimeWork_EmitsCanonicalTraceAwareBatchEvent"
     },
     {
-      "file": "runtime_api/api_throttle_failure_regression_test.go",
-      "name": "TestRetryableThrottleFailureWithoutGuardUsesDefaultRetryLimitAndFailsWork"
-    },
-    {
       "file": "runtime_api/dashboard_engine_state_test.go",
       "name": "TestDashboard_EngineStateSnapshot_EndToEnd"
     },
