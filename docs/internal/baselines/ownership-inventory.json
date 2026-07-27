@@ -2316,6 +2316,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/automations/internal/services/cron",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/cron/internal/service",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/cron/wire",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/automations/internal/services/reconciliation",
       "disposition": "retain",
       "destination": "automations",
@@ -2335,12 +2353,6 @@
     },
     {
       "packagePath": "pkg/services/automations/service",
-      "disposition": "retain",
-      "destination": "automations",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/automations/timework",
       "disposition": "retain",
       "destination": "automations",
       "destinationKind": "owner"

@@ -489,7 +489,7 @@ func TestRunRejectsRetiredPackageRootsWithCanonicalOwners(t *testing.T) {
 		{packagePath: "pkg/hostedworkers", canonicalOwner: "Automation Hosted Sources (hosted polling / observation, secret resolution for observation, poll/restart/checkpoint, observation normalization, and commanding Work admission) or Workers Hosted Runner (remote Work execution request/result, execution lifecycle observation, cancellation, and normalized execution outcome under the Runner contract); transitional pkg/services/workers/services/hosted_logic location alone is not durable ownership"},
 		{packagePath: "pkg/invocations", canonicalOwner: "pkg/services/work, pkg/services/factory_sessions, or pkg/services/workers, according to the concern"},
 		{packagePath: "pkg/materialize", canonicalOwner: "pkg/services/work"},
-		{packagePath: "pkg/timework", canonicalOwner: "pkg/services/automations/timework"},
+		{packagePath: "pkg/timework", canonicalOwner: "pkg/services/automations/internal/services/cron"},
 		{packagePath: "pkg/workcontent", canonicalOwner: "pkg/services/work"},
 		{packagePath: "pkg/workgraph", canonicalOwner: "pkg/services/work"},
 		{packagePath: "pkg/workquery", canonicalOwner: "pkg/services/work"},
@@ -577,7 +577,7 @@ func TestRunRejectsRetiredPackageImportsWithCanonicalOwners(t *testing.T) {
 		{
 			importPath:     "github.com/portpowered/infinite-you/pkg/timework",
 			retiredRoot:    "pkg/timework",
-			canonicalOwner: "pkg/services/automations/timework",
+			canonicalOwner: "pkg/services/automations/internal/services/cron",
 		},
 		{
 			importPath:     "github.com/portpowered/infinite-you/pkg/workcontent",

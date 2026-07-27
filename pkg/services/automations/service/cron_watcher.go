@@ -8,13 +8,11 @@ import (
 	"sync"
 	"time"
 
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-
 	"github.com/go-co-op/gocron/v2"
 	"github.com/jonboulle/clockwork"
 	"go.uber.org/zap"
 
-	"github.com/portpowered/infinite-you/pkg/services/automations/timework"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
@@ -96,7 +94,7 @@ func (s *Service) registerCronJobs(
 		if ws.Kind != interfaces.WorkstationKindCron {
 			continue
 		}
-		schedule, err := cronSchedule(ws)
+		schedule, err := s.cronSchedule(ws)
 		if err != nil {
 			s.logger().Warn("cron watcher disabled",
 				zap.String("workstation", ws.Name),
@@ -196,7 +194,7 @@ func (s *Service) workflowIdentity(factoryDir string) string {
 	return ""
 }
 
-func cronSchedule(ws interfaces.FactoryWorkstationConfig) (string, error) {
+func (s *Service) cronSchedule(ws interfaces.FactoryWorkstationConfig) (string, error) {
 	if ws.Cron == nil {
 		return "", fmt.Errorf("missing cron config")
 	}
@@ -204,7 +202,7 @@ func cronSchedule(ws interfaces.FactoryWorkstationConfig) (string, error) {
 	if schedule == "" {
 		return "", fmt.Errorf("missing cron schedule")
 	}
-	if err := timework.ValidateCronSchedule(schedule); err != nil {
+	if err := s.cron.ValidateCronSchedule(schedule); err != nil {
 		return "", err
 	}
 	return schedule, nil
@@ -269,7 +267,7 @@ func (s *Service) submitCronTickAttempt(
 	}
 	defer cancel()
 
-	workRequest, metadata, err := timework.CronTimeWorkRequest(workflowIdentity, ws, firedAt)
+	workRequest, metadata, err := s.cron.CronTimeWorkRequest(workflowIdentity, ws, firedAt)
 	if err != nil {
 		return fmt.Errorf("cron workstation %q time work request: %w", ws.Name, err)
 	}

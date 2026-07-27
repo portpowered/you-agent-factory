@@ -1,4 +1,4 @@
-package timework
+package service
 
 import (
 	"encoding/json"
@@ -6,13 +6,19 @@ import (
 	"testing"
 	"time"
 
+	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
+func testCronService() cron.Service {
+	return New()
+}
+
 func TestBuildCronTimeMetadata_DeterministicForSameWorkflowWorkstationAndNominalTime(t *testing.T) {
+	svc := testCronService()
 	nominalAt := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
-	input := CronTimeInput{
+	input := cron.CronTimeInput{
 		WorkflowIdentity: "factory/main",
 		WorkstationName:  "daily-refresh",
 		NominalAt:        nominalAt,
@@ -20,11 +26,11 @@ func TestBuildCronTimeMetadata_DeterministicForSameWorkflowWorkstationAndNominal
 		ExpiryWindow:     time.Minute,
 	}
 
-	first, err := BuildCronTimeMetadata(input)
+	first, err := svc.BuildCronTimeMetadata(input)
 	if err != nil {
 		t.Fatalf("BuildCronTimeMetadata first: %v", err)
 	}
-	second, err := BuildCronTimeMetadata(input)
+	second, err := svc.BuildCronTimeMetadata(input)
 	if err != nil {
 		t.Fatalf("BuildCronTimeMetadata second: %v", err)
 	}
@@ -44,8 +50,9 @@ func TestBuildCronTimeMetadata_DeterministicForSameWorkflowWorkstationAndNominal
 }
 
 func TestParseCronTiming_DefaultsJitterAndExpiryWindowFromSchedule(t *testing.T) {
+	svc := testCronService()
 	nominalAt := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
-	timing, err := ParseCronTiming(&interfaces.CronConfig{Schedule: "*/5 * * * *"}, nominalAt)
+	timing, err := svc.ParseCronTiming(&interfaces.CronConfig{Schedule: "*/5 * * * *"}, nominalAt)
 	if err != nil {
 		t.Fatalf("ParseCronTiming: %v", err)
 	}
@@ -58,7 +65,8 @@ func TestParseCronTiming_DefaultsJitterAndExpiryWindowFromSchedule(t *testing.T)
 }
 
 func TestParseCronTiming_InvalidScheduleIncludesValue(t *testing.T) {
-	_, err := ParseCronTiming(&interfaces.CronConfig{Schedule: "not a cron"}, time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC))
+	svc := testCronService()
+	_, err := svc.ParseCronTiming(&interfaces.CronConfig{Schedule: "not a cron"}, time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC))
 	if err == nil {
 		t.Fatal("expected invalid schedule error")
 	}
@@ -68,6 +76,7 @@ func TestParseCronTiming_InvalidScheduleIncludesValue(t *testing.T) {
 }
 
 func TestEvaluateCronSchedule_DueOnlyAtOrAfterBoundary(t *testing.T) {
+	svc := testCronService()
 	lastEvaluatedAt := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	for _, test := range []struct {
 		name        string
@@ -79,7 +88,7 @@ func TestEvaluateCronSchedule_DueOnlyAtOrAfterBoundary(t *testing.T) {
 		{name: "after boundary", evaluatedAt: lastEvaluatedAt.Add(7 * time.Minute), wantDue: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := EvaluateCronSchedule("*/5 * * * *", lastEvaluatedAt, test.evaluatedAt)
+			got, err := svc.EvaluateCronSchedule("*/5 * * * *", lastEvaluatedAt, test.evaluatedAt)
 			if err != nil {
 				t.Fatalf("EvaluateCronSchedule: %v", err)
 			}
@@ -95,6 +104,7 @@ func TestEvaluateCronSchedule_DueOnlyAtOrAfterBoundary(t *testing.T) {
 }
 
 func TestEvaluateCronSchedule_NormalizesExplicitInstantsToUTC(t *testing.T) {
+	svc := testCronService()
 	losAngeles, err := time.LoadLocation("America/Los_Angeles")
 	if err != nil {
 		t.Fatalf("LoadLocation: %v", err)
@@ -102,11 +112,11 @@ func TestEvaluateCronSchedule_NormalizesExplicitInstantsToUTC(t *testing.T) {
 	lastEvaluatedAt := time.Date(2026, time.July, 13, 8, 59, 30, 0, losAngeles)
 	evaluatedAt := time.Date(2026, time.July, 13, 16, 0, 0, 0, time.UTC)
 
-	first, err := EvaluateCronSchedule("0 * * * *", lastEvaluatedAt, evaluatedAt)
+	first, err := svc.EvaluateCronSchedule("0 * * * *", lastEvaluatedAt, evaluatedAt)
 	if err != nil {
 		t.Fatalf("EvaluateCronSchedule first: %v", err)
 	}
-	second, err := EvaluateCronSchedule("0 * * * *", lastEvaluatedAt, evaluatedAt)
+	second, err := svc.EvaluateCronSchedule("0 * * * *", lastEvaluatedAt, evaluatedAt)
 	if err != nil {
 		t.Fatalf("EvaluateCronSchedule second: %v", err)
 	}
@@ -119,10 +129,11 @@ func TestEvaluateCronSchedule_NormalizesExplicitInstantsToUTC(t *testing.T) {
 }
 
 func TestEvaluateCronSchedule_HonorsExplicitScheduleTimezone(t *testing.T) {
+	svc := testCronService()
 	lastEvaluatedAt := time.Date(2026, time.July, 13, 15, 59, 30, 0, time.UTC)
 	evaluatedAt := time.Date(2026, time.July, 13, 16, 0, 0, 0, time.UTC)
 
-	got, err := EvaluateCronSchedule(
+	got, err := svc.EvaluateCronSchedule(
 		"CRON_TZ=America/Los_Angeles 0 9 * * *",
 		lastEvaluatedAt,
 		evaluatedAt,
@@ -136,18 +147,20 @@ func TestEvaluateCronSchedule_HonorsExplicitScheduleTimezone(t *testing.T) {
 }
 
 func TestEvaluateCronSchedule_RejectsInvalidInput(t *testing.T) {
+	svc := testCronService()
 	now := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
-	if _, err := EvaluateCronSchedule("not a cron", now, now); err == nil || !strings.Contains(err.Error(), `"not a cron"`) {
+	if _, err := svc.EvaluateCronSchedule("not a cron", now, now); err == nil || !strings.Contains(err.Error(), `"not a cron"`) {
 		t.Fatalf("invalid schedule error = %v, want actionable schedule value", err)
 	}
-	if _, err := EvaluateCronSchedule("* * * * *", now, now.Add(-time.Second)); err == nil || !strings.Contains(err.Error(), "precedes") {
+	if _, err := svc.EvaluateCronSchedule("* * * * *", now, now.Add(-time.Second)); err == nil || !strings.Contains(err.Error(), "precedes") {
 		t.Fatalf("reversed interval error = %v, want explicit ordering error", err)
 	}
 }
 
 func TestCronTimeWorkRequest_UsesCanonicalInternalTimeWorkContract(t *testing.T) {
+	svc := testCronService()
 	nominalAt := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
-	req, metadata, err := CronTimeWorkRequest("factory/main", interfaces.FactoryWorkstationConfig{
+	req, metadata, err := svc.CronTimeWorkRequest("factory/main", interfaces.FactoryWorkstationConfig{
 		Name: "daily-refresh",
 		Cron: &interfaces.CronConfig{
 			Schedule:     "* * * * *",
@@ -168,25 +181,26 @@ func TestCronTimeWorkRequest_UsesCanonicalInternalTimeWorkContract(t *testing.T)
 	if len(req.Works) != 1 {
 		t.Fatalf("works = %d, want 1", len(req.Works))
 	}
-	work := req.Works[0]
-	if work.WorkTypeID != interfaces.SystemTimeWorkTypeID {
-		t.Fatalf("work type = %q, want %q", work.WorkTypeID, interfaces.SystemTimeWorkTypeID)
+	workItem := req.Works[0]
+	if workItem.WorkTypeID != interfaces.SystemTimeWorkTypeID {
+		t.Fatalf("work type = %q, want %q", workItem.WorkTypeID, interfaces.SystemTimeWorkTypeID)
 	}
-	if work.State != interfaces.SystemTimePendingState {
-		t.Fatalf("state = %q, want %q", work.State, interfaces.SystemTimePendingState)
+	if workItem.State != interfaces.SystemTimePendingState {
+		t.Fatalf("state = %q, want %q", workItem.State, interfaces.SystemTimePendingState)
 	}
-	if work.Tags[interfaces.TimeWorkTagKeySource] != interfaces.TimeWorkSourceCron {
-		t.Fatalf("source tag = %q, want %q", work.Tags[interfaces.TimeWorkTagKeySource], interfaces.TimeWorkSourceCron)
+	if workItem.Tags[interfaces.TimeWorkTagKeySource] != interfaces.TimeWorkSourceCron {
+		t.Fatalf("source tag = %q, want %q", workItem.Tags[interfaces.TimeWorkTagKeySource], interfaces.TimeWorkSourceCron)
 	}
-	if work.Tags[interfaces.TimeWorkTagKeyCronWorkstation] != "daily-refresh" {
-		t.Fatalf("cron workstation tag = %q", work.Tags[interfaces.TimeWorkTagKeyCronWorkstation])
+	if workItem.Tags[interfaces.TimeWorkTagKeyCronWorkstation] != "daily-refresh" {
+		t.Fatalf("cron workstation tag = %q", workItem.Tags[interfaces.TimeWorkTagKeyCronWorkstation])
 	}
-	if work.Tags[interfaces.TimeWorkTagKeyDueAt] != metadata.DueAt.Format(time.RFC3339Nano) {
-		t.Fatalf("due tag = %q, want %q", work.Tags[interfaces.TimeWorkTagKeyDueAt], metadata.DueAt.Format(time.RFC3339Nano))
+	if workItem.Tags[interfaces.TimeWorkTagKeyDueAt] != metadata.DueAt.Format(time.RFC3339Nano) {
+		t.Fatalf("due tag = %q, want %q", workItem.Tags[interfaces.TimeWorkTagKeyDueAt], metadata.DueAt.Format(time.RFC3339Nano))
 	}
 }
 
 func TestCronTimeWorkRequest_EveryMinuteScheduleDeterministicWithFakeClock(t *testing.T) {
+	svc := testCronService()
 	nominalAt := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
 	ws := interfaces.FactoryWorkstationConfig{
 		Name: "daily-refresh",
@@ -196,22 +210,22 @@ func TestCronTimeWorkRequest_EveryMinuteScheduleDeterministicWithFakeClock(t *te
 		},
 	}
 
-	req, metadata, err := CronTimeWorkRequest("factory/main", ws, nominalAt)
+	req, metadata, err := svc.CronTimeWorkRequest("factory/main", ws, nominalAt)
 	if err != nil {
 		t.Fatalf("CronTimeWorkRequest: %v", err)
 	}
 	if len(req.Works) != 1 {
 		t.Fatalf("works = %d, want 1", len(req.Works))
 	}
-	work := req.Works[0]
+	workItem := req.Works[0]
 
-	wantJitter := DeterministicCronJitter("factory/main", ws.Name, nominalAt, 5*time.Second)
+	wantJitter := svc.DeterministicCronJitter("factory/main", ws.Name, nominalAt, 5*time.Second)
 	wantDueAt := nominalAt.Add(wantJitter)
 	wantExpiresAt := wantDueAt.Add(time.Minute)
-	wantWorkID := CronTimeWorkID("factory/main", ws.Name, nominalAt)
+	wantWorkID := svc.CronTimeWorkID("factory/main", ws.Name, nominalAt)
 
-	if work.WorkID != wantWorkID {
-		t.Fatalf("work ID = %q, want %q", work.WorkID, wantWorkID)
+	if workItem.WorkID != wantWorkID {
+		t.Fatalf("work ID = %q, want %q", workItem.WorkID, wantWorkID)
 	}
 	if metadata.DueAt != wantDueAt {
 		t.Fatalf("due_at = %s, want %s", metadata.DueAt, wantDueAt)
@@ -225,15 +239,15 @@ func TestCronTimeWorkRequest_EveryMinuteScheduleDeterministicWithFakeClock(t *te
 
 	wantTags := metadata.Tags()
 	for key, want := range wantTags {
-		if got := work.Tags[key]; got != want {
+		if got := workItem.Tags[key]; got != want {
 			t.Fatalf("tag %s = %q, want %q", key, got, want)
 		}
 	}
 
 	var payload map[string]string
-	payloadBytes, ok := work.Payload.([]byte)
+	payloadBytes, ok := workItem.Payload.([]byte)
 	if !ok {
-		t.Fatalf("payload type = %T, want []byte", work.Payload)
+		t.Fatalf("payload type = %T, want []byte", workItem.Payload)
 	}
 	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
 		t.Fatalf("payload is not JSON: %v\npayload=%s", err, payloadBytes)
