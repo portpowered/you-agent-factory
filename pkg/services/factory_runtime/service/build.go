@@ -6,7 +6,6 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/context"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/definitionmapping"
 	factoryingest "github.com/portpowered/infinite-you/pkg/services/factory_runtime/ingest"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/scheduler"
@@ -41,9 +40,10 @@ type RuntimeFactory struct {
 	runtimeMetrics       factory.RuntimeMetricsSinkFactory
 	newID                factory.IDGenerator
 	workRequestIDs       work.RequestIDGenerator
-	runtimeDirs          factory.RuntimeDirectoryFileSystem
-	inputFiles           factory.InputFileSystem
-	inputDirectoryWalker factory.InputDirectoryWalker
+	runtimeDirs              factory.RuntimeDirectoryFileSystem
+	inputFiles               factory.InputFileSystem
+	inputDirectoryWalker     factory.InputDirectoryWalker
+	orchestrationCompilation factory.OrchestrationCompilation
 }
 
 func NewRuntimeFactory(
@@ -59,6 +59,7 @@ func NewRuntimeFactory(
 	runtimeDirs factory.RuntimeDirectoryFileSystem,
 	inputFiles factory.InputFileSystem,
 	inputDirectoryWalker factory.InputDirectoryWalker,
+	orchestrationCompilation factory.OrchestrationCompilation,
 ) *RuntimeFactory {
 	return &RuntimeFactory{
 		quorumPolicy:         quorumPolicy,
@@ -70,9 +71,10 @@ func NewRuntimeFactory(
 		runtimeMetrics:       runtimeMetrics,
 		newID:                newID,
 		workRequestIDs:       workRequestIDs,
-		runtimeDirs:          runtimeDirs,
-		inputFiles:           inputFiles,
-		inputDirectoryWalker: inputDirectoryWalker,
+		runtimeDirs:              runtimeDirs,
+		inputFiles:               inputFiles,
+		inputDirectoryWalker:     inputDirectoryWalker,
+		orchestrationCompilation: orchestrationCompilation,
 	}
 }
 
@@ -128,6 +130,9 @@ func (f *RuntimeFactory) Build(
 	if f.runtimeDirs == nil || f.inputFiles == nil || f.inputDirectoryWalker == nil {
 		return nil, fmt.Errorf("Factory Runtime runtime directory filesystem, input filesystem, and input directory walker are required")
 	}
+	if f.orchestrationCompilation == nil {
+		return nil, fmt.Errorf("Factory Runtime orchestration compilation is required")
+	}
 	if clock == nil {
 		return nil, fmt.Errorf("Factory Runtime clock is required")
 	}
@@ -182,14 +187,13 @@ func (f *RuntimeFactory) Build(
 			_ = factoryhost.CloseBundleSinks(logSink, metricsSink)
 		}
 	}()
-	mapper, err := definitionmapping.New(f.newID)
+	net, err := f.orchestrationCompilation.CompilePetriNet(ctx, factory.OrchestrationCompileRequest{
+		Config:     loadedFactoryCfg.FactoryConfig(),
+		FactoryDir: dir,
+	})
 	if err != nil {
-		return nil, err
-	}
-	net, err := mapper.Map(ctx, loadedFactoryCfg.FactoryConfig())
-	if err != nil {
-		logger.Error("failed to map factory config", zap.Error(err))
-		return nil, fmt.Errorf("map factory config: %w", err)
+		logger.Error("failed to compile factory orchestration", zap.Error(err))
+		return nil, fmt.Errorf("compile factory orchestration: %w", err)
 	}
 
 	effectiveFactoryRunnerID := effectiveFactoryRunnerID(runnerID, loadedFactoryCfg.FactoryConfig())

@@ -403,6 +403,13 @@ func provideOrchestrationJavaScriptExecution(
 	return factoryruntimeorchestrationowner.New(newID, workflows)
 }
 
+func provideOrchestrationCompilation(
+	newID factoryruntime.IDGenerator,
+	workflows factoryruntime.JavaScriptWorkflows,
+) factoryruntime.OrchestrationCompilation {
+	return factoryruntimeorchestrationowner.NewCompilation(newID, workflows, workflows)
+}
+
 func provideFactorySessionExecutionFactory(
 	workflows factoryruntime.JavaScriptWorkflows,
 	orchestration factoryruntime.OrchestrationJavaScriptExecution,

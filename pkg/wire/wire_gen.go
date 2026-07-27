@@ -256,7 +256,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	runtimeDirectoryFileSystem := provideFactoryRuntimeDirectories(edges2)
 	inputFileSystem := provideFactoryRuntimeInputs(edges2)
 	inputDirectoryWalker := provideFactoryRuntimeInputDirectoryWalker(edges2)
-	runtimeFactory := service.NewRuntimeFactory(quorumPolicyService, invocationOutputShapingService, workPropagationPolicyService, decisionEnvelopeService, runtimeLoggerFactory, runtimeLogSinkFactory, runtimeMetricsSinkFactory, idGenerator, requestIDGenerator, runtimeDirectoryFileSystem, inputFileSystem, inputDirectoryWalker)
+	orchestrationCompilation := provideOrchestrationCompilation(idGenerator, javaScriptWorkflows)
+	runtimeFactory := service.NewRuntimeFactory(quorumPolicyService, invocationOutputShapingService, workPropagationPolicyService, decisionEnvelopeService, runtimeLoggerFactory, runtimeLogSinkFactory, runtimeMetricsSinkFactory, idGenerator, requestIDGenerator, runtimeDirectoryFileSystem, inputFileSystem, inputDirectoryWalker, orchestrationCompilation)
 	assembly, err := service.NewAssembly(runtimeFactory)
 	if err != nil {
 		return nil, err
@@ -619,6 +620,7 @@ var servicesSet = wire2.NewSet(
 	provideFactorySessionsService,
 	providePortableRecordingWriter,
 	provideOrchestrationJavaScriptExecution,
+	provideOrchestrationCompilation,
 	provideFactorySessionExecutionFactory,
 	provideRecordingsProjectionFactory,
 	provideRecordingsFactory,

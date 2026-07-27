@@ -126,6 +126,7 @@ var servicesSet = wire.NewSet(
 	provideFactorySessionsService,
 	providePortableRecordingWriter,
 	provideOrchestrationJavaScriptExecution,
+	provideOrchestrationCompilation,
 	provideFactorySessionExecutionFactory,
 	provideRecordingsProjectionFactory,
 	provideRecordingsFactory,
