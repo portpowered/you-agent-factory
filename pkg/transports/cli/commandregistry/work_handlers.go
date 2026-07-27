@@ -8,9 +8,156 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
 )
+
+const (
+	workListStateNameInputID    = "you.work.list.flag.state-name"
+	workListStateTypeInputID    = "you.work.list.flag.state-type"
+	workListNameInputID         = "you.work.list.flag.name"
+	workListWorkTypeNameInputID = "you.work.list.flag.work-type-name"
+	workListTraceIDInputID      = "you.work.list.flag.trace-id"
+	workListSortByInputID       = "you.work.list.flag.sort-by"
+	workListMaxResultsInputID   = "you.work.list.flag.max-results"
+	workListNextTokenInputID    = "you.work.list.flag.next-token"
+	workListSessionInputID      = "you.work.list.flag.session"
+	workServerInputID           = "you.flag.server"
+	workJSONInputID             = "you.flag.json"
+	workVerboseInputID          = "you.flag.verbose"
+	workDebugInputID            = "you.flag.debug"
+)
+
+// ResolvedWorkRunE executes one Work command from invocation-local resolved
+// inputs. The second snapshot contains inherited root inputs.
+type ResolvedWorkRunE func(
+	*cobra.Command,
+	resolvedinput.Inputs,
+	resolvedinput.Inputs,
+) error
+
+// ResolvedWorkHandlers supplies typed handlers for the runnable Work commands.
+// Construction maps these handlers through the stable IDs in the manifest.
+type ResolvedWorkHandlers struct {
+	List      ResolvedWorkRunE
+	Show      ResolvedWorkRunE
+	Move      ResolvedWorkRunE
+	Visualize ResolvedWorkRunE
+}
+
+// ResolvedListBinding supplies the effects used by the Work list stable-input
+// adapter. Each invocation maps resolved values into a fresh ListConfig.
+type ResolvedListBinding struct {
+	ListWork          func(workcli.ListConfig) error
+	DiagnosticsWriter func(*cobra.Command) io.Writer
+}
+
+// ResolvedListRunE maps canonical Work list input IDs into one transport
+// request without retaining Cobra-backed pointers between invocations.
+func ResolvedListRunE(binding ResolvedListBinding) ResolvedWorkRunE {
+	return func(
+		cmd *cobra.Command,
+		inputs resolvedinput.Inputs,
+		inherited resolvedinput.Inputs,
+	) error {
+		if binding.ListWork == nil {
+			return fmt.Errorf("work list service is required")
+		}
+		cfg, err := resolvedListConfig(cmd, inputs, inherited)
+		if err != nil {
+			return fmt.Errorf("resolve work list inputs: %w", err)
+		}
+		if binding.DiagnosticsWriter != nil {
+			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
+		}
+		return binding.ListWork(cfg)
+	}
+}
+
+func resolvedListConfig(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) (workcli.ListConfig, error) {
+	stateName, err := inputs.String(workListStateNameInputID)
+	if err != nil {
+		return workcli.ListConfig{}, err
+	}
+	stateType, err := inputs.String(workListStateTypeInputID)
+	if err != nil {
+		return workcli.ListConfig{}, err
+	}
+	name, err := inputs.String(workListNameInputID)
+	if err != nil {
+		return workcli.ListConfig{}, err
+	}
+	workTypeName, err := inputs.String(workListWorkTypeNameInputID)
+	if err != nil {
+		return workcli.ListConfig{}, err
+	}
+	traceID, err := inputs.String(workListTraceIDInputID)
+	if err != nil {
+		return workcli.ListConfig{}, err
+	}
+	sortBy, err := inputs.String(workListSortByInputID)
+	if err != nil {
+		return workcli.ListConfig{}, err
+	}
+	maxResults, err := inputs.Int(workListMaxResultsInputID)
+	if err != nil {
+		return workcli.ListConfig{}, err
+	}
+	nextToken, err := inputs.String(workListNextTokenInputID)
+	if err != nil {
+		return workcli.ListConfig{}, err
+	}
+	sessionID, err := inputs.String(workListSessionInputID)
+	if err != nil {
+		return workcli.ListConfig{}, err
+	}
+	globals, err := resolvedWorkGlobals(inherited)
+	if err != nil {
+		return workcli.ListConfig{}, err
+	}
+	return workcli.ListConfig{
+		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
+		StateName: stateName, StateType: stateType, Name: name,
+		WorkTypeName: workTypeName, TraceID: traceID, SortBy: sortBy,
+		MaxResults: maxResults, NextToken: nextToken, JSON: globals.json,
+		Verbose: globals.verbose || globals.debug, Debug: globals.debug,
+		Output: cmd.OutOrStdout(),
+	}, nil
+}
+
+type resolvedWorkGlobalValues struct {
+	server  string
+	json    bool
+	verbose bool
+	debug   bool
+}
+
+func resolvedWorkGlobals(inputs resolvedinput.Inputs) (resolvedWorkGlobalValues, error) {
+	server, err := inputs.String(workServerInputID)
+	if err != nil {
+		return resolvedWorkGlobalValues{}, err
+	}
+	jsonOutput, err := inputs.Bool(workJSONInputID)
+	if err != nil {
+		return resolvedWorkGlobalValues{}, err
+	}
+	verbose, err := inputs.Bool(workVerboseInputID)
+	if err != nil {
+		return resolvedWorkGlobalValues{}, err
+	}
+	debug, err := inputs.Bool(workDebugInputID)
+	if err != nil {
+		return resolvedWorkGlobalValues{}, err
+	}
+	return resolvedWorkGlobalValues{
+		server: server, json: jsonOutput, verbose: verbose, debug: debug,
+	}, nil
+}
 
 // RunnableWorkCommandIDs returns contracted runnable command IDs for the work
 // family in stable sorted order.
