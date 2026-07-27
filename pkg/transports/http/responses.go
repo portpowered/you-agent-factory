@@ -41,6 +41,8 @@ func errorFamilyForStatus(status int) factoryapi.ErrorFamily {
 		return factoryapi.ErrorFamilyNotFound
 	case http.StatusMethodNotAllowed:
 		return factoryapi.ErrorFamilyBadRequest
+	case http.StatusUnsupportedMediaType:
+		return factoryapi.ErrorFamilyBadRequest
 	case http.StatusGone:
 		return factoryapi.ErrorFamilyGone
 	default:

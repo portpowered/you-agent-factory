@@ -759,21 +759,9 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/redacted_reasoning_decoder.go#decodeRedactedReasoning",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session redacted reasoning decoding stays grouped until extraction refactor."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_blob_decode.go#decodeBlobEntryValue",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_parse.go#messageUnknownContentText",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session message content formatting stays grouped until extraction refactor."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -915,13 +903,13 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/system_initialization/initializer.go#Initializer.Initialize",
+      "target": "pkg/services/system_initialization/internal/workflow/workflow.go#Initializer.Initialize",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/work/content_staging_test.go#TestContentStagingOwnsPersistenceSignedResolutionAndCleanup",
+      "target": "pkg/services/work/internal/services/content_staging/internal/service/service_test.go#TestContentStagingOwnsPersistenceSignedResolutionAndCleanup",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
@@ -1043,13 +1031,13 @@
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/transports/cli/cliinputs/synthetic_args_relationships_test.go#assertSyntheticArgumentRecord",
       "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: synthetic argument assertions keep the full plan §4.3 field contract visible in one helper."
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: synthetic argument assertions keep the full plan \u00a74.3 field contract visible in one helper."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/transports/cli/cliinputs/synthetic_flags_test.go#assertSyntheticFlagRecord",
       "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: synthetic flag assertions keep the full plan §4.3 field contract visible in one helper."
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: synthetic flag assertions keep the full plan \u00a74.3 field contract visible in one helper."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",

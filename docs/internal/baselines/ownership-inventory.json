@@ -1157,6 +1157,12 @@
     },
     {
       "fromOwner": "factory_definitions",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/factory_definitions/wire -\u003e pkg/transports/mapping/factoryconfig"
+    },
+    {
+      "fromOwner": "factory_definitions",
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/services/factory_definitions/contracts -\u003e pkg/services/work"
@@ -2412,6 +2418,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/automations/internal/services/script_pollers",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/script_pollers/internal/service",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/script_pollers/wire",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/automations/service",
       "disposition": "retain",
       "destination": "automations",
@@ -2779,6 +2803,12 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/validation/topologytests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/wire",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -4045,6 +4075,18 @@
     },
     {
       "packagePath": "pkg/services/system_initialization",
+      "disposition": "retain",
+      "destination": "system_initialization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization/internal/workflow",
+      "disposition": "retain",
+      "destination": "system_initialization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization/wire",
       "disposition": "retain",
       "destination": "system_initialization",
       "destinationKind": "owner"

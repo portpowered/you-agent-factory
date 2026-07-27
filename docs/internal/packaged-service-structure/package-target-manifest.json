@@ -77,6 +77,9 @@
     "pkg/services/automations/internal/services/reconciliation",
     "pkg/services/automations/internal/services/reconciliation/internal/service",
     "pkg/services/automations/internal/services/reconciliation/wire",
+    "pkg/services/automations/internal/services/script_pollers",
+    "pkg/services/automations/internal/services/script_pollers/internal/service",
+    "pkg/services/automations/internal/services/script_pollers/wire",
     "pkg/services/automations/service",
     "pkg/services/edges",
     "pkg/services/factory_definitions",
@@ -123,6 +126,7 @@
     "pkg/services/factory_definitions/transports/cli",
     "pkg/services/factory_definitions/ttsobservability",
     "pkg/services/factory_definitions/validation",
+    "pkg/services/factory_definitions/wire",
     "pkg/services/factory_definitions/wire/defaultscaffold",
     "pkg/services/factory_definitions/workers",
     "pkg/services/factory_definitions/workers/taxonomy",
@@ -323,6 +327,8 @@
     "pkg/services/recordings/service",
     "pkg/services/recordings/wire",
     "pkg/services/system_initialization",
+    "pkg/services/system_initialization/internal/workflow",
+    "pkg/services/system_initialization/wire",
     "pkg/services/work",
     "pkg/services/work/internal/services/state_access",
     "pkg/services/work/internal/services/state_access/internal/service",
@@ -634,6 +640,21 @@
       "destination": "automations/internal/services/reconciliation"
     },
     {
+      "packagePath": "pkg/services/automations/internal/services/script_pollers",
+      "disposition": "retain",
+      "destination": "automations/internal/services/script_pollers"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/script_pollers/internal/service",
+      "disposition": "retain",
+      "destination": "automations/internal/services/script_pollers"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/script_pollers/wire",
+      "disposition": "retain",
+      "destination": "automations/internal/services/script_pollers"
+    },
+    {
       "packagePath": "pkg/services/automations/service",
       "disposition": "retain",
       "destination": "automations"
@@ -860,6 +881,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/validation",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/wire",
       "disposition": "retain",
       "destination": "factory_definitions"
     },
@@ -1860,6 +1886,16 @@
     },
     {
       "packagePath": "pkg/services/system_initialization",
+      "disposition": "retain",
+      "destination": "system_initialization"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization/internal/workflow",
+      "disposition": "retain",
+      "destination": "system_initialization"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization/wire",
       "disposition": "retain",
       "destination": "system_initialization"
     },

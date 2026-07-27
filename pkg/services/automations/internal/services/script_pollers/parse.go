@@ -1,0 +1,133 @@
+package script_pollers
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/services/work"
+)
+
+// ScriptPollerStdout is the parsed stdout payload from one script-poller cycle.
+type ScriptPollerStdout struct {
+	Request          work.WorkRequest
+	HasRequest       bool
+	AdvancedCursor   string
+	Checkpoint       string
+	AdvancesPosition bool
+}
+
+func parseScriptPollerOutput(stdout []byte) (work.WorkRequest, bool, error) {
+	parsed, err := parseScriptPollerStdout(stdout)
+	if err != nil {
+		return work.WorkRequest{}, parsed.HasRequest, err
+	}
+	return parsed.Request, parsed.HasRequest, nil
+}
+
+func parseScriptPollerStdout(stdout []byte) (ScriptPollerStdout, error) {
+	trimmed := bytes.TrimSpace(stdout)
+	if len(trimmed) == 0 {
+		return ScriptPollerStdout{}, nil
+	}
+
+	var envelope scriptPollerOutputEnvelope
+	if err := json.Unmarshal(trimmed, &envelope); err != nil {
+		return ScriptPollerStdout{HasRequest: true}, fmt.Errorf("script poller emitted malformed stdout: %w", err)
+	}
+	if len(envelope.Events) > 0 {
+		return ScriptPollerStdout{HasRequest: true}, fmt.Errorf("script poller emitted unsupported raw factory events")
+	}
+	if len(envelope.Request) > 0 && len(envelope.Submissions) > 0 {
+		return ScriptPollerStdout{HasRequest: true}, fmt.Errorf("script poller stdout must contain either request or submissions, not both")
+	}
+
+	recovery := scriptPollerRecoveryFromEnvelope(envelope)
+	if len(envelope.Request) > 0 {
+		request, err := work.ParseCanonicalWorkRequestJSON(envelope.Request)
+		if err != nil {
+			return ScriptPollerStdout{HasRequest: true}, fmt.Errorf("script poller emitted malformed stdout: %w", err)
+		}
+		if err := validateScriptPollerWorkRequest(request); err != nil {
+			return ScriptPollerStdout{HasRequest: true}, err
+		}
+		return mergeScriptPollerStdout(ScriptPollerStdout{
+			Request:    request,
+			HasRequest: true,
+		}, recovery), nil
+	}
+	if len(envelope.Submissions) > 0 {
+		request, err := scriptPollerWorkRequestFromSubmissions(envelope.Submissions)
+		if err != nil {
+			return ScriptPollerStdout{HasRequest: true}, err
+		}
+		return mergeScriptPollerStdout(ScriptPollerStdout{
+			Request:    request,
+			HasRequest: true,
+		}, recovery), nil
+	}
+
+	request, err := work.ParseCanonicalWorkRequestJSON(trimmed)
+	if err != nil {
+		return ScriptPollerStdout{HasRequest: true}, fmt.Errorf("script poller emitted malformed stdout: %w", err)
+	}
+	if err := validateScriptPollerWorkRequest(request); err != nil {
+		return ScriptPollerStdout{HasRequest: true}, err
+	}
+	return mergeScriptPollerStdout(ScriptPollerStdout{
+		Request:    request,
+		HasRequest: true,
+	}, recovery), nil
+}
+
+type scriptPollerOutputEnvelope struct {
+	Request     json.RawMessage `json:"request"`
+	Submissions json.RawMessage `json:"submissions"`
+	Events      json.RawMessage `json:"events"`
+	Cursor      string          `json:"cursor"`
+	Checkpoint  string          `json:"checkpoint"`
+}
+
+func scriptPollerRecoveryFromEnvelope(envelope scriptPollerOutputEnvelope) ScriptPollerStdout {
+	cursor := strings.TrimSpace(envelope.Cursor)
+	checkpoint := strings.TrimSpace(envelope.Checkpoint)
+	return ScriptPollerStdout{
+		AdvancedCursor:   cursor,
+		Checkpoint:       checkpoint,
+		AdvancesPosition: cursor != "" || checkpoint != "",
+	}
+}
+
+func mergeScriptPollerStdout(parsed, recovery ScriptPollerStdout) ScriptPollerStdout {
+	parsed.AdvancedCursor = recovery.AdvancedCursor
+	parsed.Checkpoint = recovery.Checkpoint
+	parsed.AdvancesPosition = recovery.AdvancesPosition
+	return parsed
+}
+
+func scriptPollerWorkRequestFromSubmissions(data []byte) (work.WorkRequest, error) {
+	var submissions []work.SubmitRequest
+	if err := json.Unmarshal(data, &submissions); err != nil {
+		return work.WorkRequest{}, fmt.Errorf("script poller emitted malformed stdout: decode submissions: %w", err)
+	}
+	if len(submissions) == 0 {
+		return work.WorkRequest{}, fmt.Errorf("script poller emitted malformed stdout: submissions must contain at least one item")
+	}
+
+	request := work.WorkRequestFromSubmitRequests(submissions)
+	if strings.TrimSpace(request.RequestID) == "" {
+		return work.WorkRequest{}, fmt.Errorf("script poller emitted malformed stdout: submissions must share a non-empty requestId")
+	}
+	return request, nil
+}
+
+func validateScriptPollerWorkRequest(request work.WorkRequest) error {
+	if request.Type != work.WorkRequestTypeFactoryRequestBatch {
+		return fmt.Errorf("script poller emitted malformed stdout: unsupported work request type %q", request.Type)
+	}
+	if strings.TrimSpace(request.RequestID) == "" {
+		return fmt.Errorf("script poller emitted malformed stdout: work request must set requestId")
+	}
+	return nil
+}
