@@ -3,10 +3,12 @@ package poller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -88,6 +90,64 @@ func TestPollerEmptyResultCreatesNoWork(t *testing.T) {
 	}
 }
 
+// TestPollerRecoverableFailureRetriesWithoutDuplicates proves a POLLER
+// workstation retries after a recoverable external poll failure and admits each
+// external item exactly once. The scenario replaces only the script poller
+// command edge and controllable process clock, injects a transient command
+// failure followed by a successful poll batch, and observes admission through
+// public Work listings without duplicate submission for the same external item.
+func TestPollerRecoverableFailureRetriesWithoutDuplicates(t *testing.T) {
+	dir := scaffoldScriptPollerFactory(t)
+	support.ClearSeedInputs(t, dir)
+
+	fakeClock := clockwork.NewFakeClock()
+	runner := newPollerRetrySequenceCommandRunner(t, []pollerIngressRunOutcome{
+		{err: errors.New("transient poll source unavailable")},
+		{stdout: pollerExternalWorkRequestJSON(t)},
+	})
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Edges: serviceedges.Edges{
+			ScriptCommandRunner: runner,
+			Clock:               fakeClock,
+		},
+	})
+	defer server.Stop(t)
+
+	outputLocation := support.WorkCustomerLocation(pollerWorkTypeName, pollerOutputStateName)
+	baseline := support.ListDefaultSessionWork(t, server.URL())
+	if got := support.CountWorkAtCustomerState(baseline, outputLocation); got != 0 {
+		t.Fatalf("baseline CountWorkAtCustomerState(%q) = %d, want 0 before retry scenario", outputLocation, got)
+	}
+
+	waitForPollCycle(t, runner, 10*time.Second)
+	afterFailure := support.ListDefaultSessionWork(t, server.URL())
+	if got := support.CountWorkAtCustomerState(afterFailure, outputLocation); got != 0 {
+		t.Fatalf("CountWorkAtCustomerState(%q) = %d after failed poll, want 0; listed=%#v", outputLocation, got, afterFailure.Results)
+	}
+
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	fakeClock.Advance(100 * time.Millisecond)
+
+	waitForRunnerCalls(t, runner, 2, 10*time.Second)
+	listed := waitForListedWorkAtCustomerState(t, server.URL(), outputLocation, 1, 10*time.Second)
+	if got := support.CountWorkAtCustomerState(listed, outputLocation); got != 1 {
+		t.Fatalf("CountWorkAtCustomerState(%q) = %d, want 1 after successful retry; listed=%#v", outputLocation, got, listed.Results)
+	}
+	if !support.HasWorkAtCustomerState(listed, pollerExternalWorkID, outputLocation) {
+		t.Fatalf("listed work = %#v, want work %q at %q", listed.Results, pollerExternalWorkID, outputLocation)
+	}
+
+	waitForRunnerCalls(t, runner, 3, 10*time.Second)
+	stable := support.ListDefaultSessionWork(t, server.URL())
+	if got := support.CountWorkAtCustomerState(stable, outputLocation); got != 1 {
+		t.Fatalf("CountWorkAtCustomerState(%q) = %d after post-success restart, want 1 (no duplicate); listed=%#v", outputLocation, got, stable.Results)
+	}
+	if runner.callCount() < 2 {
+		t.Fatalf("poller command calls = %d, want at least failed poll and successful retry", runner.callCount())
+	}
+}
+
 func scaffoldScriptPollerFactory(t *testing.T) string {
 	t.Helper()
 	return support.ScaffoldFactory(t, map[string]any{
@@ -137,13 +197,48 @@ func pollerExternalWorkRequestJSON(t *testing.T) []byte {
 	return payload
 }
 
-func waitForPollCycle(t *testing.T, runner *pollerIngressCommandRunner, timeout time.Duration) {
+type pollerPollCycleObserver interface {
+	callCount() int
+	pollCycleDone() <-chan struct{}
+}
+
+func waitForPollCycle(t *testing.T, runner pollerPollCycleObserver, timeout time.Duration) {
 	t.Helper()
 
 	select {
-	case <-runner.pollDone:
+	case <-runner.pollCycleDone():
 	case <-time.After(timeout):
 		t.Fatalf("timed out waiting for poller poll cycle; calls=%d", runner.callCount())
+	}
+}
+
+func waitForRunnerCalls(t *testing.T, runner pollerPollCycleObserver, want int, timeout time.Duration) {
+	t.Helper()
+
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		if runner.callCount() >= want {
+			return
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for %d poller command call(s); got %d", want, runner.callCount())
+		}
+	}
+}
+
+func waitForFakeClockWaiters(t *testing.T, fakeClock *clockwork.FakeClock, waiters int) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := fakeClock.BlockUntilContext(ctx, waiters); err != nil {
+		t.Fatalf("timed out waiting for %d fake-clock waiter(s): %v", waiters, err)
 	}
 }
 
@@ -180,6 +275,12 @@ func waitForListedWorkAtCustomerState(
 	}
 }
 
+type pollerIngressRunOutcome struct {
+	stdout   []byte
+	err      error
+	exitCode int
+}
+
 type pollerIngressCommandRunner struct {
 	mu       sync.Mutex
 	stdout   []byte
@@ -202,10 +303,7 @@ func (r *pollerIngressCommandRunner) Run(_ context.Context, _ platformprocess.Co
 	stdout := append([]byte(nil), r.stdout...)
 	r.mu.Unlock()
 
-	select {
-	case r.pollDone <- struct{}{}:
-	default:
-	}
+	r.signalPollCycle()
 
 	if callNumber == 1 {
 		return platformprocess.CommandResult{Stdout: stdout}, nil
@@ -219,4 +317,74 @@ func (r *pollerIngressCommandRunner) callCount() int {
 	return r.calls
 }
 
+func (r *pollerIngressCommandRunner) pollCycleDone() <-chan struct{} {
+	return r.pollDone
+}
+
+func (r *pollerIngressCommandRunner) signalPollCycle() {
+	select {
+	case r.pollDone <- struct{}{}:
+	default:
+	}
+}
+
+type pollerRetrySequenceCommandRunner struct {
+	mu       sync.Mutex
+	outcomes []pollerIngressRunOutcome
+	calls    int
+	pollDone chan struct{}
+}
+
+func newPollerRetrySequenceCommandRunner(t *testing.T, outcomes []pollerIngressRunOutcome) *pollerRetrySequenceCommandRunner {
+	t.Helper()
+	copied := make([]pollerIngressRunOutcome, len(outcomes))
+	for i, outcome := range outcomes {
+		if outcome.stdout != nil {
+			copied[i].stdout = append([]byte(nil), outcome.stdout...)
+		}
+		copied[i].err = outcome.err
+		copied[i].exitCode = outcome.exitCode
+	}
+	return &pollerRetrySequenceCommandRunner{
+		outcomes: copied,
+		pollDone: make(chan struct{}, 8),
+	}
+}
+
+func (r *pollerRetrySequenceCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	r.mu.Lock()
+	r.calls++
+	callNumber := r.calls
+	var outcome pollerIngressRunOutcome
+	if callNumber-1 < len(r.outcomes) {
+		outcome = r.outcomes[callNumber-1]
+	}
+	r.mu.Unlock()
+
+	r.signalPollCycle()
+
+	if outcome.err != nil {
+		return platformprocess.CommandResult{}, outcome.err
+	}
+	return platformprocess.CommandResult{Stdout: outcome.stdout, ExitCode: outcome.exitCode}, nil
+}
+
+func (r *pollerRetrySequenceCommandRunner) callCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.calls
+}
+
+func (r *pollerRetrySequenceCommandRunner) pollCycleDone() <-chan struct{} {
+	return r.pollDone
+}
+
+func (r *pollerRetrySequenceCommandRunner) signalPollCycle() {
+	select {
+	case r.pollDone <- struct{}{}:
+	default:
+	}
+}
+
 var _ platformprocess.CommandRunner = (*pollerIngressCommandRunner)(nil)
+var _ platformprocess.CommandRunner = (*pollerRetrySequenceCommandRunner)(nil)
