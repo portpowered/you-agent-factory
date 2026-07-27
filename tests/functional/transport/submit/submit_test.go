@@ -27,6 +27,8 @@ const functionalBatch = `{
 	]
 }`
 
+// TestSubmitFamilyExecutesThroughRootBuiltProcess proves batch dry-run and unary
+// submit commands execute through root.BuildProcess with the expected customer output.
 func TestSubmitFamilyExecutesThroughRootBuiltProcess(t *testing.T) {
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
 	if err != nil {
@@ -105,6 +107,8 @@ func TestSubmitFamilyExecutesThroughRootBuiltProcess(t *testing.T) {
 	})
 }
 
+// TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure proves live
+// unary submit enqueues Work before a downstream structured-output failure surfaces.
 func TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure(t *testing.T) {
 	factoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.ClearSeedInputs(t, factoryDir)

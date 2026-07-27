@@ -17,6 +17,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs proves list,
+// show, move, and visualize work CLI commands execute through resolved handlers.
 func TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs(t *testing.T) {
 	var listed workcli.ListConfig
 	var shown workcli.ShowConfig

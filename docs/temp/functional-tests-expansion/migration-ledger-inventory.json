@@ -30,6 +30,10 @@
       "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
     },
     {
+      "path": "tests/functional/cli/factory_run/events/events_test.go",
+      "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
+    },
+    {
       "path": "tests/functional/cli/mcp_resume/stdio_client_test.go",
       "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
     },
@@ -617,9 +621,29 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/cli/factory_run/events/events_test.go",
-      "package": "you-agent-factory/tests/functional/cli/factory_run/events",
-      "scenario": "TestSuccessfulInvocationEmitsCanonicalNDJSON",
+      "source_path": "tests/functional/transport/cli/output/ndjson_stream_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/output",
+      "scenario": "TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/output/ndjson_stream_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/output/ndjson_stream_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/output",
+      "scenario": "TestCLINDJSONFailureEndsWithOneTerminalResult",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/output/ndjson_stream_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/output/ndjson_stream_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/output",
+      "scenario": "TestCLINDJSONSequenceIsMonotonic",
       "lane": "short",
       "destination": "tests/functional/transport/cli/output/ndjson_stream_test.go",
       "catch_all": "none",
@@ -3457,14 +3481,34 @@
       "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
-      "source_path": "tests/functional/runtime_api/api_throttle_failure_regression_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestRetryableThrottleFailureWithoutGuardUsesDefaultRetryLimitAndFailsWork",
+      "source_path": "tests/functional/workers/inference/failure_normalization_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestProviderNonZeroExitMapsToPublicFailure",
       "lane": "short",
       "destination": "tests/functional/workers/inference/failure_normalization_test.go",
-      "catch_all": "runtime_api",
+      "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-09-workers-resilience"
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/failure_normalization_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestProviderAuthRateLimitAndTimeoutRemainDistinct",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/failure_normalization_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/failure_normalization_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestProviderFailureRedactsPromptEnvironmentAndCredentials",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/failure_normalization_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/runtime_api/api_unified_event_log_smoke_test.go",
@@ -5137,24 +5181,34 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/workflow/batch_ideation_pipeline_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestBatchIdeationPipeline_ConcurrencyLimit2",
+      "source_path": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/petri/dispatch",
+      "scenario": "TestPetriIndependentWorkDispatchesConcurrently",
       "lane": "short",
       "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
-      "catch_all": "workflow",
+      "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
+      "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/workflow/batch_ideation_pipeline_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestSerialIdeationPipeline_ConcurrencyLimit1",
+      "source_path": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/petri/dispatch",
+      "scenario": "TestPetriConcurrentResultsCorrelateToOriginalWork",
       "lane": "short",
       "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
-      "catch_all": "workflow",
+      "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/petri/dispatch",
+      "scenario": "TestPetriConcurrentFailureDoesNotDuplicateDispatch",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/workflow/code_review_loop_long_test.go",
@@ -5242,56 +5296,6 @@
       "scenario": "TestDispatcherLifecycle_PlannerFailure",
       "lane": "short",
       "destination": "tests/functional/orchestration/petri/dispatch/simple_run_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
-    },
-    {
-      "source_path": "tests/functional/workflow/dispatcher_workflow_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestDispatcherWorkflow_ExecutionPoolIsolation",
-      "lane": "functionallong",
-      "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
-    },
-    {
-      "source_path": "tests/functional/workflow/dispatcher_workflow_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestDispatcherWorkflow_MultipleSeedFiles",
-      "lane": "functionallong",
-      "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
-    },
-    {
-      "source_path": "tests/functional/workflow/dispatcher_workflow_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestDispatcherWorkflow_ReviewFailurePerItem",
-      "lane": "functionallong",
-      "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
-    },
-    {
-      "source_path": "tests/functional/workflow/dispatcher_workflow_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestDispatcherWorkflow_SingleSeedFile",
-      "lane": "functionallong",
-      "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
-    },
-    {
-      "source_path": "tests/functional/workflow/dispatcher_workflow_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestDispatcherWorkflow_TwoSeedFiles",
-      "lane": "functionallong",
-      "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
       "catch_all": "workflow",
       "specialty_targets": "none",
       "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
@@ -5865,6 +5869,36 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workstations/poller/poller_test.go",
+      "package": "you-agent-factory/tests/functional/workstations/poller",
+      "scenario": "TestPollerCreatesWorkFromExternalItems",
+      "lane": "short",
+      "destination": "tests/functional/workstations/poller/poller_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workstations/poller/poller_test.go",
+      "package": "you-agent-factory/tests/functional/workstations/poller",
+      "scenario": "TestPollerEmptyResultCreatesNoWork",
+      "lane": "short",
+      "destination": "tests/functional/workstations/poller/poller_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workstations/poller/poller_test.go",
+      "package": "you-agent-factory/tests/functional/workstations/poller",
+      "scenario": "TestPollerRecoverableFailureRetriesWithoutDuplicates",
+      "lane": "short",
+      "destination": "tests/functional/workstations/poller/poller_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
   "scanned_at_utc": "2026-07-27T12:57:10Z",
@@ -5872,48 +5906,49 @@
     "by_catch_all": {
       "bootstrap_portability": 27,
       "guards_batch": 28,
-      "none": 221,
+      "none": 232,
       "replay_contracts": 24,
-      "runtime_api": 108,
+      "runtime_api": 107,
       "smoke": 89,
-      "workflow": 71
+      "workflow": 64
     },
     "by_top_level_package": {
       "acceptance": 14,
       "bootstrap_portability": 27,
-      "cli": 73,
+      "cli": 72,
       "factory": 4,
       "guards_batch": 28,
       "models": 5,
       "observability": 9,
       "operator_settings": 1,
+      "orchestration": 3,
       "product": 10,
       "providers": 67,
       "replay_contracts": 24,
-      "runtime_api": 108,
+      "runtime_api": 107,
       "sessionparity": 13,
+      "sessions": 2,
       "smoke": 89,
-      "transport": 17,
+      "transport": 20,
       "work": 2,
-      "workers": 2,
-      "workflow": 71,
-      "workstations": 2,
-      "sessions": 2
+      "workers": 5,
+      "workflow": 64,
+      "workstations": 5
     },
-    "customer_top_level_Test_scenarios": 568,
-    "files_with_customer_Test": 186,
-    "functional_test_go_files": 225,
-    "helper_only_non_customer_files": 34,
+    "customer_top_level_Test_scenarios": 571,
+    "files_with_customer_Test": 200,
+    "functional_test_go_files": 251,
+    "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
-    "lane_functionallong": 122,
-    "lane_short": 446
+    "lane_functionallong": 117,
+    "lane_short": 454
   },
   "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. Non-catch-all rows mapped by FND-007-006; catch-all rows mapped by FND-007-003\u2026005.",
   "runtime_api_mapping": {
     "mapped_at": "2026-07-24T02:25:00Z",
     "story": "fnd-007-migration-ledger-003",
-    "scenario_count": 108,
+    "scenario_count": 107,
     "batch_ids": [
       "runtime_api-delete-01-transport-http",
       "runtime_api-delete-02-work-submission",
@@ -5932,7 +5967,7 @@
   "smoke_workflow_mapping": {
     "mapped_at_utc": "2026-07-24T02:26:56Z",
     "smoke_scenarios": 94,
-    "workflow_scenarios": 73
+    "workflow_scenarios": 66
   },
   "guards_bootstrap_replay_mapping": {
     "mapped_at_utc": "2026-07-24T02:29:50Z",
@@ -5980,10 +6015,10 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T00:58:39Z",
-    "story": "fnd-007-migration-ledger-007",
-    "live_customer_scenarios": 547,
-    "ledger_rows": 547,
+    "audited_at_utc": "2026-07-27T13:05:00Z",
+    "story": "ft-wave1-cli-ndjson-stream-004",
+    "live_customer_scenarios": 560,
+    "ledger_rows": 560,
     "unmapped_scenarios": 0,
     "checklist_destinations": 434,
     "wrong_layer_destinations": 69,

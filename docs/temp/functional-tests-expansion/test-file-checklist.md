@@ -117,7 +117,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIJSONFailureRemainsValidJSON` verifies structured failure output.
   - `TestCLIJSONContainsNoPrivateRuntimeFields` guards the public boundary.
 
-- [ ] `tests/functional/transport/cli/output/ndjson_stream_test.go`
+- [x] `tests/functional/transport/cli/output/ndjson_stream_test.go`
   - `TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult` verifies
     record order and final record type.
   - `TestCLINDJSONSequenceIsMonotonic` verifies event ordering.
@@ -239,7 +239,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     command metadata.
   - `TestUnsupportedProviderFlagReturnsCapabilityError` covers mismatch.
 
-- [ ] `tests/functional/workers/inference/failure_normalization_test.go`
+- [x] `tests/functional/workers/inference/failure_normalization_test.go`
   - `TestProviderNonZeroExitMapsToPublicFailure` covers generic process failure.
   - `TestProviderAuthRateLimitAndTimeoutRemainDistinct` covers error classes.
   - `TestProviderFailureRedactsPromptEnvironmentAndCredentials` covers safety.
@@ -408,7 +408,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPetriWorkerErrorReturnsFailedTerminalOutcome`.
   - `TestPetriInvocationInputAndOutputMapping`.
 
-- [ ] `tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go`
+- [x] `tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go`
   - `TestPetriIndependentWorkDispatchesConcurrently`.
   - `TestPetriConcurrentResultsCorrelateToOriginalWork`.
   - `TestPetriConcurrentFailureDoesNotDuplicateDispatch`.
@@ -437,7 +437,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestRepeaterHonorsEachConfiguredStopWord`.
   - `TestRepeaterLoopBreakerTerminatesNonConvergingWork`.
 
-- [ ] `tests/functional/workstations/poller/poller_test.go`
+- [x] `tests/functional/workstations/poller/poller_test.go`
   - `TestPollerCreatesWorkFromExternalItems`.
   - `TestPollerEmptyResultCreatesNoWork`.
   - `TestPollerRecoverableFailureRetriesWithoutDuplicates`.
