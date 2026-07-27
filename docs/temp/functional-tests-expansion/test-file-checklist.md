@@ -188,7 +188,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIUnknownRouteReturnsStructuredNotFound`.
   - `TestAPIWrongMethodReturnsDocumentedMethodError`.
 
-- [ ] `tests/functional/transport/http/server/content_negotiation_test.go`
+- [x] `tests/functional/transport/http/server/content_negotiation_test.go`
   - `TestAPIJSONRequestsAndResponsesUseDocumentedContentType`.
   - `TestAPIUnsupportedContentTypeReturns415`.
   - `TestAPIMalformedJSONReturnsStructured400`.
@@ -453,6 +453,9 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/automations/filesystem_watcher_root_composition_test.go`
   - `TestBuildProcessRemainsFilesystemWatcherInertBeforeRuntimeLifecycle`.
   - `TestAutomationsFilesystemWatcherPreseedsThroughRuntimeLifecycle`.
+
+- [x] `tests/functional/automations/hosted_sources_root_composition_test.go`
+  - `TestBuildProcessRemainsHostedSourcesInertBeforeRuntimeLifecycle`.
 
 ## Wave 1 — workstations
 

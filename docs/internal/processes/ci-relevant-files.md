@@ -334,6 +334,17 @@
   `transport` and subsection `http/server` from the path; every top-level
   `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
   viz-compatible.
+  HTTP API server content-negotiation functional coverage belongs in
+  `tests/functional/transport/http/server/content_negotiation_test.go`: prove
+  JSON requests and responses use the documented `application/json` media type
+  from the published OpenAPI inventory, prove unsupported `Content-Type` values
+  against JSON-bodied endpoints return structured HTTP 415
+  `UNSUPPORTED_MEDIA_TYPE` errors before body decode, and prove malformed JSON
+  bodies with the documented JSON media type return structured HTTP 400
+  `BAD_REQUEST` errors distinct from media-type rejection. Catalog metadata
+  infers domain `transport` and subsection `http/server` from the path; every
+  top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
+  stays viz-compatible.
   HTTP API server OpenAPI routing functional coverage belongs in
   `tests/functional/transport/http/server/routing_test.go`: prove every
   published OpenAPI operation inventory entry reaches a non-404 handler through
@@ -495,7 +506,29 @@ Wave 0 functional-tests-expansion planning authority lives under
   repository `factory/` scaffold remain outside that classification.
   The package's passive embedded-filesystem tests run in `make test-maintenance`,
   matching the repository-boundary checker that protects its authored data
-  ownership.
+  ownership. Focused command-exit failure evidence lives in
+  `cmd/packagedfactorysourcecheck/guard_failure_behavior_test.go`.
+- `cmd/packagedfactoryconsumptioncheck` owns the static consumption gate for
+  shipped first-party Factory definition bytes. Keep it in the default
+  `make lint` aggregation: production Go may import
+  `packages/packaged-factories` only from the embed package itself and
+  `internal/packagedfactorycatalog`, and may call
+  `packagedfactorycatalog.LoadPublishedDefinitionCatalog` only from the
+  approved wiring and catalog-projection files
+  (`pkg/wire/profiles.go`, `pkg/transports/http/handlers_models.go`,
+  `pkg/services/factory_definitions/packages/goal/prompt_drift.go`). Factory
+  Definitions list/resolve/install must continue to consume detached catalog
+  bytes through `PackagedFactoryCatalogOperations` rather than alternate embed
+  or filesystem paths.   Focused unknown-identity resolve/install rejection
+  evidence lives in `pkg/wire/packaged_factory_guard_failure_test.go` and
+  `tests/functional/product/packaged_factory_guard_failure/`.
+  First-party definition guard closeout verification runs, in order,
+  `make packaged-factory-source-check`, `make packaged-factory-consumption-check`,
+  `make packaged-factory-catalog-check`, and `make packaged-factory-package-verify`
+  (or the focused `packaged-factory-package-consumer-smoke` subset for
+  clean-consumer proof). No additional coverage, ownership, or package-target
+  manifest edits are required when those gates already register the new cmd
+  surfaces through default `make lint`.
   Public Go packages under `packages/` are not selected by the default unit
   lane. Classify passive publication boundaries explicitly in
   `internal/testlanes` and list them in `make test-maintenance`; the

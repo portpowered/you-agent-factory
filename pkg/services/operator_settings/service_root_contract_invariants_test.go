@@ -160,6 +160,8 @@ func TestRootContract_ContractValuesStayInertWhenHeld(t *testing.T) {
 	}
 
 	selection := operatorsettings.EffectiveSelection{
+		BackendScopeID:            "local-00000000-0000-4000-8000-000000000010",
+		WorkerPresets:             []operatorsettings.DocumentWorkerPreset{{ID: "research", ModelProvider: "CODEX"}},
 		WorkerModelProvider:       "CODEX",
 		WorkerModel:               "gpt-5",
 		WorkerModelProviderSource: operatorsettings.EffectiveLayerSourceFlag,
@@ -170,6 +172,10 @@ func TestRootContract_ContractValuesStayInertWhenHeld(t *testing.T) {
 	selection.WorkerModel = "mutated"
 	if clonedSelection.WorkerModel == "mutated" {
 		t.Fatal("EffectiveSelection.Clone() shares mutable model state")
+	}
+	selection.WorkerPresets[0].ID = "mutated"
+	if clonedSelection.WorkerPresets[0].ID == "mutated" {
+		t.Fatal("EffectiveSelection.Clone() shares mutable worker preset state")
 	}
 
 	overrides := operatorsettings.EffectiveOverrideFacts{

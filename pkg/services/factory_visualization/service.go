@@ -6,22 +6,21 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	activationlifecyclewire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/wire"
+	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
+	liveviewprojectionwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 // View is the transport-independent presentation input emitted after the
 // canonical Factory event projection changes.
-type View struct {
-	EngineState factoryruntime.StateSnapshot
-	RenderData  recordings.SimpleDashboardRenderData
-	ObservedAt  time.Time
-}
+type View = liveviewprojection.View
+
+// RuntimeObservation is the sanitized Runtime fact shape carried on emitted Views.
+type RuntimeObservation = liveviewprojection.RuntimeObservation
 
 // Sink presents one projected Factory view at an external boundary.
 type Sink interface {
@@ -34,24 +33,15 @@ type SinkFunc func(View)
 func (f SinkFunc) PresentFactoryView(view View) { f(view) }
 
 // Clock supplies observation timestamps without hiding process-global time.
-type Clock interface {
-	Now() time.Time
-}
+type Clock = liveviewprojection.Clock
 
 // Source supplies retained-then-live canonical events and the corresponding
 // runtime snapshot. Implementations may adapt a currently selected Factory
 // Session, but the visualization service never reaches into its registry.
-type Source interface {
-	SubscribeFactoryEvents(
-		context.Context,
-		*factorydefinitions.FactoryEventReconnectCursor,
-		factorydefinitions.FactoryEventReconnectScope,
-	) (*factorydefinitions.FactoryEventStream, error)
-	GetEngineStateSnapshot(context.Context) (*factoryruntime.StateSnapshot, error)
-}
+type Source = liveviewprojection.Source
 
 // ErrorReporter receives non-fatal projection or presentation-read failures.
-type ErrorReporter func(error)
+type ErrorReporter = liveviewprojection.ErrorReporter
 
 // RuntimeFactory constructs one inert visualization lifecycle for a selected
 // Factory Session runtime. Wire injects this operation into runtime assembly.
@@ -67,6 +57,7 @@ type RuntimeFactory func(
 // subscription lifecycle for one Factory visualization.
 type Service struct {
 	activation activationlifecycle.Service
+	projection liveviewprojection.Service
 
 	source      Source
 	projections recordings.ProjectionService
@@ -107,8 +98,25 @@ func New(
 	if err != nil {
 		return nil, err
 	}
+	projection, err := liveviewprojectionwire.NewService(
+		source,
+		projections,
+		clock,
+		adaptSink(sink),
+		reportError,
+	)
+	if err != nil {
+		return nil, err
+	}
+	liveviewprojectionwire.BindRetainedEventsSupplier(projection, func() []factorydefinitions.FactoryEvent {
+		if activation == nil {
+			return nil
+		}
+		return activation.RetainedEvents()
+	})
 	return &Service{
 		activation:  activation,
+		projection:  projection,
 		source:      source,
 		projections: projections,
 		clock:       clock,
@@ -142,6 +150,13 @@ func (s *Service) Wait(ctx context.Context) error {
 	return s.activation.Wait(ctx)
 }
 
+func adaptSink(sink Sink) liveviewprojection.Sink {
+	if sink == nil {
+		return nil
+	}
+	return SinkFunc(sink.PresentFactoryView)
+}
+
 type activationSourceAdapter struct {
 	source Source
 }
@@ -163,16 +178,16 @@ func (a activationSourceAdapter) GetEngineObservation(
 	if a.source == nil {
 		return nil, errors.New("read Factory visualization engine observation: event source is required")
 	}
-	snapshot, err := a.source.GetEngineStateSnapshot(ctx)
+	facts, err := a.source.GetRuntimeSnapshotFacts(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if snapshot == nil {
+	if facts == nil {
 		return nil, nil
 	}
 	return &activationlifecycle.EngineObservation{
-		TickCount:            snapshot.TickCount,
-		ActiveThrottlePauses: snapshot.ActiveThrottlePauses,
+		TickCount:            facts.RuntimeObservation.TickCount,
+		ActiveThrottlePauses: facts.ActiveThrottlePauses,
 	}, nil
 }
 
@@ -185,9 +200,8 @@ func (a activationSinkAdapter) PresentFactoryView(view activationlifecycle.View)
 		return
 	}
 	a.sink.PresentFactoryView(View{
-		EngineState: factoryruntime.StateSnapshot{
-			TickCount:            view.EngineObservation.TickCount,
-			ActiveThrottlePauses: view.EngineObservation.ActiveThrottlePauses,
+		Runtime: RuntimeObservation{
+			TickCount: view.EngineObservation.TickCount,
 		},
 		RenderData: view.RenderData,
 		ObservedAt: view.ObservedAt,
