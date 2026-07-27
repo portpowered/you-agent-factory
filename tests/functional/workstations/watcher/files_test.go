@@ -3,6 +3,7 @@
 package watcher
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -429,4 +430,250 @@ func TestWatcherCombinedDefaultAndDynamicExecDirectory(t *testing.T) {
 	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "processing")); got != 0 {
 		t.Fatalf("CountWorkAtCustomerState(task:processing) = %d, want 0 after completion", got)
 	}
+}
+
+// TestWatcherParentChildBatchFanIn proves that submitting a canonical
+// PARENT_CHILD batch through a watched file admits the batch via watcher ingress
+// and routes parent-aware failure when a child story fails, leaving Work in the
+// documented terminal states with no non-terminal Work leak.
+func TestWatcherParentChildBatchFanIn(t *testing.T) {
+	support.SkipLongFunctional(t, "slow watcher parent-child batch fan-in sweep")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "submitted_parent_child_filewatcher"))
+	writeSubmittedParentChildBatch(t, dir)
+
+	provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
+		"story-worker": {
+			{Content: "Story completed. COMPLETE"},
+			{Error: errors.New("story processing failed")},
+		},
+		"story-set-failure-handler": {
+			{Content: "Story set failed. COMPLETE"},
+		},
+	})
+
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		15*time.Second,
+	)
+
+	wantStates := map[string]int{
+		support.WorkCustomerLocation("story", "complete"):    1,
+		support.WorkCustomerLocation("story", "failed"):      1,
+		support.WorkCustomerLocation("story-set", "failed"):  1,
+		support.WorkCustomerLocation("story", "init"):        0,
+		support.WorkCustomerLocation("story-set", "waiting"):   0,
+		support.WorkCustomerLocation("story-set", "complete"): 0,
+	}
+	for location, want := range wantStates {
+		if got := support.CountWorkAtCustomerState(listed, location); got != want {
+			t.Fatalf("CountWorkAtCustomerState(%s) = %d, want %d; listed=%#v", location, got, want, listed)
+		}
+	}
+
+	if provider.CallCount("story-worker") != 2 {
+		t.Fatalf("story-worker calls = %d, want 2", provider.CallCount("story-worker"))
+	}
+	if provider.CallCount("story-set-failure-handler") != 1 {
+		t.Fatalf("story-set-failure-handler calls = %d, want 1", provider.CallCount("story-set-failure-handler"))
+	}
+
+	assertWatchedParentChildRequestRecorded(t, events)
+	assertParentFailedOnlyAfterChildFailure(t, events)
+}
+
+func writeSubmittedParentChildBatch(t *testing.T, dir string) {
+	t.Helper()
+
+	batchDir := filepath.Join(dir, "inputs", "BATCH", "default")
+	if err := os.MkdirAll(batchDir, 0o755); err != nil {
+		t.Fatalf("create batch input dir: %v", err)
+	}
+	batchJSON := []byte(`{
+  "requestId": "release-story-set",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "story-set",
+      "workTypeName": "story-set",
+      "state": "waiting",
+      "payload": {"title": "April release story set"},
+      "tags": {"project": "sample-service", "branch": "ralph/april-release"}
+    },
+    {
+      "name": "story-auth",
+      "workTypeName": "story",
+      "payload": {"title": "Harden auth session handling"},
+      "tags": {"project": "sample-service", "branch": "ralph/april-release"}
+    },
+    {
+      "name": "story-billing",
+      "workTypeName": "story",
+      "payload": {"title": "Polish billing retry UX"},
+      "tags": {"project": "sample-service", "branch": "ralph/april-release"}
+    }
+  ],
+  "relations": [
+    {"type": "PARENT_CHILD", "sourceWorkName": "story-auth", "targetWorkName": "story-set"},
+    {"type": "PARENT_CHILD", "sourceWorkName": "story-billing", "targetWorkName": "story-set"}
+  ]
+}`)
+	if err := os.WriteFile(filepath.Join(batchDir, "release-story-set.json"), batchJSON, 0o644); err != nil {
+		t.Fatalf("write batch file: %v", err)
+	}
+}
+
+func assertWatchedParentChildRequestRecorded(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
+
+	requestIndex := -1
+	requestEvents := 0
+	firstRelationIndex := -1
+	parentChildRelations := map[string]bool{}
+
+	for i, event := range events {
+		switch event.Type {
+		case factoryapi.FactoryEventTypeWorkRequest:
+			if support.StringPointerValue(event.Context.RequestId) != "release-story-set" {
+				continue
+			}
+			payload, err := event.Payload.AsWorkRequestEventPayload()
+			if err != nil {
+				t.Fatalf("decode WORK_REQUEST event %q: %v", event.Id, err)
+			}
+			requestIndex = i
+			requestEvents++
+			if payload.Type != factoryapi.WorkRequestTypeFactoryRequestBatch {
+				t.Fatalf("request type = %q, want FACTORY_REQUEST_BATCH", payload.Type)
+			}
+			if support.StringPointerValue(payload.Source) != "external-submit" {
+				t.Fatalf("request source = %q, want external-submit", support.StringPointerValue(payload.Source))
+			}
+			works := support.FactoryWorksValue(payload.Works)
+			if len(works) != 3 {
+				t.Fatalf("request work items = %d, want 3", len(works))
+			}
+			assertRequestIncludesStorySetParent(t, works)
+		case factoryapi.FactoryEventTypeRelationshipChangeRequest:
+			if support.StringPointerValue(event.Context.RequestId) != "release-story-set" {
+				continue
+			}
+			payload, err := event.Payload.AsRelationshipChangeRequestEventPayload()
+			if err != nil {
+				t.Fatalf("decode RELATIONSHIP_CHANGE event %q: %v", event.Id, err)
+			}
+			if payload.Relation.Type != factoryapi.RelationTypeParentChild {
+				t.Fatalf("relation type = %q, want PARENT_CHILD", payload.Relation.Type)
+			}
+			if payload.Relation.TargetWorkName != "story-set" {
+				t.Fatalf("relation target = %q, want story-set", payload.Relation.TargetWorkName)
+			}
+			parentChildRelations[payload.Relation.SourceWorkName] = true
+			if firstRelationIndex == -1 {
+				firstRelationIndex = i
+			}
+		}
+	}
+
+	if requestEvents != 1 {
+		t.Fatalf("WORK_REQUEST events for release-story-set = %d, want 1", requestEvents)
+	}
+	if !parentChildRelations["story-auth"] || !parentChildRelations["story-billing"] || len(parentChildRelations) != 2 {
+		t.Fatalf("PARENT_CHILD relations = %#v, want story-auth and story-billing under story-set", parentChildRelations)
+	}
+	if firstRelationIndex <= requestIndex {
+		t.Fatalf("WORK_REQUEST index %d should precede RELATIONSHIP_CHANGE index %d", requestIndex, firstRelationIndex)
+	}
+}
+
+func assertRequestIncludesStorySetParent(t *testing.T, works []factoryapi.Work) {
+	t.Helper()
+
+	for _, work := range works {
+		if work.Name != "story-set" {
+			continue
+		}
+		if support.StringPointerValue(work.WorkTypeName) != "story-set" {
+			t.Fatalf("story-set work_type_name = %q, want story-set", support.StringPointerValue(work.WorkTypeName))
+		}
+		return
+	}
+
+	t.Fatal("WORK_REQUEST missing story-set parent work item")
+}
+
+func assertParentFailedOnlyAfterChildFailure(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
+
+	childFailureIndex := -1
+	childFailureDispatchID := ""
+	parentFailureDispatchIndex := -1
+	parentFailureCompletionIndex := -1
+
+	for i, event := range events {
+		switch event.Type {
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			payload, err := event.Payload.AsDispatchResponseEventPayload()
+			if err != nil {
+				t.Fatalf("decode DISPATCH_COMPLETED event %q: %v", event.Id, err)
+			}
+			switch {
+			case payload.TransitionId == "process-story" &&
+				payload.Outcome == factoryapi.WorkOutcomeFailed &&
+				support.StringPointerValue(event.Context.DispatchId) == childFailureDispatchID:
+				childFailureIndex = i
+			case payload.TransitionId == "fail-story-set-from-child" &&
+				payload.Outcome == factoryapi.WorkOutcomeAccepted:
+				parentFailureCompletionIndex = i
+			}
+		case factoryapi.FactoryEventTypeDispatchRequest:
+			payload, err := event.Payload.AsDispatchRequestEventPayload()
+			if err != nil {
+				t.Fatalf("decode DISPATCH_CREATED event %q: %v", event.Id, err)
+			}
+			if payload.TransitionId == "process-story" &&
+				dispatchHistoryIncludesWorkName(t, events, event, payload, "story-billing") {
+				childFailureDispatchID = support.StringPointerValue(event.Context.DispatchId)
+			}
+			if payload.TransitionId == "fail-story-set-from-child" &&
+				dispatchHistoryIncludesWorkName(t, events, event, payload, "story-set") {
+				parentFailureDispatchIndex = i
+			}
+		}
+	}
+
+	if childFailureIndex == -1 {
+		t.Fatal("missing failed child dispatch completion for story-billing")
+	}
+	if parentFailureDispatchIndex == -1 {
+		t.Fatal("missing parent failure dispatch creation")
+	}
+	if parentFailureCompletionIndex == -1 {
+		t.Fatal("missing parent failure dispatch completion")
+	}
+	if parentFailureDispatchIndex <= childFailureIndex {
+		t.Fatalf("parent failure dispatch index %d should be after child failure index %d", parentFailureDispatchIndex, childFailureIndex)
+	}
+	if parentFailureCompletionIndex <= childFailureIndex {
+		t.Fatalf("parent failure completion index %d should be after child failure index %d", parentFailureCompletionIndex, childFailureIndex)
+	}
+}
+
+func dispatchHistoryIncludesWorkName(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	event factoryapi.FactoryEvent,
+	payload factoryapi.DispatchRequestEventPayload,
+	workName string,
+) bool {
+	t.Helper()
+
+	for _, work := range support.DispatchInputWorksFromHistory(t, events, event, payload) {
+		if work.Name == workName {
+			return true
+		}
+	}
+	return false
 }
