@@ -1,7 +1,7 @@
 {
   "exports": {
     "generated.cli.commands": {
-      "artifactHash": "df212bef9f035f1c1eca1e126b46b742ff3c2219e30cce6749643d300da0033f",
+      "artifactHash": "7ffc979f91eb898e92c701d79b9824dfa76cc4921ba42905d52f860d15619da9",
       "documentation": {
         "documentation": {
           "description": {
@@ -18,7 +18,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.cli.commands",
-        "sourceHash": "df212bef9f035f1c1eca1e126b46b742ff3c2219e30cce6749643d300da0033f",
+        "sourceHash": "7ffc979f91eb898e92c701d79b9824dfa76cc4921ba42905d52f860d15619da9",
         "visibility": "public"
       },
       "family": "cli",

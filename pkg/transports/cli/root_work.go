@@ -228,6 +228,9 @@ func newB12ProductionFamilies(
 	if err != nil {
 		return b12ProductionFamilies{}, err
 	}
+	if err := preserveSubmitArgumentCompatibility(submitCommand); err != nil {
+		return b12ProductionFamilies{}, err
+	}
 	mcpCommand, err := newMCPCommand(options)
 	if err != nil {
 		return b12ProductionFamilies{}, err
@@ -238,6 +241,52 @@ func newB12ProductionFamilies(
 		Server: runServer.Server,
 		Submit: submitCommand,
 	}, nil
+}
+
+// preserveSubmitArgumentCompatibility keeps the established public Cobra
+// argument shape while the isolated Submit constructor retains manifest-owned
+// argument resolution. The canonical batch resolver must run before its
+// relationship validation, even though the production root leaves Args unset.
+func preserveSubmitArgumentCompatibility(submit *cobra.Command) error {
+	if submit == nil {
+		return fmt.Errorf("preserve submit argument compatibility: submit command is required")
+	}
+	submit.Args = nil
+	submit.Long = strings.TrimPrefix(submit.Long, submit.Short+"\n\n")
+	submit.Example = ""
+	for _, flagName := range []string{"name", "payload", "work-type-name"} {
+		flag := submit.Flags().Lookup(flagName)
+		if flag == nil {
+			return fmt.Errorf("preserve submit argument compatibility: flag %q is required", flagName)
+		}
+		delete(flag.Annotations, cobra.BashCompOneRequiredFlag)
+		delete(flag.Annotations, "infinite-you/required")
+	}
+
+	batch, _, err := submit.Find([]string{"batch"})
+	if err != nil {
+		return fmt.Errorf("preserve submit argument compatibility: find batch command: %w", err)
+	}
+	if batch == nil {
+		return fmt.Errorf("preserve submit argument compatibility: batch command is required")
+	}
+	batch.Long = strings.TrimPrefix(batch.Long, batch.Short+"\n\n")
+	resolveArguments := batch.Args
+	if resolveArguments == nil {
+		return fmt.Errorf("preserve submit argument compatibility: batch argument resolver is required")
+	}
+	validateInputs := batch.PreRunE
+	batch.Args = nil
+	batch.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if err := resolveArguments(cmd, args); err != nil {
+			return err
+		}
+		if validateInputs != nil {
+			return validateInputs(cmd, args)
+		}
+		return nil
+	}
+	return nil
 }
 
 func productionRootSubcommands(

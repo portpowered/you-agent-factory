@@ -55,6 +55,21 @@ func TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition(
 		}
 	}
 
+	var failedShowOutput bytes.Buffer
+	err = process.Execute(root.Input{
+		Args: []string{
+			"you", "--server", server.URL, "session", "show",
+		},
+		Env: testHomeEnvironment(home), Stdout: &failedShowOutput,
+		Context: context.Background(), WorkingDirectory: workingDirectory,
+	})
+	if err == nil {
+		t.Fatal("Process.Execute(default session show) error = nil")
+	}
+	if failedShowOutput.Len() != 0 {
+		t.Fatalf("default session show stdout = %q, want empty", failedShowOutput.String())
+	}
+
 	requests.assert(t)
 	before := requests.count()
 	var rejectedOutput bytes.Buffer
@@ -113,6 +128,8 @@ func (requests *sessionRequests) handle(writer http.ResponseWriter, request *htt
 		_, _ = fmt.Fprint(writer, `{"sessions":[]}`)
 	case request.Method == http.MethodGet && request.URL.Path == "/factory-sessions/session-show":
 		_, _ = fmt.Fprint(writer, `{"id":"session-show","runtime":{"orchestratorKind":"JAVASCRIPT"}}`)
+	case request.Method == http.MethodGet && request.URL.Path == "/factory-sessions/~default":
+		http.Error(writer, "default session unavailable", http.StatusServiceUnavailable)
 	case request.Method == http.MethodGet:
 		_, _ = fmt.Fprint(writer, `{"sessionId":"dur-sess-1","dispatches":[]}`)
 	case request.URL.Path == "/factory-sessions/~default/pause":
@@ -134,8 +151,8 @@ func (requests *sessionRequests) assert(t *testing.T) {
 	t.Helper()
 	requests.mu.Lock()
 	defer requests.mu.Unlock()
-	if len(requests.requests) != 7 {
-		t.Fatalf("request count = %d, want 7: %#v", len(requests.requests), requests.requests)
+	if len(requests.requests) != 8 {
+		t.Fatalf("request count = %d, want 8: %#v", len(requests.requests), requests.requests)
 	}
 	want := []capturedRequest{
 		{method: http.MethodPost, path: "/factory-sessions"},
@@ -145,6 +162,7 @@ func (requests *sessionRequests) assert(t *testing.T) {
 		{method: http.MethodGet, path: "/factory-sessions/dur-sess-1/dispatches"},
 		{method: http.MethodPost, path: "/factory-sessions/~default/pause"},
 		{method: http.MethodPost, path: "/factory-sessions/session-resume/resume"},
+		{method: http.MethodGet, path: "/factory-sessions/~default"},
 	}
 	for index, expected := range want {
 		got := requests.requests[index]

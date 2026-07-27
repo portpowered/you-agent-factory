@@ -425,7 +425,7 @@ func (h *SessionResolvedHandler) Show(
 	if err := rejectDeprecatedSessionPort(inputs, sessionShowPortInputID); err != nil {
 		return err
 	}
-	sessionID, err := inputs.String(sessionShowIDInputID)
+	sessionID, err := optionalSessionID(inputs, sessionShowIDInputID)
 	if err != nil {
 		return fmt.Errorf("resolve session show inputs: %w", err)
 	}

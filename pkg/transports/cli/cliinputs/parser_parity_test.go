@@ -283,11 +283,10 @@ func productionParserParityRunFlagCases() []productionParserParityCase {
 func productionParserParitySubmitCases() []productionParserParityCase {
 	return []productionParserParityCase{
 		{
-			name:             "submit inherited json flag is parseable from root",
-			commandPath:      "you submit",
-			argv:             []string{"--json", "submit", "--name", "work-a", "--work-type-name", "task", "--payload", "payload.md"},
-			flagLong:         "json",
-			argumentPosition: -1,
+			name:        "submit inherited json flag is parseable from root",
+			commandPath: "you submit",
+			argv:        []string{"--json", "submit", "--name", "work-a", "--work-type-name", "task", "--payload", "payload.md"},
+			flagLong:    "json",
 			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				record := findFlagRecord(t, inv, "you submit", "json")
@@ -297,6 +296,22 @@ func productionParserParitySubmitCases() []productionParserParityCase {
 				flag := parsedFlag(parsed, "json")
 				if flag == nil || !flag.Changed || flag.Value != "true" {
 					t.Fatalf("parsed json = changed %v value %q, want true", flag != nil && flag.Changed, flagValue(flag))
+				}
+			},
+		},
+		{
+			name:             "submit optional variadic positional accepts flag-only argv",
+			commandPath:      "you submit",
+			argv:             []string{"submit", "--name", "work-a", "--work-type-name", "task", "--payload", "payload.md"},
+			argumentPosition: 0,
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
+				t.Helper()
+				arg := findArgumentRecord(t, inv, "you submit", 0)
+				if !arg.Variadic || arg.MinCardinality != 0 {
+					t.Fatalf("inventory arg = %+v, want optional variadic slot with min 0", arg)
+				}
+				if len(parsed.Positionals) != 0 {
+					t.Fatalf("positionals = %v, want empty", parsed.Positionals)
 				}
 			},
 		},
@@ -321,15 +336,15 @@ func productionParserParitySubmitCases() []productionParserParityCase {
 			},
 		},
 		{
-			name:             "submit batch optional positional accepts flag-only argv",
+			name:             "submit batch variadic positional accepts flag-only argv",
 			commandPath:      "you submit batch",
 			argv:             []string{"submit", "batch", "--dry-run"},
 			argumentPosition: 0,
 			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
 				t.Helper()
 				arg := findArgumentRecord(t, inv, "you submit batch", 0)
-				if arg.Variadic || arg.MinCardinality != 0 || arg.MaxCardinality != 1 {
-					t.Fatalf("inventory arg = %+v, want one optional positional slot", arg)
+				if !arg.Variadic || arg.MinCardinality != 0 {
+					t.Fatalf("inventory arg = %+v, want optional variadic slot", arg)
 				}
 				if len(parsed.Positionals) != 0 {
 					t.Fatalf("positionals = %v, want empty", parsed.Positionals)

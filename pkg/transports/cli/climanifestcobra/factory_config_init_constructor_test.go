@@ -607,18 +607,25 @@ func TestSessionResolvedInspectionRejectsInvalidInputsBeforeSideEffects(t *testi
 			listCalls++
 			return nil
 		},
-		ShowSession: func(sessioncli.ShowConfig) error {
+		ShowSession: func(cfg sessioncli.ShowConfig) error {
 			showCalls++
-			return nil
+			if cfg.SessionID != "" {
+				t.Fatalf("default show SessionID = %q, want empty compatibility target", cfg.SessionID)
+			}
+			return errors.New("default session unavailable")
 		},
 		ListDispatches: func(sessioncli.DispatchesConfig) error {
 			dispatchCalls++
 			return nil
 		},
 	}
+	stdout, _, err := executeResolvedSessionWithOutput(t, services, "session", "show")
+	if err == nil || stdout != "" {
+		t.Fatalf("default show error = %v, stdout = %q", err, stdout)
+	}
+	showCalls = 0
 	for _, args := range [][]string{
 		{"session", "list", "--scope", "workspace"},
-		{"session", "show"},
 		{"session", "show", "one", "two"},
 		{"session", "dispatches"},
 		{"session", "dispatches", "one", "two"},

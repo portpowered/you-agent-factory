@@ -103,24 +103,6 @@ func TestSubmitFamilyExecutesThroughRootBuiltProcess(t *testing.T) {
 			}
 		}
 	})
-
-	t.Run("deprecated port rejected before submit", func(t *testing.T) {
-		payloadPath := filepath.Join(t.TempDir(), "request.md")
-		if err := os.WriteFile(payloadPath, []byte("must not be submitted"), 0o600); err != nil {
-			t.Fatalf("write unary payload: %v", err)
-		}
-		err := process.Execute(functionalInput(
-			t,
-			[]string{
-				"you", "submit", "--port", "9090", "--name", "rejected",
-				"--work-type-name", "task", "--payload", payloadPath,
-			},
-			io.Discard,
-		))
-		if err == nil || !strings.Contains(err.Error(), "--port is no longer supported; use --server") {
-			t.Fatalf("Process.Execute(deprecated port) error = %v", err)
-		}
-	})
 }
 
 func TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure(t *testing.T) {
