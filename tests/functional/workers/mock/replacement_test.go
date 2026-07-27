@@ -1,6 +1,8 @@
 package mock
 
 import (
+	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +19,9 @@ import (
 )
 
 const (
+	unknownMockWorkerName = "ghost-worker"
+	invalidMockRunType    = "bogus"
+
 	mockedWorkerName      = "mocked-worker"
 	realWorkerName        = "real-worker"
 	mockedWorkstationName = "mock-process"
@@ -72,6 +77,132 @@ func TestMockWorkersReplaceOnlyNamedChildren(t *testing.T) {
 
 	assertMockAcceptedDispatch(t, mockObservation)
 	assertInjectedProviderDispatch(t, realObservation)
+}
+
+// TestUnknownWorkerOverrideFailsActionably proves an unknown or invalid
+// --with-mock-workers override fails before dispatch with a stable,
+// customer-visible diagnostic instead of silently accepting the bad override.
+func TestUnknownWorkerOverrideFailsActionably(t *testing.T) {
+	dir := scaffoldNamedReplacementFactory(t)
+
+	tests := []struct {
+		name          string
+		payload       string
+		wantNeedle    string
+		wantSecondary string
+	}{
+		{
+			name: "invalid runType in override entry",
+			payload: `{
+				"mockWorkers": [
+					{
+						"workerName": "` + unknownMockWorkerName + `",
+						"runType": "` + invalidMockRunType + `"
+					}
+				]
+			}`,
+			wantNeedle:    invalidMockRunType,
+			wantSecondary: `runtype must be one of "accept", "script", or "reject"`,
+		},
+		{
+			name: "unknown nested override field",
+			payload: `{
+				"mockWorkers": [
+					{
+						"workerName": "` + unknownMockWorkerName + `",
+						"runType": "accept",
+						"unexpectedNested": true
+					}
+				]
+			}`,
+			wantNeedle:    "unexpectednested",
+			wantSecondary: "unknown field",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := testutil.NewProviderCommandRunner(
+				platformprocess.CommandResult{Stdout: []byte(injectedProviderOutput)},
+			)
+			mockWorkersPath := writeRawMockWorkersConfig(t, tc.payload)
+			diagnostic := executeRunWithMockWorkersExpectingFailure(
+				t,
+				dir,
+				mockWorkersPath,
+				serviceedges.Edges{ProviderCommandRunner: runner},
+			)
+
+			lowDiagnostic := strings.ToLower(diagnostic)
+			if !strings.Contains(lowDiagnostic, strings.ToLower(tc.wantNeedle)) {
+				t.Fatalf("diagnostic = %q, want override identifier %q", diagnostic, tc.wantNeedle)
+			}
+			if !strings.Contains(lowDiagnostic, strings.ToLower(tc.wantSecondary)) {
+				t.Fatalf(
+					"diagnostic = %q, want actionable context containing %q",
+					diagnostic,
+					tc.wantSecondary,
+				)
+			}
+			if runner.CallCount() != 0 {
+				t.Fatalf(
+					"provider command runner calls = %d after rejected override, want 0 pre-dispatch rejection",
+					runner.CallCount(),
+				)
+			}
+		})
+	}
+}
+
+func executeRunWithMockWorkersExpectingFailure(
+	t *testing.T,
+	factoryDir string,
+	mockWorkersPath string,
+	edges serviceedges.Edges,
+) string {
+	t.Helper()
+
+	process := support.BuildProcess(t, edges)
+	inputs := support.FakeInputs(context.Background(), []string{
+		"you",
+		"run",
+		"--dir", factoryDir,
+		"--continuously",
+		"--with-server",
+		"--quiet",
+		"--no-record",
+		"--with-mock-workers", mockWorkersPath,
+	})
+	inputs.WorkingDirectory = factoryDir
+
+	err := process.Execute(inputs.Input)
+	if err == nil {
+		t.Fatalf(
+			"expected invalid mock-worker override to fail before dispatch; stdout=%q stderr=%q",
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+
+	diagnostic := strings.ToLower(strings.Join([]string{
+		err.Error(),
+		inputs.Stderr(),
+		inputs.Stdout(),
+	}, "\n"))
+	if strings.TrimSpace(diagnostic) == "" {
+		t.Fatal("expected customer-visible diagnostic for invalid mock-worker override")
+	}
+	return diagnostic
+}
+
+func writeRawMockWorkersConfig(t *testing.T, payload string) string {
+	t.Helper()
+
+	path := t.TempDir() + "/mock-workers.json"
+	if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write mock workers config: %v", err)
+	}
+	return path
 }
 
 func scaffoldNamedReplacementFactory(t *testing.T) string {
