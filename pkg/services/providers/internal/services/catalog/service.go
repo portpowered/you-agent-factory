@@ -12,6 +12,9 @@ import (
 type Service interface {
 	ListProviders(context.Context, providers.ListProvidersRequest) (providers.ListProvidersResult, error)
 	GetProvider(context.Context, providers.GetProviderRequest) (providers.GetProviderResult, error)
+	// ResolveProviderID returns the canonical identity for a catalog ID or
+	// accepted alias without probing readiness or performing adapter I/O.
+	ResolveProviderID(providers.ID) (providers.ID, error)
 }
 
 // ProbeFacts are live readiness and prerequisite facts for one projected catalog

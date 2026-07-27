@@ -1,12 +1,10 @@
-package service_test
+package service
 
 import (
 	"strings"
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	internalservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/internal/service"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestProjectAvailabilityPostures(t *testing.T) {
@@ -14,56 +12,56 @@ func TestProjectAvailabilityPostures(t *testing.T) {
 
 	cases := []struct {
 		name          string
-		manifest      factoryapi.ProviderManifest
+		manifest      publishedProviderManifest
 		wantAvail     providers.Availability
 		wantReadiness providers.Readiness
 	}{
 		{
 			name: "not-supported",
-			manifest: factoryapi.ProviderManifest{
-				Id:                         "blocked",
-				TechnicalSupportLevel:      factoryapi.ProviderTechnicalSupportLevelNotSupported,
-				ImplementationAvailability: factoryapi.ProviderImplementationAvailabilityBundled,
+			manifest: publishedProviderManifest{
+				ID:                         "blocked",
+				TechnicalSupportLevel:      "not-supported",
+				ImplementationAvailability: "bundled",
 			},
 			wantAvail:     providers.AvailabilityNotSupported,
 			wantReadiness: providers.ReadinessUnavailable,
 		},
 		{
 			name: "catalog-only",
-			manifest: factoryapi.ProviderManifest{
-				Id:                         "catalog-only",
-				TechnicalSupportLevel:      factoryapi.ProviderTechnicalSupportLevelExperimental,
-				ImplementationAvailability: factoryapi.ProviderImplementationAvailabilityCatalogOnly,
+			manifest: publishedProviderManifest{
+				ID:                         "catalog-only",
+				TechnicalSupportLevel:      "experimental",
+				ImplementationAvailability: "catalog-only",
 			},
 			wantAvail:     providers.AvailabilityCatalogOnly,
 			wantReadiness: providers.ReadinessUnavailable,
 		},
 		{
 			name: "selectable bundled",
-			manifest: factoryapi.ProviderManifest{
-				Id:                         "selectable",
-				TechnicalSupportLevel:      factoryapi.ProviderTechnicalSupportLevelProduction,
-				ImplementationAvailability: factoryapi.ProviderImplementationAvailabilityBundled,
+			manifest: publishedProviderManifest{
+				ID:                         "selectable",
+				TechnicalSupportLevel:      "production",
+				ImplementationAvailability: "bundled",
 			},
 			wantAvail:     providers.AvailabilitySelectable,
 			wantReadiness: providers.ReadinessReady,
 		},
 		{
 			name: "selectable externally supplied",
-			manifest: factoryapi.ProviderManifest{
-				Id:                         "external",
-				TechnicalSupportLevel:      factoryapi.ProviderTechnicalSupportLevelExperimental,
-				ImplementationAvailability: factoryapi.ProviderImplementationAvailabilityExternallySupplied,
+			manifest: publishedProviderManifest{
+				ID:                         "external",
+				TechnicalSupportLevel:      "experimental",
+				ImplementationAvailability: "externally-supplied",
 			},
 			wantAvail:     providers.AvailabilitySelectable,
 			wantReadiness: providers.ReadinessReady,
 		},
 		{
 			name: "supported-but-unavailable default",
-			manifest: factoryapi.ProviderManifest{
-				Id:                         "unsupported-impl",
-				TechnicalSupportLevel:      factoryapi.ProviderTechnicalSupportLevelExperimental,
-				ImplementationAvailability: factoryapi.ProviderImplementationAvailability("unknown"),
+			manifest: publishedProviderManifest{
+				ID:                         "unsupported-impl",
+				TechnicalSupportLevel:      "experimental",
+				ImplementationAvailability: "unknown",
 			},
 			wantAvail:     providers.AvailabilitySupportedButUnavailable,
 			wantReadiness: providers.ReadinessUnavailable,
@@ -74,9 +72,9 @@ func TestProjectAvailabilityPostures(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			descriptors, err := internalservice.ProjectManifestsForTest([]factoryapi.ProviderManifest{testCase.manifest})
+			descriptors, err := projectManifests([]publishedProviderManifest{testCase.manifest})
 			if err != nil {
-				t.Fatalf("ProjectManifestsForTest() = %v", err)
+				t.Fatalf("projectManifests() = %v", err)
 			}
 			if len(descriptors) != 1 {
 				t.Fatalf("len(descriptors) = %d, want 1", len(descriptors))
@@ -95,26 +93,21 @@ func TestProjectAvailabilityPostures(t *testing.T) {
 func TestProjectStaticPrerequisites(t *testing.T) {
 	t.Parallel()
 
-	manifest := factoryapi.ProviderManifest{
-		Id: "cursor",
-		DisplayName: factoryapi.NameValue{
-			Type:  factoryapi.LOCALIZABLEASSET,
-			Value: "Cursor CLI",
-		},
-		Discovery: factoryapi.ProviderDiscoveryPrerequisites{
+	manifest := publishedProviderManifest{
+		ID:          "cursor",
+		DisplayName: publishedNameValue{Value: "Cursor CLI"},
+		Discovery: publishedProviderDiscovery{
 			ConfigurationKeys: []string{"CURSOR_API_KEY"},
-			EndpointKinds: []factoryapi.ProviderDiscoveryEndpointKind{
-				factoryapi.ProviderDiscoveryEndpointKindStdio,
-			},
-			ExecutableNames: []string{"agent"},
+			EndpointKinds:     []string{"stdio"},
+			ExecutableNames:   []string{"agent"},
 		},
-		TechnicalSupportLevel:      factoryapi.ProviderTechnicalSupportLevelExperimental,
-		ImplementationAvailability: factoryapi.ProviderImplementationAvailabilityBundled,
+		TechnicalSupportLevel:      "experimental",
+		ImplementationAvailability: "bundled",
 	}
 
-	descriptors, err := internalservice.ProjectManifestsForTest([]factoryapi.ProviderManifest{manifest})
+	descriptors, err := projectManifests([]publishedProviderManifest{manifest})
 	if err != nil {
-		t.Fatalf("ProjectManifestsForTest() = %v", err)
+		t.Fatalf("projectManifests() = %v", err)
 	}
 	prerequisites := descriptors[0].Prerequisites
 	if len(prerequisites) != 3 {
