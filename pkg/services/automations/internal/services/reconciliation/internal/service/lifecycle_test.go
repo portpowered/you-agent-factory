@@ -317,11 +317,125 @@ func TestStopSourceCommitsStoppingBeforeExactlyOnceEffect(t *testing.T) {
 	}
 }
 
+func TestStopSourceFailureDoesNotOverwriteNewerStoppedObservation(t *testing.T) {
+	t.Parallel()
+
+	identity := sourceIdentity("stale-stop-failure")
+	effects := newBlockingStopEffects(identity)
+	effects.stopErr = errors.New("late stop failure")
+	service := reconciliationwire.NewService(effects.bundle())
+	effects.service = service
+	startAndWait(t, service, identity)
+
+	results := make(chan automations.StopSourceResult, 1)
+	errs := make(chan error, 1)
+	go func() {
+		result, err := service.StopSource(
+			context.Background(),
+			automations.StopSourceRequest{Identity: identity},
+		)
+		results <- result
+		errs <- err
+	}()
+	if err := <-effects.entered; err != nil {
+		t.Fatal(err)
+	}
+
+	waited, err := service.WaitSource(
+		context.Background(),
+		automations.WaitSourceRequest{
+			Identity: identity,
+			Desired:  automations.DesiredLifecycleStopped,
+		},
+	)
+	if err != nil {
+		t.Fatalf("WaitSource stopped during stop effect: %v", err)
+	}
+	assertLifecycle(
+		t,
+		waited.Outcome,
+		automations.DesiredLifecycleStopped,
+		automations.ObservedLifecycleStopped,
+		automations.ConvergenceStatusConverged,
+		false,
+	)
+
+	close(effects.release)
+	if err := <-errs; err != nil {
+		t.Fatalf("stale StopSource failure: %v", err)
+	}
+	stopped := <-results
+	assertLifecycle(
+		t,
+		stopped.Outcome,
+		automations.DesiredLifecycleStopped,
+		automations.ObservedLifecycleStopped,
+		automations.ConvergenceStatusConverged,
+		true,
+	)
+}
+
+func TestStopSourceFailureDoesNotOverwriteSupersedingStart(t *testing.T) {
+	t.Parallel()
+
+	identity := sourceIdentity("superseded-stop-failure")
+	effects := newBlockingStopEffects(identity)
+	effects.stopErr = errors.New("late stop failure")
+	service := reconciliationwire.NewService(effects.bundle())
+	effects.service = service
+	startAndWait(t, service, identity)
+
+	results := make(chan automations.StopSourceResult, 1)
+	errs := make(chan error, 1)
+	go func() {
+		result, err := service.StopSource(
+			context.Background(),
+			automations.StopSourceRequest{Identity: identity},
+		)
+		results <- result
+		errs <- err
+	}()
+	if err := <-effects.entered; err != nil {
+		t.Fatal(err)
+	}
+
+	restarted, err := service.StartSource(
+		context.Background(),
+		automations.StartSourceRequest{Identity: identity, Kind: "schedule"},
+	)
+	if err != nil {
+		t.Fatalf("StartSource superseding stop: %v", err)
+	}
+	assertLifecycle(
+		t,
+		restarted.Outcome,
+		automations.DesiredLifecycleRunning,
+		automations.ObservedLifecycleStopping,
+		automations.ConvergenceStatusProgressing,
+		true,
+	)
+
+	close(effects.release)
+	if err := <-errs; err != nil {
+		t.Fatalf("superseded StopSource failure: %v", err)
+	}
+	stopped := <-results
+	assertLifecycle(
+		t,
+		stopped.Outcome,
+		automations.DesiredLifecycleStopped,
+		automations.ObservedLifecycleStopping,
+		automations.ConvergenceStatusProgressing,
+		true,
+	)
+}
+
 type blockingStopEffects struct {
 	identity automations.SourceIdentity
 	service  reconciliation.Service
 	entered  chan error
 	release  chan struct{}
+	stopErr  error
 
 	mu    sync.Mutex
 	calls int
@@ -356,7 +470,7 @@ func (f *blockingStopEffects) stop(ctx context.Context, _ reconciliation.StopEff
 	f.mu.Unlock()
 	f.entered <- err
 	<-f.release
-	return nil
+	return f.stopErr
 }
 
 func (f *blockingStopEffects) stopCount() int {

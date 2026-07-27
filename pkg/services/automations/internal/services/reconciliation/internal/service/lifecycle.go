@@ -257,7 +257,8 @@ func commitStopFailure(
 	prior lifecycleSnapshot,
 	err error,
 ) (automations.LifecycleOutcome, error) {
-	if record.observation != effect.Observation {
+	if record.desired != automations.DesiredLifecycleStopped ||
+		record.observation != effect.Observation {
 		result, currentErr := currentWaitResult(automations.DesiredLifecycleStopped, record)
 		return result.Outcome, currentErr
 	}
