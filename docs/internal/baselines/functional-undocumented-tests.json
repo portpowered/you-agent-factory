@@ -1163,18 +1163,6 @@
       "name": "TestNamedReviewInvocationVariants_RealCLIRequireApprovalAfterRejection"
     },
     {
-      "file": "smoke/cli_run_mode_compat_smoke_test.go",
-      "name": "TestRunModeCompat_RealCLIFactoryTextInvocationSuppressesOperatorChatter"
-    },
-    {
-      "file": "smoke/cli_run_mode_compat_smoke_test.go",
-      "name": "TestRunModeCompat_RealCLINamedGoalBatchStdoutDoesNotIncludeOperatorChatter"
-    },
-    {
-      "file": "smoke/cli_run_mode_compat_smoke_test.go",
-      "name": "TestRunModeCompat_RealCLIOperatorContinuousRunReportsStartupOutputWithoutQuiet"
-    },
-    {
       "file": "smoke/config_driven_execution_test.go",
       "name": "TestConfigDrivenExecution_AddWorkType"
     },
