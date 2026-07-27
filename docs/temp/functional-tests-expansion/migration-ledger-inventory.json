@@ -1839,26 +1839,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/orchestration/javascript/contracts/input_mapping_test.go",
-      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
-      "scenario": "TestJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs",
-      "lane": "short",
-      "destination": "tests/functional/orchestration/javascript/contracts/input_mapping_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/orchestration/javascript/contracts/input_mapping_test.go",
-      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
-      "scenario": "TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch",
-      "lane": "short",
-      "destination": "tests/functional/orchestration/javascript/contracts/input_mapping_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/orchestration/javascript/durability/resume_test.go",
       "package": "you-agent-factory/tests/functional/orchestration/javascript/durability",
       "scenario": "TestJavaScriptCorruptCheckpointFailsActionably",
@@ -6627,6 +6607,26 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/contracts/input_mapping_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
+      "scenario": "TestJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/contracts/input_mapping_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/contracts/input_mapping_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
+      "scenario": "TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/contracts/input_mapping_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
   "scanned_at_utc": "2026-07-27T20:00:00Z",
@@ -6634,11 +6634,7 @@
     "by_catch_all": {
       "bootstrap_portability": 21,
       "guards_batch": 27,
-<<<<<<< HEAD
-      "none": 341,
-=======
-      "none": 342,
->>>>>>> aecd88cff (feat: ft-wave1-js-input-mapping-004 - Preserve adjacent ownership and narrow metadata only)
+      "none": 343,
       "replay_contracts": 23,
       "runtime_api": 106,
       "smoke": 84,
@@ -6668,23 +6664,14 @@
       "workflow": 44,
       "workstations": 29
     },
-<<<<<<< HEAD
-    "customer_top_level_Test_scenarios": 641,
-    "files_with_customer_Test": 219,
-=======
-    "customer_top_level_Test_scenarios": 642,
+    "customer_top_level_Test_scenarios": 643,
     "files_with_customer_Test": 220,
->>>>>>> aecd88cff (feat: ft-wave1-js-input-mapping-004 - Preserve adjacent ownership and narrow metadata only)
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 95,
-<<<<<<< HEAD
-    "lane_short": 546,
-=======
-    "lane_short": 547,
->>>>>>> aecd88cff (feat: ft-wave1-js-input-mapping-004 - Preserve adjacent ownership and narrow metadata only)
+    "lane_short": 548,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
       "you-agent-factory/tests/functional/automations": 4,
@@ -6827,26 +6814,15 @@
     }
   },
   "completeness_audit": {
-<<<<<<< HEAD
-    "audited_at_utc": "2026-07-27T21:15:00Z",
-    "story": "ft-wave1-inference-selection",
-    "live_customer_scenarios": 641,
-    "ledger_rows": 641,
-=======
-    "audited_at_utc": "2026-07-27T20:18:00Z",
+    "audited_at_utc": "2026-07-27T20:26:00Z",
     "story": "ft-wave1-js-input-mapping-mergeability",
-    "live_customer_scenarios": 642,
-    "ledger_rows": 642,
->>>>>>> aecd88cff (feat: ft-wave1-js-input-mapping-004 - Preserve adjacent ownership and narrow metadata only)
+    "live_customer_scenarios": 643,
+    "ledger_rows": 643,
     "unmapped_scenarios": 0,
     "checklist_destinations": 437,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-<<<<<<< HEAD
-    "lane_short": 546,
-=======
-    "lane_short": 547,
->>>>>>> aecd88cff (feat: ft-wave1-js-input-mapping-004 - Preserve adjacent ownership and narrow metadata only)
+    "lane_short": 548,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
