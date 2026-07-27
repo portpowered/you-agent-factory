@@ -9,6 +9,7 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 )
 
 // Root is the singular peer-facing Factory Visualization contract.
@@ -201,57 +202,57 @@ func (e *ProjectionError) Unwrap() error {
 // through the singular Root seam.
 var _ Root = (*Service)(nil)
 
-// Activate implements Root by validating explicit request parameters then
-// delegating to the existing Start path.
+// Activate implements Root by delegating to the activation_lifecycle owner.
 func (s *Service) Activate(ctx context.Context, req ActivateRequest) (ActivateResult, error) {
-	if req.Mode == "" {
-		return ActivateResult{}, &LifecycleError{
-			Kind:    LifecycleErrorMissingParameters,
-			Message: "activate Factory visualization: required request parameters are missing",
-		}
+	if s == nil || s.activation == nil {
+		return ActivateResult{}, errors.New("activate Factory visualization: service is required")
 	}
-	if req.Mode != ActivateModeRetainedThenLive {
-		return ActivateResult{}, &LifecycleError{
-			Kind:    LifecycleErrorMissingParameters,
-			Message: fmt.Sprintf("activate Factory visualization: activate mode %q is not supported", req.Mode),
-		}
+	result, err := s.activation.Activate(ctx, activationlifecycle.ActivateRequest{
+		Mode: activationlifecycle.ActivateMode(req.Mode),
+	})
+	if err != nil {
+		return ActivateResult{}, mapActivationLifecycleError(err)
 	}
-	err := s.Start(ctx)
-	if err == nil {
-		return ActivateResult{State: LifecycleStateStarted}, nil
-	}
-	if errors.Is(err, errAlreadyStarted) {
-		return ActivateResult{}, &LifecycleError{
-			Kind:    LifecycleErrorAlreadyActivated,
-			Message: "activate Factory visualization: already activated",
-			Cause:   err,
-		}
-	}
-	return ActivateResult{}, err
+	return ActivateResult{State: LifecycleState(result.State)}, nil
 }
 
-// Join implements Root by delegating to Wait and mapping not-started failures.
-func (s *Service) Join(ctx context.Context, _ JoinRequest) (JoinResult, error) {
-	err := s.Wait(ctx)
-	if err == nil {
-		return JoinResult{State: LifecycleStateStarted}, nil
-	}
-	if errors.Is(err, errNotStarted) {
+// Join implements Root by delegating to the activation_lifecycle owner.
+func (s *Service) Join(ctx context.Context, req JoinRequest) (JoinResult, error) {
+	if s == nil || s.activation == nil {
 		return JoinResult{}, &LifecycleError{
 			Kind:    LifecycleErrorNotActivated,
 			Message: "join Factory visualization: not activated",
-			Cause:   err,
 		}
 	}
-	return JoinResult{}, err
+	result, err := s.activation.Join(ctx, activationlifecycle.JoinRequest{})
+	if err != nil {
+		return JoinResult{}, mapActivationLifecycleError(err)
+	}
+	return JoinResult{State: LifecycleState(result.State)}, nil
 }
 
-// StopDrain implements Root by delegating to Stop (cancel, join, final view).
-func (s *Service) StopDrain(ctx context.Context, _ StopDrainRequest) (StopDrainResult, error) {
-	if err := s.Stop(ctx); err != nil {
+// StopDrain implements Root by delegating to the activation_lifecycle owner.
+func (s *Service) StopDrain(ctx context.Context, req StopDrainRequest) (StopDrainResult, error) {
+	if s == nil || s.activation == nil {
+		return StopDrainResult{State: LifecycleStateStopped}, nil
+	}
+	result, err := s.activation.StopDrain(ctx, activationlifecycle.StopDrainRequest{})
+	if err != nil {
 		return StopDrainResult{}, err
 	}
-	return StopDrainResult{State: LifecycleStateStopped}, nil
+	return StopDrainResult{State: LifecycleState(result.State)}, nil
+}
+
+func mapActivationLifecycleError(err error) error {
+	var lifeErr *activationlifecycle.LifecycleError
+	if errors.As(err, &lifeErr) {
+		return &LifecycleError{
+			Kind:    LifecycleErrorKind(lifeErr.Kind),
+			Message: lifeErr.Message,
+			Cause:   lifeErr.Cause,
+		}
+	}
+	return err
 }
 
 // Observe implements Root by validating observe inputs, reading a detached
@@ -304,9 +305,7 @@ func (s *Service) Observe(ctx context.Context, req ObserveRequest) (ObserveResul
 		}
 	}
 
-	s.mu.Lock()
-	events := append([]factorydefinitions.FactoryEvent(nil), s.events...)
-	s.mu.Unlock()
+	events := s.activation.RetainedEvents()
 
 	if req.Reconnect != nil {
 		cursor := factorydefinitions.FactoryEventReconnectCursor{

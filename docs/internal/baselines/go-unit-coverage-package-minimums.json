@@ -221,6 +221,40 @@
       "minimum": 87.50
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/requiredtools",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/service",
+      "minimum": 73.91
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/structural",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/topology",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire",
+      "minimum": 70.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition",
       "minimum": 62.16
     },
@@ -847,6 +881,24 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service",
+      "minimum": 35.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/models",
       "minimum": 86.83
     },
@@ -1144,6 +1196,24 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/wire",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/internal/service",
+      "minimum": 89.92
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/wire",
       "minimum": 100.00
     },
     {

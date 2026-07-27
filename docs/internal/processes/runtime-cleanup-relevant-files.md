@@ -736,7 +736,14 @@ keep catalog methods on the singular `Service` rather than elevating
 `NamedFactoryCatalog` as a peer-facing authority, and extend the same
 external fake-peer characterization test with representative success and
 distinct typed invalid-name vs missing outcomes (`ErrInvalidNamedFactoryName`
-vs `ErrNamedFactoryNotFound`). Authoring slices similarly stay on the
+vs `ErrNamedFactoryNotFound`). Validate slices mirror the same pattern in
+`definition/validate_equivalence_test.go`: owner-local `newRootValidateServiceForPeer`
+construction, `peerExerciseRootValidateSuccess` / `peerExerciseRootValidateTypedFailures`
+helpers that accept only `factoryroot.Service`, shared cross-path fixtures
+(`CrossPathValidAlphaFactoryJSON` / `CrossPathInvalidFactoryJSON`), distinct
+`ErrInvalidFactoryDefinitionPayload` vs `FactoryDefinitionValidationFailure`
+with CTR-DEF characterization codes, and effective success via alpha fixture
+plus required DEFAULT handling work type. Authoring slices similarly stay on the
 singular `Service` with prepare/flatten/expand/create/replace request
 shapes that omit filesystem effects and mapping codecs; publish
 `ErrMalformedFactoryLayoutPayload` and `AtomicFactoryWriteFailure`
@@ -751,7 +758,15 @@ peer-facing loader); publish distinct `ErrInvalidAuthoredFactorySource` vs
 `ValidationResult` success shapes (not a peer-facing nested `Validator`
 interface); publish distinct `ErrInvalidFactoryDefinitionPayload` vs
 `FactoryDefinitionValidationFailure` (`ErrFactoryDefinitionValidationFailed`
-with blocking `ValidationTarget` findings and no Petri vocabulary). Snapshot
+with blocking `ValidationTarget` findings and no Petri vocabulary). The
+parent-private nested validation subservice locks its public surface in
+`internal/services/validation/boundary_test.go`: `service.go` exports only
+`Service` and `Dependencies` with factory_definitions root request/result
+vocabulary and contracts injected ports, direct imports avoid Wire/Runtime/
+Petri/peer/sibling-lease paths, and `wire/wire.go` constructs from injected
+ports without selecting Runtime/Petri implementations or sibling catalog/
+authoring_layout/compilation/snapshots_portability/distribution leases.
+Snapshot
 slices stay on the singular `Service` via `CaptureFactorySnapshot`,
 `PrepareFactorySnapshotImport`, and `MaterializeFactorySnapshot` returning
 detached `FactorySnapshot` / `PortableFactorySnapshotFacts` (not

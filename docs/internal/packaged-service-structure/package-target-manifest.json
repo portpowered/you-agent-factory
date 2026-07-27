@@ -86,6 +86,13 @@
     "pkg/services/factory_definitions/internal/services/catalog",
     "pkg/services/factory_definitions/internal/services/catalog/internal/service",
     "pkg/services/factory_definitions/internal/services/catalog/wire",
+    "pkg/services/factory_definitions/internal/services/validation",
+    "pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
+    "pkg/services/factory_definitions/internal/services/validation/internal/requiredtools",
+    "pkg/services/factory_definitions/internal/services/validation/internal/service",
+    "pkg/services/factory_definitions/internal/services/validation/internal/structural",
+    "pkg/services/factory_definitions/internal/services/validation/internal/topology",
+    "pkg/services/factory_definitions/internal/services/validation/wire",
     "pkg/services/factory_definitions/internal/testcomposition",
     "pkg/services/factory_definitions/invocationinterpolation",
     "pkg/services/factory_definitions/invocationoutput",
@@ -224,6 +231,9 @@
     "pkg/services/factory_sessions/wire/contracts",
     "pkg/services/factory_visualization",
     "pkg/services/factory_visualization/internal/contracts",
+    "pkg/services/factory_visualization/internal/services/activation_lifecycle",
+    "pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service",
+    "pkg/services/factory_visualization/internal/services/activation_lifecycle/wire",
     "pkg/services/models",
     "pkg/services/models/internal/artifacts",
     "pkg/services/models/internal/catalog",
@@ -655,6 +665,41 @@
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog/wire",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/requiredtools",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/service",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/structural",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/topology",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/wire",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/testcomposition",
@@ -1345,6 +1390,21 @@
       "packagePath": "pkg/services/factory_visualization/internal/contracts",
       "disposition": "retain",
       "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/activation_lifecycle"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/activation_lifecycle"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle/wire",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/activation_lifecycle"
     },
     {
       "packagePath": "pkg/services/models",

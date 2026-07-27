@@ -21,6 +21,7 @@ properties:
       - FACTORY_NOT_IDLE
       - STALE_FACTORY_VERSION
       - MOVE_WORK_REQUEST_ALREADY_APPLIED
+      - METHOD_NOT_ALLOWED
       - EXECUTION_REQUEST_ID_CONFLICT
       - FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED
       - INVALID_RESPONSE_EVENT_CURSOR
@@ -38,6 +39,7 @@ properties:
       - Current factory runtime is not idle and cannot activate a new named factory.
       - Submitted editable factory definition was based on an older version than the current definition.
       - Operator move requestId was already applied for this session.
+      - The HTTP method is not allowed for the requested route.
       - Durable execution requestId was reused with materially different inputs.
       - Lifecycle control requestId was already applied with different control inputs.
       - The Factory Response Event reconnect cursor is invalid.

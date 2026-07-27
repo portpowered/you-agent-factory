@@ -152,7 +152,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLISubmitUnavailableServer` covers connection failure and exit code.
   - `TestCLISubmitBackendErrorPreservesPublicMessage` covers error mapping.
 
-- [ ] `tests/functional/transport/cli/commands/work_wiring_test.go`
+- [x] `tests/functional/transport/cli/commands/work_wiring_test.go`
   - `TestCLIWorkListAndShowReflectSubmittedWork` covers public read models.
   - `TestCLIWorkMoveChangesState` covers manual recovery/move.
   - `TestCLIWorkShowMissingReturnsNotFound` covers error behavior.
@@ -180,7 +180,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIServerShutdownClosesListenerAndActiveStreams`.
   - `TestAPIServerBindFailureUnwindsStartedLifecycleRoles`.
 
-- [ ] `tests/functional/transport/http/server/routing_test.go`
+- [x] `tests/functional/transport/http/server/routing_test.go`
   - `TestAPIRoutesEveryOpenAPIOperationToNon404Handler` uses the operation
     inventory with safe requests.
   - `TestAPIUnknownRouteReturnsStructuredNotFound`.

@@ -116,7 +116,7 @@ func applyReviewedEvidence(scenario *Scenario) {
 	case "cli/you.submit.batch":
 		markCovered(scenario, LaneLong, "tests/functional/transport/cli/commands/submit_wiring_test.go::TestCLISubmitBatchFile", InterfaceCLI)
 	case "cli/you.work.move":
-		markCovered(scenario, LaneLong, "tests/functional/smoke/cli_work_move_smoke_test.go::TestWorkMove_RealCLIMovesSubmittedWork", InterfaceCLI)
+		markCovered(scenario, LaneLong, "tests/functional/transport/cli/commands/work_wiring_test.go::TestCLIWorkMoveChangesState", InterfaceCLI)
 	case "rest/submitWorkBySessionId", "rest/listWorkBySessionId", "rest/getStatusBySessionId":
 		markCovered(scenario, LaneLong, "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned", InterfaceREST)
 	case "rest/upsertWorkRequestBySessionId":

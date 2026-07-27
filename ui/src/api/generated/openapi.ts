@@ -7215,6 +7215,8 @@ export const ErrorResponseCode = {
   STALE_FACTORY_VERSION: "STALE_FACTORY_VERSION",
   // Operator move requestId was already applied for this session.
   MOVE_WORK_REQUEST_ALREADY_APPLIED: "MOVE_WORK_REQUEST_ALREADY_APPLIED",
+  // The HTTP method is not allowed for the requested route.
+  METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
   // Durable execution requestId was reused with materially different inputs.
   EXECUTION_REQUEST_ID_CONFLICT: "EXECUTION_REQUEST_ID_CONFLICT",
   // Lifecycle control requestId was already applied with different control inputs.
