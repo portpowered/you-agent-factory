@@ -1,0 +1,11 @@
+{
+  "argv": ["agy", "chat", "--headless", "--model", "gemini-pro"],
+  "provider": "agy",
+  "model": "gemini-pro",
+  "exitCode": 0,
+  "stdoutStream": false,
+  "stderrStream": false,
+  "workingDirectoryRole": "factory-root",
+  "timeoutCancelClass": "none",
+  "terminalErrorClass": "none"
+}

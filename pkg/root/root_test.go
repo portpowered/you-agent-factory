@@ -184,7 +184,6 @@ func TestBuildProcessRejectsUnknownAndNonSelectableFactoryProvidersWithoutFallba
 		want     string
 	}{
 		{name: "unknown", provider: "unknown.provider", want: `provider "unknown.provider" is unknown`},
-		{name: "not supported", provider: "agy", want: `provider "agy" is not selectable (not-supported)`},
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {

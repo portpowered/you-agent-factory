@@ -314,7 +314,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPiGoldenStructuredFailure`.
   - `TestPiGoldenTimeout`.
 
-- [ ] `tests/functional/workers/inference/agy/golden_test.go`
+- [x] `tests/functional/workers/inference/agy/golden_test.go`
   - `TestAgyGoldenFinalOnlySuccess`.
   - `TestAgyGoldenStructuredFailure`.
   - `TestAgyGoldenTimeout`.
