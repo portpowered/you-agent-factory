@@ -335,7 +335,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### JavaScript / TypeScript loading and invocation
 
-- [ ] `tests/functional/orchestration/javascript/loading/inline_javascript_test.go`
+- [x] `tests/functional/orchestration/javascript/loading/inline_javascript_test.go`
   - `TestInlineJavaScriptFactoryRunsFromCLI` covers an inline definition.
   - `TestInlineJavaScriptSyntaxErrorReturnsSourceLocation` covers load failure.
 

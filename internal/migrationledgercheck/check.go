@@ -105,7 +105,6 @@ var ExpectedDeletionOnlyBatches = []string{
 	"smoke-delete-05-factory-packaged",
 	"smoke-delete-06-factory-packaged-cross",
 	"smoke-delete-07-sessions-controls",
-	"smoke-delete-08-orchestration-javascript",
 	"smoke-delete-09-guards",
 	"smoke-delete-10-workers-mock",
 	"smoke-delete-11-resilience-process",

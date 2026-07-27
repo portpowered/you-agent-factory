@@ -4081,24 +4081,24 @@
       "deletion_only_batch": "smoke-delete-04-transport-cli"
     },
     {
-      "source_path": "tests/functional/smoke/cli_javascript_factory_run_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/smoke",
-      "scenario": "TestJavaScriptFactoryRun_RealCLIProvesOrderedTwoStagePipeline",
+      "source_path": "tests/functional/orchestration/javascript/loading/inline_javascript_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/loading",
+      "scenario": "TestInlineJavaScriptFactoryRunsFromCLI",
       "lane": "short",
       "destination": "tests/functional/orchestration/javascript/loading/inline_javascript_test.go",
-      "catch_all": "smoke",
+      "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "smoke-delete-08-orchestration-javascript"
+      "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/smoke/cli_javascript_factory_run_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/smoke",
-      "scenario": "TestJavaScriptFactoryRun_RealCLIUsesMockWorkersAndReturnsPrimaryResult",
+      "source_path": "tests/functional/orchestration/javascript/loading/inline_javascript_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/loading",
+      "scenario": "TestInlineJavaScriptSyntaxErrorReturnsSourceLocation",
       "lane": "short",
       "destination": "tests/functional/orchestration/javascript/loading/inline_javascript_test.go",
-      "catch_all": "smoke",
+      "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "smoke-delete-08-orchestration-javascript"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/smoke/cli_named_deep_research_smoke_test.go",
@@ -6336,10 +6336,10 @@
     "by_catch_all": {
       "bootstrap_portability": 27,
       "guards_batch": 28,
-      "none": 274,
+      "none": 276,
       "replay_contracts": 24,
       "runtime_api": 106,
-      "smoke": 86,
+      "smoke": 82,
       "workflow": 64
     },
     "by_top_level_package": {
@@ -6351,14 +6351,14 @@
       "models": 5,
       "observability": 9,
       "operator_settings": 1,
-      "orchestration": 15,
+      "orchestration": 17,
       "product": 10,
       "providers": 49,
       "replay_contracts": 24,
       "runtime_api": 106,
       "sessionparity": 13,
       "sessions": 2,
-      "smoke": 86,
+      "smoke": 84,
       "transport": 34,
       "work": 2,
       "workers": 40,
@@ -6396,6 +6396,7 @@
       "you-agent-factory/tests/functional/orchestration/javascript/composition": 7,
       "you-agent-factory/tests/functional/orchestration/javascript/durability": 3,
       "you-agent-factory/tests/functional/orchestration/javascript/events": 2,
+      "you-agent-factory/tests/functional/orchestration/javascript/loading": 2,
       "you-agent-factory/tests/functional/orchestration/petri/dispatch": 3,
       "you-agent-factory/tests/functional/product/init_setup": 10,
       "you-agent-factory/tests/functional/providers": 39,
@@ -6407,7 +6408,7 @@
       "you-agent-factory/tests/functional/runtime_api/factory_transformation": 39,
       "you-agent-factory/tests/functional/sessionparity": 13,
       "you-agent-factory/tests/functional/sessions/cli": 2,
-      "you-agent-factory/tests/functional/smoke": 86,
+      "you-agent-factory/tests/functional/smoke": 82,
       "you-agent-factory/tests/functional/transport/cli/commands": 4,
       "you-agent-factory/tests/functional/transport/cli/output": 3,
       "you-agent-factory/tests/functional/transport/cli/parameters": 3,
@@ -6459,7 +6460,7 @@
   },
   "smoke_workflow_mapping": {
     "mapped_at_utc": "2026-07-24T02:26:56Z",
-    "smoke_scenarios": 86,
+    "smoke_scenarios": 82,
     "workflow_scenarios": 64
   },
   "guards_bootstrap_replay_mapping": {
