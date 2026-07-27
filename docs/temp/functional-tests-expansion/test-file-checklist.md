@@ -343,7 +343,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestJavaScriptAgentReturnsUnaryResult` covers one child dispatch.
   - `TestJavaScriptAgentFailureReturnsStableFailureRecord` covers error.
 
-- [ ] `tests/functional/orchestration/javascript/composition/pipeline_test.go`
+- [x] `tests/functional/orchestration/javascript/composition/pipeline_test.go`
   - `TestJavaScriptPipelinePassesStageOutputToNextStage` covers data flow.
   - `TestJavaScriptPipelineStopsAfterStageFailure` prevents later dispatch.
 
