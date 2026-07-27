@@ -584,7 +584,10 @@ Factory Sessions-local Wire from explicit runtime host callbacks; construction
 must not open, start, stop, or inspect a runtime. The outer Factory Sessions
 service delegates live operations through this capability, while discovery and
 target selection remain with the identity owner and durable lifecycle remains
-with the durable-execution owner.
+with the durable-execution owner. Prove customer-boundary live open/list/get/control/close
+through `support.StartFunctionalAPIServer` / `root.BuildProcess` in
+`tests/functional/sessions/live_runtime_build_process_test.go`, and keep
+`live_runtime/wire/boundary_test.go` aligned with the no peer-service-wire import rule.
 
 Live Factory Session artifact projection follows that placement rule as well.
 `pkg/factory/sessions` normalizes checkpoint-derived and runtime artifacts into
