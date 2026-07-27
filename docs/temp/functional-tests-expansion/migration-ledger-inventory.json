@@ -5739,6 +5739,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/workers/inference/flags_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestProviderPermissionWorktreeAndModelFlagsMapToCommand",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/flags_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/flags_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestUnsupportedProviderFlagReturnsCapabilityError",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/flags_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/workers/inference/cursor/golden_failure_test.go",
       "package": "you-agent-factory/tests/functional/workers/inference/cursor",
       "scenario": "TestCursorGoldenMalformedRecordReturnsStableDiagnostic",
@@ -5804,26 +5824,6 @@
       "scenario": "TestProviderNonZeroExitMapsToPublicFailure",
       "lane": "short",
       "destination": "tests/functional/workers/inference/failure_normalization_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/inference/flags_test.go",
-      "package": "you-agent-factory/tests/functional/workers/inference",
-      "scenario": "TestProviderPermissionWorktreeAndModelFlagsMapToCommand",
-      "lane": "short",
-      "destination": "tests/functional/workers/inference/flags_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/inference/flags_test.go",
-      "package": "you-agent-factory/tests/functional/workers/inference",
-      "scenario": "TestUnsupportedProviderFlagReturnsCapabilityError",
-      "lane": "short",
-      "destination": "tests/functional/workers/inference/flags_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
