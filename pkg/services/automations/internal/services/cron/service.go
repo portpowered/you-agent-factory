@@ -5,12 +5,18 @@
 package cron
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
+
+// WorkRequestSubmitter admits one Work Request materialized by cron through the
+// accepted Work boundary. Cron does not persist Work content; callers inject
+// the Automations or runtime admission collaborator.
+type WorkRequestSubmitter func(context.Context, work.WorkRequest) error
 
 // Service owns schedule evaluation, timing metadata, and tick Work-request
 // materialization for cron workstations.
@@ -25,6 +31,31 @@ type Service interface {
 	DeterministicCronJitter(workflowIdentity, workstationName string, nominalAt time.Time, maxJitter time.Duration) time.Duration
 	CronTimeWorkID(workflowIdentity, workstationName string, nominalAt time.Time) string
 	CronTimeWorkRequest(workflowIdentity string, ws interfaces.FactoryWorkstationConfig, nominalAt time.Time) (work.WorkRequest, CronTimeMetadata, error)
+	// SubmitDueCronTick evaluates schedule due-ness between explicit instants and,
+	// when due, materializes and submits one Work Request through submitter.
+	SubmitDueCronTick(
+		ctx context.Context,
+		submitter WorkRequestSubmitter,
+		workflowIdentity string,
+		ws interfaces.FactoryWorkstationConfig,
+		lastEvaluatedAt, evaluatedAt time.Time,
+	) (CronTickSubmission, error)
+	// SubmitCronTick materializes and submits one Work Request for an explicit
+	// nominal fire time. Callers that already proved due-ness (for example the
+	// runtime scheduler) use this path.
+	SubmitCronTick(
+		ctx context.Context,
+		submitter WorkRequestSubmitter,
+		workflowIdentity string,
+		ws interfaces.FactoryWorkstationConfig,
+		nominalAt time.Time,
+	) (CronTickSubmission, error)
+}
+
+// CronTickSubmission reports whether cron submitted Work for one logical tick.
+type CronTickSubmission struct {
+	Submitted bool
+	Metadata  CronTimeMetadata
 }
 
 // CronTiming contains parsed timing values from a cron workstation config.

@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
@@ -267,26 +268,31 @@ func (s *Service) submitCronTickAttempt(
 	}
 	defer cancel()
 
-	workRequest, metadata, err := s.cron.CronTimeWorkRequest(workflowIdentity, ws, firedAt)
+	submission, err := s.cron.SubmitCronTick(
+		attemptCtx,
+		cron.WorkRequestSubmitter(submitter),
+		workflowIdentity,
+		ws,
+		firedAt,
+	)
 	if err != nil {
+		if errors.Is(attemptCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("cron workstation %q %s: %w", ws.Name, cronExecutionError, context.DeadlineExceeded)
+		}
 		return fmt.Errorf("cron workstation %q time work request: %w", ws.Name, err)
 	}
-	work := workRequest.Works[0]
-
+	if !submission.Submitted {
+		return fmt.Errorf("cron workstation %q: expected submitted tick at %s", ws.Name, firedAt.Format(time.RFC3339Nano))
+	}
+	metadata := submission.Metadata
 	s.logger().Info("cron watcher trigger submitted",
 		zap.String("workstation", ws.Name),
-		zap.String("work_type", work.WorkTypeID),
-		zap.String("state", work.State),
+		zap.String("work_type", interfaces.SystemTimeWorkTypeID),
+		zap.String("state", interfaces.SystemTimePendingState),
 		zap.Time("nominal_at", metadata.NominalAt),
 		zap.Time("due_at", metadata.DueAt),
 		zap.Time("expires_at", metadata.ExpiresAt),
 	)
-	if err := submitter(attemptCtx, workRequest); err != nil {
-		if errors.Is(attemptCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
-			return fmt.Errorf("cron workstation %q %s: %w", ws.Name, cronExecutionError, context.DeadlineExceeded)
-		}
-		return err
-	}
 	return nil
 }
 
