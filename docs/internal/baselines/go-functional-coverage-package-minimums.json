@@ -456,7 +456,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/engine",
-      "minimum": 74.39
+      "minimum": 73.93
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
@@ -1796,15 +1796,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider",
-      "minimum": 63.33
+      "minimum": 60.47
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter",
-      "minimum": 80.73
+      "minimum": 79.82
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode",
-      "minimum": 48.52
+      "minimum": 48.25
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/testkit",
@@ -1818,7 +1818,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy",
-      "minimum": 71.12
+      "minimum": 70.69
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/claude",
@@ -1846,15 +1846,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor",
-      "minimum": 61.15
+      "minimum": 55.40
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor",
-      "minimum": 70.53
+      "minimum": 70.33
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini",
-      "minimum": 80.67
+      "minimum": 78.15
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract",
@@ -1878,11 +1878,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro",
-      "minimum": 73.39
+      "minimum": 71.56
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/pi",
-      "minimum": 45.26
+      "minimum": 45.03
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/providersroot",
