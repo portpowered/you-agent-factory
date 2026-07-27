@@ -262,6 +262,10 @@
     "pkg/services/models/internal/services/catalog",
     "pkg/services/models/internal/services/catalog/internal/service",
     "pkg/services/models/internal/services/catalog/wire",
+    "pkg/services/models/internal/services/inference",
+    "pkg/services/models/internal/services/inference/internal/artifacts",
+    "pkg/services/models/internal/services/inference/internal/service",
+    "pkg/services/models/internal/services/inference/wire",
     "pkg/services/models/internal/services/runtime_host",
     "pkg/services/models/internal/services/runtime_host/internal/service",
     "pkg/services/models/internal/services/runtime_host/internal/services/leases",
@@ -1568,6 +1572,26 @@
       "packagePath": "pkg/services/models/internal/services/catalog/wire",
       "disposition": "retain",
       "destination": "models/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference",
+      "disposition": "retain",
+      "destination": "models/internal/services/inference"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference/internal/artifacts",
+      "disposition": "retain",
+      "destination": "models/internal/services/inference"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference/internal/service",
+      "disposition": "retain",
+      "destination": "models/internal/services/inference"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference/wire",
+      "disposition": "retain",
+      "destination": "models/internal/services/inference"
     },
     {
       "packagePath": "pkg/services/models/internal/services/runtime_host",

@@ -3666,6 +3666,30 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/models/internal/services/inference",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference/internal/artifacts",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference/internal/service",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference/wire",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/models/internal/services/runtime_host",
       "disposition": "retain",
       "destination": "models",
