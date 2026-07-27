@@ -174,6 +174,91 @@ func TestWorkerProviderOverridesGlobalDefault(t *testing.T) {
 	}
 }
 
+// TestUnknownProviderFailsBeforeProcessStart proves that when a worker names an
+// unregistered provider alias, root.BuildProcess construction leaves registered
+// provider edges inert and factory startup fails with a stable validation error
+// before any provider invoke or customer process lifecycle starts.
+func TestUnknownProviderFailsBeforeProcessStart(t *testing.T) {
+	const (
+		unknownProviderAlias    = "unknown-provider"
+		registeredProviderID    = "registered.provider"
+		registeredProviderAlias = "registered"
+		unknownModel            = "unknown-model"
+	)
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	writeExplicitSelectionWorker(t, dir, unknownProviderAlias, unknownModel)
+
+	registeredIntegration := inference.ProgressingExternalIntegration(
+		registeredProviderID,
+		"registered provider must not run",
+	)
+	registeredManifest := externalProviderManifest(t, registeredProviderID, registeredProviderAlias)
+
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderRegistrations: []inference.Registration{
+			{Manifest: registeredManifest, Integration: registeredIntegration},
+		},
+	})
+
+	constructionStats := registeredIntegration.Stats()
+	if constructionStats.InvokeCalls != 0 || constructionStats.ProgressWrites != 0 ||
+		constructionStats.TerminalCloses != 0 || constructionStats.DiscoverCalls != 0 ||
+		constructionStats.CapabilityCalls != 0 {
+		t.Fatalf(
+			"construction side effects = %#v, want inert registry composition",
+			constructionStats,
+		)
+	}
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--dir", dir,
+		"--continuously",
+		"--with-server",
+		"--server", "http://127.0.0.1:1",
+		"--quiet",
+		"--no-record",
+	})
+	homeDir := t.TempDir()
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = dir
+
+	executeErr := process.Execute(inputs.Input)
+	if executeErr == nil {
+		t.Fatalf(
+			"Process.Execute(run unknown provider) error = nil, want validation failure; stdout=%q stderr=%q",
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	errorText := executeErr.Error()
+	if !strings.Contains(errorText, `provider "`+unknownProviderAlias+`" is unknown`) &&
+		!strings.Contains(errorText, "validate Factory provider selections") {
+		t.Fatalf(
+			"unknown provider error = %q, want stable unknown-provider validation diagnostic; stdout=%q stderr=%q",
+			errorText,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+
+	runStats := registeredIntegration.Stats()
+	if runStats.InvokeCalls != 0 {
+		t.Fatalf(
+			"registered provider invoke calls after failed startup = %d, want 0",
+			runStats.InvokeCalls,
+		)
+	}
+	if runStats.ProgressWrites != 0 || runStats.TerminalCloses != 0 {
+		t.Fatalf(
+			"registered provider side effects after failed startup = progress:%d terminal:%d, want inert",
+			runStats.ProgressWrites,
+			runStats.TerminalCloses,
+		)
+	}
+}
+
 func writeExplicitSelectionWorker(t *testing.T, factoryDir, provider, model string) {
 	t.Helper()
 	workerPath := filepath.Join(factoryDir, "workers", "worker", "AGENTS.md")
