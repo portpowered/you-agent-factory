@@ -23,9 +23,9 @@ var ErrResolutionConflict = errors.New("operator effective resolution conflict")
 type ResolutionFailureKind string
 
 const (
-	ResolutionFailureKindInvalidInput          ResolutionFailureKind = "invalid_input"
-	ResolutionFailureKindUnsupportedOverride   ResolutionFailureKind = "unsupported_override"
-	ResolutionFailureKindConflict              ResolutionFailureKind = "conflict"
+	ResolutionFailureKindInvalidInput        ResolutionFailureKind = "invalid_input"
+	ResolutionFailureKindUnsupportedOverride ResolutionFailureKind = "unsupported_override"
+	ResolutionFailureKindConflict            ResolutionFailureKind = "conflict"
 )
 
 // ResolutionFailure retains normalized effective-resolution failure facts
@@ -117,7 +117,7 @@ type ResolveEffectiveRequest struct {
 	ExpectedDocumentBaseline *DocumentDefaults
 	EnvironmentOverrides     EffectiveOverrideFacts
 	InvocationOverrides      EffectiveOverrideFacts
-	ConfigPath                 string
+	ConfigPath               string
 }
 
 // Validate checks request fields whose validity does not depend on resolution
