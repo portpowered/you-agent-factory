@@ -16,7 +16,11 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const cursorGoldenMalformedRecordCase = "malformed-record"
+const (
+	cursorGoldenMalformedRecordCase = "malformed-record"
+	cursorGoldenProcessFailureCase  = "process-failure"
+	cursorGoldenTimeoutCase         = "timeout"
+)
 
 const cursorMalformedRecordLeakProbe = "{not json}"
 
@@ -137,9 +141,185 @@ func TestCursorGoldenMalformedRecordReturnsStableDiagnostic(t *testing.T) {
 	}
 }
 
+// TestCursorGoldenProcessFailureAndTimeoutRemainDistinct replays sanitized Cursor
+// process-failure and timeout goldens through the customer process boundary and
+// proves those public failure classes remain distinct on Provider Session,
+// FactoryResponseEvent, and invocation-result surfaces.
+//golden: docs/temp/functional/provider-sessions/cursor/process-failure/manifest.json
+//golden: docs/temp/functional/provider-sessions/cursor/timeout/manifest.json
+func TestCursorGoldenProcessFailureAndTimeoutRemainDistinct(t *testing.T) {
+	t.Run("process-failure", func(t *testing.T) {
+		runCursorFailureGoldenCase(
+			t,
+			cursorGoldenProcessFailureCase,
+			"cursor-process-failure",
+			support.ProviderSessionFidelityPartialStream,
+			factoryapi.WorkFailureTypeAuthFailure,
+			factoryapi.WorkFailureTypeTimeout,
+		)
+	})
+	t.Run("timeout", func(t *testing.T) {
+		runCursorFailureGoldenCase(
+			t,
+			cursorGoldenTimeoutCase,
+			"cursor-timeout",
+			support.ProviderSessionFidelityPartialStream,
+			factoryapi.WorkFailureTypeTimeout,
+			factoryapi.WorkFailureTypeAuthFailure,
+		)
+	})
+}
+
+func runCursorFailureGoldenCase(
+	t *testing.T,
+	caseName string,
+	manifestID string,
+	fidelityClass string,
+	wantReason factoryapi.WorkFailureType,
+	notReason factoryapi.WorkFailureType,
+) {
+	t.Helper()
+
+	repoRoot := testutil.MustRepoRoot(t)
+	caseDir := filepath.Join(
+		repoRoot,
+		filepath.FromSlash(support.ProviderSessionFixturePath("cursor", caseName)),
+	)
+
+	loaded, err := support.LoadProviderSessionCase(caseDir)
+	if err != nil {
+		t.Fatalf("LoadProviderSessionCase: %v", err)
+	}
+	if loaded.Manifest.ID != manifestID {
+		t.Fatalf("manifest.ID = %q, want %s", loaded.Manifest.ID, manifestID)
+	}
+	if loaded.Manifest.FidelityClass != fidelityClass {
+		t.Fatalf(
+			"manifest.fidelityClass = %q, want %q",
+			loaded.Manifest.FidelityClass,
+			fidelityClass,
+		)
+	}
+
+	var request struct {
+		Model     string `json:"model"`
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(loaded.Request, &request); err != nil {
+		t.Fatalf("decode request.json: %v", err)
+	}
+	if request.Model == "" || request.SessionID == "" {
+		t.Fatalf("request.json = %#v, want model and session_id", request)
+	}
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCursor, request.Model))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"cursor golden `+caseName+`"}`))
+
+	exitCode := 1
+	if loaded.Process.ExitCode != nil {
+		exitCode = *loaded.Process.ExitCode
+	}
+	commandResult := platformprocess.CommandResult{
+		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
+		Stderr:   []byte(loaded.Stderr),
+		ExitCode: exitCode,
+	}
+	var runner *testutil.ProviderCommandRunner
+	if wantReason == factoryapi.WorkFailureTypeTimeout {
+		runner = testutil.NewProviderCommandRunner(
+			commandResult,
+			commandResult,
+			commandResult,
+			commandResult,
+		)
+	} else {
+		runner = testutil.NewProviderCommandRunner(commandResult)
+	}
+
+	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		30*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
+		t.Fatalf("completed work = %d, want 0; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
+	}
+	if runner.CallCount() < 1 {
+		t.Fatalf("provider command runner calls = %d, want at least 1", runner.CallCount())
+	}
+
+	inferencePayload := cursorGoldenFailedInferenceObservationWithReason(t, events, wantReason)
+	if inferencePayload.Outcome != factoryapi.InferenceOutcomeFailed {
+		t.Fatalf("inference outcome = %q, want FAILED", inferencePayload.Outcome)
+	}
+	if inferencePayload.FailureDetail == nil {
+		t.Fatal("inference response missing failure detail")
+	}
+	if inferencePayload.FailureDetail.Reason != wantReason {
+		t.Fatalf("failure reason = %q, want %q", inferencePayload.FailureDetail.Reason, wantReason)
+	}
+	if notReason != "" && inferencePayload.FailureDetail.Reason == notReason {
+		t.Fatalf("failure reason = %q, must remain distinct from %q", inferencePayload.FailureDetail.Reason, notReason)
+	}
+	if strings.TrimSpace(inferencePayload.FailureDetail.Message) == "" {
+		t.Fatal("failure message is empty, want stable public diagnostic")
+	}
+	if wantReason == factoryapi.WorkFailureTypeTimeout {
+		assertCursorGoldenTimeoutDoesNotTreatPartialStdoutAsSuccess(t, events)
+	}
+
+	observed := support.ProviderSessionObservedGoldens{
+		ProviderSession:   observeCursorProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ResponseEvents:   observeCursorResponseEventGoldens(responseEvents),
+		InvocationResult: observeCursorFailedInvocationResultGolden(inferencePayload),
+	}
+	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
+		var updated *support.ProviderSessionGoldensUpdatedError
+		if errors.As(err, &updated) {
+			t.Fatalf("%v", err)
+		}
+		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
+	}
+}
+
+func assertCursorGoldenTimeoutDoesNotTreatPartialStdoutAsSuccess(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch response: %v", err)
+		}
+		if payload.Output != nil && strings.Contains(*payload.Output, "COMPLETE") {
+			t.Fatalf("dispatch output = %q, must not treat partial stdout as success on timeout", *payload.Output)
+		}
+	}
+}
+
 func cursorGoldenFailedInferenceObservation(
 	t *testing.T,
 	events []factoryapi.FactoryEvent,
+) factoryapi.InferenceResponseEventPayload {
+	t.Helper()
+	return cursorGoldenFailedInferenceObservationWithReason(t, events, "")
+}
+
+func cursorGoldenFailedInferenceObservationWithReason(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	wantReason factoryapi.WorkFailureType,
 ) factoryapi.InferenceResponseEventPayload {
 	t.Helper()
 
@@ -158,10 +338,16 @@ func cursorGoldenFailedInferenceObservation(
 		if payload.Outcome != factoryapi.InferenceOutcomeFailed {
 			continue
 		}
+		if wantReason != "" && payload.FailureDetail != nil && payload.FailureDetail.Reason != wantReason {
+			continue
+		}
 		inferencePayload = payload
 		foundInference = true
 	}
 	if !foundInference {
+		if wantReason != "" {
+			t.Fatalf("missing failed INFERENCE_RESPONSE with reason %q", wantReason)
+		}
 		t.Fatal("missing failed INFERENCE_RESPONSE in factory events")
 	}
 	return inferencePayload
