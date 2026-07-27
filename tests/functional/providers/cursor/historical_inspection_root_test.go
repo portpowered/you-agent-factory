@@ -164,6 +164,26 @@ func TestCursorHistoricalInspectionThroughRootBuildProcess_DegradesAdverseNative
 		assertProviderSessionDetailRedacted(t, detail)
 	})
 
+	t.Run("production blob byte limit skips oversized payload", func(t *testing.T) {
+		homeDir := t.TempDir()
+		writeCursorInspectionProductionOversizedBlobStore(t, homeDir, "oversized-blob-session")
+		server := startCursorInspectionRootServer(t, homeDir, serviceedges.Edges{})
+		defer server.Stop(t)
+
+		detail := support.GetJSON[factoryapi.ProviderSessionDetailResponse](
+			t,
+			cursorProviderSessionDetailURL(server.URL(), factoryapi.Cursor, "oversized-blob-session"),
+		)
+		if len(detail.Transcript) != 1 || detail.Transcript[0].Text == nil ||
+			*detail.Transcript[0].Text != "valid message" {
+			t.Fatalf("Transcript = %#v, want one valid message before oversized skip", detail.Transcript)
+		}
+		if detail.Parse.MalformedLineCount == 0 && len(detail.Parse.ParseErrors) == 0 {
+			t.Fatalf("Parse = %#v, want bounded oversized-blob diagnostics", detail.Parse)
+		}
+		assertProviderSessionDetailRedacted(t, detail)
+	})
+
 	t.Run("unreadable database fails safely", func(t *testing.T) {
 		homeDir := t.TempDir()
 		writeCursorInspectionUnreadableStore(t, homeDir, "unreadable-session")
@@ -367,6 +387,19 @@ INSERT INTO blobs (key, value) VALUES ('malformed', 'not-json-secret-prompt');
 INSERT INTO blobs (key, value) VALUES ('oversized', ?);
 INSERT INTO meta (key, value) VALUES ('0', '{"agentId":"`+sessionID+`","createdAt":1000}');
 `, strings.Repeat("x", 128))
+		return err
+	})
+}
+
+func writeCursorInspectionProductionOversizedBlobStore(t *testing.T, homeDir, sessionID string) {
+	t.Helper()
+	const productionBlobByteLimit = 4 * 1024 * 1024
+	writeCursorInspectionStore(t, homeDir, sessionID, func(db *sql.DB) error {
+		_, err := db.Exec(`
+INSERT INTO blobs (key, value) VALUES ('valid', '{"bubbleId":"bubble-valid","text":"valid message","timestamp":1000,"type":1}');
+INSERT INTO blobs (key, value) VALUES ('oversized', ?);
+INSERT INTO meta (key, value) VALUES ('0', '{"agentId":"`+sessionID+`","createdAt":1000}');
+`, strings.Repeat("x", productionBlobByteLimit+1))
 		return err
 	})
 }
