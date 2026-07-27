@@ -282,7 +282,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCursorGoldenMalformedRecordReturnsStableDiagnostic`.
   - `TestCursorGoldenProcessFailureAndTimeoutRemainDistinct`.
 
-- [ ] `tests/functional/workers/inference/opencode/golden_test.go`
+- [x] `tests/functional/workers/inference/opencode/golden_test.go`
   - `TestOpenCodeGoldenStructuredSnapshotSuccess`.
   - `TestOpenCodeGoldenFinalOnlyFallback`.
   - `TestOpenCodeGoldenStructuredFailureAndTimeout`.
