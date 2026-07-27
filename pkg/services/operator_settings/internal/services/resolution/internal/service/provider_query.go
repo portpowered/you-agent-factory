@@ -68,6 +68,10 @@ func mapProviderCatalogError(err error, raw string) error {
 			Field:   "workerModelProvider",
 		}
 	default:
-		return err
+		return operatorsettings.ResolutionFailure{
+			Kind:    operatorsettings.ResolutionFailureKindConflict,
+			Message: raw,
+			Field:   "workerModelProvider",
+		}
 	}
 }

@@ -423,3 +423,217 @@ func TestResolveEffective_UnknownProviderSurfacesUnsupportedOverride(t *testing.
 		t.Fatalf("ResolveEffective() error = %v, want ErrResolutionUnsupportedOverride", err)
 	}
 }
+
+func TestResolveEffective_SymbolicDefaultResolvesThroughLowerPrecedenceProvider(t *testing.T) {
+	t.Parallel()
+
+	service := newResolutionService(t)
+	resolved, err := service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		DocumentBaseline: operatorsettings.DocumentDefaults{
+			WorkerModelProvider: "codex",
+			WorkerModel:         "file-model",
+		},
+		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
+			WorkerModelProvider: "DEFAULT",
+		},
+		ConfigPath: "/tmp/config.json",
+	})
+	if err != nil {
+		t.Fatalf("ResolveEffective() = %v", err)
+	}
+	if resolved.Selection.WorkerModelProvider != "CODEX" {
+		t.Fatalf("provider = %q, want CODEX", resolved.Selection.WorkerModelProvider)
+	}
+	if resolved.Selection.WorkerModelProviderSource != operatorsettings.EffectiveLayerSourceFlag {
+		t.Fatalf("provider source = %q, want flag", resolved.Selection.WorkerModelProviderSource)
+	}
+}
+
+func TestResolveEffective_UnresolvedSymbolicDefaultReturnsInvalidInput(t *testing.T) {
+	t.Parallel()
+
+	service := newResolutionService(t)
+	_, err := service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
+			WorkerModelProvider: "DEFAULT",
+		},
+		ConfigPath: "/tmp/config.json",
+	})
+	assertResolutionFailure(
+		t,
+		err,
+		operatorsettings.ErrResolutionInvalidInput,
+		operatorsettings.ResolutionFailureKindInvalidInput,
+		"workerModelProvider",
+	)
+	if errors.Is(err, operatorsettings.ErrDocumentMalformed) ||
+		errors.Is(err, operatorsettings.ErrDocumentConflict) {
+		t.Fatalf("unresolved DEFAULT leaked document failure: %v", err)
+	}
+}
+
+func TestResolveEffective_TypedResolutionFailures(t *testing.T) {
+	t.Parallel()
+
+	service := newResolutionService(t)
+
+	_, err := service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
+			WorkerModelProvider: "unsupported-provider",
+		},
+		ConfigPath: "/tmp/config.json",
+	})
+	assertResolutionFailure(
+		t,
+		err,
+		operatorsettings.ErrResolutionUnsupportedOverride,
+		operatorsettings.ResolutionFailureKindUnsupportedOverride,
+		"workerModelProvider",
+	)
+	if errors.Is(err, providers.ErrUnknownProvider) {
+		t.Fatalf("unsupported override leaked providers error: %v", err)
+	}
+
+	_, err = service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		WorkerPresets: []operatorsettings.DocumentWorkerPreset{{
+			ID:            "research",
+			ModelProvider: "codex",
+		}},
+		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
+			WorkerPresetID: "missing-preset",
+		},
+		ConfigPath: "/tmp/config.json",
+	})
+	assertResolutionFailure(
+		t,
+		err,
+		operatorsettings.ErrResolutionUnsupportedOverride,
+		operatorsettings.ResolutionFailureKindUnsupportedOverride,
+		"workerPresetID",
+	)
+
+	baseline := operatorsettings.DocumentDefaults{
+		WorkerModelProvider: "codex",
+		WorkerModel:         "gpt-5",
+	}
+	staleBaseline := operatorsettings.DocumentDefaults{
+		WorkerModelProvider: "claude",
+		WorkerModel:         "gpt-5",
+	}
+	_, err = service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		DocumentBaseline: staleBaseline,
+		ExpectedDocumentBaseline: &operatorsettings.DocumentDefaults{
+			WorkerModelProvider: baseline.WorkerModelProvider,
+			WorkerModel:         baseline.WorkerModel,
+		},
+		ConfigPath: "/tmp/config.json",
+	})
+	assertResolutionFailure(
+		t,
+		err,
+		operatorsettings.ErrResolutionConflict,
+		operatorsettings.ResolutionFailureKindConflict,
+		"documentBaseline",
+	)
+}
+
+func TestResolveEffective_FailurePathsDoNotMutateDocumentBaseline(t *testing.T) {
+	t.Parallel()
+
+	baseline := operatorsettings.DocumentDefaults{
+		WorkerModelProvider: "codex",
+		WorkerModel:         "file-model",
+	}
+	request := operatorsettings.ResolveEffectiveRequest{
+		DocumentBaseline: baseline,
+		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
+			WorkerModelProvider: "not-a-real-provider",
+		},
+		ConfigPath: "/tmp/config.json",
+	}
+
+	service := newResolutionService(t)
+	_, err := service.ResolveEffective(request)
+	if err == nil {
+		t.Fatal("ResolveEffective() succeeded, want unsupported provider failure")
+	}
+	if request.DocumentBaseline != baseline {
+		t.Fatalf("document baseline mutated after unsupported provider: got %#v, want %#v", request.DocumentBaseline, baseline)
+	}
+}
+
+func TestResolveEffective_UnexpectedProviderErrorDoesNotLeakProvidersType(t *testing.T) {
+	t.Parallel()
+
+	service, err := internalservice.New(&unexpectedProviderErrorFake{})
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	_, err = service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		DocumentBaseline: operatorsettings.DocumentDefaults{
+			WorkerModelProvider: "codex",
+			WorkerModel:         "file-model",
+		},
+		ConfigPath: "/tmp/config.json",
+	})
+	assertResolutionFailure(
+		t,
+		err,
+		operatorsettings.ErrResolutionConflict,
+		operatorsettings.ResolutionFailureKindConflict,
+		"workerModelProvider",
+	)
+	if errors.Is(err, providers.ErrUnknownProvider) ||
+		errors.Is(err, providers.ErrProviderUnavailable) {
+		t.Fatalf("unexpected provider error leaked providers sentinel: %v", err)
+	}
+}
+
+type unexpectedProviderErrorFake struct{}
+
+var _ providers.Service = (*unexpectedProviderErrorFake)(nil)
+
+func (fake *unexpectedProviderErrorFake) ListProviders(
+	_ context.Context,
+	_ providers.ListProvidersRequest,
+) (providers.ListProvidersResult, error) {
+	return providers.ListProvidersResult{}, errors.New("unexpected list failure")
+}
+
+func (fake *unexpectedProviderErrorFake) GetProvider(
+	_ context.Context,
+	_ providers.GetProviderRequest,
+) (providers.GetProviderResult, error) {
+	return providers.GetProviderResult{}, errors.New("unexpected catalog failure")
+}
+
+func (fake *unexpectedProviderErrorFake) Execute(
+	_ context.Context,
+	_ providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, errors.New("not implemented")
+}
+
+func assertResolutionFailure(
+	t *testing.T,
+	err error,
+	sentinel error,
+	kind operatorsettings.ResolutionFailureKind,
+	field string,
+) {
+	t.Helper()
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("error = %v, want %v", err, sentinel)
+	}
+	var failure operatorsettings.ResolutionFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("error = %T(%v), want operatorsettings.ResolutionFailure", err, err)
+	}
+	if failure.Kind != kind {
+		t.Fatalf("failure kind = %q, want %q", failure.Kind, kind)
+	}
+	if failure.Field != field {
+		t.Fatalf("failure field = %q, want %q", failure.Field, field)
+	}
+}
