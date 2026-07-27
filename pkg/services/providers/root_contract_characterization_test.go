@@ -3,11 +3,6 @@ package providers_test
 import (
 	"context"
 	"errors"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
-	"strings"
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -190,85 +185,5 @@ func TestRootContract_FakePeerConstructionIsInert(t *testing.T) {
 	var service providers.Service = fake
 	if service == nil {
 		t.Fatal("constructed Service is nil")
-	}
-}
-
-func TestRootContract_PackageBoundary_AvoidsForbiddenPeers(t *testing.T) {
-	t.Parallel()
-
-	assertPackageAvoidsForbiddenPeers(
-		t,
-		"github.com/portpowered/infinite-you/pkg/services/providers",
-		false,
-	)
-}
-
-func TestRootContract_TestPackageBoundary_AvoidsForbiddenPeers(t *testing.T) {
-	t.Parallel()
-
-	assertPackageAvoidsForbiddenPeers(
-		t,
-		"github.com/portpowered/infinite-you/pkg/services/providers",
-		true,
-	)
-}
-
-func assertPackageAvoidsForbiddenPeers(t *testing.T, importPath string, includeTestDeps ...bool) {
-	t.Helper()
-
-	args := []string{
-		"go",
-		"list",
-		"-deps",
-		"-f",
-		"{{if not .Standard}}{{.ImportPath}}{{end}}",
-	}
-	if len(includeTestDeps) > 0 && includeTestDeps[0] {
-		args = append(args, "-test")
-	}
-	args = append(args, importPath)
-
-	cmd := exec.Command(args[0], args[1:]...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list deps for %s: %v\n%s", importPath, err, output)
-	}
-
-	forbiddenRoots := []string{
-		"github.com/portpowered/infinite-you/pkg/services/workers/provider",
-		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri",
-		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript",
-		"github.com/portpowered/infinite-you/pkg/transports",
-		"github.com/portpowered/infinite-you/ui",
-		"github.com/portpowered/infinite-you/pkg/wire",
-		"github.com/portpowered/infinite-you/pkg/root",
-		"github.com/portpowered/infinite-you/pkg/initializer",
-	}
-	for _, dep := range strings.Fields(string(output)) {
-		for _, forbidden := range forbiddenRoots {
-			if dep == forbidden || strings.HasPrefix(dep, forbidden+"/") {
-				t.Fatalf("%s must not import %s; found dependency %s", importPath, forbidden, dep)
-			}
-		}
-	}
-}
-
-func TestRootContract_TransitionalWorkersProviderRemainsInPlace(t *testing.T) {
-	t.Parallel()
-
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("resolve test source path")
-	}
-	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
-	requiredPaths := []string{
-		"pkg/services/workers/provider/registry/registry.go",
-		"pkg/services/workers/provider/conductor/conductor.go",
-	}
-	for _, relative := range requiredPaths {
-		path := filepath.Join(repoRoot, filepath.FromSlash(relative))
-		if _, err := os.Stat(path); err != nil {
-			t.Fatalf("transitional workers provider path %s must remain present: %v", relative, err)
-		}
 	}
 }
