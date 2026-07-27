@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"strings"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -62,6 +64,10 @@ func errorFamilyForStatus(status int) factoryapi.ErrorFamily {
 		return factoryapi.ErrorFamilyNotFound
 	case http.StatusGone:
 		return factoryapi.ErrorFamilyGone
+	case http.StatusMethodNotAllowed:
+		return factoryapi.ErrorFamilyBadRequest
+	case http.StatusUnsupportedMediaType:
+		return factoryapi.ErrorFamilyBadRequest
 	default:
 		return factoryapi.ErrorFamilyInternalServerError
 	}
@@ -87,6 +93,23 @@ func requestFieldValidationMessage(err error) (string, bool) {
 // request-field validation failure.
 func RequestFieldValidationMessage(err error) (string, bool) {
 	return requestFieldValidationMessage(err)
+}
+
+func requestAcceptsJSONContentType(contentTypeHeader string) bool {
+	contentTypeHeader = strings.TrimSpace(contentTypeHeader)
+	if contentTypeHeader == "" {
+		return true
+	}
+	mediaType, _, err := mime.ParseMediaType(contentTypeHeader)
+	if err != nil {
+		return false
+	}
+	mediaType = strings.ToLower(strings.TrimSpace(mediaType))
+	return mediaType == "application/json" || strings.HasSuffix(mediaType, "+json")
+}
+
+func (s *Server) writeUnsupportedMediaTypeError(w http.ResponseWriter) {
+	s.writeError(w, http.StatusUnsupportedMediaType, "unsupported media type", "UNSUPPORTED_MEDIA_TYPE")
 }
 
 func ensureSingleJSONObject(dec *json.Decoder) error {
