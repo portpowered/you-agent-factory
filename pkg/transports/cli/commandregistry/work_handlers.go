@@ -25,6 +25,10 @@ const (
 	workListSessionInputID      = "you.work.list.flag.session"
 	workShowWorkIDInputID       = "you.work.show.arg.0"
 	workShowSessionInputID      = "you.work.show.flag.session"
+	workMoveWorkIDInputID       = "you.work.move.arg.0"
+	workMoveStateNameInputID    = "you.work.move.arg.1"
+	workMoveSessionInputID      = "you.work.move.flag.session"
+	workMoveRequestIDInputID    = "you.work.move.flag.request-id"
 	workServerInputID           = "you.flag.server"
 	workJSONInputID             = "you.flag.json"
 	workVerboseInputID          = "you.flag.verbose"
@@ -59,6 +63,13 @@ type ResolvedListBinding struct {
 // adapter. Each invocation maps resolved values into a fresh ShowConfig.
 type ResolvedShowBinding struct {
 	ShowWork          func(workcli.ShowConfig) error
+	DiagnosticsWriter func(*cobra.Command) io.Writer
+}
+
+// ResolvedMoveBinding supplies the effects used by the Work move stable-input
+// adapter. Each invocation maps resolved values into a fresh MoveConfig.
+type ResolvedMoveBinding struct {
+	MoveWork          func(workcli.MoveConfig) error
 	DiagnosticsWriter func(*cobra.Command) io.Writer
 }
 
@@ -183,6 +194,61 @@ func resolvedShowConfig(
 		WorkID: workID, JSON: globals.json,
 		Verbose: globals.verbose || globals.debug, Debug: globals.debug,
 		Output: cmd.OutOrStdout(),
+	}, nil
+}
+
+// ResolvedMoveRunE maps canonical Work move input IDs into one transport
+// request without retaining Cobra-backed pointers between invocations.
+func ResolvedMoveRunE(binding ResolvedMoveBinding) ResolvedWorkRunE {
+	return func(
+		cmd *cobra.Command,
+		inputs resolvedinput.Inputs,
+		inherited resolvedinput.Inputs,
+	) error {
+		if binding.MoveWork == nil {
+			return fmt.Errorf("work move service is required")
+		}
+		cfg, err := resolvedMoveConfig(cmd, inputs, inherited)
+		if err != nil {
+			return fmt.Errorf("resolve work move inputs: %w", err)
+		}
+		if binding.DiagnosticsWriter != nil {
+			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
+		}
+		return binding.MoveWork(cfg)
+	}
+}
+
+func resolvedMoveConfig(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) (workcli.MoveConfig, error) {
+	workID, err := inputs.String(workMoveWorkIDInputID)
+	if err != nil {
+		return workcli.MoveConfig{}, err
+	}
+	stateName, err := inputs.String(workMoveStateNameInputID)
+	if err != nil {
+		return workcli.MoveConfig{}, err
+	}
+	sessionID, err := inputs.String(workMoveSessionInputID)
+	if err != nil {
+		return workcli.MoveConfig{}, err
+	}
+	requestID, err := inputs.String(workMoveRequestIDInputID)
+	if err != nil {
+		return workcli.MoveConfig{}, err
+	}
+	globals, err := resolvedWorkGlobals(inherited)
+	if err != nil {
+		return workcli.MoveConfig{}, err
+	}
+	return workcli.MoveConfig{
+		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
+		WorkID: workID, StateName: stateName, RequestID: requestID,
+		JSON: globals.json, Verbose: globals.verbose || globals.debug,
+		Debug: globals.debug, Output: cmd.OutOrStdout(),
 	}, nil
 }
 

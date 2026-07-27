@@ -638,6 +638,142 @@ func executeResolvedShowError(
 	return root.Execute()
 }
 
+type resolvedMoveRequest struct {
+	method string
+	path   string
+	body   string
+}
+
+func resolvedMoveTransportHandler(t *testing.T) commandregistry.ResolvedWorkRunE {
+	t.Helper()
+	return commandregistry.ResolvedMoveRunE(commandregistry.ResolvedMoveBinding{
+		MoveWork: workcli.NewMove(testHTTPProtocol(t)),
+		DiagnosticsWriter: func(cmd *cobra.Command) io.Writer {
+			return cmd.ErrOrStderr()
+		},
+	})
+}
+
+func executeResolvedMove(
+	t *testing.T,
+	move commandregistry.ResolvedWorkRunE,
+	args []string,
+	output io.Writer,
+	diagnostics io.Writer,
+	ctx context.Context,
+) {
+	t.Helper()
+	if err := executeResolvedMoveError(t, move, args, output, diagnostics, ctx); err != nil {
+		t.Fatalf("Execute(%v) error = %v", args, err)
+	}
+}
+
+func executeResolvedMoveError(
+	t *testing.T,
+	move commandregistry.ResolvedWorkRunE,
+	args []string,
+	output io.Writer,
+	diagnostics io.Writer,
+	ctx context.Context,
+) error {
+	t.Helper()
+	noop := func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
+		return nil
+	}
+	root, err := climanifestcobra.NewResolvedWorkCommandTree(commandregistry.ResolvedWorkHandlers{
+		List: noop, Show: noop, Move: move, Visualize: noop,
+	})
+	if err != nil {
+		t.Fatalf("NewResolvedWorkCommandTree() error = %v", err)
+	}
+	root.SetOut(output)
+	root.SetErr(diagnostics)
+	root.SetContext(ctx)
+	root.SetArgs(args)
+	return root.Execute()
+}
+
+func newResolvedMoveServer(t *testing.T, requests *[]resolvedMoveRequest) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requests != nil {
+			*requests = append(*requests, resolvedMoveRequest{
+				method: r.Method,
+				path:   r.URL.EscapedPath(),
+				body:   readRequestBody(t, r),
+			})
+		}
+		stateName := "init"
+		if r.Method == http.MethodPost {
+			stateName = "complete"
+		}
+		writeResolvedWork(t, w, "work-1", stateName)
+	}))
+}
+
+func writeResolvedWork(t *testing.T, w http.ResponseWriter, workID, stateName string) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(factoryapi.Work{
+		WorkId: &workID,
+		State: &factoryapi.WorkState{
+			Name: stateName,
+			Type: factoryapi.WorkStateTypePROCESSING,
+		},
+	}); err != nil {
+		t.Fatalf("encode Work response: %v", err)
+	}
+}
+
+func readRequestBody(t *testing.T, r *http.Request) string {
+	t.Helper()
+	if r.Body == nil {
+		return ""
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Fatalf("read request body: %v", err)
+	}
+	return string(body)
+}
+
+func assertResolvedMoveRequests(t *testing.T, requests []resolvedMoveRequest) {
+	t.Helper()
+	if len(requests) != 4 {
+		t.Fatalf("requests = %#v, want two GET/POST pairs", requests)
+	}
+	wantPaths := []string{
+		"/factory-sessions/~default/work/work%2Freview",
+		"/factory-sessions/~default/work/work%2Freview/move",
+		"/factory-sessions/session%2Fbeta/work/work%2Freview",
+		"/factory-sessions/session%2Fbeta/work/work%2Freview/move",
+	}
+	for i, wantPath := range wantPaths {
+		if requests[i].path != wantPath {
+			t.Fatalf("request[%d] path = %q, want %q", i, requests[i].path, wantPath)
+		}
+	}
+	if requests[0].method != http.MethodGet || requests[1].method != http.MethodPost ||
+		requests[2].method != http.MethodGet || requests[3].method != http.MethodPost {
+		t.Fatalf("request methods = %#v", requests)
+	}
+	var defaultBody factoryapi.MoveWorkRequest
+	if err := json.Unmarshal([]byte(requests[1].body), &defaultBody); err != nil {
+		t.Fatalf("default move body = %q: %v", requests[1].body, err)
+	}
+	if defaultBody.StateName != "complete" || defaultBody.RequestId != nil {
+		t.Fatalf("default move body = %#v", defaultBody)
+	}
+	var sessionBody factoryapi.MoveWorkRequest
+	if err := json.Unmarshal([]byte(requests[3].body), &sessionBody); err != nil {
+		t.Fatalf("session move body = %q: %v", requests[3].body, err)
+	}
+	if sessionBody.StateName != "complete" ||
+		sessionBody.RequestId == nil || *sessionBody.RequestId != "move-request-1" {
+		t.Fatalf("session move body = %#v", sessionBody)
+	}
+}
+
 type errorWriter struct {
 	err error
 }

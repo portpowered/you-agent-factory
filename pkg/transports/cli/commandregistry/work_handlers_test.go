@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -380,6 +381,320 @@ func TestVerifyWorkRunnableCoverageRejectsMissingHandler(t *testing.T) {
 	}
 	if err := registry.VerifyWorkRunnableCoverage(manifest); err == nil {
 		t.Fatal("VerifyWorkRunnableCoverage() missing list handler = nil, want error")
+	}
+}
+
+func TestResolvedMoveRunEMapsStableInputsIntoFreshRequests(t *testing.T) {
+	var requests []workcli.MoveConfig
+	handler := commandregistry.ResolvedMoveRunE(commandregistry.ResolvedMoveBinding{
+		MoveWork: func(cfg workcli.MoveConfig) error {
+			requests = append(requests, cfg)
+			return nil
+		},
+		DiagnosticsWriter: func(cmd *cobra.Command) io.Writer {
+			return cmd.ErrOrStderr()
+		},
+	})
+
+	executeResolvedMove(t, handler, []string{
+		"--server", "https://factory.example", "--json", "--debug",
+		"work", "move", "--session", "session-alpha",
+		"--request-id", "move-request-1", "work-1", "complete",
+	}, io.Discard, io.Discard, context.Background())
+	executeResolvedMove(t, handler, []string{
+		"work", "move", "work-2", "review",
+	}, io.Discard, io.Discard, context.Background())
+
+	if len(requests) != 2 {
+		t.Fatalf("requests = %d, want 2", len(requests))
+	}
+	assertResolvedMoveConfig(t, requests[0], resolvedMoveConfigValues{
+		server: "https://factory.example", sessionID: "session-alpha",
+		workID: "work-1", stateName: "complete", requestID: "move-request-1",
+		json: true, verbose: true, debug: true,
+	})
+	assertResolvedMoveConfig(t, requests[1], resolvedMoveConfigValues{
+		server: "http://localhost:7437", workID: "work-2", stateName: "review",
+	})
+}
+
+func TestResolvedWorkMovePublicCommandPreservesRoutesBodiesAndOutputs(t *testing.T) {
+	var requests []resolvedMoveRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, resolvedMoveRequest{
+			method: r.Method,
+			path:   r.URL.EscapedPath(),
+			body:   readRequestBody(t, r),
+		})
+		stateName := "init"
+		if r.Method == http.MethodPost {
+			stateName = "complete"
+		}
+		writeResolvedWork(t, w, "work/review", stateName)
+	}))
+	defer server.Close()
+
+	run := resolvedMoveTransportHandler(t)
+	var human bytes.Buffer
+	executeResolvedMove(t, run, []string{
+		"--server", server.URL, "work", "move", "work/review", "complete",
+	}, &human, io.Discard, context.Background())
+	assertResolvedMoveHumanOutput(t, human.String())
+
+	var output bytes.Buffer
+	var diagnostics bytes.Buffer
+	executeResolvedMove(t, run, []string{
+		"--server", server.URL, "--json", "--verbose",
+		"work", "move", "--session", "session/beta",
+		"--request-id", "move-request-1", "work/review", "complete",
+	}, &output, &diagnostics, context.Background())
+
+	assertResolvedMoveRequests(t, requests)
+	var result workcli.MoveSuccessResult
+	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
+		t.Fatalf("JSON output = %q: %v", output.String(), err)
+	}
+	assertResolvedMoveJSONAndDiagnostics(
+		t, result, output.String(), diagnostics.String(),
+	)
+}
+
+func TestResolvedWorkMovePublicCommandRejectsInvalidArgumentsBeforeHTTP(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requests++
+	}))
+	defer server.Close()
+
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{name: "missing both", wantErr: "requires at least 2 arg(s)"},
+		{name: "missing state", args: []string{"work-1"}, wantErr: "requires at least 2 arg(s)"},
+		{name: "extra", args: []string{"work-1", "complete", "extra"}, wantErr: "accepts at most 2 arg(s)"},
+		{name: "blank work", args: []string{" ", "complete"}, wantErr: "work id is required"},
+		{name: "blank state", args: []string{"work-1", " "}, wantErr: "state name is required"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			args := append(
+				[]string{"--server", server.URL, "work", "move"},
+				test.args...,
+			)
+			err := executeResolvedMoveError(
+				t, resolvedMoveTransportHandler(t), args,
+				io.Discard, io.Discard, context.Background(),
+			)
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("Execute() error = %v, want %q", err, test.wantErr)
+			}
+		})
+	}
+	if requests != 0 {
+		t.Fatalf("HTTP requests = %d, want zero for invalid arguments", requests)
+	}
+}
+
+func TestResolvedWorkMovePublicCommandPreservesFailuresAndCancellation(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		body       string
+		wantErr    string
+	}{
+		{
+			name: "not found", statusCode: http.StatusNotFound,
+			body:    `{"message":"work not found"}`,
+			wantErr: `work "work-1" not found: work not found`,
+		},
+		{
+			name: "active dispatch", statusCode: http.StatusBadRequest,
+			body:    `{"message":"work is in an active dispatch"}`,
+			wantErr: "move work failed (400): work is in an active dispatch",
+		},
+		{
+			name: "invalid target state", statusCode: http.StatusBadRequest,
+			body:    `{"message":"authored state does not exist"}`,
+			wantErr: "move work failed (400): authored state does not exist",
+		},
+		{
+			name: "server failure", statusCode: http.StatusInternalServerError,
+			body:    `{"message":"factory failed"}`,
+			wantErr: "move work failed (500): factory failed",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if test.name != "not found" && r.Method == http.MethodGet {
+					writeResolvedWork(t, w, "work-1", "init")
+					return
+				}
+				w.WriteHeader(test.statusCode)
+				_, _ = io.WriteString(w, test.body)
+			}))
+			defer server.Close()
+			err := executeResolvedMoveError(
+				t, resolvedMoveTransportHandler(t),
+				[]string{"--server", server.URL, "work", "move", "work-1", "complete"},
+				io.Discard, io.Discard, context.Background(),
+			)
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("Execute() error = %v, want %q", err, test.wantErr)
+			}
+		})
+	}
+
+	t.Run("cancellation", func(t *testing.T) {
+		requests := 0
+		server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			requests++
+		}))
+		defer server.Close()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		err := executeResolvedMoveError(
+			t, resolvedMoveTransportHandler(t),
+			[]string{"--server", server.URL, "work", "move", "work-1", "complete"},
+			io.Discard, io.Discard, ctx,
+		)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Execute() error = %v, want context canceled", err)
+		}
+		if requests != 0 {
+			t.Fatalf("HTTP requests = %d, want zero after cancellation", requests)
+		}
+	})
+
+	t.Run("output writer", func(t *testing.T) {
+		server := newResolvedMoveServer(t, nil)
+		defer server.Close()
+		writeErr := errors.New("write failed")
+		err := executeResolvedMoveError(
+			t, resolvedMoveTransportHandler(t),
+			[]string{"--server", server.URL, "work", "move", "work-1", "complete"},
+			errorWriter{err: writeErr}, io.Discard, context.Background(),
+		)
+		if !errors.Is(err, writeErr) {
+			t.Fatalf("Execute() error = %v, want %v", err, writeErr)
+		}
+	})
+}
+
+func TestResolvedWorkMovePublicCommandPreservesRequestIdConflict(t *testing.T) {
+	var posts, successes int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			writeResolvedWork(t, w, "work-1", "init")
+			return
+		}
+		posts++
+		var body factoryapi.MoveWorkRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode move body: %v", err)
+		}
+		if body.RequestId == nil || *body.RequestId != "retry-key" {
+			t.Fatalf("request id = %#v, want retry-key", body.RequestId)
+		}
+		if posts == 1 {
+			successes++
+			writeResolvedWork(t, w, "work-1", "complete")
+			return
+		}
+		w.WriteHeader(http.StatusConflict)
+		_, _ = io.WriteString(w, `{"message":"Operator move request was already applied."}`)
+	}))
+	defer server.Close()
+
+	args := []string{
+		"--server", server.URL, "work", "move",
+		"--request-id", "retry-key", "work-1", "complete",
+	}
+	executeResolvedMove(
+		t, resolvedMoveTransportHandler(t), args,
+		io.Discard, io.Discard, context.Background(),
+	)
+	err := executeResolvedMoveError(
+		t, resolvedMoveTransportHandler(t), args,
+		io.Discard, io.Discard, context.Background(),
+	)
+	if err == nil || !strings.Contains(err.Error(), "move work failed (409)") ||
+		!strings.Contains(err.Error(), "already applied") {
+		t.Fatalf("second Execute() error = %v, want applied conflict", err)
+	}
+	if posts != 2 || successes != 1 {
+		t.Fatalf("posts = %d, successes = %d; want 2 attempts and one mutation", posts, successes)
+	}
+}
+
+type resolvedMoveConfigValues struct {
+	server    string
+	sessionID string
+	workID    string
+	stateName string
+	requestID string
+	json      bool
+	verbose   bool
+	debug     bool
+}
+
+func assertResolvedMoveConfig(
+	t *testing.T,
+	cfg workcli.MoveConfig,
+	want resolvedMoveConfigValues,
+) {
+	t.Helper()
+	got := resolvedMoveConfigValues{
+		server: cfg.Server, sessionID: cfg.SessionID, workID: cfg.WorkID,
+		stateName: cfg.StateName, requestID: cfg.RequestID, json: cfg.JSON,
+		verbose: cfg.Verbose, debug: cfg.Debug,
+	}
+	if got != want {
+		t.Fatalf("move config = %#v, want %#v", got, want)
+	}
+}
+
+func assertResolvedMoveHumanOutput(t *testing.T, got string) {
+	t.Helper()
+	for _, want := range []string{
+		"Work ID:\twork/review\n",
+		"Previous state:\tinit\n",
+		"New state:\tcomplete\n",
+		"Session ID:\t~default\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("human output = %q, want %q", got, want)
+		}
+	}
+}
+
+func assertResolvedMoveJSONAndDiagnostics(
+	t *testing.T,
+	result workcli.MoveSuccessResult,
+	output string,
+	diagnostics string,
+) {
+	t.Helper()
+	want := workcli.MoveSuccessResult{
+		WorkID: "work/review", PreviousState: "init", NewState: "complete",
+		SessionID:    "session/beta",
+		EndpointPath: "/factory-sessions/session/beta/work/work/review/move",
+	}
+	if result != want {
+		t.Fatalf("JSON result = %#v, want %#v", result, want)
+	}
+	if strings.Contains(output, "work move request") {
+		t.Fatalf("stdout contains diagnostics: %q", output)
+	}
+	for _, wantDiagnostic := range []string{
+		"work move request", "requestIdPresent=true", "work move response",
+	} {
+		if !strings.Contains(diagnostics, wantDiagnostic) {
+			t.Fatalf("diagnostics = %q, want %q", diagnostics, wantDiagnostic)
+		}
 	}
 }
 
