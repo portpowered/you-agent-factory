@@ -140,6 +140,22 @@
   `functional-boundary-check` stays unavoidable through the nested
   `test-functional-coverage` call, and the lane uploads Markdown, coverage
   JSON, profile, and command log on success and failure.
+  JavaScript file-backed loading functional coverage belongs in
+  `tests/functional/orchestration/javascript/loading/file_javascript_test.go`:
+  drive sync Factory Session execution through `support.BuildProcess` +
+  `support.FakeInputs` with `you --json run`, `--factory`, and
+  `--with-mock-workers`; scaffold file-backed factories with
+  `orchestrator.javascript.sourceRef` and workflow modules beside
+  `factory.json`; prove factory-relative ES module imports resolve under the
+  Factory root with a terminal `COMPLETED` primary result that reflects the
+  imported module contribution and zero provider dispatch; prove missing
+  factory-relative imports fail before work starts with customer-stable
+  `workflow.source.notFound` diagnostics that name the missing path without
+  private VM stack frames or live provider execution. Substitute external
+  effects only through `edges.Edges`. Catalog metadata infers domain
+  `orchestration` and subsection `javascript/loading` from the path; every
+  top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
+  stays viz-compatible.
   JavaScript agent composition functional coverage belongs in
   `tests/functional/orchestration/javascript/composition/agent_test.go`:
   drive sync Factory Session execution through
@@ -273,6 +289,17 @@
   reports `SERVER_BIND_FAILED` with zero browser/readiness side effects and
   rebound availability on the requested address. Catalog metadata infers domain
   `transport` and subsection `http/server` from the path; every top-level
+  `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
+  CLI JSON parameter values functional coverage belongs in
+  `tests/functional/transport/cli/parameters/json_values_test.go`: prove nested
+  JSON object and array named parameters reach canonical `InvocationArguments`
+  intact through `SubmissionRecorder`, prove invalid JSON for a `typeHint: "JSON"`
+  parameter fails with a named-parameter diagnostic and zero provider dispatch
+  through `ProviderCommandRunner`, and prove JSON `null`, empty string, empty
+  object, and empty array remain observably distinct without normalization loss
+  at the public `support.BuildProcess` boundary. Catalog metadata infers domain
+  `transport` and subsection `cli/parameters` from the path; every top-level
   `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
   viz-compatible.
   CLI response-stream backpressure functional coverage belongs in

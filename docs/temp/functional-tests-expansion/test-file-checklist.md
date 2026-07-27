@@ -91,7 +91,7 @@ intentionally small enough to distribute across many agents.
   - `TestRunDuplicateKeyUsesDocumentedPrecedence` covers duplicate input.
   - `TestRunMalformedKeyValueFailsWithoutDispatch` covers missing key/value.
 
-- [ ] `tests/functional/transport/cli/parameters/json_values_test.go`
+- [x] `tests/functional/transport/cli/parameters/json_values_test.go`
   - `TestCLIJSONParameterPreservesNestedObjectAndArray` verifies typed payload
     mapping.
   - `TestCLIInvalidJSONParameterNamesTheParameter` verifies actionable error
@@ -280,7 +280,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestClaudeGoldenFullStreamTextSuccess` covers deltas and final snapshot.
   - `TestClaudeGoldenToolLifecycleAndSessionIdentity` covers tools/session.
 
-- [ ] `tests/functional/workers/inference/claude/golden_failure_test.go`
+- [x] `tests/functional/workers/inference/claude/golden_failure_test.go`
   - `TestClaudeGoldenStructuredFailure` covers normalized error metadata.
   - `TestClaudeGoldenTimeoutClosesResponseStream` covers terminal closure.
 
@@ -341,7 +341,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestInlineJavaScriptFactoryRunsFromCLI` covers an inline definition.
   - `TestInlineJavaScriptSyntaxErrorReturnsSourceLocation` covers load failure.
 
-- [ ] `tests/functional/orchestration/javascript/loading/file_javascript_test.go`
+- [x] `tests/functional/orchestration/javascript/loading/file_javascript_test.go`
   - `TestJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot` covers path
     resolution.
   - `TestJavaScriptFactoryMissingImportFailsActionably` covers load failure.
@@ -426,7 +426,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Petri / graph orchestration
 
-- [ ] `tests/functional/orchestration/petri/dispatch/simple_run_test.go`
+- [x] `tests/functional/orchestration/petri/dispatch/simple_run_test.go`
   - `TestPetriSingleWorkerRunCompletesAtQuiescence`.
   - `TestPetriWorkerErrorReturnsFailedTerminalOutcome`.
   - `TestPetriInvocationInputAndOutputMapping`.
@@ -439,6 +439,14 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/orchestration/petri/cross/session_compatibility_test.go`
   - `TestPetriAndJavaScriptSessionsShareLifecycleControls`.
   - `TestPetriAndJavaScriptSessionsExposeCompatibleStatusFacts`.
+
+## Wave 1 — automations
+
+- [x] `tests/functional/automations/cron_root_composition_test.go`
+  - `TestBuildProcessRemainsCronInertBeforeRuntimeLifecycle`.
+  - `TestAutomationsCronActivatesThroughRuntimeLifecycle`.
+  - `TestAutomationsCronJitterProducesStableSubmissionTiming`.
+  - `TestAutomationsCronSkipsMalformedWorkstationAndFiresValid`.
 
 ## Wave 1 — workstations
 
@@ -677,6 +685,20 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPITemplateValidationDoesNotMutateCurrentFactory`.
 
 ## Wave 2 — provider sessions
+
+- [x] `tests/functional/providers/codex/process_harness_test.go`
+  - `TestCodexHistoricalInspectionSuccessThroughRootBuildProcess`.
+  - `TestCodexHistoricalInspectionDetachedRepeatedRunsThroughRootBuildProcess`.
+  - `TestCodexHistoricalInspectionMissingSessionThroughRootBuildProcess`.
+  - `TestCodexHistoricalInspectionMalformedJSONLThroughRootBuildProcess`.
+  - `TestCodexHistoricalInspectionContainmentRejectionThroughRootBuildProcess`.
+  - `TestCodexHistoricalInspectionBoundedWalkThroughRootBuildProcess`.
+  - `TestCodexHistoricalInspectionCancelledDiscoveryThroughRootBuildProcess`.
+
+- [x] `tests/functional/providers/cursor/historical_inspection_root_test.go`
+  - `TestCursorHistoricalInspectionThroughRootBuildProcess_ReturnsDeterministicNormalizedDetail`.
+  - `TestCursorHistoricalInspectionThroughRootBuildProcess_PropagatesMissingAndContainmentFailures`.
+  - `TestCursorHistoricalInspectionThroughRootBuildProcess_DegradesAdverseNativeDataSafely`.
 
 - [ ] `tests/functional/provider_sessions/details/codex_details_test.go`
   - `TestCodexProviderSessionDetailsLoadFromGoldenMetadata` covers API detail.

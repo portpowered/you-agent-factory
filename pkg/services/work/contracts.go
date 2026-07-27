@@ -30,6 +30,7 @@ const (
 	InvocationParameterTypeHintDirectoryPath = "DIRECTORY_PATH"
 	InvocationParameterTypeHintNumberString  = "NUMBER_STRING"
 	InvocationParameterTypeHintBooleanString = "BOOLEAN_STRING"
+	InvocationParameterTypeHintJSON          = "JSON"
 
 	InvocationParameterValueModeExact        = "EXACT"
 	InvocationParameterValueModeRepeated     = "REPEATED"

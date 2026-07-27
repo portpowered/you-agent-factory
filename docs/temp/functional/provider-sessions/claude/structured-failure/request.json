@@ -1,0 +1,5 @@
+{
+  "model": "claude-sonnet-4",
+  "prompt": "Trigger the Claude structured-failure golden.",
+  "sessionId": "claude-golden-structured-failure-session"
+}

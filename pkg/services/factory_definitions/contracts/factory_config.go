@@ -337,6 +337,7 @@ const (
 	InvocationParameterTypeHintDirectoryPath = work.InvocationParameterTypeHintDirectoryPath
 	InvocationParameterTypeHintNumberString  = work.InvocationParameterTypeHintNumberString
 	InvocationParameterTypeHintBooleanString = work.InvocationParameterTypeHintBooleanString
+	InvocationParameterTypeHintJSON          = work.InvocationParameterTypeHintJSON
 
 	InvocationParameterValueModeExact        = work.InvocationParameterValueModeExact
 	InvocationParameterValueModeRepeated     = work.InvocationParameterValueModeRepeated

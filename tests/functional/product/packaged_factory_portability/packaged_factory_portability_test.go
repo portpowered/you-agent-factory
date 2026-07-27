@@ -25,6 +25,9 @@ const (
 	wantGoalInvocationPrimaryText = "mock worker accepted"
 )
 
+// TestPackagedFactoryInitMaterialization_InvokesOutsideRepositoryWithBootstrapParity
+// proves packaged Factory init materializes outside the repository and invokes with
+// bootstrap parity through the customer process boundary.
 func TestPackagedFactoryInitMaterialization_InvokesOutsideRepositoryWithBootstrapParity(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow packaged Factory init portability functional path")

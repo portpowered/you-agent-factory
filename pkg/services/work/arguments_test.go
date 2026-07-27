@@ -175,6 +175,21 @@ func TestNormalizeArguments_SignatureRejectsStringValidationMismatch(t *testing.
 	assertArgumentErrorCode(t, err, ArgumentErrorCodeStringValidationMismatch)
 }
 
+func TestNormalizeArguments_SignatureRejectsInvalidJSONTypeHint(t *testing.T) {
+	_, err := NormalizeArguments(NormalizeArgumentsInput{
+		Signature: signatureConfig(namedParameter("metadata", "", nil, false, typeHintJSON, "")),
+		NamedArgs: []NamedArgumentInput{{Key: "metadata", Values: []string{`{not-json`}}},
+	})
+
+	assertArgumentErrorCode(t, err, ArgumentErrorCodeStringValidationMismatch)
+	if !strings.Contains(err.Error(), `parameter "metadata"`) {
+		t.Fatalf("error = %v, want parameter name in diagnostic", err)
+	}
+	if !strings.Contains(err.Error(), "is not valid JSON") {
+		t.Fatalf("error = %v, want JSON validation detail", err)
+	}
+}
+
 func TestNormalizeArguments_SignatureRejectsUnroutableStdin(t *testing.T) {
 	stdin := "content"
 	_, err := NormalizeArguments(NormalizeArgumentsInput{

@@ -375,22 +375,6 @@
       "name": "TestDependencyTracking_NoDepsPassThrough"
     },
     {
-      "file": "guards_batch/executor_failure_test.go",
-      "name": "TestExecutorFailure_NoFailureArcs"
-    },
-    {
-      "file": "guards_batch/executor_failure_test.go",
-      "name": "TestExecutorFailure_OutcomeFailed_NoFailureArcs"
-    },
-    {
-      "file": "guards_batch/executor_failure_test.go",
-      "name": "TestExecutorFailure_WithFailureArcs"
-    },
-    {
-      "file": "guards_batch/executor_failure_test.go",
-      "name": "TestExecutorSuccess_TokenAtOutputPlace"
-    },
-    {
       "file": "guards_batch/failed_immutability_long_test.go",
       "name": "TestFailedImmutability_CannotBeReDispatched"
     },
@@ -743,14 +727,6 @@
       "name": "TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned"
     },
     {
-      "file": "runtime_api/api_ootb_experience_smoke_long_test.go",
-      "name": "TestOOTBExperience_APIPreseededSimplePipelineCompletes"
-    },
-    {
-      "file": "runtime_api/api_ootb_experience_smoke_long_test.go",
-      "name": "TestOOTBExperience_APIPreseededTwoStagePipelineCompletes"
-    },
-    {
       "file": "runtime_api/api_packaged_deep_research_invocation_test.go",
       "name": "TestSessionInvocationAPI_PackagedDeepResearchUsesMaterializedFactorySource"
     },
@@ -1071,14 +1047,6 @@
       "name": "TestNormalizers_RejectEveryMissingRequiredScalarFact"
     },
     {
-      "file": "smoke/archive_terminal_test.go",
-      "name": "TestArchiveTerminal_MultipleTokensAllTerminate"
-    },
-    {
-      "file": "smoke/archive_terminal_test.go",
-      "name": "TestArchiveTerminal_NoFurtherFiring"
-    },
-    {
       "file": "smoke/cli_docs_smoke_test.go",
       "name": "TestDocsCommandSmoke_AuthoringFactoriesDescribesMinimalGoalRepeater"
     },
@@ -1231,40 +1199,12 @@
       "name": "TestWorkMove_RealCLIMovesSubmittedWork"
     },
     {
-      "file": "smoke/cold_start_long_test.go",
-      "name": "TestColdStart_SingleTokenReachesTerminal"
-    },
-    {
-      "file": "smoke/cold_start_test.go",
-      "name": "TestColdStart_MixedPreSeededAndLateSubmit"
-    },
-    {
-      "file": "smoke/cold_start_test.go",
-      "name": "TestColdStart_PreSeededTokensProcessed"
-    },
-    {
       "file": "smoke/config_driven_execution_test.go",
       "name": "TestConfigDrivenExecution_AddWorkType"
     },
     {
       "file": "smoke/config_driven_execution_test.go",
       "name": "TestConfigDrivenExecution_GlobalConfigDrivesDefaultsAndWorkerPreset"
-    },
-    {
-      "file": "smoke/config_driven_execution_test.go",
-      "name": "TestConfigDrivenExecution_HappyPath"
-    },
-    {
-      "file": "smoke/config_driven_execution_test.go",
-      "name": "TestConfigDrivenExecution_HappyPathFailureRouting"
-    },
-    {
-      "file": "smoke/end_to_end_dispatch_test.go",
-      "name": "TestEndToEndDispatch_CompletesThroughCustomerProcess"
-    },
-    {
-      "file": "smoke/end_to_end_dispatch_test.go",
-      "name": "TestEndToEndDispatch_MultipleWorkItemsCompleteIndependently"
     },
     {
       "file": "smoke/guarded_loop_breaker_long_test.go",
@@ -1277,18 +1217,6 @@
     {
       "file": "smoke/service_config_override_alignment_long_test.go",
       "name": "TestServiceConfigOverrideAlignment_CustomerProcessScriptCommandRunner"
-    },
-    {
-      "file": "smoke/service_harness_smoke_long_test.go",
-      "name": "TestCustomerProcess_HappyPath"
-    },
-    {
-      "file": "smoke/service_harness_smoke_long_test.go",
-      "name": "TestCustomerProcess_MultipleWorkItems"
-    },
-    {
-      "file": "smoke/service_harness_smoke_long_test.go",
-      "name": "TestCustomerProcess_NoopFallback"
     },
     {
       "file": "smoke/service_lifecycle_smoke_long_test.go",
@@ -1313,14 +1241,6 @@
     {
       "file": "smoke/service_lifecycle_smoke_long_test.go",
       "name": "TestServiceLifecycle_WorkFileSubmissionCompletesTwoStagePipeline"
-    },
-    {
-      "file": "smoke/service_pipeline_config_behavior_test.go",
-      "name": "TestServicePipelineConfigBehavior_SimplePipelineCompletesOneTask"
-    },
-    {
-      "file": "smoke/service_pipeline_config_behavior_test.go",
-      "name": "TestServicePipelineConfigBehavior_TwoStagePipelineCompletesAcrossBothWorkers"
     },
     {
       "file": "smoke/stateless_loaded_config_smoke_long_test.go",
@@ -1429,10 +1349,6 @@
     {
       "file": "workflow/conflict_resolution_test.go",
       "name": "TestConflictResolution_ReviewFailResolveReReview"
-    },
-    {
-      "file": "workflow/idea_plan_review_execute_with_limits_long_test.go",
-      "name": "TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorFullPass"
     },
     {
       "file": "workflow/logical_move_long_test.go",
