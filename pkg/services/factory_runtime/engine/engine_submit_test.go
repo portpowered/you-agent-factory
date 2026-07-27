@@ -497,3 +497,55 @@ func TestSubmitWorkRequest_WithRunLoopActiveReturnsAfterObservableProjection(t *
 		t.Fatalf("Run: %v", err)
 	}
 }
+
+func TestSubmitWorkRequest_RejectsDifferentRequestIDWhenWorkIDAlreadyMaterialized(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	eng := newTestFactoryEngine(n, marking, nil)
+
+	first := work.WorkRequest{
+		RequestID: "request-materialized-first",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
+			Name:       "materialized",
+			WorkID:     "work-materialized",
+			WorkTypeID: "task",
+			TraceID:    "trace-materialized",
+		}},
+	}
+	firstResult, err := eng.SubmitWorkRequest(context.Background(), first)
+	if err != nil {
+		t.Fatalf("first SubmitWorkRequest: %v", err)
+	}
+	if !firstResult.Accepted {
+		t.Fatalf("first submit accepted = false, want true")
+	}
+	if err := eng.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	second := work.WorkRequest{
+		RequestID: "request-materialized-retry",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
+			Name:       "materialized-retry",
+			WorkID:     "work-materialized",
+			WorkTypeID: "task",
+			TraceID:    "trace-materialized-retry",
+		}},
+	}
+	secondResult, err := eng.SubmitWorkRequest(context.Background(), second)
+	if err != nil {
+		t.Fatalf("retry SubmitWorkRequest: %v", err)
+	}
+	if secondResult.Accepted {
+		t.Fatalf("retry accepted = true, want rejection when work ID is already materialized")
+	}
+	if err := eng.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick after retry: %v", err)
+	}
+	snap := eng.GetMarking()
+	if tokens := snap.TokensInPlace("task:init"); len(tokens) != 1 {
+		t.Fatalf("tokens in task:init = %d, want 1 after rejected retry", len(tokens))
+	}
+}

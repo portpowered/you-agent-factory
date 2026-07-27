@@ -333,6 +333,10 @@ func (e *FactoryEngine) submitNormalizedWorkRequest(context context.Context, req
 		existing.Accepted = false
 		return existing, nil
 	}
+	if e.conflictingMaterializedWorkID(work) != "" {
+		e.mu.Unlock()
+		return workdomain.WorkRequestSubmitResultFromNormalized(requestID, work, false), nil
+	}
 	e.workRequests[requestID] = result
 	e.submissionHook.enqueue(work)
 	awaitProjection := e.shouldAwaitObservableProjection()
@@ -356,6 +360,28 @@ func (e *FactoryEngine) submitNormalizedWorkRequest(context context.Context, req
 	}
 
 	return result, nil
+}
+
+func (e *FactoryEngine) conflictingMaterializedWorkID(work []workdomain.SubmitRequest) string {
+	for _, req := range work {
+		if req.WorkID == "" {
+			continue
+		}
+		if e.visibleWorkIDAlreadyMaterialized(req.WorkID) {
+			return req.WorkID
+		}
+	}
+	return ""
+}
+
+func (e *FactoryEngine) visibleWorkIDAlreadyMaterialized(workID string) bool {
+	if workID == "" {
+		return false
+	}
+	if _, ok := findWorkTokenByID(e.runtimeState.Marking.Tokens, workID); ok {
+		return true
+	}
+	return workIDInActiveDispatches(e.runtimeState.Dispatches, workID)
 }
 
 func (e *FactoryEngine) shouldAwaitObservableProjection() bool {
