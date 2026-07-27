@@ -37,24 +37,45 @@ func (service *Service) Append(
 	}
 	service.appendMu.Lock()
 	defer service.appendMu.Unlock()
+
+	generationID := service.ledger.StreamGenerationID()
+	if retained, ok := retainedEventByID(service.ledger.CanonicalEvents(), string(request.Event.ID)); ok {
+		return acceptedAppendResult(retained, generationID), nil
+	}
+
 	legacy := canonical.FactoryEventFromCanonical(request.Event)
+	legacy.Context.Sequence = 0
 	if request.Event.Scope.FactorySessionID != "" {
 		sequence := int(nextScopedSequence(service.ledger.CanonicalEvents(), request.Event.Scope))
 		legacy.Context.SessionSequence = &sequence
 	}
 	service.ledger.AppendRecordedEvent(legacy)
-	recorded := service.ledger.CanonicalEvents()
-	for index := len(recorded) - 1; index >= 0; index-- {
-		if recorded[index].Id == string(request.Event.ID) {
-			return recordings.AppendRecordedEventResult{
-				Event: canonical.CanonicalEventFromFactory(
-					recorded[index],
-					service.ledger.StreamGenerationID(),
-				),
-			}, nil
-		}
+
+	if retained, ok := retainedEventByID(service.ledger.CanonicalEvents(), string(request.Event.ID)); ok {
+		return acceptedAppendResult(retained, generationID), nil
 	}
 	return recordings.AppendRecordedEventResult{}, nil
+}
+
+func acceptedAppendResult(
+	event factorydefinitions.FactoryEvent,
+	generationID string,
+) recordings.AppendRecordedEventResult {
+	return recordings.AppendRecordedEventResult{
+		Event: canonical.CanonicalEventFromFactory(event, generationID),
+	}
+}
+
+func retainedEventByID(
+	events []factorydefinitions.FactoryEvent,
+	id string,
+) (factorydefinitions.FactoryEvent, bool) {
+	for index := len(events) - 1; index >= 0; index-- {
+		if events[index].Id == id {
+			return events[index], true
+		}
+	}
+	return factorydefinitions.FactoryEvent{}, false
 }
 
 func (service *Service) SubscribeFrom(
