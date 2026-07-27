@@ -8,7 +8,6 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -89,15 +88,23 @@ func (e *LifecycleError) Unwrap() error {
 	return e.Cause
 }
 
-// EventSource supplies retained-then-live canonical events and runtime snapshots
-// for the selected Factory Session runtime.
+// EngineObservation carries Visualization-owned runtime facts required for
+// retained projection without exposing Factory Runtime StateSnapshot types on
+// the activation lifecycle contract.
+type EngineObservation struct {
+	TickCount            int
+	ActiveThrottlePauses []factorydefinitions.ActiveThrottlePause
+}
+
+// EventSource supplies retained-then-live canonical events and engine
+// observation facts for the selected Factory Session runtime.
 type EventSource interface {
 	SubscribeFactoryEvents(
 		context.Context,
 		*factorydefinitions.FactoryEventReconnectCursor,
 		factorydefinitions.FactoryEventReconnectScope,
 	) (*factorydefinitions.FactoryEventStream, error)
-	GetEngineStateSnapshot(context.Context) (*factoryruntime.StateSnapshot, error)
+	GetEngineObservation(context.Context) (*EngineObservation, error)
 }
 
 // ProjectionService reconstructs retained Factory world state for presentation.
@@ -120,9 +127,9 @@ type Clock interface {
 
 // View is the transport-independent presentation input emitted after projection.
 type View struct {
-	EngineState factoryruntime.StateSnapshot
-	RenderData  recordings.SimpleDashboardRenderData
-	ObservedAt  time.Time
+	EngineObservation EngineObservation
+	RenderData        recordings.SimpleDashboardRenderData
+	ObservedAt        time.Time
 }
 
 // ViewSink presents one projected Factory view.

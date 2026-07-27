@@ -272,19 +272,19 @@ func (s *Service) run(
 }
 
 func (s *Service) projectAndPresent(ctx context.Context) {
-	snapshot, err := s.source.GetEngineStateSnapshot(ctx)
+	observation, err := s.source.GetEngineObservation(ctx)
 	if err != nil {
-		s.report(fmt.Errorf("read Factory visualization snapshot: %w", err))
+		s.report(fmt.Errorf("read Factory visualization engine observation: %w", err))
 		return
 	}
-	if snapshot == nil {
-		s.report(errors.New("read Factory visualization snapshot: snapshot is unavailable"))
+	if observation == nil {
+		s.report(errors.New("read Factory visualization engine observation: observation is unavailable"))
 		return
 	}
 	s.mu.Lock()
 	events := append([]factorydefinitions.FactoryEvent(nil), s.events...)
 	s.mu.Unlock()
-	worldState, err := s.projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
+	worldState, err := s.projections.ReconstructFactoryWorldState(events, observation.TickCount)
 	if err != nil {
 		s.report(fmt.Errorf("project Factory visualization: %w", err))
 		return
@@ -292,12 +292,12 @@ func (s *Service) projectAndPresent(ctx context.Context) {
 	renderData := s.projections.SimpleDashboardRenderData(worldState)
 	renderData.ActiveThrottlePauses = s.projections.ProjectActiveThrottlePauses(
 		worldState.Topology,
-		snapshot.ActiveThrottlePauses,
+		observation.ActiveThrottlePauses,
 	)
 	s.sink.PresentFactoryView(activationlifecycle.View{
-		EngineState: *snapshot,
-		RenderData:  renderData,
-		ObservedAt:  s.clock.Now(),
+		EngineObservation: *observation,
+		RenderData:        renderData,
+		ObservedAt:        s.clock.Now(),
 	})
 }
 

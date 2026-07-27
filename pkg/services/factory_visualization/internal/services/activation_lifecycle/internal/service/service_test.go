@@ -7,7 +7,6 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	lifecycleservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service"
@@ -19,7 +18,7 @@ func TestActivationLifecycleOwnerBacksRootLifecycleSlice(t *testing.T) {
 	subscribeCalls := 0
 	source := &lifecycleSourceStub{
 		stream:   newLifecycleEventStream(),
-		snapshot: &factoryruntime.StateSnapshot{TickCount: 1},
+		snapshot: &activationlifecycle.EngineObservation{TickCount: 1},
 	}
 	source.subscribeHook = func() { subscribeCalls++ }
 	presentCalls := 0
@@ -86,7 +85,7 @@ func requireActivationLifecycleError(
 type lifecycleSourceStub struct {
 	stream        *factorydefinitions.FactoryEventStream
 	subscribeHook func()
-	snapshot      *factoryruntime.StateSnapshot
+	snapshot      *activationlifecycle.EngineObservation
 }
 
 func (s *lifecycleSourceStub) SubscribeFactoryEvents(
@@ -100,7 +99,7 @@ func (s *lifecycleSourceStub) SubscribeFactoryEvents(
 	return s.stream, nil
 }
 
-func (s *lifecycleSourceStub) GetEngineStateSnapshot(context.Context) (*factoryruntime.StateSnapshot, error) {
+func (s *lifecycleSourceStub) GetEngineObservation(context.Context) (*activationlifecycle.EngineObservation, error) {
 	return s.snapshot, nil
 }
 

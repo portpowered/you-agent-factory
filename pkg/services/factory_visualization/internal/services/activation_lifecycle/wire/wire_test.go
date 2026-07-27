@@ -6,7 +6,6 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	activationlifecyclewire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/wire"
@@ -29,8 +28,8 @@ func (s wireSourceStub) SubscribeFactoryEvents(
 	}, nil
 }
 
-func (wireSourceStub) GetEngineStateSnapshot(context.Context) (*factoryruntime.StateSnapshot, error) {
-	return &factoryruntime.StateSnapshot{}, nil
+func (wireSourceStub) GetEngineObservation(context.Context) (*activationlifecycle.EngineObservation, error) {
+	return &activationlifecycle.EngineObservation{}, nil
 }
 
 type wireProjectionStub struct{}

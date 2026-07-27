@@ -98,7 +98,7 @@ func New(
 		return nil, errors.New("initialize Factory visualization: presentation sink is required")
 	}
 	activation, err := activationlifecyclewire.NewService(
-		source,
+		activationSourceAdapter{source: source},
 		projections,
 		clock,
 		activationSinkAdapter{sink: sink},
@@ -142,6 +142,40 @@ func (s *Service) Wait(ctx context.Context) error {
 	return s.activation.Wait(ctx)
 }
 
+type activationSourceAdapter struct {
+	source Source
+}
+
+func (a activationSourceAdapter) SubscribeFactoryEvents(
+	ctx context.Context,
+	reconnect *factorydefinitions.FactoryEventReconnectCursor,
+	scope factorydefinitions.FactoryEventReconnectScope,
+) (*factorydefinitions.FactoryEventStream, error) {
+	if a.source == nil {
+		return nil, errors.New("subscribe Factory visualization events: event source is required")
+	}
+	return a.source.SubscribeFactoryEvents(ctx, reconnect, scope)
+}
+
+func (a activationSourceAdapter) GetEngineObservation(
+	ctx context.Context,
+) (*activationlifecycle.EngineObservation, error) {
+	if a.source == nil {
+		return nil, errors.New("read Factory visualization engine observation: event source is required")
+	}
+	snapshot, err := a.source.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if snapshot == nil {
+		return nil, nil
+	}
+	return &activationlifecycle.EngineObservation{
+		TickCount:            snapshot.TickCount,
+		ActiveThrottlePauses: snapshot.ActiveThrottlePauses,
+	}, nil
+}
+
 type activationSinkAdapter struct {
 	sink Sink
 }
@@ -151,8 +185,11 @@ func (a activationSinkAdapter) PresentFactoryView(view activationlifecycle.View)
 		return
 	}
 	a.sink.PresentFactoryView(View{
-		EngineState: view.EngineState,
-		RenderData:  view.RenderData,
-		ObservedAt:  view.ObservedAt,
+		EngineState: factoryruntime.StateSnapshot{
+			TickCount:            view.EngineObservation.TickCount,
+			ActiveThrottlePauses: view.EngineObservation.ActiveThrottlePauses,
+		},
+		RenderData: view.RenderData,
+		ObservedAt: view.ObservedAt,
 	})
 }

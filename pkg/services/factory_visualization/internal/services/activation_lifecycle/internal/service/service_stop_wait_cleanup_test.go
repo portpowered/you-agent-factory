@@ -8,7 +8,6 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	lifecycleservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service"
 )
@@ -33,7 +32,7 @@ func TestActivationLifecycleStopDrainCancelsAndJoinsWithoutSecondStop(t *testing
 	subscribeCalls := 0
 	source := &lifecycleSourceStub{
 		stream:   stream,
-		snapshot: &factoryruntime.StateSnapshot{TickCount: 1},
+		snapshot: &activationlifecycle.EngineObservation{TickCount: 1},
 	}
 	source.subscribeHook = func() { subscribeCalls++ }
 	owner := mustNewActivationLifecycleOwnerWithSource(t, source)
@@ -128,7 +127,7 @@ func TestActivationLifecycleRepeatedStopDrainIsIdempotent(t *testing.T) {
 	subscribeCalls := 0
 	source := &lifecycleSourceStub{
 		stream:   newLifecycleEventStream(),
-		snapshot: &factoryruntime.StateSnapshot{TickCount: 1},
+		snapshot: &activationlifecycle.EngineObservation{TickCount: 1},
 	}
 	source.subscribeHook = func() { subscribeCalls++ }
 	owner := mustNewActivationLifecycleOwnerWithSource(t, source)
@@ -166,7 +165,7 @@ func TestActivationLifecycleStartStopWaitCleanup(t *testing.T) {
 	var subscribeMu sync.Mutex
 	source := &lifecycleSourceStub{
 		stream:   newLifecycleEventStream(),
-		snapshot: &factoryruntime.StateSnapshot{TickCount: 1},
+		snapshot: &activationlifecycle.EngineObservation{TickCount: 1},
 	}
 	source.subscribeHook = func() {
 		subscribeMu.Lock()
@@ -207,7 +206,7 @@ func mustNewActivationLifecycleOwner(
 	t.Helper()
 	source := &lifecycleSourceStub{
 		stream:   stream,
-		snapshot: &factoryruntime.StateSnapshot{TickCount: 1},
+		snapshot: &activationlifecycle.EngineObservation{TickCount: 1},
 	}
 	return mustNewActivationLifecycleOwnerWithSource(t, source)
 }
