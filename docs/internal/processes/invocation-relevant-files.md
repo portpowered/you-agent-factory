@@ -313,6 +313,13 @@ primary-result behavior.
   authoritative completed message as `final_result_agreement`, even when it
   uses a different item correlation, so no earlier represented result can be
   overwritten before completion validation.
+- Provider-native Codex execution state lives below the parent-private
+  Providers Execution implementation. Keep its JSONL partial-record buffer,
+  item/tool correlation, progress projection, flush guard, authoritative final
+  candidate, and detached session extraction invocation-local. Inject the
+  native effect into the adapter registration; do not let adapter construction
+  start a process or let Workers-owned request/response types cross this
+  boundary.
 - Keep reusable one-attempt conformance under the Providers-private Execution
   testkit. Build the singular Providers root around a fresh
   controllable adapter for each scenario, observe only Providers-owned
