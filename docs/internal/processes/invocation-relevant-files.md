@@ -1739,6 +1739,11 @@ response-stream output.
 - `docs/reference/config.md` and `docs/reference/sessions.md` are the packaged
   `you docs` reference topics for invocation input sources, return policy, and
   the session-scoped invocation API.
+- `docs/reference/agents.md` owns root discovery and the submitter-facing
+  liveness decision: bare `you` is successful side-effect-free help, while a
+  service intended for later `you submit` calls must start through `you server`
+  or a server-enabled run. Do not describe an ordinary serverless `you run` as
+  a listening submission target.
 - Dashboard current-factory decoding for signature-backed invocation widgets
   lives in `ui/src/api/factory-definition/api.ts` and
   `ui/src/api/current-factory-definition/api.test.ts`; keep exact

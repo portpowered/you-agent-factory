@@ -269,6 +269,18 @@ without locating `factory.json` manually:
 you factory create my-team-review --from ./factory.json
 ```
 
+After changing the source definition, replace the same persisted Factory
+explicitly:
+
+```bash
+you factory update my-team-review --from ./factory.json
+```
+
+`create` refuses to overwrite an existing name; `update` requires that name to
+already exist. Both commands validate the source before replacing durable
+Factory files. Add `--set-current` only to `create` when the new project-local
+Factory should also become the selected Current Factory.
+
 By default persisted project factories live under `./factory`, and
 `you run --named <name>` resolves that project-local root before checking the
 global shared root at `~/.you-agent-factory/factories`.
