@@ -508,6 +508,11 @@ func (e *FactoryEngine) waitForEngineSignal(ctx context.Context, dispatchWait <-
 
 func (e *FactoryEngine) runUntilQuiescent(ctx context.Context) (bool, error) {
 	for {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		default:
+		}
 		mutated, shouldTerminate, err := e.tickOnce(ctx)
 		if err != nil {
 			return false, err
@@ -518,11 +523,12 @@ func (e *FactoryEngine) runUntilQuiescent(ctx context.Context) (bool, error) {
 		if !mutated {
 			e.mu.Lock()
 			stillBuffered := e.hasBufferedInputs()
-			if stillBuffered {
+			paused := e.automaticTicksPaused != nil && e.automaticTicksPaused()
+			if stillBuffered && !paused {
 				e.wakeForPendingProcessing()
 			}
 			e.mu.Unlock()
-			if stillBuffered {
+			if stillBuffered && !paused {
 				continue
 			}
 			return false, nil

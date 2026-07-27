@@ -498,6 +498,40 @@ func TestSubmitWorkRequest_WithRunLoopActiveReturnsAfterObservableProjection(t *
 	}
 }
 
+func TestRunLoopCancelsWhilePausedWithBufferedSubmission(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	paused := true
+	eng := newTestFactoryEngine(n, marking, nil, WithAutomaticTicksPaused(func() bool {
+		return paused
+	}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- eng.Run(ctx)
+	}()
+	waitForEngineRunLoopActive(t, eng, time.Second)
+
+	if _, err := submitWorkRequests(context.Background(), eng, []work.SubmitRequest{{
+		WorkTypeID: "task",
+		TraceID:    "trace-paused-buffered-shutdown",
+	}}); err != nil {
+		t.Fatalf("SubmitWorkRequest while paused: %v", err)
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil && err != context.Canceled {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for Run to stop while paused with buffered submission")
+	}
+}
+
 func TestSubmitWorkRequest_RejectsDifferentRequestIDWhenWorkIDAlreadyMaterialized(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
