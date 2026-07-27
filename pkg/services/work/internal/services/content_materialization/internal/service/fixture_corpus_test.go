@@ -1,4 +1,4 @@
-package materialize_test
+package service_test
 
 import (
 	"context"
@@ -10,11 +10,11 @@ import (
 	"testing"
 
 	content "github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/work/materialize"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/internal/service"
 )
 
 func TestURLMaterializationCorpus_LoadsRepresentativeCases(t *testing.T) {
-	corpus, err := materialize.LoadURLMaterializationCorpus()
+	corpus, err := service.LoadURLMaterializationCorpus()
 	if err != nil {
 		t.Fatalf("LoadURLMaterializationCorpus: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestURLMaterializationCorpus_LoadsRepresentativeCases(t *testing.T) {
 }
 
 func TestURLMaterializationCorpus_CasesMatchExpectedOutcomes(t *testing.T) {
-	corpus, err := materialize.LoadURLMaterializationCorpus()
+	corpus, err := service.LoadURLMaterializationCorpus()
 	if err != nil {
 		t.Fatalf("LoadURLMaterializationCorpus: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestURLMaterializationCorpus_CasesMatchExpectedOutcomes(t *testing.T) {
 		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
 			rawURL, opts, localPath := resolveURLMaterializationFixture(t, tc)
-			gotPath, cleanup, err := materialize.MaterializeContentURL(context.Background(), rawURL, opts)
+			gotPath, cleanup, err := service.MaterializeContentURL(context.Background(), rawURL, opts)
 			defer cleanup()
 
 			switch tc.Expect.Outcome {
@@ -60,7 +60,7 @@ func TestURLMaterializationCorpus_CasesMatchExpectedOutcomes(t *testing.T) {
 	}
 }
 
-func resolveURLMaterializationFixture(t *testing.T, tc materialize.URLMaterializationCase) (string, *materialize.Options, string) {
+func resolveURLMaterializationFixture(t *testing.T, tc service.URLMaterializationCase) (string, *service.Options, string) {
 	t.Helper()
 
 	switch tc.Setup {
@@ -109,7 +109,7 @@ func resolveURLMaterializationFixture(t *testing.T, tc materialize.URLMaterializ
 
 func assertURLMaterializationSuccess(
 	t *testing.T,
-	tc materialize.URLMaterializationCase,
+	tc service.URLMaterializationCase,
 	gotPath, localPath string,
 	cleanup func(),
 	err error,
@@ -141,7 +141,7 @@ func assertURLMaterializationSuccess(
 	}
 }
 
-func assertURLMaterializationError(t *testing.T, tc materialize.URLMaterializationCase, err error) {
+func assertURLMaterializationError(t *testing.T, tc service.URLMaterializationCase, err error) {
 	t.Helper()
 	if err == nil {
 		t.Fatal("expected materialization error")

@@ -1,4 +1,4 @@
-package materialize
+package service
 
 import (
 	"context"
