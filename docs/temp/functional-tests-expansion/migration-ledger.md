@@ -129,7 +129,7 @@ inventory story; later mapping stories update `destination` /
 
 | Top-level package | Customer scenarios | Catch-all owner |
 | --- | ---: | --- |
-| `acceptance` | 16 | `none` |
+| `acceptance` | 15 | `none` |
 | `bootstrap_portability` | 29 | `bootstrap_portability` |
 | `cli` | 56 | `none` |
 | `config_init` | 8 | `none` |
@@ -164,7 +164,7 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 `deletion_only_batch` and are detailed in the Remaining packages section
 (FND-007-006). `specialty_targets` records known Make selectors.
 
-#### `acceptance` (16 scenarios, catch_all=`none`)
+#### `acceptance` (15 scenarios, catch_all=`none`)
 
 | source_path | package | scenario | lane | destination | catch_all | specialty_targets | deletion_only_batch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -176,7 +176,10 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/acceptance/install_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestMigratedInstall_JSONReportsSkippedAndCreatedOutcomes | short | tests/functional/factory/definitions/init_test.go | none | test-built-cli-acceptance | n/a |
 | tests/functional/acceptance/install_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestMigratedInstall_MaterializesMissingPackagedDefaultsWithoutCorruption | short | tests/functional/factory/definitions/init_test.go | none | test-built-cli-acceptance | n/a |
 | tests/functional/acceptance/invalid_quiet_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestInvalidGoal_InvalidTopology_RejectsWithDocumentedGraphReferenceError | short | tests/functional/factory/packaged/goal/invocation_test.go | none | test-built-cli-acceptance | n/a |
-| tests/functional/acceptance/invalid_quiet_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestInvalidGoal_OutputModesExitNonZero | short | tests/functional/transport/cli/process/exit_codes_test.go | none | test-built-cli-acceptance | n/a |
+| tests/functional/transport/cli/process/exit_codes_test.go | you-agent-factory/tests/functional/transport/cli/process | TestCLIValidationFailureExitCode | short | tests/functional/transport/cli/process/exit_codes_test.go | none | test-built-cli-acceptance | n/a |
+| tests/functional/transport/cli/process/exit_codes_test.go | you-agent-factory/tests/functional/transport/cli/process | TestCLIWorkerFailureExitCode | short | tests/functional/transport/cli/process/exit_codes_test.go | none | none | n/a |
+| tests/functional/transport/cli/process/exit_codes_test.go | you-agent-factory/tests/functional/transport/cli/process | TestCLIInterruptedExitCode | short | tests/functional/transport/cli/process/exit_codes_test.go | none | none | n/a |
+| tests/functional/transport/cli/process/exit_codes_test.go | you-agent-factory/tests/functional/transport/cli/process | TestCLISuccessExitCode | short | tests/functional/transport/cli/process/exit_codes_test.go | none | none | n/a |
 | tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestGoalRepeat_RepeatedNamedRunsAssignDistinctInvocationIdentityAndReuseInstalledCopy | short | tests/functional/factory/packaged/goal/invocation_test.go | none | test-built-cli-acceptance | n/a |
 | tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestLocalModelInvoke_MissingReadiness_FailsWithDocumentedBootstrapGuidance | short | tests/functional/models/invoke/cli_test.go | none | test-built-cli-acceptance | n/a |
 | tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestSubagentInvocation_SuccessfulNamedRun_ReturnsAuthoritativePrimaryResultJSON | short | tests/functional/factory/packaged/subagent/invocation_test.go | none | test-built-cli-acceptance | n/a |
@@ -1407,7 +1410,7 @@ exceptions; they do not use deletion-only batch ids (`deletion_only_batch` = `n/
 
 | package | scenarios | checklist destinations | wrong-layer | specialty Make bindings |
 | --- | ---: | ---: | ---: | --- |
-| `acceptance` | 16 | 13 | 3 | `test-built-cli-acceptance` (13 customer scenarios; harness rows wrong-layer) |
+| `acceptance` | 15 | 12 | 3 | `test-built-cli-acceptance` (12 customer scenarios; harness rows wrong-layer) |
 | `cli` | 53 | 31 | 25 | none |
 | `config_init` | 8 | 8 | 0 | none |
 | `models` | 1 | 1 | 0 | none |
@@ -1415,7 +1418,7 @@ exceptions; they do not use deletion-only batch ids (`deletion_only_batch` = `n/
 | `providers` | 45 | 45 | 0 | `script-timeout-companion-smoke-100` (1 scenario) |
 | `sessionparity` | 13 | 0 | 13 | none |
 | `work` | 1 | 0 | 1 | none |
-| **Total** | **139** | **99** | **43** | |
+| **Total** | **138** | **98** | **43** | |
 
 ### Domain move plan
 
@@ -1448,7 +1451,10 @@ exceptions; they do not use deletion-only batch ids (`deletion_only_batch` = `n/
 | tests/functional/acceptance/install_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestMigratedInstall_JSONReportsSkippedAndCreatedOutcomes | short | tests/functional/factory/definitions/init_test.go | none | test-built-cli-acceptance | n/a |
 | tests/functional/acceptance/install_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestMigratedInstall_MaterializesMissingPackagedDefaultsWithoutCorruption | short | tests/functional/factory/definitions/init_test.go | none | test-built-cli-acceptance | n/a |
 | tests/functional/acceptance/invalid_quiet_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestInvalidGoal_InvalidTopology_RejectsWithDocumentedGraphReferenceError | short | tests/functional/factory/packaged/goal/invocation_test.go | none | test-built-cli-acceptance | n/a |
-| tests/functional/acceptance/invalid_quiet_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestInvalidGoal_OutputModesExitNonZero | short | tests/functional/transport/cli/process/exit_codes_test.go | none | test-built-cli-acceptance | n/a |
+| tests/functional/transport/cli/process/exit_codes_test.go | you-agent-factory/tests/functional/transport/cli/process | TestCLIValidationFailureExitCode | short | tests/functional/transport/cli/process/exit_codes_test.go | none | test-built-cli-acceptance | n/a |
+| tests/functional/transport/cli/process/exit_codes_test.go | you-agent-factory/tests/functional/transport/cli/process | TestCLIWorkerFailureExitCode | short | tests/functional/transport/cli/process/exit_codes_test.go | none | none | n/a |
+| tests/functional/transport/cli/process/exit_codes_test.go | you-agent-factory/tests/functional/transport/cli/process | TestCLIInterruptedExitCode | short | tests/functional/transport/cli/process/exit_codes_test.go | none | none | n/a |
+| tests/functional/transport/cli/process/exit_codes_test.go | you-agent-factory/tests/functional/transport/cli/process | TestCLISuccessExitCode | short | tests/functional/transport/cli/process/exit_codes_test.go | none | none | n/a |
 | tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestGoalRepeat_RepeatedNamedRunsAssignDistinctInvocationIdentityAndReuseInstalledCopy | short | tests/functional/factory/packaged/goal/invocation_test.go | none | test-built-cli-acceptance | n/a |
 | tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestLocalModelInvoke_MissingReadiness_FailsWithDocumentedBootstrapGuidance | short | tests/functional/models/invoke/cli_test.go | none | test-built-cli-acceptance | n/a |
 | tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go | you-agent-factory/tests/functional/acceptance | TestSubagentInvocation_SuccessfulNamedRun_ReturnsAuthoritativePrimaryResultJSON | short | tests/functional/factory/packaged/subagent/invocation_test.go | none | test-built-cli-acceptance | n/a |
