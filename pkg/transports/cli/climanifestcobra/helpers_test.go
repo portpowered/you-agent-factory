@@ -2,11 +2,14 @@ package climanifestcobra_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"testing"
 
+	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
@@ -14,6 +17,135 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
+
+func TestSessionResolvedLifecyclePreservesTargetingOutputAndDiagnostics(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		wantPath    string
+		response    string
+		wantOutput  string
+		diagnostics bool
+	}{
+		{
+			name:        "default pause human",
+			args:        []string{"--verbose", "session", "pause"},
+			wantPath:    "/factory-sessions/~default/pause",
+			response:    `{"sessionId":"~default","operation":"PAUSE","outcome":"ACCEPTED","status":"PAUSED"}`,
+			wantOutput:  "Paused Factory session ~default (lifecycle status: PAUSED).",
+			diagnostics: true,
+		},
+		{
+			name:       "default resume human",
+			args:       []string{"session", "resume"},
+			wantPath:   "/factory-sessions/~default/resume",
+			response:   `{"sessionId":"~default","operation":"RESUME","outcome":"ACCEPTED","status":"RUNNING"}`,
+			wantOutput: "Resumed Factory session ~default (lifecycle status: RUNNING).",
+		},
+		{
+			name:       "named live resume JSON",
+			args:       []string{"--json", "session", "resume", "session-beta"},
+			wantPath:   "/factory-sessions/session-beta/resume",
+			response:   `{"sessionId":"session-beta","operation":"RESUME","outcome":"ACCEPTED","status":"RUNNING"}`,
+			wantOutput: `"sessionId":"session-beta"`,
+		},
+		{
+			name:       "durable pause human",
+			args:       []string{"session", "pause", "dur-sess-review-001"},
+			wantPath:   "/factory-sessions/dur-sess-review-001/pause",
+			response:   `{"sessionId":"dur-sess-review-001","operation":"PAUSE","outcome":"ACCEPTED","status":"PAUSED"}`,
+			wantOutput: "Paused Factory session dur-sess-review-001 (lifecycle status: PAUSED).",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			protocol := newSessionTestHTTPProtocol(t, func(request *http.Request) (*http.Response, error) {
+				if request.Method != http.MethodPost || request.URL.Path != test.wantPath {
+					t.Fatalf("request = %s %s, want POST %s", request.Method, request.URL.Path, test.wantPath)
+				}
+				return sessionTestResponse(http.StatusOK, test.response), nil
+			})
+			services := commandregistry.SessionResolvedServices{
+				PauseSession:  sessioncli.NewPause(protocol),
+				ResumeSession: sessioncli.NewResume(protocol),
+				Diagnostics:   func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() },
+			}
+			stdout, stderr, err := executeResolvedSessionWithOutput(t, services, test.args...)
+			if err != nil {
+				t.Fatalf("Execute(%v) error = %v", test.args, err)
+			}
+			if !strings.Contains(strings.TrimSpace(stdout), test.wantOutput) {
+				t.Fatalf("Execute(%v) stdout = %q, want %q", test.args, stdout, test.wantOutput)
+			}
+			if test.diagnostics &&
+				(!strings.Contains(stderr, "session pause request") ||
+					!strings.Contains(stderr, "session pause response")) {
+				t.Fatalf("Execute(%v) stderr = %q, want request and response diagnostics", test.args, stderr)
+			}
+		})
+	}
+}
+
+func TestSessionResolvedLifecycleRejectsCardinalityAndPreservesFailures(t *testing.T) {
+	calls := 0
+	services := commandregistry.SessionResolvedServices{
+		PauseSession: func(sessioncli.LifecycleControlConfig) error {
+			calls++
+			return nil
+		},
+		ResumeSession: func(sessioncli.LifecycleControlConfig) error {
+			calls++
+			return nil
+		},
+	}
+	for _, operation := range []string{"pause", "resume"} {
+		stdout, _, err := executeResolvedSessionWithOutput(
+			t, services, "session", operation, "session-alpha", "session-beta",
+		)
+		if err == nil {
+			t.Fatalf("%s with extra session ID error = nil", operation)
+		}
+		if stdout != "" {
+			t.Fatalf("invalid %s stdout = %q, want empty", operation, stdout)
+		}
+	}
+	if calls != 0 {
+		t.Fatalf("invalid lifecycle operation calls = %d, want 0", calls)
+	}
+
+	operationFailure := errors.New("lifecycle unavailable")
+	for _, test := range []struct {
+		name     string
+		args     []string
+		services commandregistry.SessionResolvedServices
+		want     error
+	}{
+		{
+			name: "pause failure", args: []string{"session", "pause", "session-alpha"},
+			services: commandregistry.SessionResolvedServices{
+				PauseSession: func(sessioncli.LifecycleControlConfig) error { return operationFailure },
+			},
+			want: operationFailure,
+		},
+		{
+			name: "resume cancellation", args: []string{"session", "resume", "dur-sess-review-001"},
+			services: commandregistry.SessionResolvedServices{
+				ResumeSession: func(sessioncli.LifecycleControlConfig) error { return context.Canceled },
+			},
+			want: context.Canceled,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			stdout, _, err := executeResolvedSessionWithOutput(t, test.services, test.args...)
+			if !errors.Is(err, test.want) {
+				t.Fatalf("Execute() error = %v, want %v", err, test.want)
+			}
+			if stdout != "" {
+				t.Fatalf("Execute() stdout = %q, want empty", stdout)
+			}
+		})
+	}
+}
 
 func TestSessionFamilyCommandExecutesManifestBoundLeaf(t *testing.T) {
 	manifest := mustSessionManifest(t)
