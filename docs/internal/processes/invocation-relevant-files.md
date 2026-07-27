@@ -55,6 +55,12 @@ primary-result behavior.
   environment and working-directory delivery through `root.BuildProcess` with
   an injected command-runner edge; do not expose configured secrets in events
   or assertion output.
+- A provider command-ownership migration should move pure argv, prompt,
+  environment, and dispatch assembly into the provider package before replacing
+  an aggregate path that still owns effectful materialization or cleanup.
+  Preserve the catalog-declared executable identity even when it differs from
+  the canonical registry identity, and cut the aggregate path over only after
+  its typed effects have moved with equivalent terminal-path cleanup evidence.
 - Final-only provider integrations should keep native final stdout as response
   content and derive resumable Provider Session metadata only from explicit
   structured fields that satisfy the provider's identifier contract. If a
