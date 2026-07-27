@@ -30,35 +30,14 @@ const (
 // TestOpenCodeGoldenStructuredSnapshotSuccess replays a sanitized OpenCode
 // structured-snapshot transcript through the customer process boundary and
 // proves successful structured snapshot outcomes with matching public metadata.
-//golden: docs/temp/functional/provider-sessions/opencode/structured-snapshot-success/manifest.json
+// golden: docs/temp/functional/provider-sessions/opencode/structured-snapshot-success/manifest.json
 func TestOpenCodeGoldenStructuredSnapshotSuccess(t *testing.T) {
-	repoRoot := testutil.MustRepoRoot(t)
-	caseDir := filepath.Join(
-		repoRoot,
-		filepath.FromSlash(support.ProviderSessionFixturePath("opencode", openCodeStructuredSnapshotGoldenCase)),
+	loaded, request := loadOpenCodeGoldenCase(
+		t,
+		openCodeStructuredSnapshotGoldenCase,
+		"opencode-structured-snapshot-success",
+		support.ProviderSessionFidelitySnapshotOnly,
 	)
-
-	loaded, err := support.LoadProviderSessionCase(caseDir)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionCase: %v", err)
-	}
-	if loaded.Manifest.ID != "opencode-structured-snapshot-success" {
-		t.Fatalf("manifest.ID = %q, want opencode-structured-snapshot-success", loaded.Manifest.ID)
-	}
-	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelitySnapshotOnly {
-		t.Fatalf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, support.ProviderSessionFidelitySnapshotOnly)
-	}
-
-	var request struct {
-		Model     string `json:"model"`
-		SessionID string `json:"session_id"`
-	}
-	if err := json.Unmarshal(loaded.Request, &request); err != nil {
-		t.Fatalf("decode request.json: %v", err)
-	}
-	if request.Model == "" || request.SessionID == "" {
-		t.Fatalf("request.json = %#v, want model and session_id", request)
-	}
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
@@ -88,9 +67,9 @@ func TestOpenCodeGoldenStructuredSnapshotSuccess(t *testing.T) {
 		t,
 		dir,
 		serviceedges.Edges{
-			ProviderCommandRunner:      runner,
-			WorkersExecutableLocator:   fixedExecutableLocator{path: executablePath},
-			WorkersResolveSymlinks:     identityResolveSymlinks,
+			ProviderCommandRunner:    runner,
+			WorkersExecutableLocator: fixedExecutableLocator{path: executablePath},
+			WorkersResolveSymlinks:   identityResolveSymlinks,
 		},
 		30*time.Second,
 	)
@@ -123,7 +102,7 @@ func TestOpenCodeGoldenStructuredSnapshotSuccess(t *testing.T) {
 	}
 
 	observed := support.ProviderSessionObservedGoldens{
-		ProviderSession:   observeOpenCodeProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ProviderSession:  observeOpenCodeProviderSessionGolden(inferencePayload, loaded.Manifest),
 		ResponseEvents:   observeOpenCodeResponseEventGoldens(responseEvents),
 		InvocationResult: observeOpenCodeInvocationResultGolden(inferencePayload, dispatchOutput),
 	}
@@ -140,35 +119,14 @@ func TestOpenCodeGoldenStructuredSnapshotSuccess(t *testing.T) {
 // transcript through the customer process boundary and proves authoritative
 // terminal success without fabricated streaming deltas or structured snapshot
 // lifecycle events.
-//golden: docs/temp/functional/provider-sessions/opencode/final-only-fallback/manifest.json
+// golden: docs/temp/functional/provider-sessions/opencode/final-only-fallback/manifest.json
 func TestOpenCodeGoldenFinalOnlyFallback(t *testing.T) {
-	repoRoot := testutil.MustRepoRoot(t)
-	caseDir := filepath.Join(
-		repoRoot,
-		filepath.FromSlash(support.ProviderSessionFixturePath("opencode", openCodeFinalOnlyFallbackGoldenCase)),
+	loaded, request := loadOpenCodeGoldenCase(
+		t,
+		openCodeFinalOnlyFallbackGoldenCase,
+		"opencode-final-only-fallback",
+		support.ProviderSessionFidelityFinalOnly,
 	)
-
-	loaded, err := support.LoadProviderSessionCase(caseDir)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionCase: %v", err)
-	}
-	if loaded.Manifest.ID != "opencode-final-only-fallback" {
-		t.Fatalf("manifest.ID = %q, want opencode-final-only-fallback", loaded.Manifest.ID)
-	}
-	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelityFinalOnly {
-		t.Fatalf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, support.ProviderSessionFidelityFinalOnly)
-	}
-
-	var request struct {
-		Model     string `json:"model"`
-		SessionID string `json:"session_id"`
-	}
-	if err := json.Unmarshal(loaded.Request, &request); err != nil {
-		t.Fatalf("decode request.json: %v", err)
-	}
-	if request.Model == "" || request.SessionID == "" {
-		t.Fatalf("request.json = %#v, want model and session_id", request)
-	}
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
@@ -201,9 +159,9 @@ func TestOpenCodeGoldenFinalOnlyFallback(t *testing.T) {
 		t,
 		dir,
 		serviceedges.Edges{
-			ProviderCommandRunner:      runner,
-			WorkersExecutableLocator:   fixedExecutableLocator{path: executablePath},
-			WorkersResolveSymlinks:     identityResolveSymlinks,
+			ProviderCommandRunner:    runner,
+			WorkersExecutableLocator: fixedExecutableLocator{path: executablePath},
+			WorkersResolveSymlinks:   identityResolveSymlinks,
 		},
 		30*time.Second,
 	)
@@ -232,7 +190,7 @@ func TestOpenCodeGoldenFinalOnlyFallback(t *testing.T) {
 	assertOpenCodeFinalOnlyPublicResponseEvents(t, responseEvents)
 
 	observed := support.ProviderSessionObservedGoldens{
-		ProviderSession:   observeOpenCodeProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ProviderSession:  observeOpenCodeProviderSessionGolden(inferencePayload, loaded.Manifest),
 		ResponseEvents:   observeOpenCodeResponseEventGoldens(responseEvents),
 		InvocationResult: observeOpenCodeInvocationResultGolden(inferencePayload, dispatchOutput),
 	}
@@ -248,8 +206,8 @@ func TestOpenCodeGoldenFinalOnlyFallback(t *testing.T) {
 // TestOpenCodeGoldenStructuredFailureAndTimeout replays sanitized OpenCode
 // structured-failure and timeout transcripts through the customer process
 // boundary and proves those public failure classes remain distinct.
-//golden: docs/temp/functional/provider-sessions/opencode/structured-failure/manifest.json
-//golden: docs/temp/functional/provider-sessions/opencode/timeout/manifest.json
+// golden: docs/temp/functional/provider-sessions/opencode/structured-failure/manifest.json
+// golden: docs/temp/functional/provider-sessions/opencode/timeout/manifest.json
 func TestOpenCodeGoldenStructuredFailureAndTimeout(t *testing.T) {
 	t.Run("structured-failure", func(t *testing.T) {
 		runOpenCodeFailureGoldenCase(
@@ -283,33 +241,12 @@ func runOpenCodeFailureGoldenCase(
 ) {
 	t.Helper()
 
-	repoRoot := testutil.MustRepoRoot(t)
-	caseDir := filepath.Join(
-		repoRoot,
-		filepath.FromSlash(support.ProviderSessionFixturePath("opencode", caseName)),
+	loaded, request := loadOpenCodeGoldenCase(
+		t,
+		caseName,
+		manifestID,
+		fidelityClass,
 	)
-
-	loaded, err := support.LoadProviderSessionCase(caseDir)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionCase: %v", err)
-	}
-	if loaded.Manifest.ID != manifestID {
-		t.Fatalf("manifest.ID = %q, want %s", loaded.Manifest.ID, manifestID)
-	}
-	if loaded.Manifest.FidelityClass != fidelityClass {
-		t.Fatalf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, fidelityClass)
-	}
-
-	var request struct {
-		Model     string `json:"model"`
-		SessionID string `json:"session_id"`
-	}
-	if err := json.Unmarshal(loaded.Request, &request); err != nil {
-		t.Fatalf("decode request.json: %v", err)
-	}
-	if request.Model == "" || request.SessionID == "" {
-		t.Fatalf("request.json = %#v, want model and session_id", request)
-	}
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
@@ -371,7 +308,7 @@ func runOpenCodeFailureGoldenCase(
 	assertOpenCodeFailureDoesNotLeakSensitiveOutput(t, events, responseEvents)
 
 	observed := support.ProviderSessionObservedGoldens{
-		ProviderSession:   observeOpenCodeProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ProviderSession:  observeOpenCodeProviderSessionGolden(inferencePayload, loaded.Manifest),
 		ResponseEvents:   observeOpenCodeResponseEventGoldens(responseEvents),
 		InvocationResult: observeOpenCodeFailedInvocationResultGolden(inferencePayload),
 	}
@@ -382,6 +319,42 @@ func runOpenCodeFailureGoldenCase(
 		}
 		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
 	}
+}
+
+type openCodeGoldenRequest struct {
+	Model     string `json:"model"`
+	SessionID string `json:"session_id"`
+}
+
+func loadOpenCodeGoldenCase(
+	t *testing.T,
+	caseName string,
+	manifestID string,
+	fidelityClass string,
+) (support.ProviderSessionCase, openCodeGoldenRequest) {
+	t.Helper()
+	caseDir := filepath.Join(
+		testutil.MustRepoRoot(t),
+		filepath.FromSlash(support.ProviderSessionFixturePath("opencode", caseName)),
+	)
+	loaded, err := support.LoadProviderSessionCase(caseDir)
+	if err != nil {
+		t.Fatalf("LoadProviderSessionCase: %v", err)
+	}
+	if loaded.Manifest.ID != manifestID {
+		t.Fatalf("manifest.ID = %q, want %s", loaded.Manifest.ID, manifestID)
+	}
+	if loaded.Manifest.FidelityClass != fidelityClass {
+		t.Fatalf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, fidelityClass)
+	}
+	var request openCodeGoldenRequest
+	if err := json.Unmarshal(loaded.Request, &request); err != nil {
+		t.Fatalf("decode request.json: %v", err)
+	}
+	if request.Model == "" || request.SessionID == "" {
+		t.Fatalf("request.json = %#v, want model and session_id", request)
+	}
+	return loaded, request
 }
 
 func assertOpenCodeFailureDoesNotLeakSensitiveOutput(
@@ -398,8 +371,8 @@ func assertOpenCodeFailureDoesNotLeakSensitiveOutput(
 		"responseBody",
 	}
 	encoded, err := json.Marshal(struct {
-		Events          []factoryapi.FactoryEvent
-		ResponseEvents  []factoryapi.FactoryResponseEvent
+		Events         []factoryapi.FactoryEvent
+		ResponseEvents []factoryapi.FactoryResponseEvent
 	}{events, responseEvents})
 	if err != nil {
 		t.Fatalf("marshal observed events: %v", err)
@@ -641,13 +614,13 @@ func observeOpenCodeResponseEventGoldens(events []factoryapi.FactoryResponseEven
 				continue
 			}
 			record := map[string]any{
-				"type":         "message.completed",
-				"eventId":      event.EventId,
+				"type":             "message.completed",
+				"eventId":          event.EventId,
 				"factorySessionId": event.FactorySessionId,
-				"runId":        event.RunId,
-				"itemId":       openCodeGoldenItemID(event),
-				"text":         text,
-				"finishReason": "stop",
+				"runId":            event.RunId,
+				"itemId":           openCodeGoldenItemID(event),
+				"text":             text,
+				"finishReason":     "stop",
 			}
 			records = append(records, mustMarshalJSON(record))
 		case factoryapi.FactoryResponseEventKindTool:

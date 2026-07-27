@@ -98,6 +98,17 @@ func (s *service) GetProvider(
 	return providers.GetProviderResult{Provider: merged}, nil
 }
 
+func (s *service) ResolveProviderID(id providers.ID) (providers.ID, error) {
+	if err := id.Validate(); err != nil {
+		return "", err
+	}
+	canonical, ok := s.resolveID(id)
+	if !ok {
+		return "", providers.ErrUnknownProvider
+	}
+	return canonical, nil
+}
+
 func (s *service) applyProbe(
 	ctx context.Context,
 	descriptor providers.Descriptor,

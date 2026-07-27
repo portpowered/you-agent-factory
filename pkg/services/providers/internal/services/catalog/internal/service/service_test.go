@@ -268,6 +268,53 @@ func TestGetProviderResolvesAcceptedAliases(t *testing.T) {
 	}
 }
 
+func TestResolveProviderIDUsesStaticCanonicalAuthority(t *testing.T) {
+	t.Parallel()
+
+	probeCalls := 0
+	service, err := internalservice.New(internalservice.WithProbeQuery(func(
+		context.Context,
+		providers.Descriptor,
+	) (catalog.ProbeFacts, error) {
+		probeCalls++
+		return catalog.ProbeFacts{}, nil
+	}))
+	if err != nil {
+		t.Fatalf("NewService() = %v", err)
+	}
+
+	tests := []struct {
+		name string
+		id   providers.ID
+		want providers.ID
+		err  error
+	}{
+		{name: "canonical", id: providers.IDCodex, want: providers.IDCodex},
+		{name: "alias", id: "cursor", want: providers.IDCursor},
+		{name: "invalid", err: providers.ErrInvalidID},
+		{name: "unknown", id: "missing", err: providers.ErrUnknownProvider},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, resolveErr := service.ResolveProviderID(test.id)
+			if !errors.Is(resolveErr, test.err) {
+				t.Fatalf(
+					"ResolveProviderID(%q) error = %v, want %v",
+					test.id,
+					resolveErr,
+					test.err,
+				)
+			}
+			if got != test.want {
+				t.Fatalf("ResolveProviderID(%q) = %q, want %q", test.id, got, test.want)
+			}
+		})
+	}
+	if probeCalls != 0 {
+		t.Fatalf("ResolveProviderID() probe calls = %d, want 0", probeCalls)
+	}
+}
+
 func TestGetProviderReturnsDetachedValues(t *testing.T) {
 	t.Parallel()
 

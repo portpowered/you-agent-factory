@@ -3,6 +3,22 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+- Providers-owned one-attempt execution must clone and validate
+  `providers.ExecuteRequest` before consulting request-time catalog readiness,
+  resolve canonical IDs and accepted aliases through the same private Catalog
+  authority used by List/Get, and invoke only the adapter registered for that
+  canonical ID. Keep retry, fallback/default selection, scheduling, throttle,
+  and Work-outcome policy above this boundary; recording fakes should prove
+  validation-before-I/O, full detached request delivery, and exactly one
+  adapter call. On success, clone before publishing, validate any returned
+  SessionRef against the resolved provider, bound ordered progress and metadata
+  deterministically, redact request-derived and sensitive native diagnostics,
+  and suppress the entire result whenever the adapter returns an error.
+- Compose Providers Catalog and Execution as required sibling capabilities
+  behind one `providers.Service`. Validate adapter registrations at construction
+  through Catalog's side-effect-free canonical identity resolver, reject aliases
+  and unknown IDs before publishing the root, and reserve request-time Catalog
+  lookup for live readiness/selectability so construction remains inert.
 - Parent-private Runner implementations that expose subprocess progress should
   consume an injected streaming command capability, serialize publication only
   within each invocation, and build terminal diagnostics from the command
@@ -265,6 +281,14 @@ primary-result behavior.
   locally owned redefinition even outside `edges`. Preserve the explicit Workers
   inference-contract migration-debt exception. Prove ownership behavior with
   deliberate `run()` fixtures rather than package-local source inventories.
+- Providers Execution is the normalization boundary for private adapter
+  failures. Adapters may return a declared `providers.ExecuteFailure` or
+  parent-private lifecycle facts for native, decode, flush, and final-parse
+  failures; Execution applies deadline/cancellation precedence, then declared
+  classification, then deterministic final-parse/flush/decode/native precedence.
+  It returns only bounded detached Providers diagnostics and never forwards a
+  native error message or error type to peers. Adapter-owned finalization and
+  cleanup must complete before the synchronous attempt returns.
   Invoke implementations
   through `ExecuteInvocation` so provider-authored drafts are validated for
   provenance, invocation and item correlation, lifecycle ordering, terminal
@@ -285,6 +309,12 @@ primary-result behavior.
   authoritative completed message as `final_result_agreement`, even when it
   uses a different item correlation, so no earlier represented result can be
   overwritten before completion validation.
+- Keep reusable one-attempt conformance under the Providers-private Execution
+  testkit. Build the singular Providers root around a fresh
+  controllable adapter for each scenario, observe only Providers-owned
+  request/result/error facts plus explicit adapter call/cleanup probes, and run
+  both streaming/progress and final-only/failure-oriented implementations so
+  the harness cannot encode one provider-native protocol.
 - The provider-neutral invocation conductor lives in
   `pkg/services/workers/provider/conductor/`. Factory Sessions and worker
   executors should enter registry-selected integrations through that conductor
