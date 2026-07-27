@@ -6,7 +6,8 @@ import (
 	internalservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service"
 )
 
-// New constructs an inert dispatch-planning capability.
-func New() dispatchplanning.Service {
-	return internalservice.New()
+// New constructs a dispatch-planning capability over the Workers publication
+// edge supplied by its Factory Runtime parent.
+func New(publisher dispatchplanning.WorkersPublisher) dispatchplanning.Service {
+	return internalservice.New(publisher)
 }

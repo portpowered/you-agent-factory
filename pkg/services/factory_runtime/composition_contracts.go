@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
@@ -36,7 +37,7 @@ var (
 
 	// ErrDuplicateDispatchIntent indicates a plan/publish request conflicted with
 	// an existing dispatch intent that is not eligible for idempotent re-delivery.
-	ErrDuplicateDispatchIntent = errors.New("factory runtime duplicate dispatch intent")
+	ErrDuplicateDispatchIntent = dispatchplanning.ErrDuplicateDispatchIntent
 
 	// ErrUnknownDispatchCorrelation indicates accept/retire targeted a correlation
 	// that is not present in the Runtime dispatch outbox.

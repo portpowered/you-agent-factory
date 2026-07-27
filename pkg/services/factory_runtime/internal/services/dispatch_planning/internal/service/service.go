@@ -4,20 +4,39 @@ package service
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
+	"sync"
 
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// Planner translates complete runnable decisions without performing IO.
-type Planner struct{}
+// Planner translates complete runnable decisions and owns their per-runtime
+// outbox publication state.
+type Planner struct {
+	mu            sync.Mutex
+	publisher     dispatchplanning.WorkersPublisher
+	byDispatch    map[string]*intentRecord
+	byCorrelation map[string]*intentRecord
+}
+
+type intentRecord struct {
+	action   dispatchplanning.OutboxAction
+	status   dispatchplanning.OutboxIntentStatus
+	attempts int
+}
 
 var _ dispatchplanning.Service = (*Planner)(nil)
 
-// New constructs an inert dispatch planner.
-func New() *Planner {
-	return &Planner{}
+// New constructs a dispatch planner with an optional Workers publication edge.
+// A nil publisher keeps planning available while publication fails retryably.
+func New(publisher dispatchplanning.WorkersPublisher) *Planner {
+	return &Planner{
+		publisher:     publisher,
+		byDispatch:    make(map[string]*intentRecord),
+		byCorrelation: make(map[string]*intentRecord),
+	}
 }
 
 // Plan validates the entire batch before returning any outbox action.
@@ -57,6 +76,180 @@ func (p *Planner) Plan(ctx context.Context, req dispatchplanning.PlanRequest) (d
 		})
 	}
 	return dispatchplanning.PlanResult{Actions: actions}, nil
+}
+
+// Publish reserves both identities before performing IO. Equivalent redelivery
+// observes the accepted logical intent without reordering or republishing it.
+func (p *Planner) Publish(
+	ctx context.Context,
+	action dispatchplanning.OutboxAction,
+) (dispatchplanning.PublicationResult, error) {
+	if err := validateAction(action); err != nil {
+		return dispatchplanning.PublicationResult{}, err
+	}
+
+	stable := cloneAction(action)
+	p.mu.Lock()
+	if existing := p.existingIntent(stable); existing != nil {
+		result, err := duplicateResult(existing, stable)
+		p.mu.Unlock()
+		return result, err
+	}
+	record := &intentRecord{
+		action: stable,
+		status: dispatchplanning.OutboxIntentStatusPending,
+	}
+	p.byDispatch[stable.Request.Execution.Dispatch.DispatchID] = record
+	p.byCorrelation[stable.CorrelationID] = record
+	p.mu.Unlock()
+
+	result := publicationResult(dispatchplanning.PublicationOutcomeAccepted, stable)
+	return result, p.publish(ctx, record)
+}
+
+// Retry republishes only an explicitly pending intent. Concurrent retry or an
+// already published intent is an idempotent observation, not another call.
+func (p *Planner) Retry(
+	ctx context.Context,
+	dispatchID string,
+) (dispatchplanning.PublicationResult, error) {
+	dispatchID = strings.TrimSpace(dispatchID)
+	p.mu.Lock()
+	record := p.byDispatch[dispatchID]
+	if record == nil {
+		p.mu.Unlock()
+		return dispatchplanning.PublicationResult{}, fmt.Errorf(
+			"%w: dispatch ID %q is not pending",
+			dispatchplanning.ErrInvalidRunnableDecision,
+			dispatchID,
+		)
+	}
+	result := publicationResult(dispatchplanning.PublicationOutcomeDuplicateIdempotent, record.action)
+	if record.status != dispatchplanning.OutboxIntentStatusPending {
+		p.mu.Unlock()
+		return result, nil
+	}
+	p.mu.Unlock()
+	return result, p.publish(ctx, record)
+}
+
+// Intent returns a detached snapshot suitable for retry and diagnostics.
+func (p *Planner) Intent(dispatchID string) (dispatchplanning.OutboxIntent, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	record, ok := p.byDispatch[strings.TrimSpace(dispatchID)]
+	if !ok {
+		return dispatchplanning.OutboxIntent{}, false
+	}
+	return dispatchplanning.OutboxIntent{
+		Action:   cloneAction(record.action),
+		Status:   record.status,
+		Attempts: record.attempts,
+	}, true
+}
+
+func (p *Planner) publish(ctx context.Context, record *intentRecord) error {
+	p.mu.Lock()
+	if record.status != dispatchplanning.OutboxIntentStatusPending {
+		p.mu.Unlock()
+		return nil
+	}
+	record.status = dispatchplanning.OutboxIntentStatusPublishing
+	record.attempts++
+	action := cloneAction(record.action)
+	publisher := p.publisher
+	p.mu.Unlock()
+
+	var err error
+	if ctx == nil {
+		err = fmt.Errorf("publish dispatch intent: context is required")
+	} else if contextErr := ctx.Err(); contextErr != nil {
+		err = contextErr
+	} else if publisher == nil {
+		err = fmt.Errorf("publish dispatch intent: Workers publisher is unavailable")
+	} else {
+		err = publisher(ctx, action.Request)
+	}
+
+	p.mu.Lock()
+	if err != nil {
+		record.status = dispatchplanning.OutboxIntentStatusPending
+	} else {
+		record.status = dispatchplanning.OutboxIntentStatusPublished
+	}
+	p.mu.Unlock()
+	return err
+}
+
+func (p *Planner) existingIntent(action dispatchplanning.OutboxAction) *intentRecord {
+	if record := p.byDispatch[action.Request.Execution.Dispatch.DispatchID]; record != nil {
+		return record
+	}
+	return p.byCorrelation[action.CorrelationID]
+}
+
+func duplicateResult(
+	existing *intentRecord,
+	action dispatchplanning.OutboxAction,
+) (dispatchplanning.PublicationResult, error) {
+	if existing.action.CorrelationID != action.CorrelationID ||
+		existing.action.Request.Execution.Dispatch.DispatchID != action.Request.Execution.Dispatch.DispatchID ||
+		!reflect.DeepEqual(existing.action, action) {
+		return dispatchplanning.PublicationResult{}, fmt.Errorf(
+			"%w: dispatch ID %q or correlation ID %q conflicts with an accepted intent",
+			dispatchplanning.ErrDuplicateDispatchIntent,
+			action.Request.Execution.Dispatch.DispatchID,
+			action.CorrelationID,
+		)
+	}
+	return publicationResult(dispatchplanning.PublicationOutcomeDuplicateIdempotent, action), nil
+}
+
+func publicationResult(
+	outcome dispatchplanning.PublicationOutcome,
+	action dispatchplanning.OutboxAction,
+) dispatchplanning.PublicationResult {
+	return dispatchplanning.PublicationResult{
+		Outcome:       outcome,
+		DispatchID:    action.Request.Execution.Dispatch.DispatchID,
+		CorrelationID: action.CorrelationID,
+	}
+}
+
+func validateAction(action dispatchplanning.OutboxAction) error {
+	dispatch := action.Request.Execution.Dispatch
+	required := []struct {
+		name  string
+		value string
+	}{
+		{name: "dispatch ID", value: dispatch.DispatchID},
+		{name: "correlation ID", value: action.CorrelationID},
+		{name: "replay key", value: dispatch.Execution.ReplayKey},
+		{name: "workstation name", value: action.Request.WorkstationName},
+		{name: "worker type", value: action.Request.Execution.WorkerType},
+	}
+	for _, field := range required {
+		if strings.TrimSpace(field.value) == "" {
+			return fmt.Errorf("%w: %s is required", dispatchplanning.ErrInvalidRunnableDecision, field.name)
+		}
+	}
+	if action.Request.WorkstationName != dispatch.WorkstationName {
+		return fmt.Errorf("%w: workstation conflicts with canonical dispatch", dispatchplanning.ErrInvalidRunnableDecision)
+	}
+	if len(dispatch.Execution.WorkIDs) == 0 || containsBlank(dispatch.Execution.WorkIDs) {
+		return fmt.Errorf("%w: Work lineage is required", dispatchplanning.ErrInvalidRunnableDecision)
+	}
+	return nil
+}
+
+func cloneAction(action dispatchplanning.OutboxAction) dispatchplanning.OutboxAction {
+	return dispatchplanning.OutboxAction{
+		CorrelationID: action.CorrelationID,
+		Request: workers.WorkstationDispatchRequest{
+			WorkstationName: action.Request.WorkstationName,
+			Execution:       workers.CloneWorkstationExecutionRequest(action.Request.Execution),
+		},
+	}
 }
 
 func validateDecision(

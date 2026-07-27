@@ -15,6 +15,10 @@ import (
 // decision. Planning rejects the complete batch when any decision is invalid.
 var ErrInvalidRunnableDecision = errors.New("invalid Factory Runtime runnable decision")
 
+// ErrDuplicateDispatchIntent reports reuse of a dispatch or correlation
+// identity for content that differs from the accepted outbox intent.
+var ErrDuplicateDispatchIntent = errors.New("factory runtime duplicate dispatch intent")
+
 // ExecutionFacts carries the detached worker-selection and invocation facts
 // selected for one runnable decision. Runtime supplies values, not a Workers
 // service, executor, provider, model, script, or hosted-runner implementation.
@@ -66,8 +70,49 @@ type PlanResult struct {
 	Actions []OutboxAction
 }
 
+// WorkersPublisher is the exact Workers-facing publication edge. The outbox
+// supplies a stable canonical request; routing, capacity, execution, and retry
+// policy remain owned behind this boundary.
+type WorkersPublisher func(context.Context, workers.WorkstationDispatchRequest) error
+
+// PublicationOutcome describes whether an outbox intent was newly accepted or
+// was an equivalent redelivery of an already accepted logical intent.
+type PublicationOutcome string
+
+const (
+	PublicationOutcomeAccepted            PublicationOutcome = "ACCEPTED"
+	PublicationOutcomeDuplicateIdempotent PublicationOutcome = "DUPLICATE_IDEMPOTENT"
+)
+
+// OutboxIntentStatus exposes the explicit retry state of an accepted intent.
+type OutboxIntentStatus string
+
+const (
+	OutboxIntentStatusPending    OutboxIntentStatus = "PENDING"
+	OutboxIntentStatusPublishing OutboxIntentStatus = "PUBLISHING"
+	OutboxIntentStatusPublished  OutboxIntentStatus = "PUBLISHED"
+)
+
+// PublicationResult identifies the accepted logical intent and its outcome.
+type PublicationResult struct {
+	Outcome       PublicationOutcome
+	DispatchID    string
+	CorrelationID string
+}
+
+// OutboxIntent is a detached observation of one accepted Runtime intent.
+type OutboxIntent struct {
+	Action   OutboxAction
+	Status   OutboxIntentStatus
+	Attempts int
+}
+
 // Service owns deterministic decision validation and Workers request
-// translation. It neither publishes requests nor invokes Workers.
+// translation plus Runtime outbox identity and publication state. It invokes
+// only the injected Workers-facing publisher, never an executor.
 type Service interface {
 	Plan(context.Context, PlanRequest) (PlanResult, error)
+	Publish(context.Context, OutboxAction) (PublicationResult, error)
+	Retry(context.Context, string) (PublicationResult, error)
+	Intent(string) (OutboxIntent, bool)
 }
