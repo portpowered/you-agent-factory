@@ -8,6 +8,9 @@ import (
 
 // New constructs a dispatch-planning capability over the Workers publication
 // edge supplied by its Factory Runtime parent.
-func New(publisher dispatchplanning.WorkersPublisher) dispatchplanning.Service {
-	return internalservice.New(publisher)
+func New(
+	publisher dispatchplanning.WorkersPublisher,
+	canceler dispatchplanning.WorkersCanceler,
+) dispatchplanning.Service {
+	return internalservice.NewWithCancellation(publisher, canceler)
 }

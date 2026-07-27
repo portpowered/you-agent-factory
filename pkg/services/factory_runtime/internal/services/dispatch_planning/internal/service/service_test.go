@@ -338,6 +338,342 @@ func TestPublishCancellationLeavesAcceptedIntentPending(t *testing.T) {
 	}
 }
 
+func TestPausePreservesAcceptedIntentsAndResumePublishesInOrder(t *testing.T) {
+	t.Parallel()
+
+	var published []string
+	planner := New(func(_ context.Context, request workers.WorkstationDispatchRequest) error {
+		published = append(published, request.Execution.Dispatch.DispatchID)
+		return nil
+	})
+	if err := planner.Pause(context.Background()); err != nil {
+		t.Fatalf("Pause() error = %v", err)
+	}
+
+	for index, decision := range []dispatchplanning.RunnableDecision{
+		runnableDecision("dispatch-1", "correlation-1", "review", "reviewer", "work-1"),
+		runnableDecision("dispatch-2", "correlation-2", "implement", "implementer", "work-2"),
+	} {
+		action := plannedAction(t, planner, decision)
+		result, err := planner.Publish(context.Background(), action)
+		if err != nil {
+			t.Fatalf("Publish(%d) error = %v", index, err)
+		}
+		if result.Outcome != dispatchplanning.PublicationOutcomeAccepted {
+			t.Fatalf("Publish(%d) outcome = %q, want ACCEPTED", index, result.Outcome)
+		}
+		intent, ok := planner.Intent(action.Request.Execution.Dispatch.DispatchID)
+		if !ok || intent.Status != dispatchplanning.OutboxIntentStatusPending || intent.Attempts != 0 {
+			t.Fatalf("paused intent %d = (%#v, %t), want unattempted PENDING", index, intent, ok)
+		}
+	}
+	if len(published) != 0 {
+		t.Fatalf("paused Workers publications = %#v, want none", published)
+	}
+
+	if err := planner.Resume(context.Background()); err != nil {
+		t.Fatalf("Resume() error = %v", err)
+	}
+	if !reflect.DeepEqual(published, []string{"dispatch-1", "dispatch-2"}) {
+		t.Fatalf("resume publication order = %#v", published)
+	}
+	if state := planner.State(); state.Mode != dispatchplanning.RuntimeOutboxModeActive {
+		t.Fatalf("State() = %#v, want ACTIVE", state)
+	}
+}
+
+func TestResumeFailureRepausesWithoutPublishingLaterIntents(t *testing.T) {
+	t.Parallel()
+
+	publishErr := errors.New("Workers unavailable")
+	var published []string
+	planner := New(func(_ context.Context, request workers.WorkstationDispatchRequest) error {
+		published = append(published, request.Execution.Dispatch.DispatchID)
+		return publishErr
+	})
+	if err := planner.Pause(context.Background()); err != nil {
+		t.Fatalf("Pause() error = %v", err)
+	}
+	for _, decision := range []dispatchplanning.RunnableDecision{
+		runnableDecision("dispatch-1", "correlation-1", "review", "reviewer", "work-1"),
+		runnableDecision("dispatch-2", "correlation-2", "implement", "implementer", "work-2"),
+	} {
+		if _, err := planner.Publish(context.Background(), plannedAction(t, planner, decision)); err != nil {
+			t.Fatalf("Publish(paused) error = %v", err)
+		}
+	}
+
+	if err := planner.Resume(context.Background()); !errors.Is(err, publishErr) {
+		t.Fatalf("Resume() error = %v, want Workers failure", err)
+	}
+	if !reflect.DeepEqual(published, []string{"dispatch-1"}) {
+		t.Fatalf("failed resume publications = %#v, want no overtaking", published)
+	}
+	if state := planner.State(); state.Mode != dispatchplanning.RuntimeOutboxModePaused {
+		t.Fatalf("State() = %#v, want PAUSED after failed ordered drain", state)
+	}
+}
+
+func TestWorkersFailureIsTerminalAndLaterDecisionUsesDistinctIdentity(t *testing.T) {
+	t.Parallel()
+
+	var published []string
+	planner := New(func(_ context.Context, request workers.WorkstationDispatchRequest) error {
+		published = append(published, request.Execution.Dispatch.DispatchID)
+		return nil
+	})
+	firstAction := plannedAction(t, planner, runnableDecision(
+		"dispatch-attempt-1",
+		"correlation-attempt-1",
+		"review",
+		"reviewer",
+		"work-1",
+	))
+	if _, err := planner.Publish(context.Background(), firstAction); err != nil {
+		t.Fatalf("Publish(first) error = %v", err)
+	}
+	failure := dispatchplanning.TerminalResult{
+		DispatchID:    "dispatch-attempt-1",
+		CorrelationID: "correlation-attempt-1",
+		WorkID:        "work-1",
+		Outcome:       dispatchplanning.TerminalResultOutcomeFailure,
+	}
+	if _, err := planner.Retire(context.Background(), failure); err != nil {
+		t.Fatalf("Retire(failure) error = %v", err)
+	}
+	if !reflect.DeepEqual(published, []string{"dispatch-attempt-1"}) {
+		t.Fatalf("failure caused Runtime retry publications = %#v", published)
+	}
+
+	duplicate, err := planner.Publish(context.Background(), firstAction)
+	if err != nil || duplicate.Outcome != dispatchplanning.PublicationOutcomeDuplicateIdempotent {
+		t.Fatalf("Publish(retired intent) = (%#v, %v), want DUPLICATE_IDEMPOTENT", duplicate, err)
+	}
+	secondAction := plannedAction(t, planner, runnableDecision(
+		"dispatch-attempt-2",
+		"correlation-attempt-2",
+		"review",
+		"reviewer",
+		"work-1",
+	))
+	if _, err := planner.Publish(context.Background(), secondAction); err != nil {
+		t.Fatalf("Publish(later decision) error = %v", err)
+	}
+	if !reflect.DeepEqual(published, []string{"dispatch-attempt-1", "dispatch-attempt-2"}) {
+		t.Fatalf("later decision publications = %#v", published)
+	}
+}
+
+func TestCancellationBlocksPublicationCancelsVisibleIntentAndAcceptsLateResultOnce(t *testing.T) {
+	t.Parallel()
+	assertStoppedRuntimeBehavior(t, dispatchplanning.RuntimeStopReasonCancelled)
+}
+
+func TestTerminationBlocksPublicationCancelsVisibleIntentAndAcceptsLateResultOnce(t *testing.T) {
+	t.Parallel()
+	assertStoppedRuntimeBehavior(t, dispatchplanning.RuntimeStopReasonTerminated)
+}
+
+func assertStoppedRuntimeBehavior(t *testing.T, reason dispatchplanning.RuntimeStopReason) {
+	t.Helper()
+	planner, published, cancelled := stoppedRuntimeFixture(t, reason)
+	assertStoppedPublicationBoundary(t, planner, published, reason)
+	assertLateResultIsRetiredOnce(t, planner)
+	if err := planner.Stop(context.Background(), reason); err != nil {
+		t.Fatalf("Stop(repeated) error = %v", err)
+	}
+	if len(*cancelled) != 1 {
+		t.Fatalf("repeated Stop() cancellations = %#v, want one", *cancelled)
+	}
+}
+
+func stoppedRuntimeFixture(
+	t *testing.T,
+	reason dispatchplanning.RuntimeStopReason,
+) (*Planner, dispatchplanning.OutboxAction, *[]string) {
+	t.Helper()
+	var cancelled []string
+	planner := NewWithCancellation(
+		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
+		func(
+			_ context.Context,
+			request workers.WorkstationDispatchCancelRequest,
+		) (workers.WorkstationDispatchCancelResult, error) {
+			cancelled = append(cancelled, request.DispatchID)
+			return workers.WorkstationDispatchCancelResult{}, nil
+		},
+	)
+	published := plannedAction(t, planner, runnableDecision(
+		"dispatch-visible",
+		"correlation-visible",
+		"review",
+		"reviewer",
+		"work-1",
+	))
+	if _, err := planner.Publish(context.Background(), published); err != nil {
+		t.Fatalf("Publish(visible) error = %v", err)
+	}
+	if err := planner.Pause(context.Background()); err != nil {
+		t.Fatalf("Pause() error = %v", err)
+	}
+	pending := plannedAction(t, planner, runnableDecision(
+		"dispatch-pending",
+		"correlation-pending",
+		"review",
+		"reviewer",
+		"work-2",
+	))
+	if _, err := planner.Publish(context.Background(), pending); err != nil {
+		t.Fatalf("Publish(pending) error = %v", err)
+	}
+	if err := planner.Stop(context.Background(), reason); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if !reflect.DeepEqual(cancelled, []string{"dispatch-visible"}) {
+		t.Fatalf("Workers cancellations = %#v, want visible dispatch only", cancelled)
+	}
+	return planner, published, &cancelled
+}
+
+func assertStoppedPublicationBoundary(
+	t *testing.T,
+	planner *Planner,
+	published dispatchplanning.OutboxAction,
+	reason dispatchplanning.RuntimeStopReason,
+) {
+	t.Helper()
+	state := planner.State()
+	if state.Mode != dispatchplanning.RuntimeOutboxModeStopped || state.StopReason != reason {
+		t.Fatalf("State() = %#v, want STOPPED by %s", state, reason)
+	}
+	if _, err := planner.Retry(context.Background(), "dispatch-pending"); !errors.Is(err, dispatchplanning.ErrDispatchRuntimeStopped) {
+		t.Fatalf("Retry(after stop) error = %v, want ErrDispatchRuntimeStopped", err)
+	}
+	duplicate, err := planner.Publish(context.Background(), published)
+	if err != nil || duplicate.Outcome != dispatchplanning.PublicationOutcomeDuplicateIdempotent {
+		t.Fatalf("Publish(existing after stop) = (%#v, %v), want DUPLICATE_IDEMPOTENT", duplicate, err)
+	}
+	newAction := plannedAction(t, planner, runnableDecision(
+		"dispatch-new",
+		"correlation-new",
+		"review",
+		"reviewer",
+		"work-3",
+	))
+	if _, err := planner.Publish(context.Background(), newAction); !errors.Is(err, dispatchplanning.ErrDispatchRuntimeStopped) {
+		t.Fatalf("Publish(after stop) error = %v, want ErrDispatchRuntimeStopped", err)
+	}
+}
+
+func assertLateResultIsRetiredOnce(t *testing.T, planner *Planner) {
+	t.Helper()
+	late := dispatchplanning.TerminalResult{
+		DispatchID:    "dispatch-visible",
+		CorrelationID: "correlation-visible",
+		WorkID:        "work-1",
+		Outcome:       dispatchplanning.TerminalResultOutcomeCancelled,
+	}
+	first, err := planner.Retire(context.Background(), late)
+	if err != nil || first.Outcome != dispatchplanning.RetirementOutcomeRetired {
+		t.Fatalf("Retire(late) = (%#v, %v), want RETIRED", first, err)
+	}
+	duplicate, err := planner.Retire(context.Background(), late)
+	if err != nil || duplicate.Outcome != dispatchplanning.RetirementOutcomeDuplicateIdempotent {
+		t.Fatalf("Retire(late duplicate) = (%#v, %v), want DUPLICATE_IDEMPOTENT", duplicate, err)
+	}
+}
+
+func TestStopRetriesFailedWorkersCancellation(t *testing.T) {
+	t.Parallel()
+
+	cancelErr := errors.New("Workers cancellation unavailable")
+	cancelCalls := 0
+	planner := NewWithCancellation(
+		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
+		func(
+			context.Context,
+			workers.WorkstationDispatchCancelRequest,
+		) (workers.WorkstationDispatchCancelResult, error) {
+			cancelCalls++
+			if cancelCalls == 1 {
+				return workers.WorkstationDispatchCancelResult{}, cancelErr
+			}
+			return workers.WorkstationDispatchCancelResult{}, nil
+		},
+	)
+	action := plannedAction(t, planner, runnableDecision(
+		"dispatch-1",
+		"correlation-1",
+		"review",
+		"reviewer",
+		"work-1",
+	))
+	if _, err := planner.Publish(context.Background(), action); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+
+	if err := planner.Stop(context.Background(), dispatchplanning.RuntimeStopReasonCancelled); !errors.Is(err, cancelErr) {
+		t.Fatalf("Stop(first) error = %v, want cancellation failure", err)
+	}
+	if err := planner.Stop(context.Background(), dispatchplanning.RuntimeStopReasonCancelled); err != nil {
+		t.Fatalf("Stop(retry) error = %v", err)
+	}
+	intent, ok := planner.Intent("dispatch-1")
+	if !ok || !intent.CancellationRequested || cancelCalls != 2 {
+		t.Fatalf("cancellation retry = (%#v, %t, %d calls), want successful second attempt", intent, ok, cancelCalls)
+	}
+}
+
+func TestStopRacingPublicationCancelsAfterWorkersAcceptance(t *testing.T) {
+	t.Parallel()
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	cancelled := make(chan string, 1)
+	planner := NewWithCancellation(
+		func(context.Context, workers.WorkstationDispatchRequest) error {
+			close(entered)
+			<-release
+			return nil
+		},
+		func(
+			_ context.Context,
+			request workers.WorkstationDispatchCancelRequest,
+		) (workers.WorkstationDispatchCancelResult, error) {
+			cancelled <- request.DispatchID
+			return workers.WorkstationDispatchCancelResult{}, nil
+		},
+	)
+	action := plannedAction(t, planner, runnableDecision(
+		"dispatch-racing",
+		"correlation-racing",
+		"review",
+		"reviewer",
+		"work-1",
+	))
+	published := make(chan error, 1)
+	go func() {
+		_, err := planner.Publish(context.Background(), action)
+		published <- err
+	}()
+	<-entered
+
+	stopped := make(chan error, 1)
+	go func() {
+		stopped <- planner.Stop(context.Background(), dispatchplanning.RuntimeStopReasonTerminated)
+	}()
+	close(release)
+	if err := <-stopped; err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if err := <-published; err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+	if dispatchID := <-cancelled; dispatchID != "dispatch-racing" {
+		t.Fatalf("cancelled dispatch = %q, want dispatch-racing", dispatchID)
+	}
+}
+
 func TestRetireAcceptsEachTerminalOutcomeExactlyOnce(t *testing.T) {
 	t.Parallel()
 

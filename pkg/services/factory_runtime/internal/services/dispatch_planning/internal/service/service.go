@@ -17,26 +17,43 @@ import (
 type Planner struct {
 	mu            sync.Mutex
 	publisher     dispatchplanning.WorkersPublisher
+	canceler      dispatchplanning.WorkersCanceler
 	byDispatch    map[string]*intentRecord
 	byCorrelation map[string]*intentRecord
+	ordered       []*intentRecord
+	mode          dispatchplanning.RuntimeOutboxMode
+	stopReason    dispatchplanning.RuntimeStopReason
 }
 
 type intentRecord struct {
-	action   dispatchplanning.OutboxAction
-	status   dispatchplanning.OutboxIntentStatus
-	attempts int
-	result   *dispatchplanning.TerminalResult
+	action      dispatchplanning.OutboxAction
+	status      dispatchplanning.OutboxIntentStatus
+	attempts    int
+	result      *dispatchplanning.TerminalResult
+	cancelled   bool
+	cancelling  bool
+	publishDone chan struct{}
 }
 
 var _ dispatchplanning.Service = (*Planner)(nil)
 
-// New constructs a dispatch planner with an optional Workers publication edge.
-// A nil publisher keeps planning available while publication fails retryably.
+// New constructs a dispatch planner without a Workers cancellation edge. It is
+// useful for inert planning and publication-only tests.
 func New(publisher dispatchplanning.WorkersPublisher) *Planner {
+	return NewWithCancellation(publisher, nil)
+}
+
+// NewWithCancellation constructs the complete Runtime-owned outbox boundary.
+func NewWithCancellation(
+	publisher dispatchplanning.WorkersPublisher,
+	canceler dispatchplanning.WorkersCanceler,
+) *Planner {
 	return &Planner{
 		publisher:     publisher,
+		canceler:      canceler,
 		byDispatch:    make(map[string]*intentRecord),
 		byCorrelation: make(map[string]*intentRecord),
+		mode:          dispatchplanning.RuntimeOutboxModeActive,
 	}
 }
 
@@ -96,15 +113,28 @@ func (p *Planner) Publish(
 		p.mu.Unlock()
 		return result, err
 	}
+	if p.mode == dispatchplanning.RuntimeOutboxModeStopped {
+		p.mu.Unlock()
+		return dispatchplanning.PublicationResult{}, fmt.Errorf(
+			"%w: stopped by %s",
+			dispatchplanning.ErrDispatchRuntimeStopped,
+			p.stopReason,
+		)
+	}
 	record := &intentRecord{
 		action: stable,
 		status: dispatchplanning.OutboxIntentStatusPending,
 	}
 	p.byDispatch[stable.Request.Execution.Dispatch.DispatchID] = record
 	p.byCorrelation[stable.CorrelationID] = record
+	p.ordered = append(p.ordered, record)
+	paused := p.mode == dispatchplanning.RuntimeOutboxModePaused
 	p.mu.Unlock()
 
 	result := publicationResult(dispatchplanning.PublicationOutcomeAccepted, stable)
+	if paused {
+		return result, nil
+	}
 	return result, p.publish(ctx, record)
 }
 
@@ -126,9 +156,18 @@ func (p *Planner) Retry(
 		)
 	}
 	result := publicationResult(dispatchplanning.PublicationOutcomeDuplicateIdempotent, record.action)
-	if record.status != dispatchplanning.OutboxIntentStatusPending {
+	if record.status != dispatchplanning.OutboxIntentStatusPending ||
+		p.mode == dispatchplanning.RuntimeOutboxModePaused {
 		p.mu.Unlock()
 		return result, nil
+	}
+	if p.mode == dispatchplanning.RuntimeOutboxModeStopped {
+		p.mu.Unlock()
+		return dispatchplanning.PublicationResult{}, fmt.Errorf(
+			"%w: stopped by %s",
+			dispatchplanning.ErrDispatchRuntimeStopped,
+			p.stopReason,
+		)
 	}
 	p.mu.Unlock()
 	return result, p.publish(ctx, record)
@@ -143,10 +182,11 @@ func (p *Planner) Intent(dispatchID string) (dispatchplanning.OutboxIntent, bool
 		return dispatchplanning.OutboxIntent{}, false
 	}
 	return dispatchplanning.OutboxIntent{
-		Action:   cloneAction(record.action),
-		Status:   record.status,
-		Attempts: record.attempts,
-		Result:   cloneTerminalResult(record.result),
+		Action:                cloneAction(record.action),
+		Status:                record.status,
+		Attempts:              record.attempts,
+		CancellationRequested: record.cancelled,
+		Result:                cloneTerminalResult(record.result),
 	}, true
 }
 
@@ -156,8 +196,22 @@ func (p *Planner) publish(ctx context.Context, record *intentRecord) error {
 		p.mu.Unlock()
 		return nil
 	}
+	mode := p.mode
+	stopReason := p.stopReason
+	if mode != dispatchplanning.RuntimeOutboxModeActive {
+		p.mu.Unlock()
+		if mode == dispatchplanning.RuntimeOutboxModeStopped {
+			return fmt.Errorf(
+				"%w: stopped by %s",
+				dispatchplanning.ErrDispatchRuntimeStopped,
+				stopReason,
+			)
+		}
+		return nil
+	}
 	record.status = dispatchplanning.OutboxIntentStatusPublishing
 	record.attempts++
+	record.publishDone = make(chan struct{})
 	action := cloneAction(record.action)
 	publisher := p.publisher
 	p.mu.Unlock()
@@ -175,6 +229,8 @@ func (p *Planner) publish(ctx context.Context, record *intentRecord) error {
 
 	p.mu.Lock()
 	if record.status == dispatchplanning.OutboxIntentStatusRetired {
+		close(record.publishDone)
+		record.publishDone = nil
 		p.mu.Unlock()
 		return err
 	}
@@ -183,6 +239,8 @@ func (p *Planner) publish(ctx context.Context, record *intentRecord) error {
 	} else {
 		record.status = dispatchplanning.OutboxIntentStatusPublished
 	}
+	close(record.publishDone)
+	record.publishDone = nil
 	p.mu.Unlock()
 	return err
 }

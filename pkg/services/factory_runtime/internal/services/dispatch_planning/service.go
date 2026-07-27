@@ -1,6 +1,7 @@
 // Package dispatch_planning defines the parent-private Factory Runtime
 // capability that translates runnable decisions into canonical Workers
-// requests. Publication and execution remain outside this planning boundary.
+// requests and owns their outbox lifecycle. Execution remains behind the
+// injected Workers boundary.
 package dispatch_planning
 
 import (
@@ -26,6 +27,10 @@ var ErrUnknownDispatchCorrelation = errors.New("factory runtime unknown dispatch
 // ErrInvalidDispatchResultBoundary reports a terminal result that conflicts
 // with its accepted intent or falls outside the terminal-result vocabulary.
 var ErrInvalidDispatchResultBoundary = errors.New("factory runtime invalid dispatch result boundary")
+
+// ErrDispatchRuntimeStopped reports an attempt to accept or publish new work
+// after cancellation or termination made the Runtime outbox permanently inert.
+var ErrDispatchRuntimeStopped = errors.New("factory runtime dispatch outbox stopped")
 
 // ExecutionFacts carries the detached worker-selection and invocation facts
 // selected for one runnable decision. Runtime supplies values, not a Workers
@@ -83,6 +88,14 @@ type PlanResult struct {
 // policy remain owned behind this boundary.
 type WorkersPublisher func(context.Context, workers.WorkstationDispatchRequest) error
 
+// WorkersCanceler is the exact Workers-facing cancellation edge. Workers owns
+// cancellation execution and its idempotency policy; Runtime only forwards the
+// stable dispatch identity it previously published.
+type WorkersCanceler func(
+	context.Context,
+	workers.WorkstationDispatchCancelRequest,
+) (workers.WorkstationDispatchCancelResult, error)
+
 // PublicationOutcome describes whether an outbox intent was newly accepted or
 // was an equivalent redelivery of an already accepted logical intent.
 type PublicationOutcome string
@@ -111,10 +124,36 @@ type PublicationResult struct {
 
 // OutboxIntent is a detached observation of one accepted Runtime intent.
 type OutboxIntent struct {
-	Action   OutboxAction
-	Status   OutboxIntentStatus
-	Attempts int
-	Result   *TerminalResult
+	Action                OutboxAction
+	Status                OutboxIntentStatus
+	Attempts              int
+	CancellationRequested bool
+	Result                *TerminalResult
+}
+
+// RuntimeOutboxMode controls whether accepted intents may cross the Workers
+// publication boundary.
+type RuntimeOutboxMode string
+
+const (
+	RuntimeOutboxModeActive  RuntimeOutboxMode = "ACTIVE"
+	RuntimeOutboxModePaused  RuntimeOutboxMode = "PAUSED"
+	RuntimeOutboxModeStopped RuntimeOutboxMode = "STOPPED"
+)
+
+// RuntimeStopReason distinguishes customer cancellation from normal Runtime
+// termination without changing the lossless outbox behavior.
+type RuntimeStopReason string
+
+const (
+	RuntimeStopReasonCancelled  RuntimeStopReason = "CANCELLED"
+	RuntimeStopReasonTerminated RuntimeStopReason = "TERMINATED"
+)
+
+// RuntimeOutboxState is a detached lifecycle observation.
+type RuntimeOutboxState struct {
+	Mode       RuntimeOutboxMode
+	StopReason RuntimeStopReason
 }
 
 // TerminalResultOutcome is the orchestration-neutral terminal Workers result
@@ -161,5 +200,9 @@ type Service interface {
 	Publish(context.Context, OutboxAction) (PublicationResult, error)
 	Retry(context.Context, string) (PublicationResult, error)
 	Retire(context.Context, TerminalResult) (RetirementResult, error)
+	Pause(context.Context) error
+	Resume(context.Context) error
+	Stop(context.Context, RuntimeStopReason) error
+	State() RuntimeOutboxState
 	Intent(string) (OutboxIntent, bool)
 }
