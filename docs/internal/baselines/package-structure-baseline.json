@@ -814,6 +814,16 @@
     },
     {
       "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/automations/cron_root_composition_test.go",
+      "target": "automations"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/automations/doc.go",
+      "target": "automations"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/bootstrap_portability/agent_factory_export_import_fixture_test.go",
       "target": "bootstrap_portability"
     },
@@ -1571,6 +1581,11 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_runtime/startup.go",
       "target": "StartupReadinessError"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/workflow_source_reader.go",
+      "target": "NewWorkflowSourceReader"
     },
     {
       "rule": "service-root-exported-function",
@@ -2666,16 +2681,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/operator_settings/testdata",
       "target": "pkg/services/operator_settings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/provider_sessions/codex",
-      "target": "pkg/services/provider_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/provider_sessions/cursor",
-      "target": "pkg/services/provider_sessions"
     },
     {
       "rule": "service-root-unexpected-directory",
