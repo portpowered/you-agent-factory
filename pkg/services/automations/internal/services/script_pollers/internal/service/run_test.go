@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -110,6 +111,68 @@ func TestRunScriptPoller_SubmitsSubmitStyleRecordsStdout(t *testing.T) {
 	}
 	if len(workRequest.Works) != 1 || workRequest.Works[0].WorkID != "linear-issue-124" {
 		t.Fatalf("submitted works = %#v, want one canonical work item", workRequest.Works)
+	}
+}
+
+func TestRunScriptPoller_RejectsMalformedStdoutWithoutSubmit(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		stdout           []byte
+		wantErrSubstring string
+	}{
+		{
+			name:             "non-json stdout",
+			stdout:           []byte("submitted work\n"),
+			wantErrSubstring: "malformed stdout",
+		},
+		{
+			name:             "unsupported work request type",
+			stdout:           []byte(`{"requestId":"x","type":"UNSUPPORTED","works":[]}`),
+			wantErrSubstring: "unsupported work request type",
+		},
+		{
+			name:             "mixed request and submissions",
+			stdout:           []byte(`{"request":{"requestId":"a","type":"FACTORY_REQUEST_BATCH","works":[]},"submissions":[]}`),
+			wantErrSubstring: "either request or submissions",
+		},
+		{
+			name:             "unsupported raw factory events",
+			stdout:           mustMarshalJSON(t, map[string]any{"events": []map[string]any{{"type": "WORK_REQUEST"}}}),
+			wantErrSubstring: "unsupported raw factory events",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			runner := &sequenceCommandRunner{
+				outcomes: []runOutcome{{result: workers.CommandResult{Stdout: tc.stdout}}},
+			}
+			submitted := &recordingSubmitter{}
+			svc := newScriptPollersService(runner)
+			poller := newCanonicalScriptPollerWorkstation()
+			worker := newCanonicalScriptPollerWorker()
+			runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, t.TempDir(), poller, worker)
+
+			err := svc.RunScriptPoller(
+				context.Background(),
+				runner,
+				runtimeCfg,
+				poller,
+				worker,
+				submitted.submit,
+			)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErrSubstring) {
+				t.Fatalf("RunScriptPoller error = %v, want %q", err, tc.wantErrSubstring)
+			}
+			if submitted.calls != 0 {
+				t.Fatalf("submit calls = %d, want 0 for malformed stdout", submitted.calls)
+			}
+		})
 	}
 }
 
@@ -344,4 +407,14 @@ func containsEnv(env []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func mustMarshalJSON(t *testing.T, value any) []byte {
+	t.Helper()
+
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal JSON: %v", err)
+	}
+	return data
 }

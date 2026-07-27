@@ -81,6 +81,55 @@ func TestRunScriptPoller_UsesWorkerTimeoutWithoutSubmit(t *testing.T) {
 	}
 }
 
+func TestStartScriptPoller_RestartsOnMalformedOutputWithBackoff(t *testing.T) {
+	t.Parallel()
+
+	fakeClock := clockwork.NewFakeClock()
+	runner := &sequenceCommandRunner{
+		outcomes: []runOutcome{
+			{result: workers.CommandResult{Stdout: []byte("not-json\n")}},
+			{waitForCancel: true},
+		},
+	}
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{
+		runner: runner,
+		clock:  fakeClock,
+		logger: zap.New(logCore),
+	})
+	poller := newCanonicalScriptPollerWorkstation()
+	worker := newCanonicalScriptPollerWorker()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, t.TempDir(), poller, worker)
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	var sidecars sync.WaitGroup
+	svc.StartScriptPoller(
+		runCtx,
+		&sidecars,
+		runtimeCfg,
+		poller,
+		worker,
+		func(_ context.Context, _ work.WorkRequest) error { return nil },
+	)
+	t.Cleanup(func() {
+		cancelRun()
+		sidecars.Wait()
+	})
+
+	waitForScriptPollerRunnerCalls(t, runner, 1, time.Second)
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	fakeClock.Advance(scriptpollers.ScriptPollerRestartBackoffMin)
+	waitForScriptPollerRunnerCalls(t, runner, 2, time.Second)
+
+	if observedLogs.FilterMessage("script poller restarting").Len() == 0 {
+		t.Fatal("expected restart log for malformed poller output")
+	}
+	entry := observedLogs.FilterMessage("script poller restarting").All()[0]
+	if got := entry.ContextMap()["error"]; got == nil || !strings.Contains(got.(string), "malformed stdout") {
+		t.Fatalf("restart error = %#v, want malformed stdout context", got)
+	}
+}
+
 func TestStartScriptPoller_RestartsAfterNonZeroExit(t *testing.T) {
 	t.Parallel()
 
