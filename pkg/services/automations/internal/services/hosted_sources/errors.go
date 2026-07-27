@@ -7,4 +7,6 @@ var (
 	// request. The wrapped error preserves Work-owned rejection semantics without
 	// reinterpreting them inside hosted_sources.
 	ErrWorkAdmission = hostedlinear.ErrWorkAdmission
+	// ErrSecretResolution reports that hosted-source credential resolution failed.
+	ErrSecretResolution = hostedlinear.ErrSecretResolution
 )

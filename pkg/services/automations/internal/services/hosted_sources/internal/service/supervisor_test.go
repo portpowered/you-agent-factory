@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -324,6 +325,55 @@ func TestNewLinearPoller_RequiresExternalEffects(t *testing.T) {
 				t.Fatalf("NewLinearPoller() error = %v, want %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestStartLinearPoller_SecretResolutionFailureSkipsSubmitAndRestarts(t *testing.T) {
+	secretErr := errors.New("read secret file: missing")
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		t.Error("provider should not be called when secret resolution fails")
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	factoryDir := t.TempDir()
+	pollerCfg, runtimeCfg, workstation, worker := hostedLinearPollerFixtureForTest(t, factoryDir, server, nil)
+	pollerCfg.Logger = zap.New(logCore)
+	pollerCfg.Clock = clockwork.NewFakeClock()
+	pollerCfg.SecretResolver = func(context.Context, workers.HostedRuntimePaths, string) (string, error) {
+		return "", secretErr
+	}
+
+	var submitCalls atomic.Int32
+	ctx, cancel := context.WithCancel(context.Background())
+	var sidecars sync.WaitGroup
+	if err := startLinearPollerWithConfig(ctx, &sidecars, pollerCfg, runtimeCfg, workstation, worker, func(context.Context, work.WorkRequest) error {
+		submitCalls.Add(1)
+		return nil
+	}); err != nil {
+		t.Fatalf("StartLinearPoller() error = %v", err)
+	}
+
+	waitForObservedLogMessage(t, observedLogs, "hosted linear poller restarting", time.Second)
+	cancel()
+	sidecars.Wait()
+
+	if got := submitCalls.Load(); got != 0 {
+		t.Fatalf("submit calls = %d, want 0 when secret resolution fails", got)
+	}
+	if got := requestCount.Load(); got != 0 {
+		t.Fatalf("provider request count = %d, want 0 before secret resolution succeeds", got)
+	}
+	restartEntry := observedLogs.FilterMessage("hosted linear poller restarting").All()[0]
+	loggedErr := fieldString(restartEntry.ContextMap()["error"])
+	if !strings.Contains(loggedErr, "resolve hosted linear auth") {
+		t.Fatalf("logged restart error = %q, want secret-resolution failure", loggedErr)
+	}
+	if !strings.Contains(loggedErr, string(hostedlinear.ErrSecretResolution.Error())) {
+		t.Fatalf("logged restart error = %q, want typed secret-resolution fault", loggedErr)
 	}
 }
 

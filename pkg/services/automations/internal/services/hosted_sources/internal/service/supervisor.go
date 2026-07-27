@@ -99,7 +99,12 @@ func (p *LinearPoller) run(ctx context.Context, logger *zap.Logger) error {
 
 	apiKey, err := p.secretResolver(ctx, p.runtimeConfig, p.worker.Auth.SecretRef)
 	if err != nil {
-		return fmt.Errorf("resolve hosted linear auth %q: %w", p.worker.Auth.SecretRef, err)
+		return fmt.Errorf(
+			"resolve hosted linear auth %q: %w: %w",
+			p.worker.Auth.SecretRef,
+			hostedlinear.ErrSecretResolution,
+			err,
+		)
 	}
 
 	pollerClient := hostedlinear.Client{
