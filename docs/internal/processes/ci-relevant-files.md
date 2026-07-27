@@ -185,6 +185,20 @@
   Catalog metadata infers domain `orchestration` and subsection
   `javascript/contracts` from the path; every top-level `Test*` needs a
   customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  TypeScript Factory loading functional coverage belongs in
+  `tests/functional/orchestration/javascript/loading/typescript_test.go`:
+  drive sync Factory Session execution through `support.BuildProcess` +
+  `support.FakeInputs` with `you --json run`, `--factory`, and
+  `--with-mock-workers`; scaffold file-backed factories with
+  `orchestrator.javascript.sourceRef` pointing to `.ts` workflow files that
+  require MVP TypeScript stripping; prove supported TypeScript transpiles and
+  runs to terminal `COMPLETED` primary outcomes that reflect typed source
+  execution with zero provider dispatch; prove deliberate type or syntax
+  failures fail before dispatch with customer-stable `workflow.source.syntaxError`
+  diagnostics that are actionable without private VM internals; prove
+  source-map remapping reports authored `.ts` line/column suffixes in failure
+  diagnostics rather than only emitted JavaScript locations. Substitute
+  external effects only through `edges.Edges`.
   JavaScript agent composition functional coverage belongs in
   `tests/functional/orchestration/javascript/composition/agent_test.go`:
   drive sync Factory Session execution through
