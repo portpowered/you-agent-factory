@@ -126,10 +126,12 @@ intentionally small enough to distribute across many agents.
   - `TestCLINDJSONFailureEndsWithOneTerminalResult` guards duplicate terminal
     records.
 
-- [ ] `tests/functional/transport/cli/output/text_stream_test.go`
+- [x] `tests/functional/transport/cli/output/text_stream_test.go`
   - `TestCLITextStreamSurfacesIncrementalMessages` covers streaming providers.
   - `TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise` covers human mode.
   - `TestCLITextStreamInterruptedRunDoesNotClaimCompletion` covers failure.
+  - `TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet`
+    covers non-quiet operator continuous startup reporting.
 
 - [x] `tests/functional/transport/cli/output/stream_backpressure_test.go`
   - `TestCLISlowWriterDoesNotReorderResponseEvents` uses a controlled blocking

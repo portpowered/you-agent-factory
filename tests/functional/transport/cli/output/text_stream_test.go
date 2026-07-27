@@ -5,13 +5,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
+	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
@@ -22,6 +27,7 @@ import (
 const (
 	humanTextStreamScenarioTimeout = 30 * time.Second
 	textStreamPrimaryResult        = "mock worker accepted"
+	textStreamPromptRunWorkType    = "prompt-task"
 )
 
 // TestCLITextStreamSurfacesIncrementalMessages proves a human response-stream
@@ -98,6 +104,74 @@ func TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise(t *testing.T) {
 			t.Fatalf("stdout = %q, want only raw primary result %q", stdout, textStreamPrimaryResult)
 		}
 	})
+}
+
+// TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet proves
+// a non-quiet operator continuous CLI run with --with-server reports Factory
+// initiated and Dashboard URL startup output on stdout.
+func TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI operator continuous text-stream startup")
+	}
+
+	dir := support.ScaffoldFactory(t, textStreamPromptRunFactoryConfig())
+	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
+	configuredURL := reserveTextStreamLoopbackURL(t)
+	wantDashboardURL := configuredURL + "/dashboard/ui"
+	wantInitiated := "Factory initiated: " + dir
+
+	mockWorkersPath := writeTextStreamDefaultMockWorkersConfig(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+
+	stdout := newInterruptibleStdoutCapture()
+	homeDir := t.TempDir()
+	args := []string{
+		"you", "--server", configuredURL,
+		"run", "--factory", factoryPath,
+		"--with-mock-workers", "--no-record", "--with-server", "--continuously",
+		mockWorkersPath,
+	}
+	inputs := support.FakeInputs(ctx, args)
+	inputs.Input.WorkingDirectory = dir
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.Stdout = stdout
+	inputs.Input.Stderr = &stdout.diagnostic
+	process := support.BuildProcess(t, serviceedges.Edges{})
+
+	go func() {
+		stdout.err = process.Execute(inputs.Input)
+		close(stdout.done)
+	}()
+
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		output := stdout.String()
+		if strings.Contains(output, wantInitiated) && strings.Contains(output, "Dashboard URL: "+wantDashboardURL) {
+			cancel()
+			goto waitForShutdown
+		}
+		if err := waitForTextStreamServerReady(ctx, configuredURL); err == nil {
+			output = stdout.String()
+			if strings.Contains(output, wantInitiated) && strings.Contains(output, "Dashboard URL: "+wantDashboardURL) {
+				cancel()
+				goto waitForShutdown
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf(
+		"timed out waiting for operator startup stdout\nstdout:\n%s\nstderr:\n%s",
+		stdout.String(),
+		stdout.diagnosticText(),
+	)
+
+waitForShutdown:
+	select {
+	case <-stdout.done:
+	case <-time.After(humanTextStreamScenarioTimeout):
+		t.Fatalf("timed out waiting for continuous run cancellation\nstdout:\n%s", stdout.String())
+	}
 }
 
 // TestCLITextStreamInterruptedRunDoesNotClaimCompletion proves interrupting a
@@ -448,6 +522,12 @@ func (capture *interruptibleStdoutCapture) String() string {
 	return capture.buffer.String()
 }
 
+func (capture *interruptibleStdoutCapture) diagnosticText() string {
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	return capture.diagnostic.String()
+}
+
 func waitForInterruptibleStdoutLifecycle(t *testing.T, capture *interruptibleStdoutCapture) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -499,4 +579,78 @@ func runGoalHumanResponseStreamWithStdout(t *testing.T, stdout *firstChunkGatedS
 			t.Errorf("timed out waiting for invocation cleanup")
 		}
 	})
+}
+
+func textStreamPromptRunFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "text-stream-prompt-run",
+		"workTypes": []map[string]any{
+			{
+				"name":             textStreamPromptRunWorkType,
+				"handlingBehavior": []string{"DEFAULT"},
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]string{
+			{"name": "mock-worker"},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":      "process-prompt",
+				"worker":    "mock-worker",
+				"inputs":    []map[string]string{{"workType": textStreamPromptRunWorkType, "state": "init"}},
+				"outputs":   []map[string]string{{"workType": textStreamPromptRunWorkType, "state": "complete"}},
+				"onFailure": []map[string]string{{"workType": textStreamPromptRunWorkType, "state": "failed"}},
+			},
+		},
+	}
+}
+
+func reserveTextStreamLoopbackURL(t *testing.T) string {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve loopback port: %v", err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	if err := listener.Close(); err != nil {
+		t.Fatalf("release loopback port: %v", err)
+	}
+	return "http://127.0.0.1:" + strconv.Itoa(port)
+}
+
+func writeTextStreamDefaultMockWorkersConfig(t *testing.T) string {
+	t.Helper()
+
+	data, err := json.MarshalIndent(workers.NewEmptyMockWorkersConfig(), "", "  ")
+	if err != nil {
+		t.Fatalf("marshal default mock-workers config: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "mock-workers.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write mock-workers config: %v", err)
+	}
+	return path
+}
+
+func waitForTextStreamServerReady(ctx context.Context, baseURL string) error {
+	client := &http.Client{Timeout: 2 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, support.DefaultSessionWorkURL(baseURL, "/work"), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("server not ready")
+	}
+	return nil
 }
