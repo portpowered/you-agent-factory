@@ -55,10 +55,28 @@ func TestBuildProcessComposesRecordingsArtifactExportThroughRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildPortableArtifact: %v", err)
 	}
-	if _, err := rootService.ValidatePortableArtifact(recordings.ValidatePortableArtifactRequest{
+	encoded, err := rootService.EncodePortableArtifact(recordings.EncodePortableArtifactRequest{
 		Artifact: built.Artifact,
+	})
+	if err != nil || len(encoded.Payload) == 0 {
+		t.Fatalf("EncodePortableArtifact = (%d bytes, %v)", len(encoded.Payload), err)
+	}
+	decoded, err := rootService.DecodePortableArtifact(recordings.DecodePortableArtifactRequest{
+		Payload: encoded.Payload,
+	})
+	if err != nil {
+		t.Fatalf("DecodePortableArtifact: %v", err)
+	}
+	if _, err := rootService.ValidatePortableArtifact(recordings.ValidatePortableArtifactRequest{
+		Artifact: decoded.Artifact,
 	}); err != nil {
-		t.Fatalf("ValidatePortableArtifact: %v", err)
+		t.Fatalf("ValidatePortableArtifact decoded artifact: %v", err)
+	}
+	summarized, err := rootService.SummarizePortableArtifact(recordings.SummarizePortableArtifactRequest{
+		Artifact: decoded.Artifact,
+	})
+	if err != nil || summarized.Summary.RecordingID != bound.Status.RecordingID {
+		t.Fatalf("SummarizePortableArtifact = (%#v, %v)", summarized, err)
 	}
 	if _, err := rootService.DecodePortableArtifact(recordings.DecodePortableArtifactRequest{
 		Payload: []byte(`{`),
