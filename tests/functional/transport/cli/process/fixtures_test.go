@@ -1,13 +1,17 @@
 package process_test
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -54,4 +58,122 @@ func writeRejectingGoalMockWorkers(t *testing.T) string {
 		t.Fatalf("write rejecting mock workers: %v", err)
 	}
 	return path
+}
+
+const idleCurrentFactoryJSON = `{
+  "name": "current",
+  "workTypes": [{
+    "name": "task",
+    "states": [
+      {"name": "init", "type": "INITIAL"},
+      {"name": "complete", "type": "TERMINAL"},
+      {"name": "failed", "type": "FAILED"}
+    ]
+  }],
+  "workers": [{"name": "processor"}],
+  "workstations": [{
+    "name": "process",
+    "inputs": [{"workType": "task", "state": "init"}],
+    "outputs": [{"workType": "task", "state": "complete"}],
+    "onFailure": [{"workType": "task", "state": "failed"}],
+    "worker": "processor"
+  }]
+}`
+
+func writeIdleCurrentFactory(t testing.TB, workingDirectory string) {
+	t.Helper()
+
+	factoryDirectory := filepath.Join(workingDirectory, "factory")
+	if err := os.MkdirAll(factoryDirectory, 0o755); err != nil {
+		t.Fatalf("create Current Factory directory: %v", err)
+	}
+	path := filepath.Join(factoryDirectory, "factory.json")
+	if err := os.WriteFile(path, []byte(idleCurrentFactoryJSON), 0o600); err != nil {
+		t.Fatalf("write Current Factory: %v", err)
+	}
+}
+
+func waitForDashboardURL(
+	t testing.TB,
+	lines <-chan string,
+	scanErr <-chan error,
+	stderr *bytes.Buffer,
+	timeout time.Duration,
+) string {
+	t.Helper()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for {
+		select {
+		case line := <-lines:
+			if target, ok := strings.CutPrefix(line, "Dashboard URL: "); ok {
+				return target
+			}
+		case err := <-scanErr:
+			t.Fatalf("built CLI exited before readiness: %v; stderr=%q", err, stderr.String())
+		case <-timer.C:
+			t.Fatalf("timed out waiting for built CLI readiness; stderr=%q", stderr.String())
+		}
+	}
+}
+
+func interruptAndAssertCancellationExit(t testing.TB, command *exec.Cmd, waitTimeout time.Duration) {
+	t.Helper()
+
+	if err := command.Process.Signal(os.Interrupt); err != nil {
+		t.Fatalf("interrupt built CLI: %v", err)
+	}
+	waitResult := make(chan error, 1)
+	go func() {
+		waitResult <- command.Wait()
+	}()
+	select {
+	case err := <-waitResult:
+		exitErr, ok := err.(*exec.ExitError)
+		if !ok || exitErr.ExitCode() != 130 {
+			t.Fatalf("interrupted built CLI exit = %v, want exit code 130", err)
+		}
+	case <-time.After(waitTimeout):
+		_ = command.Process.Kill()
+		<-waitResult
+		t.Fatalf("interrupted built CLI did not exit within %s", waitTimeout)
+	}
+}
+
+func startBuiltCLIServerCommand(
+	t testing.TB,
+	session *builtcliacceptance.Session,
+	binaryPath string,
+) (*exec.Cmd, <-chan string, <-chan error, *bytes.Buffer) {
+	t.Helper()
+
+	writeIdleCurrentFactory(t, session.WorkDir)
+
+	args := append([]string{}, session.ServerFlags()...)
+	args = append(args, "server")
+
+	command := exec.Command(binaryPath, args...)
+	command.Dir = session.WorkDir
+	command.Env = session.ProcessEnv()
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		t.Fatalf("open stdout pipe: %v", err)
+	}
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	if err := command.Start(); err != nil {
+		t.Fatalf("start built CLI server: %v", err)
+	}
+
+	lines := make(chan string, 128)
+	scanErr := make(chan error, 1)
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			lines <- scanner.Text()
+		}
+		scanErr <- scanner.Err()
+	}()
+	return command, lines, scanErr, &stderr
 }

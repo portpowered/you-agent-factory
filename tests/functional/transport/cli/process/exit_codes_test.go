@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -89,4 +90,28 @@ func TestCLIWorkerFailureExitCode(t *testing.T) {
 	if result.ExitCode != 1 {
 		t.Fatalf("exit code = %d, want documented worker-failure exit 1", result.ExitCode)
 	}
+}
+
+// TestCLIInterruptedExitCode proves delivering the normal process interrupt to
+// an in-flight built you CLI command exits the documented cancellation code.
+func TestCLIInterruptedExitCode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Interrupt is not supported for child processes on Windows")
+	}
+
+	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	session := harness.NewSession(t).WithNoExternalServer(t)
+
+	command, lines, scanErr, stderr := startBuiltCLIServerCommand(t, session, harness.BinaryPath)
+	stopped := false
+	defer func() {
+		if !stopped {
+			_ = command.Process.Kill()
+			_ = command.Wait()
+		}
+	}()
+
+	_ = waitForDashboardURL(t, lines, scanErr, stderr, 30*time.Second)
+	interruptAndAssertCancellationExit(t, command, 10*time.Second)
+	stopped = true
 }
