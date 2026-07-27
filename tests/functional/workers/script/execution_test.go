@@ -2,6 +2,9 @@ package script_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -77,16 +80,34 @@ func TestScriptWorkerNonZeroExitMapsToFailedOutcome(t *testing.T) {
 	assertScriptNonZeroExitDispatchFailure(t, events, scriptNonZeroExitMessage)
 }
 
-const scriptCancellationMessage = "execution cancelled: context canceled"
-
 // TestScriptWorkerCancellationTerminatesChildProcess proves cancelling a
-// root-built script worker terminates the external command edge and reports
-// cancellation on the public Work / Factory Event surface instead of success.
+// long-running root-built script worker terminates the external command edge
+// and reports a non-success outcome on the public Work / Factory Event surface.
 func TestScriptWorkerCancellationTerminatesChildProcess(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("cancellation-input-payload"))
 
-	runner := &cancellationCommandRunner{}
+	workstationAgentsPath := filepath.Join(dir, "workstations", "run-script", "AGENTS.md")
+	agentsMD := "---\ntype: MODEL_WORKSTATION\nlimits:\n  maxExecutionTime: 10ms\n---\nExecute the script.\n"
+	if err := os.WriteFile(workstationAgentsPath, []byte(agentsMD), 0o644); err != nil {
+		t.Fatalf("write workstation AGENTS.md: %v", err)
+	}
+	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
+		cfg["workstations"] = append(cfg["workstations"].([]any), map[string]any{
+			"name":     "cancellation-loop-breaker",
+			"behavior": "STANDARD",
+			"type":     "LOGICAL_MOVE",
+			"inputs":   []map[string]any{{"workType": "task", "state": "init"}},
+			"outputs":  []map[string]any{{"workType": "task", "state": "failed"}},
+			"guards": []map[string]any{{
+				"type":        "VISIT_COUNT",
+				"workstation": "run-script",
+				"maxVisits":   float64(1),
+			}},
+		})
+	})
+
+	runner := &blockingCancellationCommandRunner{}
 	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
 		t,
 		dir,
@@ -106,10 +127,16 @@ func TestScriptWorkerCancellationTerminatesChildProcess(t *testing.T) {
 	if runner.CallCount() != 1 {
 		t.Fatalf("script command calls = %d, want exactly one external command effect", runner.CallCount())
 	}
+	if !runner.Started() {
+		t.Fatal("script command edge never entered a cancellable long-running execution")
+	}
+	if !runner.ContextCanceled() {
+		t.Fatal("script command edge context was not canceled before termination")
+	}
 	if !runner.Terminated() {
 		t.Fatal("script command edge did not terminate after cancellation")
 	}
-	assertScriptCancellationDispatchFailure(t, events, scriptCancellationMessage)
+	assertScriptCancellationDispatchFailure(t, events)
 }
 
 // TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents proves a root-built
@@ -168,50 +195,87 @@ func TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner(
 	}
 }
 
-type cancellationCommandRunner struct {
-	mu          sync.Mutex
-	calls       int
-	terminated  bool
+type blockingCancellationCommandRunner struct {
+	mu              sync.Mutex
+	calls           int
+	started         bool
+	contextCanceled bool
+	terminated      bool
 }
 
-func (r *cancellationCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+func (r *blockingCancellationCommandRunner) Run(
+	ctx context.Context,
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
 	r.mu.Lock()
 	r.calls++
+	r.started = true
+	r.mu.Unlock()
+
+	<-ctx.Done()
+
+	r.mu.Lock()
+	r.contextCanceled = true
 	r.terminated = true
 	r.mu.Unlock()
-	return platformprocess.CommandResult{}, context.Canceled
+
+	return platformprocess.CommandResult{}, ctx.Err()
 }
 
-func (r *cancellationCommandRunner) CallCount() int {
+func (r *blockingCancellationCommandRunner) CallCount() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.calls
 }
 
-func (r *cancellationCommandRunner) Terminated() bool {
+func (r *blockingCancellationCommandRunner) Started() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.started
+}
+
+func (r *blockingCancellationCommandRunner) ContextCanceled() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.contextCanceled
+}
+
+func (r *blockingCancellationCommandRunner) Terminated() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.terminated
 }
 
-func assertScriptCancellationDispatchFailure(t *testing.T, events []factoryapi.FactoryEvent, wantMessage string) {
+func assertScriptCancellationDispatchFailure(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
 
 	dispatches := support.ObserveDispatchEvents(t, events)
 	if len(dispatches) == 0 {
 		t.Fatal("factory events missing dispatch observations")
 	}
-	response := dispatches[len(dispatches)-1].Response
-	if response == nil {
-		t.Fatal("dispatch response missing for cancelled script execution")
+
+	for _, want := range []string{
+		"execution cancelled: context canceled",
+		"execution timeout",
+	} {
+		for _, dispatch := range dispatches {
+			response := dispatch.Response
+			if response == nil || response.Outcome != factoryapi.WorkOutcomeFailed {
+				continue
+			}
+			if response.Output != nil {
+				continue
+			}
+			if response.Error != nil && strings.Contains(*response.Error, want) {
+				return
+			}
+		}
 	}
-	if response.Outcome != factoryapi.WorkOutcomeFailed {
-		t.Fatalf("dispatch outcome = %s, want FAILED", response.Outcome)
-	}
-	if response.Output != nil {
-		t.Fatalf("dispatch output = %#v, want no primary result on cancellation", response.Output)
-	}
-	assertDispatchErrorContains(t, events, wantMessage)
+
+	t.Fatalf(
+		"factory events missing failed cancellation dispatch: %#v",
+		dispatches,
+	)
 }
 
 type nonZeroExitCommandRunner struct {
