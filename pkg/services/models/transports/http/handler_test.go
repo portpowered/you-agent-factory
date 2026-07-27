@@ -27,6 +27,10 @@ type modelAPIFake struct {
 		context.Context,
 		modelcontract.GetModelRequest,
 	) (modelcontract.GetModelResult, error)
+	pullForScope func(
+		context.Context,
+		modelcontract.PullModelRequest,
+	) (modelcontract.PullResult, error)
 }
 
 func (fake modelAPIFake) ListModels(ctx context.Context) (modelcontract.List, error) {
@@ -53,6 +57,13 @@ func (fake modelAPIFake) GetCatalogModel(
 	request modelcontract.GetModelRequest,
 ) (modelcontract.GetModelResult, error) {
 	return fake.getCatalog(ctx, request)
+}
+
+func (fake modelAPIFake) PullModelForScope(
+	ctx context.Context,
+	request modelcontract.PullModelRequest,
+) (modelcontract.PullResult, error) {
+	return fake.pullForScope(ctx, request)
 }
 
 type modelInvokerFake struct {
@@ -131,6 +142,15 @@ func TestAdapterUsesOpenedModelsScopeForCatalogReads(t *testing.T) {
 				},
 			}, nil
 		},
+		pullForScope: func(
+			_ context.Context,
+			request modelcontract.PullModelRequest,
+		) (modelcontract.PullResult, error) {
+			if request.Scope != scope || request.Name != "voice" {
+				t.Fatalf("PullModelForScope request = %#v, want opened scope and voice", request)
+			}
+			return modelcontract.PullResult{ModelName: "voice", Outcome: "PULLED"}, nil
+		},
 	}
 	adapter := NewAdapter(service, modelInvokerFake{}, passthroughContentPreparation{}, scope)
 
@@ -141,6 +161,10 @@ func TestAdapterUsesOpenedModelsScopeForCatalogReads(t *testing.T) {
 	detail, err := adapter.GetModel(t.Context(), "voice")
 	if err != nil || detail.Name != "voice" {
 		t.Fatalf("GetModel() = (%#v, %v), want scoped voice detail", detail, err)
+	}
+	pulled, err := adapter.PullModel(t.Context(), "voice")
+	if err != nil || pulled.ModelName != "voice" || pulled.Outcome != "PULLED" {
+		t.Fatalf("PullModel() = (%#v, %v), want scoped voice pull", pulled, err)
 	}
 }
 

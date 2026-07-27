@@ -542,6 +542,13 @@ func (workerModelService) PullModel(context.Context, string) (modelinference.Pul
 	return modelinference.PullResult{}, nil
 }
 
+func (workerModelService) PullModelForScope(
+	context.Context,
+	modelinference.PullModelRequest,
+) (modelinference.PullResult, error) {
+	return modelinference.PullResult{}, nil
+}
+
 func (workerModelService) InvokeLocal(context.Context, modelinference.LocalInvocationRequest) (modelinference.LocalInvocationResult, error) {
 	return modelinference.LocalInvocationResult{}, nil
 }

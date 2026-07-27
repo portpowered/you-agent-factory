@@ -28,6 +28,9 @@ type Service interface {
 	// GetModelReadiness returns current detached readiness facts for one scoped
 	// model without exposing a catalog assembler, cache, host, or runtime handle.
 	GetModelReadiness(context.Context, GetModelReadinessRequest) (GetModelReadinessResult, error)
+	// PullModelForScope preserves the established pull result contract while
+	// requiring the caller to identify the opened runtime scope explicitly.
+	PullModelForScope(context.Context, PullModelRequest) (PullResult, error)
 	// PrepareModelAssets makes configured assets available for one scoped model
 	// and distinguishes already-available assets from newly prepared assets.
 	// Missing/unsupported sources, interrupted preparation, integrity failure,

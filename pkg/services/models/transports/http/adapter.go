@@ -82,6 +82,12 @@ func (a *Adapter) PullModel(ctx context.Context, modelName string) (models.PullR
 	if a == nil || a.models == nil {
 		return models.PullResult{}, errors.New("Models service is required")
 	}
+	if !a.scope.IsZero() {
+		return a.models.PullModelForScope(ctx, models.PullModelRequest{
+			Scope: a.scope,
+			Name:  modelName,
+		})
+	}
 	return a.models.PullModel(ctx, modelName)
 }
 

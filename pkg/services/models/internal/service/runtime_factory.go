@@ -282,6 +282,20 @@ func (o *Root) PrepareModelAssets(
 	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
 }
 
+func (o *Root) PullModelForScope(
+	ctx context.Context,
+	request models.PullModelRequest,
+) (models.PullResult, error) {
+	if err := models.ValidatePullModelRequest(request); err != nil {
+		return models.PullResult{}, err
+	}
+	runtime, err := o.scopedRuntime(request.Scope)
+	if err != nil {
+		return models.PullResult{}, err
+	}
+	return runtime.PullModel(ctx, request.Name)
+}
+
 func (o *Root) InspectModelAssets(
 	context.Context,
 	models.InspectModelAssetsRequest,
@@ -527,6 +541,16 @@ func (s *runtimeService) PrepareModelAssets(
 	models.PrepareModelAssetsRequest,
 ) (models.PrepareModelAssetsResult, error) {
 	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (s *runtimeService) PullModelForScope(
+	ctx context.Context,
+	request models.PullModelRequest,
+) (models.PullResult, error) {
+	if err := models.ValidatePullModelRequest(request); err != nil {
+		return models.PullResult{}, err
+	}
+	return s.PullModel(ctx, request.Name)
 }
 
 func (s *runtimeService) InspectModelAssets(

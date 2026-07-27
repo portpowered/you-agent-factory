@@ -162,6 +162,13 @@ func (fake *recordingModelsService) PullModel(context.Context, string) (models.P
 	return models.PullResult{}, models.ErrUnsupportedOperation
 }
 
+func (fake *recordingModelsService) PullModelForScope(
+	context.Context,
+	models.PullModelRequest,
+) (models.PullResult, error) {
+	return models.PullResult{}, models.ErrUnsupportedOperation
+}
+
 func (fake *recordingModelsService) InspectRuntime(context.Context, string) (models.Runtime, error) {
 	return models.Runtime{}, models.ErrUnsupportedOperation
 }
