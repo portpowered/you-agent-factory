@@ -131,7 +131,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise` covers human mode.
   - `TestCLITextStreamInterruptedRunDoesNotClaimCompletion` covers failure.
 
-- [ ] `tests/functional/transport/cli/output/stream_backpressure_test.go`
+- [x] `tests/functional/transport/cli/output/stream_backpressure_test.go`
   - `TestCLISlowWriterDoesNotReorderResponseEvents` uses a controlled blocking
     writer.
   - `TestCLIWriterFailureCancelsInvocation` verifies output failure cleanup.

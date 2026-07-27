@@ -252,6 +252,21 @@
   metadata infers domain `transport` and subsection `cli/parameters` from the
   path; every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+  CLI response-stream backpressure functional coverage belongs in
+  `tests/functional/transport/cli/output/stream_backpressure_test.go`:
+  invoke `support.BuildProcess` with a gated or mid-stream-failing stdout writer
+  on `you --json run … --output response-stream`, prove NDJSON Factory Event
+  order and terminal `invocation_result` placement survive slow stdout drains,
+  and prove stdout writer failure ends the invocation unsuccessfully while
+  cancelling in-flight mock-worker external work through
+  `edges.Edges.ProviderCommandRunner` with a runner that blocks until its
+  context is cancelled. Response-stream stdout write failures cancel the
+  invocation through `pkg/transports/cli/run/factory_invocation_input.go`, and
+  worker-pool shutdown cancels in-flight executor contexts through
+  `pkg/services/factory_runtime/runtime/worker_pool.go`. Catalog metadata infers domain
+  `transport` and subsection `cli/output` from the path. Every top-level `Test*`
+  needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
   CLI docs command wiring functional coverage belongs in
   `tests/functional/transport/cli/commands/docs_wiring_test.go`: prove packaged
   topic discovery, index-driven non-empty topic rendering, and actionable
