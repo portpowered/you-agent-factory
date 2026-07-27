@@ -166,17 +166,19 @@ func TestProductionCompositionInspectsScopedAssetsThroughModelsRoot(t *testing.T
 		t.Fatalf("create revision directory: %v", err)
 	}
 	files := []string{"omnivoice-base-Q4_K_M.gguf", "omnivoice-tokenizer-Q4_K_M.gguf"}
+	assetBody := []byte("asset")
 	for _, name := range files {
-		if err := os.WriteFile(filepath.Join(revisionDirectory, name), []byte("asset"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(revisionDirectory, name), assetBody, 0o644); err != nil {
 			t.Fatalf("write %s: %v", name, err)
 		}
 	}
+	assetChecksum := fmt.Sprintf("%x", sha256.Sum256(assetBody))
 	metadata, err := json.Marshal(map[string]any{
 		"modelName": "OMNIVOICE_Q4_K_M",
 		"revision":  "rev-root",
 		"files": []map[string]any{
-			{"path": files[0], "sha256": "aaa"},
-			{"path": files[1], "sha256": "bbb"},
+			{"path": files[0], "bytes": len(assetBody), "sha256": assetChecksum},
+			{"path": files[1], "bytes": len(assetBody), "sha256": assetChecksum},
 		},
 	})
 	if err != nil {
@@ -187,13 +189,15 @@ func TestProductionCompositionInspectsScopedAssetsThroughModelsRoot(t *testing.T
 	}
 
 	result, err := service.InspectModelAssets(context.Background(), models.InspectModelAssetsRequest{
-		Scope: opened.Scope,
-		Name:  "OMNIVOICE_Q4_K_M",
+		Scope:           opened.Scope,
+		Name:            "OMNIVOICE_Q4_K_M",
+		VerifyIntegrity: true,
 	})
 	if err != nil {
 		t.Fatalf("InspectModelAssets: %v", err)
 	}
 	if result.Asset.Readiness != models.AssetReadinessAvailable ||
+		result.Asset.Integrity != models.AssetIntegrityVerified ||
 		result.Asset.Source.Provider != "MANAGED_MIRROR" ||
 		result.Asset.Revision != "rev-root" ||
 		len(result.Asset.Artifacts) != 2 {

@@ -84,6 +84,111 @@ func TestInspectModelAssetsDiscoversCompleteLocalRevisionWithoutMetadata(t *test
 	}
 }
 
+func TestInspectModelAssetsVerifiesMetadataBackedCache(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	writeVerifiedCacheFixture(t, cacheDirectory)
+	scopes := newScopes(t, "verified-inspection")
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	service := newTestService(scopes, nil)
+
+	result, err := service.InspectModelAssets(
+		context.Background(),
+		models.InspectModelAssetsRequest{
+			Scope: ref, Name: "OMNIVOICE_Q4_K_M", VerifyIntegrity: true,
+		},
+	)
+	if err != nil {
+		t.Fatalf("InspectModelAssets: %v", err)
+	}
+	if result.Asset.Readiness != models.AssetReadinessAvailable ||
+		result.Asset.Integrity != models.AssetIntegrityVerified ||
+		result.Asset.Revision != "verified-revision" ||
+		len(result.Asset.Artifacts) != 2 ||
+		result.Asset.Artifacts[0].SHA256 == "" {
+		t.Fatalf("verified inspection = %#v", result.Asset)
+	}
+}
+
+func TestInspectModelAssetsReportsCorruptCacheWithDetachedDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	writeVerifiedCacheFixture(t, cacheDirectory)
+	corruptPath := filepath.Join(
+		cacheDirectory,
+		"OMNIVOICE_Q4_K_M",
+		"verified-revision",
+		"omnivoice-base-Q4_K_M.gguf",
+	)
+	corruptBody := []byte("cached basf")
+	if err := os.WriteFile(corruptPath, corruptBody, 0o644); err != nil {
+		t.Fatalf("corrupt cached asset: %v", err)
+	}
+	scopes := newScopes(t, "corrupt-inspection")
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig("MODELSCOPE"))
+	service := newTestService(scopes, nil)
+
+	result, err := service.InspectModelAssets(
+		context.Background(),
+		models.InspectModelAssetsRequest{
+			Scope: ref, Name: "OMNIVOICE_Q4_K_M", VerifyIntegrity: true,
+		},
+	)
+	if !errors.Is(err, models.ErrAssetIntegrityFailed) {
+		t.Fatalf("InspectModelAssets error = %v, want ErrAssetIntegrityFailed", err)
+	}
+	if result.Asset.ModelName != "OMNIVOICE_Q4_K_M" ||
+		result.Asset.Readiness != models.AssetReadinessFailed ||
+		result.Asset.Integrity != models.AssetIntegrityFailed ||
+		result.Asset.Source.Provider != "MANAGED_MIRROR" ||
+		result.Asset.Revision != "verified-revision" ||
+		len(result.Asset.Artifacts) != 1 ||
+		result.Asset.Artifacts[0].Bytes != int64(len(corruptBody)) ||
+		result.Asset.Artifacts[0].SHA256 == "" {
+		t.Fatalf("corrupt inspection diagnostics = %#v", result.Asset)
+	}
+	body, readErr := os.ReadFile(corruptPath)
+	if readErr != nil || string(body) != string(corruptBody) {
+		t.Fatalf("integrity inspection mutated corrupt cache: body=%q error=%v", body, readErr)
+	}
+}
+
+func TestInspectModelAssetsIntegrityCheckReportsMissingArtifact(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	writeVerifiedCacheFixture(t, cacheDirectory)
+	if err := os.Remove(filepath.Join(
+		cacheDirectory,
+		"OMNIVOICE_Q4_K_M",
+		"verified-revision",
+		"omnivoice-tokenizer-Q4_K_M.gguf",
+	)); err != nil {
+		t.Fatalf("remove cached artifact: %v", err)
+	}
+	scopes := newScopes(t, "missing-inspection")
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	service := newTestService(scopes, nil)
+
+	result, err := service.InspectModelAssets(
+		context.Background(),
+		models.InspectModelAssetsRequest{
+			Scope: ref, Name: "OMNIVOICE_Q4_K_M", VerifyIntegrity: true,
+		},
+	)
+	if !errors.Is(err, models.ErrAssetUnavailable) {
+		t.Fatalf("InspectModelAssets error = %v, want ErrAssetUnavailable", err)
+	}
+	if result.Asset.Readiness != models.AssetReadinessMissing ||
+		result.Asset.Integrity != models.AssetIntegrityUnknown ||
+		result.Asset.Revision != "verified-revision" ||
+		len(result.Asset.Artifacts) != 1 {
+		t.Fatalf("missing inspection = %#v", result.Asset)
+	}
+}
+
 func TestInspectModelAssetsRejectsScopeBeforeCacheEffects(t *testing.T) {
 	t.Parallel()
 
@@ -143,7 +248,6 @@ func TestInspectModelAssetsClassifiesMissingAndUnsupportedSourcesBeforeCacheEffe
 	scopes := newScopes(t, "sources")
 	missing := openScope(t, scopes, "cache", models.RuntimeConfig{})
 	unsupported := openScope(t, scopes, "cache", runtimeConfig("custom-provider"))
-	valid := openScope(t, scopes, "cache", runtimeConfig(""))
 	unsupportedModel := openScope(t, scopes, "cache", models.RuntimeConfig{
 		Resources: []models.RuntimeResource{{
 			Type: models.RuntimeResourceTypeModel, Model: "OTHER_MODEL",
@@ -153,25 +257,19 @@ func TestInspectModelAssetsClassifiesMissingAndUnsupportedSourcesBeforeCacheEffe
 	service := newTestService(scopes, &cacheReads)
 
 	tests := []struct {
-		name            string
-		scope           models.RuntimeScopeRef
-		model           string
-		verifyIntegrity bool
-		want            error
+		name  string
+		scope models.RuntimeScopeRef
+		model string
+		want  error
 	}{
 		{name: "missing", scope: missing, model: "OMNIVOICE_Q4_K_M", want: models.ErrAssetSourceMissing},
 		{name: "provider", scope: unsupported, model: "OMNIVOICE_Q4_K_M", want: models.ErrAssetSourceUnsupported},
 		{name: "model", scope: unsupportedModel, model: "OTHER_MODEL", want: models.ErrAssetSourceUnsupported},
-		{
-			name: "integrity verification", scope: valid, model: "OMNIVOICE_Q4_K_M",
-			verifyIntegrity: true, want: models.ErrUnsupportedOperation,
-		},
 	}
 	for _, test := range tests {
 		_, err := service.InspectModelAssets(context.Background(), models.InspectModelAssetsRequest{
-			Scope:           test.scope,
-			Name:            test.model,
-			VerifyIntegrity: test.verifyIntegrity,
+			Scope: test.scope,
+			Name:  test.model,
 		})
 		if !errors.Is(err, test.want) {
 			t.Fatalf("%s error = %v, want %v", test.name, err, test.want)

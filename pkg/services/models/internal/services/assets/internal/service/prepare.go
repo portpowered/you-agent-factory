@@ -72,7 +72,7 @@ func (s *service) PrepareModelAssets(
 		ctx, scope.CacheDirectory, spec, source,
 	); inspectErr != nil {
 		return models.PrepareModelAssetsResult{Asset: snapshot.Clone()}, inspectErr
-	} else if available {
+	} else if available && snapshot.Integrity == models.AssetIntegrityVerified {
 		return models.PrepareModelAssetsResult{
 			Asset: snapshot.Clone(), Outcome: models.AssetPreparationAlreadyAvailable,
 		}, nil
@@ -112,6 +112,7 @@ func (s *service) inspectVerifiedCache(
 		metadataByName[filepath.ToSlash(strings.TrimSpace(file.Path))] = file
 	}
 	artifacts := make([]models.AssetArtifact, 0, len(spec.requiredArtifacts))
+	verified := true
 	for _, name := range spec.requiredArtifacts {
 		if err := assetContextError(ctx); err != nil {
 			return unavailableSnapshot(spec.modelName, source, revision, artifacts), false, err
@@ -127,43 +128,53 @@ func (s *service) inspectVerifiedCache(
 			return unavailableSnapshot(spec.modelName, source, revision, artifacts), false, nil
 		}
 		if err != nil {
-			return failedSnapshot(spec.modelName, source, revision, artifacts), false, err
+			diagnostics := append(artifacts, artifact)
+			return failedSnapshot(spec.modelName, source, revision, diagnostics), false, err
+		}
+		if expected.Bytes <= 0 && strings.TrimSpace(expected.SHA256) == "" {
+			verified = false
 		}
 		artifacts = append(artifacts, artifact)
 	}
 	snapshot := availableSnapshot(spec.modelName, source, revision, artifacts)
-	snapshot.Integrity = models.AssetIntegrityVerified
+	if verified {
+		snapshot.Integrity = models.AssetIntegrityVerified
+	}
 	return snapshot, true, nil
 }
 
 func (s *service) verifyCachedFile(path string, expected metadataFile) (models.AssetArtifact, error) {
+	artifact := models.AssetArtifact{
+		Name:   expected.Path,
+		SHA256: strings.ToLower(strings.TrimSpace(expected.SHA256)),
+	}
 	info, err := s.inspectPath(path)
 	if err != nil {
-		return models.AssetArtifact{}, err
+		return artifact, err
 	}
 	if info.IsDir() {
-		return models.AssetArtifact{}, os.ErrNotExist
+		return artifact, os.ErrNotExist
 	}
+	artifact.Bytes = info.Size()
 	if expected.Bytes > 0 && info.Size() != expected.Bytes {
-		return models.AssetArtifact{}, fmt.Errorf(
+		return artifact, fmt.Errorf(
 			"%w: asset %q size is %d, expected %d",
 			models.ErrAssetIntegrityFailed, expected.Path, info.Size(), expected.Bytes,
 		)
 	}
-	checksum := strings.ToLower(strings.TrimSpace(expected.SHA256))
-	if checksum != "" {
+	if artifact.SHA256 != "" {
 		actual, hashErr := s.fileSHA256(path)
 		if hashErr != nil {
-			return models.AssetArtifact{}, fmt.Errorf("verify cached asset %q: %w", expected.Path, hashErr)
+			return artifact, fmt.Errorf("verify cached asset %q: %w", expected.Path, hashErr)
 		}
-		if actual != checksum {
-			return models.AssetArtifact{}, fmt.Errorf(
+		if actual != artifact.SHA256 {
+			return artifact, fmt.Errorf(
 				"%w: asset %q checksum does not match",
 				models.ErrAssetIntegrityFailed, expected.Path,
 			)
 		}
 	}
-	return models.AssetArtifact{Name: expected.Path, Bytes: info.Size(), SHA256: checksum}, nil
+	return artifact, nil
 }
 
 func (s *service) fetchManifest(ctx context.Context, spec assetSpec) (remoteManifest, error) {

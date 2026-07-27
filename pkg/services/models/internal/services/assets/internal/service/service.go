@@ -105,17 +105,21 @@ func (s *service) InspectModelAssets(
 	if err != nil {
 		return models.InspectModelAssetsResult{}, err
 	}
-	if request.VerifyIntegrity {
-		return models.InspectModelAssetsResult{}, fmt.Errorf(
-			"%w: asset integrity inspection is not implemented",
-			models.ErrUnsupportedOperation,
-		)
-	}
 	if err := assetContextError(ctx); err != nil {
 		return models.InspectModelAssetsResult{}, err
 	}
 
-	snapshot, available, err := s.inspectCache(ctx, scope.CacheDirectory, spec, source)
+	var snapshot models.AssetSnapshot
+	var available bool
+	if request.VerifyIntegrity {
+		snapshot, available, err = s.inspectVerifiedCache(
+			ctx, scope.CacheDirectory, spec, source,
+		)
+	} else {
+		snapshot, available, err = s.inspectCache(
+			ctx, scope.CacheDirectory, spec, source,
+		)
+	}
 	result := models.InspectModelAssetsResult{Asset: snapshot.Clone()}
 	if err != nil {
 		return result, err
