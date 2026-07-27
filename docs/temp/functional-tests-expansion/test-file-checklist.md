@@ -98,7 +98,7 @@ intentionally small enough to distribute across many agents.
     output.
   - `TestCLIJSONNullAndEmptyValuesRemainDistinct` prevents normalization loss.
 
-- [ ] `tests/functional/transport/cli/parameters/environment_precedence_test.go`
+- [x] `tests/functional/transport/cli/parameters/environment_precedence_test.go`
   - `TestCLIExplicitFlagOverridesEnvironmentDefault` verifies precedence.
   - `TestCLIEnvironmentOverridesGlobalConfig` verifies documented precedence.
   - `TestCLIUnsetEnvironmentFallsBackWithoutFabricatingValue` covers absence.
@@ -141,7 +141,7 @@ intentionally small enough to distribute across many agents.
 These files prove command wiring and exit behavior only. Domain depth lives
 under `work/`, `sessions/`, `factory/`, and `product/`.
 
-- [ ] `tests/functional/transport/cli/commands/run_wiring_test.go`
+- [x] `tests/functional/transport/cli/commands/run_wiring_test.go`
   - `TestCLIRunFactoryByPath` covers an authored Factory path.
   - `TestCLIRunNamedFactory` covers packaged/named Factory resolution.
   - `TestCLIRunInvalidFactoryReturnsValidationFailure` covers load failure.
@@ -239,7 +239,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestWorkerProviderOverridesGlobalDefault` covers precedence.
   - `TestUnknownProviderFailsBeforeProcessStart` covers validation.
 
-- [ ] `tests/functional/workers/inference/flags_test.go`
+- [x] `tests/functional/workers/inference/flags_test.go`
   - `TestProviderPermissionWorktreeAndModelFlagsMapToCommand` covers shared
     command metadata.
   - `TestUnsupportedProviderFlagReturnsCapabilityError` covers mismatch.

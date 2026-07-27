@@ -419,7 +419,15 @@ primary-result behavior.
   belongs in `tests/functional/workers/inference/selection_test.go`; drive
   proofs through `support.RunFactoryToCompletionWithEdgesAndObservations` or
   `support.BuildProcess` with `serviceedges.Edges{ProviderRegistrations: ...}`
-  and assert on registered integration stats plus public Work outcomes only. Script execution-environment
+  and assert on registered integration stats plus public Work outcomes only.
+  Provider command-flag mapping and unsupported-flag capability rejection
+  (skip-permissions policy, resolved worktree names, explicit model values, and
+  pre-start unsupported-capability failures such as workstation `outputSchema`
+  on Gemini) belongs in
+  `tests/functional/workers/inference/flags_test.go`; drive proofs through
+  `support.RunFactoryToCompletionWithEdgesAndObservations` with
+  `serviceedges.Edges{ProviderCommandRunner: ...}` and assert on provider-process
+  command args plus public Work outcomes only. Script execution-environment
   boundary proofs (declared env filtering, missing-executable public failure,
   resource-token template resolution, multi-input ordering, and worktree
   passthrough) belong in

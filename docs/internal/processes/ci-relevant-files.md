@@ -302,6 +302,19 @@
   `transport` and subsection `cli/parameters` from the path; every top-level
   `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
   viz-compatible.
+  CLI operator-default environment precedence functional coverage belongs in
+  `tests/functional/transport/cli/parameters/environment_precedence_test.go`:
+  prove explicit `--default-worker-model-provider` and `--default-worker-model`
+  flags override conflicting `YOU_DEFAULT_WORKER_MODEL_PROVIDER` and
+  `YOU_DEFAULT_WORKER_MODEL` environment values with `SourceCLIFlag` provenance
+  on `CLIObserver` resolved inputs, prove environment overrides conflicting
+  `~/.you-agent-factory/config.json` defaults with `SourceEnvironment` when no
+  overriding flag is present, and prove unset operator-default environment
+  variables fall back to global config with `SourceOperatorConfig` without
+  fabricating `SourceEnvironment` overrides at the public
+  `support.BuildProcess` boundary. Catalog metadata infers domain `transport`
+  and subsection `cli/parameters` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
   CLI response-stream backpressure functional coverage belongs in
   `tests/functional/transport/cli/output/stream_backpressure_test.go`:
   invoke `support.BuildProcess` with a gated or mid-stream-failing stdout writer
@@ -592,6 +605,17 @@ Wave 0 functional-tests-expansion planning authority lives under
   metadata infers domain `workers` and subsection `inference` from the path;
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+- Workers inference provider command-flag functional coverage belongs in
+  `tests/functional/workers/inference/flags_test.go`: prove skip-permissions
+  policy, resolved worktree names, and explicit model values map onto the
+  selected provider-process command args, and prove unsupported provider flags
+  (for example workstation `outputSchema` on Gemini) fail with a capability
+  error before any `ProviderCommandRunner` call. Drive proofs through
+  `support.RunFactoryToCompletionWithEdgesAndObservations` with
+  `serviceedges.Edges{ProviderCommandRunner: ...}` and assert on command args
+  plus public Work outcomes only. Catalog metadata infers domain `workers` and
+  subsection `inference` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
 
 - `tests/functional/automations/` owns root.BuildProcess evidence for packaged
   Automations cron scheduling. Keep cron workstation factories explicit with
