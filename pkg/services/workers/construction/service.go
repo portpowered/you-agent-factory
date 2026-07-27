@@ -339,11 +339,12 @@ func (s *Service) resolveRegisteredAgentRunner(
 	if s == nil || s.providerFactory == nil {
 		return nil, fmt.Errorf("provider worker factory is required")
 	}
+	publish := agentProgressPublisherOrNoop(inferenceProgressPublisher)
 	providersRoot, err := providersroot.NewService(providersroot.Config{
 		Factory:          s.providerFactory,
 		SkipPermissions:  effectiveSkipPermissions,
 		Logger:           logger,
-		Publish:          inferenceProgressPublisher,
+		Publish:          publish,
 		FactoryDirectory: strings.TrimSpace(runtimeConfig.FactoryDir()),
 	})
 	if err != nil {
@@ -351,7 +352,7 @@ func (s *Service) resolveRegisteredAgentRunner(
 	}
 	registry, err := runnerswire.NewAgentRegistry(runners.AgentDependencies{
 		Providers: providersRoot,
-		Publish:   inferenceProgressPublisher,
+		Publish:   publish,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("construct agent runner registry: %w", err)
@@ -366,6 +367,15 @@ func (s *Service) resolveRegisteredAgentRunner(
 		return nil, fmt.Errorf("resolve agent runner: runner is nil")
 	}
 	return binding.Runner, nil
+}
+
+func agentProgressPublisherOrNoop(
+	publisher workerprovider.InferenceProgressPublisher,
+) workerprovider.InferenceProgressPublisher {
+	if publisher != nil {
+		return publisher
+	}
+	return func(_ workers.ProgressFragment) {}
 }
 
 func (s *Service) legacyProviderRunner(

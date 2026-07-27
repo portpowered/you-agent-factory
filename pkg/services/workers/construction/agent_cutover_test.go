@@ -105,6 +105,59 @@ func TestServiceBuildWithAgentRunnerCutoverExposesDispatchAndDirect(t *testing.T
 	}
 }
 
+func TestServiceBuildWithAgentRunnerCutoverAndNilProgressPublisher(t *testing.T) {
+	factory, err := workerprovider.NewFactory(
+		&mockworker.MockWorkerCommandRunner{},
+		workerprocess.ClockFunc(testClock),
+		&agypty.MockAllocator{},
+		filepath.EvalSymlinks,
+		platformprocess.HostExecutableLocator{},
+		platformfilesystem.Local{},
+		platformfilesystem.Local{},
+		"linux",
+		platformfilesystem.Local{},
+	)
+	if err != nil {
+		t.Fatalf("NewFactory() error = %v", err)
+	}
+	service := New(
+		factory,
+		nil,
+		nil,
+		nil,
+		testFactoryDocs,
+		nil,
+		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
+		testRetryRandom,
+		platformfilesystem.Local{},
+	).WithAgentRunnerCutover(true)
+
+	_, err = service.Build(
+		runtimefixtures.RuntimeConfigLookupFixture{
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				"model": {Name: "model", Type: interfaces.WorkerTypeModel},
+			},
+		},
+		"model",
+		"",
+		nil,
+		logging.NoopLogger{},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		testClock,
+		os.Environ,
+		os.Getwd,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Build() with nil progress publisher error = %v", err)
+	}
+}
+
 func TestAgentRunnerProviderOverrideBypassesRegisteredRunner(t *testing.T) {
 	service := New(
 		nil,
