@@ -27,14 +27,26 @@ delegation to the target owner or part of an active removal lane.
 
 For services whose behavior depends on one Factory Session runtime, construct an
 inert process-scoped root through the service-local `wire` package and pass
-runtime-specific values through an owner-defined binding such as `ForRuntime`.
-Keep that binding on the canonical root `Service` and return the same public
-`Service` contract, as Models and Factory Sessions do; do not introduce a
-Wire-owned binder or return a private runtime-assembly contract. Owner-private
-runtime opening may unwrap its own bound implementation internally, but
-cross-service consumers receive only the root contract. Do not inject a
-callback that lets the runtime-opening consumer select or construct the
-concrete service.
+runtime-specific values through an owner-defined typed binding. Models uses
+`OpenRuntimeScope` on its canonical process-scoped `Service` and returns only an
+opaque `RuntimeScopeRef`; Factory Session selection must keep using the same
+Models root rather than receiving or constructing a second `Service`. Register
+each successfully opened scope with the opening transaction immediately,
+release later-opened resources before earlier scopes on failure, and transfer
+the same exactly-once reverse-order closer to the successful runtime product.
+Thread the opaque scope beside that root through downstream Worker and transport
+bindings, and attach it to typed Models requests at the final consumer. When
+live session state is not installed yet, snapshot Models scope configuration
+from the already-loaded Factory definition so startup-time catalog and
+invocation consumers observe the selected Factory without a lazy service view.
+When a scope lazily materializes owner-internal runtime capability, revalidate
+the scope while serializing cache insertion so a concurrent close cannot let a
+stale resolution reinsert capability after cleanup reports success. Prove that
+boundary with a deterministic concurrent operation-versus-close test.
+Use a cleanup context detached from request cancellation when closing an
+already-acquired owner scope. Do not introduce a Wire-owned binder, return a
+private peer runtime-assembly contract, or inject a callback that lets the
+runtime-opening consumer select or construct the concrete service.
 
 Keep the product-facing service root to its canonical `Service` interface plus
 detached value contracts. Construction-only roles belong in the service-local

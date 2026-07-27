@@ -36,6 +36,7 @@ import (
 type Service struct {
 	sessions                          CurrentRuntimeResolver
 	models                            models.Service
+	modelsScope                       models.RuntimeScopeRef
 	providerFactory                   *workerprovider.Factory
 	scriptFactory                     *workerexecutor.ScriptFactory
 	executorBuilder                   workerconstruction.Builder

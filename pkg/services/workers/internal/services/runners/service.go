@@ -60,6 +60,7 @@ type ScriptDependencies struct {
 type InferenceConfig struct {
 	Worker    models.LocalWorker
 	Resources []models.LocalResource
+	Scope     models.RuntimeScopeRef
 }
 
 // InferenceDependencies are the exact effects projected into one Inference Runner.
