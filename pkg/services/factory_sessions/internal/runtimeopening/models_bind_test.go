@@ -2,6 +2,8 @@ package runtimeopening
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -14,7 +16,9 @@ import (
 
 type recordingModelsService struct {
 	openRequests    []models.OpenRuntimeScopeRequest
+	closeRequests   []models.CloseRuntimeScopeRequest
 	forRuntimeCalls int
+	events          *[]string
 }
 
 func (fake *recordingModelsService) OpenRuntimeScope(
@@ -22,6 +26,9 @@ func (fake *recordingModelsService) OpenRuntimeScope(
 	request models.OpenRuntimeScopeRequest,
 ) (models.OpenRuntimeScopeResult, error) {
 	fake.openRequests = append(fake.openRequests, request)
+	if fake.events != nil {
+		*fake.events = append(*fake.events, "models-open")
+	}
 	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:test:1")
 	if err != nil {
 		return models.OpenRuntimeScopeResult{}, err
@@ -30,10 +37,14 @@ func (fake *recordingModelsService) OpenRuntimeScope(
 }
 
 func (fake *recordingModelsService) CloseRuntimeScope(
-	context.Context,
-	models.CloseRuntimeScopeRequest,
+	_ context.Context,
+	request models.CloseRuntimeScopeRequest,
 ) (models.CloseRuntimeScopeResult, error) {
-	return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
+	fake.closeRequests = append(fake.closeRequests, request)
+	if fake.events != nil {
+		*fake.events = append(*fake.events, "models-close")
+	}
+	return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
 }
 
 func (fake *recordingModelsService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
@@ -242,6 +253,7 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 		"/factory",
 		"runtime-1",
 		"backend-1",
+		func() error { return nil },
 	)
 
 	if opened.application.HTTP.Models != root {
@@ -252,6 +264,46 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 	}
 	if root.forRuntimeCalls != 0 {
 		t.Fatalf("ForRuntime calls = %d, want 0", root.forRuntimeCalls)
+	}
+}
+
+func TestRuntimeOpeningCleanupClosesModelsScopeAfterLaterResourceOnFailure(t *testing.T) {
+	t.Parallel()
+
+	var events []string
+	root := &recordingModelsService{events: &events}
+	bind, err := bindModelsRuntimeScope(
+		context.Background(),
+		root,
+		"/cache/models",
+		func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
+	)
+	if err != nil {
+		t.Fatalf("bindModelsRuntimeScope() error = %v, want nil", err)
+	}
+
+	cleanup := &runtimeOpeningCleanup{}
+	cleanup.OwnModelsScope(context.Background(), bind)
+	cleanup.Add(func() error {
+		events = append(events, "later-close")
+		return nil
+	})
+	openingErr := errors.New("later opening step failed")
+	if err := cleanup.Unwind(openingErr); !errors.Is(err, openingErr) {
+		t.Fatalf("Unwind() error = %v, want opening failure", err)
+	}
+	if !slices.Equal(events, []string{"models-open", "later-close", "models-close"}) {
+		t.Fatalf("cleanup events = %v, want reverse acquisition order", events)
+	}
+	if len(root.closeRequests) != 1 || root.closeRequests[0].Scope != bind.Scope {
+		t.Fatalf("CloseRuntimeScope requests = %#v, want issued scope exactly once", root.closeRequests)
+	}
+
+	if err := cleanup.Close(); err != nil {
+		t.Fatalf("second Close() error = %v, want nil", err)
+	}
+	if len(root.closeRequests) != 1 {
+		t.Fatalf("CloseRuntimeScope requests after second close = %d, want 1", len(root.closeRequests))
 	}
 }
 

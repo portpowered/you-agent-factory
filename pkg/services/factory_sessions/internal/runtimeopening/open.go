@@ -70,7 +70,7 @@ func openRuntime(
 	resolveHome factorysessions.HomeDirectoryResolver,
 	replayFiles fileeffects.ReplayRecordingReader,
 	providerIdentities factorysessions.ProviderIdentityResolver,
-) (runtimeProducts, error) {
+) (products runtimeProducts, err error) {
 	if request == nil {
 		return runtimeProducts{}, fmt.Errorf("runtime opening request is required")
 	}
@@ -179,6 +179,13 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+	cleanup := &runtimeOpeningCleanup{}
+	cleanup.OwnModelsScope(context.WithoutCancel(ctx), modelsBind)
+	defer func() {
+		if err != nil {
+			err = cleanup.Unwind(err)
+		}
+	}()
 	selectedModels := modelsBind.Root
 	if contentMaterializer == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work content materializer is required")
@@ -288,6 +295,7 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+	cleanup.Add(startupRuntime.CloseArtifacts)
 	sessionRuntime, service4, invocationDomain, definitionHost, err := runtimeService.Complete(
 		root.FactoryRootDir,
 		clock,
@@ -383,6 +391,7 @@ func openRuntime(
 		configured.Definition.Directory,
 		configured.Runtime.RuntimeInstanceID,
 		configured.Session.BackendScopeID,
+		cleanup.Close,
 	)
 	return opened, nil
 }

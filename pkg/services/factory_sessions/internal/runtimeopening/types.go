@@ -38,11 +38,12 @@ func assembleRuntimeProducts(
 	directory string,
 	runtimeInstanceID string,
 	backendScopeID string,
+	closeResources func() error,
 ) runtimeProducts {
 	workerPrompts, _ := workerService.(workers.PromptTemplates)
 	inputResolver, _ := sessionInvocation.(roles.InvocationInputResolver)
 	resources := roles.RuntimeResources{
-		Logger: startup.RuntimeLogger(), Close: startup.CloseArtifacts,
+		Logger: startup.RuntimeLogger(), Close: closeResources,
 		Diagnostics: startup.RuntimeDiagnostics(),
 	}
 	resources.Directory = directory
@@ -68,7 +69,7 @@ func assembleRuntimeProducts(
 			Workers: workerService, Sessions: factorySessionGateway,
 			Invoker: sessionInvocation, InputResolver: inputResolver,
 			Execution: factorySessionGateway, Lifecycle: lifecycle,
-			CloseArtifacts: startup.CloseArtifacts,
+			CloseArtifacts: closeResources,
 		},
 		execution: roles.OpenedExecutionRuntime{
 			Execution: factorySessionGateway, WorkflowPreview: workflowPreview,
