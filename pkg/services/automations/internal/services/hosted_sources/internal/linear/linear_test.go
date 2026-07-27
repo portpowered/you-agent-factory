@@ -277,6 +277,52 @@ func TestRunPollCycle_StopsAtCheckpointAndSkipsResubmission(t *testing.T) {
 	}
 }
 
+func TestRunPollCycle_CheckpointDecodeFailureFailsWithoutSubmit(t *testing.T) {
+	worker := linearWorkerConfigForTest(
+		interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		nil,
+	)
+	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
+	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
+	if err := os.WriteFile(checkpointPath, []byte("not-json"), 0o600); err != nil {
+		t.Fatalf("write corrupt checkpoint: %v", err)
+	}
+
+	httpCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpCalls++
+		t.Fatal("unexpected provider request when checkpoint decode fails")
+	}))
+	defer server.Close()
+
+	submitCalls := 0
+	_, err := RunPollCycle(
+		context.Background(),
+		Client{Endpoint: server.URL, HTTPClient: server.Client(), Logger: zap.NewNop()},
+		nil,
+		workstation,
+		worker,
+		func(_ context.Context, request work.WorkRequest) error {
+			submitCalls++
+			t.Fatalf("unexpected submit when checkpoint decode fails: %#v", request)
+			return nil
+		},
+		checkpointStoreForTest(t),
+		checkpointPath,
+		"linear-secret-key",
+		zap.NewNop(),
+	)
+	if err == nil || !strings.Contains(err.Error(), "decode hosted linear checkpoint") {
+		t.Fatalf("RunPollCycle() error = %v, want checkpoint decode failure", err)
+	}
+	if submitCalls != 0 {
+		t.Fatalf("submit calls = %d, want 0 when checkpoint decode fails", submitCalls)
+	}
+	if httpCalls != 0 {
+		t.Fatalf("provider HTTP calls = %d, want 0 when checkpoint decode fails", httpCalls)
+	}
+}
+
 func TestRunPollCycle_NoNewerIssuesSkipsSubmitAndCheckpoint(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
