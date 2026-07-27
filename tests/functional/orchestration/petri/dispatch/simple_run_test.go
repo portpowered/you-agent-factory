@@ -1,10 +1,13 @@
 package dispatch
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -233,6 +236,261 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{traceID})
 		assertQuiescentSession(t, session, 1, 0)
 	})
+}
+
+// TestPetriWorkerErrorReturnsFailedTerminalOutcome proves worker or provider
+// failures at the external-effect edge project Work to the Factory-configured
+// public failed location with a failed dispatch outcome on Factory Events,
+// without routing the same Work to success terminals.
+func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
+	t.Run("mock_provider_error_routes_to_failed_terminal", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "happy_path"))
+		traceID := "trace-provider-error"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "task",
+			TraceID:    traceID,
+			Payload:    []byte(`{"title":"will fail at provider"}`),
+		})
+
+		provider := testutil.NewMockProviderWithErrors(
+			[]workerexecution.InferenceResponse{{Content: ""}},
+			[]error{fmt.Errorf("provider inference failed")},
+		)
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderOverride: provider},
+			10*time.Second,
+		)
+
+		failedTerminal := support.WorkCustomerLocation("task", "failed")
+		successTerminal := support.WorkCustomerLocation("task", "complete")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			failedTerminal: 1,
+			successTerminal: 0,
+			support.WorkCustomerLocation("task", "init"):        0,
+			support.WorkCustomerLocation("task", "processing"): 0,
+		})
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
+		assertTraceAbsentAtCustomerState(t, listed, successTerminal, traceID)
+		assertQuiescentSession(t, session, 0, 1)
+
+		failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
+		if !ok {
+			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
+		}
+		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
+		if provider.CallCount() != 1 {
+			t.Errorf("provider call count = %d, want 1", provider.CallCount())
+		}
+	})
+
+	t.Run("provider_command_exit_routes_to_failed_terminal", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_failure_no_arcs"))
+		traceID := "trace-command-exit-failure"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "task",
+			TraceID:    traceID,
+			Payload:    []byte(`work payload`),
+		})
+
+		runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+			Stderr:   []byte("provider unavailable"),
+			ExitCode: 1,
+		})
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderCommandRunner: runner},
+			10*time.Second,
+		)
+
+		failedTerminal := support.WorkCustomerLocation("task", "failed")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			failedTerminal: 1,
+			support.WorkCustomerLocation("task", "init"):        0,
+			support.WorkCustomerLocation("task", "processing"): 0,
+		})
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
+		assertQuiescentSession(t, session, 0, 1)
+
+		failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
+		if !ok {
+			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
+		}
+		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
+	})
+
+	t.Run("rejected_worker_outcome_routes_to_failed_terminal", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_no_arcs"))
+		traceID := "trace-rejected-outcome"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "task",
+			TraceID:    traceID,
+			Payload:    []byte(`work payload`),
+		})
+
+		provider := testutil.NewMockProvider(support.RejectedProviderResponse("not good enough"))
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderOverride: provider},
+			10*time.Second,
+		)
+
+		failedTerminal := support.WorkCustomerLocation("task", "failed")
+		successTerminal := support.WorkCustomerLocation("task", "done")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			failedTerminal:  1,
+			successTerminal: 0,
+			support.WorkCustomerLocation("task", "init"): 0,
+		})
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
+		assertTraceAbsentAtCustomerState(t, listed, successTerminal, traceID)
+		assertQuiescentSession(t, session, 0, 1)
+
+		failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
+		if !ok {
+			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
+		}
+		assertRejectedDispatchForWork(
+			t,
+			support.ObserveDispatchEvents(t, events),
+			failedWorkID,
+			"not good enough",
+		)
+	})
+
+	t.Run("planner_failure_routes_idea_to_failed", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_lifecycle_dir"))
+		traceID := "trace-planner-failure"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "idea",
+			TraceID:    traceID,
+			Payload:    []byte(`{"title":"broken idea"}`),
+		})
+
+		provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+			"planner": {{Content: "failed"}},
+		})
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderOverride: provider},
+			10*time.Second,
+		)
+
+		failedTerminal := support.WorkCustomerLocation("idea", "failed")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			failedTerminal: 1,
+			support.WorkCustomerLocation("idea", "init"):              0,
+			support.WorkCustomerLocation("prd", "init"):               0,
+			support.WorkCustomerLocation("code-change", "init"):       0,
+			support.WorkCustomerLocation("code-change", "archived"):     0,
+		})
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
+		assertQuiescentSession(t, session, 0, 1)
+
+		failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
+		if !ok {
+			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
+		}
+		assertRejectedDispatchForWork(
+			t,
+			support.ObserveDispatchEvents(t, events),
+			failedWorkID,
+			"failed",
+		)
+	})
+
+	t.Run("executor_failure_routes_prd_to_failed", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_lifecycle_dir"))
+		traceID := "trace-executor-failure"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "idea",
+			TraceID:    traceID,
+			Payload:    []byte(`{"title":"failing executor"}`),
+		})
+
+		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
+			"planner":  {{Content: "success<COMPLETE>"}},
+			"executor": {{Content: "failed", Error: errors.New("failed executors")}},
+		})
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderOverride: provider},
+			15*time.Second,
+		)
+
+		failedTerminal := support.WorkCustomerLocation("prd", "failed")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			failedTerminal: 1,
+			support.WorkCustomerLocation("idea", "init"):          0,
+			support.WorkCustomerLocation("prd", "init"):           0,
+			support.WorkCustomerLocation("code-change", "init"):   0,
+			support.WorkCustomerLocation("code-change", "archived"): 0,
+		})
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
+		assertQuiescentSession(t, session, 0, 1)
+
+		failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
+		if !ok {
+			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
+		}
+		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
+	})
+}
+
+func assertFailedDispatchForWork(
+	t *testing.T,
+	dispatches []support.DispatchEventObservation,
+	workID string,
+) {
+	t.Helper()
+
+	for _, dispatch := range dispatches {
+		if !support.DispatchObservationIncludesWork(dispatch, workID) {
+			continue
+		}
+		if dispatch.Response == nil {
+			continue
+		}
+		if dispatch.Response.Outcome != factoryapi.WorkOutcomeFailed {
+			continue
+		}
+		return
+	}
+	t.Fatalf("no failed dispatch observation for work %q", workID)
+}
+
+func assertRejectedDispatchForWork(
+	t *testing.T,
+	dispatches []support.DispatchEventObservation,
+	workID string,
+	wantFeedback string,
+) {
+	t.Helper()
+
+	for _, dispatch := range dispatches {
+		if !support.DispatchObservationIncludesWork(dispatch, workID) {
+			continue
+		}
+		if dispatch.Response == nil {
+			continue
+		}
+		if dispatch.Response.Outcome != factoryapi.WorkOutcomeRejected {
+			continue
+		}
+		if dispatch.Response.Output != nil && *dispatch.Response.Output == wantFeedback {
+			return
+		}
+	}
+	t.Fatalf(
+		"no rejected dispatch observation with feedback %q for work %q",
+		wantFeedback,
+		workID,
+	)
 }
 
 func simpleSingleWorkerPipelineConfig() map[string]any {
