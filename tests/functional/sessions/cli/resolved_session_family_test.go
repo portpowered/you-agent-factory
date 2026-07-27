@@ -9,8 +9,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -89,6 +92,35 @@ func TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition(
 	}
 	if rejectedOutput.Len() != 0 {
 		t.Fatalf("deprecated port stdout = %q, want empty", rejectedOutput.String())
+	}
+}
+
+func TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch(t *testing.T) {
+	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	home := t.TempDir()
+	payloadPath := filepath.Join(t.TempDir(), "request.md")
+	if err := os.WriteFile(payloadPath, []byte("must not be submitted"), 0o600); err != nil {
+		t.Fatalf("write payload: %v", err)
+	}
+	var stdout bytes.Buffer
+	err = process.Execute(root.Input{
+		Args: []string{
+			"you", "submit", "--port", "9090", "--name", "rejected",
+			"--work-type-name", "task", "--payload", payloadPath,
+		},
+		Env:              testHomeEnvironment(home),
+		Stdout:           &stdout,
+		Context:          context.Background(),
+		WorkingDirectory: home,
+	})
+	if err == nil || !strings.Contains(err.Error(), "--port is no longer supported; use --server") {
+		t.Fatalf("deprecated port error = %v", err)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("deprecated port stdout = %q, want empty", stdout.String())
 	}
 }
 
