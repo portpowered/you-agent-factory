@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -204,6 +205,80 @@ func TestWatcherConcurrentFilesCompleteWithoutDuplicates(t *testing.T) {
 		}
 		if work.State == nil || work.State.Type != factoryapi.WorkStateTypeTERMINAL {
 			t.Fatalf("completed Work[%d] state type = %#v, want TERMINAL", i, work.State)
+		}
+	}
+}
+
+// TestWatcherMixedOutcomesLeaveNoNonTerminalWorkLeak proves that when watched
+// seed files produce a mix of successful and failed Work outcomes, every item
+// settles in a configured terminal state and no Work remains in non-terminal
+// states such as init or processing.
+func TestWatcherMixedOutcomesLeaveNoNonTerminalWorkLeak(t *testing.T) {
+	support.SkipLongFunctional(t, "slow file-watcher mixed-outcome settlement sweep")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "filewatcher_flow"))
+	const seedCount = 5
+	for i := 1; i <= seedCount; i++ {
+		testutil.WriteSeedFile(t, dir, "task", fmt.Appendf(nil, `{"title": "item %d"}`, i))
+	}
+
+	// Pre-load results: succeed, succeed, fail, succeed, fail.
+	runner := testutil.NewProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
+		platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
+		platformprocess.CommandResult{Stderr: []byte("error"), ExitCode: 1},
+		platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
+		platformprocess.CommandResult{Stderr: []byte("error"), ExitCode: 1},
+	)
+
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		10*time.Second,
+	)
+
+	if session.Runtime.Progress.Categories.Terminal != 3 || session.Runtime.Progress.Categories.Failed != 2 {
+		t.Fatalf(
+			"session progress categories = %+v, want 3 terminal and 2 failed",
+			session.Runtime.Progress.Categories,
+		)
+	}
+	if got := len(listed.Results); got != seedCount {
+		t.Fatalf("listed Work count = %d, want %d; listed=%#v", got, seedCount, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "complete")); got != 3 {
+		t.Fatalf("CountWorkAtCustomerState(task:complete) = %d, want 3; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "failed")); got != 2 {
+		t.Fatalf("CountWorkAtCustomerState(task:failed) = %d, want 2; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "init")); got != 0 {
+		t.Fatalf("CountWorkAtCustomerState(task:init) = %d, want 0 after settlement", got)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "processing")); got != 0 {
+		t.Fatalf("CountWorkAtCustomerState(task:processing) = %d, want 0 after settlement", got)
+	}
+
+	for i, work := range listed.Results {
+		workID := support.StringPointerValue(work.WorkId)
+		if workID == "" {
+			t.Fatalf("Work[%d] has empty work ID: %#v", i, work)
+		}
+		if work.State == nil {
+			t.Fatalf("Work[%d] state is nil: %#v", i, work)
+		}
+		switch work.State.Type {
+		case factoryapi.WorkStateTypeTERMINAL:
+			if work.State.Name != "complete" {
+				t.Fatalf("terminal Work[%d] state name = %q, want complete; %#v", i, work.State.Name, work)
+			}
+		case factoryapi.WorkStateTypeFAILED:
+			if work.State.Name != "failed" {
+				t.Fatalf("failed Work[%d] state name = %q, want failed; %#v", i, work.State.Name, work)
+			}
+		default:
+			t.Fatalf("Work[%d] state type = %q, want TERMINAL or FAILED; %#v", i, work.State.Type, work)
 		}
 	}
 }
