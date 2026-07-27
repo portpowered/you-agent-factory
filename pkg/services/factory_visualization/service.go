@@ -17,6 +17,9 @@ import (
 // canonical Factory event projection changes.
 type View = liveviewprojection.View
 
+// RuntimeObservation is the sanitized Runtime fact shape carried on emitted Views.
+type RuntimeObservation = liveviewprojection.RuntimeObservation
+
 // Sink presents one projected Factory view at an external boundary.
 type Sink interface {
 	PresentFactoryView(View)

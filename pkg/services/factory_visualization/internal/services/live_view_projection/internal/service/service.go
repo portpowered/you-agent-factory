@@ -201,7 +201,7 @@ func (s *Service) Observe(
 		return liveviewprojection.ObserveResult{}, err
 	}
 
-	snapshot, err := s.source.GetEngineStateSnapshot(ctx)
+	snapshot, err := s.source.GetRuntimeSnapshotFacts(ctx)
 	if err != nil {
 		return liveviewprojection.ObserveResult{}, &liveviewprojection.ProjectionError{
 			Kind:    liveviewprojection.ProjectionErrorSnapshotUnavailable,
@@ -302,7 +302,7 @@ func (s *Service) run(
 }
 
 func (s *Service) projectAndPresent(ctx context.Context) {
-	snapshot, err := s.source.GetEngineStateSnapshot(ctx)
+	snapshot, err := s.source.GetRuntimeSnapshotFacts(ctx)
 	if err != nil {
 		s.report(fmt.Errorf("read Factory visualization snapshot: %w", err))
 		return
@@ -325,9 +325,10 @@ func (s *Service) projectAndPresent(ctx context.Context) {
 		snapshot.ActiveThrottlePauses,
 	)
 	s.sink.PresentFactoryView(liveviewprojection.View{
-		EngineState: *snapshot,
-		RenderData:  renderData,
-		ObservedAt:  s.clock.Now(),
+		ObservedAt:         s.clock.Now(),
+		RetainedEventCount: len(events),
+		Runtime:            snapshot.RuntimeObservation,
+		RenderData:         renderData,
 	})
 }
 

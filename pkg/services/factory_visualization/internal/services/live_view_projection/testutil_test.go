@@ -5,7 +5,6 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
@@ -20,7 +19,7 @@ func (stubSource) SubscribeFactoryEvents(
 	return nil, nil
 }
 
-func (stubSource) GetEngineStateSnapshot(context.Context) (*factoryruntime.StateSnapshot, error) {
+func (stubSource) GetRuntimeSnapshotFacts(context.Context) (*liveviewprojection.RuntimeSnapshotFacts, error) {
 	return nil, nil
 }
 

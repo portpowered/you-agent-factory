@@ -6,7 +6,6 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 	projectionservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -25,7 +24,9 @@ func TestLiveViewProjectionConformance(t *testing.T) {
 			History: []factorydefinitions.FactoryEvent{history},
 			Events:  live,
 		},
-		snapshot: &factoryruntime.StateSnapshot{TickCount: 3},
+		snapshot: &liveviewprojection.RuntimeSnapshotFacts{
+			RuntimeObservation: liveviewprojection.RuntimeObservation{TickCount: 3},
+		},
 	}
 	projected := make(chan []factorydefinitions.FactoryEvent, 2)
 	projections := projectionStub{
@@ -60,7 +61,7 @@ func TestLiveViewProjectionConformance(t *testing.T) {
 	if got := <-projected; len(got) != 1 || got[0].Id != history.Id {
 		t.Fatalf("initial projection events = %#v", got)
 	}
-	if got := <-rendered; !got.ObservedAt.Equal(now) || got.EngineState.TickCount != 3 {
+	if got := <-rendered; !got.ObservedAt.Equal(now) || got.Runtime.TickCount != 3 {
 		t.Fatalf("initial view = %#v", got)
 	}
 
@@ -107,7 +108,7 @@ type sourceStub struct {
 	stream        *factorydefinitions.FactoryEventStream
 	subscribeErr  error
 	subscribeHook func()
-	snapshot      *factoryruntime.StateSnapshot
+	snapshot      *liveviewprojection.RuntimeSnapshotFacts
 	snapshotErr   error
 }
 
@@ -122,12 +123,13 @@ func (s *sourceStub) SubscribeFactoryEvents(
 	return s.stream, s.subscribeErr
 }
 
-func (s *sourceStub) GetEngineStateSnapshot(context.Context) (*factoryruntime.StateSnapshot, error) {
+func (s *sourceStub) GetRuntimeSnapshotFacts(context.Context) (*liveviewprojection.RuntimeSnapshotFacts, error) {
 	return s.snapshot, s.snapshotErr
 }
 
 type projectionStub struct {
-	reconstruct func([]factorydefinitions.FactoryEvent, int) (factorydefinitions.FactoryWorldState, error)
+	reconstruct   func([]factorydefinitions.FactoryEvent, int) (factorydefinitions.FactoryWorldState, error)
+	dashboardData recordings.SimpleDashboardRenderData
 }
 
 func (p projectionStub) ReconstructFactoryWorldState(
@@ -140,9 +142,12 @@ func (p projectionStub) ReconstructFactoryWorldState(
 	return factorydefinitions.FactoryWorldState{}, nil
 }
 
-func (projectionStub) SimpleDashboardRenderData(
+func (p projectionStub) SimpleDashboardRenderData(
 	factorydefinitions.FactoryWorldState,
 ) recordings.SimpleDashboardRenderData {
+	if p.dashboardData.InFlightDispatchCount != 0 || p.dashboardData.Session.HasData {
+		return p.dashboardData
+	}
 	return recordings.SimpleDashboardRenderData{}
 }
 

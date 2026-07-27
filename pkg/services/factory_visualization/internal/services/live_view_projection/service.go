@@ -11,16 +11,31 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
+
+// RuntimeObservation carries sanitized Runtime facts on Visualization-owned Views.
+type RuntimeObservation struct {
+	TickCount     int
+	FactoryState  string
+	RuntimeStatus factorydefinitions.RuntimeStatus
+	Uptime        time.Duration
+}
 
 // View is the transport-independent presentation input emitted after the
 // canonical Factory event projection changes.
 type View struct {
-	EngineState factoryruntime.StateSnapshot
-	RenderData  recordings.SimpleDashboardRenderData
-	ObservedAt  time.Time
+	ObservedAt         time.Time
+	RetainedEventCount int
+	Runtime            RuntimeObservation
+	RenderData         recordings.SimpleDashboardRenderData
+}
+
+// RuntimeSnapshotFacts are sanitized Runtime observation inputs consumed by the
+// private owner when projecting Views.
+type RuntimeSnapshotFacts struct {
+	RuntimeObservation
+	ActiveThrottlePauses []factorydefinitions.ActiveThrottlePause
 }
 
 // Sink presents one projected Factory view at an external boundary.
@@ -46,7 +61,7 @@ type Source interface {
 		*factorydefinitions.FactoryEventReconnectCursor,
 		factorydefinitions.FactoryEventReconnectScope,
 	) (*factorydefinitions.FactoryEventStream, error)
-	GetEngineStateSnapshot(context.Context) (*factoryruntime.StateSnapshot, error)
+	GetRuntimeSnapshotFacts(context.Context) (*RuntimeSnapshotFacts, error)
 }
 
 // ErrorReporter receives non-fatal projection or presentation-read failures.

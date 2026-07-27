@@ -7,7 +7,6 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 	projectionservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/internal/service"
 )
@@ -26,7 +25,7 @@ func TestStartAppliesRetainedHistoryBeforeFirstLiveDelta(t *testing.T) {
 			History: retained,
 			Events:  live,
 		},
-		snapshot: &factoryruntime.StateSnapshot{TickCount: 2},
+		snapshot: snapshotFacts(2),
 	}
 	projected := make(chan []factorydefinitions.FactoryEvent, 1)
 	projections := projectionStub{
@@ -62,8 +61,8 @@ func TestStartAppliesRetainedHistoryBeforeFirstLiveDelta(t *testing.T) {
 			t.Fatalf("retained projection[%d] id = %q, want %q", i, got[i].Id, retained[i].Id)
 		}
 	}
-	if view := <-rendered; view.EngineState.TickCount != 2 {
-		t.Fatalf("retained view tick = %d, want 2", view.EngineState.TickCount)
+	if view := <-rendered; view.Runtime.TickCount != 2 {
+		t.Fatalf("retained view tick = %d, want 2", view.Runtime.TickCount)
 	}
 
 	select {
@@ -97,7 +96,7 @@ func TestStartRetainsVisualizationOwnedCursorAndEventsAfterSubscribe(t *testing.
 			History: retained,
 			Events:  live,
 		},
-		snapshot: &factoryruntime.StateSnapshot{TickCount: 7},
+		snapshot: snapshotFacts(7),
 	}
 	svc, err := projectionservice.New(
 		source,
@@ -150,14 +149,14 @@ func TestStartInvalidSubscriptionDoesNotLeaveHalfStartedSubscriber(t *testing.T)
 			name: "subscribe error",
 			source: &sourceStub{
 				subscribeErr: subscribeErr,
-				snapshot:     &factoryruntime.StateSnapshot{TickCount: 1},
+				snapshot:     snapshotFacts(1),
 			},
 		},
 		{
 			name: "nil stream",
 			source: &sourceStub{
 				stream:   nil,
-				snapshot: &factoryruntime.StateSnapshot{TickCount: 1},
+				snapshot: snapshotFacts(1),
 			},
 		},
 		{
@@ -166,7 +165,7 @@ func TestStartInvalidSubscriptionDoesNotLeaveHalfStartedSubscriber(t *testing.T)
 				stream: &factorydefinitions.FactoryEventStream{
 					History: []factorydefinitions.FactoryEvent{event("history", 1)},
 				},
-				snapshot: &factoryruntime.StateSnapshot{TickCount: 1},
+				snapshot: snapshotFacts(1),
 			},
 		},
 	}
@@ -209,6 +208,12 @@ func TestStartInvalidSubscriptionDoesNotLeaveHalfStartedSubscriber(t *testing.T)
 	}
 }
 
+func snapshotFacts(tick int) *liveviewprojection.RuntimeSnapshotFacts {
+	return &liveviewprojection.RuntimeSnapshotFacts{
+		RuntimeObservation: liveviewprojection.RuntimeObservation{TickCount: tick},
+	}
+}
+
 func TestStartSubscribesOnceForRetainedThenLive(t *testing.T) {
 	t.Parallel()
 
@@ -216,7 +221,7 @@ func TestStartSubscribesOnceForRetainedThenLive(t *testing.T) {
 	live := make(chan factorydefinitions.FactoryEvent)
 	source := &sourceStub{
 		stream: &factorydefinitions.FactoryEventStream{Events: live},
-		snapshot: &factoryruntime.StateSnapshot{TickCount: 1},
+		snapshot: snapshotFacts(1),
 		subscribeHook: func() { subscribeCalls++ },
 	}
 	svc, err := projectionservice.New(
