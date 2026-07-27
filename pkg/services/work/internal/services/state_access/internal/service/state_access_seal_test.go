@@ -106,6 +106,15 @@ func (a *sealSessionAdapter) MoveWork(
 	}, nil
 }
 
+func (a *sealSessionAdapter) ReadWorkSnapshot(context.Context) (work.ReadSnapshot, error) {
+	return work.ReadSnapshot{Items: []work.ReadModel{{
+		CursorID: "tok-seal-1",
+		WorkID:   "work-seal-1",
+		Name:     "story-1",
+		State:    &work.State{Name: "draft", Type: work.StateTypeInitial},
+	}}}, nil
+}
+
 type stubSessionResolver struct {
 	adapter stateaccess.SessionAdapter
 }

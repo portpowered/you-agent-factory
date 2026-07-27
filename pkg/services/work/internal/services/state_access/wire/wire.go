@@ -60,3 +60,9 @@ func (a runtimeSessionAdapter) MoveWork(
 ) (work.OperatorMoveResult, error) {
 	return a.runtime.MoveWork(ctx, workID, stateName, source, requestID)
 }
+
+func (a runtimeSessionAdapter) ReadWorkSnapshot(
+	ctx context.Context,
+) (work.ReadSnapshot, error) {
+	return a.runtime.ReadWorkSnapshot(ctx)
+}

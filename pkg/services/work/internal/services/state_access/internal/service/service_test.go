@@ -11,12 +11,14 @@ import (
 )
 
 type recordingSessionAdapter struct {
-	submitted work.WorkRequest
-	movedID   string
-	source    work.WorkStateChangeSource
-	requestID string
-	submitErr error
-	moveErr   error
+	submitted   work.WorkRequest
+	movedID     string
+	source      work.WorkStateChangeSource
+	requestID   string
+	submitErr   error
+	moveErr     error
+	snapshot    work.ReadSnapshot
+	snapshotErr error
 }
 
 func (a *recordingSessionAdapter) SubmitWorkRequest(
@@ -50,14 +52,21 @@ func (a *recordingSessionAdapter) MoveWork(
 		return work.OperatorMoveResult{}, a.moveErr
 	}
 	return work.OperatorMoveResult{
-		WorkID:     workID,
-		WorkTypeID: "story",
-		FromState:  "draft",
-		ToState:    "review",
+		WorkID:      workID,
+		WorkTypeID:  "story",
+		FromState:   "draft",
+		ToState:     "review",
 		FromPlaceID: "story:draft",
 		ToPlaceID:   "story:review",
 		TokenID:     "tok-1",
 	}, nil
+}
+
+func (a *recordingSessionAdapter) ReadWorkSnapshot(context.Context) (work.ReadSnapshot, error) {
+	if a.snapshotErr != nil {
+		return work.ReadSnapshot{}, a.snapshotErr
+	}
+	return a.snapshot, nil
 }
 
 type stubSessionResolver struct {
