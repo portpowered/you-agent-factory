@@ -3,9 +3,12 @@ package commandregistry
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
+	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/spf13/cobra"
 )
 
@@ -107,6 +110,15 @@ func (r *Registry) AttachHandlers(cmd *cobra.Command, commandID string) error {
 const (
 	SubmitHandlerID      = "you.submit.handler"
 	SubmitBatchHandlerID = "you.submit.batch.handler"
+
+	submitNameInputID     = "you.submit.flag.name"
+	submitWorkTypeInputID = "you.submit.flag.work-type-name"
+	submitPayloadInputID  = "you.submit.flag.payload"
+	submitSessionInputID  = "you.submit.flag.session"
+	rootServerInputID     = "you.flag.server"
+	rootJSONInputID       = "you.flag.json"
+	rootVerboseInputID    = "you.flag.verbose"
+	rootDebugInputID      = "you.flag.debug"
 )
 
 // SubmitHandler consumes one invocation's local and inherited resolved inputs.
@@ -121,6 +133,114 @@ type SubmitHandlers struct {
 // SubmitRegistry contains exactly the stable handlers accepted by the submit family.
 type SubmitRegistry struct {
 	handlers map[string]SubmitHandler
+}
+
+// UnarySubmitHandler adapts one invocation's typed stable-ID inputs to the
+// existing unary submit operation without retaining mutable command state.
+func UnarySubmitHandler(operation func(submitcli.SubmitConfig) error) SubmitHandler {
+	return func(
+		cmd *cobra.Command,
+		local resolvedinput.Inputs,
+		inherited resolvedinput.Inputs,
+	) error {
+		if operation == nil {
+			return fmt.Errorf("execute unary submit: operation is required")
+		}
+		cfg, err := unarySubmitConfig(cmd, local, inherited)
+		if err != nil {
+			return fmt.Errorf("execute unary submit: %w", err)
+		}
+		return operation(cfg)
+	}
+}
+
+func unarySubmitConfig(
+	cmd *cobra.Command,
+	local resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) (submitcli.SubmitConfig, error) {
+	if cmd == nil {
+		return submitcli.SubmitConfig{}, fmt.Errorf("command is required")
+	}
+	name, err := requiredSubmitString(local, submitNameInputID)
+	if err != nil {
+		return submitcli.SubmitConfig{}, err
+	}
+	workType, err := requiredSubmitString(local, submitWorkTypeInputID)
+	if err != nil {
+		return submitcli.SubmitConfig{}, err
+	}
+	payload, err := requiredSubmitString(local, submitPayloadInputID)
+	if err != nil {
+		return submitcli.SubmitConfig{}, err
+	}
+	sessionID, err := submitString(local, submitSessionInputID)
+	if err != nil {
+		return submitcli.SubmitConfig{}, err
+	}
+	server, err := submitString(inherited, rootServerInputID)
+	if err != nil {
+		return submitcli.SubmitConfig{}, err
+	}
+	base, err := cliserver.ResolveBase(server)
+	if err != nil {
+		return submitcli.SubmitConfig{}, fmt.Errorf(
+			"resolved submit input %q is not a valid server URI",
+			rootServerInputID,
+		)
+	}
+	jsonOutput, err := submitBool(inherited, rootJSONInputID)
+	if err != nil {
+		return submitcli.SubmitConfig{}, err
+	}
+	verbose, err := submitBool(inherited, rootVerboseInputID)
+	if err != nil {
+		return submitcli.SubmitConfig{}, err
+	}
+	debug, err := submitBool(inherited, rootDebugInputID)
+	if err != nil {
+		return submitcli.SubmitConfig{}, err
+	}
+	return submitcli.SubmitConfig{
+		Context:      cmd.Context(),
+		Name:         name,
+		WorkTypeName: workType,
+		Payload:      payload,
+		Server:       base.String(),
+		SessionID:    sessionID,
+		JSON:         jsonOutput,
+		Output:       cmd.OutOrStdout(),
+		Verbose:      verbose || debug,
+		Debug:        debug,
+		Diagnostics:  cmd.ErrOrStderr(),
+	}, nil
+}
+
+func requiredSubmitString(inputs resolvedinput.Inputs, inputID string) (string, error) {
+	value, err := submitString(inputs, inputID)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(value) == "" {
+		return "", fmt.Errorf("resolved submit input %q is required", inputID)
+	}
+	return value, nil
+}
+
+func submitString(inputs resolvedinput.Inputs, inputID string) (string, error) {
+	value, err := inputs.String(inputID)
+	if err != nil {
+		return "", fmt.Errorf("resolved submit input %q must be a string", inputID)
+	}
+	return value, nil
+}
+
+func submitBool(inputs resolvedinput.Inputs, inputID string) (bool, error) {
+	value, err := inputs.Bool(inputID)
+	if err != nil {
+		return false, fmt.Errorf("resolved submit input %q must be a boolean", inputID)
+	}
+	return value, nil
 }
 
 // NewSubmitRegistry constructs a complete submit-only handler registry.

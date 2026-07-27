@@ -1,6 +1,8 @@
 package commandregistry_test
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -9,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
+	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/spf13/cobra"
 )
 
@@ -202,3 +205,194 @@ func submitRegistryManifest(t *testing.T) climanifest.Manifest {
 		},
 	}
 }
+
+func TestUnarySubmitHandlerBuildsFreshConfigFromStableInputs(t *testing.T) {
+	ctx := context.WithValue(context.Background(), submitContextKey{}, "invocation")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := &cobra.Command{Use: "submit"}
+	cmd.SetContext(ctx)
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+
+	local := resolveSubmitInputs(t, map[string]resolvedinput.Value{
+		"you.submit.flag.name":           resolvedinput.StringValue("work-one"),
+		"you.submit.flag.work-type-name": resolvedinput.StringValue("REVIEW"),
+		"you.submit.flag.payload":        resolvedinput.StringValue("payload.json"),
+		"you.submit.flag.session":        resolvedinput.StringValue("session-alpha"),
+	})
+	inherited := resolveSubmitInputs(t, map[string]resolvedinput.Value{
+		"you.flag.server":  resolvedinput.StringValue("HTTPS://FACTORY.EXAMPLE/base/?token=secret"),
+		"you.flag.json":    resolvedinput.BoolValue(true),
+		"you.flag.verbose": resolvedinput.BoolValue(false),
+		"you.flag.debug":   resolvedinput.BoolValue(true),
+	})
+
+	var received []submitcli.SubmitConfig
+	handler := commandregistry.UnarySubmitHandler(func(cfg submitcli.SubmitConfig) error {
+		received = append(received, cfg)
+		return nil
+	})
+	if err := handler(cmd, local, inherited); err != nil {
+		t.Fatalf("handler() error = %v", err)
+	}
+	if len(received) != 1 {
+		t.Fatalf("operation calls = %d, want 1", len(received))
+	}
+	assertUnarySubmitConfig(t, received[0], ctx, &stdout, &stderr)
+
+	secondLocal := resolveSubmitInputs(t, map[string]resolvedinput.Value{
+		"you.submit.flag.name":           resolvedinput.StringValue("work-two"),
+		"you.submit.flag.work-type-name": resolvedinput.StringValue("BUILD"),
+		"you.submit.flag.payload":        resolvedinput.StringValue("payload.md"),
+		"you.submit.flag.session":        resolvedinput.StringValue(""),
+	})
+	if err := handler(cmd, secondLocal, inherited); err != nil {
+		t.Fatalf("second handler() error = %v", err)
+	}
+	if len(received) != 2 || received[0].Name != "work-one" ||
+		received[1].Name != "work-two" || received[1].SessionID != "" {
+		t.Fatalf("invocation configs retained mutable state: %#v", received)
+	}
+}
+
+func assertUnarySubmitConfig(
+	t *testing.T,
+	got submitcli.SubmitConfig,
+	ctx context.Context,
+	stdout, stderr *bytes.Buffer,
+) {
+	t.Helper()
+	if got.Context != ctx || got.Context.Value(submitContextKey{}) != "invocation" {
+		t.Fatal("context was not propagated from the invocation")
+	}
+	if got.Name != "work-one" || got.WorkTypeName != "REVIEW" ||
+		got.Payload != "payload.json" || got.SessionID != "session-alpha" {
+		t.Fatalf("local config = %#v", got)
+	}
+	if got.Server != "https://factory.example/base" {
+		t.Fatalf("server = %q, want normalized URI without query credentials", got.Server)
+	}
+	if !got.JSON || !got.Verbose || !got.Debug {
+		t.Fatalf("inherited modes = JSON:%t Verbose:%t Debug:%t, want all enabled", got.JSON, got.Verbose, got.Debug)
+	}
+	if got.Output != stdout || got.Diagnostics != stderr {
+		t.Fatal("stdout/stderr writers were not propagated")
+	}
+}
+
+func TestUnarySubmitHandlerRejectsInvalidRequiredStableInputsBeforeOperation(t *testing.T) {
+	requiredIDs := []string{
+		"you.submit.flag.name",
+		"you.submit.flag.work-type-name",
+		"you.submit.flag.payload",
+	}
+	for _, inputID := range requiredIDs {
+		for _, invalid := range []struct {
+			name  string
+			value *resolvedinput.Value
+		}{
+			{name: "missing"},
+			{name: "blank", value: submitValuePtr(resolvedinput.StringValue(" \t "))},
+			{name: "wrong type", value: submitValuePtr(resolvedinput.BoolValue(true))},
+		} {
+			t.Run(inputID+"/"+invalid.name, func(t *testing.T) {
+				localValues := validUnaryLocalValues()
+				if invalid.value == nil {
+					delete(localValues, inputID)
+				} else {
+					localValues[inputID] = *invalid.value
+				}
+				calls := 0
+				handler := commandregistry.UnarySubmitHandler(func(submitcli.SubmitConfig) error {
+					calls++
+					return nil
+				})
+				err := handler(
+					&cobra.Command{Use: "submit"},
+					resolveSubmitInputs(t, localValues),
+					validUnaryInheritedInputs(t),
+				)
+				if err == nil || !strings.Contains(err.Error(), inputID) {
+					t.Fatalf("handler() error = %v, want stable input ID %q", err, inputID)
+				}
+				if strings.Contains(err.Error(), "payload-secret") {
+					t.Fatalf("handler() leaked an input value: %v", err)
+				}
+				if calls != 0 {
+					t.Fatalf("operation calls = %d, want 0", calls)
+				}
+			})
+		}
+	}
+}
+
+func TestUnarySubmitHandlerRejectsUnsafeServerWithoutEchoingIt(t *testing.T) {
+	const unsafeServer = "https://user:credential@factory.example"
+	inherited := resolveSubmitInputs(t, map[string]resolvedinput.Value{
+		"you.flag.server":  resolvedinput.StringValue(unsafeServer),
+		"you.flag.json":    resolvedinput.BoolValue(false),
+		"you.flag.verbose": resolvedinput.BoolValue(false),
+		"you.flag.debug":   resolvedinput.BoolValue(false),
+	})
+	calls := 0
+	err := commandregistry.UnarySubmitHandler(func(submitcli.SubmitConfig) error {
+		calls++
+		return nil
+	})(&cobra.Command{Use: "submit"}, resolveSubmitInputs(t, validUnaryLocalValues()), inherited)
+	if err == nil || !strings.Contains(err.Error(), "you.flag.server") {
+		t.Fatalf("handler() error = %v, want stable server input ID", err)
+	}
+	if strings.Contains(err.Error(), unsafeServer) || strings.Contains(err.Error(), "credential") {
+		t.Fatalf("handler() leaked server credentials: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("operation calls = %d, want 0", calls)
+	}
+}
+
+type submitContextKey struct{}
+
+func validUnaryLocalValues() map[string]resolvedinput.Value {
+	return map[string]resolvedinput.Value{
+		"you.submit.flag.name":           resolvedinput.StringValue("work"),
+		"you.submit.flag.work-type-name": resolvedinput.StringValue("REVIEW"),
+		"you.submit.flag.payload":        resolvedinput.StringValue("payload-secret.json"),
+		"you.submit.flag.session":        resolvedinput.StringValue(""),
+	}
+}
+
+func validUnaryInheritedInputs(t *testing.T) resolvedinput.Inputs {
+	t.Helper()
+	return resolveSubmitInputs(t, map[string]resolvedinput.Value{
+		"you.flag.server":  resolvedinput.StringValue("http://localhost:7437"),
+		"you.flag.json":    resolvedinput.BoolValue(false),
+		"you.flag.verbose": resolvedinput.BoolValue(false),
+		"you.flag.debug":   resolvedinput.BoolValue(false),
+	})
+}
+
+func resolveSubmitInputs(
+	t *testing.T,
+	values map[string]resolvedinput.Value,
+) resolvedinput.Inputs {
+	t.Helper()
+	definitions := make([]resolvedinput.Definition, 0, len(values))
+	candidates := make([]resolvedinput.Candidate, 0, len(values))
+	for inputID, value := range values {
+		definitions = append(definitions, resolvedinput.Definition{
+			ID: inputID, Kind: value.Kind(),
+			Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag},
+		})
+		candidates = append(candidates, resolvedinput.Candidate{
+			InputID: inputID, Source: resolvedinput.SourceCLIFlag, Value: value,
+		})
+	}
+	inputs, err := resolvedinput.Resolve(definitions, candidates)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	return inputs
+}
+
+func submitValuePtr(value resolvedinput.Value) *resolvedinput.Value { return &value }
