@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -32,10 +33,17 @@ func (service *Service) applyDocumentUpdate(
 		return operatorsettings.ApplyDocumentUpdateResult{}, err
 	}
 
+	if err := service.persistDocument(context.Background(), operatorsettings.PersistDocumentRequest{
+		Path:     path,
+		Document: updated,
+	}); err != nil {
+		return operatorsettings.ApplyDocumentUpdateResult{}, err
+	}
+
 	return operatorsettings.ApplyDocumentUpdateResult{
 		Document:  updated,
 		Path:      path,
-		Persisted: false,
+		Persisted: true,
 	}, nil
 }
 

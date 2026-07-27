@@ -3,7 +3,11 @@
 // service instead of this parent-private subservice contract.
 package settingsdocument
 
-import operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+import (
+	"context"
+
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+)
 
 // Service is the singular document subservice contract for the Operator
 // Settings root. It owns strict load, semantic update, and atomic persist of
@@ -13,4 +17,5 @@ type Service interface {
 	ApplyDocumentUpdate(
 		operatorsettings.ApplyDocumentUpdateRequest,
 	) (operatorsettings.ApplyDocumentUpdateResult, error)
+	PersistDocument(context.Context, operatorsettings.PersistDocumentRequest) error
 }

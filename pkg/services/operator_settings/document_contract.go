@@ -229,3 +229,18 @@ type ApplyDocumentUpdateResult struct {
 	Path      string
 	Persisted bool
 }
+
+// PersistDocumentRequest atomically publishes one complete validated operator
+// document at Path.
+type PersistDocumentRequest struct {
+	Path     string
+	Document Document
+}
+
+// Validate checks request fields whose validity does not depend on storage state.
+func (request PersistDocumentRequest) Validate() error {
+	if strings.TrimSpace(request.Path) == "" {
+		return fmt.Errorf("%w: path is required", ErrDocumentMalformed)
+	}
+	return nil
+}

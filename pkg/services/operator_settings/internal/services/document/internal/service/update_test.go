@@ -8,16 +8,13 @@ import (
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/internal/service"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
 func TestApplyDocumentUpdate_ModelOnlyUpdatePreservesProviderAndReturnsValidatedDocument(t *testing.T) {
 	t.Parallel()
 
 	path := writeFixtureToTemp(t, "valid/load-defaults.json")
-	initialBytes := readFixture(t, "valid/load-defaults.json")
-	files := map[string][]byte{path: initialBytes}
-	service := newDocumentUpdateService(t, files)
+	service := newDocumentUpdateService(t)
 
 	nextModel := "claude-opus"
 	updated, err := service.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
@@ -29,8 +26,8 @@ func TestApplyDocumentUpdate_ModelOnlyUpdatePreservesProviderAndReturnsValidated
 	if err != nil {
 		t.Fatalf("ApplyDocumentUpdate() = %v", err)
 	}
-	if updated.Persisted {
-		t.Fatal("Persisted = true, want false before atomic persist story")
+	if !updated.Persisted {
+		t.Fatal("Persisted = false, want true after atomic persist")
 	}
 	if updated.Path != path {
 		t.Fatalf("Path = %q, want %q", updated.Path, path)
@@ -44,8 +41,13 @@ func TestApplyDocumentUpdate_ModelOnlyUpdatePreservesProviderAndReturnsValidated
 	if updated.Document.Runtime != operatorsettings.EmptyDocument().Runtime {
 		t.Fatalf("Runtime = %#v, want production defaults", updated.Document.Runtime)
 	}
-	if !reflect.DeepEqual(files[path], initialBytes) {
-		t.Fatal("destination bytes changed after semantic-only update")
+
+	reloaded, err := service.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
+	if err != nil {
+		t.Fatalf("LoadDocument() after persist = %v", err)
+	}
+	if reloaded.Document.Defaults.WorkerModel != nextModel {
+		t.Fatalf("reloaded WorkerModel = %q, want %q", reloaded.Document.Defaults.WorkerModel, nextModel)
 	}
 }
 
@@ -54,8 +56,7 @@ func TestApplyDocumentUpdate_UnsupportedProviderPreservesDocumentAndDestinationB
 
 	path := writeFixtureToTemp(t, "valid/load-defaults.json")
 	initialBytes := readFixture(t, "valid/load-defaults.json")
-	files := map[string][]byte{path: append([]byte(nil), initialBytes...)}
-	service := newDocumentUpdateService(t, files)
+	service := newDocumentUpdateService(t)
 
 	unsupported := "other"
 	_, err := service.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
@@ -71,7 +72,7 @@ func TestApplyDocumentUpdate_UnsupportedProviderPreservesDocumentAndDestinationB
 		failure.Kind != operatorsettings.DocumentFailureKindUnsupported {
 		t.Fatalf("ApplyDocumentUpdate() = %#v, want unsupported DocumentFailure", err)
 	}
-	if !reflect.DeepEqual(files[path], initialBytes) {
+	if !reflect.DeepEqual(readFixtureFromPath(t, path), initialBytes) {
 		t.Fatal("destination bytes changed after unsupported provider update")
 	}
 
@@ -92,8 +93,7 @@ func TestApplyDocumentUpdate_BackendScopeConflictPreservesDocumentAndDestination
 
 	path := writeFixtureToTemp(t, "valid/backend-scope-sibling.json")
 	initialBytes := readFixture(t, "valid/backend-scope-sibling.json")
-	files := map[string][]byte{path: append([]byte(nil), initialBytes...)}
-	service := newDocumentUpdateService(t, files)
+	service := newDocumentUpdateService(t)
 
 	model := "gpt-5"
 	_, err := service.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
@@ -111,7 +111,7 @@ func TestApplyDocumentUpdate_BackendScopeConflictPreservesDocumentAndDestination
 		!strings.Contains(failure.Message, "backend scope mismatch") {
 		t.Fatalf("ApplyDocumentUpdate() = %#v, want backend scope conflict", err)
 	}
-	if !reflect.DeepEqual(files[path], initialBytes) {
+	if !reflect.DeepEqual(readFixtureFromPath(t, path), initialBytes) {
 		t.Fatal("destination bytes changed after backend scope conflict")
 	}
 
@@ -128,8 +128,7 @@ func TestApplyDocumentUpdate_ProviderUpdateCanonicalizesThroughCatalog(t *testin
 	t.Parallel()
 
 	path := writeFixtureToTemp(t, "valid/load-defaults.json")
-	files := map[string][]byte{path: readFixture(t, "valid/load-defaults.json")}
-	service := newDocumentUpdateService(t, files)
+	service := newDocumentUpdateService(t)
 
 	alias := " openai "
 	updated, err := service.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
@@ -149,19 +148,10 @@ func TestApplyDocumentUpdate_ProviderUpdateCanonicalizesThroughCatalog(t *testin
 	}
 }
 
-func newDocumentUpdateService(t *testing.T, files map[string][]byte) *internalservice.Service {
+func newDocumentUpdateService(t *testing.T) *internalservice.Service {
 	t.Helper()
 
-	return internalservice.New(
-		&mapFileSystem{files: files},
-		func(string, string) (operatorsettings.TemporaryFile, error) {
-			t.Fatal("temp-file creation is unexpected during semantic update")
-			return nil, errors.New("unexpected temp-file creation")
-		},
-		globalconfigmapping.Decode,
-		globalconfigmapping.Encode,
-		controlledProviderCatalog,
-	)
+	return newDocumentPersistService(t, testLocalFilesystem, testCreateTemp)
 }
 
 func controlledProviderCatalog(value string) (string, bool) {

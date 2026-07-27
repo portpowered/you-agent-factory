@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -62,4 +63,17 @@ func (service *Service) ApplyDocumentUpdate(
 		return operatorsettings.ApplyDocumentUpdateResult{}, err
 	}
 	return service.applyDocumentUpdate(request)
+}
+
+func (service *Service) PersistDocument(
+	ctx context.Context,
+	request operatorsettings.PersistDocumentRequest,
+) error {
+	if service == nil {
+		return errDocumentOwnerUnavailable
+	}
+	if err := request.Validate(); err != nil {
+		return err
+	}
+	return service.persistDocument(ctx, request)
 }

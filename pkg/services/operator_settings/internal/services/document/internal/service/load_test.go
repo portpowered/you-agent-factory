@@ -198,6 +198,16 @@ func writeFixtureToTemp(t *testing.T, relativePath string) string {
 	return path
 }
 
+func readFixtureFromPath(t *testing.T, path string) []byte {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) = %v", path, err)
+	}
+	return data
+}
+
 func TestLoadDocument_MalformedFixtureFromInventoryFailsClosed(t *testing.T) {
 	t.Parallel()
 
