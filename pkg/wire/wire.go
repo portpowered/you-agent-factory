@@ -128,6 +128,7 @@ var servicesSet = wire.NewSet(
 	provideFactorySessionsService,
 	providePortableRecordingWriter,
 	provideFactorySessionExecutionFactory,
+	provideConductorInvocationWithProgressFactory,
 	provideRecordingsProjectionFactory,
 	provideRecordingsFactory,
 	provideRuntimeLedgerFactory,

@@ -3,6 +3,7 @@ package support
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -27,8 +28,8 @@ func NewRecordingCommandRunner(stdout string) *RecordingCommandRunner {
 	return &RecordingCommandRunner{stdout: []byte(stdout)}
 }
 
-func (r *staticSuccessCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	return platformprocess.CommandResult{Stdout: append([]byte(nil), r.stdout...)}, nil
+func (r *staticSuccessCommandRunner) Run(_ context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{Stdout: shapedProviderCommandStdout(req.Command, r.stdout)}, nil
 }
 
 func (r *RecordingCommandRunner) Run(_ context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -36,7 +37,7 @@ func (r *RecordingCommandRunner) Run(_ context.Context, req platformprocess.Comm
 	defer r.mu.Unlock()
 
 	r.requests = append(r.requests, cloneProcessCommandRequest(req))
-	return platformprocess.CommandResult{Stdout: append([]byte(nil), r.stdout...)}, nil
+	return platformprocess.CommandResult{Stdout: shapedProviderCommandStdout(req.Command, r.stdout)}, nil
 }
 
 func (r *RecordingCommandRunner) CallCount() int {
@@ -70,6 +71,18 @@ func cloneProcessCommandRequest(request platformprocess.CommandRequest) platform
 	request.Stdin = append([]byte(nil), request.Stdin...)
 	request.Env = append([]string(nil), request.Env...)
 	return request
+}
+
+func shapedProviderCommandStdout(command string, stdout []byte) []byte {
+	text := string(stdout)
+	switch strings.ToLower(strings.TrimSpace(command)) {
+	case string(modelprovider.ProviderCodex):
+		return CodexSuccessStdout(text)
+	case string(modelprovider.ProviderClaude):
+		return ClaudeSuccessStdout(text)
+	default:
+		return append([]byte(nil), stdout...)
+	}
 }
 
 var _ platformprocess.CommandRunner = (*RecordingCommandRunner)(nil)

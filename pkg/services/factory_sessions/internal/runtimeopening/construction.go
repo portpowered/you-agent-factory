@@ -185,6 +185,7 @@ func NewDurableExecution(
 	root RuntimeRoot,
 	clock factoryruntime.Clock,
 	providerOverride workerprovider.Provider,
+	mockWorkersConfig *workers.MockWorkersConfig,
 	executionFactory FactorySessionExecutionFactory,
 	providerIdentities factorysessions.ProviderIdentityResolver,
 ) (factorysessions.ExecutionService, error) {
@@ -242,7 +243,7 @@ func NewDurableExecution(
 			DefaultModelProvider: defaultProvider,
 			DefaultModel:         operatorConfig.Defaults.WorkerModel,
 		},
-		sessionRequest.Host.MockWorkers,
+		mockWorkersConfig,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("compose durable session persistence: %w", err)

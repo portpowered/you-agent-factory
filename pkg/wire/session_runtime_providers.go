@@ -535,10 +535,13 @@ func provideFactorySessionExecutionFactory(
 	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
 	responseEventIDs factorysessions.ResponseEventIDGenerator,
-	invocation factorysessionwire.WorkerInvocationFactory,
 	invocationWithProgress factorysessionwire.WorkerInvocationWithProgressFactory,
 	allocator agypty.PTYAllocator,
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
+	registry *providerregistry.Registry,
+	registryRebinder workersservice.ProviderRegistryRebinder,
+	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
+	conductorInvocationWithProgress factorysessionwire.ConductorInvocationWithProgressFactory,
 	edges serviceedges.Edges,
 ) factorysessionwire.FactorySessionExecutionFactory {
 	return func(
@@ -548,18 +551,32 @@ func provideFactorySessionExecutionFactory(
 		clock factoryruntime.Clock,
 		workerPresetIDs map[string]struct{},
 		workerSettings factoryruntime.JavaScriptWorkerSettings,
-		mockWorkersEnabled bool,
+		mockWorkers *workers.MockWorkersConfig,
 	) (factorysessions.ExecutionService, error) {
 		executor := workerinvocation.NewExecutor(provider)
 		var liveChildInvocation factorysessionwire.LiveChildInvocationFactory
-		if !mockWorkersEnabled &&
-			invocationWithProgress != nil &&
-			adaptRunner != nil &&
+		if adaptRunner != nil &&
 			allocator != nil &&
 			edges.ProviderCommandRunner != nil {
 			runner := adaptRunner(edges.ProviderCommandRunner)
-			liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
-				return invocationWithProgress(runner, allocator, publisher)
+			if mockWorkers != nil &&
+				mockWorkers.UnmatchedDispatchPolicy.PassthroughUnmatched() &&
+				registry != nil &&
+				registryRebinder != nil &&
+				workersMockCommandRunnerFactory != nil &&
+				conductorInvocationWithProgress != nil {
+				runner = workersMockCommandRunnerFactory(mockWorkers, nil, runner)
+				reboundRegistry, err := registryRebinder(runner)
+				if err != nil {
+					return nil, fmt.Errorf("rebind provider registry for live child invocation: %w", err)
+				}
+				liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
+					return conductorInvocationWithProgress(reboundRegistry, runner, allocator, publisher)
+				}
+			} else if invocationWithProgress != nil {
+				liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
+					return invocationWithProgress(runner, allocator, publisher)
+				}
 			}
 		}
 		return factorysessionwire.NewDurableExecution(
@@ -971,6 +988,51 @@ func provideWorkerInvocationFactory(edges serviceedges.Edges) factorysessionwire
 		return workersservice.NewInvocation(
 			runner, commandClock, allocator, resolveSymlinks,
 			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,
+		)
+	}
+}
+
+func provideConductorInvocationWithProgressFactory(edges serviceedges.Edges) factorysessionwire.ConductorInvocationWithProgressFactory {
+	commandClock := edges.Clock
+	if commandClock == nil {
+		commandClock = platformclock.Real{}
+	}
+	resolveSymlinks := edges.WorkersResolveSymlinks
+	if resolveSymlinks == nil {
+		resolveSymlinks = filepath.EvalSymlinks
+	}
+	executableLocator := edges.WorkersExecutableLocator
+	if executableLocator == nil {
+		executableLocator = platformprocess.HostExecutableLocator{}
+	}
+	executableInspector := edges.WorkersExecutablePathInspector
+	if executableInspector == nil {
+		executableInspector = platformfilesystem.Local{}
+	}
+	executableFiles := edges.WorkersExecutableFileReader
+	if executableFiles == nil {
+		executableFiles = platformfilesystem.Local{}
+	}
+	operatingSystem := resolveWorkersOperatingSystem(edges)
+	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
+	return func(
+		registry *providerregistry.Registry,
+		runner workers.CommandRunner,
+		allocator agypty.PTYAllocator,
+		publisher workers.ProgressPublisher,
+	) (workers.InvocationExecutor, error) {
+		return workersservice.NewConductorInvocationWithProgress(
+			registry,
+			runner,
+			commandClock,
+			allocator,
+			resolveSymlinks,
+			executableLocator,
+			executableInspector,
+			executableFiles,
+			operatingSystem,
+			publisher,
+			temporaryFiles,
 		)
 	}
 }

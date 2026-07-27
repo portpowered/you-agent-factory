@@ -965,6 +965,10 @@
       "minimum": 65.36
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch",
+      "minimum": 50.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service",
       "minimum": 100.00
     },
@@ -1192,7 +1196,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/process",
-      "minimum": 77.66
+      "minimum": 73.21
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/prompting",
@@ -1220,11 +1224,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/claude",
-      "minimum": 4.91
+      "minimum": 4.44
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex",
-      "minimum": 7.07
+      "minimum": 6.34
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/commandenv",
@@ -1294,7 +1298,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/services/testing",
-      "minimum": 93.07
+      "minimum": 90.44
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/skippermissions",

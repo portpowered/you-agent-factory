@@ -96,6 +96,7 @@ type (
 	WorkFactory                     = runtimeopening.WorkFactory
 	AutomationFactory               = runtimeopening.AutomationFactory
 	FactorySessionExecutionFactory  = runtimeopening.FactorySessionExecutionFactory
+	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
 	RecordingsProjectionFactory     = runtimeopening.RecordingsProjectionFactory
 	RecordingsFactory               = runtimeopening.RecordingsFactory
 	RuntimeLedgerFactory            = runtimeopening.RuntimeLedgerFactory

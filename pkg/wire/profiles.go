@@ -368,6 +368,7 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 		root factorysessionwire.RuntimeRoot,
 		clock factoryruntime.Clock,
 		provider workerprovider.Provider,
+		mockWorkersConfig *workers.MockWorkersConfig,
 		factory factorysessionwire.FactorySessionExecutionFactory,
 		providerIdentities factorysessions.ProviderIdentityResolver,
 	) (factorysessions.ExecutionService, error) {
@@ -378,6 +379,7 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 			root,
 			clock,
 			provider,
+			mockWorkersConfig,
 			factory,
 			providerIdentities,
 		)

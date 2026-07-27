@@ -3,7 +3,6 @@ package codex
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -44,7 +43,7 @@ func NewCommandEffect(runner workers.CommandRunner) Effect {
 			return effectResult, nativeCommandError(ctx, runErr)
 		}
 		if result.ExitCode != 0 {
-			return effectResult, fmt.Errorf("codex exited with code %d", result.ExitCode)
+			return effectResult, exitFailureFromCommandResult(result)
 		}
 		return effectResult, nil
 	})

@@ -396,13 +396,14 @@ func (failure *openingCoordinatorFailure) openWorkerExecution(
 }
 
 func openingCoordinatorDurableExecution(
-	factorydefinitions.RuntimeOpeningRequest,
-	factorysessions.SessionRuntimeOpeningRequest,
-	RuntimeRoot,
-	factoryruntime.Clock,
-	workerprovider.Provider,
-	FactorySessionExecutionFactory,
-	factorysessions.ProviderIdentityResolver,
+	_ factorydefinitions.RuntimeOpeningRequest,
+	_ factorysessions.SessionRuntimeOpeningRequest,
+	_ RuntimeRoot,
+	_ factoryruntime.Clock,
+	_ workerprovider.Provider,
+	_ *workers.MockWorkersConfig,
+	_ FactorySessionExecutionFactory,
+	_ factorysessions.ProviderIdentityResolver,
 ) (factorysessions.ExecutionService, error) {
 	return nil, nil
 }

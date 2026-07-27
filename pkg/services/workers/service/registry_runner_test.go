@@ -372,6 +372,30 @@ func TestConductorInvocationRunnerRoutesCodexThroughConductor(t *testing.T) {
 	}
 }
 
+func TestConductorInvocationRunnerResolvesModelProviderWhenRunnerIDEmpty(t *testing.T) {
+	t.Parallel()
+
+	providers := builtInProviderRegistry(t)
+	native := &conductorRouteRecordingRunner{}
+	runner := conductorInvocationRunner{
+		next:      native,
+		conductor: conductor.New(providers),
+		providers: providers,
+	}
+
+	_, err := runner.Execute(context.Background(), workers.RunnerExecutionRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-codex-model-provider"},
+		ModelProvider: workers.RunnerIDCodex,
+		UserMessage:   "hello codex",
+	})
+	if err == nil {
+		t.Fatal("Execute(modelProvider=codex) error = nil, want conductor dependency failure without Providers service")
+	}
+	if native.calls != 0 {
+		t.Fatalf("native runner calls = %d, want 0", native.calls)
+	}
+}
+
 func TestConductorInvocationRunnerRoutesMigratedGeminiThroughConductor(t *testing.T) {
 	t.Parallel()
 
