@@ -534,3 +534,8 @@ Wave 0 functional-tests-expansion planning authority lives under
   Automations cron scheduling. Keep cron workstation factories explicit with
   `"behavior": "CRON"` and observe submissions through `serviceedges.Edges.SubmissionRecorder`
   on `support.StartFunctionalAPIServer`, matching the runtime_api cron smoke helpers.
+
+- `tests/functional/automations/hosted_sources_root_composition_test.go` owns
+  root.BuildProcess inert-construction evidence for Automations hosted Linear
+  polling. Assert zero `SubmissionRecorder` submissions after `support.BuildProcess`
+  before runtime lifecycle starts, matching the cron inert-construction pattern.
