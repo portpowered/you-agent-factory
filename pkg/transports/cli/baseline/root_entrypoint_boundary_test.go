@@ -16,42 +16,6 @@ import (
 const cliImportPath = "github.com/portpowered/infinite-you/pkg/transports/cli"
 const httpTransportImportPath = "github.com/portpowered/infinite-you/pkg/transports/http"
 
-func TestRunServerManifestAuthoritySourceGuard(t *testing.T) {
-	root := testutil.MustRepoPath(t, ".")
-	for _, relative := range []string{
-		"pkg/transports/cli/root_work.go",
-		"pkg/transports/cli/climanifestcobra/run_submit_constructor.go",
-	} {
-		path := filepath.Join(root, filepath.FromSlash(relative))
-		parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-		if err != nil {
-			t.Fatalf("parse %s: %v", relative, err)
-		}
-		ast.Inspect(parsed, func(node ast.Node) bool {
-			function, ok := node.(*ast.FuncDecl)
-			if !ok {
-				return true
-			}
-			switch function.Name.Name {
-			case "newRunCommand", "registerRunCommandFlags",
-				"runExecutionLocalBindingTarget", "runRuntimeLocalBindingTarget",
-				"runInvocationLocalBindingTarget":
-				t.Errorf("%s reintroduces handwritten run/server public registration", relative)
-			}
-			return true
-		})
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", relative, err)
-		}
-		if strings.Contains(string(raw), `case "continuously"`) ||
-			strings.Contains(string(raw), `case "with-server"`) ||
-			strings.Contains(string(raw), `case "with-site"`) {
-			t.Errorf("%s reintroduces a family-specific run/server public binding switch", relative)
-		}
-	}
-}
-
 func TestCLIInventoryPackagesUseCanonicalProcessRoot(t *testing.T) {
 	t.Parallel()
 

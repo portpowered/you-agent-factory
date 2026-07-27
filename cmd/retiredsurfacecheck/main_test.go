@@ -14,7 +14,7 @@ func TestRunPassesOnRepositoryRoot(t *testing.T) {
 	if err := run(config{root: root}, &stdout, &stderr); err != nil {
 		t.Fatalf("run() error = %v, stderr:\n%s", err, stderr.String())
 	}
-	if got := stdout.String(); !strings.Contains(got, "[agent-factory:retired-surface] retired command/docs surfaces and encoded-path production resolution remain absent") {
+	if got := stdout.String(); !strings.Contains(got, "[agent-factory:retired-surface] retired command/docs surfaces, encoded-path production resolution, and handwritten run/server registration remain absent") {
 		t.Fatalf("stdout = %q, want retired-surface success summary", got)
 	}
 }
@@ -27,7 +27,7 @@ func TestMakeRetiredSurfaceCheckTargetPassesOnRepositoryRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("make retired-surface-check failed: %v\n%s", err, output)
 	}
-	if !strings.Contains(string(output), "[agent-factory:retired-surface] retired command/docs surfaces and encoded-path production resolution remain absent") {
+	if !strings.Contains(string(output), "[agent-factory:retired-surface] retired command/docs surfaces, encoded-path production resolution, and handwritten run/server registration remain absent") {
 		t.Fatalf("make output = %q, want retired-surface success summary", output)
 	}
 }

@@ -1744,8 +1744,10 @@ response-stream output.
   flag help in `contracts/cli/commands.json` and bind stable flag names through
   an explicit target map assembled beside the handler config. Do not recreate a
   hidden Cobra command to harvest help strings or add flag-name switches in the
-  family constructor; the source guard and executable/manifest parity tests
-  under `pkg/transports/cli/baseline` and `climanifestcobra` protect that seam.
+  family constructor; the `retired-surface-check` static-policy lint plus
+  executable/manifest parity tests under `pkg/transports/cli/baseline` and
+  `climanifestcobra` protect that seam. Keep source scanning out of the
+  behavioral Go test suite.
 - Raw JavaScript `you run --factory workflow.js` owns a standalone durable
   execution service rather than a Factory Runtime. When hosting that run, bind
   the same execution service to the generated HTTP/dashboard transport, gate

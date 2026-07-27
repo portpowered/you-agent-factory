@@ -1,6 +1,8 @@
 package retiredsurfaceguard_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -91,6 +93,33 @@ func TestScanDocsReintroductionViolations_FailsOnDeliberateReintroduction(t *tes
 	}
 }
 
+func TestScanCLIManifestAuthoritySourceViolations_FailsOnHandwrittenRegistration(t *testing.T) {
+	root := t.TempDir()
+	writeManifestAuthorityFixture(t, root, "pkg/transports/cli/root_work.go", `package cli
+
+func newRunCommand() {}
+`)
+	writeManifestAuthorityFixture(t, root, "pkg/transports/cli/climanifestcobra/run_submit_constructor.go", `package climanifestcobra
+
+func bind(name string) {
+	switch name {
+	case "with-server":
+	}
+}
+`)
+
+	violations, err := retiredsurfaceguard.ScanCLIManifestAuthoritySourceViolations(root)
+	if err != nil {
+		t.Fatalf("ScanCLIManifestAuthoritySourceViolations: %v", err)
+	}
+	output := formatViolations(violations)
+	for _, want := range []string{"newRunCommand", "with-server"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("violations = %q, want substring %q", output, want)
+		}
+	}
+}
+
 func TestScanEncodedPathReintroductionViolations_PassesOnHierarchicalMapper(t *testing.T) {
 	mapper := func(factoriesRoot, name string) (string, error) {
 		return factoriesRoot + "/@you/goal", nil
@@ -118,6 +147,17 @@ func TestScanEncodedPathReintroductionViolations_FailsOnEncodedMapper(t *testing
 	}
 	if got := formatViolations(violations); !strings.Contains(got, "percent-encoded scoped leaf names") {
 		t.Fatalf("violations = %q, want percent-encoded mapping failure", got)
+	}
+}
+
+func writeManifestAuthorityFixture(t *testing.T, root, relative, content string) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(relative))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", relative, err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", relative, err)
 	}
 }
 
