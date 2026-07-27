@@ -476,10 +476,22 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPollerEmptyResultCreatesNoWork`.
   - `TestPollerRecoverableFailureRetriesWithoutDuplicates`.
 
-- [ ] `tests/functional/workstations/watcher/files_test.go`
-  - `TestFileWatcherHandlesSingleSequentialAndConcurrentFiles`.
-  - `TestFileWatcherDoesNotLeakOrDuplicateWork`.
-  - `TestFileWatcherSwitchesWithCurrentFactory`.
+- [x] `tests/functional/workstations/watcher/files_test.go`
+  - `TestWatcherSingleFileCompletesOneWork` verifies one watched seed file
+    completes exactly one Work.
+  - `TestWatcherSequentialFilesAllComplete` verifies sequential multi-file
+    watcher admission.
+  - `TestWatcherConcurrentFilesCompleteWithoutDuplicates` verifies concurrent
+    admission without duplicate Work.
+  - `TestWatcherMixedOutcomesLeaveNoNonTerminalWorkLeak` verifies mixed
+    success/failure settlement leaves no non-terminal Work.
+  - `TestWatcherDefaultChannelSubmission`, `TestWatcherExecutionIDDirectorySubmission`,
+    and `TestWatcherCombinedDefaultAndDynamicExecDirectory` verify multi-channel
+    watched-file ingress paths.
+  - `TestWatcherParentChildBatchFanIn` verifies PARENT_CHILD batch fan-in via
+    watched-file ingress.
+  - `TestWatcherExecutionFollowsCurrentFactorySwitch` verifies watched-file
+    execution follows Current Factory activation.
 
 ## Wave 2 — work
 
