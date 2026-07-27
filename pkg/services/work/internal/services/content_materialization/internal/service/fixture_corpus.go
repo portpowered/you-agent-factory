@@ -23,6 +23,7 @@ type URLMaterializationCase struct {
 // URLMaterializationCaseExpectation describes the expected materialization outcome.
 type URLMaterializationCaseExpectation struct {
 	Outcome              string   `json:"outcome"`
+	ErrorIs              string   `json:"errorIs,omitempty"`
 	ErrorContains        []string `json:"errorContains,omitempty"`
 	SameAsLocalPath      bool     `json:"sameAsLocalPath,omitempty"`
 	BodyMatch            bool     `json:"bodyMatch,omitempty"`

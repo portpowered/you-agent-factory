@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/url"
 	"strings"
+
+	work "github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 func validateRemoteTarget(ctx context.Context, rawURL string, parsed *url.URL, allowPrivate bool) error {
@@ -58,9 +60,9 @@ func isBlockedIP(ip net.IP) bool {
 }
 
 func ssrfError(rawURL string) error {
-	return fmt.Errorf("media url not allowed: %s (ssrf)", rawURL)
+	return fmt.Errorf("media url not allowed: %s (ssrf): %w", rawURL, work.ErrUnsafeContentURL)
 }
 
 func inaccessibleError(rawURL, reason string) error {
-	return fmt.Errorf("media url inaccessible: %s (%s)", rawURL, reason)
+	return fmt.Errorf("media url inaccessible: %s (%s): %w", rawURL, reason, work.ErrContentURLInaccessible)
 }

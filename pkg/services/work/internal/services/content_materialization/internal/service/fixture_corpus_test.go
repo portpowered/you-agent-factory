@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -65,7 +66,11 @@ func resolveURLMaterializationFixture(t *testing.T, tc service.URLMaterializatio
 
 	switch tc.Setup {
 	case "":
-		return tc.URL, newMaterializeTestOptions(), ""
+		opts := newMaterializeTestOptions()
+		if tc.MaxBytes > 0 {
+			opts.MaxBytes = tc.MaxBytes
+		}
+		return tc.URL, opts, ""
 	case "local_file":
 		dir := t.TempDir()
 		localPath := filepath.Join(dir, "fixture.png")
@@ -145,6 +150,19 @@ func assertURLMaterializationError(t *testing.T, tc service.URLMaterializationCa
 	t.Helper()
 	if err == nil {
 		t.Fatal("expected materialization error")
+	}
+	switch tc.Expect.ErrorIs {
+	case "":
+	case "unsafe":
+		if !errors.Is(err, content.ErrUnsafeContentURL) {
+			t.Fatalf("error = %v, want errors.Is(..., ErrUnsafeContentURL)", err)
+		}
+	case "inaccessible":
+		if !errors.Is(err, content.ErrContentURLInaccessible) {
+			t.Fatalf("error = %v, want errors.Is(..., ErrContentURLInaccessible)", err)
+		}
+	default:
+		t.Fatalf("unsupported expect.errorIs %q", tc.Expect.ErrorIs)
 	}
 	for _, fragment := range tc.Expect.ErrorContains {
 		if !strings.Contains(err.Error(), fragment) {

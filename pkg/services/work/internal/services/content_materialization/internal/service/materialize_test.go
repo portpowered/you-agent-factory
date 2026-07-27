@@ -276,6 +276,7 @@ func TestMaterializeContentURL_SSRFRejected(t *testing.T) {
 		"http://127.0.0.1/test.png",
 		"http://169.254.169.254/latest/meta-data/",
 		"http://10.0.0.1/secret",
+		"http://[::1]/secret",
 	}
 	for _, rawURL := range cases {
 		t.Run(rawURL, func(t *testing.T) {
@@ -283,6 +284,9 @@ func TestMaterializeContentURL_SSRFRejected(t *testing.T) {
 			defer cleanup()
 			if err == nil {
 				t.Fatal("expected ssrf error")
+			}
+			if !errors.Is(err, content.ErrUnsafeContentURL) {
+				t.Fatalf("error = %v, want errors.Is(..., ErrUnsafeContentURL)", err)
 			}
 			if !strings.Contains(err.Error(), "media url not allowed") {
 				t.Fatalf("error = %v", err)
@@ -342,8 +346,46 @@ func TestMaterializeContentURL_RemoteExceedsSizeLimit(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected size limit error")
 	}
+	if !errors.Is(err, content.ErrContentURLInaccessible) {
+		t.Fatalf("error = %v, want errors.Is(..., ErrContentURLInaccessible)", err)
+	}
 	if !strings.Contains(err.Error(), "exceeds size limit") {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestMaterializeContentURL_RemoteExceedsSizeLimitCleansUpTempFile(t *testing.T) {
+	t.Parallel()
+
+	var createdPath string
+	opts := newMaterializeTestOptions()
+	opts.AllowPrivateURLs = true
+	opts.CreateTempFile = func(dir, pattern string) (content.ContentTemporaryFile, error) {
+		f, err := os.CreateTemp(dir, pattern)
+		if err != nil {
+			return nil, err
+		}
+		createdPath = f.Name()
+		return f, nil
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, strings.Repeat("x", 32))
+	}))
+	defer server.Close()
+	opts.HTTPDoer = server.Client()
+	opts.MaxBytes = 8
+
+	_, cleanup, err := service.MaterializeContentURL(context.Background(), server.URL, opts)
+	defer cleanup()
+	if err == nil {
+		t.Fatal("expected size limit error")
+	}
+	if createdPath == "" {
+		t.Fatal("expected temporary file to be created before size-limit failure")
+	}
+	if _, statErr := os.Stat(createdPath); !os.IsNotExist(statErr) {
+		t.Fatalf("temporary file %q should be removed after size-limit failure, stat err=%v", createdPath, statErr)
 	}
 }
 
