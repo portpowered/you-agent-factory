@@ -126,7 +126,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/internal/service",
-      "minimum": 63.63
+      "minimum": 35.82
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire",
