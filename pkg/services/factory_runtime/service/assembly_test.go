@@ -3,6 +3,11 @@ package service
 import (
 	"strings"
 	"testing"
+
+	"github.com/jonboulle/clockwork"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
+	instancehostwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire"
 )
 
 func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
@@ -24,4 +29,15 @@ func TestNewAssemblyBindsRuntimeFactory(t *testing.T) {
 	if assembly == nil || assembly.runtimeFactory != runtimeFactory {
 		t.Fatalf("NewAssembly() = %#v, want supplied Runtime Factory", assembly)
 	}
+}
+
+func TestRuntimeCompositionComposesInertInstanceHost(t *testing.T) {
+	t.Parallel()
+
+	clock := clockwork.NewFakeClock()
+	lifecycle, err := instancehostwire.New(instancehost.Dependencies{Clock: clock})
+	if err != nil {
+		t.Fatalf("instancehostwire.New() error = %v", err)
+	}
+	var _ factoryruntime.Lifecycle = lifecycle
 }
