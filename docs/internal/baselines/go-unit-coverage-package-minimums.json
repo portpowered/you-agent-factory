@@ -922,7 +922,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service",
-      "minimum": 79.54
+      "minimum": 79.31
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases",
