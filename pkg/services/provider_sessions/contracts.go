@@ -125,7 +125,7 @@ func CanonicalProvider(provider string) string {
 	switch trimmed {
 	case "", "cursor":
 		return trimmed
-	case "agent", "cursor-agent":
+	case "agent", "cursor-agent", "cursor-cli":
 		return "cursor"
 	default:
 		return trimmed

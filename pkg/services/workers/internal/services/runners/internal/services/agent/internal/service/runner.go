@@ -125,6 +125,7 @@ func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRe
 	result := providers.ExecuteRequest{
 		Provider:         providerID,
 		AttemptID:        request.Dispatch.DispatchID,
+		Model:            request.Model,
 		SystemPrompt:     request.SystemPrompt,
 		UserMessage:      request.UserMessage,
 		OutputSchema:     request.OutputSchema,
@@ -149,9 +150,11 @@ func runnerResult(
 	response := workers.RunnerExecutionResult{Content: result.Content}
 	if result.SessionRef != nil {
 		response.ProviderSession = &workers.ProviderSessionMetadata{
-			Provider: result.SessionRef.Provider.String(),
-			Kind:     result.SessionRef.Kind,
-			ID:       result.SessionRef.ID,
+			Provider: workers.CanonicalProviderSessionProvider(
+				result.SessionRef.Provider.String(),
+			),
+			Kind: result.SessionRef.Kind,
+			ID:   result.SessionRef.ID,
 		}
 	}
 	if result.Diagnostics != nil {
@@ -179,14 +182,33 @@ func runnerFailureResult(
 	request workers.RunnerExecutionRequest,
 ) workers.RunnerExecutionResult {
 	response := runnerResult(providers.ExecuteResult{
+		SessionRef:  failure.SessionRef,
 		Diagnostics: failure.Diagnostics,
 	}, providers.ID(request.RunnerID))
+	if response.ProviderSession == nil && failure.SessionRef != nil {
+		response.ProviderSession = &workers.ProviderSessionMetadata{
+			Provider: workers.CanonicalProviderSessionProvider(
+				failure.SessionRef.Provider.String(),
+			),
+			Kind: failure.SessionRef.Kind,
+			ID:   failure.SessionRef.ID,
+		}
+	}
 	if strings.TrimSpace(request.SessionID) != "" {
 		response.ProviderSession = &workers.ProviderSessionMetadata{
-			Provider: request.RunnerID,
+			Provider: workers.CanonicalProviderSessionProvider(request.RunnerID),
 			Kind:     providers.SessionIDKind,
 			ID:       request.SessionID,
 		}
+	}
+	if response.ProviderSession == nil {
+		response.ProviderSession = &workers.ProviderSessionMetadata{
+			Provider: workers.CanonicalProviderSessionProvider(request.RunnerID),
+		}
+	} else if strings.TrimSpace(response.ProviderSession.Provider) == "" {
+		response.ProviderSession.Provider = workers.CanonicalProviderSessionProvider(
+			request.RunnerID,
+		)
 	}
 	return response
 }
@@ -282,6 +304,10 @@ func canonicalAgentFailureMessage(
 ) string {
 	switch failureType {
 	case workers.WorkFailureTypeTimeout:
+		if msg := strings.TrimSpace(providerMessage); msg != "" &&
+			msg != "execution timeout" {
+			return msg
+		}
 		return agentTimeoutFailureMessage
 	case workers.WorkFailureTypeUnknown:
 		if strings.TrimSpace(providerMessage) == "" {

@@ -15,7 +15,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	providerstructured "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured"
 )
 
@@ -26,6 +28,8 @@ type Config struct {
 	Logger            logging.Logger
 	Publish           workerprovider.InferenceProgressPublisher
 	FactoryDirectory  string
+	ProviderRegistry  *providerregistry.Registry
+	Conductor         *conductor.Conductor
 }
 
 // Service implements providers.Service by delegating Execute to one
@@ -72,6 +76,9 @@ func (s *Service) Execute(
 			Message: err.Error(),
 		}
 	}
+	if s.shouldRouteConductor(request.Provider.String()) {
+		return s.executeViaConductor(ctx, request)
+	}
 	provider, err := s.providerInstance()
 	if err != nil {
 		return providers.ExecuteResult{}, providers.ExecuteFailure{
@@ -112,11 +119,12 @@ func (s *Service) providerInstance() (inferencecontract.Provider, error) {
 func inferenceRequest(request providers.ExecuteRequest) workers.ProviderInferenceRequest {
 	providerID := request.Provider.String()
 	infer := workers.ProviderInferenceRequest{
-		Dispatch: workDispatch(request.AttemptID),
-		ModelProvider: modelProviderForProviderIdentity(providerID),
-		SystemPrompt:  request.SystemPrompt,
-		UserMessage:   request.UserMessage,
-		OutputSchema:  request.OutputSchema,
+		Dispatch:         workDispatch(request.AttemptID),
+		Model:            strings.TrimSpace(request.Model),
+		ModelProvider:    modelProviderForProviderIdentity(providerID),
+		SystemPrompt:     request.SystemPrompt,
+		UserMessage:      request.UserMessage,
+		OutputSchema:     request.OutputSchema,
 		WorkingDirectory: request.WorkingDirectory,
 		Worktree:         request.Worktree,
 	}
@@ -214,6 +222,15 @@ func executeFailureFromProvider(err error) (providers.ExecuteFailure, bool) {
 	failure := providers.ExecuteFailure{
 		Kind:    failureKindForProviderType(providerErr.Type),
 		Message: providerErr.Message,
+	}
+	if providerErr.ProviderSession != nil {
+		failure.SessionRef = &providers.SessionRef{
+			Provider: providers.ID(
+				workers.CanonicalProviderSessionProvider(providerErr.ProviderSession.Provider),
+			),
+			Kind: providerErr.ProviderSession.Kind,
+			ID:   providerErr.ProviderSession.ID,
+		}
 	}
 	if providerErr.Diagnostics != nil {
 		metadata := cloneMetadata(providerErr.Diagnostics.Metadata)

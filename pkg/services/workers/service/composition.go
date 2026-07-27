@@ -170,6 +170,7 @@ func NewRuntimeWithSelection(
 			service.executorBuilder = builder.
 				WithRunnerSelection(providerRegistry.ResolveRunnerSelection).
 				WithProviderIdentityResolution(providerRegistry.CanonicalIdentity).
+				WithProviderRegistry(providerRegistry).
 				WithAgentRunnerCutover(true)
 		}
 		service.agentDispatchUsesRegisteredRunner = true

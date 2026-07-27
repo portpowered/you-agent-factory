@@ -19,8 +19,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
+	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/providersroot"
+	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	providerstructured "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured"
 	"github.com/portpowered/infinite-you/pkg/services/workers/skippermissions"
 )
@@ -81,6 +83,7 @@ type Service struct {
 	workstationFiles                  platformfilesystem.ReadFileInspector
 	resolveRunner                     workers.RunnerSelectionResolver
 	resolveProvider                   workers.ProviderIdentityResolver
+	providerRegistry                  *providerregistry.Registry
 	agentDispatchUsesRegisteredRunner bool
 }
 
@@ -134,6 +137,17 @@ func (s *Service) WithProviderIdentityResolution(resolve workers.ProviderIdentit
 	}
 	clone := *s
 	clone.resolveProvider = resolve
+	return &clone
+}
+
+// WithProviderRegistry returns a service copy that can route agent dispatch
+// through conductor-backed provider integrations on the Providers root.
+func (s *Service) WithProviderRegistry(registry *providerregistry.Registry) *Service {
+	if s == nil {
+		return nil
+	}
+	clone := *s
+	clone.providerRegistry = registry
 	return &clone
 }
 
@@ -340,13 +354,18 @@ func (s *Service) resolveRegisteredAgentRunner(
 		return nil, fmt.Errorf("provider worker factory is required")
 	}
 	publish := agentProgressPublisherOrNoop(inferenceProgressPublisher)
-	providersRoot, err := providersroot.NewService(providersroot.Config{
+	providersConfig := providersroot.Config{
 		Factory:          s.providerFactory,
 		SkipPermissions:  effectiveSkipPermissions,
 		Logger:           logger,
 		Publish:          publish,
 		FactoryDirectory: strings.TrimSpace(runtimeConfig.FactoryDir()),
-	})
+	}
+	if s.providerRegistry != nil {
+		providersConfig.ProviderRegistry = s.providerRegistry
+		providersConfig.Conductor = providerconductor.New(s.providerRegistry)
+	}
+	providersRoot, err := providersroot.NewService(providersConfig)
 	if err != nil {
 		return nil, fmt.Errorf("construct Providers root for agent dispatch: %w", err)
 	}
