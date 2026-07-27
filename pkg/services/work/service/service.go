@@ -9,8 +9,10 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessions 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
+	stateaccesswire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire"
 )
 
 // Service coordinates Work operations against the runtime registered for a
@@ -28,6 +30,7 @@ type applicationService struct {
 	readSubmittedFile   work.SubmittedFileReader
 	contentStaging      work.ContentStagingService
 	contentMaterializer work.ContentMaterializer
+	stateAccess         stateaccess.Service
 }
 
 // New constructs the canonical Work application service.
@@ -49,6 +52,9 @@ func NewService(
 		readSubmittedFile:   readSubmittedFile,
 		contentStaging:      contentStaging,
 		contentMaterializer: contentMaterializer,
+		stateAccess: stateaccesswire.NewService(
+			stateaccesswire.NewRuntimeSessionResolver(runtimes),
+		),
 	}
 }
 
@@ -86,11 +92,10 @@ func (s *applicationService) SubmitWorkRequestForSession(
 	sessionID string,
 	request work.WorkRequest,
 ) (work.WorkRequestSubmitResult, error) {
-	runtime, err := s.runtime(sessionID)
-	if err != nil {
-		return work.WorkRequestSubmitResult{}, err
+	if s == nil || s.stateAccess == nil {
+		return work.WorkRequestSubmitResult{}, fmt.Errorf("Work state access is required")
 	}
-	return runtime.SubmitWorkRequest(ctx, request)
+	return s.stateAccess.SubmitWorkRequestForSession(ctx, sessionID, request)
 }
 
 func (s *applicationService) MoveWorkForSession(
@@ -100,17 +105,10 @@ func (s *applicationService) MoveWorkForSession(
 	stateName string,
 	requestID string,
 ) (work.OperatorMoveResult, error) {
-	runtime, err := s.runtime(sessionID)
-	if err != nil {
-		return work.OperatorMoveResult{}, err
+	if s == nil || s.stateAccess == nil {
+		return work.OperatorMoveResult{}, fmt.Errorf("Work state access is required")
 	}
-	return runtime.MoveWork(
-		ctx,
-		workID,
-		stateName,
-		work.WorkStateChangeSourceAPI,
-		requestID,
-	)
+	return s.stateAccess.MoveWorkForSession(ctx, sessionID, workID, stateName, requestID)
 }
 
 func (s *applicationService) StageContent(
