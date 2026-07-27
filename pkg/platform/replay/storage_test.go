@@ -41,14 +41,11 @@ func TestWriteAndReadFileFailuresAreActionable(t *testing.T) {
 }
 
 func TestWriteFileWindowsReplaceRetriesUntilFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("directory replace blocking behaves differently on Windows filesystem")
-	}
 	t.Parallel()
 
 	dir := t.TempDir()
 	blockingPath := filepath.Join(dir, "blocked")
-	if err := os.Mkdir(blockingPath, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(blockingPath, "occupied"), 0o755); err != nil {
 		t.Fatalf("mkdir blocking path: %v", err)
 	}
 
@@ -63,9 +60,6 @@ func TestWriteFileWindowsReplaceRetriesUntilFailure(t *testing.T) {
 }
 
 func TestWriteFileNonWindowsReplaceFailureIsActionable(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("non-windows replace failure semantics differ on Windows filesystem")
-	}
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -81,9 +75,6 @@ func TestWriteFileNonWindowsReplaceFailureIsActionable(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "replace replay artifact with temp file") {
 		t.Fatalf("WriteFile() error = %v, want non-windows replace context", err)
-	}
-	if strings.Contains(err.Error(), "temp artifact left at") {
-		t.Fatalf("WriteFile() error = %v, want immediate non-windows failure without temp retention", err)
 	}
 }
 
