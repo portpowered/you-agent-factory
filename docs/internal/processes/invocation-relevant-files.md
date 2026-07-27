@@ -309,6 +309,12 @@ primary-result behavior.
   authoritative completed message as `final_result_agreement`, even when it
   uses a different item correlation, so no earlier represented result can be
   overwritten before completion validation.
+- Keep reusable one-attempt conformance under the Providers-private Execution
+  testkit. Build the singular Providers root around a fresh
+  controllable adapter for each scenario, observe only Providers-owned
+  request/result/error facts plus explicit adapter call/cleanup probes, and run
+  both streaming/progress and final-only/failure-oriented implementations so
+  the harness cannot encode one provider-native protocol.
 - The provider-neutral invocation conductor lives in
   `pkg/services/workers/provider/conductor/`. Factory Sessions and worker
   executors should enter registry-selected integrations through that conductor

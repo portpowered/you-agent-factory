@@ -915,6 +915,10 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/testutil/execution",
+      "minimum": 82.91
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/wire",
       "minimum": 75.00
     },
