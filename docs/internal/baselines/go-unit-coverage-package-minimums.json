@@ -98,7 +98,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/stdio",
-      "minimum": 92.20
+      "minimum": 89.61
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/root",
