@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -43,6 +44,18 @@ func TestNew_ProviderBoundPetriDispatchPreservesPublicContractOnReplay(t *testin
 	}
 	if history.CallCount("RecordWorkstationResponse") != 1 {
 		t.Fatalf("RecordWorkstationResponse calls = %d, want 1", history.CallCount("RecordWorkstationResponse"))
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if len(snapshot.DispatchHistory) != 1 {
+		t.Fatalf("dispatch history = %#v, want one completed dispatch", snapshot.DispatchHistory)
+	}
+	impl := f.(*factoryImpl)
+	intent, ok := impl.dispatchPlan.Intent(snapshot.DispatchHistory[0].DispatchID)
+	if !ok || intent.Status != dispatchplanning.OutboxIntentStatusRetired || intent.Attempts != 1 {
+		t.Fatalf("dispatch outbox intent = %#v, %t; want one published and retired intent", intent, ok)
 	}
 	// Recordings owns canonical inference-event construction and replay shape;
 	// Workers owns provider emission ordering.

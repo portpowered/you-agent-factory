@@ -274,8 +274,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/cli/named_invocation/named_invocation_test.go | you-agent-factory/tests/functional/cli/named_invocation | TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer | short | tests/functional/factory/packaged/goal/invocation_test.go | none | none | n/a |
 | tests/functional/cli/named_invocation/named_invocation_test.go | you-agent-factory/tests/functional/cli/named_invocation | TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer | short | tests/functional/factory/packaged/subagent/invocation_test.go | none | none | n/a |
 | tests/functional/cli/root_discovery/root_discovery_test.go | you-agent-factory/tests/functional/cli/root_discovery | TestBareRootPrintsConciseHelpWithoutProductEffects | short | tests/functional/transport/cli/process/help_and_version_test.go | none | none | n/a |
-| tests/functional/cli/session/session_enumeration_test.go | you-agent-factory/tests/functional/cli/session | TestSessionEnumeration | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
-| tests/functional/cli/session/session_enumeration_test.go | you-agent-factory/tests/functional/cli/session | TestSessionEnumerationJSON | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
 | tests/functional/sessions/cli/resolved_session_family_test.go | you-agent-factory/tests/functional/sessions/cli | TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
 | tests/functional/sessions/cli/resolved_session_family_test.go | you-agent-factory/tests/functional/sessions/cli | TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
 | tests/functional/cli/session_resume/resume_non_regression_test.go | you-agent-factory/tests/functional/cli/session_resume | TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadSemantics | short | tests/functional/sessions/restart/logical_identity_test.go | none | none | n/a |
@@ -329,7 +327,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/guards_batch/partial_batch_long_test.go | you-agent-factory/tests/functional/guards_batch | TestPartialBatch_ThrottledProviderFailureWithoutAuthoredGuardEventuallyFails | functionallong | tests/functional/resilience/batch/partial_batch_test.go | guards_batch | none | guards_batch-delete-06-resilience-batch |
 | tests/functional/guards_batch/resource_contention_test.go | you-agent-factory/tests/functional/guards_batch | TestConfigDriven_ResourceContention | short | tests/functional/resources/fairness_long_test.go | guards_batch | none | guards_batch-delete-05-resources-fairness |
 | tests/functional/guards_batch/resource_token_name_test.go | you-agent-factory/tests/functional/guards_batch | TestResourceGated_DispatchTokenName | short | tests/functional/resources/concurrency_test.go | guards_batch | none | guards_batch-delete-04-resources-concurrency |
-| tests/functional/guards_batch/watcher_parent_child_batch_long_test.go | you-agent-factory/tests/functional/guards_batch | TestFileWatcherParentChildBatch_SubmittedFanInSmoke | functionallong | tests/functional/workstations/watcher/files_test.go | guards_batch | none | guards_batch-delete-07-workstations-watcher |
 
 #### `models` (1 scenarios, catch_all=`none`)
 
@@ -357,7 +354,7 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/orchestration/javascript/contracts/response_events_test.go | you-agent-factory/tests/functional/orchestration/javascript/contracts | TestJavaScriptChildProgressPublishesCanonicalResponseEvents | short | tests/functional/orchestration/javascript/contracts/response_events_test.go | none | none | workflow-delete-09-orchestration-javascript |
 | tests/functional/orchestration/javascript/contracts/response_events_test.go | you-agent-factory/tests/functional/orchestration/javascript/contracts | TestJavaScriptTerminalResultFollowsFinalResponseEvent | short | tests/functional/orchestration/javascript/contracts/response_events_test.go | none | none | n/a |
 
-#### `providers` (46 scenarios, catch_all=`none`)
+#### `providers` (45 scenarios, catch_all=`none`)
 
 | source_path | package | scenario | lane | destination | catch_all | specialty_targets | deletion_only_batch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -405,7 +402,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/providers/mock_workers_agent_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace | short | tests/functional/workers/mock/replacement_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_agent_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput | short | tests/functional/workers/mock/replacement_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_agent_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary | short | tests/functional/workers/mock/replacement_test.go | none | none | n/a |
-| tests/functional/providers/mock_workers_cli_http_stability_smoke_long_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_CLIServiceModeStartupWorkFileSupportsRepeatedLiveHTTPPollingBeforeCompletion | functionallong | tests/functional/transport/http/server/concurrent_requests_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_end_to_end_smoke_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials | short | tests/functional/workers/mock/replacement_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_script_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect | short | tests/functional/workers/script/execution_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_script_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_ScriptDefaultAcceptProducesSuccessfulScriptResult | short | tests/functional/workers/script/execution_test.go | none | none | n/a |
@@ -482,6 +478,7 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/runtime_api/api_legacy_unary_retirement_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly | short | tests/functional/work/submission/http_test.go | runtime_api | artifact-contract-closeout | runtime_api-delete-02-work-submission |
 | tests/functional/runtime_api/api_manual_work_recovery_test.go | you-agent-factory/tests/functional/runtime_api | TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress | short | tests/functional/work/recovery/manual_move_test.go | runtime_api | none | runtime_api-delete-02-work-submission |
 | tests/functional/runtime_api/api_model_local_inference_long_test.go | you-agent-factory/tests/functional/runtime_api | TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio | functionallong | tests/functional/models/lifecycle/http_test.go | runtime_api | pr-inference-approval,long-tests-functional-runtime | runtime_api-delete-08-models |
+| tests/functional/runtime_api/api_model_transport_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork | short | tests/functional/models/lifecycle/http_test.go | runtime_api | none | runtime_api-delete-08-models |
 | tests/functional/runtime_api/api_model_transport_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned | short | tests/functional/models/lifecycle/http_test.go | runtime_api | none | runtime_api-delete-08-models |
 | tests/functional/runtime_api/api_ootb_experience_smoke_long_test.go | you-agent-factory/tests/functional/runtime_api | TestOOTBExperience_APIPreseededSimplePipelineCompletes | functionallong | tests/functional/orchestration/petri/dispatch/simple_run_test.go | runtime_api | none | runtime_api-delete-10-observability-product |
 | tests/functional/runtime_api/api_ootb_experience_smoke_long_test.go | you-agent-factory/tests/functional/runtime_api | TestOOTBExperience_APIPreseededTwoStagePipelineCompletes | functionallong | tests/functional/orchestration/petri/dispatch/simple_run_test.go | runtime_api | none | runtime_api-delete-10-observability-product |
@@ -628,6 +625,9 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryInitValidateAndQuery | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryFlattenExpandPreservesMeaning | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryReplaceCurrentChangesSessionFactory | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/session_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISessionCreateListShowDelete | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/session_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISessionMissingIDReturnsNotFound | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/session_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISessionPauseBuffersAndResumeDispatches | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/submit_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISubmitBackendErrorPreservesPublicMessage | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/submit_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISubmitBatchFile | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/submit_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISubmitBatchInlineJSON | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
@@ -763,13 +763,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_FeedbackPropagated | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_SucceedsBeforeLimit | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
-| tests/functional/workflow/watcher_multichannel_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestMultiChannelFileWatcher_DefaultSubmission | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_multichannel_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestMultiChannelFileWatcher_DynamicExecDir | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_multichannel_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestMultiChannelFileWatcher_ExecutionIDSubmission | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_seed_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestFileWatcherFlowConcurrent | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_seed_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestFileWatcherFlowNoTokenLeaks | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_seed_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestFileWatcherFlowSequential | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_seed_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestFileWatcherFlowSingle | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
 | tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationAndReload | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
 | tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationPreservesIndependentWorkflows | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
 | tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationRejectionLoop | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
@@ -901,6 +894,7 @@ Batch execution guidance for later move work:
 | tests/functional/runtime_api/api_legacy_unary_retirement_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly | short | tests/functional/work/submission/http_test.go | runtime_api | artifact-contract-closeout | runtime_api-delete-02-work-submission |
 | tests/functional/runtime_api/api_manual_work_recovery_test.go | you-agent-factory/tests/functional/runtime_api | TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress | short | tests/functional/work/recovery/manual_move_test.go | runtime_api | none | runtime_api-delete-02-work-submission |
 | tests/functional/runtime_api/api_model_local_inference_long_test.go | you-agent-factory/tests/functional/runtime_api | TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio | functionallong | tests/functional/models/lifecycle/http_test.go | runtime_api | pr-inference-approval,long-tests-functional-runtime | runtime_api-delete-08-models |
+| tests/functional/runtime_api/api_model_transport_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork | short | tests/functional/models/lifecycle/http_test.go | runtime_api | none | runtime_api-delete-08-models |
 | tests/functional/runtime_api/api_model_transport_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned | short | tests/functional/models/lifecycle/http_test.go | runtime_api | none | runtime_api-delete-08-models |
 | tests/functional/runtime_api/api_ootb_experience_smoke_long_test.go | you-agent-factory/tests/functional/runtime_api | TestOOTBExperience_APIPreseededSimplePipelineCompletes | functionallong | tests/functional/orchestration/petri/dispatch/simple_run_test.go | runtime_api | none | runtime_api-delete-10-observability-product |
 | tests/functional/runtime_api/api_ootb_experience_smoke_long_test.go | you-agent-factory/tests/functional/runtime_api | TestOOTBExperience_APIPreseededTwoStagePipelineCompletes | functionallong | tests/functional/orchestration/petri/dispatch/simple_run_test.go | runtime_api | none | runtime_api-delete-10-observability-product |
@@ -1017,7 +1011,8 @@ can execute independently until package ownership reaches zero.
 | `workflow-delete-02-work-routing` | workflow | 7 | work/routing | none |
 | `workflow-delete-03-work-relationships` | workflow | 8 | work/relationships | none |
 | `workflow-delete-04-work-routing-logical` | workflow | 2 | work/routing | none |
-| `workflow-delete-06-workstations-watcher` | workflow | 7 | workstations/watcher | none |
+| `workflow-delete-05-workstations-repeater` | workflow | 13 | workstations/repeater | none |
+| `workflow-delete-06-workstations-watcher` | workflow | 7 | workstations/watcher | consumed |
 | `workflow-delete-07-factory-current` | workflow | 7 | factory/current | none |
 | `workflow-delete-08-guards` | workflow | 5 | guards | none |
 | `workflow-delete-09-orchestration-javascript` | workflow | 2 | orchestration/javascript | none |
@@ -1113,6 +1108,9 @@ Batch execution guidance for later move work:
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryInitValidateAndQuery | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryFlattenExpandPreservesMeaning | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryReplaceCurrentChangesSessionFactory | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/session_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISessionCreateListShowDelete | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/session_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISessionMissingIDReturnsNotFound | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/session_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISessionPauseBuffersAndResumeDispatches | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/submit_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISubmitBackendErrorPreservesPublicMessage | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/submit_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISubmitBatchFile | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/submit_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISubmitBatchInlineJSON | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
@@ -1222,13 +1220,6 @@ Batch execution guidance for later move work:
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_FeedbackPropagated | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_SucceedsBeforeLimit | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
-| tests/functional/workflow/watcher_multichannel_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestMultiChannelFileWatcher_DefaultSubmission | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_multichannel_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestMultiChannelFileWatcher_DynamicExecDir | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_multichannel_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestMultiChannelFileWatcher_ExecutionIDSubmission | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_seed_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestFileWatcherFlowConcurrent | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_seed_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestFileWatcherFlowNoTokenLeaks | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_seed_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestFileWatcherFlowSequential | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
-| tests/functional/workflow/watcher_seed_submission_long_test.go | you-agent-factory/tests/functional/workflow | TestFileWatcherFlowSingle | functionallong | tests/functional/workstations/watcher/files_test.go | workflow | none | workflow-delete-06-workstations-watcher |
 | tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationAndReload | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
 | tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationPreservesIndependentWorkflows | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
 | tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationRejectionLoop | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
@@ -1282,7 +1273,7 @@ ownership reaches zero.
 | `guards_batch-delete-04-resources-concurrency` | guards_batch | 5 | resources | none |
 | `guards_batch-delete-05-resources-fairness` | guards_batch | 1 | resources | none |
 | `guards_batch-delete-06-resilience-batch` | guards_batch | 6 | resilience/batch | none |
-| `guards_batch-delete-07-workstations-watcher` | guards_batch | 1 | workstations/watcher | none |
+| `guards_batch-delete-07-workstations-watcher` | guards_batch | 1 | workstations/watcher | consumed |
 | `bootstrap_portability-delete-01-factory-definitions-init` | bootstrap_portability | 7 | factory/definitions | none |
 | `bootstrap_portability-delete-02-factory-definitions-validation` | bootstrap_portability | 3 | factory/definitions | none |
 | `bootstrap_portability-delete-03-factory-definitions-import-export` | bootstrap_portability | 10 | factory/definitions | none |
@@ -1412,7 +1403,6 @@ Batch execution guidance for later move work:
 | tests/functional/guards_batch/partial_batch_long_test.go | you-agent-factory/tests/functional/guards_batch | TestPartialBatch_ThrottledProviderFailureWithoutAuthoredGuardEventuallyFails | functionallong | tests/functional/resilience/batch/partial_batch_test.go | guards_batch | none | guards_batch-delete-06-resilience-batch |
 | tests/functional/guards_batch/resource_contention_test.go | you-agent-factory/tests/functional/guards_batch | TestConfigDriven_ResourceContention | short | tests/functional/resources/fairness_long_test.go | guards_batch | none | guards_batch-delete-05-resources-fairness |
 | tests/functional/guards_batch/resource_token_name_test.go | you-agent-factory/tests/functional/guards_batch | TestResourceGated_DispatchTokenName | short | tests/functional/resources/concurrency_test.go | guards_batch | none | guards_batch-delete-04-resources-concurrency |
-| tests/functional/guards_batch/watcher_parent_child_batch_long_test.go | you-agent-factory/tests/functional/guards_batch | TestFileWatcherParentChildBatch_SubmittedFanInSmoke | functionallong | tests/functional/workstations/watcher/files_test.go | guards_batch | none | guards_batch-delete-07-workstations-watcher |
 | tests/functional/replay_contracts/canonical_topology_snapshot_projection_test.go | you-agent-factory/tests/functional/replay_contracts | TestCanonicalTopologySnapshotsPreservePublicIdentityAndResourceEvidence | short | tests/functional/events/factory_events/order_and_cursor_test.go | replay_contracts | none | replay_contracts-delete-02-events-factory-events |
 | tests/functional/replay_contracts/replay_event_stream_artifact_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifact | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | artifact-contract-closeout | replay_contracts-delete-01-events-replay |
 | tests/functional/replay_contracts/replay_event_stream_artifact_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifactWithCopiedRootFactoryDefinition | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | artifact-contract-closeout | replay_contracts-delete-01-events-replay |
@@ -1453,14 +1443,14 @@ exceptions; they do not use deletion-only batch ids (`deletion_only_batch` = `n/
 | package | scenarios | checklist destinations | wrong-layer | specialty Make bindings |
 | --- | ---: | ---: | ---: | --- |
 | `acceptance` | 16 | 13 | 3 | `test-built-cli-acceptance` (13 customer scenarios; harness rows wrong-layer) |
-| `cli` | 56 | 31 | 25 | none |
+| `cli` | 53 | 31 | 25 | none |
 | `config_init` | 8 | 8 | 0 | none |
 | `models` | 1 | 1 | 0 | none |
 | `operator_settings` | 1 | 0 | 1 | none |
-| `providers` | 46 | 46 | 0 | `script-timeout-companion-smoke-100` (1 scenario) |
+| `providers` | 45 | 45 | 0 | `script-timeout-companion-smoke-100` (1 scenario) |
 | `sessionparity` | 13 | 0 | 13 | none |
 | `work` | 1 | 0 | 1 | none |
-| **Total** | **142** | **99** | **43** | |
+| **Total** | **139** | **99** | **43** | |
 
 ### Domain move plan
 
@@ -1553,8 +1543,6 @@ exceptions; they do not use deletion-only batch ids (`deletion_only_batch` = `n/
 | tests/functional/cli/named_invocation/named_invocation_test.go | you-agent-factory/tests/functional/cli/named_invocation | TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer | short | tests/functional/factory/packaged/goal/invocation_test.go | none | none | n/a |
 | tests/functional/cli/named_invocation/named_invocation_test.go | you-agent-factory/tests/functional/cli/named_invocation | TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer | short | tests/functional/factory/packaged/subagent/invocation_test.go | none | none | n/a |
 | tests/functional/cli/root_discovery/root_discovery_test.go | you-agent-factory/tests/functional/cli/root_discovery | TestBareRootPrintsConciseHelpWithoutProductEffects | short | tests/functional/transport/cli/process/help_and_version_test.go | none | none | n/a |
-| tests/functional/cli/session/session_enumeration_test.go | you-agent-factory/tests/functional/cli/session | TestSessionEnumeration | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
-| tests/functional/cli/session/session_enumeration_test.go | you-agent-factory/tests/functional/cli/session | TestSessionEnumerationJSON | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
 | tests/functional/sessions/cli/resolved_session_family_test.go | you-agent-factory/tests/functional/sessions/cli | TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
 | tests/functional/sessions/cli/resolved_session_family_test.go | you-agent-factory/tests/functional/sessions/cli | TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
 | tests/functional/cli/session_resume/resume_non_regression_test.go | you-agent-factory/tests/functional/cli/session_resume | TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadSemantics | short | tests/functional/sessions/restart/logical_identity_test.go | none | none | n/a |
@@ -1619,7 +1607,6 @@ exceptions; they do not use deletion-only batch ids (`deletion_only_batch` = `n/
 | tests/functional/providers/mock_workers_agent_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace | short | tests/functional/workers/mock/replacement_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_agent_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput | short | tests/functional/workers/mock/replacement_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_agent_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary | short | tests/functional/workers/mock/replacement_test.go | none | none | n/a |
-| tests/functional/providers/mock_workers_cli_http_stability_smoke_long_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_CLIServiceModeStartupWorkFileSupportsRepeatedLiveHTTPPollingBeforeCompletion | functionallong | tests/functional/transport/http/server/concurrent_requests_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_end_to_end_smoke_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials | short | tests/functional/workers/mock/replacement_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_script_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect | short | tests/functional/workers/script/execution_test.go | none | none | n/a |
 | tests/functional/providers/mock_workers_script_test.go | you-agent-factory/tests/functional/providers | TestMockWorkers_ScriptDefaultAcceptProducesSuccessfulScriptResult | short | tests/functional/workers/script/execution_test.go | none | none | n/a |
@@ -1755,7 +1742,8 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `workflow-delete-02-work-routing` | workflow | 7 | work/routing | planned |
 | `workflow-delete-03-work-relationships` | workflow | 8 | work/relationships | planned |
 | `workflow-delete-04-work-routing-logical` | workflow | 2 | work/routing | planned |
-| `workflow-delete-06-workstations-watcher` | workflow | 7 | workstations/watcher | planned |
+| `workflow-delete-05-workstations-repeater` | workflow | 13 | workstations/repeater | planned |
+| `workflow-delete-06-workstations-watcher` | workflow | 7 | workstations/watcher | consumed |
 | `workflow-delete-07-factory-current` | workflow | 7 | factory/current | planned |
 | `workflow-delete-08-guards` | workflow | 5 | guards | planned |
 | `workflow-delete-09-orchestration-javascript` | workflow | 2 | orchestration/javascript | planned |
@@ -1765,7 +1753,7 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `guards_batch-delete-04-resources-concurrency` | guards_batch | 5 | resources | planned |
 | `guards_batch-delete-05-resources-fairness` | guards_batch | 1 | resources | planned |
 | `guards_batch-delete-06-resilience-batch` | guards_batch | 6 | resilience/batch | planned |
-| `guards_batch-delete-07-workstations-watcher` | guards_batch | 1 | workstations/watcher | planned |
+| `guards_batch-delete-07-workstations-watcher` | guards_batch | 1 | workstations/watcher | consumed |
 | `bootstrap_portability-delete-01-factory-definitions-init` | bootstrap_portability | 7 | factory/definitions | planned |
 | `bootstrap_portability-delete-02-factory-definitions-validation` | bootstrap_portability | 3 | factory/definitions | planned |
 | `bootstrap_portability-delete-03-factory-definitions-import-export` | bootstrap_portability | 10 | factory/definitions | planned |

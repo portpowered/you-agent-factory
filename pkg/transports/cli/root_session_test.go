@@ -5,16 +5,31 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 )
+
+type rootTestHTTPClock struct{}
+
+func (rootTestHTTPClock) Now() time.Time { return time.Unix(1, 0) }
+
+func rootTestHTTPProtocol() clihttp.Protocol {
+	protocol, err := clihttp.NewProtocol(&http.Client{}, rootTestHTTPClock{})
+	if err != nil {
+		panic(err)
+	}
+	return protocol
+}
 
 func TestSessionCommand_RegistersSubcommands(t *testing.T) {
 	root := newLegacyTestRootCommand()

@@ -158,7 +158,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIWorkShowMissingReturnsNotFound` covers error behavior.
   - `TestCLIWorkVisualizeProducesDeterministicGraph` covers visualization.
 
-- [ ] `tests/functional/transport/cli/commands/session_wiring_test.go`
+- [x] `tests/functional/transport/cli/commands/session_wiring_test.go`
   - `TestCLISessionCreateListShowDelete` covers the basic lifecycle.
   - `TestCLISessionPauseBuffersAndResumeDispatches` covers lifecycle control.
   - `TestCLISessionMissingIDReturnsNotFound` covers show/delete failure.
@@ -196,7 +196,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestGeneratedClientDecodesRepresentativeStructuredError`.
   - `TestGeneratedClientAndServerSchemaStayAligned`.
 
-- [ ] `tests/functional/transport/http/server/concurrent_requests_test.go`
+- [x] `tests/functional/transport/http/server/concurrent_requests_test.go`
   - `TestAPIConcurrentSessionRequestsRemainIsolated`.
   - `TestAPICancelledRequestDoesNotCancelUnrelatedSession`.
 
@@ -479,10 +479,22 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/workstations/poller/build_process_test.go`
   - `TestScriptPollerAutomationRemainsInertThroughRootBuildProcessConstruction`.
 
-- [ ] `tests/functional/workstations/watcher/files_test.go`
-  - `TestFileWatcherHandlesSingleSequentialAndConcurrentFiles`.
-  - `TestFileWatcherDoesNotLeakOrDuplicateWork`.
-  - `TestFileWatcherSwitchesWithCurrentFactory`.
+- [x] `tests/functional/workstations/watcher/files_test.go`
+  - `TestWatcherSingleFileCompletesOneWork` verifies one watched seed file
+    completes exactly one Work.
+  - `TestWatcherSequentialFilesAllComplete` verifies sequential multi-file
+    watcher admission.
+  - `TestWatcherConcurrentFilesCompleteWithoutDuplicates` verifies concurrent
+    admission without duplicate Work.
+  - `TestWatcherMixedOutcomesLeaveNoNonTerminalWorkLeak` verifies mixed
+    success/failure settlement leaves no non-terminal Work.
+  - `TestWatcherDefaultChannelSubmission`, `TestWatcherExecutionIDDirectorySubmission`,
+    and `TestWatcherCombinedDefaultAndDynamicExecDirectory` verify multi-channel
+    watched-file ingress paths.
+  - `TestWatcherParentChildBatchFanIn` verifies PARENT_CHILD batch fan-in via
+    watched-file ingress.
+  - `TestWatcherExecutionFollowsCurrentFactorySwitch` verifies watched-file
+    execution follows Current Factory activation.
 
 ## Wave 2 — work
 

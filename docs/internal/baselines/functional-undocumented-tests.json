@@ -303,14 +303,6 @@
       "name": "TestBareRootPrintsConciseHelpWithoutProductEffects"
     },
     {
-      "file": "cli/session/session_enumeration_test.go",
-      "name": "TestSessionEnumeration"
-    },
-    {
-      "file": "cli/session/session_enumeration_test.go",
-      "name": "TestSessionEnumerationJSON"
-    },
-    {
       "file": "cli/session_resume/resume_non_regression_test.go",
       "name": "TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadSemantics"
     },
@@ -535,10 +527,6 @@
       "name": "TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary"
     },
     {
-      "file": "providers/mock_workers_cli_http_stability_smoke_long_test.go",
-      "name": "TestMockWorkers_CLIServiceModeStartupWorkFileSupportsRepeatedLiveHTTPPollingBeforeCompletion"
-    },
-    {
       "file": "providers/mock_workers_end_to_end_smoke_test.go",
       "name": "TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials"
     },
@@ -749,10 +737,6 @@
     {
       "file": "runtime_api/api_model_local_inference_long_test.go",
       "name": "TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio"
-    },
-    {
-      "file": "runtime_api/api_model_transport_smoke_test.go",
-      "name": "TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork"
     },
     {
       "file": "runtime_api/api_model_transport_smoke_test.go",
@@ -1521,18 +1505,6 @@
     {
       "file": "workflow/review_retry_exhaustion_long_test.go",
       "name": "TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries"
-    },
-    {
-      "file": "workflow/watcher_multichannel_submission_long_test.go",
-      "name": "TestMultiChannelFileWatcher_DefaultSubmission"
-    },
-    {
-      "file": "workflow/watcher_multichannel_submission_long_test.go",
-      "name": "TestMultiChannelFileWatcher_DynamicExecDir"
-    },
-    {
-      "file": "workflow/watcher_multichannel_submission_long_test.go",
-      "name": "TestMultiChannelFileWatcher_ExecutionIDSubmission"
     }
   ]
 }
