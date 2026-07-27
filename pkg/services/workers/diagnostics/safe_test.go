@@ -8,6 +8,46 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestSafeWorkDiagnosticsRedactsHostSpecificWorkingDirectory(t *testing.T) {
+	t.Parallel()
+	safe := SafeWorkDiagnosticsFromWorkDiagnostics(&workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
+			RequestMetadata: map[string]string{
+				"working_directory": `C:\Users\alice\factory`,
+				"worktree":          "feature-runtime",
+			},
+		},
+	})
+	if got := safe.Provider.RequestMetadata["working_directory"]; got != workerexecution.MetadataOnlyCommandEnvValue {
+		t.Fatalf("working_directory = %q, want metadata-only marker", got)
+	}
+	if got := safe.Provider.RequestMetadata["worktree"]; got != "feature-runtime" {
+		t.Fatalf("worktree = %q, want portable branch name preserved", got)
+	}
+
+	relative := SafeWorkDiagnosticsFromWorkDiagnostics(&workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
+			RequestMetadata: map[string]string{
+				"working_directory": "workspace/cursor",
+			},
+		},
+	})
+	if got := relative.Provider.RequestMetadata["working_directory"]; got != "workspace/cursor" {
+		t.Fatalf("relative working_directory = %q, want preserved portable path", got)
+	}
+
+	portableAbsolute := SafeWorkDiagnosticsFromWorkDiagnostics(&workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
+			RequestMetadata: map[string]string{
+				"working_directory": `C:\repo`,
+			},
+		},
+	})
+	if got := portableAbsolute.Provider.RequestMetadata["working_directory"]; got != `C:\repo` {
+		t.Fatalf("portable absolute working_directory = %q, want preserved fixture path", got)
+	}
+}
+
 func TestSafeWorkDiagnosticsAllowlistAndCloneIsolation(t *testing.T) {
 	t.Parallel()
 	safe := SafeWorkDiagnosticsFromWorkDiagnostics(&workerexecution.WorkDiagnostics{
