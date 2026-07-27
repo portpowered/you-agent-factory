@@ -269,6 +269,17 @@
   metadata infers domain `transport` and subsection `cli/parameters` from the
   path; every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+  CLI key=value parameter mapping functional coverage belongs in
+  `tests/functional/transport/cli/parameters/key_value_test.go`: prove repeated
+  `--key=value` tokens reach canonical `InvocationArguments` through
+  `SubmissionRecorder`, prove values with embedded `=` survive intact, prove
+  duplicate keys on REPEATED parameters append in CLI observation order, and
+  prove malformed shapes (missing value, bare `key=value` without `--`) fail
+  with stable diagnostics and zero provider dispatch through
+  `ProviderCommandRunner` at the public `support.BuildProcess` boundary. Catalog
+  metadata infers domain `transport` and subsection `cli/parameters` from the
+  path; every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
   CLI response-stream backpressure functional coverage belongs in
   `tests/functional/transport/cli/output/stream_backpressure_test.go`:
   invoke `support.BuildProcess` with a gated or mid-stream-failing stdout writer

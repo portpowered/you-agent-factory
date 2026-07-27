@@ -2081,6 +2081,16 @@
     {
       "source_path": "tests/functional/product/init_setup/init_setup_test.go",
       "package": "you-agent-factory/tests/functional/product/init_setup",
+      "scenario": "TestInitPackagedFactoryInstallDelegatesThroughDefinitions",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/init_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/product/init_setup/init_setup_test.go",
+      "package": "you-agent-factory/tests/functional/product/init_setup",
       "scenario": "TestInitSuppliedInputFailuresDoNotWrite",
       "lane": "short",
       "destination": "tests/functional/factory/definitions/init_test.go",
@@ -2129,24 +2139,14 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/product/init_setup/init_setup_test.go",
-      "package": "you-agent-factory/tests/functional/product/init_setup",
-      "scenario": "TestInitPackagedFactoryInstallDelegatesThroughDefinitions",
-      "lane": "short",
-      "destination": "tests/functional/factory/definitions/init_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/product/packaged_factory_portability/packaged_factory_portability_test.go",
       "package": "you-agent-factory/tests/functional/product/packaged_factory_portability",
       "scenario": "TestPackagedFactoryInitMaterialization_InvokesOutsideRepositoryWithBootstrapParity",
       "lane": "short",
-      "destination": "tests/functional/product/packaged_factory_portability/packaged_factory_portability_test.go",
-      "catch_all": "none",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "catch_all": "bootstrap_portability",
       "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
+      "deletion_only_batch": "bootstrap_portability-delete-05-factory-current"
     },
     {
       "source_path": "tests/functional/providers/cli_script_executor_test.go",
@@ -4089,16 +4089,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/sessions/live_runtime_build_process_test.go",
-      "package": "you-agent-factory/tests/functional/sessions",
-      "scenario": "TestBuildProcessRoutesLiveOpenListControlAndCloseThroughFactorySessionsRoot",
-      "lane": "short",
-      "destination": "tests/functional/sessions/live_runtime_build_process_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/sessions/cli/resolved_session_family_test.go",
       "package": "you-agent-factory/tests/functional/sessions/cli",
       "scenario": "TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch",
@@ -4117,6 +4107,16 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/live_runtime_build_process_test.go",
+      "package": "you-agent-factory/tests/functional/sessions",
+      "scenario": "TestBuildProcessRoutesLiveOpenListControlAndCloseThroughFactorySessionsRoot",
+      "lane": "short",
+      "destination": "tests/functional/sessions/lifecycle/crud_test.go",
+      "catch_all": "runtime_api",
+      "specialty_targets": "none",
+      "deletion_only_batch": "runtime_api-delete-04-sessions"
     },
     {
       "source_path": "tests/functional/smoke/archive_terminal_test.go",
@@ -5234,6 +5234,46 @@
       "scenario": "TestRunRejectsExtraPositionalValues",
       "lane": "short",
       "destination": "tests/functional/transport/cli/parameters/positional_values_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/key_value_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestRunDuplicateKeyUsesDocumentedPrecedence",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/key_value_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/key_value_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestRunKeyValueParametersReachFactoryInvocation",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/key_value_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/key_value_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestRunKeyValuePreservesEqualsInValue",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/key_value_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/key_value_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestRunMalformedKeyValueFailsWithoutDispatch",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/key_value_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -6893,14 +6933,14 @@
       "workflow": 44,
       "workstations": 29
     },
-    "customer_top_level_Test_scenarios": 666,
-    "files_with_customer_Test": 217,
+    "customer_top_level_Test_scenarios": 670,
+    "files_with_customer_Test": 218,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 113,
-    "lane_short": 553,
+    "lane_short": 557,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
       "you-agent-factory/tests/functional/automations": 4,
@@ -6944,7 +6984,7 @@
       "you-agent-factory/tests/functional/smoke": 86,
       "you-agent-factory/tests/functional/transport/cli/commands": 10,
       "you-agent-factory/tests/functional/transport/cli/output": 9,
-      "you-agent-factory/tests/functional/transport/cli/parameters": 9,
+      "you-agent-factory/tests/functional/transport/cli/parameters": 13,
       "you-agent-factory/tests/functional/transport/docs": 1,
       "you-agent-factory/tests/functional/transport/http": 1,
       "you-agent-factory/tests/functional/transport/http/status": 2,
@@ -7043,15 +7083,15 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T20:30:00Z",
+    "audited_at_utc": "2026-07-27T20:50:00Z",
     "story": "structured-packages-implementation-auto-03-script-pollers-mergeability",
-    "live_customer_scenarios": 666,
-    "ledger_rows": 666,
+    "live_customer_scenarios": 670,
+    "ledger_rows": 670,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 553,
+    "lane_short": 557,
     "lane_functionallong": 113,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
