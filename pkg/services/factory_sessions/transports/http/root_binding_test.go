@@ -76,6 +76,11 @@ type httpSessionsRootFake struct {
 	sessions     map[string]factorysessions.SessionProjection
 	listReads    func(context.Context) ([]factorysessions.ReadProjection, error)
 	listSessions func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
+	onOpen       func(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error)
+	onClose      func(context.Context, string) error
+	onStartAsync func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
+	onPauseDurable func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	onPauseLive    func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 }
 
 var _ factorysessions.Service = (*httpSessionsRootFake)(nil)
@@ -105,7 +110,10 @@ func (fake *httpSessionsRootFake) ListSessions(ctx context.Context, request fact
 	return fake.listSessions(ctx, request)
 }
 
-func (fake *httpSessionsRootFake) OpenFactorySession(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
+func (fake *httpSessionsRootFake) OpenFactorySession(ctx context.Context, request factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
+	if fake.onOpen != nil {
+		return fake.onOpen(ctx, request)
+	}
 	return &factorysessions.OpenResult{SessionID: factorysessions.DefaultSessionID}, nil
 }
 
@@ -153,7 +161,10 @@ func (fake *httpSessionsRootFake) ObserveForSession(context.Context, string, fac
 	return factoryruntime.ObserveResult{}, factorysessions.ErrSessionNotFound
 }
 
-func (fake *httpSessionsRootFake) PauseLiveFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+func (fake *httpSessionsRootFake) PauseLiveFactorySession(ctx context.Context, sessionID string, control factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	if fake.onPauseLive != nil {
+		return fake.onPauseLive(ctx, sessionID, control)
+	}
 	return factorysessions.LifecycleControlResult{}, factorysessions.ErrSessionNotFound
 }
 
@@ -161,11 +172,17 @@ func (fake *httpSessionsRootFake) ResumeLiveFactorySession(context.Context, stri
 	return factorysessions.LifecycleControlResult{}, factorysessions.ErrSessionNotFound
 }
 
-func (fake *httpSessionsRootFake) CloseFactorySession(context.Context, string) error {
+func (fake *httpSessionsRootFake) CloseFactorySession(ctx context.Context, sessionID string) error {
+	if fake.onClose != nil {
+		return fake.onClose(ctx, sessionID)
+	}
 	return factorysessions.ErrSessionNotFound
 }
 
-func (fake *httpSessionsRootFake) PauseDurableFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+func (fake *httpSessionsRootFake) PauseDurableFactorySession(ctx context.Context, sessionID string, control factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	if fake.onPauseDurable != nil {
+		return fake.onPauseDurable(ctx, sessionID, control)
+	}
 	return factorysessions.LifecycleControlResult{}, factorysessions.ErrDurableSessionNotFound
 }
 
@@ -193,7 +210,10 @@ func (fake *httpSessionsRootFake) InterruptDurableFactorySessionDispatch(context
 	return factorysessions.LifecycleControlResult{}, factorysessions.ErrDurableSessionNotFound
 }
 
-func (fake *httpSessionsRootFake) StartAsync(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+func (fake *httpSessionsRootFake) StartAsync(ctx context.Context, request factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+	if fake.onStartAsync != nil {
+		return fake.onStartAsync(ctx, request)
+	}
 	return factorysessions.AsyncStartResult{}, factorysessions.ErrDurableSessionNotFound
 }
 
