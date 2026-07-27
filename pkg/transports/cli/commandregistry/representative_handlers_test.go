@@ -10,8 +10,10 @@ import (
 	"testing"
 
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
 
@@ -130,6 +132,124 @@ func TestNewSessionRegistryRegistersExactlyCanonicalRunnableIDs(t *testing.T) {
 	}
 	if err := registry.VerifySessionRunnableCoverage(manifest); err == nil || !strings.Contains(err.Error(), "you.work.list") {
 		t.Fatalf("VerifySessionRunnableCoverage() error = %v, want extra stable ID", err)
+	}
+}
+
+func TestNewSessionResolvedRegistryRejectsInvalidManifestBindings(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(map[string]climanifest.Command)
+		want   string
+	}{
+		{
+			name: "missing command",
+			mutate: func(commands map[string]climanifest.Command) {
+				delete(commands, "you.session.create")
+			},
+			want: "you.session.create",
+		},
+		{
+			name: "missing handler",
+			mutate: func(commands map[string]climanifest.Command) {
+				record := commands["you.session.create"]
+				record.Handler = nil
+				commands[record.ID] = record
+			},
+			want: "has no handler ID",
+		},
+		{
+			name: "duplicate handler",
+			mutate: func(commands map[string]climanifest.Command) {
+				record := commands["you.session.create"]
+				record.Handler.ID = commands["you.session.delete"].Handler.ID
+				commands[record.ID] = record
+			},
+			want: "duplicate handler registration",
+		},
+		{
+			name: "extra command",
+			mutate: func(commands map[string]climanifest.Command) {
+				commands["foreign"] = commands["you.session"]
+			},
+			want: "command count",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest, err := generated.SessionFamilyManifest()
+			if err != nil {
+				t.Fatalf("SessionFamilyManifest() error = %v", err)
+			}
+			test.mutate(manifest.Commands)
+			if _, err := commandregistry.NewSessionResolvedRegistry(
+				manifest,
+				commandregistry.SessionResolvedServices{},
+			); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("NewSessionResolvedRegistry() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestSessionResolvedHandlersRejectMissingOperations(t *testing.T) {
+	manifest, err := generated.SessionFamilyManifest()
+	if err != nil {
+		t.Fatalf("SessionFamilyManifest() error = %v", err)
+	}
+	registry, err := commandregistry.NewSessionResolvedRegistry(
+		manifest,
+		commandregistry.SessionResolvedServices{},
+	)
+	if err != nil {
+		t.Fatalf("NewSessionResolvedRegistry() error = %v", err)
+	}
+	handlerIDs, err := commandregistry.RunnableSessionHandlerIDs(manifest)
+	if err != nil {
+		t.Fatalf("RunnableSessionHandlerIDs() error = %v", err)
+	}
+	for _, handlerID := range handlerIDs {
+		handlers, err := registry.LookupHandlers(handlerID)
+		if err != nil {
+			t.Fatalf("LookupHandlers(%q) error = %v", handlerID, err)
+		}
+		err = handlers.ResolvedRunE(
+			&cobra.Command{Use: handlerID},
+			resolvedinput.Inputs{},
+			resolvedinput.Inputs{},
+		)
+		if err == nil {
+			t.Fatalf("resolved handler %q missing operation error = nil", handlerID)
+		}
+	}
+
+	registry, err = commandregistry.NewSessionResolvedRegistry(
+		manifest,
+		commandregistry.SessionResolvedServices{
+			CreateSession:  func(sessioncli.CreateConfig) error { return nil },
+			DeleteSession:  func(sessioncli.DeleteConfig) error { return nil },
+			ListSessions:   func(sessioncli.ListConfig) error { return nil },
+			ShowSession:    func(sessioncli.ShowConfig) error { return nil },
+			ListDispatches: func(sessioncli.DispatchesConfig) error { return nil },
+			PauseSession:   func(sessioncli.LifecycleControlConfig) error { return nil },
+			ResumeSession:  func(sessioncli.LifecycleControlConfig) error { return nil },
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewSessionResolvedRegistry(valid services) error = %v", err)
+	}
+	for _, handlerID := range handlerIDs {
+		handlers, err := registry.LookupHandlers(handlerID)
+		if err != nil {
+			t.Fatalf("LookupHandlers(%q) error = %v", handlerID, err)
+		}
+		err = handlers.ResolvedRunE(
+			&cobra.Command{Use: handlerID},
+			resolvedinput.Inputs{},
+			resolvedinput.Inputs{},
+		)
+		if err == nil {
+			t.Fatalf("resolved handler %q missing input error = nil", handlerID)
+		}
 	}
 }
 
