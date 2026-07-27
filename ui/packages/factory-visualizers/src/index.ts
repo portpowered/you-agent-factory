@@ -30,27 +30,14 @@ export {
 } from "./factory-timeline-scrubber.js";
 
 export {
-  DEFAULT_FACTORY_TOPOLOGY_CHROME_PRESET,
-  type FactoryTopologyChromeConfiguration,
-  type FactoryTopologyChromePreset,
-  type FactoryTopologyChromeRegion,
-  type ResolvedFactoryTopologyChrome,
-  resolveFactoryTopologyChrome,
-} from "./factory-topology-chrome.js";
-
-export {
-  type FactoryTopologyFlowProjection,
   FactoryTopologyReplay,
   type FactoryTopologyReplayMessages,
-  type FactoryTopologyReplayProjection,
   type FactoryTopologyReplayProps,
   type FactoryTopologyReplayState,
-  projectFactoryTopologyFlow,
 } from "./factory-topology-replay.js";
 
 export type {
   FactoryTopologyReplayError,
-  FactoryVisualizationLayoutDiagnostic,
   FactoryVisualizerError,
   FactoryVisualizerErrorCause,
   FactoryVisualizerErrorKind,

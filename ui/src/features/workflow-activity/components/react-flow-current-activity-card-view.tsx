@@ -1,6 +1,6 @@
 import "@xyflow/react/dist/style.css";
 
-import { type ReactNode, useId } from "react";
+import { useId } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { ImportFactoryValue } from "../../../api/session-factory";
@@ -16,18 +16,15 @@ import {
 import type { CurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
-import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
 import { CurrentActivityGraphSaveNotifications } from "./react-flow-current-activity-card-save-notifications";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
 function CurrentActivityCardHeading({
-  actions,
   headingID,
   hidden = false,
   locale,
 }: {
-  actions?: ReactNode;
   headingID: string;
   hidden?: boolean;
   locale?: string;
@@ -43,11 +40,10 @@ function CurrentActivityCardHeading({
   }
 
   return (
-    <div className="flex min-w-0 items-center justify-between gap-3">
+    <div>
       <Heading as="h2" className="m-0" id={headingID}>
         {messages.title}
       </Heading>
-      {actions}
     </div>
   );
 }
@@ -123,23 +119,6 @@ export function ReactFlowCurrentActivityCardView(
     >
       {showHeaderActions ? (
         <CurrentActivityCardHeading
-          actions={
-            viewModel.editorControls.isEditing ? null : (
-              <CurrentActivityGraphHeaderActions
-                compact
-                dirtySummary={viewModel.status.dirtySummary}
-                editorMode={false}
-                editorUnavailableClassifierWorkstationName={
-                  viewModel.editorControls.unavailableClassifierWorkstationName
-                }
-                hasChanges={viewModel.status.hasSharedGraphChanges}
-                isDefinitionLoading={viewModel.status.isDefinitionLoading}
-                loadErrorMessage={viewModel.status.loadErrorMessage}
-                locale={props.locale}
-                onToggle={viewModel.editorControls.toggleMode}
-              />
-            )
-          }
           headingID={headingID}
           locale={props.locale}
         />
@@ -155,11 +134,6 @@ export function ReactFlowCurrentActivityCardView(
         headingID={headingID}
         imports={imports}
         locale={props.locale}
-        onSelectResource={props.onSelectResource}
-        onSelectStateNode={props.onSelectStateNode}
-        onSelectWorker={props.onSelectWorker}
-        onSelectWorkType={props.onSelectWorkType}
-        onSelectWorkstation={props.onSelectWorkstation}
         selection={props.selection}
         snapshot={props.snapshot}
       />

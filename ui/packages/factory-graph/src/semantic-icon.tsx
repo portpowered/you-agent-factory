@@ -1,0 +1,236 @@
+import type { ReactNode } from "react";
+
+function cn(...classNames: Array<string | undefined>): string {
+  return classNames.filter(Boolean).join(" ");
+}
+
+export const GRAPH_SEMANTIC_ICON_KINDS = [
+  "queue",
+  "processing",
+  "terminal",
+  "failed",
+  "resource",
+  "worker",
+  "work-type",
+  "constraint",
+  "doc",
+  "limit",
+  "workstation",
+  "repeater",
+  "cron",
+  "poller",
+  "exhaustion",
+  "active-work",
+] as const;
+
+export type GraphSemanticIconKind = (typeof GRAPH_SEMANTIC_ICON_KINDS)[number];
+
+interface GraphSemanticIconDefinition {
+  paths: ReactNode;
+}
+
+export interface GraphSemanticIconProps {
+  className?: string;
+  kind: GraphSemanticIconKind | (string & {});
+  label?: string;
+  locale?: string;
+}
+
+const DEFAULT_ICON_CLASS_NAME = "h-4 w-4 shrink-0 text-on-surface-variant";
+const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
+  "active-work": {
+    paths: (
+      <>
+        <path d="M8 5v14l11-7-11-7Z" />
+        <path d="M4.5 8.5v7" />
+      </>
+    ),
+  },
+  constraint: {
+    paths: (
+      <>
+        <rect height="9" rx="2" width="14" x="5" y="10" />
+        <path d="M8 10V8a4 4 0 0 1 8 0v2" />
+        <path d="M12 13.5v2" />
+      </>
+    ),
+  },
+  doc: {
+    paths: (
+      <>
+        <path d="M8 4h7l5 5v11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" />
+        <path d="M15 4v5h5" />
+        <path d="M9 12h6" />
+        <path d="M9 16h4" />
+      </>
+    ),
+  },
+  cron: {
+    paths: (
+      <>
+        <circle cx="12" cy="12" r="8" />
+        <path d="M12 7.5V12l3 2" />
+      </>
+    ),
+  },
+  poller: {
+    paths: (
+      <>
+        <path d="M6 6.5h8a4 4 0 1 1 0 8H9.5" />
+        <path d="m7.5 4-3 2.5 3 2.5" />
+        <path d="M18 17.5H10a4 4 0 1 1 0-8h4.5" />
+        <path d="m16.5 20 3-2.5-3-2.5" />
+      </>
+    ),
+  },
+  exhaustion: {
+    paths: (
+      <>
+        <path d="M12 4 21 19H3L12 4Z" />
+        <path d="M12 9v4" />
+        <path d="M12 16.5h.01" />
+      </>
+    ),
+  },
+  failed: {
+    paths: (
+      <>
+        <path d="M8.5 3.5h7L20.5 8.5v7l-5 5h-7l-5-5v-7l5-5Z" />
+        <path d="m9 9 6 6" />
+        <path d="m15 9-6 6" />
+      </>
+    ),
+  },
+  limit: {
+    paths: (
+      <>
+        <path d="M5 17a7 7 0 0 1 14 0" />
+        <path d="M12 17l4-6" />
+        <path d="M8 19h8" />
+      </>
+    ),
+  },
+  processing: {
+    paths: (
+      <>
+        <path d="M18.5 9A7 7 0 0 0 6.2 6.2L4.5 8" />
+        <path d="M4.5 4.5V8h3.5" />
+        <path d="M5.5 15a7 7 0 0 0 12.3 2.8L19.5 16" />
+        <path d="M19.5 19.5V16H16" />
+      </>
+    ),
+  },
+  queue: {
+    paths: (
+      <>
+        <path d="M5 7h11" />
+        <path d="M5 12h14" />
+        <path d="M5 17h8" />
+        <path d="m16 15 3 2-3 2" />
+      </>
+    ),
+  },
+  repeater: {
+    paths: (
+      <>
+        <path d="M17 7h-6a5 5 0 0 0 0 10h1" />
+        <path d="m15 4 3 3-3 3" />
+        <path d="M7 17h6a5 5 0 0 0 0-10h-1" />
+        <path d="m9 20-3-3 3-3" />
+      </>
+    ),
+  },
+  resource: {
+    paths: (
+      <>
+        <ellipse cx="12" cy="6" rx="6.5" ry="3" />
+        <path d="M5.5 6v6c0 1.7 2.9 3 6.5 3s6.5-1.3 6.5-3V6" />
+        <path d="M5.5 12v6c0 1.7 2.9 3 6.5 3s6.5-1.3 6.5-3v-6" />
+      </>
+    ),
+  },
+  worker: {
+    paths: (
+      <>
+        <circle cx="12" cy="7" r="3.2" />
+        <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+        <path d="M8.5 14.5 12 18l3.5-3.5" />
+      </>
+    ),
+  },
+  "work-type": {
+    paths: (
+      <>
+        <rect height="14" rx="2.5" width="12" x="6" y="5" />
+        <path d="M9 9h6" />
+        <path d="M9 12h6" />
+        <path d="M9 15h4" />
+      </>
+    ),
+  },
+  terminal: {
+    paths: (
+      <>
+        <circle cx="12" cy="12" r="8" />
+        <path d="m8.5 12 2.3 2.3 4.7-5" />
+      </>
+    ),
+  },
+  workstation: {
+    paths: (
+      <>
+        <rect height="10" rx="2" width="14" x="5" y="5" />
+        <path d="M9 19h6" />
+        <path d="M12 15v4" />
+      </>
+    ),
+  },
+} satisfies Record<GraphSemanticIconKind, GraphSemanticIconDefinition>;
+
+function unknownIconPaths(): ReactNode {
+  return (
+    <>
+      <path d="M12 3.5 20.5 8.2v7.6L12 20.5 3.5 15.8V8.2L12 3.5Z" />
+      <path d="M9.5 9a2.6 2.6 0 1 1 3.2 2.5c-.5.2-.7.6-.7 1.2v.3" />
+      <path d="M12 16.5h.01" />
+    </>
+  );
+}
+
+export function graphSemanticIconLabel(
+  kind: GraphSemanticIconProps["kind"],
+): string {
+  return GRAPH_SEMANTIC_ICON_DEFINITIONS[kind as GraphSemanticIconKind] !==
+    undefined
+    ? String(kind)
+    : "Unknown graph semantic";
+}
+
+export function GraphSemanticIcon({
+  className,
+  kind,
+  label,
+}: GraphSemanticIconProps) {
+  const definition =
+    GRAPH_SEMANTIC_ICON_DEFINITIONS[kind as GraphSemanticIconKind];
+  const accessibleLabel = label ?? graphSemanticIconLabel(kind);
+
+  return (
+    <svg
+      aria-label={accessibleLabel}
+      className={cn(DEFAULT_ICON_CLASS_NAME, className)}
+      data-graph-semantic-icon={definition ? kind : "unknown"}
+      fill="none"
+      focusable="false"
+      role="img"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {definition?.paths ?? unknownIconPaths()}
+    </svg>
+  );
+}

@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import { createFactoryGraphSource } from "@you-agent-factory/factory-graph";
 import type {
   FactoryWorkProgressCategory,
   FactoryWorkProgressProjection,
@@ -66,7 +67,14 @@ const topology: FactoryTopologyReplayProps = {
     workStateCount: (count) => `${count} Work`,
     workStateCountUnavailable: "Work unavailable",
   },
-  state: { projection: createFactoryTopologyProjection(), status: "ready" },
+  state: {
+    source: createFactoryGraphSource({
+      factory: { name: "Topology fixture" },
+      runtime: createFactoryTopologyProjection(),
+      selectedTick: 2,
+    }),
+    status: "ready",
+  },
 };
 
 const categories: Record<
@@ -254,26 +262,6 @@ describe("FactoryEmulatorView visibility overrides", () => {
 });
 
 describe("FactoryEmulatorView failure containment", () => {
-  it("forwards topology layout diagnostics through the view error callback", async () => {
-    const onError = vi.fn();
-    render(
-      <FactoryEmulatorView
-        controls={controls}
-        onError={onError}
-        topology={{
-          ...topology,
-          layout: { schemaVersion: "unsupported" },
-        }}
-        workProgress={workProgress}
-      />,
-    );
-    await waitFor(() =>
-      expect(onError).toHaveBeenCalledWith(
-        expect.objectContaining({ kind: "layout-validation" }),
-      ),
-    );
-  });
-
   it("contains composition failures and forwards a safe diagnostic", async () => {
     const onError = vi.fn();
     const consoleError = vi

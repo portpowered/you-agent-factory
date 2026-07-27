@@ -12,14 +12,16 @@ Go runtime.
 | API contracts | Generated contract types exposed by `@you-agent-factory/client` | Canonical `FactoryDefinition`, `FactoryEvent`, and OpenAPI `components`, `paths`, and `operations` types. These are the shared data boundary, not an execution runtime. |
 | Client | `@you-agent-factory/client` | Transport-neutral validation and parsing for Factory definitions, canonical events, recordings, replay text, and presentation-only layout sidecars. It does not open a network connection. |
 | Replay | `@you-agent-factory/factory-replay` | Pure, framework-independent ordering, accepted-event checkpoints, selected-tick world reconstruction, and topology, activity, load, and Work-progress projections. It consumes client contracts as types and owns no history or persistence. |
+| Factory graph | `@you-agent-factory/factory-graph` | Lossless semantic-graph source contract: complete Factory definition, selected-tick topology/activity/load, and saved visualization layout. It owns no host transport, persistence, or editor-session state. |
 | Emulator | `@you-agent-factory/factory-emulator` | Deterministic, transport-neutral execution of the documented Petri subset into a caller-owned canonical-event sink. It uses client contracts but is independent of React, replay, visualizers, browser timers, and storage. |
 | Components | `@you-agent-factory/components` | Domain-neutral React controls, graph primitives, styles, and design tokens. Hosts supply state and callbacks. |
-| Visualizers | `@you-agent-factory/factory-visualizers` | Controlled, read-only Factory replay and emulator compositions. It combines client/replay contracts with components but owns no transport, execution, playback timer, durable state, or dashboard store. |
+| Visualizers | `@you-agent-factory/factory-visualizers` | Controlled, read-only Factory replay and emulator compositions. It adapts the lossless Factory graph source while semantic rendering migrates into the Factory graph package; it owns no transport, execution, playback timer, durable state, or dashboard store. |
 
-The intended direction is contracts/client to replay or emulator, then
-components plus replay into visualizers, and finally into a consumer host. The
-emulator does not depend on replay or visualizers. Package code never imports
-the hosted dashboard to obtain state or behavior.
+The intended direction is contracts/client to replay or emulator, then replay
+plus client into the Factory graph, then components plus the Factory graph into
+visualizers, and finally into a consumer host. The emulator does not depend on
+replay, the Factory graph, or visualizers. Package code never imports the
+hosted dashboard to obtain state or behavior.
 
 ## Verify the complete package family
 
@@ -33,23 +35,22 @@ bun run verify:public-packages
 
 The command installs the locked UI toolchain once, then runs each package's
 existing release gate in dependency-safe order: client, components, replay,
-emulator, then visualizers. Those package gates retain their own pack and clean
+Factory graph, emulator, then visualizers. Those package gates retain their own pack and clean
 installed-consumer checks. Immediately after the replay gate, the aggregate
 command also runs the established deterministic 10,000-event replay regression,
 including its retained-memory bound. After building client and replay, the
 command links those workspace packages into the installed UI toolchain for
 downstream local type resolution without copying source package trees. After
-the five package gates, it runs the focused production website adapter and
+the six package gates, it runs the focused production website adapter and
 customer-demo state/component regressions, builds their browser acceptance
 stories, and verifies the adapter and both demos at desktop and narrow
-viewports, including reduced-motion behavior. It then runs the focused hosted
-topology adapter/component regressions and verifies exact-session replay in the
-browser at desktop and narrow viewports, including same-tick event ordering,
-session switching, refresh isolation, and explicit loading, empty, error, and
-success outcomes. The aggregate command stops at the first failed install,
-behavioral regression, build, browser check, link, or release gate and reports
-the package family or package, step, command, and command outcome. It does not
-depend on a root Makefile release target.
+viewports, including reduced-motion behavior. Dashboard Factory graph behavior
+is covered by the workflow-activity graph suite and its renderer-path guard,
+which ensures that observe and edit modes continue to use the restored semantic
+graph instead of a dashboard-specific topology renderer. The aggregate command
+stops at the first failed install, behavioral regression, build, browser check,
+link, or release gate and reports the package family or package, step, command,
+and command outcome. It does not depend on a root Makefile release target.
 
 ## Hosted execution and browser emulation
 

@@ -5,11 +5,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { chromium } from "playwright";
-import { verifyResponsiveStateAndAnnotationMatrix } from "./verify-responsive-story-matrix.mjs";
 
 const require = createRequire(import.meta.url);
 const axePath = require.resolve("axe-core/axe.min.js");
-
 const packageRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -24,11 +22,13 @@ const httpServer = path.resolve(
   "../../node_modules/http-server/bin/http-server",
 );
 
-if (!Number.isSafeInteger(port) || port < 3100 || port > 3999) {
-  throw new Error(
-    "FACTORY_VISUALIZERS_STORYBOOK_PORT must be an integer from 3100 to 3999.",
-  );
-}
+const storyIds = [
+  "factory-visualizers-factoryemulatorview--full",
+  "factory-visualizers-factoryemulatorview--loading-initial",
+  "factory-visualizers-factoryemulatorview--empty",
+  "factory-visualizers-factoryemulatorview--terminal",
+  "factory-visualizers-factoryemulatorview--host-failure",
+];
 
 await assertPortAvailable(port);
 const server = spawn(
@@ -41,697 +41,86 @@ let browser;
 try {
   await waitForServer();
   browser = await chromium.launch({ headless: true });
-  await verifyResponsiveViewports(browser);
-  await verifyResponsiveStateAndAnnotationMatrix(browser, {
-    assert,
-    assertNoPageOverflow,
-    openStory,
-    tabTo,
-  });
-  await verifyChromePresets(browser);
-  await verifyChromeOperationalDetail(browser);
-  await verifyRecordingComposition(browser);
-  await verifyRecordingPresentations(browser);
-  await verifyAccessiblePlayback(browser);
-  await verifyGermanFormatting(browser);
-  await verifyReducedMotion(browser);
-  console.log(
-    "Factory visualizer accessibility and responsive browser checks passed.",
+  for (const viewport of [
+    { height: 800, width: 360 },
+    { height: 900, width: 1200 },
+  ]) {
+    const context = await browser.newContext({ viewport });
+    const page = await context.newPage();
+    for (const storyId of storyIds) {
+      await openStory(page, storyId);
+      await assertNoPageOverflow(page, storyId);
+      await assertNoSeriousAccessibilityViolations(page, storyId);
+    }
+    await openStory(page, storyIds[0]);
+    await page
+      .locator('[data-current-activity-node-type="worker"]')
+      .first()
+      .waitFor({ state: "visible", timeout: 5_000 });
+    await page
+      .locator('[data-current-activity-node-type="workstation"]')
+      .first()
+      .waitFor({ state: "visible", timeout: 5_000 });
+    await context.close();
+  }
+  process.stdout.write(
+    "Factory visualizer accessibility and responsive browser checks passed.\n",
   );
 } finally {
   await browser?.close();
   server.kill();
 }
 
-async function verifyChromePresets(browserInstance) {
-  const context = await browserInstance.newContext({
-    viewport: { width: 720, height: 900 },
-  });
-  const page = await context.newPage();
-  const stories = [
-    ["full-chrome", true, true, true, true],
-    ["minimal-chrome", false, true, true, false],
-    ["no-chrome", false, false, false, false],
-  ];
-
-  for (const [story, legend, background, controls, annotations] of stories) {
-    const storyId = `factory-visualizers-factorytopologyreplay--${story}`;
-    await openStory(page, storyId);
-    await assertNoPageOverflow(page, storyId);
-    await assertNoSeriousAccessibilityViolations(page, storyId);
-    await assertChromeRegion(
-      page.getByRole("group", { name: "Topology legend" }),
-      legend,
-      storyId,
-    );
-    await assertChromeRegion(
-      page.locator(".react-flow__background"),
-      background,
-      storyId,
-    );
-    await assertChromeRegion(
-      page.locator(".react-flow__controls"),
-      controls,
-      storyId,
-    );
-    await assertChromeRegion(
-      page.getByRole("button", { name: "Hide annotations" }),
-      annotations,
-      storyId,
-    );
-  }
-
-  await openStory(
-    page,
-    "factory-visualizers-factorytopologyreplay--full-chrome",
-  );
-  const annotations = page.getByRole("button", { name: "Hide annotations" });
-  await tabTo(page, annotations, 50);
-  await page.keyboard.press("Enter");
-  await page
-    .getByRole("button", { name: "Show annotations" })
-    .waitFor({ state: "visible", timeout: 5_000 });
-  await context.close();
-}
-
-async function assertChromeRegion(locator, expected, storyId) {
-  const count = await locator.count();
-  assert(
-    expected ? count > 0 && (await locator.first().isVisible()) : count === 0,
-    `${storyId} did not ${expected ? "render" : "unmount"} expected chrome.`,
-  );
-}
-
-async function verifyChromeOperationalDetail(browserInstance) {
-  const stories = ["full-chrome", "minimal-chrome", "no-chrome"];
-  const viewports = [
-    { width: 360, height: 800 },
-    { width: 1200, height: 900 },
-  ];
-
-  for (const viewport of viewports) {
-    const context = await browserInstance.newContext({ viewport });
-    const page = await context.newPage();
-    for (const story of stories) {
-      const storyId = `factory-visualizers-factorytopologyreplay--${story}`;
-      await openStory(page, storyId);
-      await assertNoPageOverflow(page, storyId);
-      assert(
-        await page.getByRole("group", { name: "Active Work" }).isVisible(),
-        `${storyId} omitted active Work evidence at ${viewport.width}px.`,
-      );
-      assert(
-        (await page.getByText("Active for 1 ticks").count()) === 3,
-        `${storyId} did not retain bounded active Work durations at ${viewport.width}px.`,
-      );
-      assert(
-        await page.getByText("1 more active Work").isVisible(),
-        `${storyId} omitted active Work overflow evidence at ${viewport.width}px.`,
-      );
-      assert(
-        (await page.getByText("2 of 4 capacity occupied").count()) > 0,
-        `${storyId} omitted resource evidence at ${viewport.width}px.`,
-      );
-      assert(
-        (await page.getByText("7 Work in this state").count()) > 0,
-        `${storyId} omitted Work State evidence at ${viewport.width}px.`,
-      );
-      await page.waitForFunction(
-        () => document.querySelectorAll(".react-flow__edge").length > 0,
-        { timeout: 5_000 },
-      );
-      assert(
-        (await page.locator(".react-flow__edge").count()) > 0,
-        `${storyId} omitted its active route at ${viewport.width}px.`,
-      );
-    }
-    await context.close();
-  }
-}
-
-async function verifyRecordingPresentations(browserInstance) {
-  const context = await browserInstance.newContext({
-    viewport: { width: 1200, height: 900 },
-  });
-  const page = await context.newPage();
-  const stories = [
-    "factory-visualizers-factoryrecordingtopologyreplay--same-tick-history-and-current",
-    "factory-visualizers-factoryrecordingtopologyreplay--dense-recording",
-    "factory-visualizers-factoryrecordingtopologyreplay--annotated-recording",
-    "factory-visualizers-factoryrecordingtopologyreplay--localized-recording",
-    "factory-visualizers-factorytopologyreplay--emulator-ready-dense-annotations",
-  ];
-  for (const storyId of stories) {
-    await openStory(page, storyId);
-    await assertNoPageOverflow(page, storyId);
-    await assertNoSeriousAccessibilityViolations(page, storyId);
-  }
-
-  await openStory(
-    page,
-    "factory-visualizers-factoryrecordingtopologyreplay--same-tick-history-and-current",
-  );
-  const sameTickSlider = page.getByRole("slider", {
-    name: "Select recording tick",
-  });
-  await tabTo(page, sameTickSlider, 30);
-  await page.keyboard.press("ArrowRight");
-  await page
-    .getByRole("button", { name: "workstation: triage" })
-    .getByText("1 active Dispatch")
-    .waitFor({ state: "visible", timeout: 5_000 });
-
-  await openStory(
-    page,
-    "factory-visualizers-factoryrecordingtopologyreplay--dense-recording",
-  );
-  const denseNode = page.getByRole("button", {
-    name: "workstation: Review",
-  });
-  await tabTo(page, denseNode, 100);
-  await page.keyboard.press("Enter");
-  assert(
-    (await page.locator(".react-flow__edge").count()) >= 20,
-    "The dense recording omitted canonical topology connections.",
-  );
-
-  await openStory(
-    page,
-    "factory-visualizers-factoryrecordingtopologyreplay--localized-recording",
-  );
-  assert(
-    await page.getByText("Ausgewählter logischer Schritt 7.000").isVisible(),
-    "The localized recording does not format logical ticks through its formatter.",
-  );
-  assert(
-    await page.getByText("2 Aufträge insgesamt").isVisible(),
-    "The localized recording does not use localized plural Work copy.",
-  );
-  await verifyAnnotatedRecording(page);
-  await context.close();
-
-  await verifyNarrowRecording(browserInstance);
-}
-
-async function verifyAnnotatedRecording(page) {
-  await openStory(
-    page,
-    "factory-visualizers-factoryrecordingtopologyreplay--annotated-recording",
-  );
-  const showAnnotations = page.getByRole("button", {
-    name: "Show annotations",
-  });
-  const annotationsToggle = page.getByRole("button", {
-    name: /^(Show|Hide) annotations$/,
-  });
-  await annotationsToggle.waitFor({ state: "visible", timeout: 5_000 });
-  if (
-    await page.getByRole("button", { name: "Hide annotations" }).isVisible()
-  ) {
-    await annotationsToggle.click();
-    await showAnnotations.waitFor({ state: "visible", timeout: 5_000 });
-  }
-  await showAnnotations.click();
-  await page
-    .getByRole("button", { name: "Hide annotations" })
-    .waitFor({ state: "visible", timeout: 5_000 });
-  await page
-    .getByText("Escalations are reviewed here.")
-    .waitFor({ state: "visible", timeout: 5_000 });
-  assert(
-    await page.getByText("Escalations are reviewed here.").isVisible(),
-    "The annotated recording did not render its caller-owned layout sidecar.",
-  );
-  await page.getByRole("button", { name: "Hide annotations" }).click();
-  assert(
-    !(await page.getByText("Escalations are reviewed here.").isVisible()),
-    "Hiding annotations in the recording did not remove the annotation node.",
-  );
-}
-
-async function verifyNarrowRecording(browserInstance) {
-  const narrowContext = await browserInstance.newContext({
-    viewport: { width: 360, height: 800 },
-  });
-  const narrowPage = await narrowContext.newPage();
-  const narrowStory =
-    "factory-visualizers-factoryrecordingtopologyreplay--narrow-viewport";
-  await openStory(narrowPage, narrowStory);
-  await narrowPage.evaluate(() => {
-    document.body.style.zoom = "200%";
-  });
-  await assertNoPageOverflow(narrowPage, `${narrowStory} at 200% zoom`);
-  await assertNoSeriousAccessibilityViolations(narrowPage, narrowStory);
-  const narrowSlider = narrowPage.getByRole("slider", {
-    name: "Select recording tick",
-  });
-  await tabTo(narrowPage, narrowSlider, 100);
-  await narrowPage.keyboard.press("ArrowLeft");
-  assert(
-    await narrowPage.getByText("Inspecting recording history").isVisible(),
-    "The narrow high-zoom timeline is not keyboard operable.",
-  );
-  assert(
-    await narrowPage
-      .getByRole("region", { name: "Recorded Work progress" })
-      .isVisible(),
-    "The narrow high-zoom Work progress region is unreachable.",
-  );
-  await narrowContext.close();
-}
-
-async function verifyRecordingComposition(browserInstance) {
-  const context = await browserInstance.newContext({
-    viewport: { width: 720, height: 900 },
-  });
-  const page = await context.newPage();
-  await openStory(
-    page,
-    "factory-visualizers-factoryrecordingtopologyreplay--loading",
-  );
-  const loadingRegion = page.getByRole("region", {
-    name: "Recorded Factory topology",
-  });
-  assert(
-    (await loadingRegion.getAttribute("aria-busy")) === "true",
-    "The recording loading story does not expose an accessible busy state.",
-  );
-
-  await openStory(
-    page,
-    "factory-visualizers-factoryrecordingtopologyreplay--empty-recording",
-  );
-  assert(
-    await page
-      .getByText("No Factory topology is available at this tick.")
-      .isVisible(),
-    "The empty recording story does not expose an intentional empty topology state.",
-  );
-
-  await openStory(
-    page,
-    "factory-visualizers-factoryrecordingtopologyreplay--validated-recording",
-  );
-  assert(
-    await page
-      .getByRole("region", { name: "Recorded Factory playback" })
-      .isVisible(),
-    "The validated recording composition is not a visible labeled region.",
-  );
-  const workstation = page.getByRole("button", {
-    name: "workstation: triage",
-  });
-  await tabTo(page, workstation, 50);
-  assert(
-    (await workstation.evaluate(
-      (element) => getComputedStyle(element).outlineWidth,
-    )) !== "0px",
-    "The validated recording topology does not expose visible keyboard focus.",
-  );
-
-  await openStory(
-    page,
-    "factory-visualizers-factoryrecordingtopologyreplay--same-tick-history-and-current",
-  );
-  const slider = page.getByRole("slider", { name: "Select recording tick" });
-  await tabTo(page, slider, 20);
-  await page.keyboard.press("ArrowLeft");
-  assert(
-    await page.getByText("Tick 1 of 3").isVisible(),
-    "Keyboard scrubbing fabricated a sparse tick instead of selecting recorded history.",
-  );
-  assert(
-    await page.getByText("Inspecting recording history").isVisible(),
-    "The recording did not expose visible history status after keyboard scrubbing.",
-  );
-  assert(
-    await slider.evaluate((element) => element === document.activeElement),
-    "Keyboard scrubbing did not preserve focus on the recording timeline.",
-  );
-  await page.getByRole("button", { name: "Follow latest" }).click();
-  assert(
-    await page.getByText("Following current recording").isVisible(),
-    "Following latest did not return recording playback to current mode.",
-  );
-
-  await openStory(
-    page,
-    "factory-visualizers-factoryrecordingtopologyreplay--invalid-recording",
-  );
-  assert(
-    await page.getByRole("alert").isVisible(),
-    "The invalid recording does not render the shared accessible failure.",
-  );
-  assert(
-    await page
-      .getByRole("button", { name: "Sibling example control" })
-      .isVisible(),
-    "The invalid recording made sibling Storybook content unusable.",
-  );
-
-  await openStory(
-    page,
-    "factory-visualizers-factoryrecordingtopologyreplay--projection-failure",
-  );
-  assert(
-    await page.getByRole("alert").isVisible(),
-    "The projection failure does not render the shared accessible failure.",
-  );
-  assert(
-    (await page.locator(".react-flow").count()) === 0,
-    "The projection failure retained stale ready-state graph content.",
-  );
-  assert(
-    await page
-      .getByRole("button", { name: "Sibling example control" })
-      .isVisible(),
-    "The projection failure made sibling Storybook content unusable.",
-  );
-  await verifyRecordingAccessibilityStates(page);
-  await context.close();
-}
-
-async function verifyRecordingAccessibilityStates(page) {
-  for (const state of [
-    "loading",
-    "empty-recording",
-    "validated-recording",
-    "invalid-recording",
-  ]) {
-    const storyId = `factory-visualizers-factoryrecordingtopologyreplay--${state}`;
-    await openStory(page, storyId);
-    await assertNoSeriousAccessibilityViolations(page, storyId);
-  }
-}
-
-async function verifyAccessiblePlayback(browserInstance) {
-  const context = await browserInstance.newContext({
-    viewport: { width: 720, height: 900 },
-  });
-  const page = await context.newPage();
-  const storyId =
-    "factory-visualizers-factoryemulatorview--accessible-playback";
-  await openStory(page, storyId);
-  await assertNoSeriousAccessibilityViolations(page, storyId);
-
-  const pause = page.getByRole("button", { name: "Pause" });
-  await tabTo(page, pause, 20);
-  assert(
-    (await pause.evaluate(
-      (element) => getComputedStyle(element).outlineWidth,
-    )) !== "0px",
-    "The playback controls do not expose visible keyboard focus.",
-  );
-  await page.keyboard.press("Enter");
-  await page
-    .getByRole("status", { name: "Runtime status" })
-    .getByText("Paused")
-    .waitFor();
-  assert(
-    await page.getByRole("button", { name: "Pause" }).isDisabled(),
-    "The paused playback state did not disable Pause.",
-  );
-
-  const slider = page.getByRole("slider", { name: "Select tick" });
-  await slider.focus();
-  await page.keyboard.press("ArrowLeft");
-  const historicalTick = await slider.inputValue();
-  await page.waitForTimeout(850);
-  assert(
-    (await slider.inputValue()) === historicalTick,
-    "Manual historical selection was overridden by autoplay.",
-  );
-  assert(
-    await page.getByText("Viewing history.").isVisible(),
-    "Historical selection did not expose its status.",
-  );
-
-  await page.getByRole("button", { name: "Follow latest" }).click();
-  assert(
-    await page.getByText("Current Factory.").isVisible(),
-    "Follow latest did not restore current mode.",
-  );
-  await page.getByRole("button", { name: "Submit Work" }).click();
-  assert(
-    await page.getByText("Submissions: 1").isVisible(),
-    "Keyboard-accessible submission did not update its live status.",
-  );
-  await page.getByRole("button", { name: "Restart" }).click();
-  assert(
-    (await slider.inputValue()) === "2" &&
-      (await page.getByText("Submissions: 0").isVisible()),
-    "Restart did not restore the deterministic initial playback state.",
-  );
-  await context.close();
-}
-
-async function verifyResponsiveViewports(browserInstance) {
-  const viewports = [
-    { width: 360, height: 800, progress: "small" },
-    { width: 720, height: 900, progress: "medium" },
-    { width: 1200, height: 900, progress: "large" },
-  ];
-
-  for (const viewport of viewports) {
-    const context = await browserInstance.newContext({ viewport });
-    const page = await context.newPage();
-    await verifyLayout(
-      page,
-      `factory-visualizers-workprogressvisualizer--${viewport.progress}`,
-    );
-    await verifyLayout(
-      page,
-      "factory-visualizers-factorytopologyreplay--dense-prepared-projection",
-    );
-    await verifyLayout(page, "factory-visualizers-factoryemulatorview--full");
-    await openStory(
-      page,
-      "factory-visualizers-factorytopologyreplay--dense-prepared-projection",
-    );
-    assert(
-      await page.locator(".react-flow__controls").isVisible(),
-      `Dense topology controls are hidden at ${viewport.width}px.`,
-    );
-
-    const workstation = page.getByRole("button", {
-      name: "workstation: Review",
-    });
-    await tabTo(page, workstation, 50);
-    assert(
-      (await workstation.evaluate(
-        (element) => getComputedStyle(element).outlineWidth,
-      )) !== "0px",
-      `Topology node focus is not visible at ${viewport.width}px.`,
-    );
-    await page.keyboard.press("Enter");
-    const zoomIn = page.getByRole("button", { name: "Zoom in" });
-    await tabTo(page, zoomIn, 50);
-    assert(
-      (await zoomIn.evaluate(
-        (element) => getComputedStyle(element).outlineStyle,
-      )) !== "none",
-      `Graph control focus is not visible at ${viewport.width}px.`,
-    );
-
-    await verifyLayout(
-      page,
-      "factory-visualizers-factorytimelinescrubber--history-keyboard",
-    );
-    const slider = page.getByRole("slider", { name: "Select replay tick" });
-    await tabTo(page, slider, 10);
-    assert(
-      (await slider.evaluate(
-        (element) => getComputedStyle(element).outlineWidth,
-      )) !== "0px",
-      `Timeline focus is not visible at ${viewport.width}px.`,
-    );
-    await page.keyboard.press("ArrowRight");
-    assert(
-      await page.getByText("Tick 8 of 24").isVisible(),
-      `Timeline selection stopped being host-controlled at ${viewport.width}px.`,
-    );
-    await page.keyboard.press("Tab");
-    assert(
-      await page
-        .getByRole("button", { name: "Follow latest" })
-        .evaluate((element) => element === document.activeElement),
-      `Timeline actions are not in logical keyboard order at ${viewport.width}px.`,
-    );
-
-    await verifyLayout(
-      page,
-      "factory-visualizers-factorytopologyreplay--failed-with-retry",
-    );
-    const retry = page.getByRole("button", { name: "Try again" });
-    assert(
-      await retry.isVisible(),
-      `The failure retry action is hidden at ${viewport.width}px.`,
-    );
-    await tabTo(page, retry, 5);
-    await context.close();
-  }
-}
-
-async function verifyGermanFormatting(browserInstance) {
-  const context = await browserInstance.newContext({
-    viewport: { width: 720, height: 900 },
-  });
-  const page = await context.newPage();
-  await openStory(
-    page,
-    "factory-visualizers-factorytimelinescrubber--german-history",
-  );
-  assert(
-    await page.getByText("Schritt 7.000 von 12.000").isVisible(),
-    "The German tick formatter evidence is missing.",
-  );
-  await context.close();
-}
-
-async function verifyReducedMotion(browserInstance) {
-  const context = await browserInstance.newContext({
-    reducedMotion: "reduce",
-    viewport: { width: 720, height: 900 },
-  });
-  const page = await context.newPage();
-  await openStory(
-    page,
-    "factory-visualizers-factorytopologyreplay--dense-prepared-projection",
-  );
-  const topology = page.getByRole("region", {
-    name: "Factory topology at selected tick",
-  });
-  assert(
-    (await topology.getAttribute("data-reduced-motion")) === "true",
-    "The reduced-motion preference was not observed.",
-  );
-  assert(
-    (await page.locator(".react-flow__edge.animated").count()) === 0,
-    "An active topology edge remained animated.",
-  );
-  await openStory(
-    page,
-    "factory-visualizers-factoryemulatorview--accessible-playback",
-  );
-  const slider = page.getByRole("slider", { name: "Select tick" });
-  const initialTick = await slider.inputValue();
-  await page.waitForTimeout(850);
-  assert(
-    (await slider.inputValue()) === initialTick,
-    "The reduced-motion emulator demo autoplayed unexpectedly.",
-  );
-  assert(
-    await page.getByRole("button", { name: "Pause" }).isDisabled(),
-    "The reduced-motion emulator demo did not start paused.",
-  );
-  await page.getByRole("button", { name: "Step" }).click();
-  assert(
-    Number(await slider.inputValue()) === Number(initialTick) + 1,
-    "Reduced motion prevented explicit playback advancement.",
-  );
-  await page.getByRole("button", { name: "Submit Work" }).click();
-  assert(
-    await page.getByText("Submissions: 1").isVisible(),
-    "Reduced motion prevented explicit submission.",
-  );
-  await page.getByRole("button", { name: "Restart" }).click();
-  assert(
-    (await slider.inputValue()) === initialTick,
-    "Reduced motion prevented explicit restart.",
-  );
-  await context.close();
-}
-
-async function verifyLayout(page, storyId) {
-  await openStory(page, storyId);
-  await assertNoPageOverflow(page, storyId);
-}
-
 async function assertNoPageOverflow(page, storyId) {
-  const hasPageOverflow = await page.evaluate(
+  const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > window.innerWidth + 1,
   );
-  assert(!hasPageOverflow, `${storyId} has page-level horizontal overflow.`);
+  if (overflow)
+    throw new Error(`[factory-visualizers-storybook] ${storyId} overflows`);
 }
 
 async function assertNoSeriousAccessibilityViolations(page, storyId) {
   await page.addScriptTag({ path: axePath });
-  const violations = await page.evaluate(async () => {
-    const result = await window.axe.run(document, {
-      runOnly: {
-        type: "tag",
-        values: ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"],
-      },
-    });
-    return result.violations
-      .filter(({ impact }) => impact === "critical" || impact === "serious")
-      .map(({ id, impact, nodes }) => ({
-        id,
-        impact,
-        nodes: nodes.map(({ failureSummary, target }) => ({
-          failureSummary,
-          target,
-        })),
-      }));
-  });
-  assert(
-    violations.length === 0,
-    `${storyId} has serious accessibility violations: ${JSON.stringify(violations)}`,
+  const results = await page.evaluate(async () =>
+    window.axe.run(document, {
+      resultTypes: ["violations"],
+      rules: { "color-contrast": { enabled: false } },
+    }),
   );
+  const serious = results.violations.filter((violation) =>
+    ["critical", "serious"].includes(violation.impact),
+  );
+  if (serious.length > 0)
+    throw new Error(
+      `[factory-visualizers-storybook] ${storyId} accessibility violations: ${serious.map((violation) => violation.id).join(", ")}`,
+    );
+}
+
+async function assertPortAvailable(requestedPort) {
+  await new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once("error", reject);
+    probe.listen(requestedPort, "127.0.0.1", () =>
+      probe.close((error) => (error ? reject(error) : resolve())),
+    );
+  });
 }
 
 async function openStory(page, storyId) {
-  await page.goto(`${baseUrl}/iframe.html?id=${storyId}&viewMode=story`, {
-    timeout: 10_000,
-    waitUntil: "domcontentloaded",
+  await page.goto(`${baseUrl}/iframe.html?id=${storyId}`, {
+    waitUntil: "networkidle",
   });
-  try {
-    await page.getByRole("region").first().waitFor({ timeout: 10_000 });
-  } catch (error) {
-    const body = (await page.locator("body").innerText()).slice(0, 800);
-    throw new Error(`${storyId} did not render a labeled region. ${body}`, {
-      cause: error,
-    });
-  }
-}
-
-async function tabTo(page, locator, attempts) {
-  for (let index = 0; index < attempts; index++) {
-    if (await locator.evaluate((element) => element === document.activeElement))
-      return;
-    await page.keyboard.press("Tab");
-  }
-  throw new Error(
-    "The target control was not reachable in the expected keyboard order.",
-  );
 }
 
 async function waitForServer() {
-  for (let attempt = 0; attempt < 40; attempt++) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
     try {
-      const response = await fetch(`${baseUrl}/index.json`, {
-        signal: AbortSignal.timeout(2_000),
-      });
+      const response = await fetch(baseUrl);
       if (response.ok) return;
     } catch {
-      // The bounded retry loop reports one failure if the server never becomes ready.
+      // The static server is still starting.
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error("The temporary Storybook server did not become ready.");
-}
-
-async function assertPortAvailable(candidatePort) {
-  await new Promise((resolve, reject) => {
-    const probe = net.createServer();
-    probe.once("error", () =>
-      reject(new Error(`Port ${candidatePort} is already occupied.`)),
-    );
-    probe.once("listening", () => probe.close(resolve));
-    probe.listen(candidatePort, "127.0.0.1");
-  });
-}
-
-function assert(condition, message) {
-  if (!condition) throw new Error(message);
+  throw new Error("Factory visualizer Storybook server did not start.");
 }

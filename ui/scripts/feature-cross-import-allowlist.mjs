@@ -1124,48 +1124,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
-      "src/features/factory-graph-editor/lib/work-state/factory-graph-work-state-phase-styling.ts",
-    importSpecifiers: [
-      "../../../flowchart/components/current-activity-node-chrome",
-      "../../../flowchart/components/graph-semantic-icon",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
-      "src/features/flowchart/components/current-activity-place-node.tsx",
-    importSpecifiers: [
-      "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
-      "../../factory-graph-editor/lib/work-state/factory-graph-work-state-phase-styling",
-      "../../workflow-activity/messages/activity-shell",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
-      "src/features/flowchart/components/current-activity-resource-node.tsx",
-    importSpecifiers: ["../../workflow-activity/messages/activity-shell"],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
-      "src/features/flowchart/components/current-activity-work-type-node.tsx",
-    importSpecifiers: ["../../workflow-activity/messages/activity-shell"],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
-      "src/features/flowchart/components/current-activity-worker-node.tsx",
-    importSpecifiers: ["../../workflow-activity/messages/activity-shell"],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
       "src/features/flowchart/lib/workstation-graph-presentation.ts",
     importSpecifiers: [
       "../../current-factory-definition/lib/workstation-behavior",
@@ -1178,22 +1136,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     importSpecifiers: [
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
       "../../flowchart/components/current-activity-node-chrome",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
-      "src/features/graphs/components/workstation-node-view.tsx",
-    importSpecifiers: [
-      "../../current-factory-definition/lib/workstation-progress-outcome-routes",
-      "../../flowchart/components/current-activity-node-chrome",
-      "../../flowchart/components/current-activity-work-progress-marker",
-      "../../flowchart/components/graph-semantic-icon",
-      "../../flowchart/lib/current-activity-graph-hover",
-      "../../flowchart/lib/workstation-graph-presentation",
-      "../../flowchart/messages/activity-graph",
-      "../../workflow-activity/messages/activity-shell",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -1848,13 +1790,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../current-factory-definition/lib/doc-editable-values",
       "../../workflow-activity/lib/factory-bundled-docs",
     ],
-    reason:
-      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
-  },
-  {
-    relativeFilePath:
-      "src/features/flowchart/components/current-activity-doc-node.tsx",
-    importSpecifiers: ["../../workflow-activity/messages/activity-shell"],
     reason:
       "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
   },

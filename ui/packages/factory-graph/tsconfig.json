@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@you-agent-factory/client": ["../client/dist/index.d.ts"],
+      "@you-agent-factory/components": ["../components/dist/index.d.ts"],
+      "@you-agent-factory/components/*": ["../components/dist/*/index.d.ts"],
+      "@you-agent-factory/factory-replay": ["../factory-replay/dist/index.d.ts"]
+    },
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "strict": true,
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "rootDir": "src"
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

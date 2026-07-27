@@ -10,6 +10,7 @@ import { promisify } from "node:util";
 import { packAndVerify as packClient } from "../../client/scripts/verify-package-pack.mjs";
 import { packAndVerify as packComponents } from "../../components/scripts/verify-package-pack.mjs";
 import { packAndVerify as packEmulator } from "../../factory-emulator/scripts/verify-package-pack.mjs";
+import { packAndVerify as packGraph } from "../../factory-graph/scripts/verify-package-pack.mjs";
 import { packAndVerify as packReplay } from "../../factory-replay/scripts/verify-package-pack.mjs";
 import { packAndVerify as packVisualizers } from "./verify-package-pack.mjs";
 
@@ -33,9 +34,9 @@ import {
   type FactoryTimelineScrubberMessages,
   type FactoryTopologyReplayMessages,
   type FactoryTopologyReplayError,
-  type FactoryTopologyReplayProjection,
   type WorkProgressVisualizerMessages,
 } from "@you-agent-factory/factory-visualizers";
+import { createFactoryGraphSource } from "@you-agent-factory/factory-graph";
 import { parseFactoryRecording, type FactoryDefinition, type FactoryEvent } from "@you-agent-factory/client";
 import {
   createFactoryEmulatorSession,
@@ -96,11 +97,15 @@ const recordingMessages: FactoryRecordingTopologyReplayMessages = {
 const recording = parseFactoryRecording(supportPlayback);
 const events = canonicalizeFactoryEvents(recording.events);
 const selectedTick = events.at(-1)?.context.tick ?? 0;
-const topology: FactoryTopologyReplayProjection = {
-  activity: projectFactoryActivityAtTick({ events, tick: selectedTick }),
-  load: projectFactoryLoadAtTick({ events, tick: selectedTick }),
-  topology: projectFactoryTopologyAtTick({ events, tick: selectedTick }),
-};
+const topology = createFactoryGraphSource({
+  factory: recording.factory ?? { name: "Support playback" },
+  runtime: {
+    activity: projectFactoryActivityAtTick({ events, tick: selectedTick }),
+    load: projectFactoryLoadAtTick({ events, tick: selectedTick }),
+    topology: projectFactoryTopologyAtTick({ events, tick: selectedTick }),
+  },
+  selectedTick,
+});
 const reportError = (_error: FactoryTopologyReplayError) => {};
 const reportRecordingError = (_error: FactoryRecordingTopologyReplayError) => {};
 
@@ -166,10 +171,14 @@ function InstalledEmulator({ id }: { id: string }) {
     void runtime.start().catch((error) => setState((current) => ({ ...current, error: String(error) })));
   }, [runtime]);
 
-  const replay = useMemo<FactoryTopologyReplayProjection>(() => ({
-    activity: projectFactoryActivityAtTick({ events: state.events, tick: state.selectedTick }),
-    load: projectFactoryLoadAtTick({ events: state.events, tick: state.selectedTick }),
-    topology: projectFactoryTopologyAtTick({ events: state.events, tick: state.selectedTick }),
+  const replay = useMemo(() => createFactoryGraphSource({
+    factory: emulatorFactory,
+    runtime: {
+      activity: projectFactoryActivityAtTick({ events: state.events, tick: state.selectedTick }),
+      load: projectFactoryLoadAtTick({ events: state.events, tick: state.selectedTick }),
+      topology: projectFactoryTopologyAtTick({ events: state.events, tick: state.selectedTick }),
+    },
+    selectedTick: state.selectedTick,
   }), [state.events, state.selectedTick]);
   const workProgress = useMemo<FactoryWorkProgressProjection>(
     () => projectFactoryWorkProgressAtTick({ events: state.events, tick: state.selectedTick }),
@@ -236,7 +245,7 @@ function InstalledEmulator({ id }: { id: string }) {
     <FactoryEmulatorView
       controls={controls}
       submission={<div><button onClick={() => void submit()} type="button">Submit Work</button><button onClick={showLocalError} type="button">Show local error</button><output aria-label="Submission count">{state.submissions}</output></div>}
-      topology={{ messages: topologyMessages, state: replay.topology.nodes.length === 0 ? { status: "empty" } : { projection: replay, status: "ready" } }}
+      topology={{ messages: topologyMessages, state: replay.runtime.topology.nodes.length === 0 ? { status: "empty" } : { source: replay, status: "ready" } }}
       workProgress={{ formatNumber: String, messages: progressMessages, projection: workProgress }}
     />
   </article>;
@@ -246,7 +255,7 @@ function App() {
   return <main>
     <section aria-label="Installed emulator examples"><InstalledEmulator id="alpha" /><InstalledEmulator id="beta" /></section>
     <section aria-label="Valid packaged recording">
-      <FactoryTopologyReplay messages={topologyMessages} onError={reportError} state={{ projection: topology, status: "ready" }} />
+      <FactoryTopologyReplay messages={topologyMessages} onError={reportError} state={{ source: topology, status: "ready" }} />
     </section>
     <FactoryTimelineScrubber formatTick={String} messages={timelineMessages} onFollowLatest={() => {}} onSelectTick={() => {}} state={{ earliestTick: 0, latestTick: 4, mode: "history", selectedTick: 2, status: "available" }} />
     <WorkProgressVisualizer formatNumber={(value) => new Intl.NumberFormat("en").format(value)} messages={progressMessages} projection={progress} />
@@ -305,6 +314,7 @@ async function writeConsumer(root, tarballs) {
       "@you-agent-factory/components": pathToFileURL(tarballs.components).href,
       "@you-agent-factory/factory-emulator": pathToFileURL(tarballs.emulator)
         .href,
+      "@you-agent-factory/factory-graph": pathToFileURL(tarballs.graph).href,
       "@you-agent-factory/factory-replay": pathToFileURL(tarballs.replay).href,
       "@you-agent-factory/factory-visualizers": pathToFileURL(
         tarballs.visualizers,
@@ -514,8 +524,14 @@ async function verifyBrowser(distRoot) {
     const topology = page
       .getByRole("region", { name: "Factory topology" })
       .first();
-    await topology.getByLabel("worker: support-agent").waitFor();
-    await topology.getByLabel("workstation: triage").waitFor();
+    await topology
+      .locator('[data-current-activity-node-type="worker"]')
+      .first()
+      .waitFor();
+    await topology
+      .locator('[data-current-activity-node-type="workstation"]')
+      .first()
+      .waitFor();
     await page.getByText("6 total", { exact: true }).waitFor();
     const invalidRecording = page.getByRole("region", {
       name: "Invalid packaged recording",
@@ -545,6 +561,7 @@ try {
       "client",
       "components",
       "emulator",
+      "graph",
       "replay",
       "visualizers",
       "consumer",
@@ -557,11 +574,13 @@ try {
     packDestination: roots.components,
   });
   const emulator = await packEmulator(roots.emulator);
+  const graph = await packGraph(roots.graph);
   const visualizers = await packVisualizers(roots.visualizers);
   await writeConsumer(roots.consumer, {
     client: client.tarballPath,
     components: components.tarballPath,
     emulator: emulator.tarballPath,
+    graph: graph.tarballPath,
     replay: replay.tarballPath,
     visualizers: visualizers.tarballPath,
   });

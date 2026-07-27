@@ -40,7 +40,12 @@ function createEditorStub(
 }
 
 describe("currentActivityCardFactoryDefinition", () => {
-  it("does not expose the retired app-local projection in observe mode", () => {
+  const snapshot = {
+    ...structuredClone(singleNodeDashboardSnapshot),
+    factory: baseFactoryDefinition,
+  };
+
+  it("uses the event-computed Factory definition in observe mode", () => {
     expect(
       currentActivityCardFactoryDefinition(
         createEditorStub({
@@ -48,8 +53,9 @@ describe("currentActivityCardFactoryDefinition", () => {
           editableFactoryDocumentStatus: "success",
           editorMode: false,
         }),
+        snapshot,
       ),
-    ).toBeNull();
+    ).toEqual(baseFactoryDefinition);
   });
 
   it("returns null in editor mode while the scoped factory document is pending", () => {
@@ -59,6 +65,7 @@ describe("currentActivityCardFactoryDefinition", () => {
           editableFactoryDocumentStatus: "pending",
           editorMode: true,
         }),
+        snapshot,
       ),
     ).toBeNull();
   });
@@ -76,6 +83,7 @@ describe("currentActivityCardFactoryDefinition", () => {
           editableFactoryDocumentStatus: "success",
           editorMode: true,
         }),
+        snapshot,
       ),
     ).toEqual(baseFactoryDefinitionDocument);
   });
@@ -125,6 +133,7 @@ describe("currentActivityCardFactoryDefinition", () => {
           editableFactoryDocumentStatus: "success",
           editorMode: true,
         }),
+        snapshot,
       ),
     ).toEqual(pendingDraft);
   });

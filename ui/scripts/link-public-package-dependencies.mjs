@@ -4,6 +4,10 @@ import { fileURLToPath } from "node:url";
 
 const uiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageScope = path.join(uiRoot, "node_modules", "@you-agent-factory");
+// factory-graph is a regular file dependency of the UI workspace. Bun installs
+// it from the locked package manifest, so it must not be replaced with a
+// development symlink here. The two packages below are linked because their
+// build artifacts are consumed directly by the downstream release checks.
 const workspacePackages = ["client", "factory-replay"];
 
 async function pathExists(targetPath) {

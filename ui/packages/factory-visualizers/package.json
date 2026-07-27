@@ -1,7 +1,7 @@
 {
   "name": "@you-agent-factory/factory-visualizers",
   "version": "0.0.0",
-  "description": "Controlled React visualizers for caller-prepared Factory replay projections.",
+  "description": "Controlled React hosts for the canonical Factory semantic graph.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -39,7 +39,7 @@
     "check:pack": "node scripts/verify-package-pack.mjs",
     "check:package-boundary": "node scripts/check-package-boundary.mjs",
     "lint": "biome check .",
-    "prepare:dependencies": "bun run --cwd ../client build && bun run --cwd ../components build && bun run --cwd ../factory-replay build",
+    "prepare:dependencies": "bun run --cwd ../client build && bun run --cwd ../components build && bun run --cwd ../factory-replay build && bun run --cwd ../factory-graph build",
     "storybook": "storybook dev -p 6027",
     "test": "vitest run --config vitest.config.ts",
     "test-storybook": "bun run build-storybook && bun run verify:accessibility-responsive",
@@ -49,6 +49,7 @@
   },
   "dependencies": {
     "@you-agent-factory/components": "0.0.0",
+    "@you-agent-factory/factory-graph": "0.0.0",
     "@xyflow/react": "^12.10.2"
   },
   "peerDependencies": {
@@ -67,6 +68,7 @@
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react-swc": "^4.1.0",
     "@you-agent-factory/client": "workspace:*",
+    "@you-agent-factory/factory-graph": "workspace:*",
     "@you-agent-factory/factory-replay": "workspace:*",
     "axe-core": "^4.10.2",
     "happy-dom": "^20.9.0",

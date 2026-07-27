@@ -29,13 +29,12 @@ describe("verifyPublicPackageRelease", () => {
       "@you-agent-factory/factory-replay: run release gate",
       "@you-agent-factory/factory-replay consumer: run 10,000-event retained-memory regression",
       "Public package family: link built workspace dependencies",
+      "@you-agent-factory/factory-graph: run release gate",
       "@you-agent-factory/factory-emulator: run release gate",
       "@you-agent-factory/factory-visualizers: run release gate",
       "Website Factory emulator adapter and customer demos: run focused state and component regressions",
       "Website Factory emulator adapter and customer demos: build browser acceptance stories",
       "Website Factory emulator adapter and customer demos: run desktop, narrow, and reduced-motion browser checks",
-      "Hosted Factory topology replay: run focused exact-session state and component regressions",
-      "Hosted Factory topology replay: run desktop and narrow exact-session browser regression",
     ]);
   });
 
@@ -43,11 +42,9 @@ describe("verifyPublicPackageRelease", () => {
     ["install locked UI prerequisites", 0],
     ["run release gate", 4],
     ["run 10,000-event retained-memory regression", 5],
-    ["run focused state and component regressions", 9],
-    ["build browser acceptance stories", 10],
-    ["run desktop, narrow, and reduced-motion browser checks", 11],
-    ["run focused exact-session state and component regressions", 12],
-    ["run desktop and narrow exact-session browser regression", 13],
+    ["run focused state and component regressions", 10],
+    ["build browser acceptance stories", 11],
+    ["run desktop, narrow, and reduced-motion browser checks", 12],
   ])(
     "stops after the first failed %s and reports its command outcome",
     async (_failureKind, failedStepIndex) => {

@@ -1,5 +1,6 @@
 import type { FactoryEvent } from "@you-agent-factory/client";
 import { Heading, Text } from "@you-agent-factory/components/primitives";
+import { createFactoryGraphSource } from "@you-agent-factory/factory-graph";
 import {
   FactoryEmulatorView,
   type FactoryEmulatorViewProps,
@@ -280,11 +281,15 @@ function CustomerFactoryEmulatorDemo({
             state.replay.world.topology.nodes.length === 0
               ? { status: "empty" }
               : {
-                  projection: {
-                    activity: state.replay.world.activity,
-                    load: state.replay.world.load,
-                    topology: state.replay.world.topology,
-                  },
+                  source: createFactoryGraphSource({
+                    factory: fixture.factory,
+                    runtime: {
+                      activity: state.replay.world.activity,
+                      load: state.replay.world.load,
+                      topology: state.replay.world.topology,
+                    },
+                    selectedTick: state.selectedTick,
+                  }),
                   status: "ready",
                 },
         }}

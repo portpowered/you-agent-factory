@@ -57,6 +57,13 @@ const config: StorybookConfig = {
               "../factory-replay/src/index.ts",
             ),
           },
+          {
+            find: "@you-agent-factory/factory-graph",
+            replacement: path.resolve(
+              packageRoot,
+              "../factory-graph/src/index.ts",
+            ),
+          },
         ],
         dedupe: ["@xyflow/react", "react", "react-dom", "react/jsx-runtime"],
       },

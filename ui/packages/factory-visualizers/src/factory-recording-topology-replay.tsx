@@ -4,6 +4,7 @@ import {
   safeParseFactoryRecording,
 } from "@you-agent-factory/client";
 import { Text } from "@you-agent-factory/components/primitives";
+import { createFactoryGraphSource } from "@you-agent-factory/factory-graph";
 import {
   canonicalizeFactoryEvents,
   type FactoryActivityProjection,
@@ -50,8 +51,7 @@ export interface FactoryRecordingValidationDiagnostic {
 
 export type FactoryRecordingTopologyReplayError =
   | FactoryRecordingValidationDiagnostic
-  | FactoryVisualizerError
-  | import("./visualizer-error").FactoryVisualizationLayoutDiagnostic;
+  | FactoryVisualizerError;
 
 export interface FactoryRecordingTopologyReplayMessages {
   progress: WorkProgressVisualizerMessages;
@@ -65,8 +65,6 @@ export interface FactoryRecordingTopologyReplayMessages {
 export interface FactoryRecordingTopologyReplayProps {
   defaultSelectedTick?: number;
   formatNumber: (value: number) => string;
-  /** Presentation-only content validated by the controlled topology renderer. */
-  layout?: unknown;
   messages: FactoryRecordingTopologyReplayMessages;
   onError?: (error: FactoryRecordingTopologyReplayError) => void;
   onSelectNode?: (node: FactoryTopologyNode) => void;
@@ -102,7 +100,6 @@ export function createRecordingProjectionCache(): RecordingProjectionCache {
 export function FactoryRecordingTopologyReplay({
   defaultSelectedTick,
   formatNumber,
-  layout,
   messages,
   onError,
   onSelectNode,
@@ -157,7 +154,6 @@ export function FactoryRecordingTopologyReplay({
       defaultSelectedTick={defaultSelectedTick}
       formatNumber={formatNumber}
       key={parsed.data.id}
-      layout={layout}
       messages={messages}
       onError={onError}
       onSelectNode={onSelectNode}
@@ -170,7 +166,6 @@ export function FactoryRecordingTopologyReplay({
 function ValidatedRecordingReplay({
   defaultSelectedTick,
   formatNumber,
-  layout,
   messages,
   onError,
   onSelectNode,
@@ -243,7 +238,6 @@ function ValidatedRecordingReplay({
         }}
       />
       <FactoryTopologyReplay
-        layout={layout}
         messages={messages.topology}
         onError={onError}
         onSelectNode={onSelectNode}
@@ -251,14 +245,20 @@ function ValidatedRecordingReplay({
         state={{
           ...(prepared.topology.nodes.length === 0
             ? { status: "empty" as const }
-            : {
-                projection: {
-                  activity: prepared.activity,
-                  load: prepared.load,
-                  topology: prepared.topology,
-                },
-                status: "ready" as const,
-              }),
+            : recording.factory
+              ? {
+                  source: createFactoryGraphSource({
+                    factory: recording.factory,
+                    runtime: {
+                      activity: prepared.activity,
+                      load: prepared.load,
+                      topology: prepared.topology,
+                    },
+                    selectedTick,
+                  }),
+                  status: "ready" as const,
+                }
+              : { status: "failed" as const }),
         }}
       />
       <WorkProgressVisualizer

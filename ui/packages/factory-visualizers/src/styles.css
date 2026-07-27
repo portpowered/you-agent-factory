@@ -1,18 +1,7 @@
 @import "@xyflow/react/dist/style.css";
 
-.factory-recording-topology-replay {
-  display: grid;
-  box-sizing: border-box;
-  inline-size: 100%;
-  min-inline-size: 0;
-  gap: 1rem;
-}
-
-.factory-emulator-controls {
-  display: grid;
-  gap: 1rem;
-}
-
+.factory-recording-topology-replay,
+.factory-emulator-controls,
 .factory-emulator-view {
   display: grid;
   box-sizing: border-box;
@@ -25,18 +14,26 @@
   min-inline-size: 0;
 }
 
-.factory-emulator-failure {
+.factory-emulator-failure,
+.factory-timeline-scrubber,
+.factory-work-progress {
   box-sizing: border-box;
   inline-size: 100%;
   min-inline-size: 0;
   padding: 1rem;
   color: var(--color-on-surface);
   background: var(--color-surface-container-low);
-  border: 1px solid var(--color-error);
+  border: 1px solid var(--color-outline-variant);
   border-radius: 1rem;
 }
 
-.factory-emulator-failure__content {
+.factory-emulator-failure {
+  border-color: var(--color-error);
+}
+
+.factory-emulator-failure__content,
+.factory-topology-replay__state,
+.factory-work-progress__empty {
   display: grid;
   justify-items: center;
   gap: 1rem;
@@ -48,29 +45,23 @@
   border-radius: 0.75rem;
 }
 
-.factory-emulator-failure__content > * {
+.factory-emulator-failure__content > *,
+.factory-topology-replay__state > * {
   margin: 0;
 }
 
-.factory-recording-topology-replay__tick {
+.factory-recording-topology-replay__tick,
+.factory-timeline-scrubber__position,
+.factory-timeline-scrubber__status,
+.factory-timeline-scrubber__action-status,
+.factory-work-progress__total {
   margin: 0;
   color: var(--color-on-surface-variant);
 }
 
-.factory-timeline-scrubber {
-  box-sizing: border-box;
-  inline-size: 100%;
-  min-inline-size: 0;
-  padding: 1rem;
-  color: var(--color-on-surface);
-  background: var(--color-surface-container-low);
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 1rem;
-}
-
 .factory-topology-replay {
-  box-sizing: border-box;
   position: relative;
+  box-sizing: border-box;
   inline-size: 100%;
   block-size: clamp(28rem, 68vh, 48rem);
   min-inline-size: 0;
@@ -88,261 +79,16 @@
 }
 
 .factory-topology-replay__state {
-  display: grid;
   max-inline-size: 32rem;
-  justify-items: center;
-  gap: 1rem;
-  padding: 1.5rem;
-  color: var(--color-on-surface-variant);
-  text-align: center;
-  background: var(--color-surface-container);
-  border: 1px dashed var(--color-outline-variant);
-  border-radius: 0.75rem;
 }
 
 .factory-topology-replay__state[role="alert"] {
   border-color: var(--color-error);
 }
 
-.factory-topology-replay__state > * {
-  margin: 0;
-}
-
-.factory-topology-replay .react-flow__node {
-  inline-size: 13.5rem;
-}
-
-.factory-topology-replay
-  .react-flow__node:has(.factory-topology-replay__annotation) {
-  inline-size: auto;
-}
-
-.factory-topology-replay__annotation-toggle {
-  position: absolute;
-  z-index: 5;
-  inset-block-start: 1rem;
-  inset-inline-end: 1rem;
-  padding: 0.5rem 0.75rem;
-  color: var(--color-on-surface);
-  cursor: pointer;
-  background: var(--color-surface-container-high);
-  border: 1px solid var(--color-outline);
-  border-radius: 0.5rem;
-}
-
-.factory-topology-replay__annotation-toggle:focus-visible {
-  outline: 0.1875rem solid var(--color-on-surface);
-  outline-offset: 0.25rem;
-}
-
-.factory-topology-replay__active-work {
-  position: absolute;
-  z-index: 5;
-  inset-block-start: 1rem;
-  inset-inline-start: 1rem;
-  box-sizing: border-box;
-  max-inline-size: calc(100% - 2rem);
-  padding: 0.5rem 0.75rem;
-  color: var(--color-on-surface);
-  background: var(--color-surface-container-high);
-  border: 1px solid var(--color-outline);
-  border-radius: 0.5rem;
-}
-
-.factory-topology-replay__active-work ul {
-  display: grid;
-  gap: 0.25rem;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-
-.factory-topology-replay__active-work li {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.75rem;
-  justify-content: space-between;
-}
-
-.factory-topology-replay__active-work li > * {
-  min-inline-size: 0;
-  overflow-wrap: anywhere;
-}
-
-.factory-topology-replay__active-work p {
-  margin: 0.25rem 0 0;
-  color: var(--color-on-surface-variant);
-}
-
-.factory-topology-replay__annotation {
-  box-sizing: border-box;
-  display: grid;
-  gap: 0.5rem;
-  padding: 0.75rem;
-  margin: 0;
-  color: var(--color-on-surface);
-  pointer-events: none;
-  background: var(--color-surface-container);
-  border: 1px solid var(--color-outline);
-  border-radius: 0.75rem;
-}
-
-.factory-topology-replay__annotation[data-tone="accent"] {
-  border-color: var(--color-primary, var(--color-af-foundation-accent));
-}
-
-.factory-topology-replay__annotation[data-tone="info"] {
-  border-color: var(--color-info);
-}
-
-.factory-topology-replay__annotation[data-tone="success"] {
-  border-color: var(--color-success);
-}
-
-.factory-topology-replay__annotation[data-tone="warning"] {
-  border-color: var(--color-warning);
-}
-
-.factory-topology-replay__annotation[data-tone="danger"] {
-  border-color: var(--color-error);
-}
-
-.factory-topology-replay__annotation-title,
-.factory-topology-replay__annotation-body {
-  overflow-wrap: anywhere;
-}
-
-.factory-topology-replay__annotation-body {
-  white-space: pre-wrap;
-}
-
-.factory-topology-replay__annotation--image {
-  display: block;
-  padding: 0;
-  overflow: hidden;
-}
-
-.factory-topology-replay__annotation-image {
-  display: block;
-  inline-size: 100%;
-  block-size: 100%;
-  object-fit: contain;
-}
-
-.factory-topology-replay__annotation-image-state {
-  display: grid;
-  min-block-size: 4rem;
-  place-items: center;
-  padding: 0.75rem;
-  color: var(--color-on-surface-variant);
-  text-align: center;
-}
-
-.factory-topology-replay__annotation-image-state[role="alert"] {
-  color: var(--color-error);
-}
-
-.factory-topology-replay__node-button,
-.factory-topology-replay__node-static {
-  display: block;
-  inline-size: 100%;
-  margin: 0;
-}
-
-.factory-topology-replay__node-button:focus-visible {
-  border-radius: 0.625rem;
-  outline: 0.1875rem solid
-    var(--color-primary, var(--color-af-foundation-accent));
-  outline-offset: 0.25rem;
-}
-
-.factory-topology-replay__legend {
-  display: inline-block;
-  padding: 0.5rem 0.75rem;
-  margin: 0 0 0.75rem;
-  color: var(--color-on-surface);
-  background: var(--color-surface-container-low);
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 0.5rem;
-}
-
-.factory-topology-replay__legend ul {
-  display: grid;
-  gap: 0.25rem;
-  padding: 0;
-  margin: 0.25rem 0 0;
-  list-style: none;
-}
-
-.factory-topology-replay__legend li {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.factory-topology-replay__legend-swatch {
-  inline-size: 1rem;
-  block-size: 0.1875rem;
-  background: var(--color-outline);
-}
-
-.factory-topology-replay__legend-swatch--active {
-  background: var(--color-warning);
-}
-
-.factory-topology-replay__node-title,
-.factory-topology-replay__node-kind,
-.factory-topology-replay__node-cue {
-  display: block;
-  min-inline-size: 0;
-  overflow-wrap: anywhere;
-}
-
-.factory-topology-replay__node-kind,
-.factory-topology-replay__node-cue {
-  color: var(--color-on-surface-variant);
-  font-size: 0.75rem;
-}
-
-.factory-topology-replay__node-kind {
-  text-transform: capitalize;
-}
-
-.factory-topology-replay__node-cue {
-  margin-block-start: 0.25rem;
-}
-
-.factory-topology-replay__node-activity-detail {
-  min-inline-size: 0;
-}
-
-.factory-topology-replay__node-empty-state {
-  display: block;
-  margin-block-start: 0.25rem;
-  color: var(--color-on-surface-variant);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-.factory-topology-replay__node-empty-state-image {
-  display: block;
-  max-inline-size: 100%;
-  max-block-size: 8rem;
-  margin-block-start: 0.5rem;
-  object-fit: contain;
-}
-
-.factory-topology-replay__node--active {
-  border-block-start: 0.25rem solid var(--color-warning);
-}
-
-.factory-topology-replay .react-flow__edge.animated path {
-  stroke: var(--color-warning);
-  stroke-width: 0.1875rem;
-}
-
 .factory-timeline-scrubber__header,
-.factory-timeline-scrubber__controls {
+.factory-timeline-scrubber__controls,
+.factory-work-progress__header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -352,14 +98,9 @@
 
 .factory-timeline-scrubber__header > *,
 .factory-timeline-scrubber__status,
-.factory-timeline-scrubber__action-status {
+.factory-timeline-scrubber__action-status,
+.factory-work-progress__header > * {
   margin: 0;
-}
-
-.factory-timeline-scrubber__position,
-.factory-timeline-scrubber__status,
-.factory-timeline-scrubber__action-status {
-  color: var(--color-on-surface-variant);
 }
 
 .factory-timeline-scrubber__controls {
@@ -390,33 +131,6 @@
 
 .factory-timeline-scrubber__action-status {
   margin-block-start: 0.25rem;
-}
-
-.factory-work-progress {
-  box-sizing: border-box;
-  inline-size: 100%;
-  min-inline-size: 0;
-  padding: 1rem;
-  color: var(--color-on-surface);
-  background: var(--color-surface-container-low);
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 1rem;
-}
-
-.factory-work-progress__header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
-}
-
-.factory-work-progress__header > * {
-  margin: 0;
-}
-
-.factory-work-progress__total {
-  color: var(--color-on-surface-variant);
 }
 
 .factory-work-progress__categories {
@@ -474,11 +188,6 @@
 .factory-work-progress__empty {
   padding: 1rem;
   margin: 1rem 0 0;
-  color: var(--color-on-surface-variant);
-  text-align: center;
-  background: var(--color-surface-container);
-  border: 1px dashed var(--color-outline-variant);
-  border-radius: 0.75rem;
 }
 
 @media (min-width: 34rem) {
@@ -503,9 +212,5 @@
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
     transition-duration: 0.01ms;
-  }
-
-  .factory-topology-replay .react-flow__edge.animated path {
-    animation: none;
   }
 }

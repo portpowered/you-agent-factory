@@ -123,7 +123,7 @@ export function WorkflowActivityBentoCard({
           loadErrorMessage={viewModel.status.loadErrorMessage}
           locale={locale}
           onToggle={editorControls.toggleMode}
-          showModeToggle={!editorControls.isEditing}
+          showModeToggle={false}
         />
       }
       title={messages.widgetTitle}
