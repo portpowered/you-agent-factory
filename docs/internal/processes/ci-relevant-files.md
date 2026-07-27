@@ -147,6 +147,12 @@
   `UseMockWorkers: true` and a recording `edges.Edges.ProviderCommandRunner`,
   assert unary child results on `result.primaryResult`, and prove stable
   `FAILED` dispatch records via the `fail:` fake-child prompt prefix without
+  live provider execution. JavaScript pipeline composition functional coverage
+  belongs in
+  `tests/functional/orchestration/javascript/composition/pipeline_test.go`:
+  use `pipeline(items, worker, next?)` with at least two stages so stage-two
+  prompts depend on stage-one child output, and assert stage-output data flow
+  on `result.primaryResult` and the Factory Session dispatch listing without
   live provider execution. Catalog metadata infers domain `orchestration` and
   subsection `javascript/composition` from the path; every top-level `Test*`
   needs a customer-readable Go doc so `functionaltestmetadata` stays

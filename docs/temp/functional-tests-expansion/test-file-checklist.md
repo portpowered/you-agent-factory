@@ -78,7 +78,7 @@ intentionally small enough to distribute across many agents.
   - `TestOptionalSessionIDUsesDefaultWhenOmitted` verifies default session
     targeting and explicit override.
 
-- [ ] `tests/functional/transport/cli/parameters/flags_test.go`
+- [x] `tests/functional/transport/cli/parameters/flags_test.go`
   - `TestCLIStringBooleanAndRepeatedFlagsReachRequest` verifies flag mapping at
     the external observation edge.
   - `TestCLIUnknownFlagFailsBeforeLifecycleStart` verifies stable diagnostics.
@@ -198,16 +198,19 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIConcurrentSessionRequestsRemainIsolated`.
   - `TestAPICancelledRequestDoesNotCancelUnrelatedSession`.
 
-- [ ] `tests/functional/transport/http/status/status_test.go`
+- [x] `tests/functional/transport/http/status/status_test.go`
   - `TestAPIStatusReportsReadyAfterStartup`.
   - `TestAPIStatusDoesNotLeakInternalConfiguration`.
 
 ### MCP transport
 
-- [ ] `tests/functional/transport/mcp/stdio/discovery_test.go`
+- [x] `tests/functional/transport/mcp/stdio/discovery_test.go`
   - `TestMCPStdioInitializeAndToolDiscovery`.
   - `TestMCPDiscoveryContainsCanonicalFactorySessionTools`.
   - `TestMCPUnknownToolReturnsProtocolError`.
+  - `TestMCPStdioRuntimeRejectsMissingHomeEnvironment`.
+  - `TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot`.
+  - `TestMCPStdioFixtureAndRuntimePathsReachInitializer`.
 
 - [ ] `tests/functional/transport/mcp/protocol/errors_test.go`
   - `TestMCPMalformedParametersReturnInvalidParams`.
@@ -274,7 +277,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestClaudeGoldenStructuredFailure` covers normalized error metadata.
   - `TestClaudeGoldenTimeoutClosesResponseStream` covers terminal closure.
 
-- [ ] `tests/functional/workers/inference/cursor/golden_success_test.go`
+- [x] `tests/functional/workers/inference/cursor/golden_success_test.go`
   - `TestCursorGoldenTextSuccessAndSessionIdentity` covers public metadata.
   - `TestCursorGoldenReadableProviderSessionDetails` covers detail lookup.
 
@@ -282,7 +285,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCursorGoldenMalformedRecordReturnsStableDiagnostic`.
   - `TestCursorGoldenProcessFailureAndTimeoutRemainDistinct`.
 
-- [ ] `tests/functional/workers/inference/opencode/golden_test.go`
+- [x] `tests/functional/workers/inference/opencode/golden_test.go`
   - `TestOpenCodeGoldenStructuredSnapshotSuccess`.
   - `TestOpenCodeGoldenFinalOnlyFallback`.
   - `TestOpenCodeGoldenStructuredFailureAndTimeout`.
@@ -343,7 +346,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestJavaScriptAgentReturnsUnaryResult` covers one child dispatch.
   - `TestJavaScriptAgentFailureReturnsStableFailureRecord` covers error.
 
-- [ ] `tests/functional/orchestration/javascript/composition/pipeline_test.go`
+- [x] `tests/functional/orchestration/javascript/composition/pipeline_test.go`
   - `TestJavaScriptPipelinePassesStageOutputToNextStage` covers data flow.
   - `TestJavaScriptPipelineStopsAfterStageFailure` prevents later dispatch.
 
