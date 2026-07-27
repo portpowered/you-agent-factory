@@ -1,0 +1,3 @@
+{"eventId":"6471c13a-8fa4-4d69-aad6-5710026fe3cc","factorySessionId":"7738dc86-6fae-4316-b9f0-52cb7dcff784","itemId":"","runId":"2726e627-3055-4285-b1dc-302030dc6858","status":"started","type":"session.started"}
+{"eventId":"227b51ee-c088-42f0-9f10-a8f0cbf5a3bc","factorySessionId":"7738dc86-6fae-4316-b9f0-52cb7dcff784","itemId":"msg-snapshot","runId":"2726e627-3055-4285-b1dc-302030dc6858","text":"draft text","type":"message.delta"}
+{"eventId":"23407025-c679-4551-aa5a-190ba84898d1","factorySessionId":"7738dc86-6fae-4316-b9f0-52cb7dcff784","finishReason":"stop","itemId":"msg-snapshot","runId":"2726e627-3055-4285-b1dc-302030dc6858","text":"authoritative text COMPLETE","type":"message.completed"}

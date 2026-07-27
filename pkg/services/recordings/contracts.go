@@ -73,9 +73,22 @@ var ErrInvalidRecordingEvent = errors.New("invalid recording event")
 // ErrInvalidRecordingFailure reports a malformed detached recording failure.
 var ErrInvalidRecordingFailure = errors.New("invalid recording failure")
 
+// ErrInvalidRecordingTerminalMetadata reports terminal facts that cannot be applied.
+var ErrInvalidRecordingTerminalMetadata = errors.New("invalid recording terminal metadata")
+
+// ErrRecordingSnapshotEncoding identifies snapshot encoding failure.
+var ErrRecordingSnapshotEncoding = errors.New("recording snapshot encoding failed")
+
+// ErrRecordingSnapshotWrite identifies snapshot persistence failure.
+var ErrRecordingSnapshotWrite = errors.New("recording snapshot write failed")
+
 // ErrRecordingWriteRejected reports that a write was rejected after the
 // recording finished.
 var ErrRecordingWriteRejected = errors.New("recording write rejected after finish")
+
+// DefaultRecordingFlushInterval is the cadence used when an enabled recording
+// does not request a positive active-flush interval.
+const DefaultRecordingFlushInterval = 250 * time.Millisecond
 
 // ErrMissingReplayArtifact reports that a replay-load request lacks a usable
 // artifact path or id.
@@ -351,6 +364,34 @@ type BindRecordingResult struct {
 	Status RecordingStatusFacts
 }
 
+// RecordingTargetRequest selects either an explicit opaque target or the
+// Recordings-owned generated live-recording layout. Artifact takes precedence;
+// HomeDir is required when Recordings must generate the target.
+type RecordingTargetRequest struct {
+	Artifact          RecordingArtifactReference
+	HomeDir           string
+	ReportedSessionID string
+}
+
+// StartRecordingRequest selects and binds one recording lifecycle. Disabled
+// requests are intentionally inert: they do not select a target or allocate an
+// identity.
+type StartRecordingRequest struct {
+	Enabled       bool
+	RecordingID   RecordingID
+	Scope         CanonicalEventScope
+	Target        RecordingTargetRequest
+	FlushInterval time.Duration
+}
+
+// StartRecordingResult reports whether recording was enabled and, when it was,
+// the detached active binding. Target is the session-safe reported reference;
+// no service path, writer, or storage handle crosses the root boundary.
+type StartRecordingResult struct {
+	Enabled bool
+	Status  RecordingStatusFacts
+}
+
 // RecordRecordingEventRequest associates one canonical Recordings event with a
 // bound recording.
 type RecordRecordingEventRequest struct {
@@ -363,10 +404,13 @@ type RecordRecordingEventResult struct {
 	Status RecordingStatusFacts
 }
 
-// RecordRecordingErrorRequest appends one detached failure fact.
+// RecordRecordingErrorRequest appends one detached failure fact. Cause is kept
+// only inside the lifecycle owner so the terminal error can preserve standard
+// error matching; it never crosses the detached status boundary.
 type RecordRecordingErrorRequest struct {
 	RecordingID RecordingID
 	Failure     RecordingFailure
+	Cause       error
 }
 
 // RecordRecordingErrorResult reports failed state with accumulated failures.
@@ -385,6 +429,17 @@ type FlushRecordingResult struct {
 	Status RecordingStatusFacts
 }
 
+// StopRecordingRequest identifies active periodic lifecycle work to cancel and
+// join. It does not finalize the recording or perform a final flush.
+type StopRecordingRequest struct {
+	RecordingID RecordingID
+}
+
+// StopRecordingResult reports status after periodic lifecycle work has stopped.
+type StopRecordingResult struct {
+	Status RecordingStatusFacts
+}
+
 // FinishRecordingRequest is the plain finish request for one bound recording.
 type FinishRecordingRequest struct {
 	RecordingID RecordingID
@@ -392,7 +447,8 @@ type FinishRecordingRequest struct {
 }
 
 // FinishRecordingResult reports finalized state, or failed terminal state when
-// the recording accumulated failures before finalization.
+// the recording accumulated failures. FinishRecording returns all underlying
+// causes in occurrence order while this result remains detached value data.
 type FinishRecordingResult struct {
 	Status RecordingStatusFacts
 }
@@ -406,6 +462,27 @@ type RecordingStatusRequest struct {
 type RecordingStatusResult struct {
 	Status RecordingStatusFacts
 }
+
+// RecordingSnapshot is the detached value passed to the exact persistence
+// effect selected by Wire. Target selection remains private to Recordings.
+type RecordingSnapshot struct {
+	Status RecordingStatusFacts
+	Events []CanonicalEvent
+}
+
+// RecordingSnapshotWriter persists one consistent lifecycle snapshot at the
+// Recordings-private service target.
+type RecordingSnapshotWriter func(string, RecordingSnapshot) error
+
+// RecordingFlushTicker is the exact scheduling handle owned by one active
+// recording. Its fields are effects rather than another service interface.
+type RecordingFlushTicker struct {
+	Ticks <-chan time.Time
+	Stop  func()
+}
+
+// RecordingFlushTickerFactory constructs an injected cadence source.
+type RecordingFlushTickerFactory func(time.Duration) RecordingFlushTicker
 
 // LoadReplayArtifactRequest is retained for the pre-neutral replay adapter.
 //
@@ -603,6 +680,9 @@ type Service interface {
 	// BindRecording constructs or idempotently returns one session-scoped
 	// recording through the plain recording-lifecycle root-contract slice.
 	BindRecording(BindRecordingRequest) (BindRecordingResult, error)
+	// StartRecording selects a target and binds an enabled recording, or
+	// returns an inert disabled result without performing target work.
+	StartRecording(StartRecordingRequest) (StartRecordingResult, error)
 	// RecordRecordingEvent associates one canonical Factory Event with a bound
 	// recording.
 	RecordRecordingEvent(RecordRecordingEventRequest) (RecordRecordingEventResult, error)
@@ -610,6 +690,9 @@ type Service interface {
 	RecordRecordingError(RecordRecordingErrorRequest) (RecordRecordingErrorResult, error)
 	// FlushRecording flushes one bound recording through the published slice.
 	FlushRecording(FlushRecordingRequest) (FlushRecordingResult, error)
+	// StopRecording cancels and joins active periodic flush work without
+	// finalizing or performing the caller-owned final flush.
+	StopRecording(StopRecordingRequest) (StopRecordingResult, error)
 	// FinishRecording finalizes one recording with terminal metadata.
 	FinishRecording(FinishRecordingRequest) (FinishRecordingResult, error)
 	// QueryRecordingStatus returns detached lifecycle and accumulated failure
@@ -762,6 +845,9 @@ type RuntimeRecorder interface {
 	Finish(time.Time)
 	Flush() error
 	Err() error
+	// Finalize stops periodic work, applies terminal metadata, and attempts one
+	// final synchronous flush. Repeated calls return the first terminal result.
+	Finalize(time.Time) error
 }
 
 // RuntimeRecorderFactory constructs one session-scoped replay recorder from

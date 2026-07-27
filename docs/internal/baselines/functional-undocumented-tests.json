@@ -528,15 +528,7 @@
     },
     {
       "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates"
-    },
-    {
-      "file": "providers/cli_template_resolution_long_test.go",
       "name": "TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates"
-    },
-    {
-      "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates"
     },
     {
       "file": "providers/cli_template_resolution_long_test.go",
@@ -573,18 +565,6 @@
     {
       "file": "providers/codex_worktree_workstation_test.go",
       "name": "TestCodexWorktreeWorkstationDispatch_MaterializesCheckoutAndOmitsCLIWorktreeFlag"
-    },
-    {
-      "file": "providers/cursor_provider_command_test.go",
-      "name": "TestCursorProviderCommand_DispatchesAgentWithRenderedPrompt"
-    },
-    {
-      "file": "providers/cursor_provider_command_test.go",
-      "name": "TestCursorProviderCommand_PublicModelProviderEnumRoutesToAgent"
-    },
-    {
-      "file": "providers/cursor_provider_command_test.go",
-      "name": "TestCursorProviderCommand_SkipPermissionsPassesForceFlag"
     },
     {
       "file": "providers/mock_workers_agent_test.go",
@@ -1321,10 +1301,6 @@
     {
       "file": "smoke/cli_run_mode_compat_smoke_test.go",
       "name": "TestRunModeCompat_RealCLIOperatorContinuousRunReportsStartupOutputWithoutQuiet"
-    },
-    {
-      "file": "smoke/cli_submit_batch_smoke_test.go",
-      "name": "TestSubmitBatch_RealCLIUpsertsToRunningFactory"
     },
     {
       "file": "smoke/cli_work_move_smoke_test.go",

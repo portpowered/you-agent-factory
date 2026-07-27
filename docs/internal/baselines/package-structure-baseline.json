@@ -1034,11 +1034,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/providers/cursor_provider_command_test.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/providers/doc.go",
       "target": "providers"
     },
@@ -1275,11 +1270,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/cli_run_mode_compat_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_submit_batch_smoke_test.go",
       "target": "smoke"
     },
     {

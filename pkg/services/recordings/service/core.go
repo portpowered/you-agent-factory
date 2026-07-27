@@ -13,19 +13,12 @@ import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/events"
 	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
+	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
+	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
 )
 
 func NewProjectionService() recordings.ProjectionService {
 	return projectionquerywire.NewService()
-}
-
-type lifecycleRecordingSession struct {
-	artifact       recordings.RecordingArtifactReference
-	scope          recordings.CanonicalEventScope
-	events         []recordings.CanonicalEvent
-	flushedThrough *recordings.CanonicalEventCursor
-	failures       []recordings.RecordingFailure
-	finalizedAt    *time.Time
 }
 
 type neutralReplayPlan struct {
@@ -39,14 +32,13 @@ type neutralReplayPlan struct {
 type combinedService struct {
 	recordings.Ledger
 	recordings.ProjectionService
+	recordinglifecycle.Service
 
-	appendMu        sync.Mutex
-	lifecycleMu     sync.Mutex
-	lifecycleByID   map[string]*lifecycleRecordingSession
-	nextRecordingID int
-	replayByKey     map[string]*factorydefinitions.ReplayArtifact
-	replayPlans     map[recordings.ReplayPlanHandle]*neutralReplayPlan
-	nextReplayPlan  int
+	appendMu       sync.Mutex
+	lifecycleMu    sync.Mutex
+	replayByKey    map[string]*factorydefinitions.ReplayArtifact
+	replayPlans    map[recordings.ReplayPlanHandle]*neutralReplayPlan
+	nextReplayPlan int
 }
 
 var _ recordings.Service = (*combinedService)(nil)
@@ -350,204 +342,6 @@ func validateReconnectReplayHistory(
 	return recordings.ErrReconnectCursorNotFound
 }
 
-func (service *combinedService) BindRecording(
-	request recordings.BindRecordingRequest,
-) (recordings.BindRecordingResult, error) {
-	if strings.TrimSpace(string(request.Artifact)) == "" {
-		return recordings.BindRecordingResult{}, recordings.ErrMissingRecordingTarget
-	}
-	if request.Scope.FactorySessionID != "" &&
-		strings.TrimSpace(request.Scope.FactorySessionID) == "" {
-		return recordings.BindRecordingResult{}, recordings.ErrInvalidRecordingScope
-	}
-	service.lifecycleMu.Lock()
-	defer service.lifecycleMu.Unlock()
-	if service.lifecycleByID == nil {
-		service.lifecycleByID = make(map[string]*lifecycleRecordingSession)
-	}
-	id := strings.TrimSpace(string(request.RecordingID))
-	if id == "" {
-		for {
-			service.nextRecordingID++
-			id = "recording-" + strconv.Itoa(service.nextRecordingID)
-			if _, exists := service.lifecycleByID[id]; !exists {
-				break
-			}
-		}
-	} else if existing, exists := service.lifecycleByID[id]; exists {
-		if existing.artifact != request.Artifact || existing.scope != request.Scope {
-			return recordings.BindRecordingResult{}, recordings.ErrRecordingBindingConflict
-		}
-		return recordings.BindRecordingResult{
-			Status: recordingStatus(recordings.RecordingID(id), existing),
-		}, nil
-	}
-	session := &lifecycleRecordingSession{
-		artifact: request.Artifact,
-		scope:    request.Scope,
-	}
-	service.lifecycleByID[id] = session
-	return recordings.BindRecordingResult{
-		Status: recordingStatus(recordings.RecordingID(id), session),
-	}, nil
-}
-
-func (service *combinedService) lifecycleSessionLocked(
-	id recordings.RecordingID,
-) (*lifecycleRecordingSession, error) {
-	if strings.TrimSpace(string(id)) == "" || service.lifecycleByID == nil {
-		return nil, recordings.ErrMissingRecordingTarget
-	}
-	session, ok := service.lifecycleByID[string(id)]
-	if !ok {
-		return nil, recordings.ErrMissingRecordingTarget
-	}
-	return session, nil
-}
-
-func (service *combinedService) RecordRecordingEvent(
-	request recordings.RecordRecordingEventRequest,
-) (recordings.RecordRecordingEventResult, error) {
-	service.lifecycleMu.Lock()
-	defer service.lifecycleMu.Unlock()
-	session, err := service.lifecycleSessionLocked(request.RecordingID)
-	if err != nil {
-		return recordings.RecordRecordingEventResult{}, err
-	}
-	if session.finalizedAt != nil {
-		return recordings.RecordRecordingEventResult{}, recordings.ErrRecordingWriteRejected
-	}
-	if !validRecordingEvent(session, request.Event) {
-		return recordings.RecordRecordingEventResult{}, recordings.ErrInvalidRecordingEvent
-	}
-	session.events = append(session.events, request.Event)
-	return recordings.RecordRecordingEventResult{
-		Status: recordingStatus(request.RecordingID, session),
-	}, nil
-}
-
-func (service *combinedService) RecordRecordingError(
-	request recordings.RecordRecordingErrorRequest,
-) (recordings.RecordRecordingErrorResult, error) {
-	service.lifecycleMu.Lock()
-	defer service.lifecycleMu.Unlock()
-	session, err := service.lifecycleSessionLocked(request.RecordingID)
-	if err != nil {
-		return recordings.RecordRecordingErrorResult{}, err
-	}
-	if session.finalizedAt != nil {
-		return recordings.RecordRecordingErrorResult{}, recordings.ErrRecordingWriteRejected
-	}
-	if strings.TrimSpace(request.Failure.Code) == "" ||
-		strings.TrimSpace(request.Failure.Message) == "" {
-		return recordings.RecordRecordingErrorResult{}, recordings.ErrInvalidRecordingFailure
-	}
-	session.failures = append(session.failures, request.Failure)
-	return recordings.RecordRecordingErrorResult{
-		Status: recordingStatus(request.RecordingID, session),
-	}, nil
-}
-
-func (service *combinedService) FlushRecording(
-	request recordings.FlushRecordingRequest,
-) (recordings.FlushRecordingResult, error) {
-	service.lifecycleMu.Lock()
-	defer service.lifecycleMu.Unlock()
-	session, err := service.lifecycleSessionLocked(request.RecordingID)
-	if err != nil {
-		return recordings.FlushRecordingResult{}, err
-	}
-	if len(session.events) > 0 {
-		cursor := session.events[len(session.events)-1].Cursor
-		session.flushedThrough = &cursor
-	}
-	return recordings.FlushRecordingResult{
-		Status: recordingStatus(request.RecordingID, session),
-	}, nil
-}
-
-func (service *combinedService) FinishRecording(
-	request recordings.FinishRecordingRequest,
-) (recordings.FinishRecordingResult, error) {
-	service.lifecycleMu.Lock()
-	defer service.lifecycleMu.Unlock()
-	session, err := service.lifecycleSessionLocked(request.RecordingID)
-	if err != nil {
-		return recordings.FinishRecordingResult{}, err
-	}
-	if session.finalizedAt == nil {
-		finishedAt := request.FinishedAt.UTC()
-		session.finalizedAt = &finishedAt
-	}
-	return recordings.FinishRecordingResult{
-		Status: recordingStatus(request.RecordingID, session),
-	}, nil
-}
-
-func (service *combinedService) QueryRecordingStatus(
-	request recordings.RecordingStatusRequest,
-) (recordings.RecordingStatusResult, error) {
-	service.lifecycleMu.Lock()
-	defer service.lifecycleMu.Unlock()
-	session, err := service.lifecycleSessionLocked(request.RecordingID)
-	if err != nil {
-		return recordings.RecordingStatusResult{}, err
-	}
-	return recordings.RecordingStatusResult{
-		Status: recordingStatus(request.RecordingID, session),
-	}, nil
-}
-
-func validRecordingEvent(
-	session *lifecycleRecordingSession,
-	event recordings.CanonicalEvent,
-) bool {
-	if !validAppendEvent(event) || event.Scope != session.scope ||
-		event.Sequence < 0 || event.Cursor.StreamGenerationID == "" ||
-		event.Cursor.Sequence != event.Sequence {
-		return false
-	}
-	if len(session.events) == 0 {
-		return true
-	}
-	previous := session.events[len(session.events)-1]
-	return event.Cursor.StreamGenerationID == previous.Cursor.StreamGenerationID &&
-		event.Sequence > previous.Sequence
-}
-
-func recordingStatus(
-	id recordings.RecordingID,
-	session *lifecycleRecordingSession,
-) recordings.RecordingStatusFacts {
-	state := recordings.RecordingActive
-	if len(session.failures) > 0 {
-		state = recordings.RecordingFailed
-	} else if session.finalizedAt != nil {
-		state = recordings.RecordingFinalized
-	}
-	status := recordings.RecordingStatusFacts{
-		RecordingID:    id,
-		Artifact:       session.artifact,
-		Scope:          session.scope,
-		State:          state,
-		AcceptedEvents: len(session.events),
-		Failures:       append([]recordings.RecordingFailure(nil), session.failures...),
-	}
-	if len(session.events) > 0 {
-		cursor := session.events[len(session.events)-1].Cursor
-		status.LastEvent = &cursor
-	}
-	if session.flushedThrough != nil {
-		cursor := *session.flushedThrough
-		status.FlushedThrough = &cursor
-	}
-	if session.finalizedAt != nil {
-		finalizedAt := *session.finalizedAt
-		status.FinalizedAt = &finalizedAt
-	}
-	return status
-}
-
 func (service *combinedService) replayArtifactKey(request recordings.LoadReplayArtifactRequest) string {
 	if id := strings.TrimSpace(request.ArtifactID); id != "" {
 		return id
@@ -592,24 +386,21 @@ func (service *combinedService) BindReplayExecution(
 func (service *combinedService) LoadReplayRecording(
 	request recordings.LoadReplayRecordingRequest,
 ) (recordings.LoadReplayRecordingResult, error) {
-	id := strings.TrimSpace(string(request.RecordingID))
-	if id == "" {
+	snapshot, err := service.Snapshot(request.RecordingID)
+	if errors.Is(err, recordings.ErrMissingRecordingTarget) {
 		return recordings.LoadReplayRecordingResult{}, recordings.ErrReplayRecordingNotFound
 	}
-	service.lifecycleMu.Lock()
-	defer service.lifecycleMu.Unlock()
-	session, ok := service.lifecycleByID[id]
-	if !ok {
-		return recordings.LoadReplayRecordingResult{}, recordings.ErrReplayRecordingNotFound
+	if err != nil {
+		return recordings.LoadReplayRecordingResult{}, err
 	}
-	if session.finalizedAt == nil {
+	if snapshot.Status.FinalizedAt == nil {
 		return recordings.LoadReplayRecordingResult{}, recordings.ErrReplayRecordingNotFinalized
 	}
 	return recordings.LoadReplayRecordingResult{
 		Recording: recordings.ReplayRecordingFacts{
-			RecordingID: recordings.RecordingID(id),
-			Scope:       session.scope,
-			Events:      append([]recordings.CanonicalEvent(nil), session.events...),
+			RecordingID: request.RecordingID,
+			Scope:       snapshot.Status.Scope,
+			Events:      append([]recordings.CanonicalEvent(nil), snapshot.Events...),
 		},
 	}, nil
 }
@@ -734,6 +525,35 @@ func replayPlanDivergence(
 func NewService(
 	ledger recordings.Ledger,
 	projection recordings.ProjectionService,
+	targets ...recordings.LiveRecordingTargetPlanner,
+) recordings.Service {
+	return NewServiceWithLifecycleEffects(
+		ledger,
+		projection,
+		firstTargetPlanner(targets),
+		nil,
+		nil,
+	)
+}
+
+func firstTargetPlanner(
+	targets []recordings.LiveRecordingTargetPlanner,
+) recordings.LiveRecordingTargetPlanner {
+	if len(targets) == 0 {
+		return nil
+	}
+	return targets[0]
+}
+
+// NewServiceWithLifecycleEffects constructs the Recordings root with the exact
+// active-flush persistence and scheduling effects selected by Wire.
+func NewServiceWithLifecycleEffects(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targetPlanner recordings.LiveRecordingTargetPlanner,
+	writer recordings.RecordingSnapshotWriter,
+	tickers recordings.RecordingFlushTickerFactory,
+	clocks ...recordings.RecordingClock,
 ) recordings.Service {
 	if ledger == nil || projection == nil {
 		return nil
@@ -741,8 +561,14 @@ func NewService(
 	return &combinedService{
 		Ledger:            ledger,
 		ProjectionService: projection,
-		replayByKey:       make(map[string]*factorydefinitions.ReplayArtifact),
-		replayPlans:       make(map[recordings.ReplayPlanHandle]*neutralReplayPlan),
+		Service: recordinglifecyclewire.NewService(
+			targetPlanner,
+			writer,
+			tickers,
+			clocks...,
+		),
+		replayByKey: make(map[string]*factorydefinitions.ReplayArtifact),
+		replayPlans: make(map[recordings.ReplayPlanHandle]*neutralReplayPlan),
 	}
 }
 

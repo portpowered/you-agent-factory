@@ -514,19 +514,21 @@ func assertRecordingLifecycleBindingCollision(t *testing.T, svc recordings.Servi
 	active := recordingLifecycleStatus(t, svc, request.RecordingID)
 	assertServiceBindingCollision(t, svc, request, active, "active")
 
+	producerErr := errors.New("preserve this failure")
 	if _, err := svc.RecordRecordingError(recordings.RecordRecordingErrorRequest{
 		RecordingID: request.RecordingID,
 		Failure: recordings.RecordingFailure{
 			Code: "producer_failed", Message: "preserve this failure",
 		},
+		Cause: producerErr,
 	}); err != nil {
 		t.Fatalf("RecordRecordingError stable: %v", err)
 	}
 	if _, err := svc.FinishRecording(recordings.FinishRecordingRequest{
 		RecordingID: request.RecordingID,
 		FinishedAt:  time.Unix(1_700_000_100, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording stable: %v", err)
+	}); !errors.Is(err, producerErr) {
+		t.Fatalf("FinishRecording stable error = %v, want producer cause", err)
 	}
 	terminal := recordingLifecycleStatus(t, svc, request.RecordingID)
 	if terminal.State != recordings.RecordingFailed || terminal.FinalizedAt == nil {

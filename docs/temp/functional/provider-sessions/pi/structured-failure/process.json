@@ -1,0 +1,21 @@
+{
+  "argv": [
+    "pi",
+    "--print",
+    "--mode",
+    "json",
+    "--approve",
+    "--model",
+    "anthropic/claude-sonnet-4",
+    "--session",
+    "pi-session-structured-failure"
+  ],
+  "provider": "pi",
+  "model": "anthropic/claude-sonnet-4",
+  "exitCode": 1,
+  "stdoutStream": true,
+  "stderrStream": false,
+  "workingDirectoryRole": "factory-root",
+  "timeoutCancelClass": "none",
+  "terminalErrorClass": "structured"
+}
