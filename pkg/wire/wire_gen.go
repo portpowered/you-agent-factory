@@ -159,6 +159,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
+	idGenerator := provideFactoryRuntimeIDGenerator(edges2)
+	orchestrationJavaScriptExecution := provideOrchestrationJavaScriptExecution(idGenerator, javaScriptWorkflows)
 	writer, err := providePortableRecordingWriter(edges2)
 	if err != nil {
 		return nil, err
@@ -173,7 +175,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	v24 := provideWorkerCommandRunnerAdapter()
-	v25 := provideFactorySessionExecutionFactory(javaScriptWorkflows, writer, v20, v21, v15, responseEventIDGenerator, v22, v23, ptyAllocator, v24, edges2)
+	v25 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, writer, v20, v21, v15, responseEventIDGenerator, v22, v23, ptyAllocator, v24, edges2)
 	v26 := provideRecordingsProjectionFactory()
 	storage := provideReplayArtifactStorage()
 	v27 := provideRecordingsFactory(liveRecordingTargetPlanner, storage)
@@ -250,7 +252,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	idGenerator := provideFactoryRuntimeIDGenerator(edges2)
 	requestIDGenerator := provideWorkRequestIDGenerator(edges2)
 	runtimeDirectoryFileSystem := provideFactoryRuntimeDirectories(edges2)
 	inputFileSystem := provideFactoryRuntimeInputs(edges2)
@@ -334,7 +335,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	v50 := provideFactorySessionContractFixtureReader(edges2)
-	v51 := provideStandaloneSessionExecutionFactory(javaScriptWorkflows, writer, v20, v21, v15, v50)
+	v51 := provideStandaloneSessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, writer, v20, v21, v15, v50)
 	runtimeArtifactRootResolver := provideRuntimeArtifactRootResolver()
 	v52 := provideFactorySessionExecutionOpeningFileSystem(edges2)
 	logger, err := logging.NewDefaultLogger()
@@ -617,6 +618,7 @@ var servicesSet = wire2.NewSet(
 	provideAutomationFactory,
 	provideFactorySessionsService,
 	providePortableRecordingWriter,
+	provideOrchestrationJavaScriptExecution,
 	provideFactorySessionExecutionFactory,
 	provideRecordingsProjectionFactory,
 	provideRecordingsFactory,

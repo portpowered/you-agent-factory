@@ -326,7 +326,7 @@ func (s *JavaScriptRuntimeService) runResumedAsyncSession(
 		s.mu.Unlock()
 	}()
 
-	resumeContext := s.workflowRuntime.ResumeContext(
+	resumeContext := s.orchestration.ResumeJavaScript(
 		workflowresult.JavaScriptCompletedCheckpointSummary{
 			CompletedDispatchIDs: checkpointSummary.CompletedDispatchIDs,
 			CheckpointState:      checkpointSummary.CheckpointState,
@@ -397,7 +397,7 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntimeWithResume(
 	if err != nil {
 		return workflowresult.JavaScriptRuntimeOutcome{}, err
 	}
-	return s.workflowRuntime.Run(ctx, workflowresult.JavaScriptRuntimeRequest{
+	return s.orchestration.RunJavaScript(ctx, workflowresult.JavaScriptRuntimeRequest{
 		Source:     sourceContent,
 		SourceRef:  resolved.SourceRef,
 		SessionID:  sessionID,

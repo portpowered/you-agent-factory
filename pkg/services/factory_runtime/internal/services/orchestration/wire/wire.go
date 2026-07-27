@@ -8,10 +8,11 @@ import (
 	internalservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/internal/service"
 )
 
-// New constructs the inert orchestration kind selector and definition compiler.
+// New constructs the parent-private orchestration owner.
 func New(
 	newID factoryruntime.IDGenerator,
 	workflows factoryruntime.JavaScriptWorkflowDefinitions,
+	runtime factoryruntime.JavaScriptWorkflowRuntime,
 ) orchestration.Service {
-	return internalservice.New(newID, workflows)
+	return internalservice.New(newID, workflows, runtime)
 }

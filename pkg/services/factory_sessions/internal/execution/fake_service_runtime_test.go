@@ -64,7 +64,7 @@ func newConfiguredJavaScriptRuntimeService(config javaScriptRuntimeServiceConfig
 			BuildResult:  checkpointfixtures.ResumableCheckpointSummaryResult(),
 			LatestResult: checkpointfixtures.ResumableCheckpointSummaryResult(),
 		},
-		workflows, workflows, workflows,
+		workflows, orchestrationJavaScriptFromWorkflows(workflows), workflows,
 		nil, factory.JavaScriptWorkerSettings{}, mustTestRecordingWriter(),
 		testSessionIDGenerator,
 		nil, nil, nil,
@@ -3869,4 +3869,30 @@ func (localWorkflowSourceFilesForExecutionTest) ReadFile(path string) ([]byte, e
 }
 func (localWorkflowSourceFilesForExecutionTest) Stat(path string) (os.FileInfo, error) {
 	return os.Stat(path)
+}
+
+type orchestrationJavaScriptAdapter struct {
+	factory.JavaScriptWorkflowRuntime
+}
+
+func orchestrationJavaScriptFromWorkflows(workflows factory.JavaScriptWorkflows) factory.OrchestrationJavaScriptExecution {
+	if workflows == nil {
+		return nil
+	}
+	return orchestrationJavaScriptAdapter{workflows}
+}
+
+func (a orchestrationJavaScriptAdapter) RunJavaScript(
+	ctx context.Context,
+	req factory.JavaScriptRuntimeRequest,
+	hooks factory.JavaScriptRuntimeHooks,
+) (factory.JavaScriptRuntimeOutcome, error) {
+	return a.Run(ctx, req, hooks)
+}
+
+func (a orchestrationJavaScriptAdapter) ResumeJavaScript(
+	summary factory.JavaScriptCompletedCheckpointSummary,
+	records []factory.JavaScriptRuntimeRecord,
+) factory.JavaScriptResumeContext {
+	return a.ResumeContext(summary, records)
 }

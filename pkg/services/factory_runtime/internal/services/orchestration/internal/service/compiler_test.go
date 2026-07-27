@@ -25,7 +25,7 @@ workflow.final("ok");
 func TestCompileSelectsPetriKindForLegacyDefinition(t *testing.T) {
 	t.Parallel()
 
-	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows())
+	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	result, err := compiler.Compile(context.Background(), orchestration.CompileRequest{
 		Config: minimalPetriFactoryConfig(),
 	})
@@ -43,7 +43,7 @@ func TestCompileSelectsPetriKindForLegacyDefinition(t *testing.T) {
 func TestCompileSelectsJavaScriptKindForInlineWorkflow(t *testing.T) {
 	t.Parallel()
 
-	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows())
+	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	result, err := compiler.Compile(context.Background(), orchestration.CompileRequest{
 		Config: minimalJavaScriptFactoryConfig(validInlineWorkflowSource),
 	})
@@ -61,7 +61,7 @@ func TestCompileSelectsJavaScriptKindForInlineWorkflow(t *testing.T) {
 func TestCompileRejectsUnsupportedOrchestrationKind(t *testing.T) {
 	t.Parallel()
 
-	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows())
+	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	_, err := compiler.Compile(context.Background(), orchestration.CompileRequest{
 		Config: &factorydefinitions.FactoryConfig{
 			Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
@@ -75,7 +75,7 @@ func TestCompileRejectsUnsupportedOrchestrationKind(t *testing.T) {
 func TestCompileRejectsMissingActivatedDefinition(t *testing.T) {
 	t.Parallel()
 
-	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows())
+	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	_, err := compiler.Compile(context.Background(), orchestration.CompileRequest{})
 	assertCompileError(t, err, orchestration.ErrDefinitionUnavailable, "ORCHESTRATION_DEFINITION_UNAVAILABLE")
 }
@@ -83,7 +83,7 @@ func TestCompileRejectsMissingActivatedDefinition(t *testing.T) {
 func TestCompileRejectsPetriCompileWithoutIDGenerator(t *testing.T) {
 	t.Parallel()
 
-	compiler := internalservice.New(nil, testJavaScriptWorkflows())
+	compiler := internalservice.New(nil, testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	_, err := compiler.Compile(context.Background(), orchestration.CompileRequest{
 		Config: minimalPetriFactoryConfig(),
 	})
@@ -93,7 +93,7 @@ func TestCompileRejectsPetriCompileWithoutIDGenerator(t *testing.T) {
 func TestCompileRejectsInvalidJavaScriptInlineSource(t *testing.T) {
 	t.Parallel()
 
-	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows())
+	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	_, err := compiler.Compile(context.Background(), orchestration.CompileRequest{
 		Config: minimalJavaScriptFactoryConfig(`workflow.final("ok");\nphase("setup";\n`),
 	})
@@ -115,7 +115,7 @@ func TestCompileRejectsInvalidJavaScriptInlineSource(t *testing.T) {
 func TestCompileRejectsJavaScriptMissingSource(t *testing.T) {
 	t.Parallel()
 
-	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows())
+	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	_, err := compiler.Compile(context.Background(), orchestration.CompileRequest{
 		Config: &factorydefinitions.FactoryConfig{
 			Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
@@ -130,7 +130,7 @@ func TestCompileRejectsJavaScriptMissingSource(t *testing.T) {
 func TestCompileIsInertAndDoesNotRequireRuntimeSideEffects(t *testing.T) {
 	t.Parallel()
 
-	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows())
+	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	result, err := compiler.Compile(context.Background(), orchestration.CompileRequest{
 		Config: minimalPetriFactoryConfig(),
 	})

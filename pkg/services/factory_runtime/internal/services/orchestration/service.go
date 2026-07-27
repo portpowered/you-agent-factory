@@ -86,8 +86,17 @@ type CompileResult struct {
 	Binding Binding
 }
 
-// Service owns orchestration kind selection and activated-definition
-// compilation for private Petri and JavaScript variants.
+// Service owns orchestration kind selection, activated-definition compilation,
+// and private-variant execute/resume for Petri and JavaScript orchestration.
 type Service interface {
 	Compile(context.Context, CompileRequest) (CompileResult, error)
+	RunJavaScript(
+		context.Context,
+		factoryruntime.JavaScriptRuntimeRequest,
+		factoryruntime.JavaScriptRuntimeHooks,
+	) (factoryruntime.JavaScriptRuntimeOutcome, error)
+	ResumeJavaScript(
+		factoryruntime.JavaScriptCompletedCheckpointSummary,
+		[]factoryruntime.JavaScriptRuntimeRecord,
+	) factoryruntime.JavaScriptResumeContext
 }

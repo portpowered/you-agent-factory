@@ -46,6 +46,7 @@ func TestProvideFactorySessionExecutionFactory_RespectsMockWorkersGate(t *testin
 	adaptRunner := provideWorkerCommandRunnerAdapter()
 	factory := provideFactorySessionExecutionFactory(
 		workflows,
+		provideOrchestrationJavaScriptExecution(provideFactoryRuntimeIDGenerator(edges), workflows),
 		writer,
 		stores,
 		syncWaits,

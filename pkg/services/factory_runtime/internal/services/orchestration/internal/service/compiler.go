@@ -20,21 +20,57 @@ const (
 	diagnosticCodeJavaScriptMissingSource = "ORCHESTRATION_JAVASCRIPT_MISSING_SOURCE"
 )
 
-// Compiler selects orchestration kind and compiles activated definitions without
-// starting runtime loops or touching Workers/checkpoint ports.
+// Compiler selects orchestration kind, compiles activated definitions, and
+// drives private JavaScript execute/resume without exposing VM internals.
 type Compiler struct {
 	newID     factoryruntime.IDGenerator
 	workflows factoryruntime.JavaScriptWorkflowDefinitions
+	runtime   factoryruntime.JavaScriptWorkflowRuntime
 }
 
 var _ orchestration.Service = (*Compiler)(nil)
+var _ factoryruntime.OrchestrationJavaScriptExecution = (*Compiler)(nil)
 
-// New constructs an inert orchestration compiler.
+// New constructs the parent-private orchestration owner.
 func New(
 	newID factoryruntime.IDGenerator,
 	workflows factoryruntime.JavaScriptWorkflowDefinitions,
+	runtime factoryruntime.JavaScriptWorkflowRuntime,
 ) *Compiler {
-	return &Compiler{newID: newID, workflows: workflows}
+	return &Compiler{newID: newID, workflows: workflows, runtime: runtime}
+}
+
+// RunJavaScript executes one JavaScript orchestration variant through the
+// private runtime while preserving Runtime-facing outcome vocabulary.
+func (c *Compiler) RunJavaScript(
+	ctx context.Context,
+	request factoryruntime.JavaScriptRuntimeRequest,
+	hooks factoryruntime.JavaScriptRuntimeHooks,
+) (factoryruntime.JavaScriptRuntimeOutcome, error) {
+	if c == nil || c.runtime == nil {
+		return factoryruntime.JavaScriptRuntimeOutcome{}, compileError(
+			orchestration.ErrInvalidDefinition,
+			orchestration.KindJavaScript,
+			orchestration.Diagnostic{
+				Code:    diagnosticCodeInvalidDefinition,
+				Message: "JavaScript orchestration runtime is required",
+				Path:    "orchestration.javascript.run",
+			},
+		)
+	}
+	return c.runtime.Run(ctx, request, hooks)
+}
+
+// ResumeJavaScript rebuilds private resume state for a JavaScript orchestration
+// variant without requiring peers to import VM internals.
+func (c *Compiler) ResumeJavaScript(
+	summary factoryruntime.JavaScriptCompletedCheckpointSummary,
+	records []factoryruntime.JavaScriptRuntimeRecord,
+) factoryruntime.JavaScriptResumeContext {
+	if c == nil || c.runtime == nil {
+		return factoryruntime.JavaScriptResumeContext{}
+	}
+	return c.runtime.ResumeContext(summary, records)
 }
 
 // Compile selects the authored orchestration kind and produces a runnable binding.
