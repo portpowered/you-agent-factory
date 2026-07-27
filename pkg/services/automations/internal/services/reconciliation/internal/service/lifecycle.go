@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 
@@ -15,6 +14,7 @@ type sourceRecord struct {
 	kind        string
 	desired     automations.DesiredLifecycleState
 	observation automations.SourceObservation
+	terminalErr error
 }
 
 func (s *service) StartSource(
@@ -23,6 +23,14 @@ func (s *service) StartSource(
 ) (automations.StartSourceResult, error) {
 	if err := validateStartRequest(request); err != nil {
 		return automations.StartSourceResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		observation := pendingObservation(request.Identity)
+		return automations.StartSourceResult{
+			Outcome: cancelledLifecycleOutcome(
+				automations.DesiredLifecycleRunning, observation, false,
+			),
+		}, cancelledOperationError("StartSource", err)
 	}
 	record, err := s.recordForStart(request)
 	if err != nil {
@@ -36,6 +44,13 @@ func (s *service) StartSource(
 			"StartSource", automations.ErrorCodeConflict, automations.ErrConflict,
 			"source kind differs from the authoritative source",
 		)
+	}
+	if err := ctx.Err(); err != nil {
+		return automations.StartSourceResult{
+			Outcome: cancelledLifecycleOutcome(
+				automations.DesiredLifecycleRunning, record.observation, false,
+			),
+		}, cancelledOperationError("StartSource", err)
 	}
 
 	switch record.observation.State {
@@ -58,6 +73,14 @@ func (s *service) StartSource(
 				true,
 			),
 		}, nil
+	case automations.ObservedLifecycleFailed, automations.ObservedLifecycleCancelled:
+		if record.desired == automations.DesiredLifecycleRunning {
+			return automations.StartSourceResult{
+				Outcome: terminalLifecycleOutcome(
+					record.desired, record.observation, true,
+				),
+			}, record.terminalErr
+		}
 	}
 
 	if s.effects.Start == nil {
@@ -67,10 +90,14 @@ func (s *service) StartSource(
 		Kind:        record.kind,
 		Observation: record.observation,
 	}); err != nil {
-		return automations.StartSourceResult{}, err
+		outcome, terminalErr := recordEffectFailure(
+			"StartSource", automations.DesiredLifecycleRunning, record, err,
+		)
+		return automations.StartSourceResult{Outcome: outcome}, terminalErr
 	}
 	record.desired = automations.DesiredLifecycleRunning
 	record.observation.State = automations.ObservedLifecycleStarting
+	record.terminalErr = nil
 	return automations.StartSourceResult{
 		Outcome: lifecycleOutcome(
 			record.desired,
@@ -100,6 +127,13 @@ func (s *service) StopSource(
 
 	record.mu.Lock()
 	defer record.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return automations.StopSourceResult{
+			Outcome: cancelledLifecycleOutcome(
+				automations.DesiredLifecycleStopped, record.observation, false,
+			),
+		}, cancelledOperationError("StopSource", err)
+	}
 	switch record.observation.State {
 	case automations.ObservedLifecycleStopped:
 		return automations.StopSourceResult{
@@ -119,6 +153,14 @@ func (s *service) StopSource(
 				true,
 			),
 		}, nil
+	case automations.ObservedLifecycleFailed, automations.ObservedLifecycleCancelled:
+		if record.desired == automations.DesiredLifecycleStopped {
+			return automations.StopSourceResult{
+				Outcome: terminalLifecycleOutcome(
+					record.desired, record.observation, true,
+				),
+			}, record.terminalErr
+		}
 	}
 
 	if s.effects.Stop == nil {
@@ -127,10 +169,14 @@ func (s *service) StopSource(
 	if err := s.effects.Stop(ctx, reconciliation.StopEffect{
 		Observation: record.observation,
 	}); err != nil {
-		return automations.StopSourceResult{}, err
+		outcome, terminalErr := recordEffectFailure(
+			"StopSource", automations.DesiredLifecycleStopped, record, err,
+		)
+		return automations.StopSourceResult{Outcome: outcome}, terminalErr
 	}
 	record.desired = automations.DesiredLifecycleStopped
 	record.observation.State = automations.ObservedLifecycleStopping
+	record.terminalErr = nil
 	return automations.StopSourceResult{
 		Outcome: lifecycleOutcome(
 			record.desired,
@@ -160,6 +206,13 @@ func (s *service) WaitSource(
 
 	record.mu.Lock()
 	defer record.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return automations.WaitSourceResult{
+			Outcome: cancelledLifecycleOutcome(
+				request.Desired, record.observation, false,
+			),
+		}, cancelledOperationError("WaitSource", err)
+	}
 	if desiredMatches(request.Desired, record.observation.State) {
 		return automations.WaitSourceResult{
 			Outcome: lifecycleOutcome(
@@ -170,6 +223,13 @@ func (s *service) WaitSource(
 			),
 		}, nil
 	}
+	if terminalConvergence(record.observation.State) != "" {
+		return automations.WaitSourceResult{
+			Outcome: terminalLifecycleOutcome(
+				request.Desired, record.observation, true,
+			),
+		}, record.terminalErr
+	}
 	if s.effects.Wait == nil {
 		return automations.WaitSourceResult{}, unavailableEffectsError("WaitSource")
 	}
@@ -179,19 +239,26 @@ func (s *service) WaitSource(
 		Observation: record.observation,
 	})
 	if err != nil {
-		return automations.WaitSourceResult{}, err
+		outcome, terminalErr := recordEffectFailure(
+			"WaitSource", request.Desired, record, err,
+		)
+		return automations.WaitSourceResult{Outcome: outcome}, terminalErr
 	}
 	if err := validateEffectObservation(record.observation, observation); err != nil {
 		return automations.WaitSourceResult{}, err
 	}
 	record.observation = observation
-	convergence := automations.ConvergenceStatusProgressing
+	record.terminalErr = observationTerminalError("WaitSource", observation.State)
+	convergence := terminalConvergence(observation.State)
+	if convergence == "" {
+		convergence = automations.ConvergenceStatusProgressing
+	}
 	if desiredMatches(request.Desired, observation.State) {
 		convergence = automations.ConvergenceStatusConverged
 	}
 	return automations.WaitSourceResult{
 		Outcome: lifecycleOutcome(request.Desired, observation, convergence, false),
-	}, nil
+	}, record.terminalErr
 }
 
 func (s *service) SourceStatus(
@@ -229,11 +296,7 @@ func (s *service) recordForStart(
 		return existing, nil
 	}
 
-	observation := automations.SourceObservation{
-		Identity:   request.Identity,
-		InstanceID: stableInstanceID(request.Identity.AutomationID, request.Identity.SourceID),
-		State:      automations.ObservedLifecyclePending,
-	}
+	observation := pendingObservation(request.Identity)
 	if request.Resume != nil {
 		observation = *request.Resume
 	}
@@ -300,44 +363,4 @@ func desiredMatches(
 		observed == automations.ObservedLifecycleRunning ||
 		desired == automations.DesiredLifecycleStopped &&
 			observed == automations.ObservedLifecycleStopped
-}
-
-func lifecycleOutcome(
-	desired automations.DesiredLifecycleState,
-	observation automations.SourceObservation,
-	convergence automations.ConvergenceStatus,
-	idempotent bool,
-) automations.LifecycleOutcome {
-	return automations.LifecycleOutcome{
-		Desired:     desired,
-		Observation: observation,
-		Convergence: convergence,
-		Idempotent:  idempotent,
-	}
-}
-
-func invalidOperationError(op, reason string) *automations.Error {
-	return operationError(
-		op, automations.ErrorCodeInvalid, automations.ErrInvalidRequest, reason,
-	)
-}
-
-func unavailableEffectsError(op string) *automations.Error {
-	return operationError(
-		op, automations.ErrorCodeNotReady, automations.ErrNotReady,
-		"source supervision effects are not configured",
-	)
-}
-
-func operationError(
-	op string,
-	code automations.ErrorCode,
-	sentinel error,
-	reason string,
-) *automations.Error {
-	return &automations.Error{
-		Op:   op,
-		Code: code,
-		Err:  fmt.Errorf("%w: %s", sentinel, reason),
-	}
 }

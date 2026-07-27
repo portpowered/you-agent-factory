@@ -258,6 +258,9 @@ type recordingEffects struct {
 	waits      []reconciliation.WaitEffect
 	waitStates []automations.ObservedLifecycleState
 	events     []string
+	startErr   error
+	stopErr    error
+	waitErr    error
 }
 
 func (f *recordingEffects) bundle() reconciliation.Effects {
@@ -273,7 +276,7 @@ func (f *recordingEffects) Start(_ context.Context, effect reconciliation.StartE
 	defer f.mu.Unlock()
 	f.starts = append(f.starts, effect)
 	f.events = append(f.events, "start")
-	return nil
+	return f.startErr
 }
 
 func (f *recordingEffects) Stop(_ context.Context, effect reconciliation.StopEffect) error {
@@ -281,7 +284,7 @@ func (f *recordingEffects) Stop(_ context.Context, effect reconciliation.StopEff
 	defer f.mu.Unlock()
 	f.stops = append(f.stops, effect)
 	f.events = append(f.events, "stop")
-	return nil
+	return f.stopErr
 }
 
 func (f *recordingEffects) Wait(
@@ -292,6 +295,9 @@ func (f *recordingEffects) Wait(
 	defer f.mu.Unlock()
 	f.waits = append(f.waits, effect)
 	f.events = append(f.events, "wait")
+	if f.waitErr != nil {
+		return automations.SourceObservation{}, f.waitErr
+	}
 	observation := effect.Observation
 	if len(f.waitStates) > 0 {
 		observation.State = f.waitStates[0]
