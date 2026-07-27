@@ -8,6 +8,7 @@ type PackagedFactoryFormat = contracts.PackagedFactoryFormat
 const (
 	PackagedFactoryFormatJSON = contracts.PackagedFactoryFormatJSON
 	PackagedFactoryFormatYAML = contracts.PackagedFactoryFormatYAML
+	PackagedFactoryFormatYML  = contracts.PackagedFactoryFormatYML
 )
 
 // PackagedGoalPromptFileSystem is the exact filesystem effect used by the

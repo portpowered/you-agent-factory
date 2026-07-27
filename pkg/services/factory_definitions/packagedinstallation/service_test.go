@@ -2,10 +2,14 @@ package packagedinstallation
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
@@ -129,5 +133,245 @@ func TestEnsurePackagedFactories_FailsClosedWithoutFileSystem(t *testing.T) {
 	)
 	if err == nil || !strings.Contains(err.Error(), "installation filesystem is required") {
 		t.Fatalf("EnsurePackagedFactories() error = %v", err)
+	}
+}
+
+func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T) {
+	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	if err != nil {
+		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
+	}
+	definition, ok := catalog.Lookup("@you/deep-research")
+	if !ok {
+		t.Fatal("published catalog is missing @you/deep-research")
+	}
+	tests := []struct {
+		format   factorydefinitions.PackagedFactoryFormat
+		rootFile string
+	}{
+		{format: factorydefinitions.PackagedFactoryFormatJSON, rootFile: "factory.json"},
+		{format: factorydefinitions.PackagedFactoryFormatYAML, rootFile: "factory.yaml"},
+		{format: factorydefinitions.PackagedFactoryFormatYML, rootFile: "factory.yml"},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(string(test.format), func(t *testing.T) {
+			root := t.TempDir()
+			result, installErr := New(
+				packagedInstallationTestPersistence(),
+				platformfilesystem.Local{},
+			).InstallPackagedFactory(t.Context(), root, definition, test.format)
+			if installErr != nil {
+				t.Fatalf("InstallPackagedFactory() error = %v", installErr)
+			}
+			if result.Outcome != factorydefinitions.PackagedFactoryInstallCreated ||
+				result.Format != test.format {
+				t.Fatalf("InstallPackagedFactory() = %#v", result)
+			}
+			assertSingleAuthoredRoot(t, result.FactoryDir, test.rootFile)
+			assertDeepResearchScript(t, definition, result.FactoryDir)
+			assertPortableMaterializedContent(t, result.FactoryDir)
+			assertCustomerEditIsLoaded(t, result.FactoryDir, test.rootFile)
+		})
+	}
+}
+
+func TestInstallPackagedFactory_DefaultsToJSONAndRejectsUnsupportedFormat(t *testing.T) {
+	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	if err != nil {
+		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
+	}
+	definition, ok := catalog.Lookup("@you/goal")
+	if !ok {
+		t.Fatal("published catalog is missing @you/goal")
+	}
+	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{})
+	root := t.TempDir()
+	result, err := installer.InstallPackagedFactory(
+		t.Context(),
+		root,
+		definition,
+		"",
+	)
+	if err != nil {
+		t.Fatalf("default InstallPackagedFactory() error = %v", err)
+	}
+	if result.Format != factorydefinitions.PackagedFactoryFormatJSON {
+		t.Fatalf("default format = %q", result.Format)
+	}
+	assertSingleAuthoredRoot(t, result.FactoryDir, "factory.json")
+
+	unsupportedRoot := t.TempDir()
+	_, err = installer.InstallPackagedFactory(
+		t.Context(),
+		unsupportedRoot,
+		definition,
+		factorydefinitions.PackagedFactoryFormat("TOML"),
+	)
+	if err == nil || !strings.Contains(err.Error(), `unsupported packaged Factory format "TOML"`) {
+		t.Fatalf("unsupported format error = %v", err)
+	}
+	entries, readErr := os.ReadDir(unsupportedRoot)
+	if readErr != nil {
+		t.Fatalf("ReadDir() error = %v", readErr)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("unsupported format created entries: %v", entries)
+	}
+}
+
+func TestInstallPackagedFactory_MaterializesEveryPublishedFactory(t *testing.T) {
+	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	if err != nil {
+		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
+	}
+	for _, definition := range catalog.All() {
+		definition := definition
+		t.Run(definition.Name, func(t *testing.T) {
+			result, installErr := New(
+				packagedInstallationTestPersistence(),
+				platformfilesystem.Local{},
+			).InstallPackagedFactory(
+				t.Context(),
+				t.TempDir(),
+				definition,
+				factorydefinitions.PackagedFactoryFormatJSON,
+			)
+			if installErr != nil {
+				t.Fatalf("InstallPackagedFactory() error = %v", installErr)
+			}
+			if result.Name != definition.Name ||
+				result.Outcome != factorydefinitions.PackagedFactoryInstallCreated {
+				t.Fatalf("InstallPackagedFactory() = %#v", result)
+			}
+			if _, loadErr := factorydefinitioncomposition.LoadDirectory(
+				result.FactoryDir,
+				nil,
+			); loadErr != nil {
+				t.Fatalf("load materialized Factory: %v", loadErr)
+			}
+		})
+	}
+}
+
+func assertSingleAuthoredRoot(t *testing.T, factoryDir, want string) {
+	t.Helper()
+	for _, rootFile := range []string{"factory.json", "factory.yaml", "factory.yml"} {
+		_, err := os.Stat(filepath.Join(factoryDir, rootFile))
+		if rootFile == want {
+			if err != nil {
+				t.Fatalf("stat selected root %s: %v", rootFile, err)
+			}
+			continue
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("unexpected authored root %s: %v", rootFile, err)
+		}
+	}
+	if _, err := factorydefinitioncomposition.LoadDirectory(factoryDir, nil); err != nil {
+		t.Fatalf("load materialized Factory: %v", err)
+	}
+}
+
+func assertDeepResearchScript(
+	t *testing.T,
+	definition factorydefinitions.PackagedDefinition,
+	factoryDir string,
+) {
+	t.Helper()
+	var published struct {
+		SupportingFiles struct {
+			BundledFiles []struct {
+				TargetPath string `json:"targetPath"`
+				Content    struct {
+					Inline string `json:"inline"`
+				} `json:"content"`
+			} `json:"bundledFiles"`
+		} `json:"supportingFiles"`
+	}
+	if err := json.Unmarshal(definition.JSON, &published); err != nil {
+		t.Fatalf("decode published definition: %v", err)
+	}
+	if len(published.SupportingFiles.BundledFiles) == 0 {
+		t.Fatal("published definition has no bundled assets")
+	}
+	for _, bundled := range published.SupportingFiles.BundledFiles {
+		relativePath := strings.TrimPrefix(bundled.TargetPath, "factory/")
+		content, err := os.ReadFile(filepath.Join(factoryDir, relativePath))
+		if err != nil {
+			t.Fatalf("read materialized asset %s: %v", relativePath, err)
+		}
+		if string(content) != bundled.Content.Inline {
+			t.Fatalf("materialized asset %s differs from published content", relativePath)
+		}
+	}
+}
+
+func assertPortableMaterializedContent(t *testing.T, factoryDir string) {
+	t.Helper()
+	err := filepath.WalkDir(factoryDir, func(
+		path string,
+		entry os.DirEntry,
+		walkErr error,
+	) error {
+		if walkErr != nil || entry.IsDir() {
+			return walkErr
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, forbidden := range []string{
+			"packages/packaged-factories",
+			"generated/factories",
+			"node_modules",
+			"npm ",
+		} {
+			if strings.Contains(string(content), forbidden) {
+				t.Fatalf("%s contains non-portable reference %q", path, forbidden)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk materialized Factory: %v", err)
+	}
+}
+
+func assertCustomerEditIsLoaded(t *testing.T, factoryDir, rootFile string) {
+	t.Helper()
+	path := filepath.Join(factoryDir, rootFile)
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read authored root: %v", err)
+	}
+	var edited []byte
+	if rootFile == "factory.json" {
+		edited = []byte(strings.Replace(
+			string(content),
+			`"name": "deep-research"`,
+			`"name": "customer-edited"`,
+			1,
+		))
+	} else {
+		edited = []byte(strings.Replace(
+			string(content),
+			"\nname: deep-research\n",
+			"\nname: customer-edited\n",
+			1,
+		))
+	}
+	if string(edited) == string(content) {
+		t.Fatalf("could not locate editable name in %s", rootFile)
+	}
+	if err := os.WriteFile(path, edited, 0o644); err != nil {
+		t.Fatalf("write customer edit: %v", err)
+	}
+	loaded, err := factorydefinitioncomposition.LoadDirectory(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("load customer-edited Factory: %v", err)
+	}
+	if loaded.FactoryConfig().Name != "customer-edited" {
+		t.Fatalf("loaded name = %q, want customer-edited", loaded.FactoryConfig().Name)
 	}
 }

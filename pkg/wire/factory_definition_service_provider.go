@@ -22,6 +22,7 @@ func provideFactoryDefinitionsFactory(
 	versionFileSystem factorydefinitions.VersionFileSystem,
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
+	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
 ) factorysessionwire.FactoryDefinitionsFactory {
 	return func(
 		sessionHost factorysessions.DefinitionHost,
@@ -58,6 +59,7 @@ func provideFactoryDefinitionsFactory(
 			namedPaths,
 			namedFactoryCatalogFileSystem,
 			packagedCatalog,
+			packagedInstaller,
 		)
 		if definitions == nil {
 			return nil

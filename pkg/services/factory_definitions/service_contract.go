@@ -597,6 +597,7 @@ func (operations PackagedFactoryCatalogOperations) ResolveBuiltInPackagedFactory
 type InstallPackagedFactoryRequest struct {
 	RootDir string
 	Name    string
+	Format  PackagedFactoryFormat
 }
 
 // InstallPackagedFactoryResult carries Definitions-owned distribute success
@@ -604,6 +605,32 @@ type InstallPackagedFactoryRequest struct {
 type InstallPackagedFactoryResult struct {
 	Definition DistributedFactoryDefinitionFacts
 	Outcome    PackagedFactoryInstallOutcome
+	Format     PackagedFactoryFormat
+}
+
+// PackagedFactoryInstallationOperations are the Definitions-owned write
+// operations used after catalog selection has returned a detached definition.
+type PackagedFactoryInstallationOperations struct {
+	Install func(
+		context.Context,
+		string,
+		PackagedDefinition,
+		PackagedFactoryFormat,
+	) (PackagedFactoryInstallResult, error)
+}
+
+func (operations PackagedFactoryInstallationOperations) InstallPackagedFactory(
+	ctx context.Context,
+	rootDir string,
+	definition PackagedDefinition,
+	format PackagedFactoryFormat,
+) (PackagedFactoryInstallResult, error) {
+	if operations.Install == nil {
+		return PackagedFactoryInstallResult{}, fmt.Errorf(
+			"packaged Factory installation collaborator is required",
+		)
+	}
+	return operations.Install(ctx, rootDir, definition, format)
 }
 
 // CreateFactoryScaffoldRequest creates one Factory scaffold under a target

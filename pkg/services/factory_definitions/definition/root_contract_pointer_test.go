@@ -95,3 +95,60 @@ func TestServiceDelegatesBuiltInCatalogThroughDefinitionsRoot(t *testing.T) {
 		t.Fatalf("ResolveBuiltInPackagedFactory() = %#v, %v", resolved, err)
 	}
 }
+
+func TestServiceResolvesThenInstallsBuiltInPackage(t *testing.T) {
+	t.Parallel()
+	var installed factoryroot.PackagedDefinition
+	var installedFormat factoryroot.PackagedFactoryFormat
+	svc := NewWithCatalogPackagesAndInstallation(
+		stubDefinitionHost{},
+		nil,
+		factoryroot.PackagedFactoryCatalogOperations{
+			List:    packagedCatalogStub{}.ListBuiltInPackagedFactories,
+			Resolve: packagedCatalogStub{}.ResolveBuiltInPackagedFactory,
+		},
+		factoryroot.PackagedFactoryInstallationOperations{
+			Install: func(
+				_ context.Context,
+				rootDir string,
+				definition factoryroot.PackagedDefinition,
+				format factoryroot.PackagedFactoryFormat,
+			) (factoryroot.PackagedFactoryInstallResult, error) {
+				if rootDir != "/customer/factories" {
+					t.Fatalf("rootDir = %q", rootDir)
+				}
+				installed = definition
+				installedFormat = format
+				return factoryroot.PackagedFactoryInstallResult{
+					Name:       definition.Name,
+					FactoryDir: "/customer/factories/@you/goal",
+					Outcome:    factoryroot.PackagedFactoryInstallCreated,
+					Format:     format,
+				}, nil
+			},
+		},
+	)
+
+	result, err := svc.InstallPackagedFactory(
+		t.Context(),
+		factoryroot.InstallPackagedFactoryRequest{
+			RootDir: "/customer/factories",
+			Name:    "@you/goal",
+			Format:  factoryroot.PackagedFactoryFormatYML,
+		},
+	)
+	if err != nil {
+		t.Fatalf("InstallPackagedFactory() error = %v", err)
+	}
+	if installed.Name != "@you/goal" ||
+		installed.Project != "builtin-goal" ||
+		installedFormat != factoryroot.PackagedFactoryFormatYML {
+		t.Fatalf("installation input = %#v, %q", installed, installedFormat)
+	}
+	if result.Definition.Name != "@you/goal" ||
+		result.Definition.FactoryDir != "/customer/factories/@you/goal" ||
+		result.Outcome != factoryroot.PackagedFactoryInstallCreated ||
+		result.Format != factoryroot.PackagedFactoryFormatYML {
+		t.Fatalf("InstallPackagedFactory() = %#v", result)
+	}
+}

@@ -30,10 +30,12 @@ func New(
 	namedPaths factoryroot.NamedPathResolver,
 	namedFactoryCatalogFileSystem factoryroot.NamedFactoryCatalogFileSystem,
 	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
+	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
 ) factoryroot.Service {
 	if sessionHost == nil || clock == nil || versionFileSystem == nil ||
 		namedPaths == nil || namedFactoryCatalogFileSystem == nil ||
-		packagedCatalog.List == nil || packagedCatalog.Resolve == nil {
+		packagedCatalog.List == nil || packagedCatalog.Resolve == nil ||
+		packagedInstaller.Install == nil {
 		return nil
 	}
 	host, err := factorydefinition.NewHost(
@@ -76,10 +78,11 @@ func New(
 		Paths:      namedPaths,
 		FileSystem: namedFactoryCatalogFileSystem,
 	})
-	definitions := factorydefinition.NewWithCatalogAndPackages(
+	definitions := factorydefinition.NewWithCatalogPackagesAndInstallation(
 		host,
 		catalogService,
 		packagedCatalog,
+		packagedInstaller,
 		versionFileSystem,
 	)
 	sessionHost.AttachFactoryDefinitions(definitions)

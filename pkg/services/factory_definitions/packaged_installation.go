@@ -13,6 +13,7 @@ type PackagedFactoryInstallResult struct {
 	Name       string
 	FactoryDir string
 	Outcome    PackagedFactoryInstallOutcome
+	Format     PackagedFactoryFormat
 }
 
 // PackagedFactoryInstaller owns validation and persistence of the packaged

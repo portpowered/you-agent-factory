@@ -5,6 +5,7 @@ type PackagedFactoryFormat string
 const (
 	PackagedFactoryFormatJSON PackagedFactoryFormat = "JSON"
 	PackagedFactoryFormatYAML PackagedFactoryFormat = "YAML"
+	PackagedFactoryFormatYML  PackagedFactoryFormat = "YML"
 )
 
 // PackagedDefinition is one Factory Definition shipped with the executable.

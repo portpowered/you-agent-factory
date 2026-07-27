@@ -368,6 +368,16 @@ func providePackagedFactoryCatalog(
 	return factorydefinitionsservice.NewPackagedFactoryCatalog(definitions)
 }
 
+func providePackagedFactoryInstallation(
+	persistence factorydefinitions.Persistence,
+	fileSystem factorydefinitions.PackagedInstallationFileSystem,
+) factorydefinitions.PackagedFactoryInstallationOperations {
+	installer := packagedinstallation.New(persistence, fileSystem)
+	return factorydefinitions.PackagedFactoryInstallationOperations{
+		Install: installer.InstallPackagedFactory,
+	}
+}
+
 func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLoader) factorysessionwire.DurableExecutionFactory {
 	return func(
 		definition factorydefinitions.RuntimeOpeningRequest,
