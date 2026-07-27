@@ -126,4 +126,78 @@ func TestRootService_Characterization_InitializeValidationFailure(t *testing.T) 
 	if !reflect.DeepEqual(result, systeminitialization.Result{}) {
 		t.Fatalf("Initialize() result = %#v, want zero result", result)
 	}
+	var partialFailure systeminitialization.InitializePartialFailure
+	if errors.As(err, &partialFailure) {
+		t.Fatalf("validation failure error = %v, want no rollback facts", err)
+	}
+}
+
+func TestRootService_Characterization_InitializeCancellationFailureHasNoRollbackFacts(t *testing.T) {
+	t.Parallel()
+
+	fake := &rootServiceFake{
+		err: fmt.Errorf("peer cancellation: %w", systeminitialization.ErrInitializeCancelled),
+	}
+
+	var service systeminitialization.Service = fake
+	result, err := service.Initialize(context.Background(), systeminitialization.Request{
+		HomeDir: "/home/peer",
+	})
+	if !errors.Is(err, systeminitialization.ErrInitializeCancelled) {
+		t.Fatalf("Initialize() error = %v, want ErrInitializeCancelled", err)
+	}
+	if !reflect.DeepEqual(result, systeminitialization.Result{}) {
+		t.Fatalf("Initialize() result = %#v, want zero result", result)
+	}
+	var partialFailure systeminitialization.InitializePartialFailure
+	if errors.As(err, &partialFailure) {
+		t.Fatalf("cancellation failure error = %v, want no rollback facts", err)
+	}
+}
+
+func TestRootService_Characterization_InitializePartialFailureWithRollbackFacts(t *testing.T) {
+	t.Parallel()
+
+	partialFailure := systeminitialization.InitializePartialFailure{
+		Message: "packaged factory install failed",
+		Facts: []systeminitialization.RollbackFact{
+			{
+				Step:    systeminitialization.InitializeStepLegacyMigration,
+				Outcome: systeminitialization.RollbackStepCompleted,
+			},
+			{
+				Step:    systeminitialization.InitializeStepSystemConfig,
+				Outcome: systeminitialization.RollbackStepRolledBackOrPreserved,
+			},
+			{
+				Step:    systeminitialization.InitializeStepPackagedFactories,
+				Outcome: systeminitialization.RollbackStepUnresolved,
+			},
+		},
+	}
+	fake := &rootServiceFake{
+		err: fmt.Errorf("peer partial failure: %w", partialFailure),
+	}
+
+	var service systeminitialization.Service = fake
+	result, err := service.Initialize(context.Background(), systeminitialization.Request{
+		HomeDir: "/home/peer",
+	})
+	if !errors.Is(err, systeminitialization.ErrInitializePartialFailure) {
+		t.Fatalf("Initialize() error = %v, want ErrInitializePartialFailure", err)
+	}
+	if !reflect.DeepEqual(result, systeminitialization.Result{}) {
+		t.Fatalf("Initialize() result = %#v, want zero result", result)
+	}
+	var got systeminitialization.InitializePartialFailure
+	if !errors.As(err, &got) {
+		t.Fatalf("Initialize() error = %T(%v), want InitializePartialFailure", err, err)
+	}
+	if len(got.Facts) != 3 ||
+		got.Facts[0].Step != systeminitialization.InitializeStepLegacyMigration ||
+		got.Facts[0].Outcome != systeminitialization.RollbackStepCompleted ||
+		got.Facts[1].Outcome != systeminitialization.RollbackStepRolledBackOrPreserved ||
+		got.Facts[2].Outcome != systeminitialization.RollbackStepUnresolved {
+		t.Fatalf("Initialize() rollback facts = %#v", got.Facts)
+	}
 }

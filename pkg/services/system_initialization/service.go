@@ -68,9 +68,14 @@ type Service interface {
 	// Initialize applies Bootstrap-owned initialization intent and returns
 	// customer-visible created/skipped outcomes. Missing or blank home-directory
 	// intent fails with ErrMissingHomeDir; cancelled context fails with
-	// ErrInitializeCancelled. Partial-failure rollback facts are published as
-	// additive typed outcomes on the same Service rather than through a second
-	// peer-facing Bootstrap interface.
+	// ErrInitializeCancelled. Partial failures fail with ErrInitializePartialFailure
+	// and carry Bootstrap-owned InitializePartialFailure rollback facts peers
+	// inspect with errors.As. Bootstrap owns ordering, idempotency, and rollback
+	// reporting; Operator Settings and Factory Definitions retain their own
+	// transactional store boundaries. Validation and cancellation failures do not
+	// invent rollback work facts. Rollback facts are additive typed outcomes on
+	// this same Service rather than through a second peer-facing Bootstrap
+	// interface.
 	Initialize(context.Context, Request) (Result, error)
 }
 
