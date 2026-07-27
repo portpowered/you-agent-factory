@@ -122,6 +122,63 @@ func TestGeneratedClientStatusAndSessionRoundTrip(t *testing.T) {
 	})
 }
 
+// TestGeneratedClientDecodesRepresentativeStructuredError proves representative
+// structured API failures decode through the published generated HTTP client into
+// typed failure results with documented HTTP status and error family/code, not
+// opaque transport errors or unstructured response bodies.
+func TestGeneratedClientDecodesRepresentativeStructuredError(t *testing.T) {
+	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+
+	generatedClient, err := generatedclient.NewClientWithResponses(
+		server.URL(),
+		generatedclient.WithHTTPClient(http.DefaultClient),
+	)
+	if err != nil {
+		t.Fatalf("construct published generated HTTP client: %v", err)
+	}
+
+	const missingSessionID = "missing-session"
+	failure, err := generatedClient.GetFactoryResponseEventsBySessionIdWithResponse(
+		context.Background(),
+		missingSessionID,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("request missing-session response events through generated HTTP client: %v", err)
+	}
+	if failure.StatusCode() != http.StatusNotFound || failure.JSON404 == nil {
+		t.Fatalf("generated failure response = %#v, want typed 404 API failure", failure)
+	}
+	if failure.JSON404.Family != generatedclient.ErrorFamilyNotFound {
+		t.Fatalf("generated API error family = %q, want %q", failure.JSON404.Family, generatedclient.ErrorFamilyNotFound)
+	}
+	if failure.JSON404.Code != generatedclient.ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND {
+		t.Fatalf("generated API error code = %q, want %q", failure.JSON404.Code, generatedclient.ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND)
+	}
+	if strings.TrimSpace(failure.JSON404.Message) == "" {
+		t.Fatalf("generated API error message = %#v, want documented structured message", failure.JSON404.Message)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cancelled, cancelErr := generatedClient.GetFactoryResponseEventsBySessionIdWithResponse(
+		ctx,
+		factorysessions.DefaultSessionID,
+		nil,
+	)
+	if cancelled != nil {
+		t.Fatalf("cancelled generated client response = %#v, want no typed API response", cancelled)
+	}
+	if !errors.Is(cancelErr, context.Canceled) {
+		t.Fatalf("cancelled generated client error = %v, want context.Canceled", cancelErr)
+	}
+}
+
 func setGeneratedClientAcceptJSON(_ context.Context, req *http.Request) error {
 	req.Header.Set("Accept", "application/json")
 	return nil
