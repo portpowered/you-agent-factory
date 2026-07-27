@@ -854,16 +854,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/bootstrap_portability/cli_relative_working_directory_functionallong_helpers_test.go",
-      "target": "bootstrap_portability"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/bootstrap_portability/cli_relative_working_directory_long_test.go",
-      "target": "bootstrap_portability"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/bootstrap_portability/export_import_fixture_test.go",
       "target": "bootstrap_portability"
     },

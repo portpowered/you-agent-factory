@@ -103,7 +103,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIEnvironmentOverridesGlobalConfig` verifies documented precedence.
   - `TestCLIUnsetEnvironmentFallsBackWithoutFabricatingValue` covers absence.
 
-- [ ] `tests/functional/transport/cli/parameters/working_directory_test.go`
+- [x] `tests/functional/transport/cli/parameters/working_directory_test.go`
   - `TestCLIRelativeFactoryPathResolvesFromInvocationDirectory` verifies
     customer working-directory behavior.
   - `TestCLIWorkingDirectoryDoesNotLeakIntoOutput` verifies portable output.
