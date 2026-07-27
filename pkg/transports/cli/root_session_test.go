@@ -1110,7 +1110,7 @@ func writeSessionCompositionOutput(output, diagnostics io.Writer, result error) 
 func TestShowSessionUsesInjectedService(t *testing.T) {
 	called := false
 	root := (CommandFactory{
-		ModelsCLI: legacyModelsCLIService{},
+		ModelsCLI: rootModelsCLI,
 		SessionsCLI: session.Bind(session.Operations{
 			Show: func(cfg session.ShowConfig) error {
 				called = true

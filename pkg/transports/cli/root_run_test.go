@@ -378,28 +378,9 @@ func (rootModelInvocationOperation) InvokeModel(context.Context, factorysessions
 }
 
 var rootModelsCLI = modelscli.New(rootTestHTTPProtocol(), rootModelInvocationOperation{})
-var listModels = rootModelsCLI.List
-var inspectModel = rootModelsCLI.Inspect
-var invokeModel = rootModelsCLI.Invoke
-var pullModel = rootModelsCLI.Pull
 
-type legacyModelsCLIService struct{}
-
-func (legacyModelsCLIService) List(cfg modelscli.ListConfig) error       { return listModels(cfg) }
-func (legacyModelsCLIService) Inspect(cfg modelscli.InspectConfig) error { return inspectModel(cfg) }
-func (legacyModelsCLIService) Invoke(cfg modelscli.InvokeConfig) error   { return invokeModel(cfg) }
-func (legacyModelsCLIService) Pull(cfg modelscli.PullConfig) error       { return pullModel(cfg) }
-
-func ShowSessionAccessor() func(sessioncli.ShowConfig) error         { return showSession }
-func SetShowSessionAccessor(fn func(sessioncli.ShowConfig) error)    { showSession = fn }
-func ListModelsAccessor() func(modelscli.ListConfig) error           { return listModels }
-func SetListModelsAccessor(fn func(modelscli.ListConfig) error)      { listModels = fn }
-func InspectModelAccessor() func(modelscli.InspectConfig) error      { return inspectModel }
-func SetInspectModelAccessor(fn func(modelscli.InspectConfig) error) { inspectModel = fn }
-func InvokeModelAccessor() func(modelscli.InvokeConfig) error        { return invokeModel }
-func SetInvokeModelAccessor(fn func(modelscli.InvokeConfig) error)   { invokeModel = fn }
-func PullModelAccessor() func(modelscli.PullConfig) error            { return pullModel }
-func SetPullModelAccessor(fn func(modelscli.PullConfig) error)       { pullModel = fn }
+func ShowSessionAccessor() func(sessioncli.ShowConfig) error      { return showSession }
+func SetShowSessionAccessor(fn func(sessioncli.ShowConfig) error) { showSession = fn }
 
 func newLegacyTestRootCommand() *cobra.Command {
 	return newLegacyTestRootCommandWithCatalog(rootNamedFactoryCatalogFake{})
@@ -407,7 +388,7 @@ func newLegacyTestRootCommand() *cobra.Command {
 
 func withTestInjectedPlatformRoles(factory CommandFactory) CommandFactory {
 	if factory.ModelsCLI == nil {
-		factory.ModelsCLI = legacyModelsCLIService{}
+		factory.ModelsCLI = rootModelsCLI
 	}
 	factory.prepareInvocationInput = rootInvocationInputScript{prepare: func(context.Context, work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error) {
 		return work.PreparedInvocationInput{}, nil
@@ -738,8 +719,8 @@ func newLegacyTestRootCommandWithCatalogDefaultsAndInvocation(
 	factory := withTestInjectedPlatformRoles(CommandFactory{
 		namedFactoryCatalog: catalog,
 		SubmitWork:          submitWork, SubmitBatch: submitBatch,
-		SessionsCLI: rootTestSessionsCLI(),
-		ModelsCLI:   legacyModelsCLIService{},
+		SessionsCLI:          rootTestSessionsCLI(),
+		ModelsCLI:            rootModelsCLI,
 		FlattenFactoryConfig: flattenFactoryConfig,
 		ExpandFactoryConfig:  expandFactoryConfig, InitFactory: initFactory,
 		QueryFactory: queryFactory, ListFactories: listFactories,
@@ -829,7 +810,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestProductionRunSubmitFamilyCutoverEnabled(t *testing.T) {
-	root := (CommandFactory{ModelsCLI: legacyModelsCLIService{}}).NewCommand(nil, nil, nil)
+	root := (CommandFactory{ModelsCLI: rootModelsCLI}).NewCommand(nil, nil, nil)
 	for _, path := range [][]string{{"run"}, {"submit"}, {"submit", "batch"}} {
 		cmd, remaining, err := root.Find(path)
 		if err != nil {

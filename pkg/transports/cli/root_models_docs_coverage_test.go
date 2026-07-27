@@ -254,7 +254,7 @@ func TestProductionDocsExecutesTopicWithVerboseDiagnostics(t *testing.T) {
 
 func TestModelsListUsesInjectedService(t *testing.T) {
 	called := false
-	root := (CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
+	root := NewCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
 		list: func(modelscli.ListConfig) error {
 			called = true
 			return nil
@@ -275,7 +275,7 @@ func TestInjectedModelServicesRouteGeneratedCutoverCommands(t *testing.T) {
 	var listed bool
 	var inspected, pulled string
 	var invocations []modelscli.InvokeConfig
-	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: modelsCLIServiceFunctions{
+	factory := withTestInjectedPlatformRoles(NewCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
 		list: func(modelscli.ListConfig) error { listed = true; return nil },
 		inspect: func(cfg modelscli.InspectConfig) error {
 			inspected = cfg.ModelName
@@ -289,7 +289,7 @@ func TestInjectedModelServicesRouteGeneratedCutoverCommands(t *testing.T) {
 			invocations = append(invocations, cfg)
 			return nil
 		},
-	}})
+	}}))
 	root := factory.NewCommand(
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
@@ -481,15 +481,17 @@ func TestFactoryReplaceCurrentCommand_GlobalJSONMapsToConfig(t *testing.T) {
 }
 
 func TestModelsInspectCommand_GlobalJSONMapsToConfig(t *testing.T) {
-	originalInspectModel := inspectModel
+	originalModelsCLI := rootModelsCLI
 	defer func() {
-		inspectModel = originalInspectModel
+		rootModelsCLI = originalModelsCLI
 	}()
 
 	var got modelscli.InspectConfig
-	inspectModel = func(cfg modelscli.InspectConfig) error {
-		got = cfg
-		return nil
+	rootModelsCLI = modelsCLIServiceFunctions{
+		inspect: func(cfg modelscli.InspectConfig) error {
+			got = cfg
+			return nil
+		},
 	}
 
 	root := newLegacyTestRootCommand()
@@ -613,15 +615,17 @@ func TestInitCommand_GlobalJSONIsRejectedBeforeInitService(t *testing.T) {
 }
 
 func TestModelsListCommand_DefaultServerAndJSONFlagMapToConfig(t *testing.T) {
-	originalListModels := listModels
+	originalModelsCLI := rootModelsCLI
 	defer func() {
-		listModels = originalListModels
+		rootModelsCLI = originalModelsCLI
 	}()
 
 	var got modelscli.ListConfig
-	listModels = func(cfg modelscli.ListConfig) error {
-		got = cfg
-		return nil
+	rootModelsCLI = modelsCLIServiceFunctions{
+		list: func(cfg modelscli.ListConfig) error {
+			got = cfg
+			return nil
+		},
 	}
 
 	root := newLegacyTestRootCommand()
@@ -641,23 +645,25 @@ func TestModelsListCommand_DefaultServerAndJSONFlagMapToConfig(t *testing.T) {
 }
 
 func TestModelsListCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStderr(t *testing.T) {
-	originalListModels := listModels
+	originalModelsCLI := rootModelsCLI
 	defer func() {
-		listModels = originalListModels
+		rootModelsCLI = originalModelsCLI
 	}()
 
-	listModels = func(cfg modelscli.ListConfig) error {
-		if !cfg.Verbose {
-			t.Fatal("expected verbose config")
-		}
-		if cfg.Diagnostics == nil {
-			t.Fatal("expected diagnostics writer")
-		}
-		if _, err := fmt.Fprintln(cfg.Diagnostics, "diagnostic: models list"); err != nil {
+	rootModelsCLI = modelsCLIServiceFunctions{
+		list: func(cfg modelscli.ListConfig) error {
+			if !cfg.Verbose {
+				t.Fatal("expected verbose config")
+			}
+			if cfg.Diagnostics == nil {
+				t.Fatal("expected diagnostics writer")
+			}
+			if _, err := fmt.Fprintln(cfg.Diagnostics, "diagnostic: models list"); err != nil {
+				return err
+			}
+			_, err := fmt.Fprintln(cfg.Output, `{"results":[]}`)
 			return err
-		}
-		_, err := fmt.Fprintln(cfg.Output, `{"results":[]}`)
-		return err
+		},
 	}
 
 	var stdout bytes.Buffer
@@ -684,15 +690,17 @@ func TestModelsListCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStderr
 }
 
 func TestModelsInspectCommand_MapsModelArgumentAndServer(t *testing.T) {
-	originalInspectModel := inspectModel
+	originalModelsCLI := rootModelsCLI
 	defer func() {
-		inspectModel = originalInspectModel
+		rootModelsCLI = originalModelsCLI
 	}()
 
 	var got modelscli.InspectConfig
-	inspectModel = func(cfg modelscli.InspectConfig) error {
-		got = cfg
-		return nil
+	rootModelsCLI = modelsCLIServiceFunctions{
+		inspect: func(cfg modelscli.InspectConfig) error {
+			got = cfg
+			return nil
+		},
 	}
 
 	root := newLegacyTestRootCommand()
@@ -712,15 +720,17 @@ func TestModelsInspectCommand_MapsModelArgumentAndServer(t *testing.T) {
 }
 
 func TestModelsInvokeCommand_MapsArgumentsAndFlags(t *testing.T) {
-	originalInvokeModel := invokeModel
+	originalModelsCLI := rootModelsCLI
 	defer func() {
-		invokeModel = originalInvokeModel
+		rootModelsCLI = originalModelsCLI
 	}()
 
 	var got modelscli.InvokeConfig
-	invokeModel = func(cfg modelscli.InvokeConfig) error {
-		got = cfg
-		return nil
+	rootModelsCLI = modelsCLIServiceFunctions{
+		invoke: func(cfg modelscli.InvokeConfig) error {
+			got = cfg
+			return nil
+		},
 	}
 
 	root := newLegacyTestRootCommand()
@@ -737,15 +747,17 @@ func TestModelsInvokeCommand_MapsArgumentsAndFlags(t *testing.T) {
 }
 
 func TestModelsPullCommand_MapsArgumentsAndFlags(t *testing.T) {
-	originalPullModel := pullModel
+	originalModelsCLI := rootModelsCLI
 	defer func() {
-		pullModel = originalPullModel
+		rootModelsCLI = originalModelsCLI
 	}()
 
 	var got modelscli.PullConfig
-	pullModel = func(cfg modelscli.PullConfig) error {
-		got = cfg
-		return nil
+	rootModelsCLI = modelsCLIServiceFunctions{
+		pull: func(cfg modelscli.PullConfig) error {
+			got = cfg
+			return nil
+		},
 	}
 
 	root := newLegacyTestRootCommand()
