@@ -44,7 +44,8 @@ func (r *reader) Details(
 	if session.Kind != providers.SessionIDKind {
 		return providersessions.Detail{}, providersessions.ErrUnsupportedKind
 	}
-	return LoadDetails(
+	return loadDetails(
+		ctx,
 		r.dependencies.Files,
 		r.dependencies.WalkDirectory,
 		r.dependencies.ResolveSymlinks,

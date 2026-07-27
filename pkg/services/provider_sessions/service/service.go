@@ -16,7 +16,6 @@ import (
 
 type inspectionService struct {
 	codex                 codexreader.Service
-	codexRoot             string
 	cursorRoot            cursor.AgentStorageRoot
 	cursorWalkDirectory   providersessions.CursorWalkDirectory
 	cursorResolveSymlinks providersessions.CursorResolveSymlinks
@@ -84,7 +83,6 @@ func newForRoots(files providersessions.FileSystem, codexWalkDirectory providers
 	}
 	return &inspectionService{
 		codex:                 codexService,
-		codexRoot:             codexRoot,
 		cursorRoot:            cursor.AgentStorageRoot(cursorRoot),
 		cursorWalkDirectory:   cursorWalkDirectory,
 		cursorResolveSymlinks: cursorResolveSymlinks,
@@ -235,6 +233,6 @@ func (s *inspectionService) rootFor(provider providersessions.Provider) string {
 	case providersessions.ProviderCursor:
 		return string(s.cursorRoot)
 	default:
-		return s.codexRoot
+		return ""
 	}
 }

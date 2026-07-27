@@ -239,8 +239,8 @@ func TestGetProviderSessionDetails_RejectsSessionSymlinkOutsideConfiguredRoot(t 
 		t.Fatalf("create symlink: %v", err)
 	}
 	_, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, root, "sess-outside")
-	if !errors.Is(err, providersessions.ErrInvalidIdentifier) {
-		t.Fatalf("err = %v, want ErrInvalidIdentifier", err)
+	if !errors.Is(err, providersessions.ErrSessionOutsideRoot) {
+		t.Fatalf("err = %v, want ErrSessionOutsideRoot", err)
 	}
 }
 
@@ -262,8 +262,8 @@ func TestGetProviderSessionDetails_RejectsSessionSymlinkOutsideConfiguredRootEve
 		t.Fatalf("create symlink: %v", err)
 	}
 	_, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, root, "sess-shared")
-	if !errors.Is(err, providersessions.ErrInvalidIdentifier) {
-		t.Fatalf("err = %v, want ErrInvalidIdentifier", err)
+	if !errors.Is(err, providersessions.ErrSessionOutsideRoot) {
+		t.Fatalf("err = %v, want ErrSessionOutsideRoot", err)
 	}
 }
 

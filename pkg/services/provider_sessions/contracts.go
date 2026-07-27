@@ -24,7 +24,9 @@ type Service interface {
 	// receive a detached Detail value (transcript, parse, usage, and related
 	// normalized facts) or a typed Provider Sessions failure such as
 	// ErrUnsupportedProvider, ErrUnsupportedKind, ErrInvalidIdentifier,
-	// ErrSessionNotFound, ErrAmbiguousSessionFile, and/or LookupError. Callers do
+	// ErrSessionNotFound, ErrAmbiguousSessionFile, ErrSessionOutsideRoot,
+	// ErrSessionSourceNotRegularFile, ErrSessionStorageUnavailable, and/or
+	// LookupError. Callers do
 	// not supply filesystem/SQL/OS effect ports or Codex/Cursor reader types to
 	// invoke this peer API. Additive typed SessionRef slices (Inspect, Project)
 	// share this singular root without replacing Details.
@@ -34,7 +36,9 @@ type Service interface {
 	// providers.SessionRef vocabulary (provider + kind + id). Peers receive a
 	// detached InspectResult or a typed Provider Sessions failure such as
 	// ErrUnsupportedProvider, ErrUnsupportedKind, ErrInvalidIdentifier,
-	// ErrSessionNotFound, ErrAmbiguousSessionFile, and/or LookupError. This slice
+	// ErrSessionNotFound, ErrAmbiguousSessionFile, ErrSessionOutsideRoot,
+	// ErrSessionSourceNotRegularFile, ErrSessionStorageUnavailable, and/or
+	// LookupError. This slice
 	// does not import Providers catalog/execution, enumeration, availability,
 	// capability, or Workers selection-policy types.
 	Inspect(InspectRequest) (InspectResult, error)
@@ -44,7 +48,9 @@ type Service interface {
 	// whose Detail covers transcript entries, reasoning summaries,
 	// tool/function-call facts, parse summary, and token usage, or a typed
 	// Provider Sessions failure such as ErrUnsupportedProvider,
-	// ErrUnsupportedKind, ErrSessionNotFound, and/or LookupError. Method
+	// ErrUnsupportedKind, ErrSessionNotFound, ErrSessionOutsideRoot,
+	// ErrSessionSourceNotRegularFile, ErrSessionStorageUnavailable, and/or
+	// LookupError. Method
 	// signatures and published values do not name private Codex/Cursor reader
 	// types, filesystem/SQL/OS effect ports, or Providers execution types.
 	Project(ProjectRequest) (ProjectResult, error)
@@ -234,15 +240,19 @@ type UnknownEvent struct {
 }
 
 var (
-	ErrAmbiguousSessionFile = errors.New("ambiguous provider session file")
-	ErrInvalidIdentifier    = errors.New("invalid provider session identifier")
-	ErrSessionNotFound      = errors.New("provider session not found")
-	ErrUnsupportedKind      = errors.New("unsupported provider session kind")
-	ErrUnsupportedProvider  = errors.New("unsupported provider session provider")
+	ErrAmbiguousSessionFile        = errors.New("ambiguous provider session file")
+	ErrInvalidIdentifier           = errors.New("invalid provider session identifier")
+	ErrSessionNotFound             = errors.New("provider session not found")
+	ErrSessionOutsideRoot          = errors.New("provider session resolves outside configured storage")
+	ErrSessionSourceNotRegularFile = errors.New("provider session source is not a regular file")
+	ErrSessionStorageUnavailable   = errors.New("provider session storage is unavailable")
+	ErrUnsupportedKind             = errors.New("unsupported provider session kind")
+	ErrUnsupportedProvider         = errors.New("unsupported provider session provider")
 )
 
-// LookupError retains normalized provider and root context without exposing
-// provider-specific storage details through the service API.
+// LookupError retains normalized provider context. Root is optional legacy
+// diagnostic context; Codex lookups omit it so configured host paths do not
+// cross the Provider Sessions boundary.
 type LookupError struct {
 	Provider Provider
 	Root     string

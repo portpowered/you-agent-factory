@@ -223,7 +223,7 @@ func TestGetProviderSessionDetails_RegressionLoadsCodexAndCursorFromConfiguredRo
 	codexRoot, cursorRoot := t.TempDir(), t.TempDir()
 	service := newServiceForRoots(t, codexRoot, cursorRoot)
 	_, codexErr := service.Details("codex", "session_id", "missing-session")
-	assertLookupContext(t, codexErr, providersessions.ProviderCodex, codexRoot)
+	assertLookupContext(t, codexErr, providersessions.ProviderCodex, "")
 	_, cursorErr := service.Details("cursor", "session_id", "missing-session")
 	assertCursorLookupContext(t, cursorErr, cursorRoot)
 }
@@ -236,7 +236,7 @@ func TestGetProviderSessionDetails_EventRefRoundTripLoadsCursorAndCodex(t *testi
 		want     providersessions.Provider
 		root     string
 	}{
-		{"codex", providersessions.ProviderCodex, codexRoot},
+		{"codex", providersessions.ProviderCodex, ""},
 		{"cursor", providersessions.ProviderCursor, cursorRoot},
 		{"agent", providersessions.ProviderCursor, cursorRoot},
 	} {
