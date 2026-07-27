@@ -22,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork confirms model pull returns a configured legacy cache hit without upstream network requests.
 func TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork(t *testing.T) {
 	dir := support.ScaffoldFactory(t, localCachedModelTransportSmokeConfig())
 	cacheDirectory := t.TempDir()

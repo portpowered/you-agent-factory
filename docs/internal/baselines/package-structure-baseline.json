@@ -1474,11 +1474,6 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/cli/session/session_enumeration_test.go",
-      "target": "cli"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/cli/session_resume/resume_non_regression_test.go",
       "target": "cli"
     },
@@ -2474,11 +2469,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/automations/timework",
-      "target": "pkg/services/automations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/authoredlayout",
       "target": "pkg/services/factory_definitions"
     },
@@ -2755,6 +2745,11 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/provider_sessions/codex",
+      "target": "pkg/services/provider_sessions"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/provider_sessions/cursor",
       "target": "pkg/services/provider_sessions"
     },
     {

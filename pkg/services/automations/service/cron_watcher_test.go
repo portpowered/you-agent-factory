@@ -189,6 +189,84 @@ func TestSubmitCronTick_RetryableFailureRetriesBeforeSuccess(t *testing.T) {
 	}
 }
 
+func TestStartCronWatchersForRuntime_DisablesMissingScheduleWithoutAffectingValidCronJobs(t *testing.T) {
+	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	observedRequests := make(chan work.WorkRequest, 8)
+	validCron := interfaces.FactoryWorkstationConfig{
+		Name: "valid-cron",
+		Kind: interfaces.WorkstationKindCron,
+		Cron: &interfaces.CronConfig{
+			Schedule:       "* * * * *",
+			TriggerAtStart: true,
+		},
+		Outputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "init",
+		}},
+	}
+	missingScheduleCron := interfaces.FactoryWorkstationConfig{
+		Name: "missing-schedule-cron",
+		Kind: interfaces.WorkstationKindCron,
+		Cron: &interfaces.CronConfig{
+			TriggerAtStart: true,
+		},
+		Outputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "init",
+		}},
+	}
+	runtimeCfg := newCronLoadedRuntimeConfig(
+		t,
+		"factory-alpha",
+		&interfaces.FactoryConfig{
+			WorkTypes:    []interfaces.WorkTypeConfig{{Name: "task"}},
+			Workstations: []interfaces.FactoryWorkstationConfig{validCron, missingScheduleCron},
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			validCron.Name:            &validCron,
+			missingScheduleCron.Name: &missingScheduleCron,
+		},
+	)
+	svc := newAutomationService(automationFixture{
+		Logger: zap.New(logCore),
+		Clock:  fakeClock,
+	})
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	var sidecars sync.WaitGroup
+	svc.StartCronWatchersForRuntime(
+		runCtx,
+		&sidecars,
+		"factory-alpha",
+		runtimeCfg.FactoryConfig(),
+		runtimeCfg,
+		func(_ context.Context, request work.WorkRequest) error {
+			select {
+			case observedRequests <- request:
+			default:
+				t.Fatalf("cron request channel overflow")
+			}
+			return nil
+		},
+	)
+	t.Cleanup(func() {
+		cancelRun()
+		sidecars.Wait()
+	})
+
+	startupRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
+	assertCronWorkRequestForWorkstation(t, startupRequest, start, "valid-cron")
+	assertNoCronWorkRequestQueued(t, observedRequests)
+
+	cancelRun()
+	sidecars.Wait()
+	assertCronWatcherRegistrationLog(t, observedLogs, "valid-cron")
+	assertCronWatcherDisabledLog(t, observedLogs, "missing-schedule-cron")
+	assertCronSchedulerStartedLog(t, observedLogs, 1)
+}
+
 func TestStartCronWatchersForRuntime_DisablesInvalidSchedulesWithoutAffectingValidCronJobs(t *testing.T) {
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)

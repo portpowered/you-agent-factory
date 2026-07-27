@@ -6,7 +6,7 @@ import (
 	"time"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 // rootServiceFake is a peer-shaped Provider Sessions root Service that uses
@@ -144,6 +144,9 @@ func TestRootService_Characterization_TypedFailures(t *testing.T) {
 		{name: "invalid identifier", err: providersessions.ErrInvalidIdentifier},
 		{name: "session not found", err: providersessions.ErrSessionNotFound},
 		{name: "ambiguous session", err: providersessions.ErrAmbiguousSessionFile},
+		{name: "outside root", err: providersessions.ErrSessionOutsideRoot},
+		{name: "non-regular source", err: providersessions.ErrSessionSourceNotRegularFile},
+		{name: "storage unavailable", err: providersessions.ErrSessionStorageUnavailable},
 		{
 			name: "lookup wraps session not found",
 			err: &providersessions.LookupError{
@@ -228,6 +231,9 @@ func TestRootService_Inspect_Characterization_TypedFailures(t *testing.T) {
 		{name: "invalid identifier", err: providersessions.ErrInvalidIdentifier},
 		{name: "session not found", err: providersessions.ErrSessionNotFound},
 		{name: "ambiguous session", err: providersessions.ErrAmbiguousSessionFile},
+		{name: "outside root", err: providersessions.ErrSessionOutsideRoot},
+		{name: "non-regular source", err: providersessions.ErrSessionSourceNotRegularFile},
+		{name: "storage unavailable", err: providersessions.ErrSessionStorageUnavailable},
 		{
 			name: "lookup wraps session not found",
 			err: &providersessions.LookupError{
@@ -436,6 +442,9 @@ func TestRootService_Project_Characterization_TypedFailures(t *testing.T) {
 		{name: "unsupported provider", err: providersessions.ErrUnsupportedProvider},
 		{name: "unsupported kind", err: providersessions.ErrUnsupportedKind},
 		{name: "session not found", err: providersessions.ErrSessionNotFound},
+		{name: "outside root", err: providersessions.ErrSessionOutsideRoot},
+		{name: "non-regular source", err: providersessions.ErrSessionSourceNotRegularFile},
+		{name: "storage unavailable", err: providersessions.ErrSessionStorageUnavailable},
 		{
 			name: "lookup wraps session not found",
 			err: &providersessions.LookupError{

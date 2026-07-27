@@ -64,11 +64,13 @@
     "pkg/platform/stdio",
     "pkg/root",
     "pkg/services/automations",
+    "pkg/services/automations/internal/services/cron",
+    "pkg/services/automations/internal/services/cron/internal/service",
+    "pkg/services/automations/internal/services/cron/wire",
     "pkg/services/automations/internal/services/reconciliation",
     "pkg/services/automations/internal/services/reconciliation/internal/service",
     "pkg/services/automations/internal/services/reconciliation/wire",
     "pkg/services/automations/service",
-    "pkg/services/automations/timework",
     "pkg/services/edges",
     "pkg/services/factory_definitions",
     "pkg/services/factory_definitions/authoredlayout",
@@ -105,6 +107,7 @@
     "pkg/services/factory_definitions/service",
     "pkg/services/factory_definitions/snapshotcapture",
     "pkg/services/factory_definitions/ttsobservability",
+    "pkg/services/factory_definitions/transports/cli",
     "pkg/services/factory_definitions/validation",
     "pkg/services/factory_definitions/wire/defaultscaffold",
     "pkg/services/factory_definitions/workers",
@@ -235,7 +238,9 @@
     "pkg/services/operator_settings",
     "pkg/services/operator_settings/identityinventory",
     "pkg/services/provider_sessions",
-    "pkg/services/provider_sessions/codex",
+    "pkg/services/provider_sessions/internal/services/codex_reader",
+    "pkg/services/provider_sessions/internal/services/codex_reader/internal/service",
+    "pkg/services/provider_sessions/internal/services/codex_reader/wire",
     "pkg/services/provider_sessions/internal/services/cursor_reader",
     "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
     "pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
@@ -516,6 +521,21 @@
       "destination": "automations"
     },
     {
+      "packagePath": "pkg/services/automations/internal/services/cron",
+      "disposition": "retain",
+      "destination": "automations/internal/services/cron"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/cron/internal/service",
+      "disposition": "retain",
+      "destination": "automations/internal/services/cron"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/cron/wire",
+      "disposition": "retain",
+      "destination": "automations/internal/services/cron"
+    },
+    {
       "packagePath": "pkg/services/automations/internal/services/reconciliation",
       "disposition": "retain",
       "destination": "automations/internal/services/reconciliation"
@@ -534,11 +554,6 @@
       "packagePath": "pkg/services/automations/service",
       "disposition": "retain",
       "destination": "automations"
-    },
-    {
-      "packagePath": "pkg/services/automations/timework",
-      "disposition": "move",
-      "destination": "automations/internal/services/cron"
     },
     {
       "packagePath": "pkg/services/edges",
@@ -717,6 +732,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/ttsobservability",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/transports/cli",
       "disposition": "retain",
       "destination": "factory_definitions"
     },
@@ -1376,6 +1396,11 @@
       "destination": "provider_sessions/internal/services/codex_reader"
     },
     {
+      "packagePath": "pkg/services/provider_sessions/cursor",
+      "disposition": "move",
+      "destination": "provider_sessions/internal/services/cursor_reader"
+    },
+    {
       "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader",
       "disposition": "retain",
       "destination": "provider_sessions/internal/services/cursor_reader"
@@ -1394,6 +1419,21 @@
       "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/wire",
       "disposition": "retain",
       "destination": "provider_sessions/internal/services/cursor_reader"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/codex_reader"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader/internal/service",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/codex_reader"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader/wire",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/codex_reader"
     },
     {
       "packagePath": "pkg/services/provider_sessions/service",

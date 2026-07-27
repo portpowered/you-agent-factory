@@ -8,18 +8,17 @@ import (
 	"strings"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/codex"
+	codexreader "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader"
+	codexreaderwire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader/wire"
 	cursorreader "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader"
 	cursorreaderwire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/wire"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 type inspectionService struct {
-	codexRoot            string
-	codexWalkDirectory   providersessions.CodexWalkDirectory
-	codexResolveSymlinks providersessions.CodexResolveSymlinks
-	cursorReader         cursorreader.Service
-	files                providersessions.FileSystem
+	codex        codexreader.Service
+	cursorReader cursorreader.Service
+	files        providersessions.FileSystem
 }
 
 // Compile-time proof that production inspectionService seals the singular
@@ -42,7 +41,7 @@ func New(
 	if err := validateDependencies(files, resolveHome, codexWalkDirectory, codexResolveSymlinks, cursorWalkDirectory, cursorResolveSymlinks, cursorOpenDatabase, cursorOperatingSystem); err != nil {
 		return nil, err
 	}
-	codexRoot, err := codex.DefaultSessionsRoot(resolveHome)
+	codexRoot, err := codexreaderwire.DefaultSessionsRoot(resolveHome)
 	if err != nil {
 		return nil, err
 	}
@@ -75,12 +74,19 @@ func newForRoots(files providersessions.FileSystem, codexWalkDirectory providers
 		return nil, err
 	}
 	codexRoot = filepath.Clean(codexRoot)
+	codexService, err := codexreaderwire.NewService(codexreader.Dependencies{
+		Files:           files,
+		WalkDirectory:   codexWalkDirectory,
+		ResolveSymlinks: codexResolveSymlinks,
+		SessionsRoot:    codexRoot,
+	})
+	if err != nil {
+		return nil, err
+	}
 	return &inspectionService{
-		codexRoot:            codexRoot,
-		codexWalkDirectory:   codexWalkDirectory,
-		codexResolveSymlinks: codexResolveSymlinks,
-		cursorReader:         cursorReader,
-		files:                files,
+		codex:        codexService,
+		cursorReader: cursorReader,
+		files:        files,
 	}, nil
 }
 
@@ -156,27 +162,23 @@ func (s *inspectionService) detailsForRef(ctx context.Context, ref providers.Ses
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if ref.Provider != providers.IDCodex && ref.Provider != providers.IDCursor {
-		return providersessions.Detail{}, providersessions.ErrUnsupportedProvider
+	if err := validateSessionRef(ref); err != nil {
+		return providersessions.Detail{}, err
 	}
-	if strings.TrimSpace(ref.Kind) != providers.SessionIDKind {
-		return providersessions.Detail{}, providersessions.ErrUnsupportedKind
-	}
-	if strings.TrimSpace(ref.ID) == "" {
-		return providersessions.Detail{}, providersessions.ErrInvalidIdentifier
-	}
-	if ref.Provider == providers.IDCursor {
+	switch ref.Provider {
+	case providers.IDCursor:
 		return s.cursorReader.Read(ctx, ref)
-	}
-
-	detail, err := codex.LoadDetails(s.files, s.codexWalkDirectory, s.codexResolveSymlinks, s.codexRoot, ref.ID)
-	if err == nil {
-		return detail, nil
-	}
-	return providersessions.Detail{}, &providersessions.LookupError{
-		Provider: providersessions.ProviderCodex,
-		Root:     s.codexRoot,
-		Err:      err,
+	case providers.IDCodex:
+		detail, err := s.codex.Details(ctx, ref)
+		if err == nil {
+			return detail, nil
+		}
+		return providersessions.Detail{}, &providersessions.LookupError{
+			Provider: providersessions.ProviderCodex,
+			Err:      err,
+		}
+	default:
+		return providersessions.Detail{}, providersessions.ErrUnsupportedProvider
 	}
 }
 
@@ -189,4 +191,19 @@ func normalizeProvider(provider string) (providers.ID, error) {
 	default:
 		return "", providersessions.ErrUnsupportedProvider
 	}
+}
+
+func validateSessionRef(session providers.SessionRef) error {
+	if strings.TrimSpace(session.ID) == "" {
+		return providersessions.ErrInvalidIdentifier
+	}
+	switch session.Provider {
+	case providers.IDCodex, providers.IDCursor:
+	default:
+		return providersessions.ErrUnsupportedProvider
+	}
+	if strings.TrimSpace(session.Kind) != providers.SessionIDKind {
+		return providersessions.ErrUnsupportedKind
+	}
+	return nil
 }

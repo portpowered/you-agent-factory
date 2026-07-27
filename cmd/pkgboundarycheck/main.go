@@ -107,7 +107,6 @@ var transportPrivateServiceSubpackages = []string{
 // paths whose external callers have been migrated to the owning service root.
 // Packages within the same service may continue using these paths internally.
 var convergedServiceSubpackageRoots = map[string]string{
-	"pkg/services/automations/timework":                         "automations",
 	"pkg/services/factory_definitions/contracts":                "factory_definitions",
 	"pkg/services/factory_definitions/decisionenvelope":         "factory_definitions",
 	"pkg/services/factory_definitions/invocationinterpolation":  "factory_definitions",
@@ -160,7 +159,6 @@ var convergedServiceSubpackageRoots = map[string]string{
 	"pkg/services/factory_definitions/editable":                 "factory_definitions",
 	"pkg/services/factory_definitions/packages":                 "factory_definitions",
 	"pkg/services/factory_definitions/scaffold":                 "factory_definitions",
-	"pkg/services/provider_sessions/codex":                      "provider_sessions",
 	"pkg/services/recordings/events":                            "recordings",
 	"pkg/services/recordings/projections/dashboard":             "recordings",
 	"pkg/services/recordings/replay":                            "recordings",
@@ -212,7 +210,8 @@ var retiredPackageRoots = append([]retiredPackageRoot{
 	{packagePath: "pkg/services/provider_sessions/cursor/persistence", canonicalOwner: "pkg/services/factory_sessions/internal/cursors/persistence"},
 	{packagePath: "pkg/services/factory_sessions/internal/execution/testharness", canonicalOwner: "owner-local _test.go construction in pkg/services/factory_sessions/internal/execution"},
 	{packagePath: "pkg/testutil", canonicalOwner: "internal/testutil or package-local test helpers"},
-	{packagePath: "pkg/timework", canonicalOwner: "pkg/services/automations/timework"},
+	{packagePath: "pkg/timework", canonicalOwner: "pkg/services/automations/internal/services/cron"},
+	{packagePath: "pkg/services/automations/timework", canonicalOwner: "pkg/services/automations/internal/services/cron"},
 	{packagePath: "pkg/work", canonicalOwner: "pkg/services/work"},
 	{packagePath: "pkg/workcontent", canonicalOwner: "pkg/services/work"},
 	{packagePath: "pkg/workers", canonicalOwner: "pkg/services/workers"},

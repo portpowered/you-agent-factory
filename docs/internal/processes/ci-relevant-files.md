@@ -252,6 +252,17 @@
   metadata infers domain `transport` and subsection `cli/parameters` from the
   path; every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+  CLI key=value parameter mapping functional coverage belongs in
+  `tests/functional/transport/cli/parameters/key_value_test.go`: prove repeated
+  `--key=value` tokens reach canonical `InvocationArguments` through
+  `SubmissionRecorder`, prove values with embedded `=` survive intact, prove
+  duplicate keys on REPEATED parameters append in CLI observation order, and
+  prove malformed shapes (missing value, bare `key=value` without `--`) fail
+  with stable diagnostics and zero provider dispatch through
+  `ProviderCommandRunner` at the public `support.BuildProcess` boundary. Catalog
+  metadata infers domain `transport` and subsection `cli/parameters` from the
+  path; every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
   CLI response-stream backpressure functional coverage belongs in
   `tests/functional/transport/cli/output/stream_backpressure_test.go`:
   invoke `support.BuildProcess` with a gated or mid-stream-failing stdout writer
@@ -526,6 +537,11 @@ Wave 0 functional-tests-expansion planning authority lives under
   (`malformed-record`, `process-failure`, `timeout`) replay through
   `tests/functional/workers/inference/cursor/golden_failure_test.go`. Use
   `stdout.txt` when fixtures include non-JSON stream lines; `.jsonl` loaders
-  reject invalid JSON per line. Retryable timeout cases must queue multiple
+  reject invalid JSON per line.   Retryable timeout cases must queue multiple
   identical `ProviderCommandRunner` results so retries do not fall through to
   the default mock.
+
+- `tests/functional/automations/` owns root.BuildProcess evidence for packaged
+  Automations cron scheduling. Keep cron workstation factories explicit with
+  `"behavior": "CRON"` and observe submissions through `serviceedges.Edges.SubmissionRecorder`
+  on `support.StartFunctionalAPIServer`, matching the runtime_api cron smoke helpers.

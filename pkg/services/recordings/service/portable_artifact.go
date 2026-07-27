@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
 )
 
 func (service *combinedService) BuildPortableArtifact(
@@ -162,7 +163,7 @@ func validatePortableArtifactSummary(artifact recordings.PortableArtifact) error
 func validatePortableArtifactEvents(artifact recordings.PortableArtifact) error {
 	var previous recordings.CanonicalEvent
 	for index, event := range artifact.Events {
-		if !validAppendEvent(event) || event.Scope != artifact.Summary.Scope ||
+		if !canonical.ValidAppendEvent(event) || event.Scope != artifact.Summary.Scope ||
 			event.Cursor.StreamGenerationID == "" ||
 			event.Cursor.Sequence != event.Sequence ||
 			event.Sequence < 0 {

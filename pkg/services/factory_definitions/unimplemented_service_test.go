@@ -97,6 +97,9 @@ func TestUnimplementedService_SnapshotDistributeTypedOutcomes(t *testing.T) {
 	if _, err := unimplemented.ListBuiltInPackagedFactories(ctx, factorydefinitions.ListBuiltInPackagedFactoriesRequest{}); err == nil {
 		t.Fatal("ListBuiltInPackagedFactories: expected collaborator-required error")
 	}
+	if _, err := unimplemented.ResolveBuiltInPackagedFactory(ctx, factorydefinitions.ResolveBuiltInPackagedFactoryRequest{Name: "@you/missing"}); !errors.Is(err, factorydefinitions.ErrUnknownPackagedFactoryIdentity) {
+		t.Fatalf("ResolveBuiltInPackagedFactory: got %v, want ErrUnknownPackagedFactoryIdentity", err)
+	}
 	if _, err := unimplemented.InstallPackagedFactory(ctx, factorydefinitions.InstallPackagedFactoryRequest{Name: "@you/missing"}); !errors.Is(err, factorydefinitions.ErrUnknownPackagedFactoryIdentity) {
 		t.Fatalf("InstallPackagedFactory: got %v, want ErrUnknownPackagedFactoryIdentity", err)
 	}

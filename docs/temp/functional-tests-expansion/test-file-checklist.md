@@ -84,7 +84,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIUnknownFlagFailsBeforeLifecycleStart` verifies stable diagnostics.
   - `TestCLIFlagAfterPositionalValueUsesDocumentedParsing` guards ordering.
 
-- [ ] `tests/functional/transport/cli/parameters/key_value_test.go`
+- [x] `tests/functional/transport/cli/parameters/key_value_test.go`
   - `TestRunKeyValueParametersReachFactoryInvocation` covers repeated
     `key=value` inputs.
   - `TestRunKeyValuePreservesEqualsInValue` covers URLs and encoded values.
@@ -158,7 +158,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIWorkShowMissingReturnsNotFound` covers error behavior.
   - `TestCLIWorkVisualizeProducesDeterministicGraph` covers visualization.
 
-- [ ] `tests/functional/transport/cli/commands/session_wiring_test.go`
+- [x] `tests/functional/transport/cli/commands/session_wiring_test.go`
   - `TestCLISessionCreateListShowDelete` covers the basic lifecycle.
   - `TestCLISessionPauseBuffersAndResumeDispatches` covers lifecycle control.
   - `TestCLISessionMissingIDReturnsNotFound` covers show/delete failure.
@@ -255,7 +255,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestProviderSnapshotOnlyEmitsCompletedSnapshotsOnly`.
   - `TestProviderFinalOnlyEmitsTerminalMessageOnly`.
 
-- [ ] `tests/functional/workers/inference/process_cleanup_test.go`
+- [x] `tests/functional/workers/inference/process_cleanup_test.go`
   - `TestProviderTimeoutTerminatesChildProcessTree` covers cleanup.
   - `TestProviderCancellationTerminatesCompanionProcesses` covers cancellation.
   - `TestProviderSuccessWaitsForProcessAndStreamClosure` covers normal cleanup.
@@ -272,7 +272,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     proves named worktree checkout materialization and omits the CLI `--worktree`
     flag.
 
-- [ ] `tests/functional/workers/inference/codex/golden_failure_test.go`
+- [x] `tests/functional/workers/inference/codex/golden_failure_test.go`
   - `TestCodexGoldenStructuredFailure` replays a non-zero structured failure.
   - `TestCodexGoldenTimeoutHasNoFalseTerminalMessage` covers timeout.
 

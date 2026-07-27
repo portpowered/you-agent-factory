@@ -1,8 +1,6 @@
 package authoredlayout
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -97,11 +95,19 @@ func (w *Writer) WritePrepared(
 	if err := w.fileSystem.MkdirAll(targetDir, 0o755); err != nil {
 		return fmt.Errorf("create factory directory %s: %w", targetDir, err)
 	}
-	formatted, err := formatCanonicalFactoryJSON(prepared.Canonical, sourcePath)
+	rootFileName, err := preparedRootFileName(prepared.RootFileName)
 	if err != nil {
 		return err
 	}
-	factoryPath := filepath.Join(targetDir, factorydefinitions.FactoryConfigFile)
+	formatted, err := formatCanonicalFactory(
+		prepared.Canonical,
+		sourcePath,
+		rootFileName,
+	)
+	if err != nil {
+		return err
+	}
+	factoryPath := filepath.Join(targetDir, rootFileName)
 	if err := w.fileSystem.WriteFile(factoryPath, formatted, 0o644); err != nil {
 		return fmt.Errorf("write canonical factory config %s: %w", factoryPath, err)
 	}
@@ -874,19 +880,6 @@ func (w *Writer) copyFactoryRelativeFile(
 		return fmt.Errorf("write target file %s: %w", targetPath, err)
 	}
 	return nil
-}
-
-func formatCanonicalFactoryJSON(data []byte, sourcePath string) ([]byte, error) {
-	var formatted bytes.Buffer
-	if err := json.Indent(&formatted, data, "", "  "); err != nil {
-		return nil, fmt.Errorf(
-			"format canonical factory config %s: %w",
-			sourcePath,
-			err,
-		)
-	}
-	formatted.WriteByte('\n')
-	return formatted.Bytes(), nil
 }
 
 func (w *Writer) ensureDefaultInputChannelDirectories(
