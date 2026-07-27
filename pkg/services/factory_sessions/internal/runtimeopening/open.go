@@ -170,20 +170,16 @@ func openRuntime(
 		}
 		return ProjectModelsRuntimeConfig(runtime.RuntimeConfig)
 	}
-	if modelService == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Models service is required")
-	}
-	modelDomain, err := modelService.ForRuntime(models.RuntimeBinding{
-		CacheDirectory: configured.Models.CacheDirectory,
-		RuntimeConfig:  currentRuntimeConfig,
-	})
+	modelsBind, err := bindModelsRuntimeScope(
+		ctx,
+		modelService,
+		configured.Models.CacheDirectory,
+		currentRuntimeConfig,
+	)
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	if modelDomain == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Models service returned nil runtime view")
-	}
-	selectedModels := modelDomain
+	selectedModels := modelsBind.Root
 	if contentMaterializer == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work content materializer is required")
 	}
@@ -388,5 +384,6 @@ func openRuntime(
 		configured.Runtime.RuntimeInstanceID,
 		configured.Session.BackendScopeID,
 	)
+	opened.modelsScope = modelsBind.Scope
 	return opened, nil
 }

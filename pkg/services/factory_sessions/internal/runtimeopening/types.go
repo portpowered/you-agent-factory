@@ -16,6 +16,7 @@ type runtimeProducts struct {
 	application roles.OpenedApplicationRuntime
 	invocation  roles.OpenedInvocationRuntime
 	execution   roles.OpenedExecutionRuntime
+	modelsScope models.RuntimeScopeRef
 }
 
 func assembleRuntimeProducts(
