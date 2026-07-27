@@ -28,6 +28,24 @@ const (
 	typedInputRegionValue   = "us-west"
 	typedInputTagAlphaValue = "alpha"
 	typedInputTagBetaValue  = "beta"
+
+	missingRequiredInputWorkflowSource = `return (async function () {
+  const child = await agent.run({
+    prompt: "typed-input-child",
+    label: "missing-required-child",
+    model: "gpt-allowed",
+  });
+  return {
+    label: args.label,
+    count: args.count,
+    enabled: args.enabled,
+    metadata: args.metadata,
+    tags: args.tags,
+    child: child,
+  };
+})();`
+
+	stableMissingRequiredInputDiagnostic = `required invocation parameter "label" is missing`
 )
 
 var privateJavaScriptVMDiagnosticMarkers = []string{
@@ -64,6 +82,187 @@ func TestJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs(t *
 
 	assertTypedInputMappingPrimaryResult(t, started.Result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, marshalPrimaryResultForDiagnostics(t, started.Result))
+}
+
+// TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch proves omitting a
+// required JavaScript Factory request input fails with an actionable customer
+// diagnostic before any child worker or provider dispatch when invoked through
+// the public you run customer process boundary after a root-built process run.
+func TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch(t *testing.T) {
+	t.Parallel()
+
+	dir := scaffoldMissingRequiredInputMappingFactory(t)
+	run := runMissingRequiredInputJavaScriptInvocation(t, dir)
+
+	assertMissingRequiredInputInvocationOutcome(t, run.outcome)
+	if run.providerRunner.CallCount() != 0 {
+		t.Fatalf(
+			"provider command runner call count = %d, want 0 before missing-required-input validation",
+			run.providerRunner.CallCount(),
+		)
+	}
+	assertNoPrivateJavaScriptVMDiagnostics(t, run.outcome.diagnostic)
+}
+
+type missingRequiredInputInvocationRun struct {
+	providerRunner *support.RecordingCommandRunner
+	outcome        missingRequiredInputInvocationOutcome
+}
+
+type missingRequiredInputInvocationOutcome struct {
+	response      factoryapi.InvocationResponse
+	errorResponse factoryapi.ErrorResponse
+	diagnostic    string
+}
+
+func scaffoldMissingRequiredInputMappingFactory(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "javascript-input-mapping-missing-required",
+		"invocationSignature": map[string]any{
+			"parameters": []any{map[string]any{
+				"name": "label", "required": true,
+				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+			}},
+		},
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"sourceRef": typedInputWorkflowFileName,
+				"argsSchema": map[string]any{
+					"type":     "object",
+					"required": []any{"label", "count", "enabled", "metadata", "tags"},
+					"properties": map[string]any{
+						"label":    map[string]any{"type": "string"},
+						"count":    map[string]any{"type": "number"},
+						"enabled":  map[string]any{"type": "boolean"},
+						"metadata": map[string]any{"type": "object"},
+						"tags": map[string]any{
+							"type":  "array",
+							"items": map[string]any{"type": "string"},
+						},
+					},
+					"additionalProperties": false,
+				},
+				"defaultPolicy": map[string]any{
+					"mode":          "READ_ONLY",
+					"maxAgents":     4,
+					"concurrency":   2,
+					"allowNetwork":  false,
+					"allowedModels": []any{"gpt-allowed"},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(
+		filepath.Join(dir, typedInputWorkflowFileName),
+		[]byte(missingRequiredInputWorkflowSource),
+		0o600,
+	); err != nil {
+		t.Fatalf("write missing required input workflow: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "mock-workers.json"),
+		[]byte(`{"mockWorkers":[]}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write mock-workers config: %v", err)
+	}
+	return dir
+}
+
+func runMissingRequiredInputJavaScriptInvocation(
+	t *testing.T,
+	dir string,
+) missingRequiredInputInvocationRun {
+	t.Helper()
+
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run",
+		"--factory", filepath.Join(dir, "factory.json"),
+		"--no-record",
+		"--with-mock-workers", filepath.Join(dir, "mock-workers.json"),
+		"--output", "primary",
+	})
+	homeDir := t.TempDir()
+	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = dir
+
+	err := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}).Execute(inputs.Input)
+	if err == nil {
+		t.Fatalf(
+			"Process.Execute() error = nil, want missing required input failure before child dispatch\nstdout:\n%s\nstderr:\n%s",
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	outcome := missingRequiredInputInvocationOutcome{
+		diagnostic: extractMissingRequiredInputDiagnostic(t, inputs.Stdout(), inputs.Stderr(), err.Error()),
+	}
+	if stdout := strings.TrimSpace(inputs.Stdout()); stdout != "" {
+		if decodeErr := json.Unmarshal([]byte(stdout), &outcome.response); decodeErr != nil {
+			t.Fatalf("decode InvocationResponse: %v\nstdout:\n%s", decodeErr, stdout)
+		}
+	}
+	if stderr := strings.TrimSpace(inputs.Stderr()); stderr != "" {
+		if decodeErr := json.Unmarshal([]byte(stderr), &outcome.errorResponse); decodeErr != nil {
+			t.Fatalf("decode ErrorResponse: %v\nstderr:\n%s", decodeErr, stderr)
+		}
+	}
+	return missingRequiredInputInvocationRun{
+		providerRunner: runner,
+		outcome:        outcome,
+	}
+}
+
+func assertMissingRequiredInputInvocationOutcome(
+	t *testing.T,
+	outcome missingRequiredInputInvocationOutcome,
+) {
+	t.Helper()
+
+	if outcome.response.Status != "" &&
+		outcome.response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED or empty before terminal invocation", outcome.response.Status)
+	}
+	if outcome.response.PrimaryResult != nil {
+		t.Fatalf("primaryResult = %#v, want nil before missing-required-input validation", outcome.response.PrimaryResult)
+	}
+	if outcome.errorResponse.Code != factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_MISSING_REQUIRED_INPUT") {
+		t.Fatalf(
+			"ErrorResponse code = %q, want INVOCATION_ARGUMENT_MISSING_REQUIRED_INPUT",
+			outcome.errorResponse.Code,
+		)
+	}
+	if !strings.Contains(outcome.errorResponse.Message, stableMissingRequiredInputDiagnostic) {
+		t.Fatalf(
+			"ErrorResponse message = %q, want missing required input diagnostic %q",
+			outcome.errorResponse.Message,
+			stableMissingRequiredInputDiagnostic,
+		)
+	}
+	if !strings.Contains(outcome.diagnostic, `"label"`) {
+		t.Fatalf(
+			"failure diagnostic = %q, want actionable missing required input field name %q",
+			outcome.diagnostic,
+			"label",
+		)
+	}
+}
+
+func extractMissingRequiredInputDiagnostic(t *testing.T, stdout, stderr, executeError string) string {
+	t.Helper()
+
+	diagnostic := strings.Join([]string{executeError, stdout, stderr}, "\n")
+	if strings.Contains(diagnostic, stableMissingRequiredInputDiagnostic) {
+		return diagnostic
+	}
+	t.Fatalf("diagnostic %q does not contain missing required input detail %q", diagnostic, stableMissingRequiredInputDiagnostic)
+	return ""
 }
 
 func scaffoldTypedInputMappingWorkflow(t *testing.T) string {
