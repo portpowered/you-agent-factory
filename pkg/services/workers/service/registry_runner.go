@@ -177,15 +177,16 @@ func (d *conductorCollectingDestination) result() (workers.RunnerExecutionResult
 }
 
 func providerErrorFromConductorFailure(failure inference.Failure) error {
-	return workerprovider.NewProviderError(
-		workFailureTypeFromConductorFailure(failure.Kind()),
+	return workerprovider.NewProviderErrorWithSession(
+		workFailureTypeFromConductorFailure(failure),
 		failure.Message(),
 		fmt.Errorf("conductor failure: %s", failure.Kind()),
+		providerSessionFromConductor(failure.ProviderSession()),
 	)
 }
 
-func workFailureTypeFromConductorFailure(kind inference.FailureKind) workers.WorkFailureType {
-	switch kind {
+func workFailureTypeFromConductorFailure(failure inference.Failure) workers.WorkFailureType {
+	switch failure.Kind() {
 	case inference.FailureTimeout:
 		return workers.WorkFailureTypeTimeout
 	case inference.FailureThrottled:
@@ -199,6 +200,9 @@ func workFailureTypeFromConductorFailure(kind inference.FailureKind) workers.Wor
 	case inference.FailureCanceled:
 		return workers.WorkFailureTypeUnknown
 	default:
+		if failure.Retryable() {
+			return workers.WorkFailureTypeInternalServerError
+		}
 		return workers.WorkFailureTypeUnknown
 	}
 }

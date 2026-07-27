@@ -503,6 +503,13 @@ func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req workerexecution
 		if !decision.Retryable || retryCount >= ae.retryConfig.maxRetries {
 			return workerexecution.InferenceResponse{}, retryCount, providerErr
 		}
+		if session := providerErr.ProviderSession; session != nil && strings.TrimSpace(session.ID) != "" {
+			req.SessionID = strings.TrimSpace(session.ID)
+			req.RequiredOptionalCapabilities = appendRunnerCapabilityIfMissing(
+				req.RequiredOptionalCapabilities,
+				workerexecution.RunnerOptionalCapabilitySessionResume,
+			)
+		}
 
 		baseDelay := ae.retryConfig.initialBackoff << retryCount
 		jitter, jitterErr := ae.retryConfig.jitter(baseDelay)
@@ -525,6 +532,18 @@ func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req workerexecution
 			return workerexecution.InferenceResponse{}, retryCount, err
 		}
 	}
+}
+
+func appendRunnerCapabilityIfMissing(
+	capabilities []workerexecution.RunnerOptionalCapability,
+	capability workerexecution.RunnerOptionalCapability,
+) []workerexecution.RunnerOptionalCapability {
+	for _, existing := range capabilities {
+		if existing == capability {
+			return capabilities
+		}
+	}
+	return append(capabilities, capability)
 }
 
 type providerRunnerAdapter struct {

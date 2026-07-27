@@ -185,6 +185,36 @@ func (i *successfulConductorIntegration) Invoke(
 	})))
 }
 
+type failingConductorIntegration struct {
+	identity inference.Identity
+	failure  inference.Failure
+}
+
+func (i *failingConductorIntegration) Identity() inference.Identity { return i.identity }
+
+func (*failingConductorIntegration) MaximumCapabilities() inference.CapabilitySet {
+	return inference.NewCapabilitySet(inference.CapabilityPromptSubmission)
+}
+
+func (*failingConductorIntegration) Discover(context.Context) (inference.Discovery, error) {
+	return inference.NewDiscovery(inference.ReadinessReady), nil
+}
+
+func (i *failingConductorIntegration) Capabilities(
+	context.Context,
+	inference.InvocationRequest,
+) (inference.CapabilitySet, error) {
+	return i.MaximumCapabilities(), nil
+}
+
+func (i *failingConductorIntegration) Invoke(
+	ctx context.Context,
+	_ inference.InvocationRequest,
+	writer inference.ResponseWriter,
+) error {
+	return writer.Close(ctx, inference.FailedCompletion(i.failure))
+}
+
 func TestConductorInvocationRunnerRoutesExternalIntegrationsThroughConductor(t *testing.T) {
 	t.Parallel()
 
@@ -210,6 +240,64 @@ func TestConductorInvocationRunnerRoutesExternalIntegrationsThroughConductor(t *
 	}
 	if integration.calls != 1 {
 		t.Fatalf("integration invoke calls = %d, want 1", integration.calls)
+	}
+	if native.calls != 0 {
+		t.Fatalf("native runner calls = %d, want 0", native.calls)
+	}
+}
+
+func TestConductorInvocationRunnerPreservesRetryableUnknownFailurePolicy(t *testing.T) {
+	t.Parallel()
+
+	const providerID = "customer.retryable"
+	session := inference.NewProviderSession(providerID, "session_id", "session-retry-1", nil)
+	integration := &failingConductorIntegration{
+		identity: inference.Identity(providerID),
+		failure: inference.NewFailure(inference.FailureInput{
+			Kind:            inference.FailureUnknown,
+			Message:         "provider is temporarily unavailable",
+			Retryable:       true,
+			ProviderSession: &session,
+		}),
+	}
+	builtIns, err := providerregistry.BuiltInRegistrations()
+	if err != nil {
+		t.Fatalf("BuiltInRegistrations() error = %v", err)
+	}
+	manifest := externalConductorManifest(t, providerID, "retryable")
+	providers, err := providerregistry.New(append(
+		builtIns,
+		providerregistry.ExternalRegistration(manifest, integration),
+	)...)
+	if err != nil {
+		t.Fatalf("registry.New() error = %v", err)
+	}
+	native := &conductorRouteRecordingRunner{}
+	runner := conductorInvocationRunner{
+		next:      native,
+		conductor: conductor.New(providers),
+		providers: providers,
+	}
+
+	_, err = runner.Execute(context.Background(), workers.RunnerExecutionRequest{
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-retryable-1"},
+		RunnerID: providerID,
+	})
+	var providerErr *workerprovider.ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("Execute() error = %v, want *ProviderError", err)
+	}
+	if providerErr.Type != workers.WorkFailureTypeInternalServerError {
+		t.Fatalf("provider error type = %q, want %q", providerErr.Type, workers.WorkFailureTypeInternalServerError)
+	}
+	decision := workerprovider.WorkFailureDecisionFromProviderError(providerErr)
+	if !decision.Retryable || decision.Terminal || decision.TriggersThrottlePause {
+		t.Fatalf("failure decision = %#v, want retryable non-terminal non-throttle", decision)
+	}
+	if providerErr.ProviderSession == nil ||
+		providerErr.ProviderSession.Provider != providerID ||
+		providerErr.ProviderSession.ID != "session-retry-1" {
+		t.Fatalf("provider session = %#v, want preserved retry session", providerErr.ProviderSession)
 	}
 	if native.calls != 0 {
 		t.Fatalf("native runner calls = %d, want 0", native.calls)

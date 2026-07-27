@@ -64,6 +64,15 @@ primary-result behavior.
   in the cloned `ProviderInferenceRequest.SessionID`, while direct protocol
   callers can use `InvocationRequest.ProviderSession`; a migrated provider must
   normalize both accepted inputs before applying its emitted-session rules.
+- Retryable conductor failures must preserve both retry posture and any
+  Provider Session when they cross into the Worker failure contract. A neutral
+  `unknown` failure with `Retryable=true` maps to retryable
+  `internal_server_error`, and the next attempt must require session-resume
+  capability while carrying that session ID. Wrap provider-boundary recording
+  around the final decorated runner so registry-selected conductor calls and
+  retained native calls each emit one canonical inference request/response
+  pair; otherwise conductor failures and replacement sessions disappear from
+  Factory events.
 
 - Review-gated factories that must revise rejected work should preserve the
   original input on the work-stage route, retain non-empty worker output in the

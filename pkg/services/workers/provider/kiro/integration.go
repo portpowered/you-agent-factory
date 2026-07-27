@@ -84,12 +84,26 @@ func (i *Integration) Invoke(
 	if errors.Is(runErr, context.Canceled) {
 		return runErr
 	}
+	requestedSession := validRequestedSession(request.ProviderSession())
+	if requestedSession == nil {
+		// The product runner carries configured resume state in Execution while
+		// direct protocol callers can supply ProviderSession. Normalize both
+		// accepted entry paths before applying Kiro's emitted-session semantics.
+		requestedSession = newProviderSession(providerRequest.SessionID)
+	}
+	resultSession := responseFromOutput(
+		result.Stdout,
+		result.Stderr,
+		requestedSession,
+	).ProviderSession()
 	classified := NewAdapter().ClassifyFailure(ctx, adapter.FailureContext{
 		CommandResult: result,
 		CommandError:  runErr,
 	})
 	if classified.Failure != nil {
-		return writer.Close(ctx, inference.FailedCompletion(failureFromKiroFacts(*classified.Failure)))
+		return writer.Close(ctx, inference.FailedCompletion(
+			failureFromKiroFacts(*classified.Failure, resultSession),
+		))
 	}
 	if runErr != nil {
 		return writer.Close(ctx, inference.FailedCompletion(inference.NewFailure(inference.FailureInput{
@@ -98,13 +112,6 @@ func (i *Integration) Invoke(
 		})))
 	}
 
-	requestedSession := validRequestedSession(request.ProviderSession())
-	if requestedSession == nil {
-		// The product runner carries configured resume state in Execution while
-		// direct protocol callers can supply ProviderSession. Normalize both
-		// accepted entry paths before applying Kiro's emitted-session semantics.
-		requestedSession = newProviderSession(providerRequest.SessionID)
-	}
 	response := responseFromOutput(result.Stdout, result.Stderr, requestedSession)
 	if err := writeFinalOnlyProgress(ctx, writer, request.InvocationID(), response.Content()); err != nil {
 		return err
@@ -112,11 +119,15 @@ func (i *Integration) Invoke(
 	return writer.Close(ctx, inference.SuccessfulCompletion(response))
 }
 
-func failureFromKiroFacts(facts adapter.FailureFacts) inference.Failure {
+func failureFromKiroFacts(
+	facts adapter.FailureFacts,
+	session *inference.ProviderSession,
+) inference.Failure {
 	return inference.NewFailure(inference.FailureInput{
-		Kind:      kiroFailureKind(facts.Type),
-		Message:   facts.Message,
-		Retryable: facts.Retry.Retryable,
+		Kind:            kiroFailureKind(facts.Type),
+		Message:         facts.Message,
+		Retryable:       facts.Retry.Retryable,
+		ProviderSession: session,
 	})
 }
 

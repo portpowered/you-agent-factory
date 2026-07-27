@@ -193,12 +193,13 @@ func (s *Service) Build(
 		effectiveSkipPermissions := effectiveWorkerSkipPermissions(def, invocationSkipPermissionsOverride)
 		runner, err := s.providerRunner(
 			runtimeConfig, def, logger, effectiveSkipPermissions,
-			providerOverride, inferenceProgressPublisher, inferenceRecorder, clock,
+			providerOverride, inferenceProgressPublisher,
 		)
 		if err != nil {
 			return Result{}, err
 		}
 		runner = decorateProviderRunner(runner, def, runnerDecorators, effectiveSkipPermissions)
+		runner = recordProviderRunner(runner, inferenceRecorder, clock)
 		inference := workerexecutor.NewAgentExecutorWithRunner(
 			runtimeConfig,
 			runner,
@@ -293,8 +294,6 @@ func (s *Service) providerRunner(
 	effectiveSkipPermissions bool,
 	providerOverride providercontract.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
-	inferenceRecorder workerprovider.InferenceEventRecorder,
-	clock func() time.Time,
 ) (workers.Runner, error) {
 	var runner workers.Runner
 	if providerOverride != nil {
@@ -320,21 +319,43 @@ func (s *Service) providerRunner(
 		}
 		runner = built
 	}
-	if inferenceRecorder == nil {
-		return runner, nil
-	}
-	if providerOverride != nil {
-		return workerexecutor.RunnerFromProvider(workerprovider.NewRecordingProvider(
-			providerOverride, inferenceRecorder, clock,
-		)), nil
-	}
-	providerRunner, ok := runner.(*workerprovider.ScriptWrapProvider)
-	if !ok {
-		return runner, nil
+	return runner, nil
+}
+
+// runnerProviderAdapter lets the provider-boundary recorder observe the final
+// decorated runner. Registry-selected conductor routes and retained native
+// routes therefore emit the same canonical inference events exactly once.
+type runnerProviderAdapter struct {
+	runner workers.Runner
+}
+
+func recordProviderRunner(
+	runner workers.Runner,
+	recorder workerprovider.InferenceEventRecorder,
+	clock func() time.Time,
+) workers.Runner {
+	if recorder == nil {
+		return runner
 	}
 	return workerexecutor.RunnerFromProvider(workerprovider.NewRecordingProvider(
-		providerRunner, inferenceRecorder, clock,
-	)), nil
+		runnerProviderAdapter{runner: runner},
+		recorder,
+		clock,
+	))
+}
+
+func (a runnerProviderAdapter) Infer(
+	ctx context.Context,
+	request workerexecution.ProviderInferenceRequest,
+) (workerexecution.InferenceResponse, error) {
+	if a.runner == nil {
+		return workerexecution.InferenceResponse{}, workerprovider.NewProviderError(
+			workerexecution.WorkFailureTypeMisconfigured,
+			"recording runner requires an implementation",
+			nil,
+		)
+	}
+	return a.runner.Execute(ctx, request)
 }
 
 // effectiveSkipPermissionsRunner installs invocation-local policy outside all

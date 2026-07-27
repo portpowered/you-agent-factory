@@ -17,6 +17,7 @@ type integrationFailureCase struct {
 	wantKind    inference.FailureKind
 	wantMessage string
 	wantRetry   bool
+	wantSession string
 	rejected    []string
 }
 
@@ -60,11 +61,15 @@ func TestIntegrationNormalizesKnownKiroFailures(t *testing.T) {
 			name: "temporary service failure",
 			result: workerprocess.CommandResult{
 				ExitCode: 1,
-				Stderr:   []byte(`{"type":"error","errorType":"ServiceUnavailableException","message":"host /tmp/private"}`),
+				Stderr: []byte(
+					`{"event":"session.created","session_id":"` + resumedSessionID + `"}` + "\n" +
+						`{"type":"error","errorType":"ServiceUnavailableException","message":"host /tmp/private"}`,
+				),
 			},
 			wantKind:    inference.FailureUnknown,
 			wantMessage: kiroServerFailureMessage,
 			wantRetry:   true,
+			wantSession: resumedSessionID,
 			rejected:    []string{"/tmp/private"},
 		},
 	})
@@ -152,10 +157,33 @@ func assertKiroFailureCompletion(
 			failure, want.wantKind, want.wantMessage, want.wantRetry,
 		)
 	}
+	assertKiroFailureSession(t, failure.ProviderSession(), want.wantSession)
 	for _, rejected := range want.rejected {
 		if strings.Contains(failure.Message(), rejected) {
 			t.Fatalf("failure message leaked %q: %q", rejected, failure.Message())
 		}
+	}
+}
+
+func assertKiroFailureSession(
+	t *testing.T,
+	session *inference.ProviderSession,
+	wantSession string,
+) {
+	t.Helper()
+	if wantSession == "" {
+		if session != nil {
+			t.Fatalf("failure Provider Session = %#v, want nil", session)
+		}
+		return
+	}
+	if session == nil || session.Provider() != providerIdentity || session.ID() != wantSession {
+		t.Fatalf(
+			"failure Provider Session = %#v, want provider=%q id=%q",
+			session,
+			providerIdentity,
+			wantSession,
+		)
 	}
 }
 
