@@ -7,7 +7,16 @@ import (
 )
 
 // NewService constructs the private artifacts_export capability from the
-// lifecycle snapshot seam selected by the Recordings root.
-func NewService(snapshots artifactsexport.SnapshotSource) artifactsexport.Service {
-	return artifactsexportservice.New(snapshots)
+// lifecycle snapshot seam and publication effect selected by the Recordings root.
+func NewService(
+	snapshots artifactsexport.SnapshotSource,
+	publication artifactsexport.PortableArtifactPublication,
+) artifactsexport.Service {
+	return artifactsexportservice.New(snapshots, publication)
+}
+
+// NewOSPublication constructs the default host publication effect for portable
+// artifact export and read.
+func NewOSPublication() (artifactsexport.PortableArtifactPublication, error) {
+	return artifactsexportservice.NewOSPublication()
 }

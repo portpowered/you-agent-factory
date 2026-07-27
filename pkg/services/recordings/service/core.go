@@ -577,11 +577,12 @@ func NewServiceWithLifecycleEffects(
 		tickers,
 		clocks...,
 	)
+	publication, _ := artifactsexportwire.NewOSPublication()
 	return &combinedService{
 		Ledger:            ledger,
 		ProjectionService: projection,
 		Service:           lifecycle,
-		artifactsExport:   artifactsexportwire.NewService(lifecycle),
+		artifactsExport:   artifactsexportwire.NewService(lifecycle, publication),
 		replayByKey:       make(map[string]*factorydefinitions.ReplayArtifact),
 		replayPlans:       make(map[recordings.ReplayPlanHandle]*neutralReplayPlan),
 	}

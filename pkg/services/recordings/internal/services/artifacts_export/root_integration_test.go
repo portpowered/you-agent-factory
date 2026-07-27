@@ -2,6 +2,9 @@ package artifactsexport_test
 
 import (
 	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -185,5 +188,62 @@ func TestRecordingsRootPortableExportRoundTripOmitsPrivateStorage(t *testing.T) 
 	}
 	if !reflect.DeepEqual(summarized.Summary, built.Artifact.Summary) {
 		t.Fatalf("summarized summary = %#v, want %#v", summarized.Summary, built.Artifact.Summary)
+	}
+}
+
+func TestRecordingsRootFailedExportLeavesNoReadablePublicArtifact(t *testing.T) {
+	t.Parallel()
+
+	destination := filepath.Join(t.TempDir(), "destination-is-directory")
+	if err := os.Mkdir(destination, 0o700); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	root := recordingsservice.NewService(
+		&unusedLedger{},
+		recordingsservice.NewProjectionService(),
+	)
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-failed-root-export"}
+	bound, err := root.BindRecording(recordings.BindRecordingRequest{
+		RecordingID: "recording-failed-root-export",
+		Artifact:    recordings.RecordingArtifactReference(destination),
+		Scope:       scope,
+	})
+	if err != nil {
+		t.Fatalf("BindRecording: %v", err)
+	}
+	if _, err := root.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: bound.Status.RecordingID,
+		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
+	}); err != nil {
+		t.Fatalf("FinishRecording: %v", err)
+	}
+	_, err = root.ExportPortableArtifact(recordings.ExportPortableArtifactRequest{
+		RecordingID: bound.Status.RecordingID,
+	})
+	if !errors.Is(err, recordings.ErrPortableArtifactExportFailed) {
+		t.Fatalf("ExportPortableArtifact = %v, want ErrPortableArtifactExportFailed", err)
+	}
+	info, err := os.Stat(destination)
+	if err != nil || !info.IsDir() {
+		t.Fatalf("public destination stat = %v, want existing directory", err)
+	}
+	entries, err := os.ReadDir(destination)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	for _, entry := range entries {
+		if strings.Contains(entry.Name(), ".tmp") {
+			t.Fatalf("temporary portable artifact remained after failure: %s", entry.Name())
+		}
+	}
+	_, err = root.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+		Reference: recordings.RecordingArtifactReference(destination),
+	})
+	if !errors.Is(err, recordings.ErrPortableArtifactUnavailable) &&
+		!errors.Is(err, recordings.ErrInvalidPortableArtifact) {
+		t.Fatalf("ReadPortableArtifact after failed export = %v, want unavailable or invalid", err)
+	}
+	if _, err := os.Stat(filepath.Join(destination, filepath.Base(destination))); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("nested publish path stat = %v, want not exist", err)
 	}
 }

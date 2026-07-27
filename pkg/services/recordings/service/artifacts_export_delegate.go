@@ -33,3 +33,15 @@ func (service *combinedService) SummarizePortableArtifact(
 ) (recordings.SummarizePortableArtifactResult, error) {
 	return service.artifactsExport.SummarizePortableArtifact(request)
 }
+
+func (service *combinedService) ExportPortableArtifact(
+	request recordings.ExportPortableArtifactRequest,
+) (recordings.ExportPortableArtifactResult, error) {
+	return service.artifactsExport.ExportPortableArtifact(request)
+}
+
+func (service *combinedService) ReadPortableArtifact(
+	request recordings.ReadPortableArtifactRequest,
+) (recordings.ReadPortableArtifactResult, error) {
+	return service.artifactsExport.ReadPortableArtifact(request)
+}

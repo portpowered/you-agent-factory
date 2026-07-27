@@ -17,7 +17,7 @@ func (snapshotSourceStub) Snapshot(recordings.RecordingID) (recordinglifecycle.S
 func TestNewServiceConstructsArtifactsExportCapability(t *testing.T) {
 	t.Parallel()
 
-	if service := artifactsexportwire.NewService(snapshotSourceStub{}); service == nil {
+	if service := artifactsexportwire.NewService(snapshotSourceStub{}, nil); service == nil {
 		t.Fatal("NewService() = nil")
 	}
 }

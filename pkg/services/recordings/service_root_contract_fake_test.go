@@ -653,6 +653,30 @@ func (fake *peerRootServiceFake) SummarizePortableArtifact(
 	}, nil
 }
 
+func (fake *peerRootServiceFake) ExportPortableArtifact(
+	request recordings.ExportPortableArtifactRequest,
+) (recordings.ExportPortableArtifactResult, error) {
+	built, err := fake.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
+		RecordingID: request.RecordingID,
+	})
+	if err != nil {
+		return recordings.ExportPortableArtifactResult{}, err
+	}
+	return recordings.ExportPortableArtifactResult{
+		Reference: built.Artifact.Summary.Reference,
+		Artifact:  built.Artifact,
+	}, nil
+}
+
+func (fake *peerRootServiceFake) ReadPortableArtifact(
+	request recordings.ReadPortableArtifactRequest,
+) (recordings.ReadPortableArtifactResult, error) {
+	if strings.TrimSpace(string(request.Reference)) == "" {
+		return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
+	}
+	return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
+}
+
 func peerValidatePortableArtifact(artifact recordings.PortableArtifact) error {
 	if artifact.SchemaVersion != recordings.PortableArtifactSchemaV1 {
 		return recordings.ErrUnsupportedPortableArtifactSchema

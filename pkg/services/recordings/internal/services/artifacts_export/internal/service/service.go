@@ -5,7 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -15,14 +18,19 @@ import (
 // Service keeps portable artifact close/export/read behind the Recordings-owned
 // artifacts_export capability.
 type Service struct {
-	snapshots artifactsexport.SnapshotSource
+	snapshots   artifactsexport.SnapshotSource
+	publication artifactsexport.PortableArtifactPublication
 }
 
 var _ artifactsexport.Service = (*Service)(nil)
 
-// New constructs the artifacts_export service from the lifecycle snapshot seam.
-func New(snapshots artifactsexport.SnapshotSource) *Service {
-	return &Service{snapshots: snapshots}
+// New constructs the artifacts_export service from the lifecycle snapshot seam
+// and the portable-artifact publication effect.
+func New(
+	snapshots artifactsexport.SnapshotSource,
+	publication artifactsexport.PortableArtifactPublication,
+) *Service {
+	return &Service{snapshots: snapshots, publication: publication}
 }
 
 func (service *Service) BuildPortableArtifact(
@@ -108,6 +116,67 @@ func (service *Service) SummarizePortableArtifact(
 	return recordings.SummarizePortableArtifactResult{
 		Summary: clonePortableArtifactSummary(request.Artifact.Summary),
 	}, nil
+}
+
+func (service *Service) ExportPortableArtifact(
+	request recordings.ExportPortableArtifactRequest,
+) (recordings.ExportPortableArtifactResult, error) {
+	if service.publication == nil {
+		return recordings.ExportPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
+	}
+	built, err := service.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
+		RecordingID: request.RecordingID,
+	})
+	if err != nil {
+		return recordings.ExportPortableArtifactResult{}, err
+	}
+	encoded, err := service.EncodePortableArtifact(recordings.EncodePortableArtifactRequest{
+		Artifact: built.Artifact,
+	})
+	if err != nil {
+		return recordings.ExportPortableArtifactResult{}, err
+	}
+	destination := strings.TrimSpace(string(built.Artifact.Summary.Reference))
+	if destination == "" {
+		return recordings.ExportPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
+	}
+	if err := service.publication.Publish(destination, encoded.Payload); err != nil {
+		return recordings.ExportPortableArtifactResult{}, fmt.Errorf(
+			"%w: %w",
+			recordings.ErrPortableArtifactExportFailed,
+			err,
+		)
+	}
+	return recordings.ExportPortableArtifactResult{
+		Reference: built.Artifact.Summary.Reference,
+		Artifact:  built.Artifact,
+	}, nil
+}
+
+func (service *Service) ReadPortableArtifact(
+	request recordings.ReadPortableArtifactRequest,
+) (recordings.ReadPortableArtifactResult, error) {
+	if service.publication == nil {
+		return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
+	}
+	destination := strings.TrimSpace(string(request.Reference))
+	if destination == "" {
+		return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
+	}
+	payload, err := service.publication.Read(destination)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
+		}
+		return recordings.ReadPortableArtifactResult{}, recordings.ErrInvalidPortableArtifact
+	}
+	decoded, err := service.DecodePortableArtifact(recordings.DecodePortableArtifactRequest{
+		Payload: payload,
+	})
+	if err != nil {
+		return recordings.ReadPortableArtifactResult{}, err
+	}
+	return recordings.ReadPortableArtifactResult{Artifact: decoded.Artifact}, nil
 }
 
 func portableArtifactSummary(
