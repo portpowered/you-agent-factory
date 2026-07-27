@@ -3,6 +3,7 @@ package script
 import (
 	"context"
 	"errors"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -234,13 +235,14 @@ func TestRunnerSuccessResultsStayDetachedAcrossRepeatedAndConcurrentExecutions(t
 func TestRunnerNormalizesCommandFailuresWithPartialDiagnosticsAndOneTerminalResponse(t *testing.T) {
 	processFailure := errors.New("exec: executable file not found")
 	tests := []struct {
-		name            string
-		result          workers.CommandResult
-		commandErr      error
-		wantMessage     string
-		wantOutcome     workers.ScriptExecutionOutcome
-		wantFailureType *workers.ScriptFailureType
-		wantExitCode    *int
+		name              string
+		result            workers.CommandResult
+		commandErr        error
+		wantMessage       string
+		wantOutcome       workers.ScriptExecutionOutcome
+		wantFailureType   *workers.ScriptFailureType
+		wantWorkFailure   workers.WorkFailureType
+		wantExitCode      *int
 	}{
 		{
 			name: "non-zero exit",
@@ -263,12 +265,37 @@ func TestRunnerNormalizesCommandFailuresWithPartialDiagnosticsAndOneTerminalResp
 			wantMessage:     "script command execution failed",
 			wantOutcome:     workers.ScriptExecutionOutcomeProcessError,
 			wantFailureType: scriptFailureTypePointer(workers.ScriptFailureTypeProcessError),
+			wantWorkFailure: workers.WorkFailureTypeInternalServerError,
+		},
+		{
+			name: "missing executable",
+			result: workers.CommandResult{
+				Stdout: []byte("partial stdout"),
+				Stderr: []byte("partial stderr"),
+			},
+			commandErr:      exec.ErrNotFound,
+			wantMessage:     "Script executable could not be found.",
+			wantOutcome:     workers.ScriptExecutionOutcomeProcessError,
+			wantFailureType: scriptFailureTypePointer(workers.ScriptFailureTypeProcessError),
+			wantWorkFailure: workers.WorkFailureTypeMissingExecutable,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			runCommandFailureCase(t, test.result, test.commandErr, test.wantMessage,
-				test.wantOutcome, test.wantFailureType, test.wantExitCode, processFailure)
+			wantWorkFailure := test.wantWorkFailure
+			if wantWorkFailure == "" {
+				wantWorkFailure = workers.WorkFailureTypeInternalServerError
+			}
+			runCommandFailureCase(
+				t,
+				test.result,
+				test.commandErr,
+				test.wantMessage,
+				test.wantOutcome,
+				test.wantFailureType,
+				wantWorkFailure,
+				test.wantExitCode,
+			)
 		})
 	}
 }
@@ -280,8 +307,8 @@ func runCommandFailureCase(
 	wantMessage string,
 	wantOutcome workers.ScriptExecutionOutcome,
 	wantFailureType *workers.ScriptFailureType,
+	wantWorkFailure workers.WorkFailureType,
 	wantExitCode *int,
-	processFailure error,
 ) {
 	t.Helper()
 	observations := &observationLog{}
@@ -319,12 +346,12 @@ func runCommandFailureCase(
 	result, executeErr := scriptRunner.Execute(t.Context(), validRequest())
 	var failure *workers.ProviderError
 	if !errors.As(executeErr, &failure) ||
-		failure.Type != workers.WorkFailureTypeInternalServerError ||
+		failure.Type != wantWorkFailure ||
 		failure.Message != wantMessage {
-		t.Fatalf("Execute() error = %#v, want normalized failure message %q", executeErr, wantMessage)
+		t.Fatalf("Execute() error = %#v, want normalized failure type %q message %q", executeErr, wantWorkFailure, wantMessage)
 	}
-	if commandErr != nil && !errors.Is(executeErr, processFailure) {
-		t.Fatalf("Execute() error = %v, want process cause", executeErr)
+	if commandErr != nil && !errors.Is(executeErr, commandErr) {
+		t.Fatalf("Execute() error = %v, want process cause %v", executeErr, commandErr)
 	}
 	assertFailureDiagnostics(t, result.Diagnostics, commandResult, 2*time.Second)
 	assertFailureDiagnostics(t, failure.Diagnostics, commandResult, 2*time.Second)

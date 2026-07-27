@@ -1,15 +1,19 @@
 package script_test
 
 import (
+	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -56,6 +60,76 @@ func TestScriptWorkerReceivesDeclaredEnvironmentOnly(t *testing.T) {
 	}
 	if envContainsKey(env, undeclaredHostEnvName) {
 		t.Fatalf("captured command env leaked undeclared host value %s in %v", undeclaredHostEnvName, env)
+	}
+}
+
+// TestScriptWorkerMissingExecutableFailsActionably proves a root-built script
+// worker whose external command cannot be started reports an actionable public
+// failure instead of succeeding or hanging without a customer-visible outcome.
+func TestScriptWorkerMissingExecutableFailsActionably(t *testing.T) {
+	t.Setenv(undeclaredHostEnvName, undeclaredHostEnvValue)
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	testutil.WriteSeedFile(t, dir, "task", []byte("missing-executable-input"))
+
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ScriptCommandRunner: missingExecutableCommandRunner{}},
+		10*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
+		t.Fatalf("completed work tokens = %d, want 0 successful script dispatch", got)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed work tokens = %d, want 1 actionable script failure", got)
+	}
+	assertScriptMissingExecutableDispatchFailure(t, events)
+}
+
+type missingExecutableCommandRunner struct{}
+
+func (missingExecutableCommandRunner) Run(
+	_ context.Context,
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, exec.ErrNotFound
+}
+
+func assertScriptMissingExecutableDispatchFailure(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
+
+	dispatches := support.ObserveDispatchEvents(t, events)
+	if len(dispatches) == 0 {
+		t.Fatal("factory events missing dispatch observations")
+	}
+	response := dispatches[len(dispatches)-1].Response
+	if response == nil {
+		t.Fatal("dispatch response missing for failed script execution")
+	}
+	if response.Outcome != factoryapi.WorkOutcomeFailed {
+		t.Fatalf("dispatch outcome = %s, want FAILED", response.Outcome)
+	}
+	if response.FailureDetail == nil {
+		t.Fatal("dispatch FailureDetail missing for missing executable")
+	}
+	if response.FailureDetail.Reason != factoryapi.WorkFailureTypeMissingExecutable {
+		t.Fatalf(
+			"failure reason = %q, want %q",
+			response.FailureDetail.Reason,
+			factoryapi.WorkFailureTypeMissingExecutable,
+		)
+	}
+	message := strings.ToLower(response.FailureDetail.Message)
+	if !strings.Contains(message, "executable") && !strings.Contains(message, "could not") {
+		t.Fatalf("failure message %q does not identify missing executable", response.FailureDetail.Message)
+	}
+	if strings.Contains(message, undeclaredHostEnvValue) {
+		t.Fatalf("failure message leaked undeclared host environment value %q", undeclaredHostEnvValue)
+	}
+	if response.Error != nil && strings.Contains(*response.Error, undeclaredHostEnvValue) {
+		t.Fatalf("dispatch error leaked undeclared host environment value %q", undeclaredHostEnvValue)
 	}
 }
 
