@@ -8,6 +8,31 @@ import (
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
+type packagedCatalogStub struct{}
+
+func (packagedCatalogStub) ListBuiltInPackagedFactories(
+	context.Context,
+	factoryroot.ListBuiltInPackagedFactoriesRequest,
+) (factoryroot.ListBuiltInPackagedFactoriesResult, error) {
+	return factoryroot.ListBuiltInPackagedFactoriesResult{Entries: []factoryroot.BuiltInPackagedFactoryEntry{{
+		Name: "@you/goal", Project: "builtin-goal",
+		Formats: []factoryroot.PackagedFactoryFormat{factoryroot.PackagedFactoryFormatJSON},
+	}}}, nil
+}
+
+func (packagedCatalogStub) ResolveBuiltInPackagedFactory(
+	context.Context,
+	factoryroot.ResolveBuiltInPackagedFactoryRequest,
+) (factoryroot.ResolveBuiltInPackagedFactoryResult, error) {
+	return factoryroot.ResolveBuiltInPackagedFactoryResult{
+		Definition: factoryroot.PackagedDefinition{
+			Name: "@you/goal", Project: "builtin-goal",
+			Formats: []factoryroot.PackagedFactoryFormat{factoryroot.PackagedFactoryFormatJSON},
+		},
+		Formats: []factoryroot.PackagedFactoryFormat{factoryroot.PackagedFactoryFormatJSON},
+	}, nil
+}
+
 func TestService_PromotedUnimplementedRootSlices(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -42,5 +67,31 @@ func TestService_PromotedUnimplementedRootSlices(t *testing.T) {
 	}
 	if _, err := svc.CreateFactoryScaffold(ctx, factoryroot.CreateFactoryScaffoldRequest{}); !errors.Is(err, factoryroot.ErrFactoryDistributeFailed) {
 		t.Fatalf("promoted CreateFactoryScaffold: got %v", err)
+	}
+}
+
+func TestServiceDelegatesBuiltInCatalogThroughDefinitionsRoot(t *testing.T) {
+	t.Parallel()
+	svc := NewWithCatalogAndPackages(
+		stubDefinitionHost{},
+		nil,
+		factoryroot.PackagedFactoryCatalogOperations{
+			List:    packagedCatalogStub{}.ListBuiltInPackagedFactories,
+			Resolve: packagedCatalogStub{}.ResolveBuiltInPackagedFactory,
+		},
+	)
+	listed, err := svc.ListBuiltInPackagedFactories(
+		t.Context(),
+		factoryroot.ListBuiltInPackagedFactoriesRequest{},
+	)
+	if err != nil || len(listed.Entries) != 1 || listed.Entries[0].Name != "@you/goal" {
+		t.Fatalf("ListBuiltInPackagedFactories() = %#v, %v", listed, err)
+	}
+	resolved, err := svc.ResolveBuiltInPackagedFactory(
+		t.Context(),
+		factoryroot.ResolveBuiltInPackagedFactoryRequest{Name: "@you/goal"},
+	)
+	if err != nil || resolved.Definition.Project != "builtin-goal" {
+		t.Fatalf("ResolveBuiltInPackagedFactory() = %#v, %v", resolved, err)
 	}
 }

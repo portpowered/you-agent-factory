@@ -29,9 +29,11 @@ func New(
 	replaceFactoryLayout factorydefinitions.FactoryLayoutReplacer,
 	namedPaths factoryroot.NamedPathResolver,
 	namedFactoryCatalogFileSystem factoryroot.NamedFactoryCatalogFileSystem,
+	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
 ) factoryroot.Service {
 	if sessionHost == nil || clock == nil || versionFileSystem == nil ||
-		namedPaths == nil || namedFactoryCatalogFileSystem == nil {
+		namedPaths == nil || namedFactoryCatalogFileSystem == nil ||
+		packagedCatalog.List == nil || packagedCatalog.Resolve == nil {
 		return nil
 	}
 	host, err := factorydefinition.NewHost(
@@ -74,7 +76,12 @@ func New(
 		Paths:      namedPaths,
 		FileSystem: namedFactoryCatalogFileSystem,
 	})
-	definitions := factorydefinition.NewWithCatalog(host, catalogService, versionFileSystem)
+	definitions := factorydefinition.NewWithCatalogAndPackages(
+		host,
+		catalogService,
+		packagedCatalog,
+		versionFileSystem,
+	)
 	sessionHost.AttachFactoryDefinitions(definitions)
 	return definitions
 }

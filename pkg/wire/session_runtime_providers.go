@@ -310,66 +310,6 @@ func provideFactoryScaffoldInitializer(
 	}
 }
 
-func provideFactoryDefinitionsFactory(
-	persistence factorydefinitions.Persistence,
-	loader *factoryloading.Loader,
-	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
-	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
-	namedPaths factorydefinitions.NamedPathResolver,
-	namedFactoryCatalogFileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
-	clock factorydefinitions.Clock,
-	versionFileSystem factorydefinitions.VersionFileSystem,
-	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
-) factorysessionwire.FactoryDefinitionsFactory {
-	return func(
-		sessionHost factorysessions.DefinitionHost,
-		validator factorydefinitions.Validator,
-	) factorydefinitions.Service {
-		definitions := factorydefinitionsservice.New(
-			sessionHost,
-			clock,
-			versionFileSystem,
-			validator,
-			func(
-				factoryDir string,
-				workstationLoader factorydefinitions.WorkstationLoader,
-			) (factorydefinitions.MutableLoadedFactorySource, error) {
-				return loader.LoadRuntimeSource(factoryDir, workstationLoader)
-			},
-			namedPaths.ReadCurrentPointer,
-			func(
-				ctx context.Context,
-				segment string,
-				payload []byte,
-				_ factorydefinitions.Validator,
-			) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
-				return persistence.PrepareFactoryLayout(ctx, segment, payload)
-			},
-			persistence.CreateNamedFactory,
-			namedPaths.WriteCurrentPointer,
-			wirefactorydefinitions.PortableFactoryConfigPreparer(
-				applySupportedFiles,
-				applyStarterWork,
-			),
-			wirefactorydefinitions.FactorySnapshotCapturer(),
-			persistence.ReplaceFactoryLayout,
-			namedPaths,
-			namedFactoryCatalogFileSystem,
-		)
-		if definitions == nil {
-			return nil
-		}
-		attached, err := factorydefinitionsservice.AttachEffectiveCatalog(
-			definitions,
-			listEffective,
-		)
-		if err != nil {
-			return nil
-		}
-		return attached
-	}
-}
-
 func provideEditableFactoryValidator(
 	validator factorydefinitions.DefinitionValidationOperation,
 	loader *factoryloading.Loader,

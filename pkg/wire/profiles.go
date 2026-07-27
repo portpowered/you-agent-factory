@@ -32,6 +32,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorynamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation"
+	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution"
@@ -326,7 +327,7 @@ func provideModelInvocationOperation(
 func provideSystemInitializationService(
 	persistence factorydefinitions.Persistence,
 	packagedInstallationFileSystem factorydefinitions.PackagedInstallationFileSystem,
-	packagedDefinitions []factorydefinitions.PackagedDefinition,
+	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	loadOperatorConfig operatorsettings.ConfigLoader,
 	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
 	inspectPath systeminitialization.InspectPath,
@@ -337,8 +338,8 @@ func provideSystemInitializationService(
 			Load:   loadOperatorConfig,
 			Ensure: ensureOperatorBackendScope,
 		},
+		packagedCatalog,
 		packagedinstallation.New(persistence, packagedInstallationFileSystem),
-		packagedDefinitions,
 		inspectPath,
 		migrationFiles,
 	)
@@ -359,6 +360,12 @@ func providePackagedFactoryDefinitions() ([]factorydefinitions.PackagedDefinitio
 		return nil, err
 	}
 	return catalog.All(), nil
+}
+
+func providePackagedFactoryCatalog(
+	definitions []factorydefinitions.PackagedDefinition,
+) (factorydefinitions.PackagedFactoryCatalogOperations, error) {
+	return factorydefinitionsservice.NewPackagedFactoryCatalog(definitions)
 }
 
 func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLoader) factorysessionwire.DurableExecutionFactory {

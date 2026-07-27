@@ -32,6 +32,7 @@ type Service struct {
 	catalog.Service
 	host              Host
 	versionFileSystem factoryroot.VersionFileSystem
+	packagedCatalog   factoryroot.PackagedFactoryCatalogOperations
 }
 
 type nonCatalogDefaults interface {
@@ -48,6 +49,7 @@ type nonCatalogDefaults interface {
 	PrepareFactorySnapshotImport(context.Context, factoryroot.PrepareFactorySnapshotImportRequest) (factoryroot.PrepareFactorySnapshotImportResult, error)
 	MaterializeFactorySnapshot(context.Context, factoryroot.MaterializeFactorySnapshotRequest) (factoryroot.MaterializeFactorySnapshotResult, error)
 	ListBuiltInPackagedFactories(context.Context, factoryroot.ListBuiltInPackagedFactoriesRequest) (factoryroot.ListBuiltInPackagedFactoriesResult, error)
+	ResolveBuiltInPackagedFactory(context.Context, factoryroot.ResolveBuiltInPackagedFactoryRequest) (factoryroot.ResolveBuiltInPackagedFactoryResult, error)
 	InstallPackagedFactory(context.Context, factoryroot.InstallPackagedFactoryRequest) (factoryroot.InstallPackagedFactoryResult, error)
 	CreateFactoryScaffold(context.Context, factoryroot.CreateFactoryScaffoldRequest) (factoryroot.CreateFactoryScaffoldResult, error)
 }
@@ -76,6 +78,39 @@ func NewWithCatalog(
 	service := New(host, versionFileSystems...)
 	service.Service = catalogService
 	return service
+}
+
+// NewWithCatalogAndPackages constructs the Definitions root collaborator with
+// both persisted and embedded catalog operations.
+func NewWithCatalogAndPackages(
+	host Host,
+	catalogService catalog.Service,
+	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
+	versionFileSystems ...factoryroot.VersionFileSystem,
+) *Service {
+	service := NewWithCatalog(host, catalogService, versionFileSystems...)
+	service.packagedCatalog = packagedCatalog
+	return service
+}
+
+func (s *Service) ListBuiltInPackagedFactories(
+	ctx context.Context,
+	request factoryroot.ListBuiltInPackagedFactoriesRequest,
+) (factoryroot.ListBuiltInPackagedFactoriesResult, error) {
+	if s == nil || s.packagedCatalog.List == nil {
+		return factoryroot.UnimplementedService{}.ListBuiltInPackagedFactories(ctx, request)
+	}
+	return s.packagedCatalog.ListBuiltInPackagedFactories(ctx, request)
+}
+
+func (s *Service) ResolveBuiltInPackagedFactory(
+	ctx context.Context,
+	request factoryroot.ResolveBuiltInPackagedFactoryRequest,
+) (factoryroot.ResolveBuiltInPackagedFactoryResult, error) {
+	if s == nil || s.packagedCatalog.Resolve == nil {
+		return factoryroot.UnimplementedService{}.ResolveBuiltInPackagedFactory(ctx, request)
+	}
+	return s.packagedCatalog.ResolveBuiltInPackagedFactory(ctx, request)
 }
 
 // Save coordinates the session-scoped definition submission pipeline for the

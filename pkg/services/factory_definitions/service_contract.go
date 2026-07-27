@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -53,6 +54,7 @@ type Service interface {
 	// and scaffold creation. Install and scaffold return the same Definition
 	// aggregate identity/facts shape.
 	ListBuiltInPackagedFactories(context.Context, ListBuiltInPackagedFactoriesRequest) (ListBuiltInPackagedFactoriesResult, error)
+	ResolveBuiltInPackagedFactory(context.Context, ResolveBuiltInPackagedFactoryRequest) (ResolveBuiltInPackagedFactoryResult, error)
 	InstallPackagedFactory(context.Context, InstallPackagedFactoryRequest) (InstallPackagedFactoryResult, error)
 	CreateFactoryScaffold(context.Context, CreateFactoryScaffoldRequest) (CreateFactoryScaffoldResult, error)
 }
@@ -523,6 +525,70 @@ type ListBuiltInPackagedFactoriesResult struct {
 type BuiltInPackagedFactoryEntry struct {
 	Name    string
 	Project string
+	Formats []PackagedFactoryFormat
+}
+
+// ResolveBuiltInPackagedFactoryRequest selects one built-in packaged Factory
+// by its public manifest name.
+type ResolveBuiltInPackagedFactoryRequest struct {
+	Name string
+}
+
+// ResolveBuiltInPackagedFactoryResult carries a detached definition and the
+// representation formats published for that same manifest entry.
+type ResolveBuiltInPackagedFactoryResult struct {
+	Definition PackagedDefinition
+	Formats    []PackagedFactoryFormat
+}
+
+// UnknownPackagedFactoryError reports a missing public name together with the
+// stable public inventory. It intentionally omits embedded artifact locators.
+type UnknownPackagedFactoryError struct {
+	Name      string
+	Available []string
+}
+
+func (e *UnknownPackagedFactoryError) Error() string {
+	if e == nil {
+		return ErrUnknownPackagedFactoryIdentity.Error()
+	}
+	return fmt.Sprintf(
+		"%v %q; available packaged factories: %s",
+		ErrUnknownPackagedFactoryIdentity,
+		e.Name,
+		strings.Join(e.Available, ", "),
+	)
+}
+
+func (e *UnknownPackagedFactoryError) Is(target error) bool {
+	return target == ErrUnknownPackagedFactoryIdentity
+}
+
+// PackagedFactoryCatalogOperations are the Definitions-owned, read-only
+// catalog operations shared by bootstrap and customer-facing selection.
+type PackagedFactoryCatalogOperations struct {
+	List    func(context.Context, ListBuiltInPackagedFactoriesRequest) (ListBuiltInPackagedFactoriesResult, error)
+	Resolve func(context.Context, ResolveBuiltInPackagedFactoryRequest) (ResolveBuiltInPackagedFactoryResult, error)
+}
+
+func (operations PackagedFactoryCatalogOperations) ListBuiltInPackagedFactories(
+	ctx context.Context,
+	request ListBuiltInPackagedFactoriesRequest,
+) (ListBuiltInPackagedFactoriesResult, error) {
+	if operations.List == nil {
+		return ListBuiltInPackagedFactoriesResult{}, fmt.Errorf("packaged factory catalog collaborator is required")
+	}
+	return operations.List(ctx, request)
+}
+
+func (operations PackagedFactoryCatalogOperations) ResolveBuiltInPackagedFactory(
+	ctx context.Context,
+	request ResolveBuiltInPackagedFactoryRequest,
+) (ResolveBuiltInPackagedFactoryResult, error) {
+	if operations.Resolve == nil {
+		return ResolveBuiltInPackagedFactoryResult{}, ErrUnknownPackagedFactoryIdentity
+	}
+	return operations.Resolve(ctx, request)
 }
 
 // InstallPackagedFactoryRequest installs one built-in packaged Factory by
