@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"unicode/utf8"
 )
@@ -124,7 +125,8 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 						}
 						// Extract strings from protobuf fields
 						var extractedStrings []string
-						for key, value := range protobufFields {
+						for _, key := range sortedInterfaceKeys(protobufFields) {
+							value := protobufFields[key]
 							if str, ok := value.(string); ok && isReadableText(str) {
 								extractedStrings = append(extractedStrings, str)
 								// Try to parse as JSON if it looks like JSON
@@ -140,7 +142,8 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 								}
 							} else if nestedMap, ok := value.(map[string]interface{}); ok {
 								// Nested protobuf - extract strings from it
-								for nestedKey, nestedValue := range nestedMap {
+								for _, nestedKey := range sortedInterfaceKeys(nestedMap) {
+									nestedValue := nestedMap[nestedKey]
 									if nestedStr, ok := nestedValue.(string); ok && isReadableText(nestedStr) {
 										extractedStrings = append(extractedStrings, nestedStr)
 										// Try to parse as JSON
@@ -229,6 +232,15 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 	}
 
 	return data, nil, true
+}
+
+func sortedInterfaceKeys(data map[string]interface{}) []string {
+	keys := make([]string, 0, len(data))
+	for key := range data {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func containsString(slice []string, item string) bool {

@@ -72,6 +72,69 @@ func TestInspectLoadsCanonicalCursorProvidersRefThroughService(t *testing.T) {
 	}
 }
 
+func TestProjectReconstructsNormalizedCursorDetailThroughRoot(t *testing.T) {
+	root, sessionID := writeCursorSessionFixture(t)
+	svc := newServiceForRoots(t, t.TempDir(), root)
+	ref := providers.SessionRef{
+		Provider: providers.IDCursor,
+		Kind:     providers.SessionIDKind,
+		ID:       sessionID,
+	}
+
+	result, err := svc.Project(providersessions.ProjectRequest{Session: ref})
+	if err != nil {
+		t.Fatalf("Project: %v", err)
+	}
+	if result.Session != ref || result.Detail.ProviderSession.Provider != providersessions.ProviderCursor {
+		t.Fatalf("ProjectResult = %#v, want canonical Cursor identity", result)
+	}
+	assertRootCursorProjection(t, result.Detail)
+}
+
+func assertRootCursorProjection(t *testing.T, detail providersessions.Detail) {
+	t.Helper()
+	assertRootCursorTranscript(t, detail.Transcript)
+	assertRootCursorFacts(t, detail.Parse)
+}
+
+func assertRootCursorTranscript(t *testing.T, transcript []providersessions.TranscriptEntry) {
+	t.Helper()
+	wantTypes := []providersessions.TranscriptEntryType{
+		providersessions.TranscriptUserMessage,
+		providersessions.TranscriptAssistantMessage,
+		providersessions.TranscriptReasoning,
+		providersessions.TranscriptToolCall,
+		providersessions.TranscriptToolOutput,
+	}
+	if len(transcript) != len(wantTypes) {
+		t.Fatalf("Transcript = %#v, want %d entries", transcript, len(wantTypes))
+	}
+	for index, want := range wantTypes {
+		if transcript[index].Type != want {
+			t.Fatalf("Transcript[%d] = %#v, want %q", index, transcript[index], want)
+		}
+	}
+}
+
+func assertRootCursorFacts(t *testing.T, summary providersessions.ParseSummary) {
+	t.Helper()
+	if len(summary.FunctionCalls) != 1 ||
+		summary.FunctionCalls[0].Output == nil ||
+		*summary.FunctionCalls[0].Output != "tool result" {
+		t.Fatalf("FunctionCalls = %#v, want attached tool output", summary.FunctionCalls)
+	}
+	if len(summary.Reasoning) != 1 ||
+		summary.Reasoning[0].Text == nil ||
+		*summary.Reasoning[0].Text != "reasoning" {
+		t.Fatalf("Reasoning = %#v", summary.Reasoning)
+	}
+	if summary.TokenUsage == nil ||
+		summary.TokenUsage.TotalTokens == nil ||
+		*summary.TokenUsage.TotalTokens != 7 {
+		t.Fatalf("TokenUsage = %#v, want total 7", summary.TokenUsage)
+	}
+}
+
 func TestInspectRejectsInvalidIdentifierAndPropagatesTypedFailures(t *testing.T) {
 	svc := newServiceForRoots(t, t.TempDir(), "")
 	if _, err := svc.Inspect(providersessions.InspectRequest{Session: providersessions.SessionRef{
@@ -351,7 +414,9 @@ func writeCursorSessionFixture(t *testing.T) (string, string) {
 CREATE TABLE blobs (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
 INSERT INTO blobs (key, value) VALUES ('bubble-1', '{"bubbleId":"bubble-1","text":"hello","timestamp":1000,"type":1}');
+INSERT INTO blobs (key, value) VALUES ('message-2', '{"id":"assistant-1","role":"assistant","timestamp":2000,"content":[{"type":"output_text","text":"answer"},{"type":"reasoning","text":"reasoning","summary":"summary"},{"type":"tool_call","name":"read","tool_call_id":"call-1","arguments":{"path":"file.go"}},{"type":"tool","name":"read","tool_call_id":"call-1","content":"tool result"}]}');
 INSERT INTO meta (key, value) VALUES ('0', '{"agentId":"cursor-root-inspect","createdAt":1000}');
+INSERT INTO meta (key, value) VALUES ('usage', '{"usage":{"inputTokens":4,"outputTokens":3}}');
 `); err != nil {
 		t.Fatalf("create Cursor fixture: %v", err)
 	}

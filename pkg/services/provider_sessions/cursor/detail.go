@@ -52,16 +52,18 @@ func mapSessionToProviderSessionDetail(
 	session *SessionData,
 ) providersessions.Detail {
 	stats := session.ParseStats
+	facts := reconstructSessionFacts(session)
+	unknownCount := stats.UnavailableBlobCount + facts.unknownCount
 	summary := providersessions.ParseSummary{
 		LineCount:          stats.BlobCount + stats.MetaCount,
-		EventCount:         stats.ReadableBlobCount,
+		EventCount:         len(facts.transcript),
 		MalformedLineCount: stats.MalformedBlobCount + stats.MalformedMetaCount,
-		UnknownEventCount:  stats.UnavailableBlobCount,
-		Turns:              []providersessions.TurnSummary{},
-		FunctionCalls:      []providersessions.FunctionCallSummary{},
-		Reasoning:          []providersessions.ReasoningSummary{},
+		UnknownEventCount:  unknownCount,
+		Turns:              facts.turns,
+		FunctionCalls:      facts.functionCalls,
+		Reasoning:          facts.reasoning,
 		ParseErrors:        parseErrorsFromStats(stats),
-		UnknownEvents:      unknownEventsFromStats(stats),
+		UnknownEvents:      unknownEvents(unknownCount),
 		TokenUsage:         mapTokenUsage(session.TokenUsage),
 	}
 
@@ -77,7 +79,7 @@ func mapSessionToProviderSessionDetail(
 			ModifiedAt:   modifiedAt,
 		},
 		Parse:      summary,
-		Transcript: transcriptFromSession(session),
+		Transcript: facts.transcript,
 	}
 }
 
@@ -121,34 +123,6 @@ func totalTokens(usage SessionTokenUsage) *int {
 	return &total
 }
 
-func transcriptFromSession(session *SessionData) []providersessions.TranscriptEntry {
-	if session == nil {
-		return []providersessions.TranscriptEntry{}
-	}
-	ordered := session.OrderedBubbles()
-	transcript := make([]providersessions.TranscriptEntry, 0, len(ordered))
-	for _, bubble := range ordered {
-		text := truncateSessionText(bubble.DisplayText())
-		if text == "" {
-			continue
-		}
-		var timestamp *time.Time
-		if ts := bubble.GetTimestamp(); !ts.IsZero() {
-			utc := ts.UTC()
-			timestamp = &utc
-		}
-		entryType := providersessions.TranscriptEntryType(bubble.TranscriptEntryType())
-		transcript = append(transcript, providersessions.TranscriptEntry{
-			Order:      len(transcript) + 1,
-			SourceType: stringPtrIfNotEmpty("cursor_bubble"),
-			Text:       stringPtrIfNotEmpty(text),
-			Timestamp:  timestamp,
-			Type:       entryType,
-		})
-	}
-	return transcript
-}
-
 func parseErrorsFromStats(stats SessionParseStats) []providersessions.LineError {
 	if stats.MalformedBlobCount+stats.MalformedMetaCount == 0 {
 		return []providersessions.LineError{}
@@ -161,14 +135,14 @@ func parseErrorsFromStats(stats SessionParseStats) []providersessions.LineError 
 	}
 }
 
-func unknownEventsFromStats(stats SessionParseStats) []providersessions.UnknownEvent {
-	if stats.UnavailableBlobCount == 0 {
+func unknownEvents(count int) []providersessions.UnknownEvent {
+	if count == 0 {
 		return []providersessions.UnknownEvent{}
 	}
-	events := make([]providersessions.UnknownEvent, 0, stats.UnavailableBlobCount)
-	for range stats.UnavailableBlobCount {
+	events := make([]providersessions.UnknownEvent, 0, count)
+	for range count {
 		events = append(events, providersessions.UnknownEvent{
-			Type:        stringPtrIfNotEmpty("cursor_blob"),
+			Type:        stringPtrIfNotEmpty("cursor_record"),
 			PayloadType: stringPtrIfNotEmpty("unavailable"),
 		})
 	}

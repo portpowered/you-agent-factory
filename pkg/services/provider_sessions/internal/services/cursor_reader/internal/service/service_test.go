@@ -2,10 +2,12 @@ package service
 
 import (
 	"database/sql"
+	"encoding/binary"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -47,6 +49,135 @@ func TestReadDiscoversOnlyCanonicalContainedSession(t *testing.T) {
 	if filepath.IsAbs(detail.Source.RelativePath) {
 		t.Fatalf("RelativePath exposed absolute storage path: %q", detail.Source.RelativePath)
 	}
+}
+
+func TestReadReconstructsDeterministicDetachedNormalizedDetail(t *testing.T) {
+	root, sessionID := writeNormalizedSessionFixture(t)
+	reader, err := New(
+		platformfilesystem.Local{},
+		filepath.WalkDir,
+		filepath.EvalSymlinks,
+		sql.Open,
+		root,
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ref := providers.SessionRef{
+		Provider: providers.IDCursor,
+		Kind:     providers.SessionIDKind,
+		ID:       sessionID,
+	}
+
+	first, err := reader.Read(ref)
+	if err != nil {
+		t.Fatalf("first Read: %v", err)
+	}
+	second, err := reader.Read(ref)
+	if err != nil {
+		t.Fatalf("second Read: %v", err)
+	}
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("repeated reads differ:\nfirst:  %#v\nsecond: %#v", first, second)
+	}
+	assertNormalizedDetail(t, first)
+
+	*first.Transcript[0].Text = "mutated"
+	*first.Parse.FunctionCalls[0].Output = "mutated"
+	*first.Parse.TokenUsage.InputTokens = 999
+	first.Transcript = append(first.Transcript, providersessions.TranscriptEntry{})
+
+	third, err := reader.Read(ref)
+	if err != nil {
+		t.Fatalf("third Read: %v", err)
+	}
+	if !reflect.DeepEqual(second, third) {
+		t.Fatalf("mutating one result affected a later read:\nwant: %#v\ngot:  %#v", second, third)
+	}
+}
+
+func assertNormalizedDetail(t *testing.T, detail providersessions.Detail) {
+	t.Helper()
+	assertNormalizedTranscript(t, detail.Transcript)
+	assertNormalizedFunctionCalls(t, detail.Parse.FunctionCalls)
+	assertNormalizedReasoning(t, detail.Parse.Reasoning)
+	assertNormalizedTurns(t, detail.Parse.Turns)
+	assertNormalizedUsage(t, detail.Parse.TokenUsage)
+}
+
+func assertNormalizedTranscript(t *testing.T, transcript []providersessions.TranscriptEntry) {
+	t.Helper()
+	wantTypes := []providersessions.TranscriptEntryType{
+		providersessions.TranscriptUserMessage,
+		providersessions.TranscriptAssistantMessage,
+		providersessions.TranscriptReasoning,
+		providersessions.TranscriptToolCall,
+		providersessions.TranscriptToolOutput,
+		providersessions.TranscriptReasoning,
+	}
+	if len(transcript) != len(wantTypes) {
+		t.Fatalf("Transcript = %#v, want %d normalized entries", transcript, len(wantTypes))
+	}
+	for index, want := range wantTypes {
+		if transcript[index].Type != want || transcript[index].Order != index+1 {
+			t.Fatalf("Transcript[%d] = %#v, want type %q order %d", index, transcript[index], want, index+1)
+		}
+	}
+}
+
+func assertNormalizedFunctionCalls(t *testing.T, calls []providersessions.FunctionCallSummary) {
+	t.Helper()
+	if len(calls) != 1 {
+		t.Fatalf("FunctionCalls = %#v, want one deduplicated call", calls)
+	}
+	call := calls[0]
+	if stringValue(call.CallID) != "call-1" || stringValue(call.Name) != "search" ||
+		stringValue(call.Arguments) != `{"q":"docs"}` || stringValue(call.Output) != "found" ||
+		stringValue(call.Status) != "completed" {
+		t.Fatalf("FunctionCalls[0] = %#v", call)
+	}
+}
+
+func assertNormalizedReasoning(t *testing.T, reasoning []providersessions.ReasoningSummary) {
+	t.Helper()
+	if len(reasoning) != 2 {
+		t.Fatalf("Reasoning = %#v, want readable and encrypted facts", reasoning)
+	}
+	encrypted := reasoning[1]
+	if encrypted.Encrypted == nil || !*encrypted.Encrypted || encrypted.Text != nil || encrypted.EncryptedContent != nil {
+		t.Fatalf("encrypted reasoning = %#v, want unavailable plaintext and ciphertext", encrypted)
+	}
+}
+
+func assertNormalizedTurns(t *testing.T, turns []providersessions.TurnSummary) {
+	t.Helper()
+	if len(turns) != 1 || turns[0].FunctionCallCount != 1 ||
+		turns[0].ReasoningCount != 2 || turns[0].EventCount != 6 {
+		t.Fatalf("Turns = %#v", turns)
+	}
+}
+
+func assertNormalizedUsage(t *testing.T, usage *providersessions.TokenUsage) {
+	t.Helper()
+	if usage == nil || intValue(usage.InputTokens) != 10 || intValue(usage.OutputTokens) != 5 ||
+		intValue(usage.CachedInputTokens) != 2 || intValue(usage.CacheWriteTokens) != 1 ||
+		intValue(usage.TotalTokens) != 18 {
+		t.Fatalf("TokenUsage = %#v", usage)
+	}
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func intValue(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 func TestReadRejectsInvalidReferencesBeforeStorageIO(t *testing.T) {
@@ -246,4 +377,53 @@ INSERT INTO meta (key, value) VALUES ('0', '{"agentId":"canonical-cursor-session
 		t.Fatalf("create fixture: %v", err)
 	}
 	return root, sessionID
+}
+
+func writeNormalizedSessionFixture(t *testing.T) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	sessionID := "normalized-cursor-session"
+	path := filepath.Join(root, "workspace", sessionID, "store.db")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err := db.Exec(`
+CREATE TABLE blobs (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+`); err != nil {
+		t.Fatalf("create fixture: %v", err)
+	}
+	user := `{"id":"user-1","role":"user","timestamp":2000,"content":[{"type":"input_text","text":"question"}]}`
+	assistant := `{"id":"assistant-1","role":"assistant","timestamp":2000,"content":[{"type":"output_text","text":"answer"},{"type":"reasoning","text":"considered","summary":"brief"},{"type":"tool_call","name":"search","tool_call_id":"call-1","arguments":{"q":"docs"},"status":"started"},{"type":"tool","name":"search","tool_call_id":"call-1","content":"found","status":"completed"},{"type":"redacted-reasoning","data":"sensitive-ciphertext"}]}`
+	composer := `{"composerId":"composer-1","createdAt":1000,"fullConversationHeadersOnly":[{"bubbleId":"user-1","type":1},{"bubbleId":"assistant-1","type":2}]}`
+	usage := `{"usage":{"inputTokens":10,"outputTokens":5,"cacheReadTokens":2,"cacheWriteTokens":1}}`
+	for _, row := range []struct {
+		key   string
+		value string
+	}{
+		{key: "03-assistant-protobuf-duplicate", value: protobufJSON(assistant)},
+		{key: "02-assistant-json", value: assistant},
+		{key: "01-user", value: user},
+		{key: "04-composer", value: composer},
+	} {
+		if _, err := db.Exec(`INSERT INTO blobs (key, value) VALUES (?, ?)`, row.key, row.value); err != nil {
+			t.Fatalf("insert blob %s: %v", row.key, err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO meta (key, value) VALUES ('usage', ?)`, usage); err != nil {
+		t.Fatalf("insert usage: %v", err)
+	}
+	return root, sessionID
+}
+
+func protobufJSON(value string) string {
+	encoded := []byte{0x0a}
+	encoded = binary.AppendUvarint(encoded, uint64(len(value)))
+	encoded = append(encoded, value...)
+	return string(encoded)
 }

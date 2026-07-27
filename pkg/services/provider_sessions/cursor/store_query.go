@@ -55,14 +55,12 @@ func QueryBlobsTable(db *sql.DB) ([]BlobEntry, error) {
 	// Try key-value pattern first (most common for session storage)
 	var query string
 	if containsString(columns, "key") && containsString(columns, "value") {
-		query = "SELECT key, value FROM blobs WHERE value IS NOT NULL"
+		query = "SELECT key, value FROM blobs WHERE value IS NOT NULL ORDER BY key"
 	} else if containsString(columns, "id") && containsString(columns, "data") {
-		// Use ORDER BY rowid to preserve insertion order (chronological order)
-		// This ensures messages are in the order they were created
-		query = "SELECT id, data FROM blobs WHERE data IS NOT NULL ORDER BY rowid"
+		query = "SELECT id, data FROM blobs WHERE data IS NOT NULL ORDER BY id"
 	} else if len(columns) >= 2 {
 		// Use first two columns
-		query = fmt.Sprintf("SELECT %s, %s FROM blobs WHERE %s IS NOT NULL", columns[0], columns[1], columns[1])
+		query = fmt.Sprintf("SELECT %s, %s FROM blobs WHERE %s IS NOT NULL ORDER BY %s", columns[0], columns[1], columns[1], columns[0])
 	} else {
 		return []BlobEntry{}, nil
 	}
@@ -154,11 +152,11 @@ func QueryMetaTable(db *sql.DB) ([]MetaEntry, error) {
 
 	var query string
 	if containsString(columns, "key") && containsString(columns, "value") {
-		query = "SELECT key, value FROM meta WHERE value IS NOT NULL"
+		query = "SELECT key, value FROM meta WHERE value IS NOT NULL ORDER BY key"
 	} else if containsString(columns, "id") && containsString(columns, "data") {
-		query = "SELECT id, data FROM meta WHERE data IS NOT NULL"
+		query = "SELECT id, data FROM meta WHERE data IS NOT NULL ORDER BY id"
 	} else if len(columns) >= 2 {
-		query = fmt.Sprintf("SELECT %s, %s FROM meta WHERE %s IS NOT NULL", columns[0], columns[1], columns[1])
+		query = fmt.Sprintf("SELECT %s, %s FROM meta WHERE %s IS NOT NULL ORDER BY %s", columns[0], columns[1], columns[1], columns[0])
 	} else {
 		return []MetaEntry{}, nil
 	}
