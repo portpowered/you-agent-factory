@@ -1539,11 +1539,6 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/cli/factory_run/events/events_test.go",
-      "target": "cli"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/cli/factory_run/events/javascript_test.go",
       "target": "cli"
     },
