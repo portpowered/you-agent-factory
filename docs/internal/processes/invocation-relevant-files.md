@@ -1975,7 +1975,8 @@ response-stream output.
   cutover, re-prove preserved public behavior with
   `make cli-manifest-check`, `make cli-contract-smoke`, focused
   docs/models/mcp unit + `tests/functional/transport/docs`,
-  `tests/functional/transport/mcp_serve`, `tests/functional/models/model_list`, and
+  `tests/functional/transport/mcp/protocol`, `tests/functional/transport/mcp_serve`,
+  `tests/functional/models/model_list`, and
   `tests/functional/smoke -run TestDocsCommandSmoke_` evidence, then the
   `make verify-fast` constituents (`make typecheck`, `make mcp-contract-check`,
   `make ui-test`, `make test`) plus `make lint`. New residual functional sources
