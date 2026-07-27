@@ -212,7 +212,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot`.
   - `TestMCPStdioFixtureAndRuntimePathsReachInitializer`.
 
-- [ ] `tests/functional/transport/mcp/protocol/errors_test.go`
+- [x] `tests/functional/transport/mcp/protocol/errors_test.go`
   - `TestMCPMalformedParametersReturnInvalidParams`.
   - `TestMCPMissingFactorySessionReturnsCanonicalNotFound`.
   - `TestMCPServerShutdownClosesStdioCleanly`.
@@ -359,6 +359,8 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     external calls without sleeps.
   - `TestJavaScriptParallelPreservesDeclaredResultOrdering` covers determinism.
   - `TestJavaScriptParallelPartialFailureUsesDocumentedPolicy` covers error.
+
+- [x] `tests/functional/orchestration/javascript/events/javascript_test.go`
 
 - [ ] `tests/functional/orchestration/javascript/composition/for_each_test.go`
   - `TestJavaScriptForEachDispatchesEveryInputOnce` covers cardinality.

@@ -621,21 +621,21 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/cli/factory_run/events/javascript_test.go",
-      "package": "you-agent-factory/tests/functional/cli/factory_run/events",
+      "source_path": "tests/functional/orchestration/javascript/events/javascript_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/events",
       "scenario": "TestJavaScriptInvocationEmitsCanonicalPhaseAndCheckpointEvents",
       "lane": "short",
-      "destination": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
+      "destination": "tests/functional/orchestration/javascript/events/javascript_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/cli/factory_run/events/javascript_test.go",
-      "package": "you-agent-factory/tests/functional/cli/factory_run/events",
+      "source_path": "tests/functional/orchestration/javascript/events/javascript_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/events",
       "scenario": "TestJavaScriptInvocationWithServerJoinsListenerAfterTerminalResult",
       "lane": "short",
-      "destination": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
+      "destination": "tests/functional/orchestration/javascript/events/javascript_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -6159,6 +6159,66 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/kiro/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/kiro",
+      "scenario": "TestKiroGoldenTextSuccess",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/kiro/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/kiro/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/kiro",
+      "scenario": "TestKiroGoldenAuthAndStructuredFailure",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/kiro/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/kiro/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/kiro",
+      "scenario": "TestKiroGoldenTimeout",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/kiro/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/mcp/protocol/errors_test.go",
+      "package": "you-agent-factory/tests/functional/transport/mcp/protocol",
+      "scenario": "TestMCPMalformedParametersReturnInvalidParams",
+      "lane": "short",
+      "destination": "tests/functional/transport/mcp/protocol/errors_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/mcp/protocol/errors_test.go",
+      "package": "you-agent-factory/tests/functional/transport/mcp/protocol",
+      "scenario": "TestMCPMissingFactorySessionReturnsCanonicalNotFound",
+      "lane": "short",
+      "destination": "tests/functional/transport/mcp/protocol/errors_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/mcp/protocol/errors_test.go",
+      "package": "you-agent-factory/tests/functional/transport/mcp/protocol",
+      "scenario": "TestMCPServerShutdownClosesStdioCleanly",
+      "lane": "short",
+      "destination": "tests/functional/transport/mcp/protocol/errors_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
   "scanned_at_utc": "2026-07-27T14:53:22Z",
@@ -6195,14 +6255,14 @@
       "workflow": 64,
       "workstations": 7
     },
-    "customer_top_level_Test_scenarios": 597,
+    "customer_top_level_Test_scenarios": 603,
     "files_with_customer_Test": 200,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 117,
-    "lane_short": 480,
+    "lane_short": 486,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
       "you-agent-factory/tests/functional/bootstrap_portability": 25,
@@ -6336,13 +6396,13 @@
   "completeness_audit": {
     "audited_at_utc": "2026-07-27T15:35:00Z",
     "story": "ft-wave1-script-environment-mergeability",
-    "live_customer_scenarios": 597,
-    "ledger_rows": 597,
+    "live_customer_scenarios": 603,
+    "ledger_rows": 603,
     "unmapped_scenarios": 0,
-    "checklist_destinations": 434,
+    "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 480,
+    "lane_short": 486,
     "lane_functionallong": 117,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
