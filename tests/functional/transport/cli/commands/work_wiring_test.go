@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -19,6 +21,8 @@ const (
 	workWiringMoveRequestID = "cli-work-wiring-move"
 	workWiringMoveWorkName  = "move-recovery-task"
 	workWiringMoveWorkType  = "task"
+
+	workWiringMissingWorkID = "work-missing-999"
 )
 
 // TestCLIWorkListAndShowReflectSubmittedWork proves you work list and you work show
@@ -186,6 +190,72 @@ func TestCLIWorkMoveChangesState(t *testing.T) {
 	listed := runWorkListCLIJSON(t, ctx, binaryPath, factoryDir, baseURL, workWiringMoveWorkName)
 	if !support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation(workWiringMoveWorkType, "complete")) {
 		t.Fatalf("work list JSON missing moved work %q at complete: %#v", workID, listed.Results)
+	}
+}
+
+// TestCLIWorkShowMissingReturnsNotFound proves you work show for a missing work id
+// exits non-success with actionable not-found diagnostics and no false success payload.
+func TestCLIWorkShowMissingReturnsNotFound(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, workWiringFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	binaryPath := buildYouCLIBinary(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	showOut, err := runYouCLI(ctx, binaryPath, factoryDir, baseURL,
+		"work", "show", workWiringMissingWorkID,
+	)
+	assertCLIWorkShowNotFoundFailure(t, showOut, err, workWiringMissingWorkID)
+
+	showJSONOut, err := runYouCLI(ctx, binaryPath, factoryDir, baseURL,
+		"--json",
+		"work", "show", workWiringMissingWorkID,
+	)
+	assertCLIWorkShowNotFoundFailure(t, showJSONOut, err, workWiringMissingWorkID)
+}
+
+func assertCLIWorkShowNotFoundFailure(
+	t *testing.T,
+	output []byte,
+	err error,
+	workID string,
+) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatalf("you work show unexpectedly succeeded:\n%s", output)
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("you work show error = %v, want *exec.ExitError", err)
+	}
+	if exitErr.ExitCode() == 0 {
+		t.Fatalf("you work show exit code = 0, want non-zero")
+	}
+
+	text := string(output)
+	lower := strings.ToLower(text)
+	if !strings.Contains(lower, "not found") {
+		t.Fatalf("work show missing not-found diagnostic:\n%s", text)
+	}
+	if !strings.Contains(text, workID) {
+		t.Fatalf("work show missing work id %q in diagnostic:\n%s", workID, text)
+	}
+
+	var shown factoryapi.Work
+	if json.Unmarshal(bytesTrimSpace(output), &shown) == nil &&
+		(shown.WorkId != nil && strings.TrimSpace(*shown.WorkId) != "" || strings.TrimSpace(shown.Name) != "") {
+		t.Fatalf("work show must not emit a success work payload:\n%s", text)
+	}
+	if strings.Contains(text, "Work ID:\t") && strings.Contains(text, "State name:\t") {
+		t.Fatalf("work show must not emit human success work payload:\n%s", text)
 	}
 }
 
