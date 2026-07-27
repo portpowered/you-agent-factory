@@ -20,6 +20,7 @@ import (
 	catalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
 	inferencewire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/wire"
+	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 	runtimehostwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
@@ -124,6 +125,7 @@ func NewService(
 		runtimeScopes,
 		catalogService,
 		runtimeHost,
+		inference.InputEchoInvocationRuntime{},
 		now,
 	)
 	if err != nil {

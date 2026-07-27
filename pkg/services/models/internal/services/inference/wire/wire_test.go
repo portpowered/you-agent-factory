@@ -12,6 +12,7 @@ import (
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
 	inferencewire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/wire"
+	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
@@ -30,28 +31,38 @@ func TestNewServiceRequiresInferenceDependencies(t *testing.T) {
 		scopes          runtimescopes.Service
 		catalog         modelcatalog.Service
 		runtimeHost     runtimehost.Service
+		invocationRuntime inference.InvocationRuntime
 		clock           func() time.Time
 		wantContains    string
 		wantInvalidDeps bool
 	}{
 		{
 			name: "valid", scopes: scopes, catalog: catalog,
-			runtimeHost: runtimeHost, clock: clock.Now,
+			runtimeHost: runtimeHost, invocationRuntime: inference.InputEchoInvocationRuntime{},
+			clock: clock.Now,
 		},
 		{
-			name: "scopes", catalog: catalog, runtimeHost: runtimeHost, clock: clock.Now,
+			name: "scopes", catalog: catalog, runtimeHost: runtimeHost,
+			invocationRuntime: inference.InputEchoInvocationRuntime{}, clock: clock.Now,
 			wantContains: "Runtime Scopes", wantInvalidDeps: true,
 		},
 		{
-			name: "catalog", scopes: scopes, runtimeHost: runtimeHost, clock: clock.Now,
+			name: "catalog", scopes: scopes, runtimeHost: runtimeHost,
+			invocationRuntime: inference.InputEchoInvocationRuntime{}, clock: clock.Now,
 			wantContains: "Catalog", wantInvalidDeps: true,
 		},
 		{
-			name: "runtime host", scopes: scopes, catalog: catalog, clock: clock.Now,
+			name: "runtime host", scopes: scopes, catalog: catalog,
+			invocationRuntime: inference.InputEchoInvocationRuntime{}, clock: clock.Now,
 			wantContains: "Runtime Host", wantInvalidDeps: true,
 		},
 		{
+			name: "invocation runtime", scopes: scopes, catalog: catalog, runtimeHost: runtimeHost,
+			clock: clock.Now, wantContains: "invocation runtime", wantInvalidDeps: true,
+		},
+		{
 			name: "clock", scopes: scopes, catalog: catalog, runtimeHost: runtimeHost,
+			invocationRuntime: inference.InputEchoInvocationRuntime{},
 			wantContains: "clock", wantInvalidDeps: true,
 		},
 	}
@@ -61,6 +72,7 @@ func TestNewServiceRequiresInferenceDependencies(t *testing.T) {
 				test.scopes,
 				test.catalog,
 				test.runtimeHost,
+				test.invocationRuntime,
 				test.clock,
 			)
 			if test.wantInvalidDeps {

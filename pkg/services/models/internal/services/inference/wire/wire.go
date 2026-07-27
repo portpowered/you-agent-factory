@@ -21,6 +21,7 @@ func NewService(
 	scopes runtimescopes.Service,
 	catalog modelcatalog.Service,
 	runtimeHost runtimehost.Service,
+	invocationRuntime inference.InvocationRuntime,
 	clock func() time.Time,
 ) (inference.Service, error) {
 	if scopes == nil {
@@ -41,13 +42,19 @@ func NewService(
 			models.ErrInvalidInferenceDependencies,
 		)
 	}
+	if isNilDependency(invocationRuntime) {
+		return nil, fmt.Errorf(
+			"%w: Models Inference invocation runtime is required",
+			models.ErrInvalidInferenceDependencies,
+		)
+	}
 	if clock == nil {
 		return nil, fmt.Errorf(
 			"%w: Models Inference clock is required",
 			models.ErrInvalidInferenceDependencies,
 		)
 	}
-	return internalservice.New(scopes, catalog, runtimeHost, clock), nil
+	return internalservice.New(scopes, catalog, runtimeHost, invocationRuntime, clock), nil
 }
 
 func isNilDependency(value any) bool {

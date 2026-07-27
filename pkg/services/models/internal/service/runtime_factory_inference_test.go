@@ -11,6 +11,7 @@ import (
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
 	inferencewire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/wire"
+	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 	runtimehostwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 )
@@ -106,7 +107,7 @@ func TestInferenceWireConstructionIsInert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
-	inference, err := inferencewire.NewService(scopes, catalog, runtimeHost, clock.Now)
+	inference, err := inferencewire.NewService(scopes, catalog, runtimeHost, inference.InputEchoInvocationRuntime{}, clock.Now)
 	if err != nil {
 		t.Fatalf("construct Inference: %v", err)
 	}
