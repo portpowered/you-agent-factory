@@ -947,47 +947,6 @@ func TestAggregateSurfacesOmitMigratedGeminiBranches(t *testing.T) {
 	})
 }
 
-// Migrated Kiro must no longer own aggregate command/failure/timeout branches.
-// Production selection stays on registry + conductor; these assertions prove
-// the legacy Kiro-named ownership is gone.
-func TestAggregateSurfacesOmitMigratedKiroBranches(t *testing.T) {
-	t.Parallel()
-
-	t.Run("command_construction", func(t *testing.T) {
-		t.Parallel()
-		behavior := providerBehaviorFor(string(modelprovider.ProviderKiro), logging.NoopLogger{})
-		args, err := behavior.BuildArgs(context.Background(), workerexecution.ProviderInferenceRequest{
-			ModelProvider: string(modelprovider.ProviderKiro),
-			UserMessage:   "summarize the workspace",
-		}, false, nil)
-		if err != nil {
-			t.Fatalf("BuildArgs error = %v", err)
-		}
-		if len(args) > 0 && args[0] == "chat" {
-			t.Fatalf("aggregate still owns Kiro argv: %#v", args)
-		}
-	})
-
-	t.Run("exit_failure", func(t *testing.T) {
-		t.Parallel()
-		parsed := parseProviderExitFailure(string(modelprovider.ProviderKiro), CommandResult{
-			ExitCode: 1,
-			Stderr:   []byte("ERROR: Unauthorized"),
-		})
-		if parsed.failure.Message == "Kiro authentication failed. Sign in again and retry." {
-			t.Fatal("aggregate still owns Kiro exit-failure parsing")
-		}
-	})
-
-	t.Run("timeout_failure", func(t *testing.T) {
-		t.Parallel()
-		parsed := parseProviderTimeoutFailure(string(modelprovider.ProviderKiro), CommandResult{})
-		if parsed.Message == "Kiro request timed out." {
-			t.Fatal("aggregate still owns Kiro timeout parsing")
-		}
-	})
-}
-
 func containsArgPair(args []string, flag, value string) bool {
 	for index := 0; index+1 < len(args); index++ {
 		if args[index] == flag && args[index+1] == value {

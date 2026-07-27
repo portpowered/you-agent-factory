@@ -60,7 +60,10 @@ primary-result behavior.
   structured fields that satisfy the provider's identifier contract. If a
   successful resumed invocation emits no replacement identifier, preserve the
   validated requested Provider Session; never recover identifiers from
-  free-form assistant text.
+  free-form assistant text. The product runner carries configured resume state
+  in the cloned `ProviderInferenceRequest.SessionID`, while direct protocol
+  callers can use `InvocationRequest.ProviderSession`; a migrated provider must
+  normalize both accepted inputs before applying its emitted-session rules.
 
 - Review-gated factories that must revise rejected work should preserve the
   original input on the work-stage route, retain non-empty worker output in the

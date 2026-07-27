@@ -98,7 +98,14 @@ func (i *Integration) Invoke(
 		})))
 	}
 
-	response := responseFromOutput(result.Stdout, result.Stderr, request.ProviderSession())
+	requestedSession := validRequestedSession(request.ProviderSession())
+	if requestedSession == nil {
+		// The product runner carries configured resume state in Execution while
+		// direct protocol callers can supply ProviderSession. Normalize both
+		// accepted entry paths before applying Kiro's emitted-session semantics.
+		requestedSession = newProviderSession(providerRequest.SessionID)
+	}
+	response := responseFromOutput(result.Stdout, result.Stderr, requestedSession)
 	if err := writeFinalOnlyProgress(ctx, writer, request.InvocationID(), response.Content()); err != nil {
 		return err
 	}

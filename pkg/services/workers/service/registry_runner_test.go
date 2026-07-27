@@ -248,7 +248,7 @@ func TestConductorInvocationRunnerPreservesNativeBuiltInPath(t *testing.T) {
 func TestConductorInvocationRunnerRoutesMigratedGeminiThroughConductor(t *testing.T) {
 	t.Parallel()
 
-	commandRunner := &geminiConductorCommandRunner{
+	commandRunner := &builtInConductorCommandRunner{
 		result: workers.CommandResult{Stdout: []byte("gemini via conductor")},
 	}
 	providers := geminiConductorRegistry(t, commandRunner)
@@ -282,6 +282,63 @@ func TestConductorInvocationRunnerRoutesMigratedGeminiThroughConductor(t *testin
 	}
 	if providers.UsesNativeRunner("gemini") {
 		t.Fatal("UsesNativeRunner(gemini) = true, want conductor route")
+	}
+}
+
+func TestConductorInvocationRunnerPreservesKiroResumeSessionWithoutReplacement(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "675f9238-5f05-456c-9a9f-f8fe486f49e4"
+	commandRunner := &builtInConductorCommandRunner{
+		result: workers.CommandResult{Stdout: []byte("kiro resumed via conductor")},
+	}
+	registrations, err := providerregistry.BuiltInRegistrations(
+		providerregistry.BuiltInDependencies{CommandRunner: commandRunner},
+	)
+	if err != nil {
+		t.Fatalf("BuiltInRegistrations() error = %v", err)
+	}
+	providers, err := providerregistry.New(registrations...)
+	if err != nil {
+		t.Fatalf("registry.New() error = %v", err)
+	}
+	native := &conductorRouteRecordingRunner{}
+	runner := conductorInvocationRunner{
+		next:      native,
+		conductor: conductor.New(providers),
+		providers: providers,
+	}
+
+	result, err := runner.Execute(context.Background(), workers.RunnerExecutionRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-kiro-resume"},
+		RunnerID:      workers.RunnerIDKiro,
+		ModelProvider: workers.RunnerIDKiro,
+		UserMessage:   "continue",
+		SessionID:     sessionID,
+		RequiredOptionalCapabilities: []workers.RunnerOptionalCapability{
+			workers.RunnerOptionalCapabilitySessionResume,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute(kiro resume) error = %v", err)
+	}
+	if result.Content != "kiro resumed via conductor" {
+		t.Fatalf("Execute(kiro resume) content = %q", result.Content)
+	}
+	if commandRunner.calls != 1 {
+		t.Fatalf("Kiro command runner calls = %d, want 1", commandRunner.calls)
+	}
+	if native.calls != 0 {
+		t.Fatalf("native runner calls = %d, want 0", native.calls)
+	}
+	if !containsRunnerArgPair(commandRunner.request.Args, "--resume-id", sessionID) {
+		t.Fatalf("Kiro command args = %#v, want --resume-id %s", commandRunner.request.Args, sessionID)
+	}
+	if result.ProviderSession == nil ||
+		result.ProviderSession.Provider != workers.RunnerIDKiro ||
+		result.ProviderSession.Kind != "session_id" ||
+		result.ProviderSession.ID != sessionID {
+		t.Fatalf("Kiro provider session = %#v, want preserved kiro/session_id/%s", result.ProviderSession, sessionID)
 	}
 }
 
@@ -463,17 +520,26 @@ func geminiConductorRegistry(t *testing.T, runner workers.CommandRunner) *provid
 	return providers
 }
 
-type geminiConductorCommandRunner struct {
+type builtInConductorCommandRunner struct {
 	calls   int
 	request workers.CommandRequest
 	result  workers.CommandResult
 }
 
-func (r *geminiConductorCommandRunner) Run(
+func (r *builtInConductorCommandRunner) Run(
 	_ context.Context,
 	request workers.CommandRequest,
 ) (workers.CommandResult, error) {
 	r.calls++
 	r.request = request
 	return r.result, nil
+}
+
+func containsRunnerArgPair(args []string, flag, value string) bool {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == flag && args[index+1] == value {
+			return true
+		}
+	}
+	return false
 }
