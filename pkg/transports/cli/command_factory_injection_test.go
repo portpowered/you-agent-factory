@@ -296,7 +296,8 @@ func TestNewCommandFactoryDoesNotInstallTransportDefaults(t *testing.T) {
 func TestNewCommandFactoryPreservesInjectedOperations(t *testing.T) {
 	t.Parallel()
 
-	calls := 0
+	modelCalls := 0
+	sessionCalls := 0
 	resolver := interfaces.CurrentFactoryDirectoryResolver(func(rootDir string) (string, error) {
 		return rootDir + "/current", nil
 	})
@@ -338,9 +339,18 @@ func TestNewCommandFactoryPreservesInjectedOperations(t *testing.T) {
 		RunDirectoryCreator:               directories,
 		BrowserOpener:                     browser,
 		ModelsCLI: injectedModelsCLIService{list: func(modelscli.ListConfig) error {
-			calls++
+			modelCalls++
 			return nil
 		}},
+		SessionsCLI: session.Bind(session.Operations{
+			Show: func(cfg session.ShowConfig) error {
+				sessionCalls++
+				if cfg.SessionID != "session-alpha" {
+					t.Fatalf("SessionID = %q, want session-alpha", cfg.SessionID)
+				}
+				return nil
+			},
+		}),
 	})
 	if roots, err := factory.resolveNamedFactoryRoots("home", "repo"); err != nil || roots.Project != "repo/factory" || roots.Global != "home/factories" {
 		t.Fatalf("named Factory roots = %#v, %v", roots, err)
@@ -351,11 +361,20 @@ func TestNewCommandFactoryPreservesInjectedOperations(t *testing.T) {
 	if factory.ModelsCLI == nil {
 		t.Fatal("injected Models CLI service is missing")
 	}
+	if factory.SessionsCLI == nil {
+		t.Fatal("injected Sessions CLI service is missing")
+	}
 	if err := factory.ModelsCLI.List(modelscli.ListConfig{Context: context.Background()}); err != nil {
 		t.Fatalf("ListModels: %v", err)
 	}
-	if calls != 1 {
-		t.Fatalf("calls = %d, want 1", calls)
+	if err := factory.SessionsCLI.Show(session.ShowConfig{SessionID: "session-alpha"}); err != nil {
+		t.Fatalf("ShowSession: %v", err)
+	}
+	if modelCalls != 1 {
+		t.Fatalf("model calls = %d, want 1", modelCalls)
+	}
+	if sessionCalls != 1 {
+		t.Fatalf("session calls = %d, want 1", sessionCalls)
 	}
 	resolved, err := factory.resolveCurrentFactoryDir("factory")
 	if err != nil || resolved != "factory/current" {
