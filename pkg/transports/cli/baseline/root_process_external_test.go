@@ -17,12 +17,19 @@ import (
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
 )
 
-func TestSessionListMapsStableInputsIntoFreshTypedRequestsAcrossExecutions(t *testing.T) {
+func TestBuildProcessComposesTypedSessionAndModelsAdaptersAcrossExecutions(t *testing.T) {
 	var requests []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests = append(requests, r.URL.RequestURI())
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"sessions":[]}`)
+		switch r.URL.Path {
+		case "/factory-sessions":
+			_, _ = io.WriteString(w, `{"sessions":[]}`)
+		case "/models":
+			_, _ = io.WriteString(w, `{"results":[]}`)
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	t.Cleanup(server.Close)
 
@@ -58,14 +65,20 @@ func TestSessionListMapsStableInputsIntoFreshTypedRequestsAcrossExecutions(t *te
 		return stdout.String()
 	}
 
-	first := execute("session", "list", "--port", strconv.Itoa(port), "--json")
-	second := execute("session", "list", "--server", server.URL, "--json")
+	firstSession := execute("session", "list", "--port", strconv.Itoa(port), "--json")
+	secondSession := execute("session", "list", "--server", server.URL, "--json")
+	firstModels := execute("--server", server.URL, "models", "list", "--json")
+	secondModels := execute("models", "list", "--server", server.URL, "--json")
 
-	if first != "{\"sessions\":[]}\n" || second != "{\"sessions\":[]}\n" {
-		t.Fatalf("session list outputs = (%q, %q), want stable JSON", first, second)
+	if firstSession != "{\"sessions\":[]}\n" || secondSession != "{\"sessions\":[]}\n" {
+		t.Fatalf("session list outputs = (%q, %q), want stable JSON", firstSession, secondSession)
 	}
-	if len(requests) != 2 || requests[0] != "/factory-sessions" || requests[1] != "/factory-sessions" {
-		t.Fatalf("session list requests = %v, want two collection requests", requests)
+	if firstModels != "{\"results\":[]}\n" || secondModels != "{\"results\":[]}\n" {
+		t.Fatalf("models list outputs = (%q, %q), want stable JSON", firstModels, secondModels)
+	}
+	wantRequests := []string{"/factory-sessions", "/factory-sessions", "/models", "/models"}
+	if strings.Join(requests, ",") != strings.Join(wantRequests, ",") {
+		t.Fatalf("typed adapter requests = %v, want %v", requests, wantRequests)
 	}
 }
 

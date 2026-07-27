@@ -33,7 +33,7 @@ func TestProductionMCPServeGeneratedMetadataDelegatesStdioInitializer(t *testing
 	resolveHome := factorysessions.HomeDirectoryResolver(func() (string, error) {
 		return t.TempDir(), nil
 	})
-	root := CommandFactory{ModelsCLI: legacyModelsCLIService{}}.NewCommand(resolveHome, nil, startupcli.Functions{StdioFunc: initializeStdio})
+	root := CommandFactory{ModelsCLI: rootModelsCLI}.NewCommand(resolveHome, nil, startupcli.Functions{StdioFunc: initializeStdio})
 	root.SetIn(stdin)
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
