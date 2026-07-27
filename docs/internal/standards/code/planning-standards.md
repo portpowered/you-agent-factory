@@ -23,6 +23,9 @@ Every contributor or agent who creates or updates a PRD, `prd.json`, or work-sto
 - Frontend plans **SHOULD** prefer existing shared UI primitives and concise action/copy patterns unless a new reusable primitive is justified.
 - Avoid bundling unrelated cleanup, opportunistic refactors, or broad topology changes into a behavior-focused lane.
 - Call out quality gates directly when the work touches backend, frontend, contracts, or generated artifacts.
+- Every implementation plan **MUST** state that delivery loops through required
+  CI, blocking review feedback, conflict resolution, and actual PR merge before
+  the work is complete.
 
 ## Review Checklist
 
@@ -147,6 +150,24 @@ Rules:
 - Notes **SHOULD NOT** become a dumping ground for speculative implementation detail.
 - Plans **MUST NOT** require hidden context that exists only in the original chat when the artifact could state it directly.
 
+### 9. Make Merge the Delivery Boundary
+
+Implementation plans **MUST** make the end-to-end delivery condition explicit.
+
+Rules:
+
+- The plan **MUST** require the implementation/review cycle to continue until
+  required CI is terminal and passing, blocking PR conversation feedback is
+  explicitly addressed, merge conflicts are resolved, and the PR is merged.
+- Opening a PR, pushing the latest implementation, obtaining approval, or
+  reaching green CI without merge **MUST NOT** be described as completion.
+- Shared-file or baseline churn **MUST** be reconciled through the same delivery
+  loop when the change remains in scope; it is not by itself a reason to hold an
+  otherwise dependency-ready plan.
+- The merge condition belongs in project-level acceptance criteria or an
+  equivalent delivery section. It **SHOULD NOT** be modeled as a fake product
+  behavior story.
+
 ## Delivery Checklist
 
 Before handing a plan to implementation, authors **SHOULD** confirm:
@@ -160,3 +181,5 @@ Before handing a plan to implementation, authors **SHOULD** confirm:
 - UI plans reuse shared primitives or justify new reusable primitives.
 - Scope stays narrow and avoids unrelated cleanup.
 - Story order supports incremental implementation and review.
+- The plan explicitly continues through terminal green CI, resolved blocking
+  feedback and conflicts, and verified PR merge.
