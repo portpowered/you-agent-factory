@@ -429,6 +429,15 @@ func (e *FactoryEngine) runUntilQuiescent(ctx context.Context) (bool, error) {
 			return e.finishTerminationDrain()
 		}
 		if !mutated {
+			e.mu.Lock()
+			stillBuffered := e.hasBufferedInputs()
+			if stillBuffered {
+				e.wakeForPendingProcessing()
+			}
+			e.mu.Unlock()
+			if stillBuffered {
+				continue
+			}
 			return false, nil
 		}
 	}
