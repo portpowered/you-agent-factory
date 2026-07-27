@@ -10,6 +10,7 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 )
@@ -17,6 +18,7 @@ import (
 type service struct {
 	scopes          runtimescopes.Service
 	assets          scopedassets.Service
+	leases          hostleases.Service
 	processLauncher models.HostProcessLauncher
 	hostHTTP        models.HostHTTPDoer
 	hostClock       models.HostClock
@@ -38,6 +40,7 @@ var _ runtimehost.Service = (*service)(nil)
 func New(
 	scopes runtimescopes.Service,
 	assets scopedassets.Service,
+	leases hostleases.Service,
 	processLauncher models.HostProcessLauncher,
 	hostHTTP models.HostHTTPDoer,
 	hostClock models.HostClock,
@@ -58,6 +61,7 @@ func New(
 	return &service{
 		scopes:            scopes,
 		assets:            assets,
+		leases:            leases,
 		processLauncher:   processLauncher,
 		hostHTTP:          hostHTTP,
 		hostClock:         hostClock,

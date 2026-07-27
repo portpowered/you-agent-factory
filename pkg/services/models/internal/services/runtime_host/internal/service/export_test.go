@@ -6,6 +6,8 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
+	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 )
@@ -62,6 +64,7 @@ func NewWithHostTestConfig(
 	s := New(
 		scopes,
 		assets,
+		mustLeasesService(hostClock),
 		processLauncher,
 		hostHTTP,
 		hostClock,
@@ -107,4 +110,12 @@ func ReleaseSlotCapacity(
 // ShutdownHost stops all supervised runtimes owned by the host.
 func ShutdownHost(ctx context.Context, s runtimehost.Service) error {
 	return s.(*service).Shutdown(ctx)
+}
+
+func mustLeasesService(hostClock models.HostClock) hostleases.Service {
+	leases, err := leaseswire.NewService(hostClock)
+	if err != nil {
+		panic(err)
+	}
+	return leases
 }
