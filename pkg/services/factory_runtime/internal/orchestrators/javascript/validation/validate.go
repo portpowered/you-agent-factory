@@ -12,6 +12,11 @@ import (
 
 var syntaxLocationPattern = regexp.MustCompile(`on line (\d+) and column (\d+)`)
 
+const (
+	workflowScriptWrapperPrefix = "(function(){\n"
+	workflowScriptWrapperSuffix = "\n})()"
+)
+
 // Request carries workflow source text and orchestrator config fields to validate.
 type Request struct {
 	Source     string
@@ -42,14 +47,70 @@ func Validate(req Request) Result {
 		return Result{Issues: issues}
 	}
 
-	ast, err := js.Parse(parse.NewInputString(source), js.Options{})
+	parseSource, wrapped := workflowScriptSourceForValidation(source)
+	req.Source = parseSource
+
+	ast, err := js.Parse(parse.NewInputString(parseSource), js.Options{})
 	if err != nil {
-		issues = append(issues, syntaxIssue(err, req))
+		issue := syntaxIssue(err, req)
+		if wrapped {
+			issue.Line = remapWrappedWorkflowIssueLine(issue.Line)
+		}
+		issues = append(issues, issue)
 		return Result{Issues: issues}
 	}
 	req.AST = ast
-	issues = append(issues, analyzeJavaScriptSource(req)...)
+	analyzed := analyzeJavaScriptSource(req)
+	if wrapped {
+		analyzed = remapWrappedWorkflowIssues(analyzed)
+	}
+	issues = append(issues, analyzed...)
 	return Result{Issues: issues}
+}
+
+func workflowScriptSourceForValidation(source string) (string, bool) {
+	if isWrappedWorkflowScriptSource(source) {
+		return source, true
+	}
+	if _, err := js.Parse(parse.NewInputString(source), js.Options{}); err == nil {
+		return source, false
+	}
+	wrapped := wrapWorkflowScriptSource(source)
+	if _, err := js.Parse(parse.NewInputString(wrapped), js.Options{}); err == nil {
+		return wrapped, true
+	}
+	return source, false
+}
+
+func isWrappedWorkflowScriptSource(source string) bool {
+	trimmed := strings.TrimSpace(source)
+	return strings.HasPrefix(trimmed, workflowScriptWrapperPrefix) ||
+		strings.HasPrefix(trimmed, "(async function(){")
+}
+
+func wrapWorkflowScriptSource(source string) string {
+	return workflowScriptWrapperPrefix + source + workflowScriptWrapperSuffix
+}
+
+func remapWrappedWorkflowIssueLine(line int) int {
+	if line > 1 {
+		return line - 1
+	}
+	return line
+}
+
+func remapWrappedWorkflowIssues(issues []Issue) []Issue {
+	if len(issues) == 0 {
+		return issues
+	}
+	out := make([]Issue, len(issues))
+	for i, issue := range issues {
+		out[i] = issue
+		if issue.Line > 0 {
+			out[i].Line = remapWrappedWorkflowIssueLine(issue.Line)
+		}
+	}
+	return out
 }
 
 func syntaxIssue(err error, req Request) Issue {

@@ -39,7 +39,7 @@ func S24Scenarios() []Scenario {
 			ID:                "s24-invalid-goal",
 			Title:             "Invalid goal",
 			DocumentedOutcome: "Unknown named factories fail with a non-zero operating-system exit in default and quiet modes.",
-			TestName:          "TestInvalidGoal_OutputModesExitNonZero",
+			TestName:          "TestCLIValidationFailureExitCode",
 		},
 		{
 			ID:                "s24-terminal-failure-exit",

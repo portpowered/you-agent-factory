@@ -110,7 +110,7 @@ func TestServiceProjectsRetainedAndLiveFactoryEvents(t *testing.T) {
 	<-rendered
 
 	service.mu.Lock()
-	cursor := service.cursor
+	cursor := service.activation.ReconnectCursor()
 	service.mu.Unlock()
 	if cursor == nil || cursor.AfterEventID != liveEvent.Id ||
 		cursor.AfterSequence == nil || *cursor.AfterSequence != 4 {
@@ -198,6 +198,12 @@ func TestServiceRootLifecycleInertConstructionAndTypedActivate(t *testing.T) {
 	requireServiceLifecycleError(t, err, LifecycleErrorMissingParameters, "Activate missing parameters")
 	if subscribeCalls != 0 {
 		t.Fatal("missing-parameter Activate must not subscribe")
+	}
+
+	_, err = root.Activate(context.Background(), ActivateRequest{Mode: ActivateMode("UNSUPPORTED")})
+	requireServiceLifecycleError(t, err, LifecycleErrorMissingParameters, "Activate unsupported mode")
+	if subscribeCalls != 0 {
+		t.Fatal("unsupported-mode Activate must not subscribe")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -19,10 +19,6 @@
       "name": "TestInvalidGoal_InvalidTopology_RejectsWithDocumentedGraphReferenceError"
     },
     {
-      "file": "acceptance/invalid_quiet_outcomes_test.go",
-      "name": "TestInvalidGoal_OutputModesExitNonZero"
-    },
-    {
       "file": "acceptance/invoke_repeat_subagent_outcomes_test.go",
       "name": "TestGoalRepeat_RepeatedNamedRunsAssignDistinctInvocationIdentityAndReuseInstalledCopy"
     },
@@ -1177,10 +1173,6 @@
     {
       "file": "smoke/cli_run_mode_compat_smoke_test.go",
       "name": "TestRunModeCompat_RealCLIOperatorContinuousRunReportsStartupOutputWithoutQuiet"
-    },
-    {
-      "file": "smoke/cli_work_move_smoke_test.go",
-      "name": "TestWorkMove_RealCLIMovesSubmittedWork"
     },
     {
       "file": "smoke/config_driven_execution_test.go",

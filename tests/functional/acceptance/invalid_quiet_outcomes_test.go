@@ -16,30 +16,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-func TestInvalidGoal_OutputModesExitNonZero(t *testing.T) {
-	t.Parallel()
-
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	session := harness.NewSession(t)
-
-	for _, tc := range []struct {
-		name string
-		args []string
-	}{
-		{name: "default", args: []string{"run", "--named", "@you/missing", "--no-record", "invalid-goal-prompt"}},
-		{name: "quiet", args: []string{"run", "--named", "@you/missing", "--no-record", "--quiet", "invalid-goal-prompt"}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			defer cancel()
-			result, err := session.Run(ctx, tc.args...)
-			if err == nil || result.ExitCode == 0 {
-				t.Fatalf("invalid goal result = %#v, error = %v; want non-zero process exit", result, err)
-			}
-		})
-	}
-}
-
 func TestInvalidGoal_InvalidTopology_RejectsWithDocumentedGraphReferenceError(t *testing.T) {
 	t.Parallel()
 

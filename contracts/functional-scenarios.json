@@ -386,7 +386,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/smoke/cli_work_move_smoke_test.go::TestWorkMove_RealCLIMovesSubmittedWork",
+          "test": "tests/functional/transport/cli/commands/work_wiring_test.go::TestCLIWorkMoveChangesState",
           "boundary": "cli"
         }
       ]

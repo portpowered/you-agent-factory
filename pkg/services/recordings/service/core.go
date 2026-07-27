@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +13,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
 	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
 	artifactsexportwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/wire"
+	canonicalledger "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger"
+	canonicalledgerwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/wire"
 	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
@@ -29,10 +30,10 @@ type combinedService struct {
 	recordings.Ledger
 	recordings.ProjectionService
 	recordinglifecycle.Service
-	artifactsExport artifactsexport.Service
-	replayService recordingsreplay.Service
+	artifactsExport   artifactsexport.Service
+	replayService     recordingsreplay.Service
+	canonicalLedger   canonicalledger.Service
 
-	appendMu    sync.Mutex
 	lifecycleMu sync.Mutex
 	replayByKey map[string]*factorydefinitions.ReplayArtifact
 }
@@ -42,95 +43,14 @@ var _ recordings.Service = (*combinedService)(nil)
 func (service *combinedService) Append(
 	request recordings.AppendRecordedEventRequest,
 ) (recordings.AppendRecordedEventResult, error) {
-	if !canonical.ValidAppendEvent(request.Event) {
-		return recordings.AppendRecordedEventResult{}, recordings.ErrInvalidAppendEvent
-	}
-	service.appendMu.Lock()
-	defer service.appendMu.Unlock()
-	legacy := canonical.FactoryEventFromCanonical(request.Event)
-	if request.Event.Scope.FactorySessionID != "" {
-		sequence := int(nextScopedSequence(service.CanonicalEvents(), request.Event.Scope))
-		legacy.Context.SessionSequence = &sequence
-	}
-	service.AppendRecordedEvent(legacy)
-	recorded := service.CanonicalEvents()
-	for index := len(recorded) - 1; index >= 0; index-- {
-		if recorded[index].Id == string(request.Event.ID) {
-			return recordings.AppendRecordedEventResult{
-				Event: canonicalEventFromFactory(recorded[index], service.StreamGenerationID()),
-			}, nil
-		}
-	}
-	return recordings.AppendRecordedEventResult{}, nil
+	return service.canonicalLedger.Append(request)
 }
 
 func (service *combinedService) SubscribeFrom(
 	ctx context.Context,
 	request recordings.SubscribeRequest,
 ) (recordings.SubscribeResult, error) {
-	if request.Scope.FactorySessionID != "" &&
-		strings.TrimSpace(request.Scope.FactorySessionID) == "" {
-		return recordings.SubscribeResult{}, recordings.ErrInvalidSubscribeScope
-	}
-	if request.Cursor != nil {
-		if request.Cursor.StreamGenerationID == "" || request.Cursor.Sequence < 0 {
-			return recordings.SubscribeResult{}, recordings.ErrInvalidReconnectCursor
-		}
-		if request.Cursor.StreamGenerationID != service.StreamGenerationID() {
-			return recordings.SubscribeResult{}, recordings.ErrReconnectCursorUnavailable
-		}
-	}
-	streamContext, cancel := context.WithCancel(ctx)
-	stream, err := service.Subscribe(streamContext, nil, factorydefinitions.FactoryEventReconnectScope{
-		SessionID: request.Scope.FactorySessionID,
-	})
-	if err != nil {
-		cancel()
-		if errors.Is(err, recordings.ErrReconnectCursorNotFound) {
-			return recordings.SubscribeResult{}, recordings.ErrReconnectCursorExpired
-		}
-		return recordings.SubscribeResult{}, err
-	}
-	subscription, err := newEventSubscription(
-		stream,
-		request.Scope,
-		request.Cursor,
-		streamContext.Done(),
-		cancel,
-	)
-	if err != nil {
-		cancel()
-		return recordings.SubscribeResult{}, err
-	}
-	return recordings.SubscribeResult{
-		Subscription: subscription,
-	}, nil
-}
-
-func canonicalEventFromFactory(
-	event factorydefinitions.FactoryEvent,
-	generationID string,
-) recordings.CanonicalEvent {
-	sourceContext, _ := json.Marshal(event.Context)
-	scope := recordings.CanonicalEventScope{}
-	if event.Context.SessionID != nil {
-		scope.FactorySessionID = *event.Context.SessionID
-	}
-	sequence := recordings.CanonicalEventSequence(event.Context.Sequence)
-	return recordings.CanonicalEvent{
-		ID:          recordings.CanonicalEventID(event.Id),
-		Sequence:    sequence,
-		FactoryTick: event.Context.Tick,
-		Scope:       scope,
-		Cursor: recordings.CanonicalEventCursor{
-			StreamGenerationID: generationID,
-			Sequence:           sequence,
-		},
-		RecordedAt:    event.Context.EventTime,
-		Kind:          recordings.CanonicalEventKind(event.Type),
-		Payload:       string(event.Payload),
-		SourceContext: string(sourceContext),
-	}
+	return service.canonicalLedger.SubscribeFrom(ctx, request)
 }
 
 func (service *combinedService) ReconstructWorldState(
@@ -332,6 +252,7 @@ func NewServiceWithLifecycleEffects(
 		Service:           lifecycle,
 		artifactsExport:   artifactsexportwire.NewService(lifecycle, publication),
 		replayService:     replaywire.NewService(lifecycle, projection),
+		canonicalLedger:   canonicalledgerwire.NewService(ledger),
 		replayByKey:       make(map[string]*factorydefinitions.ReplayArtifact),
 	}
 }

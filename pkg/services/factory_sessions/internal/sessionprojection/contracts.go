@@ -16,6 +16,7 @@ type ProjectionBuildInput struct {
 	Session             *livesession.LiveSession
 	RuntimeConfig       interfaces.RuntimeConfigLookup
 	Snapshot            *factoryruntime.StateSnapshot
+	Observation         factoryruntime.Observation
 	BackendScopeID      string
 	LogicalSessionKey   string
 	NormalizedTarget    *factorysessions.RuntimeLogicalTarget
