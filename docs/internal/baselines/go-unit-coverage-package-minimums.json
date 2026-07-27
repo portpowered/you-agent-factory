@@ -910,7 +910,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service",
-      "minimum": 83.87
+      "minimum": 83.22
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
