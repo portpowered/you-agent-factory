@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
@@ -14,8 +15,10 @@ import (
 )
 
 const (
-	runningSessionID = "dur-sess-js-run-n-001"
-	successSessionID = "dur-sess-petri-success-001"
+	runningSessionID      = "dur-sess-js-run-n-001"
+	successSessionID      = "dur-sess-petri-success-001"
+	missingSessionID      = "dur-sess-missing-999"
+	internalLeakProbePath = "pkg/services/factory_sessions/internal/sessionstore"
 )
 
 var canonicalMCPRequestPreparation mcpfactorysession.RequestPreparation = mcpRequestPreparation{
@@ -852,6 +855,112 @@ func TestBind_StartControlToolsValidationFailureReturnsBadRequestWithoutInvoking
 	}
 }
 
+func TestBind_GetSessionTypedNotFoundErrorReturnsToolErrorEnvelope(t *testing.T) {
+	t.Parallel()
+
+	fake := fakeExecutionRoot{
+		getSession: func(_ context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
+			if sessionID != missingSessionID {
+				t.Fatalf("sessionId = %q, want %q", sessionID, missingSessionID)
+			}
+			return factorysessions.SessionReadResult{}, factorysessions.ErrDurableSessionNotFound
+		},
+	}
+	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
+		Execution: fake,
+		Prepare:   canonicalMCPRequestPreparation,
+	})
+	raw, err := operation(
+		context.Background(),
+		mcpfactorysession.ToolGetSession,
+		json.RawMessage(`{"sessionId":"`+missingSessionID+`"}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(get_session) transport error = %v, want typed tool response", err)
+	}
+	envelope := assertTypedToolErrorEnvelope(
+		t,
+		raw,
+		"factory_session.session.not_found",
+		false,
+		missingSessionID,
+	)
+	if envelope.Message != "factory session not found" {
+		t.Fatalf("error.message = %q, want %q; envelope = %#v", envelope.Message, "factory session not found", envelope)
+	}
+}
+
+func TestBind_ListDispatchesExecutionValidationErrorReturnsBadRequestEnvelope(t *testing.T) {
+	t.Parallel()
+
+	fake := fakeExecutionRoot{
+		queryDispatches: func(_ context.Context, request factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error) {
+			if request.SessionID != successSessionID {
+				t.Fatalf("sessionId = %q, want %q", request.SessionID, successSessionID)
+			}
+			return factorysessions.ListDispatchesResult{}, &factorysessions.ExecutionValidationError{
+				Field:   "status",
+				Message: "invalid status",
+			}
+		},
+	}
+	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
+		Execution: fake,
+		Prepare:   canonicalMCPRequestPreparation,
+	})
+	raw, err := operation(
+		context.Background(),
+		mcpfactorysession.ToolListDispatches,
+		json.RawMessage(`{"sessionId":"`+successSessionID+`","status":"BROKEN"}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(list_dispatches) transport error = %v, want typed tool response", err)
+	}
+	envelope := assertTypedToolErrorEnvelope(t, raw, "BAD_REQUEST", false, "")
+	if !strings.Contains(envelope.Message, "invalid status") {
+		t.Fatalf("error.message = %q, want validation detail; envelope = %#v", envelope.Message, envelope)
+	}
+	if envelope.Details == nil || envelope.Details["field"] != "status" {
+		t.Fatalf("error.details = %#v, want field=status", envelope.Details)
+	}
+}
+
+func TestBind_UnmappedRootErrorDoesNotLeakInternalPackagePaths(t *testing.T) {
+	t.Parallel()
+
+	fake := fakeExecutionRoot{
+		getSession: func(_ context.Context, _ string) (factorysessions.SessionReadResult, error) {
+			return factorysessions.SessionReadResult{}, fmt.Errorf(
+				"%s: connection reset\ngoroutine 1 [running]:\nmain.main()",
+				internalLeakProbePath,
+			)
+		},
+	}
+	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
+		Execution: fake,
+		Prepare:   canonicalMCPRequestPreparation,
+	})
+	raw, err := operation(
+		context.Background(),
+		mcpfactorysession.ToolGetSession,
+		json.RawMessage(`{"sessionId":"`+missingSessionID+`"}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(get_session) transport error = %v, want typed tool response", err)
+	}
+	assertEnvelopeDoesNotLeakInternalPaths(t, raw)
+	envelope := assertTypedToolErrorEnvelope(
+		t,
+		raw,
+		"factory_session.execution.internal",
+		false,
+		"",
+	)
+	if envelope.Message != "factory session execution failed" {
+		t.Fatalf("error.message = %q, want sanitized internal message; envelope = %#v", envelope.Message, envelope)
+	}
+}
+
 func TestToolOperationPropagatesCallerContextAndCancellation(t *testing.T) {
 	type markerKey struct{}
 	const markerValue = "mcp-request-context"
@@ -1285,15 +1394,50 @@ func (root fakeExecutionRoot) Pause(
 
 func assertBadRequestToolResponse(t *testing.T, raw json.RawMessage) {
 	t.Helper()
+	assertTypedToolErrorEnvelope(t, raw, "BAD_REQUEST", false, "")
+}
+
+func assertTypedToolErrorEnvelope(
+	t *testing.T,
+	raw json.RawMessage,
+	wantCode string,
+	wantRetryable bool,
+	wantSessionID string,
+) *mcpfactorysession.ToolErrorEnvelope {
+	t.Helper()
 
 	var response struct {
-		Error *mcpfactorysession.ToolErrorEnvelope `json:"error"`
+		Result *json.RawMessage                     `json:"result"`
+		Error  *mcpfactorysession.ToolErrorEnvelope `json:"error"`
 	}
 	if err := json.Unmarshal(raw, &response); err != nil {
 		t.Fatalf("decode tool response: %v", err)
 	}
-	if response.Error == nil || response.Error.Code != "BAD_REQUEST" || response.Error.Retryable {
-		t.Fatalf("tool response = %s, want non-retryable BAD_REQUEST envelope", raw)
+	if response.Result != nil {
+		t.Fatalf("tool response result = %s, want error envelope only", raw)
+	}
+	if response.Error == nil {
+		t.Fatalf("tool response = %s, want typed error envelope", raw)
+	}
+	if response.Error.Code != wantCode {
+		t.Fatalf("error.code = %q, want %q; envelope = %#v", response.Error.Code, wantCode, response.Error)
+	}
+	if response.Error.Retryable != wantRetryable {
+		t.Fatalf("error.retryable = %v, want %v; envelope = %#v", response.Error.Retryable, wantRetryable, response.Error)
+	}
+	if wantSessionID != "" && response.Error.SessionID != wantSessionID {
+		t.Fatalf("error.sessionId = %q, want %q; envelope = %#v", response.Error.SessionID, wantSessionID, response.Error)
+	}
+	if strings.TrimSpace(response.Error.Message) == "" {
+		t.Fatalf("error.message is required; envelope = %#v", response.Error)
+	}
+	return response.Error
+}
+
+func assertEnvelopeDoesNotLeakInternalPaths(t *testing.T, raw json.RawMessage) {
+	t.Helper()
+	if strings.Contains(string(raw), internalLeakProbePath) {
+		t.Fatalf("tool response leaks internal package path: %s", raw)
 	}
 }
 

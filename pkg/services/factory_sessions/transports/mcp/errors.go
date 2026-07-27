@@ -19,7 +19,9 @@ const (
 	errorCodeSessionNotFound            = "factory_session.session.not_found"
 	errorCodeResultNotReady             = "factory_session.result.not_ready"
 	errorCodeReconnectCursorNotFound    = "factory_session.events.reconnect_cursor_not_found"
+	errorCodeInternalExecution          = "factory_session.execution.internal"
 	errorMessageServiceUnavailable      = "factory session execution service is unavailable"
+	errorMessageInternalExecution       = "factory session execution failed"
 	errorMessageStartRequestIDConflict  = "execution request id was reused with a different start tuple"
 	errorMessageSessionNotFound         = "factory session not found"
 	errorMessageResultNotReady          = "factory session result is not ready"
@@ -191,7 +193,43 @@ func executionErrorEnvelope(err error) ToolErrorEnvelope {
 			Retryable: false,
 		}
 	}
-	return requestValidationErrorEnvelope(err)
+	var requestValidationErr *apisurface.RequestValidationError
+	if errors.As(err, &requestValidationErr) {
+		return requestValidationErrorEnvelope(err)
+	}
+	if isSafeClientFacingError(err) {
+		return ToolErrorEnvelope{
+			Code:      errorCodeBadRequest,
+			Message:   strings.TrimSpace(err.Error()),
+			Retryable: false,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	}
+	return unmappedExecutionErrorEnvelope()
+}
+
+func isSafeClientFacingError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	if strings.Contains(message, "factory_sessions/internal") {
+		return false
+	}
+	if strings.Contains(message, "goroutine ") {
+		return false
+	}
+	return strings.TrimSpace(message) != ""
+}
+
+func unmappedExecutionErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeInternalExecution,
+		Message:   errorMessageInternalExecution,
+		Retryable: false,
+	}
 }
 
 func validationDetailsFromPreview(preview factoryapi.FactoryPreviewResult) map[string]any {
