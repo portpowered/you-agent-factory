@@ -759,21 +759,9 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/redacted_reasoning_decoder.go#decodeRedactedReasoning",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session redacted reasoning decoding stays grouped until extraction refactor."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_blob_decode.go#decodeBlobEntryValue",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_parse.go#messageUnknownContentText",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session message content formatting stays grouped until extraction refactor."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -915,7 +903,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/system_initialization/initializer.go#Initializer.Initialize",
+      "target": "pkg/services/system_initialization/internal/workflow/workflow.go#Initializer.Initialize",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },

@@ -2796,12 +2796,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/ingest",
-      "disposition": "move",
-      "destination": "automations",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
       "disposition": "retain",
       "destination": "factory_runtime",
@@ -3853,6 +3847,18 @@
     },
     {
       "packagePath": "pkg/services/system_initialization",
+      "disposition": "retain",
+      "destination": "system_initialization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization/internal/workflow",
+      "disposition": "retain",
+      "destination": "system_initialization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization/wire",
       "disposition": "retain",
       "destination": "system_initialization",
       "destinationKind": "owner"
