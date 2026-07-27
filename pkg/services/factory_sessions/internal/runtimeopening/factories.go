@@ -96,13 +96,7 @@ type WorkersRuntimeFactory = func(
 	work.ContentMaterializer,
 ) (workers.RuntimeService, error)
 
-type WorkerHostedPollersFactory = func(
-	*zap.Logger,
-	workers.HostedPollerClock,
-	workers.HostedPollerHTTPDoer,
-	workers.HostedPollerSecretResolver,
-	string,
-) automations.HostedPollers
+type AutomationHostedSourcesFactory = automations.HostedSourcesFactory
 
 type WorkersLocalRuntimeHooksFactory = func() models.LocalRuntimeHooks
 

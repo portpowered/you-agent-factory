@@ -102,7 +102,7 @@ type (
 	RuntimeLedgerFactory            = runtimeopening.RuntimeLedgerFactory
 	ReplayClockFactory              = runtimeopening.ReplayClockFactory
 	WorkersRuntimeFactory           = runtimeopening.WorkersRuntimeFactory
-	WorkerHostedPollersFactory      = runtimeopening.WorkerHostedPollersFactory
+	AutomationHostedSourcesFactory      = runtimeopening.AutomationHostedSourcesFactory
 	WorkersLocalRuntimeHooksFactory = runtimeopening.WorkersLocalRuntimeHooksFactory
 	FactoryDefinitionsFactory       = runtimeopening.FactoryDefinitionsFactory
 	DurableExecutionFactory         = runtimeopening.DurableExecutionFactory
@@ -155,7 +155,7 @@ type RuntimeOpeningDependencies struct {
 	WorkersRuntimeFactory           WorkersRuntimeFactory
 	WorkersRuntimeExecutorsFactory  factoryruntime.WorkersRuntimeExecutorsFactory
 	WorkersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory
-	WorkerHostedPollersFactory      WorkerHostedPollersFactory
+	AutomationHostedSourcesFactory AutomationHostedSourcesFactory
 	WorkersLocalRuntimeHooksFactory WorkersLocalRuntimeHooksFactory
 	FactoryDefinitionsFactory       FactoryDefinitionsFactory
 	FactoryScaffoldInitializer      factorysessions.FactoryScaffoldInitializer
@@ -189,7 +189,7 @@ func NewRuntimeOpeningFactory(deps RuntimeOpeningDependencies) (*RuntimeOpeningF
 		deps.RecordingsProjectionFactory, deps.RecordingsFactory, deps.RuntimeLedgerFactory,
 		deps.RuntimeRecorderFactory, deps.ReplayClockFactory, deps.ReplayExecutionFactory,
 		deps.WorkersRuntimeFactory, deps.WorkersRuntimeExecutorsFactory,
-		deps.WorkersMockCommandRunnerFactory, deps.WorkerHostedPollersFactory,
+		deps.WorkersMockCommandRunnerFactory, deps.AutomationHostedSourcesFactory,
 		deps.WorkersLocalRuntimeHooksFactory, deps.FactoryDefinitionsFactory,
 		deps.FactoryScaffoldInitializer, deps.EditableFactoryValidator,
 		deps.InitialFactorySnapshotFactory, deps.FactoryRuntimeAssembler, deps.ContentMaterializer,

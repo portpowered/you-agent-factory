@@ -9,7 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -26,8 +25,6 @@ import (
 	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
-	hostedworkers "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic"
-	hostedlinear "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear"
 	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/services/testing"
 	"go.uber.org/zap"
 )
@@ -322,17 +319,6 @@ func NewMockCommandRunner(
 		RuntimeConfig: runtimeConfig,
 		Next:          next,
 	}
-}
-
-// NewHostedPollers constructs Workers-owned hosted integration pollers.
-func NewHostedPollers(
-	logger *zap.Logger,
-	clock hostedworkers.Clock,
-	httpClient hostedlinear.HTTPDoer,
-	secretResolver hostedlinear.SecretResolver,
-	linearEndpoint string,
-) automations.HostedPollers {
-	return hostedworkers.New(logger, clock, httpClient, secretResolver, linearEndpoint)
 }
 
 // LocalRuntimeHooks returns the Workers-owned recording hooks consumed by the

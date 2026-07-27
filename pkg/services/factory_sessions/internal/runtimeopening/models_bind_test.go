@@ -337,7 +337,7 @@ func TestOpenRuntimeClosesModelsScopeExactlyOnceAfterLaterStepFails(t *testing.T
 		recordingsProjectionFactory: openingCoordinatorProjections,
 		runtimeLedgerFactory:        openingCoordinatorLedgerFactory,
 		runtimeRecorderFactory:      openingCoordinatorRecorder,
-		workerHostedPollersFactory:  openingCoordinatorHostedPollers,
+		automationHostedSourcesFactory:  openingCoordinatorHostedPollers,
 		factoryScaffoldInitializer:  openingCoordinatorInitializeScaffold,
 		editableFactoryValidator:    openingCoordinatorValidateEditable,
 		contentMaterializer:         openingCoordinatorContentMaterializer{},

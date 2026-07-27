@@ -4,14 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -52,8 +50,6 @@ import (
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	workersservice "github.com/portpowered/infinite-you/pkg/services/workers/service"
-	hostedworkers "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic"
-	hostedlinear "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear"
 	workerworktree "github.com/portpowered/infinite-you/pkg/services/workers/worktree"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
@@ -861,35 +857,6 @@ func provideWorkersRuntimeExecutorsFactory() factoryruntime.WorkersRuntimeExecut
 
 func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandRunnerFactory {
 	return workersservice.NewMockCommandRunner
-}
-
-func provideWorkerHostedPollersFactory(edges serviceedges.Edges) (factorysessionwire.WorkerHostedPollersFactory, error) {
-	checkpointStore := edges.HostedLinearCheckpointStore
-	if checkpointStore == nil {
-		var err error
-		checkpointStore, err = hostedlinear.NewCheckpointStore(platformfilesystem.Local{})
-		if err != nil {
-			return nil, err
-		}
-	}
-	return func(
-		logger *zap.Logger,
-		clock workers.HostedPollerClock,
-		httpClient workers.HostedPollerHTTPDoer,
-		secretResolver workers.HostedPollerSecretResolver,
-		linearEndpoint string,
-	) automations.HostedPollers {
-		if clock == nil {
-			clock = clockwork.NewRealClock()
-		}
-		if httpClient == nil {
-			httpClient = &http.Client{Timeout: hostedlinear.DefaultRequestTimeout}
-		}
-		if secretResolver == nil {
-			secretResolver = hostedlinear.NewSecretResolver(os.Getenv, os.ReadFile)
-		}
-		return hostedworkers.New(logger, clock, httpClient, secretResolver, linearEndpoint, checkpointStore)
-	}, nil
 }
 
 func provideWorkersLocalRuntimeHooksFactory() factorysessionwire.WorkersLocalRuntimeHooksFactory {

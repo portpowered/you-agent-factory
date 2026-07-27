@@ -808,6 +808,12 @@ response-stream output.
   (`~/.you-agent-factory/recordings/...`) belongs in `pkg/config/defaultpaths`;
   `pkg/services/operator_settings` and `pkg/transports/cli/run` should keep only precedence,
   filename, and reporting behavior around those defaults.
+- Effective operator-settings resolution belongs in the parent-private owner at
+  `pkg/services/operator_settings/internal/services/resolution`; the published
+  `operatorsettings.Service` root delegates `ResolveEffective` through
+  `internal/service` and `wire` only. Query the accepted `providers.Service` root
+  for provider identity canonicalization at resolve time; do not cache availability
+  in settings state or add Providers→Operator Settings imports.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore
@@ -1810,12 +1816,13 @@ response-stream output.
   and private-record functional smoke matrices were retired when this raw
   customer-boundary owner was established; the development-plan documents remain
   historical records, not active test-ownership maps.
-- `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
-  regression coverage for adjacent `you run` modes after packaged-goal changes:
-  operator-oriented continuous startup output without `--quiet`, factory text
-  invocation stdout that suppresses operator chatter, and named-goal batch
-  stdout that stays primary-result-only. Reuse helpers from
-  `cli_factory_prompt_run_smoke_test.go` when extending these regressions.
+- `tests/functional/transport/cli/output/text_stream_test.go` holds focused
+  regression coverage for adjacent `you run` human text presentation after
+  packaged-goal changes: operator-oriented continuous startup output without
+  `--quiet`, factory text invocation stdout that suppresses operator chatter,
+  and named-goal batch stdout that stays primary-result-only. Reuse helpers
+  from sibling `json_result_test.go`, `ndjson_stream_test.go`, and
+  `stream_backpressure_test.go` when extending these regressions.
 - `cmd/factory` owns the operating-system interrupt boundary for the CLI.
   Derive the reusable process context with `signal.NotifyContext`, stop the
   signal subscription on return, and classify wrapped `context.Canceled` as the

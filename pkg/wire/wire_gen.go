@@ -209,7 +209,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	workersRuntimeExecutorsFactory := provideWorkersRuntimeExecutorsFactory()
-	v35, err := provideWorkerHostedPollersFactory(edges2)
+	v35, err := provideAutomationHostedSourcesFactory(edges2)
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +316,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		WorkersRuntimeFactory:            v34,
 		WorkersRuntimeExecutorsFactory:   workersRuntimeExecutorsFactory,
 		WorkersMockCommandRunnerFactory:  workersMockCommandRunnerFactory,
-		WorkerHostedPollersFactory:       v35,
+		AutomationHostedSourcesFactory:   v35,
 		WorkersLocalRuntimeHooksFactory:  v36,
 		FactoryDefinitionsFactory:        v41,
 		FactoryScaffoldInitializer:       factoryScaffoldInitializer,
@@ -683,7 +683,7 @@ var servicesSet = wire2.NewSet(
 	provideWorkersRuntimeFactory,
 	provideWorkersRuntimeExecutorsFactory,
 	provideWorkersMockCommandRunnerFactory,
-	provideWorkerHostedPollersFactory,
+	provideAutomationHostedSourcesFactory,
 	provideWorkersLocalRuntimeHooksFactory,
 	provideWorkerCommandRunnerAdapter,
 	provideFactoryDefinitionsFactory,
