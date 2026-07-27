@@ -235,6 +235,84 @@ func TestCronTimeWorkRequest_InvalidTimingConfigPerformsNoWorkSubmission(t *test
 	}
 }
 
+func TestValidateCronSchedule_RejectsEmptyAndUnparsableSchedules(t *testing.T) {
+	svc := testCronService()
+	for _, test := range []struct {
+		name     string
+		schedule string
+	}{
+		{name: "empty", schedule: ""},
+		{name: "whitespace", schedule: "   "},
+		{name: "unparsable", schedule: "not-a-cron"},
+		{name: "too few fields", schedule: "* * *"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := svc.ValidateCronSchedule(test.schedule)
+			if err == nil || !errors.Is(err, cron.ErrInvalidSchedule) {
+				t.Fatalf("error = %v, want typed ErrInvalidSchedule", err)
+			}
+		})
+	}
+}
+
+func TestValidateCronSchedule_AcceptsValidFiveFieldSchedule(t *testing.T) {
+	svc := testCronService()
+	if err := svc.ValidateCronSchedule("*/5 * * * *"); err != nil {
+		t.Fatalf("ValidateCronSchedule: %v", err)
+	}
+}
+
+func TestParseCronTiming_RejectsMissingScheduleWithTypedFailure(t *testing.T) {
+	svc := testCronService()
+	nominalAt := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
+	for _, test := range []struct {
+		name string
+		cron *interfaces.CronConfig
+	}{
+		{name: "nil config", cron: nil},
+		{name: "empty schedule", cron: &interfaces.CronConfig{}},
+		{name: "whitespace schedule", cron: &interfaces.CronConfig{Schedule: "   "}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := svc.ParseCronTiming(test.cron, nominalAt)
+			if err == nil || !errors.Is(err, cron.ErrInvalidSchedule) {
+				t.Fatalf("error = %v, want typed ErrInvalidSchedule", err)
+			}
+		})
+	}
+}
+
+func TestCronTimeWorkRequest_InvalidSchedulePerformsNoWorkSubmission(t *testing.T) {
+	svc := testCronService()
+	nominalAt := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
+	for _, test := range []struct {
+		name string
+		cron *interfaces.CronConfig
+	}{
+		{
+			name: "unparsable schedule",
+			cron: &interfaces.CronConfig{Schedule: "not-a-cron"},
+		},
+		{
+			name: "missing schedule",
+			cron: &interfaces.CronConfig{},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req, _, err := svc.CronTimeWorkRequest("factory/main", interfaces.FactoryWorkstationConfig{
+				Name: "daily-refresh",
+				Cron: test.cron,
+			}, nominalAt)
+			if err == nil || !errors.Is(err, cron.ErrInvalidSchedule) {
+				t.Fatalf("error = %v, want typed ErrInvalidSchedule", err)
+			}
+			if req.RequestID != "" || len(req.Works) > 0 {
+				t.Fatalf("expected no Work submission, got request=%+v", req)
+			}
+		})
+	}
+}
+
 func TestParseCronTiming_InvalidScheduleIncludesValue(t *testing.T) {
 	svc := testCronService()
 	_, err := svc.ParseCronTiming(&interfaces.CronConfig{Schedule: "not a cron"}, time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC))

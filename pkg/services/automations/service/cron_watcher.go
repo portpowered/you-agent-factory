@@ -197,11 +197,11 @@ func (s *Service) workflowIdentity(factoryDir string) string {
 
 func (s *Service) cronSchedule(ws interfaces.FactoryWorkstationConfig) (string, error) {
 	if ws.Cron == nil {
-		return "", fmt.Errorf("missing cron config")
+		return "", fmt.Errorf("%w: missing cron config", cron.ErrInvalidSchedule)
 	}
 	schedule := strings.TrimSpace(ws.Cron.Schedule)
 	if schedule == "" {
-		return "", fmt.Errorf("missing cron schedule")
+		return "", fmt.Errorf("%w: schedule is required", cron.ErrInvalidSchedule)
 	}
 	if err := s.cron.ValidateCronSchedule(schedule); err != nil {
 		return "", err

@@ -89,11 +89,11 @@ func (s *service) CronScheduleWindow(schedule string, nominalAt time.Time) (time
 
 func (s *service) ParseCronTiming(cronConfig *interfaces.CronConfig, nominalAt time.Time) (croncontract.CronTiming, error) {
 	if cronConfig == nil {
-		return croncontract.CronTiming{}, fmt.Errorf("missing cron config")
+		return croncontract.CronTiming{}, fmt.Errorf("%w: missing cron config", croncontract.ErrInvalidSchedule)
 	}
 	schedule := strings.TrimSpace(cronConfig.Schedule)
 	if schedule == "" {
-		return croncontract.CronTiming{}, fmt.Errorf("schedule is required")
+		return croncontract.CronTiming{}, fmt.Errorf("%w: schedule is required", croncontract.ErrInvalidSchedule)
 	}
 	scheduleWindow, err := s.CronScheduleWindow(schedule, nominalAt)
 	if err != nil {

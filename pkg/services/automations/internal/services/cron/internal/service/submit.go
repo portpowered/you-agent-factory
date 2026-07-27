@@ -21,11 +21,11 @@ func (s *service) SubmitDueCronTick(
 		return croncontract.CronTickSubmission{}, fmt.Errorf("cron: work request submitter is required")
 	}
 	if ws.Cron == nil {
-		return croncontract.CronTickSubmission{}, fmt.Errorf("missing cron config")
+		return croncontract.CronTickSubmission{}, fmt.Errorf("%w: missing cron config", croncontract.ErrInvalidSchedule)
 	}
 	schedule := strings.TrimSpace(ws.Cron.Schedule)
 	if schedule == "" {
-		return croncontract.CronTickSubmission{}, fmt.Errorf("missing cron schedule")
+		return croncontract.CronTickSubmission{}, fmt.Errorf("%w: schedule is required", croncontract.ErrInvalidSchedule)
 	}
 
 	evaluation, err := s.EvaluateCronSchedule(schedule, lastEvaluatedAt, evaluatedAt)

@@ -22,6 +22,103 @@ func cronWorkstationForSubmitTest() interfaces.FactoryWorkstationConfig {
 	}
 }
 
+func TestSubmitDueCronTick_InvalidSchedulePerformsNoWorkSubmission(t *testing.T) {
+	svc := testCronService()
+	now := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	for _, test := range []struct {
+		name string
+		ws   interfaces.FactoryWorkstationConfig
+	}{
+		{
+			name: "unparsable schedule",
+			ws: interfaces.FactoryWorkstationConfig{
+				Name: "daily-refresh",
+				Cron: &interfaces.CronConfig{Schedule: "not-a-cron"},
+			},
+		},
+		{
+			name: "missing schedule",
+			ws: interfaces.FactoryWorkstationConfig{
+				Name: "daily-refresh",
+				Cron: &interfaces.CronConfig{},
+			},
+		},
+		{
+			name: "missing cron config",
+			ws: interfaces.FactoryWorkstationConfig{Name: "daily-refresh"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			submitCalls := 0
+			submitter := func(context.Context, work.WorkRequest) error {
+				submitCalls++
+				return nil
+			}
+
+			_, err := svc.SubmitDueCronTick(
+				context.Background(),
+				submitter,
+				"factory/main",
+				test.ws,
+				now,
+				now.Add(5*time.Minute),
+			)
+			if err == nil || !errors.Is(err, cron.ErrInvalidSchedule) {
+				t.Fatalf("error = %v, want typed ErrInvalidSchedule", err)
+			}
+			if submitCalls != 0 {
+				t.Fatalf("submitter calls = %d, want 0", submitCalls)
+			}
+		})
+	}
+}
+
+func TestSubmitCronTick_InvalidSchedulePerformsNoWorkSubmission(t *testing.T) {
+	svc := testCronService()
+	nominalAt := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	for _, test := range []struct {
+		name string
+		ws   interfaces.FactoryWorkstationConfig
+	}{
+		{
+			name: "unparsable schedule",
+			ws: interfaces.FactoryWorkstationConfig{
+				Name: "daily-refresh",
+				Cron: &interfaces.CronConfig{Schedule: "not-a-cron"},
+			},
+		},
+		{
+			name: "missing schedule",
+			ws: interfaces.FactoryWorkstationConfig{
+				Name: "daily-refresh",
+				Cron: &interfaces.CronConfig{},
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			submitCalls := 0
+			submitter := func(context.Context, work.WorkRequest) error {
+				submitCalls++
+				return nil
+			}
+
+			_, err := svc.SubmitCronTick(
+				context.Background(),
+				submitter,
+				"factory/main",
+				test.ws,
+				nominalAt,
+			)
+			if err == nil || !errors.Is(err, cron.ErrInvalidSchedule) {
+				t.Fatalf("error = %v, want typed ErrInvalidSchedule", err)
+			}
+			if submitCalls != 0 {
+				t.Fatalf("submitter calls = %d, want 0", submitCalls)
+			}
+		})
+	}
+}
+
 func TestSubmitDueCronTick_SubmitsCanonicalWorkRequestThroughInjectedCollaborator(t *testing.T) {
 	svc := testCronService()
 	lastEvaluatedAt := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
