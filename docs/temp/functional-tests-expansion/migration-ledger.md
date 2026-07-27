@@ -343,12 +343,14 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | tests/functional/operator_settings/configcore/operator_config_core_test.go | you-agent-factory/tests/functional/operator_settings/configcore | TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior | short | wrong-layer: package-integration — direct operator_settings service calls without root.BuildProcess / public CLI boundary. Replacement evidence owner: pkg/services/operator_settings package-integration tests. | none | none | n/a |
 
-#### `orchestration` (2 scenarios, catch_all=`none`)
+#### `orchestration` (4 scenarios, catch_all=`none`)
 
 | source_path | package | scenario | lane | destination | catch_all | specialty_targets | deletion_only_batch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | tests/functional/orchestration/javascript/contracts/response_events_test.go | you-agent-factory/tests/functional/orchestration/javascript/contracts | TestJavaScriptChildProgressPublishesCanonicalResponseEvents | short | tests/functional/orchestration/javascript/contracts/response_events_test.go | none | none | workflow-delete-09-orchestration-javascript |
 | tests/functional/orchestration/javascript/contracts/response_events_test.go | you-agent-factory/tests/functional/orchestration/javascript/contracts | TestJavaScriptTerminalResultFollowsFinalResponseEvent | short | tests/functional/orchestration/javascript/contracts/response_events_test.go | none | none | n/a |
+| tests/functional/orchestration/javascript/contracts/input_mapping_test.go | you-agent-factory/tests/functional/orchestration/javascript/contracts | TestJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs | short | tests/functional/orchestration/javascript/contracts/input_mapping_test.go | none | none | n/a |
+| tests/functional/orchestration/javascript/contracts/input_mapping_test.go | you-agent-factory/tests/functional/orchestration/javascript/contracts | TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch | short | tests/functional/orchestration/javascript/contracts/input_mapping_test.go | none | none | n/a |
 
 #### `providers` (45 scenarios, catch_all=`none`)
 
