@@ -19,6 +19,8 @@ import (
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
+	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
+	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 )
 
@@ -104,6 +106,45 @@ func TestOpenRuntimeScopeDoesNotConstructAnotherRuntimeHost(t *testing.T) {
 	if launcher.starts != 0 {
 		t.Fatalf("process starts after scope open = %d, want 0", launcher.starts)
 	}
+}
+
+func TestRuntimeHostCompositionIncludesInertLeasesOwner(t *testing.T) {
+	t.Parallel()
+
+	clock := &recordingHostClock{}
+	scopes := newScopes(t, "leases-composition")
+	service := newTestRuntimeHostWithScopesAndClock(t, scopes, &recordingProcessLauncher{}, clock)
+	if service == nil {
+		t.Fatal("runtime host service is nil")
+	}
+	if clock.timerCreates != 0 {
+		t.Fatalf("timer creates during runtime host construction = %d, want 0", clock.timerCreates)
+	}
+	_, err := scopes.Open(models.RuntimeBinding{
+		CacheDirectory: t.TempDir(),
+		RuntimeConfig: func() *models.RuntimeConfig {
+			return &models.RuntimeConfig{FactoryDirectory: "factory"}
+		},
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if clock.timerCreates != 0 {
+		t.Fatalf("timer creates after scope open = %d, want 0", clock.timerCreates)
+	}
+}
+
+type recordingHostClock struct {
+	timerCreates int
+}
+
+func (clock *recordingHostClock) Now() time.Time {
+	return time.Unix(0, 0)
+}
+
+func (clock *recordingHostClock) NewTimer(time.Duration) models.HostTimer {
+	clock.timerCreates++
+	panic("host timer created during inert runtime host composition")
 }
 
 func TestInspectModelHostRejectsForeignScope(t *testing.T) {
@@ -280,12 +321,22 @@ func newTestRuntimeHostWithScopesAndClock(
 	return internalservice.New(
 		scopes,
 		mustAssetsService(t, scopes),
+		mustLeasesService(t, clock),
 		launcher,
 		http.DefaultClient,
 		clock,
 		nil,
 		nil,
 	)
+}
+
+func mustLeasesService(t *testing.T, clock models.HostClock) hostleases.Service {
+	t.Helper()
+	leases, err := leaseswire.NewService(clock, hostleases.UnconfiguredSlotFacts{})
+	if err != nil {
+		t.Fatalf("construct leases: %v", err)
+	}
+	return leases
 }
 
 func mustAssetsService(t *testing.T, scopes runtimescopes.Service) scopedassets.Service {
