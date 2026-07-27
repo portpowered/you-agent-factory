@@ -2,9 +2,11 @@ package parameters_test
 
 import (
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -174,6 +176,98 @@ func TestRunDuplicateKeyUsesDocumentedPrecedence(t *testing.T) {
 		t.Fatal("submitted invocation arguments = nil")
 	}
 	assertInvocationArgumentValues(t, arguments, "tag", []string{firstTagValue, secondTagValue})
+}
+
+// TestRunMalformedKeyValueFailsWithoutDispatch proves malformed key=value shapes
+// on you run are rejected with stable diagnostics before any worker provider
+// dispatch can start.
+func TestRunMalformedKeyValueFailsWithoutDispatch(t *testing.T) {
+	factoryDir := scaffoldNamedKeyValueInvocationFactory(t)
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName:      "processor",
+			WorkstationName: "process",
+			RunType:         workers.MockWorkerRunTypeAccept,
+		}},
+	})
+
+	tests := []struct {
+		name           string
+		invocationArgs []string
+		wantFragments  []string
+	}{
+		{
+			name: "missing named value after key",
+			invocationArgs: []string{
+				"invoke marker",
+				"--topic=Ship the café résumé plan",
+				"--priority",
+			},
+			wantFragments: []string{
+				"RUN_INVOCATION_FAILED",
+				"factory argument --priority requires a value",
+			},
+		},
+		{
+			name: "bare key=value without named prefix",
+			invocationArgs: []string{
+				"invoke marker",
+				"topic=Ship the café résumé plan",
+				"--priority=urgent",
+			},
+			wantFragments: []string{
+				"INVOCATION_ARGUMENT_POSITIONAL_OVERFLOW",
+				"received 2 positional arguments but the active invocationSignature only accepts 1",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			submissions := &invocationSubmissionObservation{}
+			providerRunner := testutil.NewProviderCommandRunner()
+			process := support.BuildProcess(t, serviceedges.Edges{
+				SubmissionRecorder:    submissions.observe,
+				ProviderCommandRunner: providerRunner,
+			})
+			base := []string{
+				"you", "run",
+				"--factory", factoryPath,
+				"--no-record",
+				"--with-mock-workers", mockWorkersPath,
+			}
+			inputs := support.FakeInputs(t.Context(), append(base, test.invocationArgs...))
+			inputs.WorkingDirectory = t.TempDir()
+
+			executeErr := process.Execute(inputs.Input)
+			if executeErr == nil {
+				t.Fatalf(
+					"Process.Execute(malformed key=value) succeeded; stdout:\n%s\nstderr:\n%s",
+					inputs.Stdout(),
+					inputs.Stderr(),
+				)
+			}
+
+			diagnostic := executeErr.Error() + "\n" + inputs.Stderr()
+			for _, want := range test.wantFragments {
+				if !strings.Contains(diagnostic, want) {
+					t.Fatalf(
+						"malformed key=value diagnostic missing %q:\n%s",
+						want,
+						diagnostic,
+					)
+				}
+			}
+			if records := submissions.snapshot(); len(records) != 0 {
+				t.Fatalf("canonical submissions = %d, want 0; records=%#v", len(records), records)
+			}
+			if providerRunner.CallCount() != 0 {
+				t.Fatalf("provider dispatch calls = %d, want 0", providerRunner.CallCount())
+			}
+		})
+	}
 }
 
 type invocationSubmissionObservation struct {
