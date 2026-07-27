@@ -1145,6 +1145,12 @@
     },
     {
       "fromOwner": "factory_definitions",
+      "toOwner": "initializer",
+      "class": "lifecycle",
+      "evidence": "pkg/services/factory_definitions/transports/cli -\u003e pkg/initializer/process"
+    },
+    {
+      "fromOwner": "factory_definitions",
       "toOwner": "platform",
       "class": "external_effect",
       "evidence": "pkg/services/factory_definitions/internal/testcomposition -\u003e pkg/platform/portablefiles"
@@ -2628,6 +2634,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/transports/cli",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/ttsobservability",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -3636,6 +3648,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/recordings/internal/canonical",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/recordings/internal/services/projection_query",
       "disposition": "retain",
       "destination": "recordings",
@@ -3667,6 +3685,24 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/recording_lifecycle/wire",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/replay",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/replay/internal/service",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/replay/wire",
       "disposition": "retain",
       "destination": "recordings",
       "destinationKind": "owner"
