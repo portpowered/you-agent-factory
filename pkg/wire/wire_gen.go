@@ -191,7 +191,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v33, err := provideWorkersRuntimeFactory(invocationInterpolationService, decisionEnvelopeService, v31, v32, source, readFileInspector, temporaryFileSystem, ptyAllocator, edges2, registry)
+	providerRegistryRebinder, err := provideProviderRegistryRebinder(edges2)
+	if err != nil {
+		return nil, err
+	}
+	v33, err := provideWorkersRuntimeFactory(invocationInterpolationService, decisionEnvelopeService, v31, v32, source, readFileInspector, temporaryFileSystem, ptyAllocator, edges2, registry, providerRegistryRebinder)
 	if err != nil {
 		return nil, err
 	}
@@ -550,7 +554,8 @@ var apiSet = wire2.NewSet(composition.NewWorkAPI, composition.NewHTTPBinder, api
 
 var servicesSet = wire2.NewSet(
 	provideProvidersService,
-	provideProviderRegistry, wire2.Bind(new(application.ProviderRegistry), new(*registry.Registry)), provideFactorySessionProviderIdentityResolver, wire.NewRequestPreparation, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
+	provideProviderRegistry,
+	provideProviderRegistryRebinder, wire2.Bind(new(application.ProviderRegistry), new(*registry.Registry)), provideFactorySessionProviderIdentityResolver, wire.NewRequestPreparation, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsProviderCatalog,
 	provideOperatorConfigDocumentService,

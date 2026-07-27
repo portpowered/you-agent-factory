@@ -9,6 +9,8 @@ import (
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 )
 
 // Option configures Providers root construction.
@@ -17,8 +19,9 @@ type Option interface {
 }
 
 type wireOptions struct {
-	catalog       []catalogwire.Option
-	commandRunner platformprocess.CommandRunner
+	catalog             []catalogwire.Option
+	commandRunner       platformprocess.CommandRunner
+	workersCommandRunner workers.CommandRunner
 }
 
 type catalogOption struct {
@@ -48,6 +51,21 @@ func WithCommandRunner(runner platformprocess.CommandRunner) Option {
 	return commandRunnerOption{runner: runner}
 }
 
+type workersCommandRunnerOption struct {
+	runner workers.CommandRunner
+}
+
+func (o workersCommandRunnerOption) apply(opts *wireOptions) {
+	opts.workersCommandRunner = o.runner
+}
+
+// WithWorkersCommandRunner injects the shared Workers subprocess runner used
+// by built-in Codex and Claude command effects without losing dispatch
+// correlation required by mock-worker interception.
+func WithWorkersCommandRunner(runner workers.CommandRunner) Option {
+	return workersCommandRunnerOption{runner: runner}
+}
+
 // NewService constructs one inert Providers root over sibling Catalog and
 // Execution capabilities sharing the same private catalog identity authority.
 func NewService(options ...Option) (providers.Service, error) {
@@ -61,16 +79,20 @@ func NewService(options ...Option) (providers.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newRoot(catalogService, config.commandRunner)
+	return newRoot(catalogService, config.commandRunner, config.workersCommandRunner)
 }
 
 func newRoot(
 	catalogService catalog.Service,
 	commandRunner platformprocess.CommandRunner,
+	workersCommandRunner workers.CommandRunner,
 ) (providers.Service, error) {
+	if workersCommandRunner == nil && commandRunner != nil {
+		workersCommandRunner = workerprocess.AdaptCommandRunner(commandRunner)
+	}
 	executionService, err := executionwire.NewBuiltInService(
 		catalogService,
-		executionwire.BuiltInDependenciesFromRunner(commandRunner),
+		executionwire.BuiltInDependenciesFromWorkersRunner(workersCommandRunner),
 	)
 	if err != nil {
 		return nil, err

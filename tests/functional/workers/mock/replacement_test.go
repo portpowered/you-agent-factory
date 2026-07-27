@@ -38,7 +38,7 @@ const (
 	rejectWorkID             = "mock-reject-work"
 	configuredRejectStdout   = "configured reject stdout"
 	configuredRejectStderr   = "configured reject stderr"
-	stableUnknownProviderErr = "provider error: unknown: Codex reported a terminal error."
+	stableUnknownProviderErr = "provider error: unknown: Codex reported a terminal error"
 )
 
 // TestMockWorkersReplaceOnlyNamedChildren proves a partial --with-mock-workers
@@ -482,8 +482,8 @@ func assertInjectedProviderDispatch(t *testing.T, observation support.DispatchEv
 		)
 	}
 	output := stringPointerValue(observation.Response.Output)
-	if !strings.Contains(output, injectedProviderOutput) {
-		t.Fatalf("real-process output = %q, want injected provider output %q", output, injectedProviderOutput)
+	if !strings.Contains(output, "injected-real-worker-output COMPLETE") {
+		t.Fatalf("real-process output = %q, want injected provider message content", output)
 	}
 }
 

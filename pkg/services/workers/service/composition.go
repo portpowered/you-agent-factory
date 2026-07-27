@@ -144,6 +144,7 @@ func NewRuntimeWithSelection(
 	providerCommandInjected bool,
 	scriptCommandInjected bool,
 	providerRegistry *providerregistry.Registry,
+	providerRegistryRebinder ProviderRegistryRebinder,
 ) (workers.RuntimeService, error) {
 	runtimeService, err := NewRuntime(
 		sessions, modelService, modelsScope, providerCommandRunner, scriptCommandRunner,
@@ -159,6 +160,7 @@ func NewRuntimeWithSelection(
 	service.providerCommandInjected = providerCommandInjected
 	service.scriptCommandInjected = scriptCommandInjected
 	service.providerRegistry = providerRegistry
+	service.providerRegistryRebinder = providerRegistryRebinder
 	if providerRegistry != nil {
 		assembly, assemblyErr := newRuntimeAssembly(providerRegistry)
 		if assemblyErr != nil {

@@ -89,6 +89,8 @@ type ExecuteRequest struct {
 	Worktree            string
 	ProcessEnvironment  []string
 	EnvVars             map[string]string
+	WorkerType          string
+	WorkstationName     string
 }
 
 // Validate checks request fields whose validity does not depend on catalog

@@ -7,16 +7,18 @@ import (
 	"strings"
 	"time"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 )
 
 const (
 	outputFormatStreamJSON = "stream-json"
 )
 
-var commandAutomationDefaults = []platformprocess.CommandEnvEntry{
+var commandAutomationDefaults = []workerprocess.CommandEnvEntry{
 	{Name: "GIT_EDITOR", Value: "true"},
 	{Name: "GIT_SEQUENCE_EDITOR", Value: "true"},
 	{Name: "GIT_MERGE_AUTOEDIT", Value: "no"},
@@ -26,7 +28,7 @@ var commandAutomationDefaults = []platformprocess.CommandEnvEntry{
 }
 
 // NewCommandEffect binds one streaming subprocess runner to the Claude adapter.
-func NewCommandEffect(runner platformprocess.CommandRunner) Effect {
+func NewCommandEffect(runner workers.CommandRunner) Effect {
 	if runner == nil {
 		return nil
 	}
@@ -52,7 +54,7 @@ func NewCommandEffect(runner platformprocess.CommandRunner) Effect {
 	})
 }
 
-func buildCommand(request providers.ExecuteRequest) (platformprocess.CommandRequest, error) {
+func buildCommand(request providers.ExecuteRequest) (workers.CommandRequest, error) {
 	args := []string{"-p"}
 	if request.SkipPermissions {
 		args = append(args, "--dangerously-skip-permissions")
@@ -76,7 +78,7 @@ func buildCommand(request providers.ExecuteRequest) (platformprocess.CommandRequ
 		"--include-partial-messages",
 		request.UserMessage,
 	)
-	return platformprocess.CommandRequest{
+	return commanddispatch.WorkersCommand(request, workers.CommandRequest{
 		Command: string(providers.IDClaude),
 		Args:    args,
 		Env: buildCommandEnv(
@@ -84,28 +86,28 @@ func buildCommand(request providers.ExecuteRequest) (platformprocess.CommandRequ
 			request.EnvVars,
 		),
 		WorkDir: request.WorkingDirectory,
-	}, nil
+	}), nil
 }
 
 func buildCommandEnv(processEnvironment []string, envVars map[string]string) []string {
-	return platformprocess.MergeCommandEnv(
+	return workerprocess.MergeCommandEnv(
 		processEnvironment,
-		platformprocess.CommandEnvEntriesFromMap(envVars),
+		workerprocess.CommandEnvEntriesFromMap(envVars),
 		commandAutomationDefaults,
 	)
 }
 
 func runStreaming(
 	ctx context.Context,
-	runner platformprocess.CommandRunner,
-	command platformprocess.CommandRequest,
+	runner workers.CommandRunner,
+	command workers.CommandRequest,
 	observe func([]byte) error,
-) (platformprocess.CommandResult, error) {
+) (workers.CommandResult, error) {
 	if streaming, ok := runner.(interface {
-		RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
+		RunStreaming(context.Context, workers.CommandRequest, workerprocess.OutputChunkObserver) (workers.CommandResult, error)
 	}); ok {
 		return streaming.RunStreaming(ctx, command, func(stream string, chunk []byte) {
-			if strings.TrimSpace(stream) == platformprocess.OutputStreamStdout {
+			if strings.TrimSpace(stream) == workerprocess.OutputStreamStdout {
 				_ = observe(chunk)
 			}
 		})

@@ -7,12 +7,14 @@ import (
 	"strings"
 	"time"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 )
 
-var commandAutomationDefaults = []platformprocess.CommandEnvEntry{
+var commandAutomationDefaults = []workerprocess.CommandEnvEntry{
 	{Name: "GIT_EDITOR", Value: "true"},
 	{Name: "GIT_SEQUENCE_EDITOR", Value: "true"},
 	{Name: "GIT_MERGE_AUTOEDIT", Value: "no"},
@@ -22,7 +24,7 @@ var commandAutomationDefaults = []platformprocess.CommandEnvEntry{
 }
 
 // NewCommandEffect binds one streaming subprocess runner to the Codex adapter.
-func NewCommandEffect(runner platformprocess.CommandRunner) Effect {
+func NewCommandEffect(runner workers.CommandRunner) Effect {
 	if runner == nil {
 		return nil
 	}
@@ -36,7 +38,7 @@ func NewCommandEffect(runner platformprocess.CommandRunner) Effect {
 		if err != nil {
 			return EffectResult{}, execution.AttemptFailure{NativeError: err}
 		}
-		result, runErr := runStreaming(ctx, runner, command, observe)
+		result, runErr := runStreaming(ctx, runner, request, command, observe)
 		effectResult := EffectResult{DurationMillis: time.Since(started).Milliseconds()}
 		if runErr != nil {
 			return effectResult, nativeCommandError(ctx, runErr)
@@ -48,9 +50,9 @@ func NewCommandEffect(runner platformprocess.CommandRunner) Effect {
 	})
 }
 
-func buildCommand(request providers.ExecuteRequest) (platformprocess.CommandRequest, error) {
+func buildCommand(request providers.ExecuteRequest) (workers.CommandRequest, error) {
 	if err := validateCodexOptionalCapabilities(request); err != nil {
-		return platformprocess.CommandRequest{}, err
+		return workers.CommandRequest{}, err
 	}
 	args := []string{"exec", "--json"}
 	if request.SkipPermissions {
@@ -60,7 +62,7 @@ func buildCommand(request providers.ExecuteRequest) (platformprocess.CommandRequ
 		args = append(args, "--model", strings.TrimSpace(request.Model))
 	}
 	args = append(args, "-")
-	return platformprocess.CommandRequest{
+	return commanddispatch.WorkersCommand(request, workers.CommandRequest{
 		Command: string(providers.IDCodex),
 		Args:    args,
 		Stdin:   []byte(request.UserMessage),
@@ -69,7 +71,7 @@ func buildCommand(request providers.ExecuteRequest) (platformprocess.CommandRequ
 			request.EnvVars,
 		),
 		WorkDir: request.WorkingDirectory,
-	}, nil
+	}), nil
 }
 
 func validateCodexOptionalCapabilities(request providers.ExecuteRequest) error {
@@ -80,24 +82,25 @@ func validateCodexOptionalCapabilities(request providers.ExecuteRequest) error {
 }
 
 func buildCommandEnv(processEnvironment []string, envVars map[string]string) []string {
-	return platformprocess.MergeCommandEnv(
+	return workerprocess.MergeCommandEnv(
 		processEnvironment,
-		platformprocess.CommandEnvEntriesFromMap(envVars),
+		workerprocess.CommandEnvEntriesFromMap(envVars),
 		commandAutomationDefaults,
 	)
 }
 
 func runStreaming(
 	ctx context.Context,
-	runner platformprocess.CommandRunner,
-	command platformprocess.CommandRequest,
+	runner workers.CommandRunner,
+	request providers.ExecuteRequest,
+	command workers.CommandRequest,
 	observe func([]byte) error,
-) (platformprocess.CommandResult, error) {
+) (workers.CommandResult, error) {
 	if streaming, ok := runner.(interface {
-		RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
+		RunStreaming(context.Context, workers.CommandRequest, workerprocess.OutputChunkObserver) (workers.CommandResult, error)
 	}); ok {
 		return streaming.RunStreaming(ctx, command, func(stream string, chunk []byte) {
-			if strings.TrimSpace(stream) == platformprocess.OutputStreamStdout {
+			if strings.TrimSpace(stream) == workerprocess.OutputStreamStdout {
 				_ = observe(chunk)
 			}
 		})

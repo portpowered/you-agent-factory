@@ -8,6 +8,8 @@ import (
 	claudeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	codexadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 )
 
 // NewService constructs an inert execution service over the supplied canonical
@@ -32,6 +34,14 @@ func NewBuiltInService(
 // shared platform process runner.
 func BuiltInDependenciesFromRunner(
 	runner platformprocess.CommandRunner,
+) executionservice.BuiltInDependencies {
+	return BuiltInDependenciesFromWorkersRunner(workerprocess.AdaptCommandRunner(runner))
+}
+
+// BuiltInDependenciesFromWorkersRunner constructs built-in adapter effects
+// from the shared Workers subprocess runner.
+func BuiltInDependenciesFromWorkersRunner(
+	runner workers.CommandRunner,
 ) executionservice.BuiltInDependencies {
 	return executionservice.BuiltInDependencies{
 		Codex:  codexadapter.NewCommandEffect(runner),

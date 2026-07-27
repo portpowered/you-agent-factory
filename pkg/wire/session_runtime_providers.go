@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -73,6 +74,13 @@ func provideProviderRegistry(
 	edges serviceedges.Edges,
 	providersService providers.Service,
 ) (*providerregistry.Registry, error) {
+	return buildProviderRegistry(edges, providersService)
+}
+
+func buildProviderRegistry(
+	edges serviceedges.Edges,
+	providersService providers.Service,
+) (*providerregistry.Registry, error) {
 	commandRunner, err := provideWorkersProviderCommandRunner(edges)
 	if err != nil {
 		return nil, err
@@ -94,6 +102,54 @@ func provideProviderRegistry(
 		)
 	}
 	return providerregistry.New(registrations...)
+}
+
+func provideProviderRegistryRebinder(
+	edges serviceedges.Edges,
+) (workersservice.ProviderRegistryRebinder, error) {
+	operatingSystem := string(resolveWorkersOperatingSystem(edges))
+	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
+	externalRegistrations := append(
+		[]providerregistry.Registration(nil),
+		externalProviderRegistrations(edges)...,
+	)
+	return func(providerRunner workers.CommandRunner) (*providerregistry.Registry, error) {
+		if providerRunner == nil {
+			return nil, fmt.Errorf("provider registry rebind requires command runner")
+		}
+		platformRunner := workerprocess.ProjectPlatformCommandRunner(providerRunner)
+		if platformRunner == nil {
+			return nil, fmt.Errorf("provider registry rebind requires platform command runner")
+		}
+		providersService, err := providerswire.NewService(
+			providerswire.WithWorkersCommandRunner(providerRunner),
+		)
+		if err != nil {
+			return nil, err
+		}
+		builtIns, err := providerregistry.BuiltInRegistrations(providerregistry.BuiltInDependencies{
+			CommandRunner:    providerRunner,
+			OperatingSystem:  operatingSystem,
+			TemporaryFiles:   temporaryFiles,
+			ProvidersService: providersService,
+		})
+		if err != nil {
+			return nil, err
+		}
+		registrations := append(builtIns, externalRegistrations...)
+		return providerregistry.New(registrations...)
+	}, nil
+}
+
+func externalProviderRegistrations(edges serviceedges.Edges) []providerregistry.Registration {
+	registrations := make([]providerregistry.Registration, 0, len(edges.ProviderRegistrations))
+	for _, addition := range edges.ProviderRegistrations {
+		registrations = append(
+			registrations,
+			providerregistry.ExternalRegistration(addition.Manifest, addition.Integration),
+		)
+	}
+	return registrations
 }
 
 func resolveWorkersOperatingSystem(edges serviceedges.Edges) workers.OperatingSystem {
@@ -656,6 +712,7 @@ func provideWorkersRuntimeFactory(
 	defaultAllocator agypty.PTYAllocator,
 	edges serviceedges.Edges,
 	providerRegistry *providerregistry.Registry,
+	providerRegistryRebinder workersservice.ProviderRegistryRebinder,
 ) (factorysessionwire.WorkersRuntimeFactory, error) {
 	if defaultAllocator == nil {
 		return nil, agypty.ErrHostRequired
@@ -767,6 +824,7 @@ func provideWorkersRuntimeFactory(
 			providerInjected,
 			scriptInjected,
 			providerRegistry,
+			providerRegistryRebinder,
 		)
 	}, nil
 }

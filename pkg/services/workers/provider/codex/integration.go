@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
@@ -104,11 +105,27 @@ func executeRequestFromInvocation(request inference.InvocationRequest) providers
 		Worktree:           execution.Worktree,
 		ProcessEnvironment: append([]string(nil), execution.ProcessEnvironment...),
 		EnvVars:            cloneStringMap(execution.EnvVars),
+		WorkerType:         workerNameFromExecution(execution),
+		WorkstationName:    workstationNameFromExecution(execution),
 	}
 	if session := requestedSession(request); session != nil {
 		executeRequest.ResumeSession = session
 	}
 	return executeRequest
+}
+
+func workerNameFromExecution(execution workers.ProviderInferenceRequest) string {
+	if execution.WorkerType != "" {
+		return execution.WorkerType
+	}
+	return execution.Dispatch.WorkerType
+}
+
+func workstationNameFromExecution(execution workers.ProviderInferenceRequest) string {
+	if execution.WorkstationType != "" {
+		return execution.WorkstationType
+	}
+	return execution.Dispatch.WorkstationName
 }
 
 func requestedSession(request inference.InvocationRequest) *providers.SessionRef {
