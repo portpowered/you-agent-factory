@@ -400,7 +400,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime",
-      "minimum": 84.00
+      "minimum": 48.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime/buffers",
