@@ -15,3 +15,11 @@ func NewService(
 ) (execution.Service, error) {
 	return executionservice.New(catalogService, registrations...)
 }
+
+// NewBuiltInService constructs an inert execution service with the native
+// adapters owned by Providers Execution.
+func NewBuiltInService(
+	catalogService catalog.Service,
+) (execution.Service, error) {
+	return NewService(catalogService, executionservice.BuiltInRegistrations()...)
+}

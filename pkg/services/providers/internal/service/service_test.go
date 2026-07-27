@@ -223,7 +223,7 @@ func TestRootCatalogProbeFailureMatchesPrivateCatalog(t *testing.T) {
 	assertGetErrorIs(t, root, providers.GetProviderRequest{ID: providers.IDCodex}, providers.ErrProviderUnavailable)
 }
 
-func TestRootExecuteUsesBoundExecutionWithoutARegisteredAdapter(t *testing.T) {
+func TestRootExecuteUsesRegisteredCodexAdapter(t *testing.T) {
 	t.Parallel()
 
 	root := mustRootService(t)
@@ -233,8 +233,11 @@ func TestRootExecuteUsesBoundExecutionWithoutARegisteredAdapter(t *testing.T) {
 		AttemptID:   "attempt-1",
 		UserMessage: "hello",
 	})
-	if !errors.Is(err, providers.ErrProviderUnavailable) {
-		t.Fatalf("Execute() error = %v, want ErrProviderUnavailable", err)
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) ||
+		failure.Kind != providers.ExecuteFailureKindDependency ||
+		!strings.Contains(failure.Message, "Codex") {
+		t.Fatalf("Execute() error = %#v, want Codex adapter dependency failure", err)
 	}
 
 	_, err = root.Execute(context.Background(), providers.ExecuteRequest{

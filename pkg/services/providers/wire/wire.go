@@ -24,7 +24,7 @@ func NewService(options ...Option) (providers.Service, error) {
 }
 
 func newRoot(catalogService catalog.Service) (providers.Service, error) {
-	executionService, err := executionwire.NewService(catalogService)
+	executionService, err := executionwire.NewBuiltInService(catalogService)
 	if err != nil {
 		return nil, err
 	}
