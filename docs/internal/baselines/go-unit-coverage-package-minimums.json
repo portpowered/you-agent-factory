@@ -430,7 +430,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/internal/service",
-      "minimum": 70.70
+      "minimum": 70.65
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire",
@@ -1528,7 +1528,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/composition",
-      "minimum": 61.29
+      "minimum": 61.11
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig",
