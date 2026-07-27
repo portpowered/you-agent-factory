@@ -13,6 +13,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
@@ -314,6 +315,179 @@ func TestInjectedModelServicesRouteGeneratedCutoverCommands(t *testing.T) {
 	if invocations[0].Operation != "TTS" || invocations[0].Text != "hello" {
 		t.Fatalf("invoke config = %#v, want operation/text bindings", invocations[0])
 	}
+}
+
+func TestModelsCommandsPreserveBehaviorThroughProductionComposition(t *testing.T) {
+	t.Parallel()
+
+	defaults := operatorconfig.ResolvedDefaults{
+		WorkerModelProvider: "CODEX",
+		WorkerModel:         "gpt-test",
+	}
+	for _, test := range modelsCompositionCases() {
+		t.Run(test.name+" success", func(t *testing.T) {
+			service := modelsCompositionService(t, test.name, defaults, nil)
+			stdout, stderr, err := executeModelsComposition(t, service, defaults, test.args)
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if stdout != "models-ok\n" || stderr != "models-diagnostic\n" {
+				t.Fatalf("stdout = %q, stderr = %q", stdout, stderr)
+			}
+		})
+		t.Run(test.name+" failure", func(t *testing.T) {
+			service := modelsCompositionService(t, test.name, defaults, test.wantError)
+			stdout, stderr, err := executeModelsComposition(t, service, defaults, test.args)
+			if !errors.Is(err, test.wantError) {
+				t.Fatalf("Execute() error = %v, want %v", err, test.wantError)
+			}
+			if stdout != "" || stderr != fmt.Sprintf("Error: %v\n", test.wantError) {
+				t.Fatalf("failure stdout = %q, stderr = %q", stdout, stderr)
+			}
+		})
+	}
+}
+
+type modelsCompositionCase struct {
+	name      string
+	args      []string
+	wantError error
+}
+
+func modelsCompositionCases() []modelsCompositionCase {
+	operationFailure := errors.New("models operation failed")
+	common := []string{"--verbose", "--json", "--server", "https://factory.example", "models"}
+	return []modelsCompositionCase{
+		{name: "list", args: append(append([]string(nil), common...), "list"), wantError: operationFailure},
+		{
+			name:      "inspect",
+			args:      append(append([]string(nil), common...), "inspect", "model-alpha"),
+			wantError: modelscli.ErrModelNotFound,
+		},
+		{
+			name: "invoke",
+			args: []string{
+				"--verbose", "--json", "--server", "https://factory.example",
+				"--default-worker-model-provider", "codex", "--default-worker-model", "gpt-test",
+				"models", "invoke", "model-alpha", "--operation", "TTS",
+				"--text", "hello", "--output", "speech.wav",
+			},
+			wantError: context.Canceled,
+		},
+		{
+			name:      "pull",
+			args:      append(append([]string(nil), common...), "pull", "model-alpha"),
+			wantError: operationFailure,
+		},
+	}
+}
+
+func modelsCompositionService(
+	t *testing.T,
+	command string,
+	defaults operatorconfig.ResolvedDefaults,
+	result error,
+) modelscli.Service {
+	t.Helper()
+	switch command {
+	case "list":
+		return modelsCLIServiceFunctions{list: func(cfg modelscli.ListConfig) error {
+			assertModelsCommonConfig(t, cfg.Context, cfg.Server, cfg.JSON, cfg.Verbose)
+			return writeModelsCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+		}}
+	case "inspect":
+		return modelsCLIServiceFunctions{inspect: func(cfg modelscli.InspectConfig) error {
+			assertModelsCommonConfig(t, cfg.Context, cfg.Server, cfg.JSON, cfg.Verbose)
+			assertModelsName(t, cfg.ModelName)
+			return writeModelsCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+		}}
+	case "invoke":
+		return modelsCLIServiceFunctions{invoke: func(cfg modelscli.InvokeConfig) error {
+			assertModelsCommonConfig(t, cfg.Context, cfg.Server, cfg.JSON, cfg.Verbose)
+			if cfg.ModelName != "model-alpha" || cfg.Operation != "TTS" ||
+				cfg.Text != "hello" || cfg.OutputPath != "speech.wav" ||
+				cfg.HomeDir == "" || cfg.OperatorDefaults != defaults || cfg.Logger == nil {
+				t.Fatalf("invoke config = %#v", cfg)
+			}
+			return writeModelsCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+		}}
+	case "pull":
+		return modelsCLIServiceFunctions{pull: func(cfg modelscli.PullConfig) error {
+			assertModelsCommonConfig(t, cfg.Context, cfg.Server, cfg.JSON, cfg.Verbose)
+			assertModelsName(t, cfg.ModelName)
+			return writeModelsCompositionOutput(cfg.Output, cfg.Diagnostics, result)
+		}}
+	default:
+		t.Fatalf("unsupported models composition command %q", command)
+		return nil
+	}
+}
+
+func executeModelsComposition(
+	t *testing.T,
+	service modelscli.Service,
+	defaults operatorconfig.ResolvedDefaults,
+	args []string,
+) (string, string, error) {
+	t.Helper()
+	factory := withTestInjectedPlatformRoles(NewCommandFactory(CommandOperations{ModelsCLI: service}))
+	factory.resolveOperatorDefaults = func(
+		_ string,
+		_ operatorconfig.Defaults,
+		flags operatorconfig.FlagOverrides,
+	) (operatorconfig.ResolvedDefaults, error) {
+		if flags.WorkerModelProvider != "codex" || flags.WorkerModel != "gpt-test" {
+			t.Fatalf("operator default flags = %#v", flags)
+		}
+		return defaults, nil
+	}
+	root := factory.NewCommand(
+		func() (string, error) { return t.TempDir(), nil },
+		func(string) (string, bool) { return "", false },
+		nil,
+	)
+	var stdout, stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs(args)
+	err := root.Execute()
+	return stdout.String(), stderr.String(), err
+}
+
+func assertModelsCommonConfig(
+	t *testing.T,
+	ctx context.Context,
+	server string,
+	jsonOutput, verbose bool,
+) {
+	t.Helper()
+	if ctx == nil || server != "https://factory.example" || !jsonOutput || !verbose {
+		t.Fatalf(
+			"common config = context %v, server %q, JSON %t, verbose %t",
+			ctx,
+			server,
+			jsonOutput,
+			verbose,
+		)
+	}
+}
+
+func assertModelsName(t *testing.T, modelName string) {
+	t.Helper()
+	if modelName != "model-alpha" {
+		t.Fatalf("ModelName = %q, want model-alpha", modelName)
+	}
+}
+
+func writeModelsCompositionOutput(output, diagnostics io.Writer, result error) error {
+	if result != nil {
+		return result
+	}
+	if _, err := fmt.Fprintln(output, "models-ok"); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintln(diagnostics, "models-diagnostic")
+	return err
 }
 
 func TestProductionRootUsesGeneratedModelsDocsFamilyCutover(t *testing.T) {
