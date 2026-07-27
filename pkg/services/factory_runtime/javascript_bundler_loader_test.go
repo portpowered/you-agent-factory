@@ -215,6 +215,99 @@ workflow.final(suffix(doubled));`
 	}
 }
 
+func TestLoad_BundlesDestructuredExportBindingsExecute(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "pairs.js"),
+		[]byte(`export const { a, b } = { a: "A", b: "B" };`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write pairs module: %v", err)
+	}
+	entry := `import { a, b } from "./lib/pairs.js";
+workflow.final(a + b);`
+	reader := factory.NewWorkflowSourceReader(dir, localWorkflowSourceFiles{})
+
+	loaded, issues := validationLoaderWorkflows.LoadSource(factory.WorkflowValidationLoadRequest{
+		SourceRef:    "workflow.js",
+		Content:      entry,
+		FactoryRoot:  dir,
+		BundleReader: reader,
+	})
+	if len(issues) > 0 {
+		t.Fatalf("load issues = %#v, want none", issues)
+	}
+
+	outcome, err := validationLoaderWorkflows.Run(t.Context(), factory.JavaScriptRuntimeRequest{
+		Source:    loaded.ExecutableSource,
+		SourceRef: "workflow.js",
+		SessionID: "session-destructured-export",
+		Args:      json.RawMessage(`{}`),
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}, factory.JavaScriptRuntimeHooks{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !outcome.OK {
+		t.Fatalf("Run() failure = %#v", outcome.Failure)
+	}
+	if string(outcome.Value.JSON) != `"AB"` {
+		t.Fatalf("primary result = %s, want \"AB\"", outcome.Value.JSON)
+	}
+}
+
+func TestLoad_BundlesMutableLetExportSnapshotsFinalValue(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "mutable.js"),
+		[]byte(`export let value = "initial";
+value = "updated";`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write mutable module: %v", err)
+	}
+	entry := `import { value } from "./lib/mutable.js";
+workflow.final(value);`
+	reader := factory.NewWorkflowSourceReader(dir, localWorkflowSourceFiles{})
+
+	loaded, issues := validationLoaderWorkflows.LoadSource(factory.WorkflowValidationLoadRequest{
+		SourceRef:    "workflow.js",
+		Content:      entry,
+		FactoryRoot:  dir,
+		BundleReader: reader,
+	})
+	if len(issues) > 0 {
+		t.Fatalf("load issues = %#v, want none", issues)
+	}
+
+	outcome, err := validationLoaderWorkflows.Run(t.Context(), factory.JavaScriptRuntimeRequest{
+		Source:    loaded.ExecutableSource,
+		SourceRef: "workflow.js",
+		SessionID: "session-mutable-let-export",
+		Args:      json.RawMessage(`{}`),
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}, factory.JavaScriptRuntimeHooks{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !outcome.OK {
+		t.Fatalf("Run() failure = %#v", outcome.Failure)
+	}
+	if string(outcome.Value.JSON) != `"updated"` {
+		t.Fatalf("primary result = %s, want \"updated\"", outcome.Value.JSON)
+	}
+}
+
 func TestLoad_BundlesDefaultExportRelativeImportExecutes(t *testing.T) {
 	t.Parallel()
 

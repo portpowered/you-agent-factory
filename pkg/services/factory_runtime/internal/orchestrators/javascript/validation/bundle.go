@@ -18,10 +18,16 @@ type importBinding struct {
 	importedAs string
 }
 
+type exportAssignment struct {
+	exportName string
+	localName  string
+}
+
 type bundledModule struct {
-	sourceRef string
-	body      string
-	imports   []resolvedImport
+	sourceRef         string
+	body              string
+	imports           []resolvedImport
+	deferredExports   []exportAssignment
 }
 
 type resolvedImport struct {
@@ -131,12 +137,13 @@ func BundleFactoryRelativeImports(
 					defaultAs: string(node.Default),
 				})
 			case *js.ExportStmt:
-				transformed, issue := transformExportStatement(node)
+				lines, deferred, issue := transformExportStatement(node)
 				if issue != nil {
 					issue.Path = sourceRef
 					return []Issue{*issue}
 				}
-				bodyLines = append(bodyLines, transformed)
+				bodyLines = append(bodyLines, lines...)
+				module.deferredExports = append(module.deferredExports, deferred...)
 			default:
 				bodyLines = append(bodyLines, stmtString(stmt))
 			}
@@ -186,6 +193,9 @@ func emitBundledExecutable(modules map[string]bundledModule, entrySourceRef stri
 		out.WriteString(module.body)
 		if module.body != "" {
 			out.WriteString("\n")
+		}
+		for _, assignment := range module.deferredExports {
+			out.WriteString(fmt.Sprintf("exports.%s = %s;\n", assignment.exportName, assignment.localName))
 		}
 		out.WriteString("return exports;\n})({}, __factoryRequire);\n")
 	}
@@ -253,56 +263,142 @@ func importBindingsFromStmt(stmt *js.ImportStmt) []importBinding {
 	return bindings
 }
 
-func transformExportStatement(stmt *js.ExportStmt) (string, *Issue) {
+func transformExportStatement(stmt *js.ExportStmt) ([]string, []exportAssignment, *Issue) {
 	if stmt.Decl == nil {
-		return "", &Issue{
+		return nil, nil, &Issue{
 			Code:    CodeUnsupportedLoader,
 			Message: "re-export statements are not supported in MVP factory-relative imports",
 		}
 	}
 	if stmt.Default {
-		return fmt.Sprintf("exports.default = %s;", declExpressionString(stmt.Decl)), nil
+		return []string{fmt.Sprintf("exports.default = %s;", declExpressionString(stmt.Decl))}, nil, nil
 	}
 	switch decl := stmt.Decl.(type) {
 	case *js.VarDecl:
-		keyword := varDeclKeyword(decl)
-		lines := make([]string, 0, len(decl.List))
-		for _, binding := range decl.List {
-			name := bindingName(binding.Binding)
-			if name == "" {
-				continue
-			}
-			if binding.Default != nil {
-				lines = append(lines, fmt.Sprintf(
-					"%s %s = %s; exports.%s = %s;",
-					keyword,
-					name,
-					exprString(binding.Default),
-					name,
-					name,
-				))
-				continue
-			}
-			lines = append(lines, fmt.Sprintf("%s %s; exports.%s = %s;", keyword, name, name, name))
-		}
-		return strings.Join(lines, "\n"), nil
+		return transformVarExportDecl(decl)
 	case *js.FuncDecl:
 		name := ""
 		if decl.Name != nil {
 			name = string(decl.Name.Name())
 		}
 		if name == "" {
-			return "", &Issue{
+			return nil, nil, &Issue{
 				Code:    CodeUnsupportedLoader,
 				Message: "anonymous export functions are not supported in factory-relative workflow modules",
 			}
 		}
-		return fmt.Sprintf("%s; exports.%s = %s;", declString(decl), name, name), nil
+		return []string{fmt.Sprintf("%s; exports.%s = %s;", declString(decl), name, name)}, nil, nil
 	default:
-		return "", &Issue{
+		return nil, nil, &Issue{
 			Code:    CodeUnsupportedLoader,
 			Message: "unsupported export declaration in factory-relative workflow module",
 		}
+	}
+}
+
+func transformVarExportDecl(decl *js.VarDecl) ([]string, []exportAssignment, *Issue) {
+	keyword := varDeclKeyword(decl)
+	deferExports := keyword == "let" || keyword == "var"
+
+	lines := make([]string, 0, len(decl.List))
+	var deferred []exportAssignment
+	for _, binding := range decl.List {
+		pattern := bindingPatternString(binding.Binding)
+		if pattern == "" {
+			continue
+		}
+		assignments, issue := collectExportAssignments(binding.Binding)
+		if issue != nil {
+			return nil, nil, issue
+		}
+		if binding.Default != nil {
+			lines = append(lines, fmt.Sprintf("%s %s = %s;", keyword, pattern, exprString(binding.Default)))
+		} else {
+			lines = append(lines, fmt.Sprintf("%s %s;", keyword, pattern))
+		}
+		for _, assignment := range assignments {
+			if deferExports {
+				deferred = append(deferred, assignment)
+				continue
+			}
+			lines = append(lines, fmt.Sprintf(
+				"exports.%s = %s;",
+				assignment.exportName,
+				assignment.localName,
+			))
+		}
+	}
+	return lines, deferred, nil
+}
+
+func collectExportAssignments(binding js.IBinding) ([]exportAssignment, *Issue) {
+	switch node := binding.(type) {
+	case *js.Var:
+		name := string(node.Name())
+		if name == "" {
+			return nil, unsupportedExportBindingIssue()
+		}
+		return []exportAssignment{{exportName: name, localName: name}}, nil
+	case *js.BindingObject:
+		if node.Rest != nil {
+			return nil, unsupportedExportBindingIssue()
+		}
+		assignments := make([]exportAssignment, 0, len(node.List))
+		for _, item := range node.List {
+			itemAssignments, issue := exportAssignmentsFromObjectItem(item)
+			if issue != nil {
+				return nil, issue
+			}
+			assignments = append(assignments, itemAssignments...)
+		}
+		return assignments, nil
+	case *js.BindingArray:
+		if node.Rest != nil {
+			return nil, unsupportedExportBindingIssue()
+		}
+		assignments := make([]exportAssignment, 0, len(node.List))
+		for _, item := range node.List {
+			if item.Binding == nil {
+				continue
+			}
+			itemAssignments, issue := collectExportAssignments(item.Binding)
+			if issue != nil {
+				return nil, issue
+			}
+			assignments = append(assignments, itemAssignments...)
+		}
+		return assignments, nil
+	default:
+		return nil, unsupportedExportBindingIssue()
+	}
+}
+
+func exportAssignmentsFromObjectItem(item js.BindingObjectItem) ([]exportAssignment, *Issue) {
+	if item.Key == nil || item.Key.IsComputed() {
+		return nil, unsupportedExportBindingIssue()
+	}
+	exportName := string(item.Key.Literal.Data)
+	if exportName == "" {
+		return nil, unsupportedExportBindingIssue()
+	}
+	switch binding := item.Value.Binding.(type) {
+	case *js.Var:
+		localName := string(binding.Name())
+		if localName == "" {
+			return nil, unsupportedExportBindingIssue()
+		}
+		return []exportAssignment{{exportName: exportName, localName: localName}}, nil
+	case *js.BindingObject, *js.BindingArray:
+		return nil, unsupportedExportBindingIssue()
+	default:
+		return nil, unsupportedExportBindingIssue()
+	}
+}
+
+func unsupportedExportBindingIssue() *Issue {
+	return &Issue{
+		Code:    CodeUnsupportedLoader,
+		Message: "unsupported export binding pattern in factory-relative workflow module",
 	}
 }
 
@@ -390,7 +486,7 @@ func varDeclKeyword(decl *js.VarDecl) string {
 	}
 }
 
-func bindingName(binding js.IBinding) string {
+func bindingPatternString(binding js.IBinding) string {
 	if binding == nil {
 		return ""
 	}

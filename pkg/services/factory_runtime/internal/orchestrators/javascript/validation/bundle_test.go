@@ -440,7 +440,7 @@ workflow.final(suffix(doubled));`
 	if len(issues) > 0 {
 		t.Fatalf("bundle issues = %#v, want none", issues)
 	}
-	if !strings.Contains(bundled, `const leaf = "LEAF"; exports.leaf = leaf;`) {
+	if !strings.Contains(bundled, `const leaf = "LEAF";`) || !strings.Contains(bundled, `exports.leaf = leaf;`) {
 		t.Fatalf("bundled source = %q, want local binding for same-module export const", bundled)
 	}
 	if !strings.Contains(bundled, `exports.doubled = doubled;`) {
@@ -489,6 +489,160 @@ workflow.final(doubled);`
 	}
 	if finalValue != "LEAF-X" {
 		t.Fatalf("workflow.final value = %q, want LEAF-X", finalValue)
+	}
+}
+
+func TestBundleFactoryRelativeImportsDestructuredExportBindingsExecute(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "pairs.js"),
+		[]byte(`export const { a, b } = { a: "A", b: "B" };`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write pairs module: %v", err)
+	}
+	entry := `import { a, b } from "./lib/pairs.js";
+workflow.final(a + b);`
+	reader := FileSourceReader(dir, bundleTestFileSystem{})
+
+	bundled, issues := BundleFactoryRelativeImports("workflow.js", entry, reader)
+	if len(issues) > 0 {
+		t.Fatalf("bundle issues = %#v, want none", issues)
+	}
+	if !strings.Contains(bundled, `const {a, b} = {a: "A", b: "B"}`) {
+		t.Fatalf("bundled source = %q, want destructured local binding", bundled)
+	}
+	if strings.Contains(bundled, `exports.{a, b}`) {
+		t.Fatalf("bundled source = %q, want per-name export assignments", bundled)
+	}
+	if !strings.Contains(bundled, `exports.a = a;`) || !strings.Contains(bundled, `exports.b = b;`) {
+		t.Fatalf("bundled source = %q, want exports.a and exports.b assignments", bundled)
+	}
+	finalValue, err := executeBundledWorkflowFinalForTest(t, bundled)
+	if err != nil {
+		t.Fatalf("execute bundled source: %v", err)
+	}
+	if finalValue != "AB" {
+		t.Fatalf("workflow.final value = %q, want AB", finalValue)
+	}
+}
+
+func TestBundleFactoryRelativeImportsMutableLetExportSnapshotsFinalValue(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "mutable.js"),
+		[]byte(`export let value = "initial";
+value = "updated";`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write mutable module: %v", err)
+	}
+	entry := `import { value } from "./lib/mutable.js";
+workflow.final(value);`
+	reader := FileSourceReader(dir, bundleTestFileSystem{})
+
+	bundled, issues := BundleFactoryRelativeImports("workflow.js", entry, reader)
+	if len(issues) > 0 {
+		t.Fatalf("bundle issues = %#v, want none", issues)
+	}
+	if strings.Contains(bundled, `exports.value = value; value = "updated"`) {
+		t.Fatalf("bundled source = %q, want deferred let export assignment after module evaluation", bundled)
+	}
+	if !strings.Contains(bundled, `let value = "initial";`) {
+		t.Fatalf("bundled source = %q, want let binding initializer", bundled)
+	}
+	if !strings.Contains(bundled, `value = "updated";`) {
+		t.Fatalf("bundled source = %q, want module evaluation mutation", bundled)
+	}
+	finalValue, err := executeBundledWorkflowFinalForTest(t, bundled)
+	if err != nil {
+		t.Fatalf("execute bundled source: %v", err)
+	}
+	if finalValue != "updated" {
+		t.Fatalf("workflow.final value = %q, want updated", finalValue)
+	}
+}
+
+func TestLoadBundlesDestructuredExportBindingsExecute(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "pairs.js"),
+		[]byte(`export const { a, b } = { a: "A", b: "B" };`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write pairs module: %v", err)
+	}
+	entry := `import { a, b } from "./lib/pairs.js";
+workflow.final(a + b);`
+	reader := FileSourceReader(dir, bundleTestFileSystem{})
+
+	loaded, issues := Load(LoadRequest{
+		SourceRef:    "workflow.js",
+		Content:      entry,
+		FactoryRoot:  dir,
+		BundleReader: reader,
+	})
+	if len(issues) > 0 {
+		t.Fatalf("load issues = %#v, want none", issues)
+	}
+	finalValue, err := executeBundledWorkflowFinalForTest(t, loaded.ExecutableSource)
+	if err != nil {
+		t.Fatalf("execute bundled source: %v", err)
+	}
+	if finalValue != "AB" {
+		t.Fatalf("workflow.final value = %q, want AB", finalValue)
+	}
+}
+
+func TestLoadBundlesMutableLetExportSnapshotsFinalValue(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "mutable.js"),
+		[]byte(`export let value = "initial";
+value = "updated";`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write mutable module: %v", err)
+	}
+	entry := `import { value } from "./lib/mutable.js";
+workflow.final(value);`
+	reader := FileSourceReader(dir, bundleTestFileSystem{})
+
+	loaded, issues := Load(LoadRequest{
+		SourceRef:    "workflow.js",
+		Content:      entry,
+		FactoryRoot:  dir,
+		BundleReader: reader,
+	})
+	if len(issues) > 0 {
+		t.Fatalf("load issues = %#v, want none", issues)
+	}
+	finalValue, err := executeBundledWorkflowFinalForTest(t, loaded.ExecutableSource)
+	if err != nil {
+		t.Fatalf("execute bundled source: %v", err)
+	}
+	if finalValue != "updated" {
+		t.Fatalf("workflow.final value = %q, want updated", finalValue)
 	}
 }
 
