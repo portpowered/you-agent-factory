@@ -426,7 +426,14 @@ primary-result behavior.
   `tests/functional/workers/script/execution_test.go`; drive them through
   `support.RunFactoryToCompletionWithEdgesAndObservations` with a replaced
   `ScriptCommandRunner` and assert on Work customer states plus dispatch
-  response events via the shared `helpers_test.go` assertions.
+  response events via the shared `helpers_test.go` assertions. Provider process
+  and companion cleanup (timeout process-tree termination, cancellation
+  companion teardown, and success-path process/stream closure) belongs in
+  `tests/functional/workers/inference/process_cleanup_test.go` with
+  functionallong companion coverage in `process_cleanup_long_test.go`; drive
+  script-backed subprocess proofs through `root.BuildProcess` with
+  `serviceedges.Edges{ScriptCommandRunner: platformprocess.NewExecCommandRunner(...)}`
+  and assert on Work, Factory Event, and dispatch outcomes only.
 - Wire supplies that same registry to the Workers runtime for routed provider
   selection, conductor composition, manifest-maximum capability checks, and
   executable-prerequisite preflight, and to Factory Sessions through the narrow
