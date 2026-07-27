@@ -2,6 +2,7 @@ package wire
 
 import (
 	"io/fs"
+	"runtime"
 	"testing"
 	"time"
 
@@ -60,6 +61,81 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	}
 }
 
+func TestNewServiceConstructsInertRoot(t *testing.T) {
+	t.Parallel()
+
+	directories := &recordingDirectoryInspection{}
+	homeCalls := 0
+	symlinkCalls := 0
+	invocationInputCalls := 0
+	initialWorkCalls := 0
+	eventIDCalls := 0
+	sessionIDCalls := 0
+	inputs := validNewServiceInputs()
+	inputs.directoryInspection = directories
+	inputs.resolveHome = func() (string, error) {
+		homeCalls++
+		panic("home directory resolved during inert construction")
+	}
+	inputs.resolveSymlinks = func(path string) (string, error) {
+		symlinkCalls++
+		panic("symlink resolved during inert construction")
+	}
+	inputs.invocationInputFiles = fileeffects.InvocationInputReader(func(string) ([]byte, error) {
+		invocationInputCalls++
+		panic("invocation input read during inert construction")
+	})
+	inputs.initialWorkFiles = fileeffects.InitialWorkReader(func(string) ([]byte, error) {
+		initialWorkCalls++
+		panic("initial Work read during inert construction")
+	})
+	inputs.eventIDs = func() string {
+		eventIDCalls++
+		return "response-event-id"
+	}
+	inputs.sessionIDs = func() string {
+		sessionIDCalls++
+		return "session-id"
+	}
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	baseline := runtime.NumGoroutine()
+
+	service, err := inputs.callNewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewService() returned nil service")
+	}
+	var root factorysessions.Service = service
+	if root == nil {
+		t.Fatal("constructed root is nil")
+	}
+	if directories.calls != 0 {
+		t.Fatalf("construction inspected filesystem %d times, want no runtime activity", directories.calls)
+	}
+	if homeCalls != 0 || symlinkCalls != 0 || invocationInputCalls != 0 || initialWorkCalls != 0 {
+		t.Fatalf(
+			"construction invoked effect stubs (home=%d symlinks=%d invocation input=%d initial Work=%d), want inert construction",
+			homeCalls, symlinkCalls, invocationInputCalls, initialWorkCalls,
+		)
+	}
+	if eventIDCalls != 0 || sessionIDCalls != 0 {
+		t.Fatalf(
+			"construction invoked generators (event IDs=%d session IDs=%d), want inert construction",
+			eventIDCalls, sessionIDCalls,
+		)
+	}
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	if leaked := runtime.NumGoroutine() - baseline; leaked > 4 {
+		t.Fatalf("goroutine leak after construction: baseline=%d current=%d delta=%d", baseline, runtime.NumGoroutine(), leaked)
+	}
+}
+
 func TestNewServiceIsInertAndRequiresRuntimeClockBinding(t *testing.T) {
 	clock := &recordingClock{}
 	directories := &recordingDirectoryInspection{}
@@ -73,15 +149,6 @@ func TestNewServiceIsInertAndRequiresRuntimeClockBinding(t *testing.T) {
 	}
 	if service == nil {
 		t.Fatal("NewService() returned nil service")
-	}
-	if clock.calls != 0 {
-		t.Fatalf("construction read clock %d times, want no runtime activity", clock.calls)
-	}
-	if directories.calls != 0 {
-		t.Fatalf("construction inspected filesystem %d times, want no runtime activity", directories.calls)
-	}
-	if symlinkCalls != 0 {
-		t.Fatalf("construction resolved symlinks %d times, want no filesystem activity", symlinkCalls)
 	}
 	if assembly, bindErr := service.ForRuntime(factorysessions.RuntimeBinding{}); bindErr == nil || assembly != nil {
 		t.Fatalf("ForRuntime() without clock = %#v, %v; want deterministic error", assembly, bindErr)
