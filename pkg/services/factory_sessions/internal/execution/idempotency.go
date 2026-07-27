@@ -411,6 +411,92 @@ func syncWaitTimeout(normalized StartRequest) (time.Duration, bool) {
 	return time.Duration(*normalized.Wait.TimeoutMillis) * time.Millisecond, true
 }
 
+func (s *JavaScriptRuntimeService) startWaitingSyncSession(
+	ctx context.Context,
+	reserved *reservedStartSession,
+	normalized StartRequest,
+	resolved ResolvedSource,
+	sourceContent string,
+	policyResolution workflowsource.JavaScriptPolicyResolution,
+	waitTimeout time.Duration,
+) (SyncStartResult, error) {
+	startedAt := s.now()
+	running := projectRuntimeRunningSessionState(
+		reserved.state.session.SessionID,
+		normalized,
+		resolved,
+		policyResolution,
+		startedAt,
+	)
+	runCtx, runCancel := workflowRunContext(context.Background(), policyResolution.Policy)
+	s.mu.Lock()
+	reserved.state.session = running.session
+	reserved.state.result = running.result
+	reserved.state.events = running.events
+	reserved.state.runCancel = runCancel
+	reserved.state.startRequest = cloneStartRequest(normalized)
+	reserved.state.resolvedSource = resolved
+	reserved.state.sourceContent = sourceContent
+	s.mu.Unlock()
+	s.presentCurrentFactoryEvents(reserved.state.session.SessionID)
+
+	go s.runAsyncSession(
+		runCtx,
+		reserved.state.session.SessionID,
+		normalized,
+		resolved,
+		sourceContent,
+		policyResolution,
+		startedAt,
+	)
+
+	result, err := s.waitSyncCompletion(
+		ctx,
+		reserved.state.session.SessionID,
+		waitTimeout,
+		normalized.Wait.CancelOnTimeout,
+	)
+	if err != nil {
+		return SyncStartResult{}, err
+	}
+	s.recordSyncStartReplay(normalized.RequestID, result)
+	return result, nil
+}
+
+func (s *JavaScriptRuntimeService) completeImmediateSyncStart(
+	ctx context.Context,
+	normalized StartRequest,
+	resolved ResolvedSource,
+	sourceContent string,
+	policyResolution workflowsource.JavaScriptPolicyResolution,
+	reserved *reservedStartSession,
+) (SyncStartResult, error) {
+	terminal, err := s.executeImmediateSyncSession(
+		ctx, normalized, resolved, sourceContent, policyResolution, reserved.state.session.SessionID,
+	)
+	if err != nil {
+		return SyncStartResult{}, err
+	}
+	s.mu.Lock()
+	candidate := cloneRuntimeSessionState(reserved.state)
+	applyRuntimeSessionFields(&candidate, terminal)
+	candidate.runCancel = nil
+	if err := s.recordCanonicalTerminalState(reserved.state, candidate); err != nil {
+		s.mu.Unlock()
+		return SyncStartResult{}, err
+	}
+	s.mu.Unlock()
+	s.presentCurrentFactoryEvents(reserved.state.session.SessionID)
+
+	snapshot, err := s.snapshotSessionState(reserved.state.session.SessionID)
+	if err != nil {
+		return SyncStartResult{}, err
+	}
+	result := s.syncStartFromState(snapshot)
+	s.recordSyncStartReplay(normalized.RequestID, result)
+	return result, nil
+}
+
 func (s *JavaScriptRuntimeService) waitSyncCompletion(
 	ctx context.Context,
 	sessionID string,

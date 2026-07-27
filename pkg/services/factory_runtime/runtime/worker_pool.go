@@ -77,18 +77,29 @@ func (a workerExecutorRequestAdapter) Execute(
 	return executor.Execute(ctx, request.Dispatch)
 }
 
-func newRuntimeWorkersBoundary(
-	service workstationExecutionBoundary,
+func runtimeWorkersBoundaryRouteNames(
 	net *state.Net,
 	executors map[string]workers.WorkerExecutor,
-	async bool,
-) *runtimeWorkersBoundary {
-	routes := make(map[string]struct{})
+) []string {
+	routes := make(map[string]struct{}, len(executors))
+	for name := range executors {
+		if name != "" {
+			routes[name] = struct{}{}
+		}
+	}
 	if net != nil {
 		for id, transition := range net.Transitions {
-			routes[id] = struct{}{}
-			if transition != nil && transition.Name != "" {
+			if id != "" {
+				routes[id] = struct{}{}
+			}
+			if transition == nil {
+				continue
+			}
+			if transition.Name != "" {
 				routes[transition.Name] = struct{}{}
+			}
+			if transition.WorkerType != "" {
+				routes[transition.WorkerType] = struct{}{}
 			}
 		}
 	}
@@ -97,13 +108,25 @@ func newRuntimeWorkersBoundary(
 		names = append(names, name)
 	}
 	sort.Strings(names)
+	return names
+}
+
+func newRuntimeWorkersBoundary(
+	service workstationExecutionBoundary,
+	net *state.Net,
+	executors map[string]workers.WorkerExecutor,
+	async bool,
+) *runtimeWorkersBoundary {
 	adapter := workerExecutorRequestAdapter{executors: executors}
+	names := runtimeWorkersBoundaryRouteNames(net, executors)
 	bindings := make([]workers.AssembledRuntimeBinding, 0, len(names))
 	for _, name := range names {
 		bindings = append(bindings, workers.AssembledRuntimeBinding{
-			RoleName: name,
-			RoleKind: workers.RuntimeBuildRoleKindWorkstation,
-			Executor: adapter,
+			RoleName:      name,
+			RoleKind:      workers.RuntimeBuildRoleKindWorkstation,
+			Executor:      adapter,
+			Capacity:      defaultRuntimeBufferSize,
+			QueueCapacity: defaultRuntimeBufferSize,
 		})
 	}
 	return &runtimeWorkersBoundary{
