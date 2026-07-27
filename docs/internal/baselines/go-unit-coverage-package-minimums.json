@@ -387,6 +387,10 @@
       "minimum": 89.53
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire",
+      "minimum": 74.10
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold",
       "minimum": 75.75
     },

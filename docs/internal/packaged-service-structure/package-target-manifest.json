@@ -123,6 +123,7 @@
     "pkg/services/factory_definitions/transports/cli",
     "pkg/services/factory_definitions/ttsobservability",
     "pkg/services/factory_definitions/validation",
+    "pkg/services/factory_definitions/wire",
     "pkg/services/factory_definitions/wire/defaultscaffold",
     "pkg/services/factory_definitions/workers",
     "pkg/services/factory_definitions/workers/taxonomy",
@@ -864,6 +865,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/validation",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/wire",
       "disposition": "retain",
       "destination": "factory_definitions"
     },

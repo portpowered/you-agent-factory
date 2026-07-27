@@ -1157,6 +1157,12 @@
     },
     {
       "fromOwner": "factory_definitions",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/factory_definitions/wire -\u003e pkg/transports/mapping/factoryconfig"
+    },
+    {
+      "fromOwner": "factory_definitions",
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/services/factory_definitions/contracts -\u003e pkg/services/work"
@@ -2779,6 +2785,12 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/validation/topologytests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/wire",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
