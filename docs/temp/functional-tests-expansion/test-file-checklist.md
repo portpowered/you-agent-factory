@@ -198,7 +198,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIConcurrentSessionRequestsRemainIsolated`.
   - `TestAPICancelledRequestDoesNotCancelUnrelatedSession`.
 
-- [ ] `tests/functional/transport/http/status/status_test.go`
+- [x] `tests/functional/transport/http/status/status_test.go`
   - `TestAPIStatusReportsReadyAfterStartup`.
   - `TestAPIStatusDoesNotLeakInternalConfiguration`.
 
