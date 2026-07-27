@@ -163,10 +163,20 @@
   blocking `Provider.Infer` until public `inFlightDispatches` reaches the fan-out
   size, release children to assert declared input-order results and documented
   partial-failure shaping on `/factory-sessions/{id}/results?mode=final` and
-  `/dispatches` without wall-clock sleeps. Catalog metadata infers domain
-  `orchestration` and subsection `javascript/composition` from the path; every
-  top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
-  stays viz-compatible.
+  `/dispatches` without wall-clock sleeps. Mock-worker replacement functional
+  coverage belongs in
+  `tests/functional/workers/mock/replacement_test.go`: prove named-only
+  `--with-mock-workers` replacement through
+  `tests/functional/internal/support.StartFunctionalAPIServer` with
+  `MockWorkersConfig`, `UnmatchedDispatchPolicy: passthrough`, and an injected
+  `edges.Edges.ProviderCommandRunner`; prove invalid override contract failures
+  through `support.BuildProcess` + `process.Execute` before dispatch; and prove
+  configured mock rejection with stable public `WorkOutcomeFailed` /
+  `WorkFailureTypeUnknown` dispatch responses without live provider credentials
+  or leaking configured reject stdout/stderr on customer-visible surfaces.
+  Catalog metadata infers domain `workers` and subsection `mock` from the path;
+  every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
   Prove default
   `functional-test-viz` wiring (boundary first, single coverage with profile
   + JSON under `.artifacts/functional-test-viz/`, Markdown generator) with
