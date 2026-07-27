@@ -236,6 +236,7 @@
     "pkg/services/providers/internal/services/catalog/internal/service",
     "pkg/services/providers/internal/services/catalog/wire",
     "pkg/services/providers/internal/services/execution",
+    "pkg/services/providers/internal/services/execution/internal/adapters/claude",
     "pkg/services/providers/internal/services/execution/internal/adapters/codex",
     "pkg/services/providers/internal/services/execution/internal/service",
     "pkg/services/providers/internal/services/execution/wire",
@@ -1362,6 +1363,11 @@
     },
     {
       "packagePath": "pkg/services/providers/internal/services/execution",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/claude",
       "disposition": "retain",
       "destination": "providers/internal/services/execution"
     },

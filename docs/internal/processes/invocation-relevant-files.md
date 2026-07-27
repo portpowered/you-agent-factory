@@ -324,6 +324,14 @@ primary-result behavior.
   before returning: context wins, recognized declared failures outrank unknown
   native outcomes, and every failure returns a zero result with only bounded
   Providers-owned diagnostics.
+- Provider-native Claude execution state lives below the same parent-private
+  Providers Execution boundary. Keep its stream-json partial-record buffer,
+  message/content-block/tool correlation, mixed text/tool progress projection,
+  deferred message completion, flush guard, authoritative result record
+  selection, and detached session extraction invocation-local. Inject the
+  native effect into the adapter registration and keep system/control records
+  out of customer-visible content; reconcile lifecycle failures with the same
+  precedence rules as other Providers-owned adapters.
 - Keep reusable one-attempt conformance under the Providers-private Execution
   testkit. Build the singular Providers root around a fresh
   controllable adapter for each scenario, observe only Providers-owned

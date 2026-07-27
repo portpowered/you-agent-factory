@@ -3486,6 +3486,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/claude",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/codex",
       "disposition": "retain",
       "destination": "providers",
