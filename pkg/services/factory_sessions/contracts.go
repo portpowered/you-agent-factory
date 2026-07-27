@@ -98,6 +98,7 @@ type RuntimeHTTPServices struct {
 	SessionExecution ExecutionService
 	Work             work.Service
 	Models           models.Service
+	ModelsScope      models.RuntimeScopeRef
 	Workers          workers.Service
 	ProviderSessions providersessions.Service
 	WorkerPrompts    workers.PromptTemplates

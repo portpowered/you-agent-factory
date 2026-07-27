@@ -34,6 +34,11 @@ Models root rather than receiving or constructing a second `Service`. Register
 each successfully opened scope with the opening transaction immediately,
 release later-opened resources before earlier scopes on failure, and transfer
 the same exactly-once reverse-order closer to the successful runtime product.
+Thread the opaque scope beside that root through downstream Worker and transport
+bindings, and attach it to typed Models requests at the final consumer. When
+live session state is not installed yet, snapshot Models scope configuration
+from the already-loaded Factory definition so startup-time catalog and
+invocation consumers observe the selected Factory without a lazy service view.
 Use a cleanup context detached from request cancellation when closing an
 already-acquired owner scope. Do not introduce a Wire-owned binder, return a
 private peer runtime-assembly contract, or inject a callback that lets the

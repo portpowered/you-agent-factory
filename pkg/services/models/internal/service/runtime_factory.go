@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -42,6 +43,8 @@ type Root struct {
 	runtimeTempDir  localmodels.TempDirectory
 	runtimeTempFile localmodels.CreateTempFile
 	runtimeScopes   runtimescopes.Service
+	runtimeMu       sync.RWMutex
+	runtimeByScope  map[models.RuntimeScopeRef]models.Service
 	catalog         modelcatalog.Service
 	process         models.ProcessDependencies
 }
@@ -138,7 +141,8 @@ func NewRoot(
 		runtimeRunner: runtimeRunner, runtimeHTTP: runtimeHTTP,
 		runtimeInspect: runtimeInspect, runtimeTempDir: runtimeTempDir, runtimeTempFile: runtimeTempFile,
 		runtimeScopes: runtimeScopes, catalog: catalogService,
-		process: process,
+		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
+		process:        process,
 	}, nil
 }
 
@@ -150,6 +154,10 @@ func (o *Root) ForRuntime(binding models.RuntimeBinding) (models.Service, error)
 	if err := models.ValidateRuntimeBinding(binding); err != nil {
 		return nil, err
 	}
+	return o.runtimeForBinding(binding)
+}
+
+func (o *Root) runtimeForBinding(binding models.RuntimeBinding) (models.Service, error) {
 	assets, err := localmodels.NewAssetPuller(
 		binding.CacheDirectory, o.assetPlatform, o.assetHTTP, o.assetEndpoints,
 		o.assetMkdirAll, o.assetStat, o.assetHome, o.assetWriteFile, o.assetRename,
@@ -183,13 +191,14 @@ func (o *Root) OpenRuntimeScope(
 		return models.OpenRuntimeScopeResult{}, err
 	}
 	config := request.Config.Clone()
-	ref, err := o.runtimeScopes.Open(models.RuntimeBinding{
+	binding := models.RuntimeBinding{
 		CacheDirectory: config.CacheDirectory,
 		RuntimeConfig: func() *models.RuntimeConfig {
 			runtimeConfig := config.Runtime
 			return &runtimeConfig
 		},
-	})
+	}
+	ref, err := o.runtimeScopes.Open(binding)
 	if err != nil {
 		return models.OpenRuntimeScopeResult{}, err
 	}
@@ -217,6 +226,9 @@ func (o *Root) CloseRuntimeScope(
 	if err != nil {
 		return models.CloseRuntimeScopeResult{}, runtimeScopeError(err)
 	}
+	o.runtimeMu.Lock()
+	delete(o.runtimeByScope, request.Scope)
+	o.runtimeMu.Unlock()
 	return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
 }
 
@@ -364,8 +376,46 @@ func (o *Root) ReleaseLease(context.Context, models.ReleaseLeaseRequest) error {
 	return missingDependencyError("Models runtime binding")
 }
 
-func (o *Root) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
-	return models.LocalInvocationResult{}, missingDependencyError("Models runtime binding")
+func (o *Root) InvokeLocal(
+	ctx context.Context,
+	request models.LocalInvocationRequest,
+) (models.LocalInvocationResult, error) {
+	runtime, err := o.scopedRuntime(request.Scope)
+	if err != nil {
+		return models.LocalInvocationResult{}, err
+	}
+	return runtime.InvokeLocal(ctx, request)
+}
+
+func (o *Root) scopedRuntime(scope models.RuntimeScopeRef) (models.Service, error) {
+	if o == nil || o.runtimeScopes == nil {
+		return nil, models.ErrUnsupportedOperation
+	}
+	if scope.IsZero() {
+		return nil, models.ErrRuntimeScopeInvalid
+	}
+	binding, err := o.runtimeScopes.Resolve(runtimescopes.Reference(scope.String()))
+	if err != nil {
+		return nil, runtimeScopeError(err)
+	}
+	o.runtimeMu.RLock()
+	runtime := o.runtimeByScope[scope]
+	o.runtimeMu.RUnlock()
+	if runtime != nil {
+		return runtime, nil
+	}
+	runtime, err = o.runtimeForBinding(binding)
+	if err != nil {
+		return nil, err
+	}
+	o.runtimeMu.Lock()
+	if existing := o.runtimeByScope[scope]; existing != nil {
+		runtime = existing
+	} else {
+		o.runtimeByScope[scope] = runtime
+	}
+	o.runtimeMu.Unlock()
+	return runtime, nil
 }
 
 func newRuntimeWithHostEdges(

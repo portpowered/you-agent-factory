@@ -260,6 +260,7 @@ func NewWorkerExecution(
 	providerOverride workerprovider.Provider,
 	state roles.CurrentRuntimeResolver,
 	modelService models.Service,
+	modelsScope models.RuntimeScopeRef,
 	contentMaterializer work.ContentMaterializer,
 	factory WorkersRuntimeFactory,
 ) (workers.RuntimeService, error) {
@@ -273,6 +274,7 @@ func NewWorkerExecution(
 	return factory(
 		state,
 		modelService,
+		modelsScope,
 		providerCommandRunner,
 		scriptCommandRunner,
 		ptyAllocator,

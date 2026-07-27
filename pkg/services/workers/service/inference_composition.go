@@ -10,15 +10,19 @@ import (
 func resolveInferenceRunner(
 	inner workers.Runner,
 	modelsService models.Service,
+	modelsScope models.RuntimeScopeRef,
 	factoryCfg *interfaces.FactoryConfig,
 	workerCfg *interfaces.FactoryWorkerConfig,
 ) workers.Runner {
 	if factoryCfg == nil {
-		return runnerswire.NewInferenceCompositionRunner(inner, modelsService, workerCfg, nil)
+		return runnerswire.NewInferenceCompositionRunner(
+			inner, modelsService, modelsScope, workerCfg, nil,
+		)
 	}
 	return runnerswire.NewInferenceCompositionRunner(
 		inner,
 		modelsService,
+		modelsScope,
 		workerCfg,
 		factoryCfg.Resources,
 	)

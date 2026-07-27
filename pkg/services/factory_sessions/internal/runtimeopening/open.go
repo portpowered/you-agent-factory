@@ -165,10 +165,10 @@ func openRuntime(
 	}
 	currentRuntimeConfig := func() *models.RuntimeConfig {
 		runtime := runtimeService.CurrentRuntime()
-		if runtime == nil {
-			return nil
+		if runtime != nil {
+			return ProjectModelsRuntimeConfig(runtime.RuntimeConfig)
 		}
-		return ProjectModelsRuntimeConfig(runtime.RuntimeConfig)
+		return ProjectModelsRuntimeConfig(load.LoadedFactoryCfg)
 	}
 	modelsBind, err := bindModelsRuntimeScope(
 		ctx,
@@ -205,7 +205,7 @@ func openRuntime(
 		nil,
 		edges.ProviderOverride,
 		runtimeService,
-		selectedModels, contentMaterializer,
+		selectedModels, modelsBind.Scope, contentMaterializer,
 		workersRuntimeFactory,
 	)
 	if err != nil {

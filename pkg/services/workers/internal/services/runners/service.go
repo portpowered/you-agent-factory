@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	ScriptIdentity     = "script"
-	InferenceIdentity  = "inference"
+	ScriptIdentity    = "script"
+	InferenceIdentity = "inference"
 )
 
 // Registration explicitly associates one canonical identity and metadata
@@ -66,6 +66,7 @@ type InferenceLocalInvoker interface {
 type InferenceConfig struct {
 	Worker    models.LocalWorker
 	Resources []models.LocalResource
+	Scope     models.RuntimeScopeRef
 }
 
 // InferenceDependencies are the exact effects projected into one Inference Runner.

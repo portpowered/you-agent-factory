@@ -141,7 +141,7 @@ func (s *Service) runtimeRunnerDecorators(
 	return append(decorators,
 		func(inner workers.Runner, definition *interfaces.FactoryWorkerConfig) workers.Runner {
 			return resolveInferenceRunner(
-				inner, s.models, factoryCfg, definition,
+				inner, s.models, s.modelsScope, factoryCfg, definition,
 			)
 		},
 		func(inner workers.Runner, definition *interfaces.FactoryWorkerConfig) workers.Runner {

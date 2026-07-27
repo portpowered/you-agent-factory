@@ -259,6 +259,9 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 	if opened.application.HTTP.Models != root {
 		t.Fatal("opened application runtime did not retain the process-scoped Models root")
 	}
+	if opened.application.HTTP.ModelsScope != scope {
+		t.Fatalf("opened HTTP Models scope = %q, want %q", opened.application.HTTP.ModelsScope, scope)
+	}
 	if opened.modelsScope != scope {
 		t.Fatalf("opened Models scope = %q, want %q", opened.modelsScope.String(), scope.String())
 	}

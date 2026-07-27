@@ -15,23 +15,41 @@ import (
 // Adapter maps Models service values at the outward HTTP boundary.
 type Adapter struct {
 	models  models.Service
+	scope   models.RuntimeScopeRef
 	invoker workers.ModelInvoker
 	content work.ContentPreparation
 }
 
 // NewAdapter constructs the Models HTTP representation adapter.
-func NewAdapter(service models.Service, invoker workers.ModelInvoker, content work.ContentPreparation) *Adapter {
+func NewAdapter(
+	service models.Service,
+	invoker workers.ModelInvoker,
+	content work.ContentPreparation,
+	scopes ...models.RuntimeScopeRef,
+) *Adapter {
 	if service == nil || invoker == nil || content == nil {
 		return nil
 	}
-	return &Adapter{models: service, invoker: invoker, content: content}
+	var scope models.RuntimeScopeRef
+	if len(scopes) > 0 {
+		scope = scopes[0]
+	}
+	return &Adapter{models: service, scope: scope, invoker: invoker, content: content}
 }
 
 func (a *Adapter) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
 	if a == nil || a.models == nil {
 		return factoryapi.ListModelsResponse{}, errors.New("Models service is required")
 	}
-	listed, err := a.models.ListModels(ctx)
+	var listed models.List
+	var err error
+	if a.scope.IsZero() {
+		listed, err = a.models.ListModels(ctx)
+	} else {
+		var scoped models.ListModelsResult
+		scoped, err = a.models.ListCatalog(ctx, models.ListModelsRequest{Scope: a.scope})
+		listed.Results = scoped.Models
+	}
 	if err != nil {
 		return factoryapi.ListModelsResponse{}, err
 	}
@@ -42,7 +60,18 @@ func (a *Adapter) GetModel(ctx context.Context, modelName string) (factoryapi.Mo
 	if a == nil || a.models == nil {
 		return factoryapi.ModelDetail{}, errors.New("Models service is required")
 	}
-	detail, err := a.models.GetModel(ctx, modelName)
+	var detail models.Detail
+	var err error
+	if a.scope.IsZero() {
+		detail, err = a.models.GetModel(ctx, modelName)
+	} else {
+		var scoped models.GetModelResult
+		scoped, err = a.models.GetCatalogModel(ctx, models.GetModelRequest{
+			Scope: a.scope,
+			Name:  modelName,
+		})
+		detail = scoped.Model
+	}
 	if err != nil {
 		return factoryapi.ModelDetail{}, err
 	}
