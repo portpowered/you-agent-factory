@@ -1881,6 +1881,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/orchestration/javascript/policy/denied_operations_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/policy",
+      "scenario": "TestJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/policy/denied_operations_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/policy/denied_operations_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/policy",
+      "scenario": "TestJavaScriptPolicyFailureDoesNotDispatchExternalWork",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/policy/denied_operations_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
       "package": "you-agent-factory/tests/functional/orchestration/petri/dispatch",
       "scenario": "TestPetriConcurrentFailureDoesNotDuplicateDispatch",
@@ -6345,14 +6365,14 @@
       "workflow": 64,
       "workstations": 7
     },
-    "customer_top_level_Test_scenarios": 612,
+    "customer_top_level_Test_scenarios": 614,
     "files_with_customer_Test": 200,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 118,
-    "lane_short": 494,
+    "lane_short": 496,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
       "you-agent-factory/tests/functional/bootstrap_portability": 25,
@@ -6488,15 +6508,15 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T16:30:00Z",
-    "story": "ft-wave1-mock-replacement-mergeability",
-    "live_customer_scenarios": 612,
-    "ledger_rows": 612,
+    "audited_at_utc": "2026-07-27T15:40:00Z",
+    "story": "ft-wave1-js-policy-denied-mergeability",
+    "live_customer_scenarios": 614,
+    "ledger_rows": 614,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 494,
+    "lane_short": 496,
     "lane_functionallong": 118,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
