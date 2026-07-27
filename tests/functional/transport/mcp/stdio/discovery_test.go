@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -52,6 +54,31 @@ func TestMCPStdioInitializeAndToolDiscovery(t *testing.T) {
 	}
 	if len(rawTools) == 0 {
 		t.Fatal("tools/list returned an empty tools array")
+	}
+}
+
+// TestMCPDiscoveryContainsCanonicalFactorySessionTools proves tools/list exposes
+// the canonical Factory Session tool names published for MCP hosts without
+// asserting Session lifecycle or tool execution semantics.
+func TestMCPDiscoveryContainsCanonicalFactorySessionTools(t *testing.T) {
+	client, shutdown, serveErr := startFixtureBackedMCPServer(t)
+	defer func() {
+		shutdown()
+		closeMCPServer(t, serveErr)
+	}()
+
+	initializeMCPClient(t, client)
+
+	toolsResult := client.call("tools/list", map[string]any{})
+	if toolsResult.Error != nil {
+		t.Fatalf("tools/list error = %#v", toolsResult.Error)
+	}
+	toolNames := toolNamesFromListResult(t, toolsResult.Result)
+
+	for _, tool := range mcpgenerated.PrimaryDiscovery() {
+		if !slices.Contains(toolNames, tool.Name) {
+			t.Fatalf("tools/list missing canonical Factory Session tool %q; got %#v", tool.Name, toolNames)
+		}
 	}
 }
 
@@ -105,6 +132,40 @@ func (c *stdioMCPClient) call(method string, params any) mcpJSONRPCResponse {
 		c.t.Fatalf("%s response id = %d, want %d", method, response.ID, id)
 	}
 	return response
+}
+
+func initializeMCPClient(t *testing.T, client *stdioMCPClient) {
+	t.Helper()
+	initResult := client.call("initialize", map[string]any{
+		"protocolVersion": "2024-11-05",
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]any{"name": "transport-discovery", "version": "test"},
+	})
+	if initResult.Error != nil {
+		t.Fatalf("initialize error = %#v", initResult.Error)
+	}
+	protocolVersion, _ := initResult.Result["protocolVersion"].(string)
+	if protocolVersion != "2024-11-05" {
+		t.Fatalf("protocolVersion = %q, want 2024-11-05", protocolVersion)
+	}
+}
+
+func toolNamesFromListResult(t *testing.T, result map[string]any) []string {
+	t.Helper()
+	rawTools, ok := result["tools"].([]any)
+	if !ok {
+		t.Fatalf("tools/list result missing tools array: %#v", result)
+	}
+	names := make([]string, 0, len(rawTools))
+	for _, raw := range rawTools {
+		tool, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("tool entry = %#v, want object", raw)
+		}
+		name, _ := tool["name"].(string)
+		names = append(names, name)
+	}
+	return names
 }
 
 func startFixtureBackedMCPServer(t *testing.T) (*stdioMCPClient, func(), <-chan error) {
