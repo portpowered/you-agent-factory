@@ -2,7 +2,9 @@ package output_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"sync"
@@ -12,6 +14,7 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -95,6 +98,62 @@ func TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise(t *testing.T) {
 			t.Fatalf("stdout = %q, want only raw primary result %q", stdout, textStreamPrimaryResult)
 		}
 	})
+}
+
+// TestCLITextStreamInterruptedRunDoesNotClaimCompletion proves interrupting a
+// human response-stream CLI run ends with the documented cancellation outcome
+// and does not print successful-completion or primary-result claims on stdout.
+func TestCLITextStreamInterruptedRunDoesNotClaimCompletion(t *testing.T) {
+	externalWork := newCancellableExternalWorkRunner()
+	stdout := newInterruptibleStdoutCapture()
+	runArgs := runGoalHumanInterruptibleResponseStream(t, externalWork, stdout)
+
+	waitForExternalWorkStart(t, externalWork)
+	waitForInterruptibleStdoutLifecycle(t, stdout)
+	select {
+	case <-stdout.done:
+		t.Fatal("invocation completed before interrupt")
+	default:
+	}
+
+	stdout.cancel()
+
+	select {
+	case <-stdout.done:
+	case <-time.After(humanTextStreamScenarioTimeout):
+		t.Fatalf("timed out waiting for interrupted invocation to finish\nstdout:\n%s", stdout.String())
+	}
+	if stdout.err == nil {
+		t.Fatalf("Process.Execute error = nil, want canceled invocation failure\nstdout:\n%s", stdout.String())
+	}
+	if !strings.Contains(stdout.err.Error(), "INVOCATION_CANCELED") {
+		t.Fatalf("Process.Execute error = %v, want INVOCATION_CANCELED\nstdout:\n%s", stdout.err, stdout.String())
+	}
+	if got := declaredRunCancelExitCode(t, runArgs); got != 130 {
+		t.Fatalf("declared you run cancel exit code = %d, want 130", got)
+	}
+	if err := externalWork.waitFinished(humanTextStreamScenarioTimeout); err != nil {
+		t.Fatalf("external mock-worker work teardown not observed after interrupt: %v", err)
+	}
+	if !errors.Is(externalWork.runErr(), context.Canceled) {
+		t.Fatalf("external work cancellation error = %v, want context.Canceled", externalWork.runErr())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "--- invocation outcome ---") {
+		t.Fatalf("stdout missing invocation outcome after interrupt:\n%s", output)
+	}
+	if !strings.Contains(output, "status: CANCELED") {
+		t.Fatalf("stdout missing canceled status after interrupt:\n%s", output)
+	}
+	if strings.Contains(output, "--- primary result ---") {
+		t.Fatalf("stdout contains primary-result separator after interrupt:\n%s", output)
+	}
+	for _, line := range nonEmptyStdoutLines(output) {
+		if line == textStreamPrimaryResult {
+			t.Fatalf("stdout line claims successful primary result after interrupt:\n%s", output)
+		}
+	}
 }
 
 var humanTextStreamForbiddenEnvelopeLiterals = []string{
@@ -198,6 +257,10 @@ type firstChunkGatedStdoutWriter struct {
 	err  error
 }
 
+func newInterruptibleStdoutCapture() *interruptibleStdoutCapture {
+	return &interruptibleStdoutCapture{done: make(chan struct{})}
+}
+
 func newFirstChunkGatedStdoutWriter() *firstChunkGatedStdoutWriter {
 	return &firstChunkGatedStdoutWriter{
 		gate: make(chan struct{}),
@@ -284,6 +347,117 @@ func isHumanFactoryLifecycleLine(line string) bool {
 		}
 	}
 	return false
+}
+
+func declaredRunCancelExitCode(t *testing.T, args []string) int {
+	t.Helper()
+
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		t.Fatalf("RunSubmitFamilyManifest() error = %v", err)
+	}
+	commandName := ""
+	for index := 1; index < len(args); index++ {
+		arg := args[index]
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		commandName = arg
+		break
+	}
+	if commandName != "run" {
+		t.Fatalf("args %v do not select you run", args)
+	}
+	for _, command := range manifest.Commands {
+		if command.Name != commandName {
+			continue
+		}
+		for _, exit := range command.Exits {
+			if exit.Kind == "cancel" {
+				return exit.Code
+			}
+		}
+	}
+	t.Fatalf("command %q missing cancel exit in run/submit manifest", commandName)
+	return -1
+}
+
+func runGoalHumanInterruptibleResponseStream(
+	t *testing.T,
+	externalWork *cancellableExternalWorkRunner,
+	stdout *interruptibleStdoutCapture,
+) []string {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	support.InstallPackagedFactory(t, homeDir, goalFactoryName)
+	mockWorkersPath := support.WriteMockWorkersConfig(t, writerFailureGoalMockWorkers())
+	args := []string{
+		"you", "run", "--named", goalFactoryName,
+		"--with-mock-workers", mockWorkersPath,
+		"--no-record", "--output", "response-stream",
+		"deterministic human text-stream interrupt contract",
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	stdout.cancel = cancel
+	inputs := support.FakeInputs(ctx, args)
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+	inputs.Input.Stdout = stdout
+	inputs.Input.Stderr = &stdout.diagnostic
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: externalWork,
+	})
+
+	go func() {
+		stdout.err = process.Execute(inputs.Input)
+		close(stdout.done)
+	}()
+
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-stdout.done:
+		case <-time.After(humanTextStreamScenarioTimeout):
+			t.Errorf("timed out waiting for interrupt invocation cleanup")
+		}
+	})
+	return args
+}
+
+type interruptibleStdoutCapture struct {
+	cancel context.CancelFunc
+
+	mu         sync.Mutex
+	buffer     bytes.Buffer
+	diagnostic bytes.Buffer
+
+	done chan struct{}
+	err  error
+}
+
+func (capture *interruptibleStdoutCapture) Write(payload []byte) (int, error) {
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	return capture.buffer.Write(payload)
+}
+
+func (capture *interruptibleStdoutCapture) String() string {
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	return capture.buffer.String()
+}
+
+func waitForInterruptibleStdoutLifecycle(t *testing.T, capture *interruptibleStdoutCapture) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if containsHumanLifecycleLine(capture.String()) {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for human lifecycle stdout before interrupt\nstdout:\n%s", capture.String())
 }
 
 func runGoalHumanResponseStreamWithStdout(t *testing.T, stdout *firstChunkGatedStdoutWriter) {
