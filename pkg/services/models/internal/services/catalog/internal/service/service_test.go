@@ -339,7 +339,7 @@ func TestCatalogOperationsHonorCancellationBeforeAndDuringReadinessQuery(t *test
 	queryStarted := make(chan struct{})
 	service, err := catalogwire.NewService(
 		scopes,
-		func(ctx context.Context, _ models.RuntimeScopeConfig, _ models.Detail) (models.Runtime, error) {
+		func(ctx context.Context, _ models.RuntimeScopeRef, _ models.RuntimeScopeConfig, _ models.Detail) (models.Runtime, error) {
 			close(queryStarted)
 			<-ctx.Done()
 			return models.Runtime{}, ctx.Err()
@@ -405,7 +405,7 @@ func TestReadinessDependencyFailuresAreSanitizedAsUnavailable(t *testing.T) {
 	scopes := newRuntimeScopes(t, "catalog-readiness-failure")
 	service, err := catalogwire.NewService(
 		scopes,
-		func(context.Context, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+		func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
 			return models.Runtime{}, errors.New(`inspect C:\private\model-cache: access denied`)
 		},
 	)

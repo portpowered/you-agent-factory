@@ -9,35 +9,13 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelassets "github.com/portpowered/infinite-you/pkg/services/models/internal/assets"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
+	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
 )
-
-func TestNewRootRejectsMissingHostPlatform(t *testing.T) {
-	t.Parallel()
-
-	for _, platform := range []localmodels.HostPlatform{
-		{Architecture: "amd64"},
-		{OperatingSystem: "linux"},
-		{OperatingSystem: " ", Architecture: "amd64"},
-		{OperatingSystem: "linux", Architecture: " "},
-	} {
-		opener, err := NewRoot(
-			platform,
-			nil, modelassets.Endpoints{},
-			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-			nil, nil, nil, nil, nil, nil, nil, nil,
-			nil, nil,
-		)
-		if opener != nil || !errors.Is(err, ErrInvalidDependencies) || !strings.Contains(err.Error(), "model asset host platform") {
-			t.Fatalf("NewRoot(%#v) = (%#v, %v), want missing host-platform dependency", platform, opener, err)
-		}
-	}
-}
 
 func TestNewServiceRetainsExplicitDependencies(t *testing.T) {
 	t.Parallel()
@@ -343,7 +321,7 @@ func TestRootCatalogMatchesDirectPrivateCatalogBehavior(t *testing.T) {
 	}
 	privateCatalog, err := catalogwire.NewService(
 		scopes,
-		func(context.Context, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+		func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
 			return currentReadiness.Clone(), nil
 		},
 	)
@@ -384,6 +362,61 @@ func TestRootCatalogMatchesDirectPrivateCatalogBehavior(t *testing.T) {
 	assertRootReadinessMatchesPrivate(t, root, privateCatalog, opened.Scope, currentReadiness)
 }
 
+func TestRootDelegatesAssetPreparation(t *testing.T) {
+	t.Parallel()
+
+	want := models.PrepareModelAssetsResult{
+		Outcome: models.AssetPreparationAlreadyAvailable,
+		Asset: models.AssetSnapshot{
+			ModelName: "scoped-model", Readiness: models.AssetReadinessAvailable,
+		},
+	}
+	privateAssets := &preparationAssetService{result: want}
+	root := &Root{assets: privateAssets}
+	request := models.PrepareModelAssetsRequest{Name: "scoped-model"}
+	got, err := root.PrepareModelAssets(context.Background(), request)
+	if err != nil {
+		t.Fatalf("PrepareModelAssets: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) || privateAssets.request != request {
+		t.Fatalf("PrepareModelAssets = %#v request %#v, want %#v / %#v", got, privateAssets.request, want, request)
+	}
+}
+
+type preparationAssetService struct {
+	request models.PrepareModelAssetsRequest
+	result  models.PrepareModelAssetsResult
+}
+
+func (service *preparationAssetService) PrepareModelAssets(
+	_ context.Context,
+	request models.PrepareModelAssetsRequest,
+) (models.PrepareModelAssetsResult, error) {
+	service.request = request
+	return service.result, nil
+}
+
+func (*preparationAssetService) InspectModelAssets(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (models.InspectModelAssetsResult, error) {
+	return models.InspectModelAssetsResult{}, nil
+}
+
+func (*preparationAssetService) ResolveRuntimeCache(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (scopedassets.RuntimeCacheLayout, error) {
+	return scopedassets.RuntimeCacheLayout{}, nil
+}
+
+func (*preparationAssetService) InspectRuntimeCache(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (scopedassets.RuntimeCacheInspection, error) {
+	return scopedassets.RuntimeCacheInspection{}, nil
+}
+
 func TestRootCatalogMatchesDirectPrivateCatalogFailures(t *testing.T) {
 	t.Parallel()
 
@@ -394,7 +427,7 @@ func TestRootCatalogMatchesDirectPrivateCatalogFailures(t *testing.T) {
 	readinessErr := error(nil)
 	privateCatalog, err := catalogwire.NewService(
 		scopes,
-		func(context.Context, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+		func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
 			return models.Runtime{}, readinessErr
 		},
 	)
@@ -476,7 +509,7 @@ func TestScopedCatalogPreservesCompatibilityBehavior(t *testing.T) {
 	}
 	privateCatalog, err := catalogwire.NewService(
 		scopes,
-		func(context.Context, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+		func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
 			return currentReadiness.Clone(), nil
 		},
 	)

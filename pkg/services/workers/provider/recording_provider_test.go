@@ -268,9 +268,7 @@ func TestRecordingProvider_Infer_SuccessPreservesProviderSessionAndSafeDiagnosti
 		"claude",
 		"claude-sonnet-4",
 		map[string]string{
-			"worker_type":       "worker-a",
-			"worktree":          "feature-worktree",
-			"working_directory": "C:\\repo",
+			"worker_type": "worker-a",
 		},
 		map[string]string{
 			"content_bytes":             "17",
@@ -321,9 +319,7 @@ func TestRecordingProvider_Infer_CursorSessionMetadataIsCanonicalizedInEvents(t 
 		string(modelprovider.ProviderCursor),
 		"gpt-5",
 		map[string]string{
-			"worker_type":       "worker-a",
-			"worktree":          "feature-worktree",
-			"working_directory": "C:\\repo",
+			"worker_type": "worker-a",
 		},
 		map[string]string{
 			"content_bytes":             "17",
@@ -377,9 +373,7 @@ func TestRecordingProvider_Infer_FailureZeroExitCodeStillPreservesProviderSessio
 		"claude",
 		"claude-sonnet-4",
 		map[string]string{
-			"worker_type":       "worker-a",
-			"worktree":          "feature-worktree",
-			"working_directory": "C:\\repo",
+			"worker_type": "worker-a",
 		},
 		map[string]string{
 			"retry_count": "0",
@@ -536,8 +530,14 @@ func TestRecordingProvider_Infer_MissingInnerProviderEmitsMisconfiguredFailureEv
 		t.Fatalf("retry_count = %q, want 0", responseMetadata["retry_count"])
 	}
 	requestMetadata := recordingProviderStringMapValue(response.Diagnostics.Provider.RequestMetadata)
-	if requestMetadata["worker_type"] != "worker-a" || requestMetadata["working_directory"] != "C:\\repo" || requestMetadata["worktree"] != "feature-worktree" {
-		t.Fatalf("request metadata = %#v, want worker_type/working_directory/worktree", requestMetadata)
+	if requestMetadata["worker_type"] != "worker-a" {
+		t.Fatalf("request metadata = %#v, want worker_type", requestMetadata)
+	}
+	if _, ok := requestMetadata["working_directory"]; ok {
+		t.Fatalf("request metadata = %#v, want working_directory redacted", requestMetadata)
+	}
+	if _, ok := requestMetadata["worktree"]; ok {
+		t.Fatalf("request metadata = %#v, want worktree redacted", requestMetadata)
 	}
 }
 

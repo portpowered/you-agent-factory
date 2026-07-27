@@ -18,4 +18,9 @@ type Service interface {
 // ReadinessQuery reads current Models-owned readiness facts for one validated
 // catalog model. Inputs and outputs are detached values; implementations must
 // honor context cancellation and must not expose runtime or cache handles.
-type ReadinessQuery func(context.Context, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error)
+type ReadinessQuery func(
+	context.Context,
+	models.RuntimeScopeRef,
+	models.RuntimeScopeConfig,
+	models.Detail,
+) (models.Runtime, error)
