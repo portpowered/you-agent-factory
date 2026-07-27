@@ -128,6 +128,42 @@ func (api *DurableAPI) ReadDurableFactorySessionEvents(ctx context.Context, sess
 	return stream, nil
 }
 
+func (api *DurableAPI) SubscribeDurableFactoryResponseEvents(
+	ctx context.Context,
+	request factorysessionexecution.ResponseEventSubscriptionRequest,
+) (apisurface.FactoryResponseEventSubscription, error) {
+	if subscriber, ok := api.execution.(interface {
+		SubscribeDurableFactoryResponseEvents(context.Context, factorysessionexecution.ResponseEventSubscriptionRequest) (*factorysessionexecution.ResponseEventCursor, error)
+	}); ok {
+		cursor, err := subscriber.SubscribeDurableFactoryResponseEvents(ctx, request)
+		if err != nil {
+			if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+				return nil, apisurface.ErrFactorySessionNotFound
+			}
+			return nil, err
+		}
+		return NewResponseEventSubscription(cursor), nil
+	}
+	execution, err := api.executionService()
+	if err != nil {
+		return nil, err
+	}
+	direct, ok := execution.(interface {
+		SubscribeResponseEvents(context.Context, string, factorysessionexecution.ResponseEventSubscriptionRequest) (*factorysessionexecution.ResponseEventCursor, error)
+	})
+	if !ok {
+		return nil, factorysessionexecution.ErrRuntimeNotAvailable
+	}
+	cursor, err := direct.SubscribeResponseEvents(ctx, request.SessionID, request)
+	if err != nil {
+		if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+			return nil, apisurface.ErrFactorySessionNotFound
+		}
+		return nil, err
+	}
+	return NewResponseEventSubscription(cursor), nil
+}
+
 func (api *DurableAPI) ProbeDurableFactorySessionEvents(ctx context.Context, sessionID string, reconnect factorysessionexecution.EventReconnectRequest) error {
 	if api == nil || api.lifecycle == nil {
 		return factorysessionexecution.ErrExecutionServiceNotConfigured

@@ -125,6 +125,7 @@ type DurableSessionProjectionAPI interface {
 	GetDurableFactorySessionArtifact(ctx context.Context, sessionID, artifactID string) (factoryapi.FactorySessionArtifactDetail, error)
 	ReadDurableFactorySessionEvents(ctx context.Context, sessionID string, request factorysessions.EventReconnectRequest) (*interfaces.FactoryEventStream, error)
 	ProbeDurableFactorySessionEvents(ctx context.Context, sessionID string, request factorysessions.EventReconnectRequest) error
+	SubscribeDurableFactoryResponseEvents(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (FactoryResponseEventSubscription, error)
 }
 
 // FactoryInvocationResult carries the runtime-owned outcome of one session

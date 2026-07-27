@@ -463,6 +463,12 @@ func provideFactorySessionExecutionFactory(
 	stores factorysessionwire.RuntimePersistenceStoreFactory,
 	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
+	responseEventIDs factorysessions.ResponseEventIDGenerator,
+	invocation factorysessionwire.WorkerInvocationFactory,
+	invocationWithProgress factorysessionwire.WorkerInvocationWithProgressFactory,
+	allocator agypty.PTYAllocator,
+	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
+	edges serviceedges.Edges,
 ) factorysessionwire.FactorySessionExecutionFactory {
 	return func(
 		projectRoot string,
@@ -472,11 +478,26 @@ func provideFactorySessionExecutionFactory(
 		workerPresetIDs map[string]struct{},
 		workerSettings factoryruntime.JavaScriptWorkerSettings,
 	) (factorysessions.ExecutionService, error) {
+		executor := workerinvocation.NewExecutor(provider)
+		var liveChildInvocation factorysessionwire.LiveChildInvocationFactory
+		if executor == nil && invocation != nil && adaptRunner != nil && allocator != nil && edges.ProviderCommandRunner != nil {
+			liveChild, err := invocation(adaptRunner(edges.ProviderCommandRunner), allocator)
+			if err != nil {
+				return nil, err
+			}
+			executor = liveChild
+			if invocationWithProgress != nil {
+				runner := adaptRunner(edges.ProviderCommandRunner)
+				liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
+					return invocationWithProgress(runner, allocator, publisher)
+				}
+			}
+		}
 		return factorysessionwire.NewDurableExecution(
 			projectRoot,
 			persistencePolicy,
 			stores,
-			workerinvocation.NewExecutor(provider),
+			executor,
 			clock,
 			syncWaits,
 			factorycheckpointsummary.New(),
@@ -485,6 +506,8 @@ func provideFactorySessionExecutionFactory(
 			workerSettings,
 			recordingWriter,
 			sessionIDs,
+			liveChildInvocation,
+			responseEventIDs,
 		)
 	}
 }
@@ -817,6 +840,37 @@ func provideWorkerHostedPollersFactory(edges serviceedges.Edges) (factorysession
 
 func provideWorkersLocalRuntimeHooksFactory() factorysessionwire.WorkersLocalRuntimeHooksFactory {
 	return workersservice.LocalRuntimeHooks
+}
+
+func provideWorkerInvocationWithProgressFactory(edges serviceedges.Edges) factorysessionwire.WorkerInvocationWithProgressFactory {
+	commandClock := edges.Clock
+	if commandClock == nil {
+		commandClock = platformclock.Real{}
+	}
+	resolveSymlinks := edges.WorkersResolveSymlinks
+	if resolveSymlinks == nil {
+		resolveSymlinks = filepath.EvalSymlinks
+	}
+	executableLocator := edges.WorkersExecutableLocator
+	if executableLocator == nil {
+		executableLocator = platformprocess.HostExecutableLocator{}
+	}
+	executableInspector := edges.WorkersExecutablePathInspector
+	if executableInspector == nil {
+		executableInspector = platformfilesystem.Local{}
+	}
+	executableFiles := edges.WorkersExecutableFileReader
+	if executableFiles == nil {
+		executableFiles = platformfilesystem.Local{}
+	}
+	operatingSystem := resolveWorkersOperatingSystem(edges)
+	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
+	return func(runner workers.CommandRunner, allocator agypty.PTYAllocator, publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
+		return workersservice.NewInvocationWithProgress(
+			runner, commandClock, allocator, resolveSymlinks,
+			executableLocator, executableInspector, executableFiles, operatingSystem, publisher, temporaryFiles,
+		)
+	}
 }
 
 func provideWorkerInvocationFactory(edges serviceedges.Edges) factorysessionwire.WorkerInvocationFactory {

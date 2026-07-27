@@ -8,6 +8,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -108,6 +109,7 @@ func (s *JavaScriptRuntimeService) recordCanonicalTerminalState(target *runtimeS
 		return err
 	}
 	applyRuntimeSessionFields(target, candidate)
+	completeSessionResponseEvents(target)
 	target.runtimeRecords = cloneRuntimeRecords(candidate.runtimeRecords)
 	target.checkpointSummary = cloneCheckpointSummary(candidate.checkpointSummary)
 	target.startRequest = cloneStartRequestPtr(candidate.startRequest)
@@ -341,6 +343,9 @@ func NewJavaScriptExecutionService(
 	workerSettings factory.JavaScriptWorkerSettings,
 	recordingWriter recording.PortableRecordingWriter,
 	generateSessionID internalcontracts.SessionIDGenerator,
+	liveChildInvocation LiveChildInvocationFactory,
+	generateResponseEventID factorysessions.ResponseEventIDGenerator,
+	responseStreams responsestreamservice.Service,
 ) (Service, error) {
 	projectRoot = strings.TrimSpace(projectRoot)
 	if projectRoot == "" {
@@ -384,6 +389,9 @@ func NewJavaScriptExecutionService(
 		workflowDefinitions, workflowRuntime, childValues,
 		workerPresetIDs, workerSettings, recordingWriter,
 		generateSessionID,
+		liveChildInvocation,
+		generateResponseEventID,
+		responseStreams,
 	), nil
 }
 
