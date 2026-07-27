@@ -5689,26 +5689,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/workers/inference/fake_custom_integration_test.go",
-      "package": "you-agent-factory/tests/functional/workers/inference",
-      "scenario": "TestFakeCustomIntegrationCompletesFactoryDispatchThroughRootBuildProcess",
-      "lane": "short",
-      "destination": "tests/functional/workers/inference/selection_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/inference/fake_custom_integration_test.go",
-      "package": "you-agent-factory/tests/functional/workers/inference",
-      "scenario": "TestFakeCustomIntegrationRemainsInertThroughRootBuildProcessConstruction",
-      "lane": "short",
-      "destination": "tests/functional/workers/inference/selection_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/workers/inference/gemini/golden_test.go",
       "package": "you-agent-factory/tests/functional/workers/inference/gemini",
       "scenario": "TestGeminiClassifierRejectsStructuredLabelThroughRootBuildProcess",
@@ -5954,6 +5934,36 @@
       "scenario": "TestProviderTimeoutTerminatesChildProcessTree",
       "lane": "short",
       "destination": "tests/functional/workers/inference/process_cleanup_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/selection_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestExplicitProviderAndModelReachSelectedProviderEdge",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/selection_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/selection_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestUnknownProviderFailsBeforeProcessStart",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/selection_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/selection_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestWorkerProviderOverridesGlobalDefault",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/selection_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -6743,14 +6753,14 @@
       "workflow": 44,
       "workstations": 29
     },
-    "customer_top_level_Test_scenarios": 651,
+    "customer_top_level_Test_scenarios": 652,
     "files_with_customer_Test": 221,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 95,
-    "lane_short": 556,
+    "lane_short": 557,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
       "you-agent-factory/tests/functional/bootstrap_portability": 25,
@@ -6891,15 +6901,15 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T21:30:00Z",
-    "story": "ft-wave1-http-startup-shutdown-mergeability",
-    "live_customer_scenarios": 651,
-    "ledger_rows": 651,
+    "audited_at_utc": "2026-07-27T21:45:00Z",
+    "story": "ft-wave1-http-startup-shutdown-mergeability-rebase2",
+    "live_customer_scenarios": 652,
+    "ledger_rows": 652,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 556,
+    "lane_short": 557,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,

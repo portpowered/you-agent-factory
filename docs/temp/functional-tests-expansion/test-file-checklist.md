@@ -234,7 +234,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Inference workers — shared contract
 
-- [ ] `tests/functional/workers/inference/selection_test.go`
+- [x] `tests/functional/workers/inference/selection_test.go`
   - `TestExplicitProviderAndModelReachSelectedProviderEdge` covers selection.
   - `TestWorkerProviderOverridesGlobalDefault` covers precedence.
   - `TestUnknownProviderFailsBeforeProcessStart` covers validation.
