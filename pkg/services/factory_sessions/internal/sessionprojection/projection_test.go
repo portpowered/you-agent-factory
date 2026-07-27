@@ -998,3 +998,38 @@ func TestProjectRuntime_LifecycleControlStatusUnchangedWithoutControlEvents(t *t
 		t.Fatalf("lifecycleControlStatus = %#v, want RUNNING", runtime.LifecycleControlStatus)
 	}
 }
+
+func TestProjectRuntimeContract_UsesNeutralObservationForStatusProgressAndUsage(t *testing.T) {
+	now := time.Date(2026, 7, 27, 20, 0, 0, 0, time.UTC)
+	runtime := sessionprojection.ProjectRuntimeContract(ProjectionContext{
+		Observation: factoryruntime.Observation{
+			Status: factoryruntime.ObservationStatusActive,
+			Progress: factoryruntime.ObservationProgress{
+				TotalWorkCount:        4,
+				InFlightDispatchCount: 1,
+				WorkCategories: factoryruntime.ObservationWorkCategories{
+					Initial: 1, Processing: 2, Terminal: 1,
+				},
+			},
+			Resources: []factoryruntime.ObservationResourceView{{
+				ResourceID: "agent-slot", InUseCount: 1, AvailableCount: 2,
+			}},
+			Health: factoryruntime.ObservationHealth{
+				FactoryState:           "RUNNING",
+				LifecycleControlStatus: "RUNNING",
+			},
+		},
+		Now: now,
+	})
+	if runtime.Status != "ACTIVE" {
+		t.Fatalf("status = %q, want ACTIVE from observation", runtime.Status)
+	}
+	if runtime.Progress.TotalTokens != 4 || runtime.Progress.InFlightCount != 1 ||
+		runtime.Progress.Categories.Processing != 2 || runtime.Progress.FactoryState != "RUNNING" {
+		t.Fatalf("progress = %#v, want neutral observation projection", runtime.Progress)
+	}
+	if len(runtime.Usage.Resources) != 1 || runtime.Usage.Resources[0].Name != "agent-slot" ||
+		runtime.Usage.Resources[0].Available != 2 || runtime.Usage.Resources[0].Total != 3 {
+		t.Fatalf("usage = %#v, want agent-slot 2/3 from observation", runtime.Usage)
+	}
+}

@@ -29,6 +29,21 @@ type constructorWorkflowContracts struct {
 	factory.JavaScriptChildValues
 }
 
+func (c constructorWorkflowContracts) RunJavaScript(
+	ctx context.Context,
+	req factory.JavaScriptRuntimeRequest,
+	hooks factory.JavaScriptRuntimeHooks,
+) (factory.JavaScriptRuntimeOutcome, error) {
+	return c.Run(ctx, req, hooks)
+}
+
+func (c constructorWorkflowContracts) ResumeJavaScript(
+	summary factory.JavaScriptCompletedCheckpointSummary,
+	records []factory.JavaScriptRuntimeRecord,
+) factory.JavaScriptResumeContext {
+	return c.ResumeContext(summary, records)
+}
+
 // serviceConfig keeps table-driven constructor tests compact without restoring
 // a production dependency bag.
 type serviceConfig struct {

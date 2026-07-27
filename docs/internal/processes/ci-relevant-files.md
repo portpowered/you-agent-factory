@@ -185,6 +185,20 @@
   Catalog metadata infers domain `orchestration` and subsection
   `javascript/contracts` from the path; every top-level `Test*` needs a
   customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  TypeScript Factory loading functional coverage belongs in
+  `tests/functional/orchestration/javascript/loading/typescript_test.go`:
+  drive sync Factory Session execution through `support.BuildProcess` +
+  `support.FakeInputs` with `you --json run`, `--factory`, and
+  `--with-mock-workers`; scaffold file-backed factories with
+  `orchestrator.javascript.sourceRef` pointing to `.ts` workflow files that
+  require MVP TypeScript stripping; prove supported TypeScript transpiles and
+  runs to terminal `COMPLETED` primary outcomes that reflect typed source
+  execution with zero provider dispatch; prove deliberate type or syntax
+  failures fail before dispatch with customer-stable `workflow.source.syntaxError`
+  diagnostics that are actionable without private VM internals; prove
+  source-map remapping reports authored `.ts` line/column suffixes in failure
+  diagnostics rather than only emitted JavaScript locations. Substitute
+  external effects only through `edges.Edges`.
   JavaScript agent composition functional coverage belongs in
   `tests/functional/orchestration/javascript/composition/agent_test.go`:
   drive sync Factory Session execution through
@@ -398,9 +412,14 @@ Wave 0 functional-tests-expansion planning authority lives under
   `tests/functional` inventory coverage, checklist destination validity, and
   lane preservation against the companion JSON. When a deletion-only batch is
   fully consumed (all scenarios owned by destination cells with
-  `deletion_only_batch: n/a`), remove its id from
-  `internal/migrationledgercheck.ExpectedDeletionOnlyBatches` and mark the
-  batch `released` in `migration-ledger.md`.
+  `deletion_only_batch: n/a`; for example `runtime_api-delete-03-workstations-cron`),
+  remove the source scenarios and ledger rows, add destination rows with
+  `deletion_only_batch: n/a`, drop the batch id from
+  `internal/migrationledgercheck/check.go` `ExpectedDeletionOnlyBatches`, mark the
+  batch `released` in `migration-ledger.md`, update summary counts in
+  `migration-ledger-inventory.json`, retarget any specialty Make bindings, and
+  refresh `test-file-checklist.md` plus narrowly coupled baselines
+  (`package-structure-baseline.json`, `functional-undocumented-tests.json`).
   `make pkg-structure` enforces the domain-mirrored functional layout
   `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
   unclassified scenario packages are blocking, while existing nonconforming

@@ -732,6 +732,10 @@ func (fake *peerRootServiceFake) GetEngineStateSnapshotForSession(context.Contex
 	return nil, ErrSessionNotFound
 }
 
+func (fake *peerRootServiceFake) ObserveForSession(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
+	return factoryruntime.ObserveResult{}, ErrSessionNotFound
+}
+
 func (fake *peerRootServiceFake) PauseLiveFactorySession(context.Context, string, ControlRequest) (LifecycleControlResult, error) {
 	return LifecycleControlResult{}, ErrSessionNotFound
 }

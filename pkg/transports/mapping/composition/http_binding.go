@@ -64,7 +64,7 @@ func (binder *HTTPBinder) Bind(
 	mappedWork := workAPI{work: workService, sessions: sessions}
 	return HTTPBinding{
 		Runtime:            NewRuntimeAPI(legacyObservation, definitions),
-		FactoryStatus:      newFactoryStatusAPI(runtime, sessions, binder.statusProjector),
+		FactoryStatus:      newFactoryStatusAPI(runtime, sessions),
 		Sessions:           NewLiveSessionAPI(sessions),
 		Work:               mappedWork,
 		WorkRead:           mappedWork,

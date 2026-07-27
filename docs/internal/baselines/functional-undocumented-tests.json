@@ -51,6 +51,14 @@
       "name": "TestProviderPosture_Discovered_EnvDefaultResolvesWithoutFileProvider"
     },
     {
+      "file": "automations/filesystem_watcher_root_composition_test.go",
+      "name": "TestAutomationsFilesystemWatcherPreseedsThroughRuntimeLifecycle"
+    },
+    {
+      "file": "automations/filesystem_watcher_root_composition_test.go",
+      "name": "TestBuildProcessRemainsFilesystemWatcherInertBeforeRuntimeLifecycle"
+    },
+    {
       "file": "bootstrap_portability/agent_factory_export_import_fixture_test.go",
       "name": "TestAgentFactoryExportImportFixture_AuthoredLayoutInterpolatesProjectSpecificPromptContent"
     },
@@ -641,14 +649,6 @@
     {
       "file": "runtime_api/api_config_driven_submit_query_smoke_test.go",
       "name": "TestConfigDriven_RESTAPISubmitAndQuery"
-    },
-    {
-      "file": "runtime_api/api_cron_workstations_smoke_test.go",
-      "name": "TestCronWorkstations_ServiceModeExpiryConsumesStaleTriggerWithTerminalOutputAndDefaultWindow"
-    },
-    {
-      "file": "runtime_api/api_cron_workstations_smoke_test.go",
-      "name": "TestCronWorkstations_ServiceModeImplicitFailureRoutingMovesFailedCronWorkIntoFailedState"
     },
     {
       "file": "runtime_api/api_factory_event_mapping_test.go",
