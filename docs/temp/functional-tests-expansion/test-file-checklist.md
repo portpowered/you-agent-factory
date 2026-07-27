@@ -378,7 +378,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 - [x] `tests/functional/orchestration/javascript/events/javascript_test.go`
 
-- [ ] `tests/functional/orchestration/javascript/composition/for_each_test.go`
+- [x] `tests/functional/orchestration/javascript/composition/for_each_test.go`
   - `TestJavaScriptForEachDispatchesEveryInputOnce` covers cardinality.
   - `TestJavaScriptForEachPreservesInputResultCorrelation` covers identity.
   - `TestJavaScriptForEachEmptyInputDoesNotDispatch` covers empty input.
