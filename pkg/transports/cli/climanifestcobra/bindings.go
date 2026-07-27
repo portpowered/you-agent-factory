@@ -104,6 +104,46 @@ type persistentInputInvocation struct {
 	inputs   resolvedinput.Inputs
 }
 
+// LocalInputValues returns only the parsed local inputs declared by record.
+// Detached command families use it to avoid treating inherited root inputs as
+// locally owned values while still addressing every value by stable input ID.
+func LocalInputValues(cmd *cobra.Command, record climanifest.Command) (map[string]any, error) {
+	if cmd == nil {
+		return nil, fmt.Errorf("read local command inputs: command is required")
+	}
+	values := make(map[string]any, len(record.Arguments)+len(record.Flags))
+	for _, argument := range record.Arguments {
+		encoded, ok := cmd.Annotations[genericArgumentAnnotationPrefix+argument.ID]
+		if !ok {
+			return nil, fmt.Errorf("read local command argument %q: value is unavailable", argument.ID)
+		}
+		value, err := decodeArgumentValue(encoded)
+		if err != nil {
+			return nil, fmt.Errorf("read local command argument %q: %w", argument.ID, err)
+		}
+		values[argument.ID] = value
+	}
+	for _, flag := range record.Flags {
+		if flag.Scope != "local" {
+			continue
+		}
+		longName, ok := cmd.Annotations[genericInputAnnotationPrefix+flag.ID]
+		if !ok {
+			return nil, fmt.Errorf("read local command input %q: binding is unavailable", flag.ID)
+		}
+		parsed := lookupCommandFlag(cmd, longName)
+		if parsed == nil {
+			return nil, fmt.Errorf("read local command input %q: flag is unavailable", flag.ID)
+		}
+		getter, ok := parsed.Value.(interface{ Get() any })
+		if !ok {
+			return nil, fmt.Errorf("read local command input %q: flag has no typed value", flag.ID)
+		}
+		values[flag.ID] = cloneGenericInputValue(getter.Get())
+	}
+	return values, nil
+}
+
 func newPersistentInputResolver(
 	plan []plannedCommand,
 	targets map[string]*genericFlagValue,
