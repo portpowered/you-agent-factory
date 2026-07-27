@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"go.uber.org/zap"
+	"github.com/jonboulle/clockwork"
 )
 
 type scriptedEventWatcher struct {
@@ -51,8 +51,8 @@ func TestFileWatcher_InjectedEventProcessesAfterDirectoryRegistration(t *testing
 
 	submitter := &recordingSubmitter{submitted: make(chan struct{}, 1)}
 	watcher := newScriptedEventWatcher()
-	fw := newTestWatcher(dir, submitter, zap.NewNop(), nil, nil, localInputFiles{}, filepath.WalkDir)
-	fw.newWatcher = func() (fileEventWatcher, error) { return watcher, nil }
+	clock := clockwork.NewFakeClock()
+	fw := newDebouncedTestWatcher(dir, submitter, clock, watcher)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -60,6 +60,7 @@ func TestFileWatcher_InjectedEventProcessesAfterDirectoryRegistration(t *testing
 
 	waitForRegisteredDirectory(t, watcher.added, dir)
 	watcher.events <- fsnotify.Event{Name: path, Op: fsnotify.Create}
+	advanceDebounce(t, clock)
 	select {
 	case <-submitter.submitted:
 	case <-time.After(time.Second):
@@ -71,14 +72,7 @@ func TestFileWatcher_InjectedEventProcessesAfterDirectoryRegistration(t *testing
 	}
 
 	cancel()
-	select {
-	case err := <-done:
-		if err != context.Canceled {
-			t.Fatalf("Watch returned %v, want context canceled", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("Watch did not stop after cancellation")
-	}
+	waitForWatchDone(t, done)
 }
 
 func waitForRegisteredDirectory(t *testing.T, added <-chan string, want string) {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/jonboulle/clockwork"
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -40,6 +41,8 @@ type watcher struct {
 	walkDirectory   filesystemwatchers.DirectoryWalker
 	workRequestIDs  work.RequestIDGenerator
 	newWatcher      fileEventWatcherFactory
+	clock           clockwork.Clock
+	debounceWindow  time.Duration
 }
 
 type fileEventWatcher interface {
@@ -90,6 +93,14 @@ func newWatcher(config filesystemwatchers.Config) *watcher {
 			knownWorkTypes[workType] = true
 		}
 	}
+	clock := config.Clock
+	if clock == nil {
+		clock = clockwork.NewRealClock()
+	}
+	debounceWindow := config.DebounceWindow
+	if debounceWindow <= 0 {
+		debounceWindow = defaultDebounceWindow
+	}
 	return &watcher{
 		dir:             config.Dir,
 		submit:          config.Submitter,
@@ -100,6 +111,8 @@ func newWatcher(config filesystemwatchers.Config) *watcher {
 		walkDirectory:   config.WalkDirectory,
 		workRequestIDs:  config.WorkRequestIDs,
 		newWatcher:      newFSNotifyEventWatcher,
+		clock:           clock,
+		debounceWindow:  debounceWindow,
 	}
 }
 
@@ -118,15 +131,19 @@ func (fw *watcher) Watch(ctx context.Context) error {
 	fw.logger.Info("file watcher started",
 		zap.String("dir", fw.dir))
 
+	scheduler := newDebounceScheduler(fw.clock, fw.debounceWindow)
+	defer scheduler.cancelAll()
+
 	for {
 		select {
 		case <-ctx.Done():
+			scheduler.cancelAll()
 			return ctx.Err()
 		case event, ok := <-watcher.Events():
 			if !ok {
 				return nil
 			}
-			if event.Op&fsnotify.Create == 0 {
+			if !isWatchedFileEvent(event.Op) {
 				continue
 			}
 
@@ -138,17 +155,27 @@ func (fw *watcher) Watch(ctx context.Context) error {
 				continue
 			}
 			if info.IsDir() {
-				if err := watcher.Add(event.Name); err != nil {
-					fw.logger.Warn("failed to watch new directory",
-						zap.String("path", event.Name), zap.Error(err))
+				if event.Op&fsnotify.Create != 0 {
+					if err := watcher.Add(event.Name); err != nil {
+						fw.logger.Warn("failed to watch new directory",
+							zap.String("path", event.Name), zap.Error(err))
+					}
 				}
 				continue
 			}
 
-			if err := fw.handleFile(ctx, event.Name); err != nil {
-				fw.logger.Error("failed to handle file",
-					zap.String("path", event.Name), zap.Error(err))
-			}
+			path := event.Name
+			scheduler.schedule(path, func() {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				if err := fw.handleFile(ctx, path); err != nil {
+					fw.logger.Error("failed to handle file",
+						zap.String("path", path), zap.Error(err))
+				}
+			})
 		case err, ok := <-watcher.Errors():
 			if !ok {
 				return nil
@@ -329,6 +356,10 @@ func (fw *watcher) watchExistingDirs(watcher fileEventWatcher) error {
 		}
 	}
 	return nil
+}
+
+func isWatchedFileEvent(op fsnotify.Op) bool {
+	return op&(fsnotify.Create|fsnotify.Write) != 0
 }
 
 // isTempFile returns true if the filename looks like a temporary file.

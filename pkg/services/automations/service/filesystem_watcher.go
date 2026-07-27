@@ -20,5 +20,7 @@ func (s *Service) NewFilesystemWatcher(config automations.FilesystemWatcherConfi
 		WalkDirectory:     filesystemwatchers.DirectoryWalker(config.WalkDirectory),
 		WorkRequestIDs:    config.WorkRequestIDs,
 		Submitter:         filesystemwatchers.WorkRequestSubmitter(config.Submitter),
+		Clock:             s.supervisorClock(),
+		DebounceWindow:    config.DebounceWindow,
 	})
 }

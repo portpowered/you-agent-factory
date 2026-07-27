@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sync"
+	"time"
 
 	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -44,6 +45,7 @@ type FilesystemWatcherConfig struct {
 	WalkDirectory     FilesystemDirectoryWalker
 	WorkRequestIDs    work.RequestIDGenerator
 	Submitter         WorkRequestSubmitter
+	DebounceWindow    time.Duration
 }
 
 // FilesystemWatcherFactory constructs inert filesystem watchers through the

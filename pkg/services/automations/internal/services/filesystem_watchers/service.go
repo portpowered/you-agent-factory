@@ -7,7 +7,9 @@ package filesystem_watchers
 import (
 	"context"
 	"io/fs"
+	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
@@ -38,6 +40,8 @@ type Config struct {
 	WalkDirectory     DirectoryWalker
 	WorkRequestIDs    work.RequestIDGenerator
 	Submitter         WorkRequestSubmitter
+	Clock             clockwork.Clock
+	DebounceWindow    time.Duration
 }
 
 // Watcher supervises one configured input root. Construction is inert; Watch and
