@@ -8,6 +8,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 )
@@ -61,7 +62,13 @@ func (h *liveRuntimeEffectHost) SessionFactory(_ string) (factoryruntime.Service
 	return h.factory, nil
 }
 
-func newLiveRuntimeCompositionGateway(t *testing.T, host *liveRuntimeEffectHost) *factorysessionservice.Service {
+type liveRuntimeGatewayHost interface {
+	factorysessionservice.Host
+	stream.SessionResolver
+	stream.Observer
+}
+
+func newLiveRuntimeCompositionGateway(t *testing.T, host liveRuntimeGatewayHost) *factorysessionservice.Service {
 	t.Helper()
 	responseService, err := responsestreamwire.NewService(func() string { return "response-event-live-runtime" })
 	if err != nil {
