@@ -56,19 +56,9 @@ func newAttempt(effect Effect) execution.Attempt {
 	) (providers.ExecuteResult, error) {
 		decoder := newDecoder()
 		effectResult, effectErr := effect.Execute(ctx, request, decoder.observe)
-		if effectErr != nil {
-			var attemptFailure execution.AttemptFailure
-			if errors.As(effectErr, &attemptFailure) {
-				return providers.ExecuteResult{}, effectErr
-			}
-			return providers.ExecuteResult{}, execution.AttemptFailure{
-				NativeError: effectErr,
-			}
-		}
-		if flushErr := decoder.flush(); flushErr != nil {
-			return providers.ExecuteResult{}, execution.AttemptFailure{
-				FlushError: flushErr,
-			}
+		flushErr := decoder.flush()
+		if failure, failed := collectFailure(decoder, effectErr, flushErr); failed {
+			return providers.ExecuteResult{}, failure
 		}
 		content, session, finalErr := decoder.final()
 		if finalErr != nil {
@@ -86,6 +76,57 @@ func newAttempt(effect Effect) execution.Attempt {
 			},
 		}, nil
 	}
+}
+
+func collectFailure(
+	decoder *decoder,
+	effectErr error,
+	flushErr error,
+) (execution.AttemptFailure, bool) {
+	failure, failed := nativeFailure(effectErr)
+	if decoder.declaredFailure != nil {
+		declared := decoder.declaredFailure.Clone()
+		if failure.Declared == nil ||
+			declared.Kind != providers.ExecuteFailureKindUnknown ||
+			failure.Declared.Kind == providers.ExecuteFailureKindUnknown {
+			failure.Declared = &declared
+		}
+		failed = true
+	}
+	if decoder.decodeErr != nil {
+		failure.DecodeError = decoder.decodeErr
+		failed = true
+	}
+	if flushErr != nil {
+		failure.FlushError = flushErr
+		failed = true
+	}
+	return failure, failed
+}
+
+func nativeFailure(err error) (execution.AttemptFailure, bool) {
+	if err == nil {
+		return execution.AttemptFailure{}, false
+	}
+	var lifecycle execution.AttemptFailure
+	if errors.As(err, &lifecycle) {
+		return lifecycle, true
+	}
+	var lifecyclePointer *execution.AttemptFailure
+	if errors.As(err, &lifecyclePointer) && lifecyclePointer != nil {
+		return *lifecyclePointer, true
+	}
+	var declared providers.ExecuteFailure
+	if errors.As(err, &declared) {
+		declared = declared.Clone()
+		return execution.AttemptFailure{Declared: &declared}, true
+	}
+	var declaredPointer *providers.ExecuteFailure
+	if errors.As(err, &declaredPointer) && declaredPointer != nil {
+		declared = declaredPointer.Clone()
+		return execution.AttemptFailure{Declared: &declared}, true
+	}
+	return execution.AttemptFailure{NativeError: err}, true
 }
 
 func unavailableAttempt(

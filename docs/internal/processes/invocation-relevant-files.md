@@ -319,7 +319,11 @@ primary-result behavior.
   candidate, and detached session extraction invocation-local. Inject the
   native effect into the adapter registration; do not let adapter construction
   start a process or let Workers-owned request/response types cross this
-  boundary.
+  boundary. Reconcile context termination, provider-declared terminal records,
+  native effect errors, decode errors, flush errors, and final-selection errors
+  before returning: context wins, recognized declared failures outrank unknown
+  native outcomes, and every failure returns a zero result with only bounded
+  Providers-owned diagnostics.
 - Keep reusable one-attempt conformance under the Providers-private Execution
   testkit. Build the singular Providers root around a fresh
   controllable adapter for each scenario, observe only Providers-owned

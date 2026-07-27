@@ -15,12 +15,15 @@ const (
 )
 
 type decoder struct {
-	pending      []byte
-	discardLine  bool
-	flushed      bool
-	sessionID    string
-	finalContent string
-	progress     []providers.ExecuteProgress
+	pending         []byte
+	discardLine     bool
+	flushed         bool
+	sessionID       string
+	finalContent    string
+	progress        []providers.ExecuteProgress
+	declaredFailure *providers.ExecuteFailure
+	declaredKnown   bool
+	decodeErr       error
 }
 
 type recordEnvelope struct {
@@ -28,6 +31,14 @@ type recordEnvelope struct {
 	ThreadID string          `json:"thread_id"`
 	Item     json.RawMessage `json:"item"`
 	Usage    *usageRecord    `json:"usage"`
+	Error    *errorRecord    `json:"error"`
+	Message  string          `json:"message"`
+}
+
+type errorRecord struct {
+	Type    string `json:"type"`
+	Status  int    `json:"status"`
+	Message string `json:"message"`
 }
 
 type usageRecord struct {
@@ -85,14 +96,14 @@ func (decoder *decoder) observe(chunk []byte) error {
 			if len(decoder.pending)+len(chunk) > maxRecordBytes {
 				decoder.pending = nil
 				decoder.discardLine = true
-				decoder.addDiagnostic("oversized_record")
+				decoder.markDecodeFailure("oversized_record")
 				return nil
 			}
 			decoder.pending = append(decoder.pending, chunk...)
 			return nil
 		}
 		if len(decoder.pending)+newline > maxRecordBytes {
-			decoder.addDiagnostic("oversized_record")
+			decoder.markDecodeFailure("oversized_record")
 		} else {
 			decoder.pending = append(decoder.pending, chunk[:newline]...)
 			decoder.decodeRecord(decoder.pending)
@@ -152,14 +163,14 @@ func (decoder *decoder) decodeRecord(raw []byte) {
 	}
 	var record recordEnvelope
 	if json.Unmarshal(raw, &record) != nil {
-		decoder.addDiagnostic("malformed_json")
+		decoder.markDecodeFailure("malformed_json")
 		return
 	}
 	switch record.Type {
 	case "thread.started":
 		decoder.sessionID = strings.TrimSpace(record.ThreadID)
 		if decoder.sessionID == "" {
-			decoder.addDiagnostic("malformed_thread")
+			decoder.markDecodeFailure("malformed_thread")
 			return
 		}
 		decoder.addProgress("session.started", "started", nil)
@@ -167,12 +178,24 @@ func (decoder *decoder) decodeRecord(raw []byte) {
 		decoder.addProgress("turn.started", "started", nil)
 	case "turn.completed":
 		if record.Usage == nil {
-			decoder.addDiagnostic("malformed_usage")
+			decoder.markDecodeFailure("malformed_usage")
 			return
 		}
 		detail, _ := json.Marshal(record.Usage)
 		decoder.addProgress("usage.updated", string(detail), nil)
 		decoder.addProgress("turn.completed", "completed", nil)
+	case "turn.failed":
+		if record.Error == nil || strings.TrimSpace(record.Error.Message) == "" {
+			decoder.markDecodeFailure("malformed_turn_failure")
+			return
+		}
+		decoder.declareFailure(*record.Error)
+	case "error":
+		if strings.TrimSpace(record.Message) == "" {
+			decoder.markDecodeFailure("malformed_error")
+			return
+		}
+		decoder.declareFailure(errorRecord{Message: record.Message})
 	case "item.started", "item.updated", "item.completed":
 		decoder.decodeItem(record.Type, record.Item)
 	default:
@@ -183,7 +206,7 @@ func (decoder *decoder) decodeRecord(raw []byte) {
 func (decoder *decoder) decodeItem(nativeType string, raw json.RawMessage) {
 	var item itemEnvelope
 	if json.Unmarshal(raw, &item) != nil || strings.TrimSpace(item.ID) == "" {
-		decoder.addDiagnostic("malformed_item")
+		decoder.markDecodeFailure("malformed_item")
 		return
 	}
 	item.ID = strings.TrimSpace(item.ID)
@@ -197,7 +220,7 @@ func (decoder *decoder) decodeItem(nativeType string, raw json.RawMessage) {
 		phase = messagePhase(phase)
 		detail := boundedDetail(item.Text)
 		if detail == "" {
-			decoder.addDiagnostic("malformed_message")
+			decoder.markDecodeFailure("malformed_message")
 			return
 		}
 		decoder.addProgress("message."+phase, detail, metadata)
@@ -246,6 +269,78 @@ func (decoder *decoder) addDiagnostic(code string) {
 	decoder.addProgress("diagnostic", "Codex stream record was omitted", map[string]string{
 		"code": code,
 	})
+}
+
+func (decoder *decoder) markDecodeFailure(code string) {
+	decoder.addDiagnostic(code)
+	if decoder.decodeErr == nil {
+		decoder.decodeErr = errors.New("Codex stream could not be decoded safely")
+	}
+}
+
+func (decoder *decoder) declareFailure(record errorRecord) {
+	failure := classifyDeclaredFailure(record)
+	known := failure.Kind != providers.ExecuteFailureKindUnknown
+	if decoder.declaredFailure == nil || known || !decoder.declaredKnown {
+		decoder.declaredFailure = &failure
+	}
+	decoder.declaredKnown = decoder.declaredKnown || known
+}
+
+func classifyDeclaredFailure(record errorRecord) providers.ExecuteFailure {
+	message := strings.ToLower(strings.TrimSpace(record.Message))
+	nativeType := strings.ToLower(strings.TrimSpace(record.Type))
+	kind := providers.ExecuteFailureKindUnknown
+	switch {
+	case nativeType == "authentication_error",
+		nativeType == "permission_error",
+		record.Status == 401, record.Status == 403,
+		strings.HasPrefix(message, "unexpected status 401"),
+		strings.HasPrefix(message, "unexpected status 403"):
+		kind = providers.ExecuteFailureKindAuthentication
+	case nativeType == "invalid_request_error",
+		record.Status == 400,
+		strings.HasPrefix(message, "unexpected status 400"):
+		kind = providers.ExecuteFailureKindInvalidRequest
+	case nativeType == "rate_limit_error",
+		nativeType == "overloaded_error",
+		record.Status == 429,
+		strings.HasPrefix(message, "unexpected status 429"),
+		strings.HasPrefix(message, "you've hit your usage limit"),
+		strings.HasPrefix(message, "selected model is at capacity"):
+		kind = providers.ExecuteFailureKindThrottled
+	case record.Status == 408,
+		strings.HasPrefix(message, "context deadline exceeded"),
+		strings.HasPrefix(message, "command timed out"),
+		strings.HasPrefix(message, "request timed out"),
+		strings.HasPrefix(message, "provider timeout"):
+		kind = providers.ExecuteFailureKindTimeout
+	case nativeType == "api_error",
+		nativeType == "server_error",
+		record.Status >= 500 && record.Status <= 599:
+		kind = providers.ExecuteFailureKindDependency
+	}
+	return providers.ExecuteFailure{
+		Kind:    kind,
+		Message: declaredFailureMessage(kind),
+	}
+}
+
+func declaredFailureMessage(kind providers.ExecuteFailureKind) string {
+	switch kind {
+	case providers.ExecuteFailureKindAuthentication:
+		return "Codex authentication failed"
+	case providers.ExecuteFailureKindInvalidRequest:
+		return "Codex rejected the request as invalid"
+	case providers.ExecuteFailureKindThrottled:
+		return "Codex is temporarily unavailable due to usage or capacity limits"
+	case providers.ExecuteFailureKindTimeout:
+		return "Codex request timed out"
+	case providers.ExecuteFailureKindDependency:
+		return "Codex encountered a temporary server error"
+	default:
+		return "Codex reported a terminal error"
+	}
 }
 
 func itemPhase(nativeType string, status string) string {
