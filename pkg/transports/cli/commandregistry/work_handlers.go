@@ -23,6 +23,8 @@ const (
 	workListMaxResultsInputID   = "you.work.list.flag.max-results"
 	workListNextTokenInputID    = "you.work.list.flag.next-token"
 	workListSessionInputID      = "you.work.list.flag.session"
+	workShowWorkIDInputID       = "you.work.show.arg.0"
+	workShowSessionInputID      = "you.work.show.flag.session"
 	workServerInputID           = "you.flag.server"
 	workJSONInputID             = "you.flag.json"
 	workVerboseInputID          = "you.flag.verbose"
@@ -50,6 +52,13 @@ type ResolvedWorkHandlers struct {
 // adapter. Each invocation maps resolved values into a fresh ListConfig.
 type ResolvedListBinding struct {
 	ListWork          func(workcli.ListConfig) error
+	DiagnosticsWriter func(*cobra.Command) io.Writer
+}
+
+// ResolvedShowBinding supplies the effects used by the Work show stable-input
+// adapter. Each invocation maps resolved values into a fresh ShowConfig.
+type ResolvedShowBinding struct {
+	ShowWork          func(workcli.ShowConfig) error
 	DiagnosticsWriter func(*cobra.Command) io.Writer
 }
 
@@ -125,6 +134,53 @@ func resolvedListConfig(
 		StateName: stateName, StateType: stateType, Name: name,
 		WorkTypeName: workTypeName, TraceID: traceID, SortBy: sortBy,
 		MaxResults: maxResults, NextToken: nextToken, JSON: globals.json,
+		Verbose: globals.verbose || globals.debug, Debug: globals.debug,
+		Output: cmd.OutOrStdout(),
+	}, nil
+}
+
+// ResolvedShowRunE maps canonical Work show input IDs into one transport
+// request without retaining Cobra-backed pointers between invocations.
+func ResolvedShowRunE(binding ResolvedShowBinding) ResolvedWorkRunE {
+	return func(
+		cmd *cobra.Command,
+		inputs resolvedinput.Inputs,
+		inherited resolvedinput.Inputs,
+	) error {
+		if binding.ShowWork == nil {
+			return fmt.Errorf("work show service is required")
+		}
+		cfg, err := resolvedShowConfig(cmd, inputs, inherited)
+		if err != nil {
+			return fmt.Errorf("resolve work show inputs: %w", err)
+		}
+		if binding.DiagnosticsWriter != nil {
+			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
+		}
+		return binding.ShowWork(cfg)
+	}
+}
+
+func resolvedShowConfig(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) (workcli.ShowConfig, error) {
+	workID, err := inputs.String(workShowWorkIDInputID)
+	if err != nil {
+		return workcli.ShowConfig{}, err
+	}
+	sessionID, err := inputs.String(workShowSessionInputID)
+	if err != nil {
+		return workcli.ShowConfig{}, err
+	}
+	globals, err := resolvedWorkGlobals(inherited)
+	if err != nil {
+		return workcli.ShowConfig{}, err
+	}
+	return workcli.ShowConfig{
+		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
+		WorkID: workID, JSON: globals.json,
 		Verbose: globals.verbose || globals.debug, Debug: globals.debug,
 		Output: cmd.OutOrStdout(),
 	}, nil

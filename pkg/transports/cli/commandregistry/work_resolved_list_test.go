@@ -314,6 +314,201 @@ func TestResolvedWorkListPublicCommandPreservesFailuresAndCancellation(t *testin
 	})
 }
 
+func TestResolvedShowRunEMapsStableInputsIntoFreshRequests(t *testing.T) {
+	var requests []workcli.ShowConfig
+	handler := commandregistry.ResolvedShowRunE(commandregistry.ResolvedShowBinding{
+		ShowWork: func(cfg workcli.ShowConfig) error {
+			requests = append(requests, cfg)
+			return nil
+		},
+		DiagnosticsWriter: func(cmd *cobra.Command) io.Writer {
+			return cmd.ErrOrStderr()
+		},
+	})
+
+	executeResolvedShow(t, handler, []string{
+		"--server", "https://factory.example", "--json", "--debug",
+		"work", "show", "--session", "session-alpha", "work-alpha",
+	}, io.Discard, io.Discard, context.Background())
+	executeResolvedShow(
+		t,
+		handler,
+		[]string{"work", "show", "work-beta"},
+		io.Discard,
+		io.Discard,
+		context.Background(),
+	)
+
+	if len(requests) != 2 {
+		t.Fatalf("requests = %d, want 2", len(requests))
+	}
+	assertResolvedShowConfig(t, requests[0], resolvedShowConfigValues{
+		server: "https://factory.example", sessionID: "session-alpha",
+		workID: "work-alpha", json: true, verbose: true, debug: true,
+	})
+	assertResolvedShowConfig(t, requests[1], resolvedShowConfigValues{
+		server: "http://localhost:7437", workID: "work-beta",
+	})
+}
+
+func TestResolvedWorkShowPublicCommandPreservesRoutesOutputsAndDiagnostics(t *testing.T) {
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.EscapedPath())
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(resolvedShowResponse()); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	run := resolvedShowTransportHandler(t)
+	var human bytes.Buffer
+	executeResolvedShow(t, run, []string{
+		"--server", server.URL, "work", "show", "work/review",
+	}, &human, io.Discard, context.Background())
+	assertResolvedShowHumanOutput(t, human.String())
+
+	var output bytes.Buffer
+	var diagnostics bytes.Buffer
+	executeResolvedShow(t, run, []string{
+		"--server", server.URL, "--json", "--verbose",
+		"work", "show", "--session", "session/beta", "work/review",
+	}, &output, &diagnostics, context.Background())
+
+	assertResolvedShowPaths(t, paths)
+	var response factoryapi.Work
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("JSON output = %q: %v", output.String(), err)
+	}
+	assertResolvedShowJSONAndDiagnostics(t, response, output.String(), diagnostics.String())
+}
+
+func TestResolvedWorkShowPublicCommandRejectsInvalidIdentitiesBeforeHTTP(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requests++
+	}))
+	defer server.Close()
+
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{name: "missing", args: nil, wantErr: "requires at least 1 arg(s)"},
+		{name: "extra", args: []string{"work-1", "work-2"}, wantErr: "accepts at most 1 arg"},
+		{name: "blank", args: []string{"   "}, wantErr: "work id is required"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			args := append(
+				[]string{"--server", server.URL, "work", "show"},
+				test.args...,
+			)
+			err := executeResolvedShowError(
+				t,
+				resolvedShowTransportHandler(t),
+				args,
+				io.Discard,
+				io.Discard,
+				context.Background(),
+			)
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("Execute() error = %v, want %q", err, test.wantErr)
+			}
+		})
+	}
+	if requests != 0 {
+		t.Fatalf("HTTP requests = %d, want zero for invalid identities", requests)
+	}
+}
+
+func TestResolvedWorkShowPublicCommandPreservesFailuresAndCancellation(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		body       string
+		wantErr    string
+	}{
+		{
+			name: "not found", statusCode: http.StatusNotFound,
+			body:    `{"message":"work not found"}`,
+			wantErr: `work "missing-work" not found: work not found`,
+		},
+		{
+			name: "server failure", statusCode: http.StatusInternalServerError,
+			body:    `{"message":"factory failed"}`,
+			wantErr: "get work failed (500): factory failed",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(test.statusCode)
+				_, _ = io.WriteString(w, test.body)
+			}))
+			defer server.Close()
+			err := executeResolvedShowError(
+				t,
+				resolvedShowTransportHandler(t),
+				[]string{"--server", server.URL, "work", "show", "missing-work"},
+				io.Discard,
+				io.Discard,
+				context.Background(),
+			)
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("Execute() error = %v, want %q", err, test.wantErr)
+			}
+		})
+	}
+
+	t.Run("cancellation", func(t *testing.T) {
+		requests := 0
+		server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			requests++
+		}))
+		defer server.Close()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		err := executeResolvedShowError(
+			t,
+			resolvedShowTransportHandler(t),
+			[]string{"--server", server.URL, "work", "show", "work-1"},
+			io.Discard,
+			io.Discard,
+			ctx,
+		)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Execute() error = %v, want context canceled", err)
+		}
+		if requests != 0 {
+			t.Fatalf("HTTP requests = %d, want zero after cancellation", requests)
+		}
+	})
+
+	t.Run("output writer", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"workId":"work-1","name":"Plan"}`)
+		}))
+		defer server.Close()
+		writeErr := errors.New("write failed")
+		err := executeResolvedShowError(
+			t,
+			resolvedShowTransportHandler(t),
+			[]string{"--server", server.URL, "work", "show", "work-1"},
+			errorWriter{err: writeErr},
+			io.Discard,
+			context.Background(),
+		)
+		if !errors.Is(err, writeErr) {
+			t.Fatalf("Execute() error = %v, want %v", err, writeErr)
+		}
+	})
+}
+
 func resolvedListTransportHandler(t *testing.T) commandregistry.ResolvedWorkRunE {
 	t.Helper()
 	return resolvedListTransportHandlerWithPreparation(t, resolvedListPreparation{})
@@ -394,6 +589,55 @@ func executeResolvedListError(
 	return root.Execute()
 }
 
+func resolvedShowTransportHandler(t *testing.T) commandregistry.ResolvedWorkRunE {
+	t.Helper()
+	return commandregistry.ResolvedShowRunE(commandregistry.ResolvedShowBinding{
+		ShowWork: workcli.NewShow(testHTTPProtocol(t)),
+		DiagnosticsWriter: func(cmd *cobra.Command) io.Writer {
+			return cmd.ErrOrStderr()
+		},
+	})
+}
+
+func executeResolvedShow(
+	t *testing.T,
+	show commandregistry.ResolvedWorkRunE,
+	args []string,
+	output io.Writer,
+	diagnostics io.Writer,
+	ctx context.Context,
+) {
+	t.Helper()
+	if err := executeResolvedShowError(t, show, args, output, diagnostics, ctx); err != nil {
+		t.Fatalf("Execute(%v) error = %v", args, err)
+	}
+}
+
+func executeResolvedShowError(
+	t *testing.T,
+	show commandregistry.ResolvedWorkRunE,
+	args []string,
+	output io.Writer,
+	diagnostics io.Writer,
+	ctx context.Context,
+) error {
+	t.Helper()
+	noop := func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
+		return nil
+	}
+	root, err := climanifestcobra.NewResolvedWorkCommandTree(commandregistry.ResolvedWorkHandlers{
+		List: noop, Show: show, Move: noop, Visualize: noop,
+	})
+	if err != nil {
+		t.Fatalf("NewResolvedWorkCommandTree() error = %v", err)
+	}
+	root.SetOut(output)
+	root.SetErr(diagnostics)
+	root.SetContext(ctx)
+	root.SetArgs(args)
+	return root.Execute()
+}
+
 type errorWriter struct {
 	err error
 }
@@ -418,6 +662,15 @@ type resolvedListConfigValues struct {
 	debug        bool
 }
 
+type resolvedShowConfigValues struct {
+	server    string
+	sessionID string
+	workID    string
+	json      bool
+	verbose   bool
+	debug     bool
+}
+
 func assertResolvedListConfig(
 	t *testing.T,
 	got workcli.ListConfig,
@@ -433,6 +686,94 @@ func assertResolvedListConfig(
 	}
 	if values != want {
 		t.Fatalf("list config values = %#v, want %#v", values, want)
+	}
+}
+
+func assertResolvedShowConfig(
+	t *testing.T,
+	got workcli.ShowConfig,
+	want resolvedShowConfigValues,
+) {
+	t.Helper()
+	values := resolvedShowConfigValues{
+		server: got.Server, sessionID: got.SessionID, workID: got.WorkID,
+		json: got.JSON, verbose: got.Verbose, debug: got.Debug,
+	}
+	if values != want {
+		t.Fatalf("show config values = %#v, want %#v", values, want)
+	}
+}
+
+func resolvedShowResponse() factoryapi.Work {
+	return factoryapi.Work{
+		Name:         "Review PRD",
+		WorkId:       stringPtr("work/review"),
+		WorkTypeName: stringPtr("story"),
+		State: &factoryapi.WorkState{
+			Name: "review",
+			Type: factoryapi.WorkStateTypePROCESSING,
+		},
+		TraceId: stringPtr("trace-1"),
+		StopSummary: &factoryapi.FactoryStopSummary{
+			SessionId:                "session/beta",
+			StopKind:                 factoryapi.FactoryStopKind("BLOCKED"),
+			WorkState:                stringPtr("story:blocked"),
+			LatestResultSummary:      stringPtr("provider timeout"),
+			SuggestedRecoverySurface: stringPtr("work repair"),
+			SuggestedRecoveryAction:  stringPtr("retry after repair"),
+		},
+	}
+}
+
+func assertResolvedShowHumanOutput(t *testing.T, output string) {
+	t.Helper()
+	for _, want := range []string{
+		"Work ID:\twork/review\n",
+		"Name:\tReview PRD\n",
+		"State type:\tPROCESSING\n",
+		"Stop summary:\tkind=BLOCKED session=session/beta state=story:blocked\n",
+		"Recovery action:\tretry after repair\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("human output = %q, want %q", output, want)
+		}
+	}
+}
+
+func assertResolvedShowPaths(t *testing.T, paths []string) {
+	t.Helper()
+	want := []string{
+		"/factory-sessions/~default/work/work%2Freview",
+		"/factory-sessions/session%2Fbeta/work/work%2Freview",
+	}
+	if len(paths) != len(want) {
+		t.Fatalf("paths = %v, want %v", paths, want)
+	}
+	for index := range want {
+		if paths[index] != want[index] {
+			t.Fatalf("path[%d] = %q, want %q", index, paths[index], want[index])
+		}
+	}
+}
+
+func assertResolvedShowJSONAndDiagnostics(
+	t *testing.T,
+	response factoryapi.Work,
+	output string,
+	diagnostics string,
+) {
+	t.Helper()
+	if response.WorkId == nil || *response.WorkId != "work/review" ||
+		response.StopSummary == nil || response.StopSummary.LatestResultSummary == nil {
+		t.Fatalf("JSON response = %#v, want API-shaped work and recovery detail", response)
+	}
+	if strings.Contains(output, "work show request") {
+		t.Fatalf("stdout contains diagnostics: %q", output)
+	}
+	if !strings.Contains(diagnostics, "work show request") ||
+		!strings.Contains(diagnostics, "session=session/beta") ||
+		!strings.Contains(diagnostics, "workId=work/review") {
+		t.Fatalf("diagnostics = %q", diagnostics)
 	}
 }
 
