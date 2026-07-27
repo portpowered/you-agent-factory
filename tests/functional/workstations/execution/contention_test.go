@@ -31,20 +31,19 @@ const (
 // through public Work and Factory Event projections.
 func TestEligibleWorkstationContentionChoosesOneDispatchOnly(t *testing.T) {
 	support.SkipLongFunctional(t, "slow execution-workstation contention sweep")
-	t.Run("competing_workstations_choose_exactly_one_dispatch", runCompetingWorkstationsChooseOne)
-	t.Run("shared_executor_resolves_distinct_workstations_in_order", runSharedExecutorWorkstationsInOrder)
-	t.Run("distinct_workers_resolve_their_bound_workstations", runDistinctWorkersAtBoundWorkstations)
+
+	t.Run("competing_workstations_choose_exactly_one_dispatch", runCompetingWorkstations)
+	t.Run("shared_executor_resolves_distinct_workstations_in_order", runSharedExecutorWorkstations)
+	t.Run("distinct_workers_resolve_their_bound_workstations", runDistinctWorkerWorkstations)
 }
 
-func runCompetingWorkstationsChooseOne(t *testing.T) {
+func runCompetingWorkstations(t *testing.T) {
 	dir := support.ScaffoldFactory(t, contendingExecutionFactoryConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"contended"}`))
 
-	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
-	)
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "Done. COMPLETE"})
 	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
 		t,
 		dir,
@@ -79,7 +78,7 @@ func runCompetingWorkstationsChooseOne(t *testing.T) {
 	}
 }
 
-func runSharedExecutorWorkstationsInOrder(t *testing.T) {
+func runSharedExecutorWorkstations(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"shared-executor"}`))
 
@@ -103,18 +102,8 @@ func runSharedExecutorWorkstationsInOrder(t *testing.T) {
 	}
 
 	workID := terminalTaskWorkIDAtState(t, listed, "done")
-	assertExactlyOneCompletedDispatchPerWorkAtWorkstation(
-		t,
-		dispatches,
-		workID,
-		statelessCollectorStage1Workstation,
-	)
-	assertExactlyOneCompletedDispatchPerWorkAtWorkstation(
-		t,
-		dispatches,
-		workID,
-		statelessCollectorStage2Workstation,
-	)
+	assertExactlyOneCompletedDispatchPerWorkAtWorkstation(t, dispatches, workID, statelessCollectorStage1Workstation)
+	assertExactlyOneCompletedDispatchPerWorkAtWorkstation(t, dispatches, workID, statelessCollectorStage2Workstation)
 
 	calls := provider.Calls()
 	if calls[0].WorkstationType != statelessCollectorStage1Workstation {
@@ -134,7 +123,7 @@ func runSharedExecutorWorkstationsInOrder(t *testing.T) {
 	}
 }
 
-func runDistinctWorkersAtBoundWorkstations(t *testing.T) {
+func runDistinctWorkerWorkstations(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"different-workers"}`))
 	rewriteStatelessCollectorForDifferentWorkers(t, dir)
@@ -163,18 +152,8 @@ func runDistinctWorkersAtBoundWorkstations(t *testing.T) {
 	}
 
 	workID := terminalTaskWorkIDAtState(t, listed, "done")
-	assertExactlyOneCompletedDispatchPerWorkAtWorkstation(
-		t,
-		dispatches,
-		workID,
-		statelessCollectorStage1Workstation,
-	)
-	assertExactlyOneCompletedDispatchPerWorkAtWorkstation(
-		t,
-		dispatches,
-		workID,
-		statelessCollectorStage2Workstation,
-	)
+	assertExactlyOneCompletedDispatchPerWorkAtWorkstation(t, dispatches, workID, statelessCollectorStage1Workstation)
+	assertExactlyOneCompletedDispatchPerWorkAtWorkstation(t, dispatches, workID, statelessCollectorStage2Workstation)
 
 	first := provider.Calls("agent-a")[0]
 	second := provider.Calls("agent-b")[0]

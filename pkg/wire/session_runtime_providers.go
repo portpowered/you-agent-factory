@@ -671,6 +671,7 @@ func provideWorkersRuntimeFactory(
 	return func(
 		sessions factorysessionwire.CurrentRuntimeResolver,
 		modelService models.Service,
+		modelsScope models.RuntimeScopeRef,
 		providerCommandRunner workers.CommandRunner,
 		scriptCommandRunner workers.CommandRunner,
 		allocator agypty.PTYAllocator,
@@ -700,6 +701,7 @@ func provideWorkersRuntimeFactory(
 		return workersservice.NewRuntimeWithSelection(
 			sessions,
 			modelService,
+			modelsScope,
 			providerCommandRunner,
 			scriptCommandRunner,
 			allocator,

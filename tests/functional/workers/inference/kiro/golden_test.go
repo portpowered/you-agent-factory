@@ -118,13 +118,7 @@ func TestKiroGoldenTextSuccess(t *testing.T) {
 		ResponseEvents:   observeKiroResponseEventGoldens(responseEvents),
 		InvocationResult: observeKiroInvocationResultGolden(inferencePayload, dispatchOutput),
 	}
-	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
-		var updated *support.ProviderSessionGoldensUpdatedError
-		if errors.As(err, &updated) {
-			t.Fatalf("%v", err)
-		}
-		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
-	}
+	compareKiroGoldens(t, loaded, observed)
 }
 
 // TestKiroGoldenAuthAndStructuredFailure replays sanitized Kiro auth-failure
@@ -168,12 +162,37 @@ func TestKiroGoldenAuthAndStructuredFailure(t *testing.T) {
 // and invocation-result metadata.
 // golden: docs/temp/functional/provider-sessions/kiro/timeout/manifest.json
 func TestKiroGoldenTimeout(t *testing.T) {
-	loaded, request := loadKiroGoldenCase(
-		t,
-		kiroGoldenTimeoutCase,
-		"kiro-timeout",
-		support.ProviderSessionFidelityFinalOnly,
+	repoRoot := testutil.MustRepoRoot(t)
+	caseDir := filepath.Join(
+		repoRoot,
+		filepath.FromSlash(support.ProviderSessionFixturePath("kiro", kiroGoldenTimeoutCase)),
 	)
+
+	loaded, err := support.LoadProviderSessionCase(caseDir)
+	if err != nil {
+		t.Fatalf("LoadProviderSessionCase: %v", err)
+	}
+	if loaded.Manifest.ID != "kiro-timeout" {
+		t.Fatalf("manifest.ID = %q, want kiro-timeout", loaded.Manifest.ID)
+	}
+	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelityFinalOnly {
+		t.Fatalf(
+			"manifest.fidelityClass = %q, want %q",
+			loaded.Manifest.FidelityClass,
+			support.ProviderSessionFidelityFinalOnly,
+		)
+	}
+
+	var request struct {
+		Model     string `json:"model"`
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(loaded.Request, &request); err != nil {
+		t.Fatalf("decode request.json: %v", err)
+	}
+	if request.Model == "" {
+		t.Fatalf("request.json = %#v, want model", request)
+	}
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
@@ -240,13 +259,7 @@ func TestKiroGoldenTimeout(t *testing.T) {
 		ResponseEvents:   observeKiroResponseEventGoldens(responseEvents),
 		InvocationResult: observeKiroFailedInvocationResultGolden(inferencePayload),
 	}
-	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
-		var updated *support.ProviderSessionGoldensUpdatedError
-		if errors.As(err, &updated) {
-			t.Fatalf("%v", err)
-		}
-		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
-	}
+	compareKiroGoldens(t, loaded, observed)
 }
 
 func assertKiroGoldenDispatchDoesNotTreatTimeoutStdoutAsSuccess(
@@ -280,7 +293,28 @@ func runKiroFailureGoldenCase(
 ) {
 	t.Helper()
 
-	loaded, request := loadKiroGoldenCase(t, caseName, manifestID, fidelityClass)
+	repoRoot := testutil.MustRepoRoot(t)
+	caseDir := filepath.Join(
+		repoRoot,
+		filepath.FromSlash(support.ProviderSessionFixturePath("kiro", caseName)),
+	)
+
+	loaded, err := support.LoadProviderSessionCase(caseDir)
+	if err != nil {
+		t.Fatalf("LoadProviderSessionCase: %v", err)
+	}
+	assertKiroGoldenManifest(t, loaded.Manifest, manifestID, fidelityClass)
+
+	var request struct {
+		Model     string `json:"model"`
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(loaded.Request, &request); err != nil {
+		t.Fatalf("decode request.json: %v", err)
+	}
+	if request.Model == "" {
+		t.Fatalf("request.json = %#v, want model", request)
+	}
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
@@ -346,6 +380,16 @@ func runKiroFailureGoldenCase(
 		ResponseEvents:   observeKiroResponseEventGoldens(responseEvents),
 		InvocationResult: observeKiroFailedInvocationResultGolden(inferencePayload),
 	}
+	compareKiroGoldens(t, loaded, observed)
+}
+
+func compareKiroGoldens(
+	t *testing.T,
+	loaded support.ProviderSessionCase,
+	observed support.ProviderSessionObservedGoldens,
+) {
+	t.Helper()
+
 	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
 		var updated *support.ProviderSessionGoldensUpdatedError
 		if errors.As(err, &updated) {
@@ -355,40 +399,20 @@ func runKiroFailureGoldenCase(
 	}
 }
 
-type kiroGoldenRequest struct {
-	Model     string `json:"model"`
-	SessionID string `json:"session_id"`
-}
-
-func loadKiroGoldenCase(
+func assertKiroGoldenManifest(
 	t *testing.T,
-	caseName string,
-	manifestID string,
-	fidelityClass string,
-) (support.ProviderSessionCase, kiroGoldenRequest) {
+	manifest support.ProviderSessionGoldenManifest,
+	wantID string,
+	wantFidelityClass string,
+) {
 	t.Helper()
-	caseDir := filepath.Join(
-		testutil.MustRepoRoot(t),
-		filepath.FromSlash(support.ProviderSessionFixturePath("kiro", caseName)),
-	)
-	loaded, err := support.LoadProviderSessionCase(caseDir)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionCase: %v", err)
+
+	if manifest.ID != wantID {
+		t.Fatalf("manifest.ID = %q, want %s", manifest.ID, wantID)
 	}
-	if loaded.Manifest.ID != manifestID {
-		t.Fatalf("manifest.ID = %q, want %s", loaded.Manifest.ID, manifestID)
+	if manifest.FidelityClass != wantFidelityClass {
+		t.Fatalf("manifest.fidelityClass = %q, want %q", manifest.FidelityClass, wantFidelityClass)
 	}
-	if loaded.Manifest.FidelityClass != fidelityClass {
-		t.Fatalf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, fidelityClass)
-	}
-	var request kiroGoldenRequest
-	if err := json.Unmarshal(loaded.Request, &request); err != nil {
-		t.Fatalf("decode request.json: %v", err)
-	}
-	if request.Model == "" {
-		t.Fatalf("request.json = %#v, want model", request)
-	}
-	return loaded, request
 }
 
 func assertKiroFailureDoesNotLeakSensitiveOutput(

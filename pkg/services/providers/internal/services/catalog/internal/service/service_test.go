@@ -72,7 +72,7 @@ func TestListProvidersOrderIsDeterministic(t *testing.T) {
 	}
 }
 
-func TestListProvidersIncludesNonSelectableEntries(t *testing.T) {
+func TestListProvidersIncludesExperimentalSelectableEntries(t *testing.T) {
 	t.Parallel()
 
 	service, err := internalservice.New()
@@ -86,11 +86,11 @@ func TestListProvidersIncludesNonSelectableEntries(t *testing.T) {
 	}
 
 	agy := indexProviders(list.Providers)[providers.IDAgy]
-	if agy.Availability != providers.AvailabilityNotSupported {
-		t.Fatalf("agy availability = %q, want %q", agy.Availability, providers.AvailabilityNotSupported)
+	if agy.Availability != providers.AvailabilitySelectable {
+		t.Fatalf("agy availability = %q, want %q", agy.Availability, providers.AvailabilitySelectable)
 	}
-	if agy.Readiness != providers.ReadinessUnavailable {
-		t.Fatalf("agy readiness = %q, want %q", agy.Readiness, providers.ReadinessUnavailable)
+	if agy.Readiness != providers.ReadinessReady {
+		t.Fatalf("agy readiness = %q, want %q", agy.Readiness, providers.ReadinessReady)
 	}
 }
 
@@ -381,12 +381,14 @@ func TestGetProviderTypedFailures(t *testing.T) {
 		providers.GetProviderRequest{ID: providers.IDCodex + "-stale"},
 		providers.ErrUnknownProvider,
 	)
-	assertGetErrorIs(
-		t,
-		service,
-		providers.GetProviderRequest{ID: providers.IDAgy},
-		providers.ErrProviderUnavailable,
-	)
+
+	got, err := service.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.IDAgy})
+	if err != nil {
+		t.Fatalf("GetProvider(agy) = %v", err)
+	}
+	if got.Provider.Availability != providers.AvailabilitySelectable {
+		t.Fatalf("agy availability = %q, want %q", got.Provider.Availability, providers.AvailabilitySelectable)
+	}
 
 	list, err := service.ListProviders(context.Background(), providers.ListProvidersRequest{})
 	if err != nil {
@@ -394,10 +396,10 @@ func TestGetProviderTypedFailures(t *testing.T) {
 	}
 	agy, ok := indexProviders(list.Providers)[providers.IDAgy]
 	if !ok {
-		t.Fatal("ListProviders() missing unavailable agy provider")
+		t.Fatal("ListProviders() missing agy provider")
 	}
-	if agy.Availability != providers.AvailabilityNotSupported {
-		t.Fatalf("agy availability = %q, want %q", agy.Availability, providers.AvailabilityNotSupported)
+	if agy.Availability != providers.AvailabilitySelectable {
+		t.Fatalf("agy availability = %q, want %q", agy.Availability, providers.AvailabilitySelectable)
 	}
 }
 

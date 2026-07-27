@@ -39,11 +39,8 @@ func TestNewJoinsSupportedCatalogManifestsWithoutProviderSideEffects(t *testing.
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	if len(registry.manifests) != 8 || len(registry.integrations) != 7 {
-		t.Fatalf("joined counts = (%d manifests, %d integrations), want (8, 7)", len(registry.manifests), len(registry.integrations))
-	}
-	if _, selectable := registry.integrations["agy"]; selectable {
-		t.Fatal("not-supported catalog entry is selectable")
+	if len(registry.manifests) != 8 || len(registry.integrations) != 8 {
+		t.Fatalf("joined counts = (%d manifests, %d integrations), want (8, 8)", len(registry.manifests), len(registry.integrations))
 	}
 }
 
@@ -136,7 +133,8 @@ func TestNewRejectsInvalidRegistrationInvariants(t *testing.T) {
 		{
 			name: "nil integration",
 			mutate: func(registrations []Registration) []Registration {
-				registrations[0].integration = typedNil
+				index := catalogRegistrationIndex(registrations, "claude")
+				registrations[index].integration = typedNil
 				return registrations
 			},
 			want: []string{`"claude": integration is nil`, `"claude": supported bundled manifest has no matching implementation`},
@@ -144,9 +142,10 @@ func TestNewRejectsInvalidRegistrationInvariants(t *testing.T) {
 		{
 			name: "mismatched integration identity",
 			mutate: func(registrations []Registration) []Registration {
-				registrations[0].integration = &fakeIntegration{
+				index := catalogRegistrationIndex(registrations, "claude")
+				registrations[index].integration = &fakeIntegration{
 					identity: "different",
-					maximum:  registrations[0].integration.MaximumCapabilities(),
+					maximum:  registrations[index].integration.MaximumCapabilities(),
 				}
 				return registrations
 			},
@@ -155,7 +154,8 @@ func TestNewRejectsInvalidRegistrationInvariants(t *testing.T) {
 		{
 			name: "malformed binding",
 			mutate: func(registrations []Registration) []Registration {
-				registrations[0].identity = " Bad Identity "
+				index := catalogRegistrationIndex(registrations, "claude")
+				registrations[index].identity = " Bad Identity "
 				return registrations
 			},
 			want: []string{`"bad identity": manifest binding identity is invalid`, `"bad identity": implementation has no matching manifest`, `"claude": supported bundled manifest has no matching implementation`},
@@ -163,10 +163,11 @@ func TestNewRejectsInvalidRegistrationInvariants(t *testing.T) {
 		{
 			name: "not supported implementation",
 			mutate: func(registrations []Registration) []Registration {
-				agy := findManifest(t, publishedCatalog(t), "agy")
-				return append(registrations, CatalogRegistration("agy", integrationFor(agy)))
+				manifest := externalManifest(t, "unsupported.provider", "unsupported")
+				manifest.TechnicalSupportLevel = SupportNotSupported
+				return append(registrations, ExternalRegistration(manifest, integrationFor(manifest)))
 			},
-			want: []string{`"agy": non-selectable manifest cannot have a runnable integration`},
+			want: []string{`"unsupported.provider": non-selectable manifest cannot have a runnable integration`},
 		},
 		{
 			name: "external manifest claims bundled availability",
@@ -199,7 +200,7 @@ func TestNewRejectsCoverageAndCapabilityContradictions(t *testing.T) {
 		{
 			name: "missing bundled implementation",
 			mutate: func(registrations []Registration) []Registration {
-				return registrations[1:]
+				return withoutCatalogRegistration(registrations, "claude")
 			},
 			want: `"claude": supported bundled manifest has no matching implementation`,
 		},
@@ -216,9 +217,10 @@ func TestNewRejectsCoverageAndCapabilityContradictions(t *testing.T) {
 		{
 			name: "maximum exceeds manifest",
 			mutate: func(registrations []Registration) []Registration {
-				current := registrations[0].integration.MaximumCapabilities().Values()
+				index := catalogRegistrationIndex(registrations, "claude")
+				current := registrations[index].integration.MaximumCapabilities().Values()
 				current = append(current, inference.CapabilityProviderReconnect)
-				registrations[0].integration = &fakeIntegration{identity: "claude", maximum: inference.NewCapabilitySet(current...)}
+				registrations[index].integration = &fakeIntegration{identity: "claude", maximum: inference.NewCapabilitySet(current...)}
 				return registrations
 			},
 			want: `"claude": integration maximum exceeds manifest maximum: provider_reconnect`,
@@ -226,7 +228,8 @@ func TestNewRejectsCoverageAndCapabilityContradictions(t *testing.T) {
 		{
 			name: "maximum contradicts manifest",
 			mutate: func(registrations []Registration) []Registration {
-				registrations[0].integration = &fakeIntegration{
+				index := catalogRegistrationIndex(registrations, "claude")
+				registrations[index].integration = &fakeIntegration{
 					identity: "claude",
 					maximum:  inference.NewCapabilitySet(inference.CapabilityPromptSubmission),
 				}
@@ -376,6 +379,25 @@ func publishedCatalog(t *testing.T) []Manifest {
 		t.Fatalf("parse published catalog: %v", err)
 	}
 	return catalog.Providers
+}
+
+func catalogRegistrationIndex(registrations []Registration, identity string) int {
+	for index := range registrations {
+		if registrationIdentity(registrations[index]) == identity {
+			return index
+		}
+	}
+	return -1
+}
+
+func withoutCatalogRegistration(registrations []Registration, identity string) []Registration {
+	filtered := make([]Registration, 0, len(registrations))
+	for _, registration := range registrations {
+		if registrationIdentity(registration) != identity {
+			filtered = append(filtered, registration)
+		}
+	}
+	return filtered
 }
 
 func findManifest(t *testing.T, manifests []Manifest, identity string) Manifest {

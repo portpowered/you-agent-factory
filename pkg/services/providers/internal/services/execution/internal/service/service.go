@@ -65,8 +65,17 @@ func New(
 func (s *service) Execute(
 	ctx context.Context,
 	request providers.ExecuteRequest,
-) (providers.ExecuteResult, error) {
+) (result providers.ExecuteResult, executeErr error) {
 	detached := request.Clone()
+	defer func() {
+		if contextErr := normalizeContextFailure(ctx, detached); contextErr != nil {
+			result = providers.ExecuteResult{}
+			executeErr = contextErr
+		}
+	}()
+	if contextErr := normalizeContextFailure(ctx, detached); contextErr != nil {
+		return providers.ExecuteResult{}, contextErr
+	}
 	if err := detached.Validate(); err != nil {
 		return providers.ExecuteResult{}, normalizeValidationFailure(detached)
 	}
@@ -82,7 +91,7 @@ func (s *service) Execute(
 		return providers.ExecuteResult{}, providers.ErrProviderUnavailable
 	}
 	detached.Provider = resolved.Provider.ID
-	result, err := attempt(ctx, detached)
+	result, err = attempt(ctx, detached)
 	if err != nil {
 		return providers.ExecuteResult{}, normalizeAttemptFailure(ctx, err, detached)
 	}

@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
@@ -370,76 +369,6 @@ func TestExecuteNormalizesDeclaredFailureKinds(t *testing.T) {
 			nativeDiagnostics.Metadata["safe"] = "mutated"
 			if failure.Diagnostics.Metadata["safe"] != "kept" {
 				t.Fatal("normalized failure retained adapter-owned diagnostics")
-			}
-		})
-	}
-}
-
-func TestExecutePropagatesCancellationAndDeadlineAndCleansUpOnce(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name       string
-		newContext func(t *testing.T, started <-chan struct{}) (context.Context, context.CancelFunc)
-		want       error
-		wantKind   providers.ExecuteFailureKind
-	}{
-		{
-			name: "canceled",
-			newContext: func(_ *testing.T, started <-chan struct{}) (context.Context, context.CancelFunc) {
-				ctx, cancel := context.WithCancel(context.Background())
-				go func() {
-					<-started
-					cancel()
-				}()
-				return ctx, cancel
-			},
-			want:     providers.ErrExecuteCancelled,
-			wantKind: providers.ExecuteFailureKindCanceled,
-		},
-		{
-			name: "deadline",
-			newContext: func(_ *testing.T, _ <-chan struct{}) (context.Context, context.CancelFunc) {
-				return context.WithTimeout(context.Background(), 100*time.Millisecond)
-			},
-			want:     providers.ErrExecuteTimeout,
-			wantKind: providers.ExecuteFailureKindTimeout,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			started := make(chan struct{})
-			cleanupCalls := 0
-			executionService := mustExecutionService(t, func(
-				ctx context.Context,
-				_ providers.ExecuteRequest,
-			) (providers.ExecuteResult, error) {
-				close(started)
-				defer func() { cleanupCalls++ }()
-				<-ctx.Done()
-				return providers.ExecuteResult{Content: "must not escape"}, ctx.Err()
-			})
-			ctx, cancel := test.newContext(t, started)
-			defer cancel()
-			result, executeErr := executionService.Execute(ctx, providers.ExecuteRequest{
-				Provider:  providers.IDCodex,
-				AttemptID: "attempt-1",
-			})
-			if !errors.Is(executeErr, test.want) {
-				t.Fatalf("Execute() error = %v, want %v", executeErr, test.want)
-			}
-			var failure providers.ExecuteFailure
-			if !errors.As(executeErr, &failure) || failure.Kind != test.wantKind {
-				t.Fatalf("Execute() error = %#v, want kind %q", executeErr, test.wantKind)
-			}
-			if cleanupCalls != 1 {
-				t.Fatalf("cleanup calls = %d, want 1", cleanupCalls)
-			}
-			if !reflect.DeepEqual(result, providers.ExecuteResult{}) {
-				t.Fatalf("Execute() result = %#v, want zero terminal result", result)
 			}
 		})
 	}

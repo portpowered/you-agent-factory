@@ -98,7 +98,6 @@ func TestRegistryLookupRejectsInvalidUnknownAndNonSelectableIdentities(t *testin
 		{identity: "", want: `provider lookup "<empty>" is invalid`},
 		{identity: "bad identity", want: `provider lookup "bad identity" is invalid`},
 		{identity: "missing", want: `provider "missing" is unknown`},
-		{identity: "agy", want: `provider "agy" is not selectable (not-supported)`},
 	}
 	for _, test := range tests {
 		_, err := registry.Lookup(test.identity)
@@ -133,7 +132,7 @@ func TestRegistryDiagnosticsDistinguishStaticAvailabilityWithoutDiscovery(t *tes
 	for _, diagnostic := range fullRegistry.SupportedProviders() {
 		availability[diagnostic.Entry().Identity()] = diagnostic.Availability()
 	}
-	if availability["agy"] != AvailabilityNotSupported ||
+	if availability["agy"] != AvailabilitySelectable ||
 		availability["claude"] != AvailabilitySelectable {
 		t.Fatalf("availability = %v", availability)
 	}
