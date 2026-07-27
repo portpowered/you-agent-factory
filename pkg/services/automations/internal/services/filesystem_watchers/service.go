@@ -30,6 +30,18 @@ type InputFileSystem interface {
 // production implementation; owner tests may inject a deterministic traversal.
 type DirectoryWalker func(string, fs.WalkDirFunc) error
 
+// ObservationIdentity is the stable Automations-owned cursor key for one watched
+// input path. Peers treat it as opaque; only filesystem_watchers derives it.
+type ObservationIdentity string
+
+// HandledIdentities records watcher cursor facts for paths whose Work commands
+// already succeeded. Implementations are Automations-owned; peers inject
+// durable stores without importing parent-private persistence types.
+type HandledIdentities interface {
+	Contains(ObservationIdentity) bool
+	Record(ObservationIdentity) error
+}
+
 // Config carries the inert construction inputs for one filesystem watcher.
 type Config struct {
 	Dir               string
@@ -40,6 +52,7 @@ type Config struct {
 	WalkDirectory     DirectoryWalker
 	WorkRequestIDs    work.RequestIDGenerator
 	Submitter         WorkRequestSubmitter
+	HandledIdentities HandledIdentities
 	Clock             clockwork.Clock
 	DebounceWindow    time.Duration
 }
