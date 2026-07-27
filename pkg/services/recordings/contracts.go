@@ -351,6 +351,33 @@ type BindRecordingResult struct {
 	Status RecordingStatusFacts
 }
 
+// RecordingTargetRequest selects either an explicit opaque target or the
+// Recordings-owned generated live-recording layout. Artifact takes precedence;
+// HomeDir is required when Recordings must generate the target.
+type RecordingTargetRequest struct {
+	Artifact          RecordingArtifactReference
+	HomeDir           string
+	ReportedSessionID string
+}
+
+// StartRecordingRequest selects and binds one recording lifecycle. Disabled
+// requests are intentionally inert: they do not select a target or allocate an
+// identity.
+type StartRecordingRequest struct {
+	Enabled     bool
+	RecordingID RecordingID
+	Scope       CanonicalEventScope
+	Target      RecordingTargetRequest
+}
+
+// StartRecordingResult reports whether recording was enabled and, when it was,
+// the detached active binding. Target is the session-safe reported reference;
+// no service path, writer, or storage handle crosses the root boundary.
+type StartRecordingResult struct {
+	Enabled bool
+	Status  RecordingStatusFacts
+}
+
 // RecordRecordingEventRequest associates one canonical Recordings event with a
 // bound recording.
 type RecordRecordingEventRequest struct {
@@ -603,6 +630,9 @@ type Service interface {
 	// BindRecording constructs or idempotently returns one session-scoped
 	// recording through the plain recording-lifecycle root-contract slice.
 	BindRecording(BindRecordingRequest) (BindRecordingResult, error)
+	// StartRecording selects a target and binds an enabled recording, or
+	// returns an inert disabled result without performing target work.
+	StartRecording(StartRecordingRequest) (StartRecordingResult, error)
 	// RecordRecordingEvent associates one canonical Factory Event with a bound
 	// recording.
 	RecordRecordingEvent(RecordRecordingEventRequest) (RecordRecordingEventResult, error)

@@ -163,7 +163,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v21 := provideFactorySessionSyncWaitScheduler()
 	v22 := provideFactorySessionExecutionFactory(javaScriptWorkflows, writer, v20, v21, v15)
 	v23 := provideRecordingsProjectionFactory()
-	v24 := provideRecordingsFactory()
+	v24 := provideRecordingsFactory(liveRecordingTargetPlanner)
 	v25 := provideRuntimeLedgerFactory()
 	storage := provideReplayArtifactStorage()
 	v26 := provideLoadedFactorySnapshotCapturer()
