@@ -83,4 +83,14 @@ func TestResponsePresentation_FacadeOpensUsableFactoryEventStreams(t *testing.T)
 	if got, want := output.String(), "event\nterminal\n"; got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
+	if finalizedAgain, err := stream.Finalize(nil); err != nil || finalizedAgain {
+		t.Fatalf("second Finalize() = (%v, %v), want (false, nil)", finalizedAgain, err)
+	}
+	stream.PresentFactoryEvents([]factorydefinitions.FactoryEvent{{Id: "late"}})
+	if err := stream.CloseAndDrain(); err != nil {
+		t.Fatalf("CloseAndDrain after late Present: %v", err)
+	}
+	if got, want := output.String(), "event\nterminal\n"; got != want {
+		t.Fatalf("late Present after Finalize changed output = %q, want %q", got, want)
+	}
 }

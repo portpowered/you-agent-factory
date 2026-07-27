@@ -180,6 +180,9 @@ func TestResponsePresentation_FactoryEventStreamsDrainEventsBeforeTerminal(t *te
 			if err := stream.CloseAndDrain(); err != nil {
 				t.Fatalf("CloseAndDrain: %v", err)
 			}
+			if got, want := output.String(), "first\nsecond\nterminal\n"; got != want {
+				t.Fatalf("late Present after Finalize changed output = %q, want %q", got, want)
+			}
 		})
 	}
 }
