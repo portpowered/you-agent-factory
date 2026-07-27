@@ -586,8 +586,8 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/smoke/cli_factory_prompt_run_smoke_test.go | you-agent-factory/tests/functional/smoke | TestFactoryPromptRun_RealCLIWritesPrimaryResultFromStdin | short | tests/functional/transport/cli/commands/run_wiring_test.go | smoke | none | smoke-delete-04-transport-cli |
 | tests/functional/smoke/cli_factory_prompt_run_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedFactoryRun_RealCLIResolvesGlobalFactoryFromUnrelatedWorkingDirectory | short | tests/functional/transport/cli/commands/run_wiring_test.go | smoke | none | smoke-delete-04-transport-cli |
 | tests/functional/smoke/cli_factory_prompt_run_smoke_test.go | you-agent-factory/tests/functional/smoke | TestPackagedGoalRun_RealCLIWritesSummaryPrimaryResult | short | tests/functional/transport/cli/commands/run_wiring_test.go | smoke | none | smoke-delete-04-transport-cli |
-| tests/functional/smoke/cli_javascript_factory_run_smoke_test.go | you-agent-factory/tests/functional/smoke | TestJavaScriptFactoryRun_RealCLIProvesOrderedTwoStagePipeline | short | tests/functional/orchestration/javascript/loading/inline_javascript_test.go | smoke | none | smoke-delete-08-orchestration-javascript |
-| tests/functional/smoke/cli_javascript_factory_run_smoke_test.go | you-agent-factory/tests/functional/smoke | TestJavaScriptFactoryRun_RealCLIUsesMockWorkersAndReturnsPrimaryResult | short | tests/functional/orchestration/javascript/loading/inline_javascript_test.go | smoke | none | smoke-delete-08-orchestration-javascript |
+| tests/functional/orchestration/javascript/loading/inline_javascript_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestInlineJavaScriptFactoryRunsFromCLI | short | tests/functional/orchestration/javascript/loading/inline_javascript_test.go | none | none | n/a |
+| tests/functional/orchestration/javascript/loading/inline_javascript_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestInlineJavaScriptSyntaxErrorReturnsSourceLocation | short | tests/functional/orchestration/javascript/loading/inline_javascript_test.go | none | none | n/a |
 | tests/functional/smoke/cli_named_deep_research_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedDeepResearchCLI_DefaultInvocationReturnsLeadSynthesis | short | tests/functional/factory/packaged/deep_research/invocation_test.go | smoke | none | smoke-delete-05-factory-packaged |
 | tests/functional/smoke/cli_named_deep_research_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedDeepResearchCLI_InvokesConfiguredBoundedResearchWithApprovedFlags | short | tests/functional/factory/packaged/deep_research/invocation_test.go | smoke | none | smoke-delete-05-factory-packaged |
 | tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalInvocationParity_EmptyInputRejectedWithStableCode | short | tests/functional/factory/packaged/cross/package_cli_api_test.go | smoke | none | smoke-delete-06-factory-packaged-cross |
@@ -994,7 +994,6 @@ can execute independently until package ownership reaches zero.
 | `smoke-delete-05-factory-packaged` | smoke | 12 | factory/packaged, work/routing | none |
 | `smoke-delete-06-factory-packaged-cross` | smoke | 6 | factory/packaged/cross | none |
 | `smoke-delete-07-sessions-controls` | smoke | 4 | sessions/controls | none |
-| `smoke-delete-08-orchestration-javascript` | smoke | 2 | orchestration/javascript | none |
 | `smoke-delete-09-guards` | smoke | 2 | guards | none |
 | `smoke-delete-10-workers-mock` | smoke | 2 | workers/mock | none |
 | `smoke-delete-11-resilience-process` | smoke | 6 | resilience/process | none |
@@ -1071,8 +1070,8 @@ Batch execution guidance for later move work:
 | tests/functional/smoke/cli_factory_prompt_run_smoke_test.go | you-agent-factory/tests/functional/smoke | TestFactoryPromptRun_RealCLIWritesPrimaryResultFromStdin | short | tests/functional/transport/cli/commands/run_wiring_test.go | smoke | none | smoke-delete-04-transport-cli |
 | tests/functional/smoke/cli_factory_prompt_run_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedFactoryRun_RealCLIResolvesGlobalFactoryFromUnrelatedWorkingDirectory | short | tests/functional/transport/cli/commands/run_wiring_test.go | smoke | none | smoke-delete-04-transport-cli |
 | tests/functional/smoke/cli_factory_prompt_run_smoke_test.go | you-agent-factory/tests/functional/smoke | TestPackagedGoalRun_RealCLIWritesSummaryPrimaryResult | short | tests/functional/transport/cli/commands/run_wiring_test.go | smoke | none | smoke-delete-04-transport-cli |
-| tests/functional/smoke/cli_javascript_factory_run_smoke_test.go | you-agent-factory/tests/functional/smoke | TestJavaScriptFactoryRun_RealCLIProvesOrderedTwoStagePipeline | short | tests/functional/orchestration/javascript/loading/inline_javascript_test.go | smoke | none | smoke-delete-08-orchestration-javascript |
-| tests/functional/smoke/cli_javascript_factory_run_smoke_test.go | you-agent-factory/tests/functional/smoke | TestJavaScriptFactoryRun_RealCLIUsesMockWorkersAndReturnsPrimaryResult | short | tests/functional/orchestration/javascript/loading/inline_javascript_test.go | smoke | none | smoke-delete-08-orchestration-javascript |
+| tests/functional/orchestration/javascript/loading/inline_javascript_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestInlineJavaScriptFactoryRunsFromCLI | short | tests/functional/orchestration/javascript/loading/inline_javascript_test.go | none | none | n/a |
+| tests/functional/orchestration/javascript/loading/inline_javascript_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestInlineJavaScriptSyntaxErrorReturnsSourceLocation | short | tests/functional/orchestration/javascript/loading/inline_javascript_test.go | none | none | n/a |
 | tests/functional/smoke/cli_named_deep_research_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedDeepResearchCLI_DefaultInvocationReturnsLeadSynthesis | short | tests/functional/factory/packaged/deep_research/invocation_test.go | smoke | none | smoke-delete-05-factory-packaged |
 | tests/functional/smoke/cli_named_deep_research_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedDeepResearchCLI_InvokesConfiguredBoundedResearchWithApprovedFlags | short | tests/functional/factory/packaged/deep_research/invocation_test.go | smoke | none | smoke-delete-05-factory-packaged |
 | tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalInvocationParity_EmptyInputRejectedWithStableCode | short | tests/functional/factory/packaged/cross/package_cli_api_test.go | smoke | none | smoke-delete-06-factory-packaged-cross |
@@ -1720,7 +1719,7 @@ documentation comment is required to point at this ledger.
 
 ## Deletion-only batch index
 
-_Status: complete — FND-007-003…007. Fifty-two deletion-only batches cover all six named catch-alls in consumption order below._
+_Status: complete — FND-007-003…007. Fifty-one active deletion-only batches cover all six named catch-alls in consumption order below (`smoke-delete-08-orchestration-javascript` consumed by `ft-wave1-inline-javascript-loading`)._
 
 Ordered list of named deletion-only batches that later move work can consume
 without inventing destinations. Prefer independent, reviewable batch sizes.
@@ -1745,7 +1744,6 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `smoke-delete-05-factory-packaged` | smoke | 12 | factory/packaged, work/routing | planned |
 | `smoke-delete-06-factory-packaged-cross` | smoke | 6 | factory/packaged/cross | planned |
 | `smoke-delete-07-sessions-controls` | smoke | 4 | sessions/controls | planned |
-| `smoke-delete-08-orchestration-javascript` | smoke | 2 | orchestration/javascript | planned |
 | `smoke-delete-09-guards` | smoke | 2 | guards | planned |
 | `smoke-delete-10-workers-mock` | smoke | 2 | workers/mock | planned |
 | `smoke-delete-11-resilience-process` | smoke | 6 | resilience/process | planned |
@@ -1790,6 +1788,6 @@ _Status: complete — FND-007-007. Fresh live-tree rescan at `2026-07-24T02:36:3
 | Destination paths exist in `test-file-checklist.md` or approved wrong-layer | **434** checklist destinations + **69** approved wrong-layer rationales; **0** invented destinations |
 | Short/long membership preserved on every row | **381** `short` + **122** `functionallong`; live scan lane matches every ledger row |
 | Specialty Make targets fully accounted for | **11** functional specialty bindings documented (see [Specialty Make target bindings](#specialty-make-target-bindings)); no dropped `-run` selectors |
-| Deletion-only batch index covers runtime_api + featureless catch-alls | **52** batches (**11** runtime_api + **22** smoke/workflow + **19** guards/bootstrap/replay); **142** non-catch-all rows use `n/a` |
+| Deletion-only batch index covers runtime_api + featureless catch-alls | **51** active batches (**11** runtime_api + **21** smoke/workflow + **19** guards/bootstrap/replay); **144** non-catch-all rows use `n/a`; `smoke-delete-08-orchestration-javascript` consumed |
 | `make pkg-structure` | pass (2026-07-24T02:36:31Z UTC) |
 | `go run ./cmd/migrationledgercheck` | pass — machine-readable companion cross-check |
