@@ -1,0 +1,238 @@
+package server_test
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+// TestAPIConcurrentSessionRequestsRemainIsolated proves overlapping Factory Session
+// HTTP reads stay correlated to their originating session identity while unrelated
+// in-flight invocations hold concurrent server work.
+func TestAPIConcurrentSessionRequestsRemainIsolated(t *testing.T) {
+	dir := scaffoldConcurrentRequestsFactory(t)
+	blocking := newBlockingInvocationRunner()
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(t, &edges, blocking, nil)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     edges,
+	})
+	defer server.Stop(t)
+
+	defaultSession := getFactorySession(t, server.URL(), factorysessions.DefaultSessionID)
+	secondSessionID := openFactorySession(t, server.URL(), dir)
+	if defaultSession.Id == secondSessionID {
+		t.Fatalf("default session id %q equals second session id %q", defaultSession.Id, secondSessionID)
+	}
+	sessionIDs := []string{defaultSession.Id, secondSessionID}
+
+	type invocationHandle struct {
+		cancel context.CancelFunc
+		done   chan error
+	}
+	handles := make([]invocationHandle, 0, len(sessionIDs))
+	for _, sessionID := range sessionIDs {
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func(sessionID string) {
+			done <- postBlockingInvocation(ctx, server.URL(), sessionID, blocking)
+		}(sessionID)
+		handles = append(handles, invocationHandle{cancel: cancel, done: done})
+	}
+
+	for range sessionIDs {
+		select {
+		case <-blocking.started:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for overlapping invocation to enter flight")
+		}
+	}
+
+	var wg sync.WaitGroup
+	var mismatchMu sync.Mutex
+	mismatches := make([]string, 0)
+	recordMismatch := func(message string) {
+		mismatchMu.Lock()
+		mismatches = append(mismatches, message)
+		mismatchMu.Unlock()
+	}
+	for round := 0; round < 10; round++ {
+		for _, expectedID := range sessionIDs {
+			wg.Add(1)
+			go func(expectedID string) {
+				defer wg.Done()
+				session := getFactorySession(t, server.URL(), expectedID)
+				if session.Id != expectedID {
+					recordMismatch(expectedID + " returned " + session.Id)
+				}
+				status := getFactorySessionStatus(t, server.URL(), expectedID)
+				if status.RuntimeStatus == "" {
+					recordMismatch(expectedID + " status missing runtimeStatus")
+				}
+			}(expectedID)
+		}
+	}
+	wg.Wait()
+	if len(mismatches) > 0 {
+		t.Fatalf("concurrent session observations crossed identities: %v", mismatches)
+	}
+
+	for _, handle := range handles {
+		handle.cancel()
+	}
+	for _, handle := range handles {
+		select {
+		case err := <-handle.done:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				t.Fatalf("blocking invocation after cancel: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for cancelled invocation to return")
+		}
+	}
+}
+
+func scaffoldConcurrentRequestsFactory(t *testing.T) string {
+	t.Helper()
+
+	cfg := concurrentRequestsTestConfig()
+	dir := support.ScaffoldFactory(t, cfg)
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	return dir
+}
+
+func concurrentRequestsTestConfig() map[string]any {
+	return map[string]any{
+		"workTypes": []map[string]any{{
+			"name":               "task",
+			"handlingBehavior":   []string{"DEFAULT"},
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]string{{"name": "worker-a"}},
+		"workstations": []map[string]any{{
+			"name":      "process",
+			"worker":    "worker-a",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+		}},
+	}
+}
+
+func openFactorySession(t *testing.T, baseURL, folderPath string) string {
+	t.Helper()
+
+	payload, err := json.Marshal(factoryapi.OpenFactorySessionRequest{FolderPath: folderPath})
+	if err != nil {
+		t.Fatalf("marshal open factory session request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST /factory-sessions: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("POST /factory-sessions status = %d, want 200", response.StatusCode)
+	}
+	var opened factoryapi.OpenFactorySessionResponse
+	if err := json.NewDecoder(response.Body).Decode(&opened); err != nil {
+		t.Fatalf("decode open factory session response: %v", err)
+	}
+	if opened.Session == nil || opened.Session.Id == "" {
+		t.Fatalf("open factory session response = %#v, want session id", opened)
+	}
+	return opened.Session.Id
+}
+
+func getFactorySession(t *testing.T, baseURL, sessionID string) factoryapi.FactorySession {
+	t.Helper()
+
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID
+	response := support.GetJSON[factoryapi.FactorySessionGetResponse](t, endpoint)
+	session, err := response.AsFactorySession()
+	if err != nil {
+		t.Fatalf("decode factory session %s: %v", sessionID, err)
+	}
+	return session
+}
+
+func getFactorySessionStatus(t *testing.T, baseURL, sessionID string) factoryapi.StatusResponse {
+	t.Helper()
+
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/status"
+	return support.GetJSON[factoryapi.StatusResponse](t, endpoint)
+}
+
+func postBlockingInvocation(
+	ctx context.Context,
+	baseURL string,
+	sessionID string,
+	blocking *blockingInvocationRunner,
+) error {
+	body, err := json.Marshal(textInvocationRequest("concurrent isolation invoke"))
+	if err != nil {
+		return err
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/invocations"
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if response != nil {
+		_ = response.Body.Close()
+	}
+	return err
+}
+
+func textInvocationRequest(text string) factoryapi.InvocationRequest {
+	var part factoryapi.WorkContentPart
+	_ = part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeText,
+		Text: text,
+	})
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := factoryapi.WorkContent{part}
+	return factoryapi.InvocationRequest{
+		SourceKind: &sourceKind,
+		Content:    &content,
+	}
+}
+
+type blockingInvocationRunner struct {
+	started chan struct{}
+}
+
+func newBlockingInvocationRunner() *blockingInvocationRunner {
+	return &blockingInvocationRunner{started: make(chan struct{}, 2)}
+}
+
+func (runner *blockingInvocationRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	select {
+	case runner.started <- struct{}{}:
+	default:
+	}
+	<-ctx.Done()
+	return platformprocess.CommandResult{}, ctx.Err()
+}
