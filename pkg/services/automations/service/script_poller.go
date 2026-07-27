@@ -26,7 +26,15 @@ func (s *Service) StartScriptPoller(
 	if s == nil || s.scriptPollers == nil {
 		return
 	}
-	s.scriptPollers.StartScriptPoller(ctx, sidecars, runtimeCfg, workstation, workerDef, submitter)
+	s.scriptPollers.StartScriptPoller(
+		ctx,
+		sidecars,
+		runtimeCfg,
+		workstation,
+		workerDef,
+		scriptpollers.ScriptPollerSupervision{},
+		submitter,
+	)
 }
 
 // RunScriptPoller executes one script poller command cycle and submits any parsed work request.
@@ -41,7 +49,15 @@ func (s *Service) RunScriptPoller(
 	if s == nil || s.scriptPollers == nil {
 		return nil
 	}
-	return s.scriptPollers.RunScriptPoller(ctx, runner, runtimeCfg, workstation, workerDef, submitter)
+	return s.scriptPollers.RunScriptPoller(
+		ctx,
+		runner,
+		runtimeCfg,
+		workstation,
+		workerDef,
+		scriptpollers.ScriptPollerSupervision{},
+		submitter,
+	)
 }
 
 // ScriptPollerCommandRequest builds the command invocation for a script poller worker.
@@ -51,7 +67,13 @@ func ScriptPollerCommandRequest(
 	workerDef *interfaces.FactoryWorkerConfig,
 	resolveTemplates workers.TemplateFieldResolver,
 ) (workers.CommandRequest, error) {
-	return scriptpollers.ScriptPollerCommandRequest(runtimeCfg, workstation, workerDef, resolveTemplates)
+	return scriptpollers.ScriptPollerCommandRequest(
+		runtimeCfg,
+		workstation,
+		workerDef,
+		resolveTemplates,
+		scriptpollers.ResumeCursor{},
+	)
 }
 
 // ParseScriptPollerOutput parses stdout from a script poller into a work request.

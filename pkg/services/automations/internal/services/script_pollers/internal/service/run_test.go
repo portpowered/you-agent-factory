@@ -48,6 +48,7 @@ func TestRunScriptPoller_SubmitsCanonicalWorkRequestStdout(t *testing.T) {
 		runtimeCfg,
 		poller,
 		worker,
+		scriptpollers.ScriptPollerSupervision{},
 		submitted.submit,
 	)
 	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
@@ -97,6 +98,7 @@ func TestRunScriptPoller_SubmitsSubmitStyleRecordsStdout(t *testing.T) {
 		runtimeCfg,
 		poller,
 		worker,
+		scriptpollers.ScriptPollerSupervision{},
 		submitted.submit,
 	)
 	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
@@ -164,6 +166,7 @@ func TestRunScriptPoller_RejectsMalformedStdoutWithoutSubmit(t *testing.T) {
 				runtimeCfg,
 				poller,
 				worker,
+				scriptpollers.ScriptPollerSupervision{},
 				submitted.submit,
 			)
 			if err == nil || !strings.Contains(err.Error(), tc.wantErrSubstring) {
@@ -194,6 +197,7 @@ func TestRunScriptPoller_EmptyStdoutDoesNotSubmit(t *testing.T) {
 		runtimeCfg,
 		poller,
 		worker,
+		scriptpollers.ScriptPollerSupervision{},
 		submitted.submit,
 	)
 	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
@@ -233,6 +237,7 @@ func TestRunScriptPoller_SubmitFailureReturnsTypedSubmitError(t *testing.T) {
 		runtimeCfg,
 		poller,
 		worker,
+		scriptpollers.ScriptPollerSupervision{},
 		submitted.submit,
 	)
 	var typed *automations.Error
@@ -271,7 +276,7 @@ func TestScriptPollerCommandRequest_ResolvesCommandArgsWorkdirAndEnv(t *testing.
 	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, factoryDir, poller, worker)
 	runtimeCfg.SetRuntimeBaseDir(runtimeBaseDir)
 
-	req, err := scriptpollers.ScriptPollerCommandRequest(runtimeCfg, poller, worker, nil)
+	req, err := scriptpollers.ScriptPollerCommandRequest(runtimeCfg, poller, worker, nil, scriptpollers.ResumeCursor{})
 	if err != nil {
 		t.Fatalf("ScriptPollerCommandRequest: %v", err)
 	}
@@ -317,12 +322,14 @@ type runOutcome struct {
 type sequenceCommandRunner struct {
 	mu       sync.Mutex
 	calls    int
+	reqs     []workers.CommandRequest
 	outcomes []runOutcome
 }
 
 func (r *sequenceCommandRunner) Run(ctx context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
 	r.mu.Lock()
 	r.calls++
+	r.reqs = append(r.reqs, req)
 	index := r.calls - 1
 	var outcome runOutcome
 	if index < len(r.outcomes) {

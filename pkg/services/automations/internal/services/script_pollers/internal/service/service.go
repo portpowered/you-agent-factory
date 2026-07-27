@@ -31,12 +31,24 @@ func New(dependencies scriptpollers.Dependencies) scriptpollers.Service {
 	return &service{dependencies: dependencies}
 }
 
+func (s *service) GetCursor(
+	ctx context.Context,
+	request automations.GetCursorRequest,
+) (automations.GetCursorResult, error) {
+	recorder := s.cursorRecorder()
+	if recorder == nil {
+		return automations.GetCursorResult{}, unavailableCursorRecorderError()
+	}
+	return recorder.GetCursor(ctx, request)
+}
+
 func (s *service) StartScriptPoller(
 	ctx context.Context,
 	sidecars *sync.WaitGroup,
 	runtimeCfg factorydefinitions.RuntimeConfigLookup,
 	workstation factorydefinitions.FactoryWorkstationConfig,
 	workerDef *factorydefinitions.FactoryWorkerConfig,
+	supervision scriptpollers.ScriptPollerSupervision,
 	submitter automations.WorkRequestSubmitter,
 ) {
 	if sidecars == nil || submitter == nil {
@@ -45,7 +57,7 @@ func (s *service) StartScriptPoller(
 	sidecars.Add(1)
 	go func() {
 		defer sidecars.Done()
-		s.superviseScriptPoller(ctx, runtimeCfg, workstation, workerDef, submitter)
+		s.superviseScriptPoller(ctx, runtimeCfg, workstation, workerDef, supervision, submitter)
 	}()
 }
 
@@ -54,6 +66,7 @@ func (s *service) superviseScriptPoller(
 	runtimeCfg factorydefinitions.RuntimeConfigLookup,
 	workstation factorydefinitions.FactoryWorkstationConfig,
 	workerDef *factorydefinitions.FactoryWorkerConfig,
+	supervision scriptpollers.ScriptPollerSupervision,
 	submitter automations.WorkRequestSubmitter,
 ) {
 	logger := s.pollerLogger(workstation.Name, workerDef.Name)
@@ -71,7 +84,7 @@ func (s *service) superviseScriptPoller(
 		}
 
 		attempt++
-		runErr := s.RunScriptPoller(ctx, runner, runtimeCfg, workstation, workerDef, submitter)
+		runErr := s.RunScriptPoller(ctx, runner, runtimeCfg, workstation, workerDef, supervision, submitter)
 		if ctx.Err() != nil {
 			return
 		}
@@ -97,13 +110,20 @@ func (s *service) RunScriptPoller(
 	runtimeCfg factorydefinitions.RuntimeConfigLookup,
 	workstation factorydefinitions.FactoryWorkstationConfig,
 	workerDef *factorydefinitions.FactoryWorkerConfig,
+	supervision scriptpollers.ScriptPollerSupervision,
 	submitter automations.WorkRequestSubmitter,
 ) error {
+	resume, err := s.resolveScriptPollerResume(ctx, supervision)
+	if err != nil {
+		return err
+	}
+
 	commandReq, err := scriptpollers.ScriptPollerCommandRequest(
 		runtimeCfg,
 		workstation,
 		workerDef,
 		s.dependencies.ResolveTemplates,
+		resume,
 	)
 	if err != nil {
 		return err
@@ -133,19 +153,87 @@ func (s *service) RunScriptPoller(
 	if result.ExitCode != 0 {
 		return fmt.Errorf("script poller exited with code %d", result.ExitCode)
 	}
-	request, hasOutput, err := scriptpollers.ParseScriptPollerOutput(result.Stdout)
+
+	parsed, err := scriptpollers.ParseScriptPollerStdout(result.Stdout)
 	if err != nil {
 		return err
 	}
-	if hasOutput {
+	if parsed.HasRequest {
 		if submitter == nil {
 			return fmt.Errorf("script poller submitter is not available")
 		}
-		if err := submitter(ctx, request); err != nil {
+		if err := submitter(ctx, parsed.Request); err != nil {
 			return scriptpollers.SubmitFailedError(err)
+		}
+		if parsed.AdvancesPosition {
+			if err := s.commitScriptPollerRecovery(ctx, supervision, resume, parsed); err != nil {
+				return err
+			}
 		}
 	}
 	return fmt.Errorf("script poller exited unexpectedly")
+}
+
+func (s *service) resolveScriptPollerResume(
+	ctx context.Context,
+	supervision scriptpollers.ScriptPollerSupervision,
+) (scriptpollers.ResumeCursor, error) {
+	instanceID := strings.TrimSpace(supervision.InstanceID)
+	if instanceID == "" {
+		return scriptpollers.ResumeCursor{}, nil
+	}
+
+	recorder := s.cursorRecorder()
+	if recorder == nil {
+		return scriptpollers.ResumeCursor{}, unavailableCursorRecorderError()
+	}
+
+	request := automations.GetCursorRequest{InstanceID: instanceID}
+	if supervision.ExpectedCursor != "" {
+		request.ExpectedCursor = supervision.ExpectedCursor
+	}
+	current, err := recorder.GetCursor(ctx, request)
+	if err != nil {
+		var typed *automations.Error
+		if errors.As(err, &typed) && typed.Code == automations.ErrorCodeNotFound {
+			if supervision.ExpectedCursor != "" {
+				return scriptpollers.ResumeCursor{}, scriptpollers.CursorConflictError(scriptpollers.GetCursorOperation)
+			}
+			return scriptpollers.ResumeCursor{}, nil
+		}
+		return scriptpollers.ResumeCursor{}, err
+	}
+	if supervision.AutomationID != "" &&
+		strings.TrimSpace(current.AutomationID) != strings.TrimSpace(supervision.AutomationID) {
+		return scriptpollers.ResumeCursor{}, scriptpollers.CursorConflictError(scriptpollers.GetCursorOperation)
+	}
+	return scriptpollers.ResumeCursor{
+		Cursor:     current.Cursor,
+		Checkpoint: current.Checkpoint,
+	}, nil
+}
+
+func (s *service) commitScriptPollerRecovery(
+	ctx context.Context,
+	supervision scriptpollers.ScriptPollerSupervision,
+	resume scriptpollers.ResumeCursor,
+	parsed scriptpollers.ScriptPollerStdout,
+) error {
+	instanceID := strings.TrimSpace(supervision.InstanceID)
+	if instanceID == "" {
+		return nil
+	}
+	recorder := s.cursorRecorder()
+	if recorder == nil {
+		return unavailableCursorRecorderError()
+	}
+	return scriptpollers.CursorPersistError(recorder.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
+		AutomationID:   supervision.AutomationID,
+		InstanceID:     instanceID,
+		ExpectedCursor: resume.Cursor,
+		Cursor:         automations.Cursor(parsed.AdvancedCursor),
+		Checkpoint:     parsed.Checkpoint,
+	}))
 }
 
 func scriptPollerRestartBackoff(attempt int) time.Duration {
@@ -232,4 +320,16 @@ func (s *service) supervisorClock() clockwork.Clock {
 		}
 	}
 	return clockwork.NewRealClock()
+}
+
+func (s *service) cursorRecorder() scriptpollers.CursorRecorder {
+	return s.dependencies.CursorRecorder
+}
+
+func unavailableCursorRecorderError() error {
+	return &automations.Error{
+		Op:   scriptpollers.GetCursorOperation,
+		Code: automations.ErrorCodeNotReady,
+		Err:  automations.ErrNotReady,
+	}
 }

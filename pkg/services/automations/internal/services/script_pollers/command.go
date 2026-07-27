@@ -15,6 +15,7 @@ func scriptPollerCommandRequest(
 	workstation factorydefinitions.FactoryWorkstationConfig,
 	workerDef *factorydefinitions.FactoryWorkerConfig,
 	resolveTemplates workers.TemplateFieldResolver,
+	resume ResumeCursor,
 ) (workers.CommandRequest, error) {
 	if runtimeCfg == nil {
 		return workers.CommandRequest{}, fmt.Errorf("runtime config is required")
@@ -61,12 +62,29 @@ func scriptPollerCommandRequest(
 	req := workers.CommandRequest{
 		Command:         resolvePortableFactoryScriptReference(runtimeCfg.FactoryDir(), workerDef.Command),
 		Args:            resolvePortableFactoryScriptReferences(runtimeCfg.FactoryDir(), workerDef.Args),
-		Env:             commandEnvWithResolvedVars(requestContext.EnvVars),
+		Env:             commandEnvWithResolvedVars(requestContext.EnvVars, resume),
 		WorkDir:         workDir,
 		WorkerType:      workerDef.Name,
 		WorkstationName: workstation.Name,
 	}
 	return req, nil
+}
+
+func commandEnvWithResolvedVars(vars map[string]string, resume ResumeCursor) []string {
+	env := make([]string, 0, len(vars)+2)
+	for key, value := range vars {
+		env = append(env, key+"="+value)
+	}
+	if cursor := strings.TrimSpace(string(resume.Cursor)); cursor != "" {
+		env = append(env, ScriptPollerCursorEnvVar+"="+cursor)
+	}
+	if checkpoint := strings.TrimSpace(resume.Checkpoint); checkpoint != "" {
+		env = append(env, ScriptPollerCheckpointEnvVar+"="+checkpoint)
+	}
+	if len(env) == 0 {
+		return nil
+	}
+	return env
 }
 
 func resolveWorkerTemplateFields(
@@ -103,18 +121,6 @@ func pollerRuntimeWorkingDirectory(runtimeCfg factorydefinitions.RuntimeConfigLo
 		return ""
 	}
 	return filepath.Clean(baseDir)
-}
-
-func commandEnvWithResolvedVars(vars map[string]string) []string {
-	if len(vars) == 0 {
-		return nil
-	}
-
-	env := make([]string, 0, len(vars))
-	for key, value := range vars {
-		env = append(env, key+"="+value)
-	}
-	return env
 }
 
 func resolvePortableFactoryScriptReferences(factoryDir string, args []string) []string {

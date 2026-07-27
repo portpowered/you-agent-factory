@@ -115,3 +115,25 @@ func TestParseScriptPollerOutput_EmptyStdoutIsNotOutput(t *testing.T) {
 		t.Fatalf("empty stdout = hasOutput %v err %v, want no output", hasOutput, err)
 	}
 }
+
+func TestParseScriptPollerStdout_ExtractsOpaqueRecoveryFacts(t *testing.T) {
+	t.Parallel()
+
+	stdout := []byte(`{
+		"requestId":"linear-issue-batch-cursor",
+		"type":"FACTORY_REQUEST_BATCH",
+		"works":[{"name":"issue-cursor","workTypeName":"task"}],
+		"cursor":"opaque-cursor-9",
+		"checkpoint":"checkpoint-9"
+	}`)
+	parsed, err := scriptpollers.ParseScriptPollerStdout(stdout)
+	if err != nil {
+		t.Fatalf("ParseScriptPollerStdout() error = %v", err)
+	}
+	if !parsed.HasRequest || !parsed.AdvancesPosition {
+		t.Fatalf("parsed = %+v, want request and position advancement", parsed)
+	}
+	if parsed.AdvancedCursor != "opaque-cursor-9" || parsed.Checkpoint != "checkpoint-9" {
+		t.Fatalf("parsed recovery = cursor %q checkpoint %q", parsed.AdvancedCursor, parsed.Checkpoint)
+	}
+}

@@ -48,7 +48,7 @@ func TestRunScriptPoller_TimesOutWithoutSubmit(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	err := svc.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, submitted.submit)
+	err := svc.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, scriptpollers.ScriptPollerSupervision{}, submitted.submit)
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("RunScriptPoller error = %v, want timeout", err)
 	}
@@ -72,7 +72,7 @@ func TestRunScriptPoller_UsesWorkerTimeoutWithoutSubmit(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	err := svc.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, submitted.submit)
+	err := svc.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, scriptpollers.ScriptPollerSupervision{}, submitted.submit)
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("RunScriptPoller error = %v, want timeout", err)
 	}
@@ -109,6 +109,7 @@ func TestStartScriptPoller_RestartsOnMalformedOutputWithBackoff(t *testing.T) {
 		runtimeCfg,
 		poller,
 		worker,
+		scriptpollers.ScriptPollerSupervision{},
 		func(_ context.Context, _ work.WorkRequest) error { return nil },
 	)
 	t.Cleanup(func() {
@@ -158,6 +159,7 @@ func TestStartScriptPoller_RestartsAfterNonZeroExit(t *testing.T) {
 		runtimeCfg,
 		poller,
 		worker,
+		scriptpollers.ScriptPollerSupervision{},
 		func(_ context.Context, _ work.WorkRequest) error { return nil },
 	)
 	t.Cleanup(func() {
@@ -208,6 +210,7 @@ func TestStartScriptPoller_RestartsAfterCommandFailure(t *testing.T) {
 		runtimeCfg,
 		poller,
 		worker,
+		scriptpollers.ScriptPollerSupervision{},
 		func(_ context.Context, _ work.WorkRequest) error { return nil },
 	)
 	t.Cleanup(func() {
@@ -254,6 +257,7 @@ func TestStartScriptPoller_StopReasonOnContextCancelDuringRun(t *testing.T) {
 		runtimeCfg,
 		poller,
 		worker,
+		scriptpollers.ScriptPollerSupervision{},
 		func(_ context.Context, _ work.WorkRequest) error { return nil },
 	)
 	cancelRun()
@@ -293,6 +297,7 @@ func TestStartScriptPoller_StopsDuringBackoffWithoutAnotherRun(t *testing.T) {
 		runtimeCfg,
 		poller,
 		worker,
+		scriptpollers.ScriptPollerSupervision{},
 		func(_ context.Context, _ work.WorkRequest) error { return nil },
 	)
 
@@ -311,6 +316,7 @@ type scriptPollersServiceOptions struct {
 	clock           clockwork.Clock
 	logger          *zap.Logger
 	executionPolicy factorydefinitionfixtures.WorkstationExecutionPolicy
+	cursorRecorder  scriptpollers.CursorRecorder
 }
 
 func newScriptPollersServiceWithOptions(options scriptPollersServiceOptions) scriptpollers.Service {
@@ -334,6 +340,7 @@ func newScriptPollersServiceWithOptions(options scriptPollersServiceOptions) scr
 			return options.runner
 		},
 		ExecutionPolicy: executionPolicy,
+		CursorRecorder:  options.cursorRecorder,
 	}
 	if options.clock != nil {
 		clock := options.clock

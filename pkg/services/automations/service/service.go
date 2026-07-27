@@ -74,6 +74,7 @@ func (s *Service) newScriptPollers() scriptpollers.Service {
 		CommandRunner:    s.commandRunner,
 		ResolveTemplates: s.resolveTemplates,
 		ExecutionPolicy:  s.executionPolicy,
+		CursorRecorder:   scriptpollers.NewMemoryCursorRecorder(),
 	})
 }
 
