@@ -142,6 +142,56 @@ func (fake *fakePackagedInstaller) EnsurePackagedFactories(
 	return append([]factorydefinitions.PackagedFactoryInstallResult(nil), fake.results...), fake.err
 }
 
+func TestInitializeFreshHomeReturnsTypedCreatedResultsThroughPeerRoots(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	definitions := []factorydefinitions.PackagedDefinition{{
+		Name:    "@you/goal",
+		JSON:    []byte(`{}`),
+		Formats: []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON},
+	}}
+	settings := &fakeOperatorSettings{}
+	installer := &fakePackagedInstaller{results: []factorydefinitions.PackagedFactoryInstallResult{{
+		Name:       "@you/goal",
+		FactoryDir: "goal",
+		Outcome:    factorydefinitions.PackagedFactoryInstallCreated,
+	}}}
+
+	result, err := newTestInitializer(t, settings, installer, definitions).
+		Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
+	if err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+
+	wantConfigPath := operatorsettings.DefaultConfigPath(homeDir)
+	wantFactoriesRoot := factorydefinitions.NamedFactoriesRoot(homeDir)
+	if result.HomeDir != homeDir ||
+		result.ConfigPath != wantConfigPath ||
+		result.NamedFactoriesRoot != wantFactoriesRoot ||
+		result.SystemConfigOutcome != systeminitialization.SystemConfigCreated {
+		t.Fatalf("Initialize() result = %#v, want typed created-path summary", result)
+	}
+	if len(result.PackagedFactories) != 1 ||
+		result.PackagedFactories[0].Name != "@you/goal" ||
+		result.PackagedFactories[0].FactoryDir != "goal" ||
+		result.PackagedFactories[0].Outcome != systeminitialization.PackagedFactoryCreated {
+		t.Fatalf("PackagedFactories = %#v, want one created packaged Factory", result.PackagedFactories)
+	}
+	if len(settings.ensureCalls) != 1 || settings.ensureCalls[0] != wantConfigPath {
+		t.Fatalf("Operator Settings ensureCalls = %#v, want [%q]", settings.ensureCalls, wantConfigPath)
+	}
+	if len(settings.loadCalls) != 1 || settings.loadCalls[0] != wantConfigPath {
+		t.Fatalf("Operator Settings loadCalls = %#v, want [%q]", settings.loadCalls, wantConfigPath)
+	}
+	if len(installer.calls) != 1 ||
+		installer.calls[0].root != wantFactoriesRoot ||
+		len(installer.calls[0].definitions) != 1 ||
+		installer.calls[0].definitions[0].Name != "@you/goal" {
+		t.Fatalf("Factory Definitions installer calls = %#v, want one install at %q", installer.calls, wantFactoriesRoot)
+	}
+}
+
 func TestInit_FreshHomeCreatesOperatorSystemConfig(t *testing.T) {
 	settings := &fakeOperatorSettings{}
 	installer := &fakePackagedInstaller{}
