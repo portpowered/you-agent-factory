@@ -121,6 +121,9 @@ func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, par
 		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 		return
 	}
+	if s.sessionsRoot != nil && s.guardSessionsRequestContext(w, r) {
+		return
+	}
 
 	response, err := s.mergeScopedFactorySessionList(r.Context(), raw)
 	if err != nil {
@@ -154,6 +157,9 @@ func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessi
 	}
 
 	if s.sessionsRoot != nil {
+		if s.guardSessionsRequestContext(w, r) {
+			return
+		}
 		projection, err := s.sessionsRoot.GetFactorySession(r.Context(), decodeGetFactorySessionRequest(sessionID))
 		if err != nil {
 			if s.writeSessionsRootError(w, string(sessionID), err) {
@@ -381,6 +387,9 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.sessionsRoot != nil {
+		if s.guardSessionsRequestContext(w, r) {
+			return
+		}
 		result, err := s.sessionsRoot.OpenFactorySession(r.Context(), factorysession.OpenRequestFromAPI(req))
 		if err != nil {
 			s.writeOpenFactorySessionRejected(w, err)
@@ -403,6 +412,9 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) writeOpenFactorySessionRejected(w http.ResponseWriter, err error) {
+	if s.writeSessionsRequestContextOutcome(w, err) {
+		return
+	}
 	s.logger.Debug("open factory session rejected", zap.Error(err))
 	var domainTargetedErr interface {
 		error
@@ -438,6 +450,9 @@ func (s *Server) writeOpenFactorySessionRejected(w http.ResponseWriter, err erro
 
 func (s *Server) CloseFactorySession(w http.ResponseWriter, r *http.Request, sessionID string) {
 	if s.sessionsRoot != nil {
+		if s.guardSessionsRequestContext(w, r) {
+			return
+		}
 		if err := s.sessionsRoot.CloseFactorySession(r.Context(), sessionID); err != nil {
 			if s.writeSessionsRootError(w, sessionID, err) {
 				return
@@ -835,6 +850,9 @@ func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.
 	}
 
 	if s.sessionsRoot != nil {
+		if s.guardSessionsRequestContext(w, r) {
+			return
+		}
 		result, err := s.sessionsRoot.StartAsync(r.Context(), raw)
 		if err != nil {
 			if s.writeSessionsRootError(w, "", err) {
@@ -878,6 +896,9 @@ func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.R
 	}
 
 	if s.sessionsRoot != nil {
+		if s.guardSessionsRequestContext(w, r) {
+			return
+		}
 		result, err := s.sessionsRoot.StartSync(r.Context(), raw)
 		if err != nil {
 			if s.writeSessionsRootError(w, "", err) {

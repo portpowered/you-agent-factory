@@ -18,6 +18,10 @@ func sessionsRootErrorResponse(sessionID string, err error) (int, any, bool) {
 		return 0, nil, false
 	}
 
+	if status, response, ok := sessionsRequestContextErrorResponse(err); ok {
+		return status, response, true
+	}
+
 	if status, response, ok := factorysession.LifecycleControlErrorResponse(sessionID, err); ok {
 		return status, response, true
 	}
@@ -68,6 +72,9 @@ func sessionsRootNotFoundErrorResponse(err error) (int, factoryapi.ErrorResponse
 
 func (s *Server) writeSessionsRootError(w http.ResponseWriter, sessionID string, err error) bool {
 	if status, response, ok := sessionsRootErrorResponse(sessionID, err); ok {
+		if response == nil {
+			return true
+		}
 		s.writeJSON(w, status, response)
 		return true
 	}
