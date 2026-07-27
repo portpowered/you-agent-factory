@@ -866,11 +866,13 @@ func TestProductionRootUsesGeneratedSessionFamilyCutover(t *testing.T) {
 func TestShowSessionUsesInjectedService(t *testing.T) {
 	called := false
 	root := (CommandFactory{
-		ModelsCLI: legacyModelsCLIService{},
-		ShowSession: func(cfg session.ShowConfig) error {
-			called = true
-			return nil
-		},
+		ModelsCLI: rootModelsCLI,
+		SessionsCLI: session.Bind(session.Operations{
+			Show: func(cfg session.ShowConfig) error {
+				called = true
+				return nil
+			},
+		}),
 	}).NewCommand(nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)

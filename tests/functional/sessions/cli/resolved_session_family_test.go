@@ -21,6 +21,9 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
+// TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition proves
+// every public session CLI leaf command executes through root.BuildProcess against
+// the resolved production composition without bypassing the customer process boundary.
 func TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition(t *testing.T) {
 	var requests sessionRequests
 	server := httptest.NewServer(http.HandlerFunc(requests.handle))
@@ -95,6 +98,8 @@ func TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition(
 	}
 }
 
+// TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch proves submit rejects
+// deprecated --port wiring before any dispatch attempt and directs callers to --server.
 func TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch(t *testing.T) {
 	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
 	if err != nil {

@@ -22,26 +22,22 @@ func TestModelsDocumentation_ExamplesReachCurrentCLIBoundary(t *testing.T) {
 	}
 	requireDocumentedModelCommands(t, doc)
 
-	originalList := listModels
-	originalInspect := inspectModel
-	originalPull := pullModel
-	originalInvoke := invokeModel
+	originalModelsCLI := rootModelsCLI
 	defer func() {
-		listModels = originalList
-		inspectModel = originalInspect
-		pullModel = originalPull
-		invokeModel = originalInvoke
+		rootModelsCLI = originalModelsCLI
 	}()
 
 	var listed bool
 	var inspected, pulled string
 	var invocations []modelscli.InvokeConfig
-	listModels = func(modelscli.ListConfig) error { listed = true; return nil }
-	inspectModel = func(cfg modelscli.InspectConfig) error { inspected = cfg.ModelName; return nil }
-	pullModel = func(cfg modelscli.PullConfig) error { pulled = cfg.ModelName; return nil }
-	invokeModel = func(cfg modelscli.InvokeConfig) error {
-		invocations = append(invocations, cfg)
-		return nil
+	rootModelsCLI = modelsCLIServiceFunctions{
+		list:    func(modelscli.ListConfig) error { listed = true; return nil },
+		inspect: func(cfg modelscli.InspectConfig) error { inspected = cfg.ModelName; return nil },
+		pull:    func(cfg modelscli.PullConfig) error { pulled = cfg.ModelName; return nil },
+		invoke: func(cfg modelscli.InvokeConfig) error {
+			invocations = append(invocations, cfg)
+			return nil
+		},
 	}
 
 	executeDocumentedModelExample(t, []string{"models", "list"})

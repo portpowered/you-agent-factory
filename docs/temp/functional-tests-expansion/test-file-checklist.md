@@ -78,7 +78,7 @@ intentionally small enough to distribute across many agents.
   - `TestOptionalSessionIDUsesDefaultWhenOmitted` verifies default session
     targeting and explicit override.
 
-- [ ] `tests/functional/transport/cli/parameters/flags_test.go`
+- [x] `tests/functional/transport/cli/parameters/flags_test.go`
   - `TestCLIStringBooleanAndRepeatedFlagsReachRequest` verifies flag mapping at
     the external observation edge.
   - `TestCLIUnknownFlagFailsBeforeLifecycleStart` verifies stable diagnostics.
@@ -117,7 +117,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIJSONFailureRemainsValidJSON` verifies structured failure output.
   - `TestCLIJSONContainsNoPrivateRuntimeFields` guards the public boundary.
 
-- [ ] `tests/functional/transport/cli/output/ndjson_stream_test.go`
+- [x] `tests/functional/transport/cli/output/ndjson_stream_test.go`
   - `TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult` verifies
     record order and final record type.
   - `TestCLINDJSONSequenceIsMonotonic` verifies event ordering.
@@ -198,7 +198,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIConcurrentSessionRequestsRemainIsolated`.
   - `TestAPICancelledRequestDoesNotCancelUnrelatedSession`.
 
-- [ ] `tests/functional/transport/http/status/status_test.go`
+- [x] `tests/functional/transport/http/status/status_test.go`
   - `TestAPIStatusReportsReadyAfterStartup`.
   - `TestAPIStatusDoesNotLeakInternalConfiguration`.
 
@@ -239,7 +239,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     command metadata.
   - `TestUnsupportedProviderFlagReturnsCapabilityError` covers mismatch.
 
-- [ ] `tests/functional/workers/inference/failure_normalization_test.go`
+- [x] `tests/functional/workers/inference/failure_normalization_test.go`
   - `TestProviderNonZeroExitMapsToPublicFailure` covers generic process failure.
   - `TestProviderAuthRateLimitAndTimeoutRemainDistinct` covers error classes.
   - `TestProviderFailureRedactsPromptEnvironmentAndCredentials` covers safety.
@@ -282,7 +282,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCursorGoldenMalformedRecordReturnsStableDiagnostic`.
   - `TestCursorGoldenProcessFailureAndTimeoutRemainDistinct`.
 
-- [ ] `tests/functional/workers/inference/opencode/golden_test.go`
+- [x] `tests/functional/workers/inference/opencode/golden_test.go`
   - `TestOpenCodeGoldenStructuredSnapshotSuccess`.
   - `TestOpenCodeGoldenFinalOnlyFallback`.
   - `TestOpenCodeGoldenStructuredFailureAndTimeout`.
@@ -408,7 +408,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPetriWorkerErrorReturnsFailedTerminalOutcome`.
   - `TestPetriInvocationInputAndOutputMapping`.
 
-- [ ] `tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go`
+- [x] `tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go`
   - `TestPetriIndependentWorkDispatchesConcurrently`.
   - `TestPetriConcurrentResultsCorrelateToOriginalWork`.
   - `TestPetriConcurrentFailureDoesNotDuplicateDispatch`.
@@ -419,7 +419,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ## Wave 1 — workstations
 
-- [ ] `tests/functional/workstations/execution/basic_test.go`
+- [x] `tests/functional/workstations/execution/basic_test.go`
   - `TestExecutionWorkstationDispatchesEligibleWorkOnce`.
   - `TestExecutionWorkstationFailureProjectsPublicFailedState`.
 
@@ -437,7 +437,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestRepeaterHonorsEachConfiguredStopWord`.
   - `TestRepeaterLoopBreakerTerminatesNonConvergingWork`.
 
-- [ ] `tests/functional/workstations/poller/poller_test.go`
+- [x] `tests/functional/workstations/poller/poller_test.go`
   - `TestPollerCreatesWorkFromExternalItems`.
   - `TestPollerEmptyResultCreatesNoWork`.
   - `TestPollerRecoverableFailureRetriesWithoutDuplicates`.

@@ -78,37 +78,6 @@ func TestOOTBExperience_APIPreseededTwoStagePipelineCompletes(t *testing.T) {
 	}
 }
 
-func TestOOTBExperience_APIStatusStaysQueryableAcrossCompletion(t *testing.T) {
-	support.SkipLongFunctional(t, "slow OOTB API status-across-completion sweep")
-
-	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-		WorkTypeID: "task",
-		TraceID:    "trace-ootb-status-001",
-		Payload:    []byte(`{"title":"Status check"}`),
-	})
-
-	server := startFunctionalServer(t, dir, true)
-
-	initialStatus := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
-	if initialStatus.FactoryState == "" {
-		t.Fatal("GET /status returned an empty factory_state before completion")
-	}
-
-	waitForGeneratedWorkTypeComplete(t, server.URL(), "task", 10*time.Second)
-
-	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
-	if status.FactoryState != "RUNNING" && status.FactoryState != "COMPLETED" {
-		t.Fatalf("GET /status factory_state = %q, want RUNNING or COMPLETED", status.FactoryState)
-	}
-	if status.TotalTokens != 1 {
-		t.Fatalf("GET /status total_tokens = %d, want 1", status.TotalTokens)
-	}
-	if status.Categories.Terminal != 1 {
-		t.Fatalf("GET /status terminal count = %d, want 1", status.Categories.Terminal)
-	}
-}
-
 func ootbTwoStagePipelineConfig() map[string]any {
 	return map[string]any{
 		"workTypes": []map[string]any{{

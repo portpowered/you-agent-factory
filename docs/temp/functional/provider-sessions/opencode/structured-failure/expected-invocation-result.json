@@ -1,0 +1,5 @@
+{
+  "failureReason": "auth_failure",
+  "message": "OpenCode authentication failed.",
+  "ok": false
+}

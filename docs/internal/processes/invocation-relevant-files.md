@@ -403,7 +403,13 @@ primary-result behavior.
   placeholder) and must register Integrations constructed inside Workers
   (for example `inferencecontract.ProgressingExternalIntegration`) rather
   than calling `inferencecontract.NewDiscovery` / `NewEventDraft` /
-  `NewResponse` from the functional package.
+  `NewResponse` from the functional package. Provider failure normalization
+  (non-zero exit, auth/rate-limit/timeout distinction, and public diagnostic
+  redaction) belongs in
+  `tests/functional/workers/inference/failure_normalization_test.go`; drive
+  command-backed failures through `root.BuildProcess` with
+  `serviceedges.Edges{ProviderCommandRunner: ...}` and assert on Work,
+  Factory Event, and Provider Session surfaces only.
 - Wire supplies that same registry to the Workers runtime for routed provider
   selection, conductor composition, manifest-maximum capability checks, and
   executable-prerequisite preflight, and to Factory Sessions through the narrow
