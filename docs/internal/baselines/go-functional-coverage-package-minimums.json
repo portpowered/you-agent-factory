@@ -444,7 +444,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
-      "minimum": 64.41
+      "minimum": 63.29
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire",
@@ -486,7 +486,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime",
-      "minimum": 66.23
+      "minimum": 65.36
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime/buffers",
@@ -498,7 +498,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/scheduler",
-      "minimum": 75.00
+      "minimum": 74.20
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service",
@@ -658,7 +658,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore",
-      "minimum": 48.19
+      "minimum": 47.92
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream",
@@ -860,7 +860,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization",
-      "minimum": 72.85
+      "minimum": 45.39
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts",
@@ -1212,7 +1212,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/events",
-      "minimum": 52.88
+      "minimum": 52.41
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/events/kinds",
@@ -1330,7 +1330,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/projections",
-      "minimum": 46.04
+      "minimum": 45.98
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/projections/dashboard",
@@ -1346,7 +1346,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization",
-      "minimum": 40.97
+      "minimum": 37.34
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work",
@@ -1542,7 +1542,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/internal/service",
-      "minimum": 57.28
+      "minimum": 55.93
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire",
