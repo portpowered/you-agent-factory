@@ -157,6 +157,8 @@ endef
 
 default:
 	$(MAKE) generate-api
+	$(MAKE) ui-deps
+	$(MAKE) ui-build
 	$(MAKE) build
 	$(MAKE) test
 	$(MAKE) lint
