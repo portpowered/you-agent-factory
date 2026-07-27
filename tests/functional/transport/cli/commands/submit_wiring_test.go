@@ -23,6 +23,11 @@ const (
 	submitWiringFileRequestID = "cli-submit-wiring-file"
 	submitWiringFileWorkName  = "file-task"
 	submitWiringFileWorkType  = "task"
+
+	submitWiringUnavailableRequestID = "cli-submit-wiring-unavailable"
+	submitWiringUnavailableWorkName  = "unavailable-task"
+	submitWiringUnavailableWorkType  = "task"
+	submitWiringUnavailableServer      = "http://127.0.0.1:1"
 )
 
 // TestCLISubmitBatchInlineJSON proves you submit batch accepts inline canonical
@@ -132,6 +137,63 @@ func TestCLISubmitBatchFile(t *testing.T) {
 	} {
 		if !strings.Contains(output, marker) {
 			t.Fatalf("submit batch output missing %q:\n%s", marker, output)
+		}
+	}
+}
+
+// TestCLISubmitUnavailableServer proves you submit batch exits with the documented
+// failure code and an actionable unreachable Factory diagnostic when the server
+// address cannot be reached, without printing a success acknowledgment payload.
+func TestCLISubmitUnavailableServer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI submit wiring")
+	}
+
+	binaryPath := buildYouCLIBinary(t)
+	inlineBatch := fmt.Sprintf(
+		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":%q,"payload":{"title":"Unavailable server wiring"}}]}`,
+		submitWiringUnavailableRequestID,
+		submitWiringUnavailableWorkName,
+		submitWiringUnavailableWorkType,
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	submitCmd := exec.CommandContext(
+		ctx,
+		binaryPath,
+		"--server", submitWiringUnavailableServer,
+		"submit", "batch",
+		inlineBatch,
+	)
+	submitCmd.Dir = t.TempDir()
+
+	submitOut, err := submitCmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("you submit batch unexpectedly succeeded against unavailable server:\n%s", submitOut)
+	}
+
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("you submit batch error = %v, want *exec.ExitError", err)
+	}
+	if exitErr.ExitCode() != 1 {
+		t.Fatalf("you submit batch exit code = %d, want 1", exitErr.ExitCode())
+	}
+
+	output := string(submitOut)
+	if !strings.Contains(output, "factory not reachable at") {
+		t.Fatalf("submit batch output missing unreachable factory diagnostic:\n%s", output)
+	}
+
+	for _, marker := range []string{
+		"requestId: " + submitWiringUnavailableRequestID,
+		"traceId:",
+		"work count:",
+	} {
+		if strings.Contains(output, marker) {
+			t.Fatalf("submit batch output must not contain success acknowledgment marker %q:\n%s", marker, output)
 		}
 	}
 }
