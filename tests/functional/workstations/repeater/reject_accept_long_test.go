@@ -14,6 +14,30 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestRepeater_GuardedLoopBreakerTerminatesRejectedRepeater proves that a
+// guarded loop breaker terminates a repeatedly rejected repeater, leaving Work
+// in a failed public state with the expected loop-breaker dispatch route.
+func TestRepeater_GuardedLoopBreakerTerminatesRejectedRepeater(t *testing.T) {
+	support.SkipLongFunctional(t, "slow repeater guarded loop-breaker sweep")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "repeater_workstation"))
+
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "exhaustion test"}`))
+
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+		"exec-worker": {
+			{Content: "retry"}, {Content: "retry"}, {Content: "retry"}, {Content: "retry"},
+			{Content: "retry"}, {Content: "retry"}, {Content: "retry"},
+		},
+		"finish-worker": {{Content: "done COMPLETE"}},
+	})
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+		ProviderOverride: provider,
+	}, 10*time.Second)
+	assertRepeaterWorkStates(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:complete": 0})
+	assertPublicDispatchRoute(t, events, "executor-loop-breaker", "task:failed")
+}
+
 // TestRepeater_RefiresOnRejectedStopsOnAccepted proves that a repeater
 // workstation refires Work while worker outputs omit the accept stop signal
 // and stops with Work in a completed public state once an accepting output
@@ -221,6 +245,24 @@ func TestMultiOutput_OutputTokensInheritInputLineage(t *testing.T) {
 	}, 10*time.Second)
 	assertRepeaterWorkStates(t, listed, map[string]int{"plan:complete": 1, "task:complete": 1})
 	assertListedLineage(t, listed, map[string]string{"plan": inputTraceID, "task": inputTraceID})
+}
+
+func assertPublicDispatchRoute(t *testing.T, events []factoryapi.FactoryEvent, transitionID, toPlaceID string) {
+	t.Helper()
+	var sawDispatch bool
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch response: %v", err)
+		}
+		sawDispatch = sawDispatch || payload.TransitionId == transitionID
+	}
+	if !sawDispatch {
+		t.Fatalf("public events missing transition %s before terminal place %s", transitionID, toPlaceID)
+	}
 }
 
 func assertListedLineage(t *testing.T, response factoryapi.ListWorkResponse, wants map[string]string) {
