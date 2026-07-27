@@ -3,8 +3,10 @@
 package loading_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -12,7 +14,11 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const typeScriptSuccessResult = "<TYPESCRIPT_SUCCESS>"
+const (
+	typeScriptSuccessResult     = "<TYPESCRIPT_SUCCESS>"
+	typeScriptSyntaxErrorSource = "type FailureMarker = string;\nworkflow.final(\"ok\");\nphase(\"setup\";\n"
+	typeScriptSyntaxErrorLine   = 3
+)
 
 // TestTypeScriptFactoryTranspilesAndRuns proves a supported file-backed
 // TypeScript Factory transpiles and completes through the public you run
@@ -55,6 +61,46 @@ func TestTypeScriptFactoryTranspilesAndRuns(t *testing.T) {
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
 
+// TestTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic proves a
+// file-backed TypeScript Factory with a deliberate syntax error fails before
+// work starts through the public you run customer process boundary with an
+// actionable load/validation diagnostic and without private VM internals or
+// external worker dispatch.
+func TestTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	dir := scaffoldFileBackedTypeScriptFactoryWithSyntaxError(t)
+	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run",
+		"--factory", filepath.Join(dir, "factory.json"),
+		"--with-mock-workers", mockWorkersPath,
+		"--output", "primary",
+		"--no-record",
+		"hello",
+	})
+	homeDir := t.TempDir()
+	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = dir
+
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	err := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}).Execute(inputs.Input)
+	assertTypeScriptTypeOrSyntaxFailureOutcome(
+		t,
+		err,
+		inputs.Stdout(),
+		inputs.Stderr(),
+		typeScriptSyntaxErrorLine,
+	)
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0 for TypeScript syntax failure before dispatch", runner.CallCount())
+	}
+	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+}
+
 func scaffoldFileBackedTypeScriptFactory(t *testing.T) string {
 	t.Helper()
 
@@ -88,6 +134,67 @@ workflow.final(result);`),
 		t.Fatalf("write TypeScript workflow entry: %v", err)
 	}
 	return dir
+}
+
+func scaffoldFileBackedTypeScriptFactoryWithSyntaxError(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "typescript-syntax-error",
+		"invocationSignature": map[string]any{
+			"parameters": []any{map[string]any{
+				"name": "prompt", "required": false,
+				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+			}},
+		},
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"sourceRef": "workflow.ts",
+				"argsSchema": map[string]any{
+					"type":                 "object",
+					"properties":           map[string]any{"prompt": map[string]any{"type": "string"}},
+					"additionalProperties": false,
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(
+		filepath.Join(dir, "workflow.ts"),
+		[]byte(typeScriptSyntaxErrorSource),
+		0o600,
+	); err != nil {
+		t.Fatalf("write TypeScript workflow entry: %v", err)
+	}
+	return dir
+}
+
+func assertTypeScriptTypeOrSyntaxFailureOutcome(
+	t *testing.T,
+	runErr error,
+	stdout string,
+	stderr string,
+	wantLine int,
+) {
+	t.Helper()
+
+	if runErr == nil {
+		t.Fatalf("Process.Execute() error = nil, want TypeScript syntax failure before invocation\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty stdout before terminal invocation on TypeScript syntax failure", stdout)
+	}
+
+	failureText := strings.Join([]string{runErr.Error(), stderr}, "\n")
+	if !strings.Contains(failureText, workflowSourceSyntaxErrorCode) {
+		t.Fatalf("failure output = %q, want customer-stable code %q", failureText, workflowSourceSyntaxErrorCode)
+	}
+	if !strings.Contains(failureText, "syntax error") {
+		t.Fatalf("failure output = %q, want actionable syntax failure diagnostic", failureText)
+	}
+	if !strings.Contains(failureText, fmt.Sprintf("line %d", wantLine)) {
+		t.Fatalf("failure output = %q, want authored source line %d indicator", failureText, wantLine)
+	}
 }
 
 func assertTypeScriptSuccessOutcome(t *testing.T, result factoryapi.InvocationResponse) {
