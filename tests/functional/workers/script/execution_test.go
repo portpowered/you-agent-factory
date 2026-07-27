@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -109,6 +110,62 @@ func TestScriptWorkerCancellationTerminatesChildProcess(t *testing.T) {
 		t.Fatal("script command edge did not terminate after cancellation")
 	}
 	assertScriptCancellationDispatchFailure(t, events, scriptCancellationMessage)
+}
+
+// TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents proves a root-built
+// script worker completes through dispatch lifecycle Factory Events without
+// emitting inference request or response events.
+func TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkID:     "work-script-no-inference",
+		WorkTypeID: "task",
+		TraceID:    "trace-script-no-inference",
+		Payload:    []byte("script input"),
+	})
+
+	runner := support.NewStaticSuccessCommandRunner("script-output-ok")
+	_, _, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ScriptCommandRunner: runner},
+		10*time.Second,
+	)
+
+	if !hasFactoryEventType(events, factoryapi.FactoryEventTypeDispatchRequest) ||
+		!hasFactoryEventType(events, factoryapi.FactoryEventTypeDispatchResponse) {
+		t.Fatalf(
+			"script worker canonical events = %v, want dispatch lifecycle events",
+			factoryEventTypes(events),
+		)
+	}
+	if hasFactoryEventType(events, factoryapi.FactoryEventTypeInferenceRequest) ||
+		hasFactoryEventType(events, factoryapi.FactoryEventTypeInferenceResponse) {
+		t.Fatalf("script worker emitted inference events: %v", factoryEventTypes(events))
+	}
+}
+
+// TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner
+// proves a root-built script worker routes through the replaced
+// ScriptCommandRunner edge and completes one terminal dispatch.
+func TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	testutil.WriteSeedFile(t, dir, "task", []byte("script server alignment"))
+
+	runner := support.NewRecordingCommandRunner("script alignment output")
+	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ScriptCommandRunner: runner},
+		10*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
+		t.Fatalf("terminal token count = %d, want 1", got)
+	}
+	if got := runner.CallCount(); got != 1 {
+		t.Fatalf("script command runner calls = %d, want 1", got)
+	}
 }
 
 type cancellationCommandRunner struct {

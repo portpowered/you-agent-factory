@@ -2751,14 +2751,14 @@
       "deletion_only_batch": "replay_contracts-delete-06-wrong-layer"
     },
     {
-      "source_path": "tests/functional/replay_contracts/worker_public_contract_smoke_long_test.go",
-      "package": "you-agent-factory/tests/functional/replay_contracts",
+      "source_path": "tests/functional/workers/script/execution_long_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
       "scenario": "TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFieldsPrivate",
       "lane": "functionallong",
       "destination": "tests/functional/workers/script/execution_test.go",
-      "catch_all": "replay_contracts",
+      "catch_all": "none",
       "specialty_targets": "artifact-contract-closeout",
-      "deletion_only_batch": "replay_contracts-delete-05-workers-script"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/runtime_api/api_batch_submission_boundary_smoke_long_test.go",
@@ -3031,14 +3031,14 @@
       "deletion_only_batch": "runtime_api-delete-07-events-replay"
     },
     {
-      "source_path": "tests/functional/runtime_api/api_inference_events_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
+      "source_path": "tests/functional/workers/script/execution_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
       "scenario": "TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents",
       "lane": "short",
       "destination": "tests/functional/workers/script/execution_test.go",
-      "catch_all": "runtime_api",
+      "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-07-events-replay"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/runtime_api/api_inference_events_test.go",
@@ -3281,14 +3281,14 @@
       "deletion_only_batch": "runtime_api-delete-09-workers-resilience"
     },
     {
-      "source_path": "tests/functional/runtime_api/api_service_config_override_alignment_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
+      "source_path": "tests/functional/workers/script/execution_test.go",
+      "package": "you-agent-factory/tests/functional/workers/script",
       "scenario": "TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner",
       "lane": "short",
       "destination": "tests/functional/workers/script/execution_test.go",
-      "catch_all": "runtime_api",
+      "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-09-workers-resilience"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/runtime_api/api_service_mode_observability_smoke_test.go",
@@ -6631,7 +6631,6 @@
       "replay_contracts-delete-02-events-factory-events",
       "replay_contracts-delete-03-events-response-events",
       "replay_contracts-delete-04-work-submission",
-      "replay_contracts-delete-05-workers-script",
       "replay_contracts-delete-06-wrong-layer"
     ]
   },

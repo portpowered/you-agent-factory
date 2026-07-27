@@ -266,6 +266,30 @@ func assertDispatchErrorContains(t *testing.T, events []factoryapi.FactoryEvent,
 	t.Fatalf("dispatch responses do not contain error %q", want)
 }
 
+func hasFactoryEventType(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) bool {
+	for _, event := range events {
+		if event.Type == eventType {
+			return true
+		}
+	}
+	return false
+}
+
+func factoryEventTypes(events []factoryapi.FactoryEvent) []factoryapi.FactoryEventType {
+	types := make([]factoryapi.FactoryEventType, 0, len(events))
+	for _, event := range events {
+		types = append(types, event.Type)
+	}
+	return types
+}
+
+func stringPointerValue[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
+}
+
 func dispatchResponses(t *testing.T, events []factoryapi.FactoryEvent) []factoryapi.DispatchResponseEventPayload {
 	t.Helper()
 	var responses []factoryapi.DispatchResponseEventPayload
