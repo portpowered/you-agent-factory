@@ -109,9 +109,7 @@ func TestServiceProjectsRetainedAndLiveFactoryEvents(t *testing.T) {
 	}
 	<-rendered
 
-	service.mu.Lock()
-	cursor := service.cursor
-	service.mu.Unlock()
+	cursor := service.reconnectCursor()
 	if cursor == nil || cursor.AfterEventID != liveEvent.Id ||
 		cursor.AfterSequence == nil || *cursor.AfterSequence != 4 {
 		t.Fatalf("cursor = %#v, want live event", cursor)
@@ -260,17 +258,37 @@ func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
 	}
 
 	source.snapshot = &factoryruntime.StateSnapshot{TickCount: 9}
-	service.projections = projectionStub{
-		reconstruct: func([]factorydefinitions.FactoryEvent, int) (factorydefinitions.FactoryWorldState, error) {
-			return factorydefinitions.FactoryWorldState{}, errors.New("reconstruct boom")
+	service, err = New(
+		source,
+		projectionStub{
+			reconstruct: func([]factorydefinitions.FactoryEvent, int) (factorydefinitions.FactoryWorldState, error) {
+				return factorydefinitions.FactoryWorldState{}, errors.New("reconstruct boom")
+			},
 		},
+		fixedClock{now: now},
+		SinkFunc(func(View) {}),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() after reconstruction stub: error = %v", err)
 	}
+	root = service
 	_, err = root.Observe(context.Background(), ObserveRequest{Mode: ObserveModeRetainedThenLive})
 	if !errors.As(err, &projErr) || projErr.Kind != ProjectionErrorReconstructionFailed {
 		t.Fatalf("Observe reconstruction failure: error = %v, want ReconstructionFailed", err)
 	}
 
-	service.projections = projectionStub{}
+	service, err = New(
+		source,
+		projectionStub{},
+		fixedClock{now: now},
+		SinkFunc(func(View) {}),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() after success stub: error = %v", err)
+	}
+	root = service
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if _, err := root.Activate(ctx, ActivateRequest{Mode: ActivateModeRetainedThenLive}); err != nil {
