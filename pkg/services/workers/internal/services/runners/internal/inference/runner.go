@@ -3,6 +3,7 @@ package inference
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -142,6 +143,9 @@ func (r *runner) normalizeInvocationError(
 ) error {
 	if err == nil {
 		return nil
+	}
+	if errors.Is(err, context.Canceled) {
+		return err
 	}
 	failure, ok := workers.ClassifyInferenceFailure(err, workers.InferenceFailureContext{
 		ModelName:  r.worker.Model,

@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -357,6 +358,145 @@ func TestRunnerSuccessResultsStayDetachedAcrossRepeatedAndConcurrentExecutions(t
 	}
 }
 
+func TestRunnerNormalizesCancellationAndDeadlineAfterModelsStart(t *testing.T) {
+	t.Run("cancellation", func(t *testing.T) {
+		runInterruptedInferenceCase(t, false)
+	})
+	t.Run("deadline", func(t *testing.T) {
+		runInterruptedInferenceCase(t, true)
+	})
+}
+
+func runInterruptedInferenceCase(t *testing.T, deadline bool) {
+	t.Helper()
+	modelsEdge := &interruptingModelsService{started: make(chan struct{}, 1)}
+	inferenceRunner, err := New(validConfig(), Dependencies{Models: modelsEdge})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if deadline {
+		ctx, cancel = context.WithTimeout(context.Background(), 50*time.Millisecond)
+	}
+	defer cancel()
+
+	type executionOutcome struct {
+		result workers.RunnerExecutionResult
+		err    error
+	}
+	done := make(chan executionOutcome, 1)
+	go func() {
+		result, executeErr := inferenceRunner.Execute(ctx, validRequest())
+		done <- executionOutcome{result: result, err: executeErr}
+	}()
+	<-modelsEdge.started
+	if !deadline {
+		cancel()
+	}
+	outcome := <-done
+
+	wantCause := context.Canceled
+	if deadline {
+		wantCause = context.DeadlineExceeded
+		failure, ok := workers.AsInferenceFailure(outcome.err)
+		if !ok || failure.Class != workers.InferenceFailureClassTimeout {
+			t.Fatalf("Execute() error = %#v, want timeout InferenceFailure", outcome.err)
+		}
+	}
+	if !errors.Is(outcome.err, wantCause) {
+		t.Fatalf("Execute() error = %v, want cause %v", outcome.err, wantCause)
+	}
+	if outcome.result.Content != "" {
+		t.Fatalf("interrupted result content = %q, want empty", outcome.result.Content)
+	}
+	if modelsEdge.Calls() != 1 {
+		t.Fatalf("Models calls = %d, want 1 in-flight invocation", modelsEdge.Calls())
+	}
+}
+
+func TestRunnerNormalizesLeaseCapacityFailure(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{
+			name: "host capacity exhausted",
+			err:  models.ErrHostCapacityExhausted,
+		},
+		{
+			name: "host readiness capacity exhausted",
+			err: &models.HostReadinessError{
+				Snapshot: models.HostReadinessSnapshot{
+					FailureClass: models.HostFailureClassCapacityExhausted,
+				},
+				Cause: models.ErrHostCapacityExhausted,
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			modelsEdge := &captureModelsService{
+				result: models.LocalInvocationResult{Handled: true},
+				err:    test.err,
+			}
+			inferenceRunner := newTestRunner(t, modelsEdge)
+
+			_, err := inferenceRunner.Execute(t.Context(), validRequest())
+			failure, ok := workers.AsInferenceFailure(err)
+			if !ok || failure.Class != workers.InferenceFailureClassRuntimeFailure {
+				t.Fatalf("Execute() error = %#v, want runtime InferenceFailure", err)
+			}
+			if !errors.Is(err, models.ErrHostCapacityExhausted) {
+				t.Fatalf("Execute() error = %v, want Models capacity cause", err)
+			}
+			var providerErr *workers.ProviderError
+			if errors.As(err, &providerErr) &&
+				providerErr.Type == workers.WorkFailureTypePermanentBadRequest {
+				t.Fatalf("Execute() error = %#v, want non-bad-request classification", err)
+			}
+			if modelsEdge.Calls() != 1 {
+				t.Fatalf("Models calls = %d, want 1", modelsEdge.Calls())
+			}
+		})
+	}
+}
+
+func TestRunnerConcurrentInterruptedExecutionsReturnStableTerminalErrors(t *testing.T) {
+	const executions = 8
+	errs := make(chan error, executions)
+	var wait sync.WaitGroup
+	for range executions {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			modelsEdge := &interruptingModelsService{started: make(chan struct{}, 1)}
+			inferenceRunner, err := New(validConfig(), Dependencies{Models: modelsEdge})
+			if err != nil {
+				errs <- err
+				return
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan error, 1)
+			go func() {
+				_, executeErr := inferenceRunner.Execute(ctx, validRequest())
+				done <- executeErr
+			}()
+			<-modelsEdge.started
+			cancel()
+			errs <- <-done
+		}()
+	}
+	wait.Wait()
+	close(errs)
+
+	for err := range errs {
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("concurrent Execute() error = %v, want context.Canceled", err)
+		}
+	}
+}
+
 func TestRunnerPreservesPreCanceledContextWithoutCallingModels(t *testing.T) {
 	modelsEdge := &captureModelsService{}
 	inferenceRunner := newTestRunner(t, modelsEdge)
@@ -530,4 +670,28 @@ func (runner *captureDelegateRunner) Request() workers.RunnerExecutionRequest {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	return workers.CloneProviderInferenceRequest(runner.request)
+}
+
+type interruptingModelsService struct {
+	mu      sync.Mutex
+	started chan struct{}
+	calls   int
+}
+
+func (service *interruptingModelsService) InvokeLocal(
+	ctx context.Context,
+	_ models.LocalInvocationRequest,
+) (models.LocalInvocationResult, error) {
+	service.mu.Lock()
+	service.calls++
+	service.mu.Unlock()
+	service.started <- struct{}{}
+	<-ctx.Done()
+	return models.LocalInvocationResult{Handled: true}, ctx.Err()
+}
+
+func (service *interruptingModelsService) Calls() int {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	return service.calls
 }
