@@ -208,7 +208,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/bootstrap_portability/cli_init_factory_test.go | you-agent-factory/tests/functional/bootstrap_portability | TestInitFactory_FailureRouting | short | tests/functional/factory/definitions/init_test.go | bootstrap_portability | none | bootstrap_portability-delete-01-factory-definitions-init |
 | tests/functional/bootstrap_portability/cli_init_factory_test.go | you-agent-factory/tests/functional/bootstrap_portability | TestInitFactory_Idempotent | short | tests/functional/factory/definitions/init_test.go | bootstrap_portability | none | bootstrap_portability-delete-01-factory-definitions-init |
 | tests/functional/bootstrap_portability/cli_init_factory_test.go | you-agent-factory/tests/functional/bootstrap_portability | TestInitFactory_StructureIsValid | short | tests/functional/factory/definitions/init_test.go | bootstrap_portability | none | bootstrap_portability-delete-01-factory-definitions-init |
-| tests/functional/bootstrap_portability/cli_relative_working_directory_long_test.go | you-agent-factory/tests/functional/bootstrap_portability | TestRelativeWorkingDirectory_UsesFactoryRuntimeRoot | functionallong | tests/functional/transport/cli/parameters/working_directory_test.go | bootstrap_portability | none | bootstrap_portability-delete-06-transport-cli |
 | tests/functional/bootstrap_portability/export_import_fixture_test.go | you-agent-factory/tests/functional/bootstrap_portability | TestExportImportFixture_BuildsCanonicalExportAndImportContractsFromAuthoredFixture | short | tests/functional/factory/definitions/import_export_test.go | bootstrap_portability | none | bootstrap_portability-delete-03-factory-definitions-import-export |
 | tests/functional/bootstrap_portability/export_import_fixture_test.go | you-agent-factory/tests/functional/bootstrap_portability | TestExportImportFixture_PersistedFactoryExposesReusableCurrentFactorySignals | short | tests/functional/factory/definitions/import_export_test.go | bootstrap_portability | none | bootstrap_portability-delete-03-factory-definitions-import-export |
 | tests/functional/bootstrap_portability/export_import_nested_docs_test.go | you-agent-factory/tests/functional/bootstrap_portability | TestExportImportSmoke_PreservesNestedFactoryDocsThroughExportImport | short | tests/functional/factory/definitions/import_export_test.go | bootstrap_portability | none | bootstrap_portability-delete-03-factory-definitions-import-export |
@@ -773,7 +772,6 @@ explicitly so completeness accounting does not silently omit them.
 
 | path | rationale |
 | --- | --- |
-| tests/functional/bootstrap_portability/cli_relative_working_directory_functionallong_helpers_test.go | Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only). |
 | tests/functional/bootstrap_portability/export_import_harness_test.go | Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only). |
 | tests/functional/bootstrap_portability/helpers_functionallong_test.go | Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only). |
 | tests/functional/bootstrap_portability/helpers_http_test.go | Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only). |
@@ -1289,7 +1287,6 @@ ownership reaches zero.
 | `bootstrap_portability-delete-03-factory-definitions-import-export` | bootstrap_portability | 10 | factory/definitions | none |
 | `bootstrap_portability-delete-04-portable-config` | bootstrap_portability | 10 | factory/definitions, transport/cli | artifact-contract-closeout |
 | `bootstrap_portability-delete-05-factory-current` | bootstrap_portability | 3 | factory/current | current-factory-watcher-switch-smoke |
-| `bootstrap_portability-delete-06-transport-cli` | bootstrap_portability | 1 | transport/cli | none |
 | `replay_contracts-delete-01-events-replay` | replay_contracts | 16 | events/replay | artifact-contract-closeout |
 | `replay_contracts-delete-02-events-factory-events` | replay_contracts | 1 | events/factory_events | none |
 | `replay_contracts-delete-03-events-response-events` | replay_contracts | 3 | events/response_events | none |
@@ -1378,7 +1375,6 @@ Batch execution guidance for later move work:
 | tests/functional/bootstrap_portability/cli_init_factory_test.go | you-agent-factory/tests/functional/bootstrap_portability | TestInitFactory_FailureRouting | short | tests/functional/factory/definitions/init_test.go | bootstrap_portability | none | bootstrap_portability-delete-01-factory-definitions-init |
 | tests/functional/bootstrap_portability/cli_init_factory_test.go | you-agent-factory/tests/functional/bootstrap_portability | TestInitFactory_Idempotent | short | tests/functional/factory/definitions/init_test.go | bootstrap_portability | none | bootstrap_portability-delete-01-factory-definitions-init |
 | tests/functional/bootstrap_portability/cli_init_factory_test.go | you-agent-factory/tests/functional/bootstrap_portability | TestInitFactory_StructureIsValid | short | tests/functional/factory/definitions/init_test.go | bootstrap_portability | none | bootstrap_portability-delete-01-factory-definitions-init |
-| tests/functional/bootstrap_portability/cli_relative_working_directory_long_test.go | you-agent-factory/tests/functional/bootstrap_portability | TestRelativeWorkingDirectory_UsesFactoryRuntimeRoot | functionallong | tests/functional/transport/cli/parameters/working_directory_test.go | bootstrap_portability | none | bootstrap_portability-delete-06-transport-cli |
 | tests/functional/bootstrap_portability/export_import_fixture_test.go | you-agent-factory/tests/functional/bootstrap_portability | TestExportImportFixture_BuildsCanonicalExportAndImportContractsFromAuthoredFixture | short | tests/functional/factory/definitions/import_export_test.go | bootstrap_portability | none | bootstrap_portability-delete-03-factory-definitions-import-export |
 | tests/functional/bootstrap_portability/export_import_fixture_test.go | you-agent-factory/tests/functional/bootstrap_portability | TestExportImportFixture_PersistedFactoryExposesReusableCurrentFactorySignals | short | tests/functional/factory/definitions/import_export_test.go | bootstrap_portability | none | bootstrap_portability-delete-03-factory-definitions-import-export |
 | tests/functional/bootstrap_portability/export_import_nested_docs_test.go | you-agent-factory/tests/functional/bootstrap_portability | TestExportImportSmoke_PreservesNestedFactoryDocsThroughExportImport | short | tests/functional/factory/definitions/import_export_test.go | bootstrap_portability | none | bootstrap_portability-delete-03-factory-definitions-import-export |
@@ -1778,7 +1774,6 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `bootstrap_portability-delete-03-factory-definitions-import-export` | bootstrap_portability | 10 | factory/definitions | planned |
 | `bootstrap_portability-delete-04-portable-config` | bootstrap_portability | 10 | factory/definitions, transport/cli | planned |
 | `bootstrap_portability-delete-05-factory-current` | bootstrap_portability | 3 | factory/current | planned |
-| `bootstrap_portability-delete-06-transport-cli` | bootstrap_portability | 1 | transport/cli | planned |
 | `replay_contracts-delete-01-events-replay` | replay_contracts | 16 | events/replay | planned |
 | `replay_contracts-delete-02-events-factory-events` | replay_contracts | 1 | events/factory_events | planned |
 | `replay_contracts-delete-03-events-response-events` | replay_contracts | 3 | events/response_events | planned |
