@@ -63,8 +63,11 @@ func TestAcceptedRecordingsRootUsesPrivateCanonicalLedger(t *testing.T) {
 }
 
 type stubLedger struct {
-	events          []factorydefinitions.FactoryEvent
-	subscribeStream factorydefinitions.FactoryEventStream
+	events           []factorydefinitions.FactoryEvent
+	subscribeStream  factorydefinitions.FactoryEventStream
+	subscribeErr     error
+	subscribeCount   int
+	lastSubscribeCtx context.Context
 }
 
 func (ledger *stubLedger) CanonicalEvents() []factorydefinitions.FactoryEvent {
@@ -74,10 +77,15 @@ func (ledger *stubLedger) CanonicalEvents() []factorydefinitions.FactoryEvent {
 }
 
 func (ledger *stubLedger) Subscribe(
-	_ context.Context,
+	ctx context.Context,
 	_ *factorydefinitions.FactoryEventReconnectCursor,
 	_ factorydefinitions.FactoryEventReconnectScope,
 ) (factorydefinitions.FactoryEventStream, error) {
+	ledger.subscribeCount++
+	ledger.lastSubscribeCtx = ctx
+	if ledger.subscribeErr != nil {
+		return factorydefinitions.FactoryEventStream{}, ledger.subscribeErr
+	}
 	return ledger.subscribeStream, nil
 }
 

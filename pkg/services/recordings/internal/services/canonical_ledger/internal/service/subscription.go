@@ -19,6 +19,9 @@ type eventSubscription struct {
 	sourceDone   <-chan struct{}
 	cancel       context.CancelFunc
 	terminal     bool
+	// continuationOnly is true when a valid reconnect cursor matched retained
+	// history but no later scoped events remain to replay.
+	continuationOnly bool
 }
 
 func newEventSubscription(
@@ -33,13 +36,14 @@ func newEventSubscription(
 		return nil, err
 	}
 	subscription := &eventSubscription{
-		history:      history,
-		live:         stream.Events,
-		generationID: stream.StreamGenerationID,
-		scope:        scope,
-		nextDelivery: nextDelivery,
-		sourceDone:   sourceDone,
-		cancel:       cancel,
+		history:          history,
+		live:             stream.Events,
+		generationID:     stream.StreamGenerationID,
+		scope:            scope,
+		nextDelivery:     nextDelivery,
+		sourceDone:       sourceDone,
+		cancel:           cancel,
+		continuationOnly: cursor != nil && len(history) == 0,
 	}
 	if cursor != nil {
 		subscription.lastCursor = *cursor
@@ -146,7 +150,25 @@ func (subscription *eventSubscription) next(
 	if len(subscription.history) > 0 {
 		event := subscription.history[0]
 		subscription.history = subscription.history[1:]
+		subscription.continuationOnly = false
 		return event, subscriptionReadEvent
+	}
+	if subscription.continuationOnly {
+		select {
+		case event, ok := <-subscription.live:
+			if !ok {
+				select {
+				case <-subscription.sourceDone:
+					return factorydefinitions.FactoryEvent{}, subscriptionReadCancelled
+				default:
+					return factorydefinitions.FactoryEvent{}, subscriptionReadTerminated
+				}
+			}
+			subscription.continuationOnly = false
+			return event, subscriptionReadEvent
+		default:
+			return factorydefinitions.FactoryEvent{}, subscriptionReadCancelled
+		}
 	}
 	select {
 	case <-ctx.Done():
