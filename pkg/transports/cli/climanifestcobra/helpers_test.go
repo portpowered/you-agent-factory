@@ -18,7 +18,7 @@ func TestRunServerExecutableSurfaceMatchesGeneratedManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunSubmitFamilyManifest() error = %v", err)
 	}
-	components := mustRunSubmitFamilyComponents(t)
+	components := mustRunServerFamilyComponents(t)
 	runRecord := manifest.Commands["you.run"]
 	serverRecord := manifest.Commands["you.server"]
 
@@ -29,7 +29,7 @@ func TestRunServerExecutableSurfaceMatchesGeneratedManifest(t *testing.T) {
 
 func assertRunServerCommandMetadata(
 	t *testing.T,
-	components climanifestcobra.RunSubmitFamilyComponents,
+	components climanifestcobra.RunServerFamilyComponents,
 	runRecord, serverRecord climanifest.Command,
 ) {
 	t.Helper()
@@ -45,7 +45,7 @@ func assertRunServerCommandMetadata(
 
 func assertRunFlagParity(
 	t *testing.T,
-	components climanifestcobra.RunSubmitFamilyComponents,
+	components climanifestcobra.RunServerFamilyComponents,
 	runRecord climanifest.Command,
 ) {
 	t.Helper()

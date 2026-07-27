@@ -372,6 +372,16 @@ func attachSubmitHandler(
 	if err != nil {
 		return fmt.Errorf("build submit family command: %w", err)
 	}
+	validate := command.PreRunE
+	command.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if err := rejectDeprecatedPortFlag(cmd, args); err != nil {
+			return err
+		}
+		if validate != nil {
+			return validate(cmd, args)
+		}
+		return nil
+	}
 	command.RunE = func(cmd *cobra.Command, _ []string) error {
 		inputs, resolveErr := resolveSubmitLocalInputs(cmd, record)
 		if resolveErr != nil {

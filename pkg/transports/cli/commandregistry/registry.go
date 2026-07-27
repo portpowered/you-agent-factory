@@ -3,6 +3,7 @@ package commandregistry
 import (
 	"context"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
@@ -206,6 +207,7 @@ func unarySubmitConfig(
 	if err != nil {
 		return submitcli.SubmitConfig{}, err
 	}
+	diagnostics := submitDiagnostics(cmd, verbose || debug)
 	return submitcli.SubmitConfig{
 		Context:      cmd.Context(),
 		Name:         name,
@@ -217,7 +219,7 @@ func unarySubmitConfig(
 		Output:       cmd.OutOrStdout(),
 		Verbose:      verbose || debug,
 		Debug:        debug,
-		Diagnostics:  cmd.ErrOrStderr(),
+		Diagnostics:  diagnostics,
 	}, nil
 }
 
@@ -252,7 +254,7 @@ func batchSubmitConfig(
 	if cmd == nil {
 		return submitcli.BatchConfig{}, fmt.Errorf("command is required")
 	}
-	argument, err := submitString(local, batchArgumentInputID)
+	argument, err := optionalSubmitString(local, batchArgumentInputID)
 	if err != nil {
 		return submitcli.BatchConfig{}, err
 	}
@@ -290,6 +292,7 @@ func batchSubmitConfig(
 	if effects.StdinIsTTY == nil {
 		return submitcli.BatchConfig{}, fmt.Errorf("batch stdin TTY detector is required")
 	}
+	diagnostics := submitDiagnostics(cmd, verbose || debug)
 	args := []string{}
 	if argument != "" {
 		args = append(args, argument)
@@ -307,9 +310,16 @@ func batchSubmitConfig(
 		Stdin:       cmd.InOrStdin(),
 		StdinIsTTY:  func() bool { return effects.StdinIsTTY(cmd.Context()) },
 		Output:      cmd.OutOrStdout(),
-		Diagnostics: cmd.ErrOrStderr(),
+		Diagnostics: diagnostics,
 		FileSystem:  effects.FileSystem,
 	}, nil
+}
+
+func submitDiagnostics(cmd *cobra.Command, enabled bool) io.Writer {
+	if !enabled {
+		return nil
+	}
+	return cmd.ErrOrStderr()
 }
 
 func submitServer(inputs resolvedinput.Inputs) (string, error) {
@@ -344,6 +354,13 @@ func submitString(inputs resolvedinput.Inputs, inputID string) (string, error) {
 		return "", fmt.Errorf("resolved submit input %q must be a string", inputID)
 	}
 	return value, nil
+}
+
+func optionalSubmitString(inputs resolvedinput.Inputs, inputID string) (string, error) {
+	if _, ok := inputs.Lookup(inputID); !ok {
+		return "", nil
+	}
+	return submitString(inputs, inputID)
 }
 
 func submitBool(inputs resolvedinput.Inputs, inputID string) (bool, error) {
