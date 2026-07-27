@@ -21,8 +21,9 @@ type Service interface {
 }
 
 // Effects applies source-specific lifecycle effects without owning
-// reconciliation policy. Wait observes one already-started transition; it must
-// not activate or stop a source.
+// reconciliation policy. Start is invoked only after the reconciler commits
+// the authoritative starting observation. Wait observes one already-started
+// transition; it must not activate or stop a source.
 type Effects struct {
 	Start func(context.Context, StartEffect) error
 	Stop  func(context.Context, StopEffect) error

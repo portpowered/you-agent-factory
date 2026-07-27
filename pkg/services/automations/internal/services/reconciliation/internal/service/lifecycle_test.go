@@ -97,6 +97,69 @@ func TestSourceLifecycleStartsOnceAndConvergesThroughWait(t *testing.T) {
 	}
 }
 
+func TestStartSourceOwnsExactlyOnceActivationAfterStartingIsAuthoritative(t *testing.T) {
+	t.Parallel()
+
+	identity := sourceIdentity("owned-activation")
+	activationEntered := make(chan error, 1)
+	releaseActivation := make(chan struct{})
+	var service reconciliation.Service
+	var activationMu sync.Mutex
+	activationCalls := 0
+	service = reconciliationwire.NewService(reconciliation.Effects{
+		Start: func(ctx context.Context, _ reconciliation.StartEffect) error {
+			status, err := service.SourceStatus(
+				ctx,
+				automations.SourceStatusRequest{Identity: identity},
+			)
+			if err != nil {
+				activationEntered <- err
+				return err
+			}
+			if status.Observation.State != automations.ObservedLifecycleStarting {
+				err := errors.New("activation ran before starting became authoritative")
+				activationEntered <- err
+				return err
+			}
+			activationMu.Lock()
+			activationCalls++
+			activationMu.Unlock()
+			activationEntered <- nil
+			<-releaseActivation
+			return nil
+		},
+	})
+	request := automations.StartSourceRequest{Identity: identity, Kind: "schedule"}
+
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := service.StartSource(context.Background(), request)
+		firstDone <- err
+	}()
+	if err := <-activationEntered; err != nil {
+		t.Fatal(err)
+	}
+
+	repeated, err := service.StartSource(context.Background(), request)
+	if err != nil {
+		t.Fatalf("repeated StartSource during activation: %v", err)
+	}
+	if !repeated.Outcome.Idempotent ||
+		repeated.Outcome.Observation.State != automations.ObservedLifecycleStarting {
+		t.Fatalf("repeated outcome = %+v, want idempotent starting", repeated.Outcome)
+	}
+	close(releaseActivation)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first StartSource activation: %v", err)
+	}
+
+	activationMu.Lock()
+	defer activationMu.Unlock()
+	if activationCalls != 1 {
+		t.Fatalf("activation calls = %d, want 1", activationCalls)
+	}
+}
+
 func TestSourceLifecycleStopsOnceAndConvergesThroughWait(t *testing.T) {
 	t.Parallel()
 

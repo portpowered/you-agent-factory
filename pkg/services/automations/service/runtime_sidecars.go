@@ -29,15 +29,14 @@ type schedulerSourceConfig struct {
 type schedulerSource struct {
 	mu sync.Mutex
 
-	config            schedulerSourceConfig
-	configured        bool
-	active            bool
-	activationStarted bool
-	ctx               context.Context
-	cancel            context.CancelFunc
-	children          *sync.WaitGroup
-	started           chan struct{}
-	launchErr         error
+	config     schedulerSourceConfig
+	configured bool
+	active     bool
+	ctx        context.Context
+	cancel     context.CancelFunc
+	children   *sync.WaitGroup
+	started    chan struct{}
+	launchErr  error
 }
 
 // StartSchedulerSidecarsForRuntime supervises configured poller and cron workstations
@@ -67,17 +66,13 @@ func (s *Service) StartSchedulerSidecarsForRuntime(
 		submitter:     submitter,
 	})
 
-	started, err := s.reconciler.StartSource(ctx, automations.StartSourceRequest{
+	_, err := s.reconciler.StartSource(ctx, automations.StartSourceRequest{
 		Identity: identity,
 		Kind:     runtimeSchedulerSourceKind,
 	})
 	if err != nil {
 		return err
 	}
-	if !started.Outcome.Idempotent {
-		source.activate(s)
-	}
-	source.awaitActivation()
 	_, err = s.reconciler.WaitSource(ctx, automations.WaitSourceRequest{
 		Identity: identity,
 		Desired:  automations.DesiredLifecycleRunning,
@@ -132,7 +127,7 @@ func (s *Service) startSchedulerSource(
 	if err != nil {
 		return err
 	}
-	return source.begin(ctx, s, effect.Observation.Identity)
+	return source.start(ctx, s, effect.Observation.Identity)
 }
 
 func (s *Service) stopSchedulerSource(
@@ -213,17 +208,18 @@ func (s *schedulerSource) configure(config schedulerSourceConfig) {
 	}
 }
 
-func (s *schedulerSource) begin(
+func (s *schedulerSource) start(
 	parent context.Context,
 	owner *Service,
 	identity automations.SourceIdentity,
 ) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if !s.configured {
+		s.mu.Unlock()
 		return fmt.Errorf("scheduler source configuration is required")
 	}
 	if s.active {
+		s.mu.Unlock()
 		return fmt.Errorf("scheduler source is already active")
 	}
 
@@ -234,22 +230,10 @@ func (s *schedulerSource) begin(
 	s.started = make(chan struct{})
 	s.launchErr = nil
 	s.active = true
-	s.activationStarted = false
 	s.config.sidecars.Add(1)
 	go owner.monitorSchedulerSource(identity, sourceCtx, s.config.sidecars)
-	return nil
-}
-
-func (s *schedulerSource) activate(owner *Service) {
-	s.mu.Lock()
-	if !s.active || s.activationStarted {
-		s.mu.Unlock()
-		return
-	}
-	s.activationStarted = true
-	sourceCtx := s.ctx
-	children := s.children
 	config := s.config
+	children := s.children
 	started := s.started
 	s.mu.Unlock()
 
@@ -258,15 +242,7 @@ func (s *schedulerSource) activate(owner *Service) {
 	s.launchErr = err
 	close(started)
 	s.mu.Unlock()
-}
-
-func (s *schedulerSource) awaitActivation() {
-	s.mu.Lock()
-	started := s.started
-	s.mu.Unlock()
-	if started != nil {
-		<-started
-	}
+	return err
 }
 
 func (s *schedulerSource) stop(ctx context.Context) error {
