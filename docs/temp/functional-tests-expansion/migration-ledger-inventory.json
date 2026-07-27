@@ -2163,6 +2163,16 @@
     {
       "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
       "package": "you-agent-factory/tests/functional/providers",
+      "scenario": "TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates",
+      "lane": "functionallong",
+      "destination": "tests/functional/workers/inference/claude/golden_success_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/cli_template_resolution_long_test.go",
+      "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates",
       "lane": "functionallong",
       "destination": "tests/functional/workers/inference/codex/golden_success_test.go",
