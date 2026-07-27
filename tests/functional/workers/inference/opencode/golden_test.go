@@ -18,7 +18,10 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const openCodeStructuredSnapshotGoldenCase = "structured-snapshot-success"
+const (
+	openCodeStructuredSnapshotGoldenCase = "structured-snapshot-success"
+	openCodeFinalOnlyFallbackGoldenCase  = "final-only-fallback"
+)
 
 // TestOpenCodeGoldenStructuredSnapshotSuccess replays a sanitized OpenCode
 // structured-snapshot transcript through the customer process boundary and
@@ -126,6 +129,139 @@ func TestOpenCodeGoldenStructuredSnapshotSuccess(t *testing.T) {
 			t.Fatalf("%v", err)
 		}
 		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
+	}
+}
+
+// TestOpenCodeGoldenFinalOnlyFallback replays a sanitized OpenCode final-only
+// transcript through the customer process boundary and proves authoritative
+// terminal success without fabricated streaming deltas or structured snapshot
+// lifecycle events.
+//golden: docs/temp/functional/provider-sessions/opencode/final-only-fallback/manifest.json
+func TestOpenCodeGoldenFinalOnlyFallback(t *testing.T) {
+	repoRoot := testutil.MustRepoRoot(t)
+	caseDir := filepath.Join(
+		repoRoot,
+		filepath.FromSlash(support.ProviderSessionFixturePath("opencode", openCodeFinalOnlyFallbackGoldenCase)),
+	)
+
+	loaded, err := support.LoadProviderSessionCase(caseDir)
+	if err != nil {
+		t.Fatalf("LoadProviderSessionCase: %v", err)
+	}
+	if loaded.Manifest.ID != "opencode-final-only-fallback" {
+		t.Fatalf("manifest.ID = %q, want opencode-final-only-fallback", loaded.Manifest.ID)
+	}
+	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelityFinalOnly {
+		t.Fatalf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, support.ProviderSessionFidelityFinalOnly)
+	}
+
+	var request struct {
+		Model     string `json:"model"`
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(loaded.Request, &request); err != nil {
+		t.Fatalf("decode request.json: %v", err)
+	}
+	if request.Model == "" || request.SessionID == "" {
+		t.Fatalf("request.json = %#v, want model and session_id", request)
+	}
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
+		support.BuildModelWorkerConfig(modelprovider.ProviderOpenCode, request.Model),
+		"stopToken: COMPLETE",
+		"skipPermissions: true\nstopToken: COMPLETE",
+		1,
+	))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"opencode golden final-only fallback"}`))
+
+	exitCode := 0
+	if loaded.Process.ExitCode != nil {
+		exitCode = *loaded.Process.ExitCode
+	}
+	executablePath := writeOpenCodeFixtureExecutable(t)
+	runner := testutil.NewProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte("1.2.3\n")},
+		platformprocess.CommandResult{
+			Stderr:   []byte("unknown option --format\n"),
+			ExitCode: 2,
+		},
+		platformprocess.CommandResult{
+			Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
+			Stderr:   []byte(loaded.Stderr),
+			ExitCode: exitCode,
+		},
+	)
+
+	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
+		t,
+		dir,
+		serviceedges.Edges{
+			ProviderCommandRunner:      runner,
+			WorkersExecutableLocator:   fixedExecutableLocator{path: executablePath},
+			WorkersResolveSymlinks:     identityResolveSymlinks,
+		},
+		30*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
+		t.Fatalf("completed work = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
+		t.Fatalf("failed work = %d, want 0", got)
+	}
+	if runner.CallCount() != 3 {
+		t.Fatalf("provider command runner calls = %d, want discovery probes plus one invocation", runner.CallCount())
+	}
+
+	inferencePayload, dispatchOutput := openCodeGoldenInferenceObservation(t, events)
+	if inferencePayload.Outcome != factoryapi.InferenceOutcomeSucceeded {
+		t.Fatalf("inference outcome = %q, want SUCCEEDED", inferencePayload.Outcome)
+	}
+	if inferencePayload.Response == nil || *inferencePayload.Response != dispatchOutput {
+		t.Fatalf("inference response text = %#v, want dispatch output %q", inferencePayload.Response, dispatchOutput)
+	}
+	if dispatchOutput == "" || !strings.Contains(dispatchOutput, "COMPLETE") {
+		t.Fatalf("dispatch output = %q, want terminal COMPLETE-bearing success text", dispatchOutput)
+	}
+
+	assertOpenCodeFinalOnlyPublicResponseEvents(t, responseEvents)
+
+	observed := support.ProviderSessionObservedGoldens{
+		ProviderSession:   observeOpenCodeProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ResponseEvents:   observeOpenCodeResponseEventGoldens(responseEvents),
+		InvocationResult: observeOpenCodeInvocationResultGolden(inferencePayload, dispatchOutput),
+	}
+	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
+		var updated *support.ProviderSessionGoldensUpdatedError
+		if errors.As(err, &updated) {
+			t.Fatalf("%v", err)
+		}
+		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
+	}
+}
+
+func assertOpenCodeFinalOnlyPublicResponseEvents(t *testing.T, events []factoryapi.FactoryResponseEvent) {
+	t.Helper()
+
+	var completedMessages int
+	for _, event := range events {
+		switch event.Kind {
+		case factoryapi.FactoryResponseEventKindMessage:
+			if event.Phase == factoryapi.FactoryResponseEventPhaseDelta {
+				t.Fatalf("final-only replay fabricated message delta: %#v", event)
+			}
+			if event.Phase == factoryapi.FactoryResponseEventPhaseCompleted {
+				completedMessages++
+			}
+		case factoryapi.FactoryResponseEventKindTool:
+			t.Fatalf("final-only replay fabricated tool lifecycle: %#v", event)
+		case factoryapi.FactoryResponseEventKindUsage:
+			t.Fatalf("final-only replay fabricated usage lifecycle: %#v", event)
+		}
+	}
+	if completedMessages == 0 {
+		t.Fatal("final-only replay missing authoritative completed message")
 	}
 }
 
