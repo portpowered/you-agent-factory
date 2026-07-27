@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/jonboulle/clockwork"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -29,6 +31,9 @@ type Service struct {
 	hostedPollers     automations.HostedPollers
 	resolveTemplates  workers.TemplateFieldResolver
 	executionPolicy   factorydefinitions.WorkstationExecutionPolicyService
+	reconciler        reconciliation.Service
+	schedulerMu       sync.Mutex
+	schedulerSources  map[automations.SourceIdentity]*schedulerSource
 }
 
 // New constructs the automation service from explicit worker-sidecar
@@ -43,7 +48,7 @@ func New(
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 ) *Service {
-	return &Service{
+	service := &Service{
 		loggerValue:       logger,
 		clock:             clock,
 		commandRunnerEdge: commandRunner,
@@ -52,7 +57,10 @@ func New(
 		hostedPollers:     hostedPollers,
 		resolveTemplates:  resolveTemplates,
 		executionPolicy:   executionPolicy,
+		schedulerSources:  make(map[automations.SourceIdentity]*schedulerSource),
 	}
+	service.reconciler = service.newSchedulerReconciler()
+	return service
 }
 
 // NewService constructs the Automations root contract for composition.
