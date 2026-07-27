@@ -6630,7 +6630,7 @@
       "smoke": 84,
       "transport": 49,
       "work": 2,
-      "workers": 48,
+      "workers": 50,
       "workflow": 44,
       "workstations": 29
     },
@@ -6784,7 +6784,7 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T21:05:00Z",
+    "audited_at_utc": "2026-07-27T21:06:00Z",
     "story": "ft-wave1-claude-golden-failure-mergeability-rebase15",
     "live_customer_scenarios": 640,
     "ledger_rows": 640,
