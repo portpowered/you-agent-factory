@@ -805,6 +805,30 @@ response-stream output.
   should opt into `GenericBindings.GuardUnknownSubcommands`; keep that
   compatibility behavior in the generic projector instead of reintroducing
   family-owned flag parsing or public-name dispatch.
+  The Session-family canonical seam is
+  `climanifestcobra.NewSessionFamilyCommandFromManifest` with
+  `commandregistry.NewSessionResolvedRegistry`: it projects all seven leaves
+  from `generated.SessionFamilyManifest`, dispatches only manifest handler IDs,
+  and maps fresh local and inherited `resolvedinput.Inputs` into the injected
+  Factory Sessions operations. While `pkg/transports/cli/root_work.go` is
+  leased, production retains the deprecated `SessionFamilyBindings`,
+  `NewSessionRegistry`, and handwritten Session `RunE` adapters.
+  After that lease ends, replace the `newSessionHandlerRegistry` call in
+  `newRootCommandWithGeneratedRepresentativeFamily` with
+  `generated.SessionFamilyManifest` plus `NewSessionResolvedRegistry`, and add
+  the resulting resolved handlers to the representative root's
+  `GenericBindings.ResolvedCobraHandlers` by each record's
+  `Handler.ID`. Preserve `sessionListPrepare(options)` and
+  `diagnostics.writer` as the injected `PrepareList` and `Diagnostics` roles.
+  Once root parser and `root.BuildProcess` parity pass, delete
+  `newSessionFamilyBindings`, `sessionLifecycleRunE`, and the legacy body of
+  `newSessionHandlerRegistry` from `root_workflow.go`; delete
+  `sessionInputBindings`, `applySessionGenericFlagUsages`, and the Session
+  branch of `productionGenericCobraHandler` from `root_work.go`; then remove
+  `SessionFamilyBindings`, `SessionHandlers`, `NewSessionRegistry`, the
+  Session binding structs and handwritten Session `RunE` adapters. Keep
+  `SessionShowRunE` only until the representative root registry no longer
+  installs its duplicate show compatibility handler.
   Validate the complete input and inheritance plan before registering any pflag
   values, and register inherited records against their persistent ancestor's
   canonical storage rather than allocating command-local copies.

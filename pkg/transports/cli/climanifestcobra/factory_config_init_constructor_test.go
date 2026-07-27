@@ -636,6 +636,45 @@ func TestSessionResolvedInspectionRejectsInvalidInputsBeforeSideEffects(t *testi
 	}
 }
 
+func TestSessionResolvedHandlersRejectDeprecatedPortBeforeSideEffects(t *testing.T) {
+	var operationCalls int
+	services := commandregistry.SessionResolvedServices{
+		ShowSession: func(sessioncli.ShowConfig) error {
+			operationCalls++
+			return nil
+		},
+		ListDispatches: func(sessioncli.DispatchesConfig) error {
+			operationCalls++
+			return nil
+		},
+		PauseSession: func(sessioncli.LifecycleControlConfig) error {
+			operationCalls++
+			return nil
+		},
+		ResumeSession: func(sessioncli.LifecycleControlConfig) error {
+			operationCalls++
+			return nil
+		},
+	}
+	for _, args := range [][]string{
+		{"session", "show", "session-alpha", "--port", "7444"},
+		{"session", "dispatches", "dur-sess-review-001", "--port", "7444"},
+		{"session", "pause", "--port", "7444"},
+		{"session", "resume", "--port", "7444"},
+	} {
+		stdout, _, err := executeResolvedSessionWithOutput(t, services, args...)
+		if err == nil || !strings.Contains(err.Error(), "--port is no longer supported") {
+			t.Fatalf("Execute(%v) error = %v, want deprecated-port rejection", args, err)
+		}
+		if stdout != "" {
+			t.Fatalf("Execute(%v) stdout = %q, want empty", args, stdout)
+		}
+	}
+	if operationCalls != 0 {
+		t.Fatalf("operation calls = %d, want zero", operationCalls)
+	}
+}
+
 func TestSessionResolvedInspectionPreservesFailuresAndCancellation(t *testing.T) {
 	operationFailure := errors.New("inspection unavailable")
 	tests := []struct {

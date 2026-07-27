@@ -76,8 +76,11 @@ type GenericBindings struct {
 	GuardUnknownSubcommands bool
 }
 
-// SessionFamilyBindings supplies the legacy typed option structs updated by
-// stable input-ID bindings while Session handlers migrate to normalized values.
+// SessionFamilyBindings supplies the retained production compatibility option
+// structs while root composition remains leased.
+//
+// Deprecated: construct the Session family with
+// NewSessionFamilyCommandFromManifest and a resolved handler registry.
 type SessionFamilyBindings struct {
 	Create     *sessioncli.CreateConfig
 	List       *sessioncli.ListConfig

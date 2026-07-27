@@ -2,6 +2,7 @@ package commandregistry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -205,6 +206,8 @@ type SessionHandlers struct {
 }
 
 const (
+	deprecatedSessionPortFlagMessage = "--port is no longer supported; use --server instead (for example, --server http://localhost:7437)"
+
 	sessionServerInputID  = "you.flag.server"
 	sessionJSONInputID    = "you.flag.json"
 	sessionVerboseInputID = "you.flag.verbose"
@@ -221,11 +224,15 @@ const (
 	sessionListPortInputID         = "you.session.list.flag.port"
 	sessionListScopeInputID        = "you.session.list.flag.scope"
 	sessionShowIDInputID           = "you.session.show.arg.0"
+	sessionShowPortInputID         = "you.session.show.flag.port"
 	sessionDispatchesIDInputID     = "you.session.dispatches.arg.0"
+	sessionDispatchesPortInputID   = "you.session.dispatches.flag.port"
 	sessionDispatchesPhaseInputID  = "you.session.dispatches.flag.phase"
 	sessionDispatchesStatusInputID = "you.session.dispatches.flag.status"
 	sessionPauseIDInputID          = "you.session.pause.arg.0"
+	sessionPausePortInputID        = "you.session.pause.flag.port"
 	sessionResumeIDInputID         = "you.session.resume.arg.0"
+	sessionResumePortInputID       = "you.session.resume.flag.port"
 )
 
 // SessionResolvedServices are the existing injected Factory Session
@@ -331,6 +338,14 @@ func optionalSessionID(inputs resolvedinput.Inputs, inputID string) (string, err
 		return "", nil
 	}
 	return inputs.String(inputID)
+}
+
+func rejectDeprecatedSessionPort(inputs resolvedinput.Inputs, inputID string) error {
+	state, present := inputs.State(inputID)
+	if present && state.Changed {
+		return errors.New(deprecatedSessionPortFlagMessage)
+	}
+	return nil
 }
 
 func (h *SessionResolvedHandler) Create(
@@ -450,6 +465,9 @@ func (h *SessionResolvedHandler) Show(
 	if h == nil || h.services.ShowSession == nil {
 		return fmt.Errorf("session show service is required")
 	}
+	if err := rejectDeprecatedSessionPort(inputs, sessionShowPortInputID); err != nil {
+		return err
+	}
 	sessionID, err := inputs.String(sessionShowIDInputID)
 	if err != nil {
 		return fmt.Errorf("resolve session show inputs: %w", err)
@@ -472,6 +490,9 @@ func (h *SessionResolvedHandler) Dispatches(
 ) error {
 	if h == nil || h.services.ListDispatches == nil {
 		return fmt.Errorf("session dispatches service is required")
+	}
+	if err := rejectDeprecatedSessionPort(inputs, sessionDispatchesPortInputID); err != nil {
+		return err
 	}
 	sessionID, err := inputs.String(sessionDispatchesIDInputID)
 	if err != nil {
@@ -502,10 +523,14 @@ func (h *SessionResolvedHandler) lifecycle(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 	inputID string,
+	portInputID string,
 	control func(sessioncli.LifecycleControlConfig) error,
 ) error {
 	if control == nil {
 		return fmt.Errorf("session lifecycle control handler is required")
+	}
+	if err := rejectDeprecatedSessionPort(inputs, portInputID); err != nil {
+		return err
 	}
 	sessionID, err := optionalSessionID(inputs, inputID)
 	if err != nil {
@@ -530,7 +555,11 @@ func (h *SessionResolvedHandler) Pause(
 	if h == nil {
 		return fmt.Errorf("session pause handler is required")
 	}
-	return h.lifecycle(cmd, inputs, inherited, sessionPauseIDInputID, h.services.PauseSession)
+	return h.lifecycle(
+		cmd, inputs, inherited,
+		sessionPauseIDInputID, sessionPausePortInputID,
+		h.services.PauseSession,
+	)
 }
 
 func (h *SessionResolvedHandler) Resume(
@@ -541,11 +570,17 @@ func (h *SessionResolvedHandler) Resume(
 	if h == nil {
 		return fmt.Errorf("session resume handler is required")
 	}
-	return h.lifecycle(cmd, inputs, inherited, sessionResumeIDInputID, h.services.ResumeSession)
+	return h.lifecycle(
+		cmd, inputs, inherited,
+		sessionResumeIDInputID, sessionResumePortInputID,
+		h.services.ResumeSession,
+	)
 }
 
-// NewSessionRegistry registers exactly one handwritten handler for each
-// canonical runnable Factory Session command.
+// NewSessionRegistry registers the retained production compatibility handlers.
+//
+// Deprecated: use NewSessionResolvedRegistry after the root composition lease
+// permits the Session-family cutover.
 func NewSessionRegistry(handlers SessionHandlers) (*Registry, error) {
 	registrations := []struct {
 		commandID string
