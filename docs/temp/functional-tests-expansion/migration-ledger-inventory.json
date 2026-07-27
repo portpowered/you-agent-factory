@@ -5559,9 +5559,9 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/workers/inference/fake_custom_integration_test.go",
+      "source_path": "tests/functional/workers/inference/selection_test.go",
       "package": "you-agent-factory/tests/functional/workers/inference",
-      "scenario": "TestFakeCustomIntegrationCompletesFactoryDispatchThroughRootBuildProcess",
+      "scenario": "TestExplicitProviderAndModelReachSelectedProviderEdge",
       "lane": "short",
       "destination": "tests/functional/workers/inference/selection_test.go",
       "catch_all": "none",
@@ -5569,9 +5569,19 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/workers/inference/fake_custom_integration_test.go",
+      "source_path": "tests/functional/workers/inference/selection_test.go",
       "package": "you-agent-factory/tests/functional/workers/inference",
-      "scenario": "TestFakeCustomIntegrationRemainsInertThroughRootBuildProcessConstruction",
+      "scenario": "TestWorkerProviderOverridesGlobalDefault",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/selection_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/selection_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestUnknownProviderFailsBeforeProcessStart",
       "lane": "short",
       "destination": "tests/functional/workers/inference/selection_test.go",
       "catch_all": "none",
@@ -6599,7 +6609,7 @@
       "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-27T19:15:00Z",
+  "scanned_at_utc": "2026-07-27T20:00:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 21,
@@ -6696,7 +6706,7 @@
       "you-agent-factory/tests/functional/transport/submit": 2,
       "you-agent-factory/tests/functional/work/cli": 1,
       "you-agent-factory/tests/functional/work/visualization": 1,
-      "you-agent-factory/tests/functional/workers/inference": 9,
+      "you-agent-factory/tests/functional/workers/inference": 10,
       "you-agent-factory/tests/functional/workers/inference/agy": 3,
       "you-agent-factory/tests/functional/workers/inference/claude": 4,
       "you-agent-factory/tests/functional/workers/inference/codex": 5,

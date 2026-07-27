@@ -540,6 +540,19 @@ Wave 0 functional-tests-expansion planning authority lives under
   reject invalid JSON per line.   Retryable timeout cases must queue multiple
   identical `ProviderCommandRunner` results so retries do not fall through to
   the default mock.
+- Workers inference provider/model selection functional coverage belongs in
+  `tests/functional/workers/inference/selection_test.go`: prove explicit
+  worker `modelProvider` and `model` dispatch invoke only the matching
+  registered `ProviderRegistrations` edge and complete factory dispatch, prove
+  worker-authored providers override operator defaults when both edges are
+  registered, and prove unknown provider aliases fail factory startup with a
+  stable validation error before any registered provider edge is invoked.
+  Drive proofs through `support.RunFactoryToCompletionWithEdgesAndObservations`
+  or `support.BuildProcess` with `serviceedges.Edges{ProviderRegistrations: ...}`
+  and assert on integration stats plus public Work outcomes only. Catalog
+  metadata infers domain `workers` and subsection `inference` from the path;
+  every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
 
 - `tests/functional/automations/` owns root.BuildProcess evidence for packaged
   Automations cron scheduling. Keep cron workstation factories explicit with

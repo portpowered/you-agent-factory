@@ -1,6 +1,7 @@
 package inference_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
@@ -276,4 +278,25 @@ func writeExplicitSelectionWorker(t *testing.T, factoryDir, provider, model stri
 	if err := os.WriteFile(workerPath, []byte(worker), 0o600); err != nil {
 		t.Fatalf("write explicit selection worker: %v", err)
 	}
+}
+
+func externalProviderManifest(t *testing.T, identity, alias string) inference.Manifest {
+	t.Helper()
+	var catalog struct {
+		Providers []inference.Manifest `json:"providers"`
+	}
+	if err := json.Unmarshal(modelproviders.CatalogJSON(), &catalog); err != nil {
+		t.Fatalf("decode embedded provider catalog: %v", err)
+	}
+	manifest := catalog.Providers[0]
+	manifest.ID = identity
+	manifest.Aliases = []string{alias}
+	manifest.ImplementationAvailability = inference.ImplementationExternallySupplied
+	manifest.TechnicalSupportLevel = inference.SupportProduction
+	manifest.Deprecation = nil
+	manifest.MaximumExecutionCapabilities = inference.ExecutionCapabilities{
+		PromptSubmission: true,
+	}
+	manifest.MaximumResponseFidelityCapabilities = inference.ResponseFidelityCapabilities{}
+	return manifest
 }
