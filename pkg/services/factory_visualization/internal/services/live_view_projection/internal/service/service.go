@@ -29,6 +29,8 @@ type Service struct {
 
 	events []factorydefinitions.FactoryEvent
 	cursor *factorydefinitions.FactoryEventReconnectCursor
+
+	retainedEventsSupplier func() []factorydefinitions.FactoryEvent
 }
 
 var _ liveviewprojection.Service = (*Service)(nil)
@@ -63,7 +65,20 @@ func New(
 	}
 }
 
-// Start subscribes once to retained-then-live canonical Factory events. It
+// BindRetainedEventsSupplier lets the Visualization root supply activation-owned
+// retained history for Observe when this owner has not started its own subscription.
+func BindRetainedEventsSupplier(
+	svc liveviewprojection.Service,
+	supplier func() []factorydefinitions.FactoryEvent,
+) {
+	if svc == nil || supplier == nil {
+		return
+	}
+	if bindable, ok := svc.(*Service); ok {
+		bindable.retainedEventsSupplier = supplier
+	}
+}
+
 // renders the retained projection before returning and then observes deltas.
 func (s *Service) Start(ctx context.Context) error {
 	if s == nil {
@@ -218,7 +233,11 @@ func (s *Service) Observe(
 
 	s.mu.Lock()
 	events := append([]factorydefinitions.FactoryEvent(nil), s.events...)
+	supplier := s.retainedEventsSupplier
 	s.mu.Unlock()
+	if len(events) == 0 && supplier != nil {
+		events = append([]factorydefinitions.FactoryEvent(nil), supplier()...)
+	}
 
 	if req.Reconnect != nil {
 		cursor := factorydefinitions.FactoryEventReconnectCursor{

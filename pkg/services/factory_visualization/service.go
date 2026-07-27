@@ -8,6 +8,8 @@ import (
 	"sync"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
+	activationlifecyclewire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/wire"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 	liveviewprojectionwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -54,17 +56,19 @@ type RuntimeFactory func(
 // Service owns the retained event projection, reconnect cursor, and live
 // subscription lifecycle for one Factory visualization.
 type Service struct {
+	activation activationlifecycle.Service
 	projection liveviewprojection.Service
+
+	source      Source
+	projections recordings.ProjectionService
+	clock       Clock
+	sink        Sink
+	reportError ErrorReporter
 
 	mu              sync.Mutex
 	presentationSeq int
 	presentations   map[PresentationSessionID]*rootPresentationSession
 }
-
-var (
-	errAlreadyStarted = errors.New("start Factory visualization: already started")
-	errNotStarted     = errors.New("wait for Factory visualization: not started")
-)
 
 // New constructs an inert Factory visualization service.
 func New(
@@ -74,6 +78,26 @@ func New(
 	sink Sink,
 	reportError ErrorReporter,
 ) (*Service, error) {
+	switch {
+	case source == nil:
+		return nil, errors.New("initialize Factory visualization: event source is required")
+	case projections == nil:
+		return nil, errors.New("initialize Factory visualization: projection service is required")
+	case clock == nil:
+		return nil, errors.New("initialize Factory visualization: clock is required")
+	case sink == nil:
+		return nil, errors.New("initialize Factory visualization: presentation sink is required")
+	}
+	activation, err := activationlifecyclewire.NewService(
+		activationSourceAdapter{source: source},
+		projections,
+		clock,
+		activationSinkAdapter{sink: sink},
+		activationlifecycle.ErrorReporter(reportError),
+	)
+	if err != nil {
+		return nil, err
+	}
 	projection, err := liveviewprojectionwire.NewService(
 		source,
 		projections,
@@ -84,41 +108,46 @@ func New(
 	if err != nil {
 		return nil, err
 	}
-	return &Service{projection: projection}, nil
+	liveviewprojectionwire.BindRetainedEventsSupplier(projection, func() []factorydefinitions.FactoryEvent {
+		if activation == nil {
+			return nil
+		}
+		return activation.RetainedEvents()
+	})
+	return &Service{
+		activation:  activation,
+		projection:  projection,
+		source:      source,
+		projections: projections,
+		clock:       clock,
+		sink:        sink,
+		reportError: reportError,
+	}, nil
 }
 
-// Start subscribes once to retained-then-live canonical Factory events. It
-// renders the retained projection before returning and then observes deltas.
+// Start subscribes once to retained-then-live canonical Factory events.
 func (s *Service) Start(ctx context.Context) error {
-	if s == nil || s.projection == nil {
+	if s == nil || s.activation == nil {
 		return errors.New("start Factory visualization: service is required")
 	}
-	err := s.projection.Start(ctx)
-	if errors.Is(err, liveviewprojection.ErrLiveViewProjectionAlreadyStarted) {
-		return errAlreadyStarted
-	}
-	return err
+	return s.activation.Start(ctx)
 }
 
 // Stop cancels and joins the event subscription, then emits one final view
 // while the Factory Runtime is still active.
 func (s *Service) Stop(ctx context.Context) error {
-	if s == nil || s.projection == nil {
+	if s == nil || s.activation == nil {
 		return nil
 	}
-	return s.projection.Stop(ctx)
+	return s.activation.Stop(ctx)
 }
 
 // Wait blocks until the live Factory event subscription exits.
 func (s *Service) Wait(ctx context.Context) error {
-	if s == nil || s.projection == nil {
+	if s == nil || s.activation == nil {
 		return nil
 	}
-	err := s.projection.Wait(ctx)
-	if errors.Is(err, liveviewprojection.ErrLiveViewProjectionNotStarted) {
-		return errNotStarted
-	}
-	return err
+	return s.activation.Wait(ctx)
 }
 
 func adaptSink(sink Sink) liveviewprojection.Sink {
@@ -128,11 +157,53 @@ func adaptSink(sink Sink) liveviewprojection.Sink {
 	return SinkFunc(sink.PresentFactoryView)
 }
 
-// reconnectCursor exposes the Visualization-owned reconnect cursor for focused
-// characterization tests in the root package.
-func (s *Service) reconnectCursor() *factorydefinitions.FactoryEventReconnectCursor {
-	if s == nil || s.projection == nil {
-		return nil
+type activationSourceAdapter struct {
+	source Source
+}
+
+func (a activationSourceAdapter) SubscribeFactoryEvents(
+	ctx context.Context,
+	reconnect *factorydefinitions.FactoryEventReconnectCursor,
+	scope factorydefinitions.FactoryEventReconnectScope,
+) (*factorydefinitions.FactoryEventStream, error) {
+	if a.source == nil {
+		return nil, errors.New("subscribe Factory visualization events: event source is required")
 	}
-	return s.projection.ReconnectCursor()
+	return a.source.SubscribeFactoryEvents(ctx, reconnect, scope)
+}
+
+func (a activationSourceAdapter) GetEngineObservation(
+	ctx context.Context,
+) (*activationlifecycle.EngineObservation, error) {
+	if a.source == nil {
+		return nil, errors.New("read Factory visualization engine observation: event source is required")
+	}
+	facts, err := a.source.GetRuntimeSnapshotFacts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if facts == nil {
+		return nil, nil
+	}
+	return &activationlifecycle.EngineObservation{
+		TickCount:            facts.RuntimeObservation.TickCount,
+		ActiveThrottlePauses: facts.ActiveThrottlePauses,
+	}, nil
+}
+
+type activationSinkAdapter struct {
+	sink Sink
+}
+
+func (a activationSinkAdapter) PresentFactoryView(view activationlifecycle.View) {
+	if a.sink == nil {
+		return
+	}
+	a.sink.PresentFactoryView(View{
+		Runtime: RuntimeObservation{
+			TickCount: view.EngineObservation.TickCount,
+		},
+		RenderData: view.RenderData,
+		ObservedAt: view.ObservedAt,
+	})
 }

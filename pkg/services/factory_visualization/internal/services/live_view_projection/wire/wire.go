@@ -3,6 +3,7 @@ package wire
 
 import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 	projectionservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/internal/service"
 )
@@ -20,4 +21,13 @@ func NewService(
 		return nil, err
 	}
 	return svc, nil
+}
+
+// BindRetainedEventsSupplier forwards activation-owned retained history into the
+// private owner for root Observe calls that occur before projection Start.
+func BindRetainedEventsSupplier(
+	svc liveviewprojection.Service,
+	supplier func() []factorydefinitions.FactoryEvent,
+) {
+	projectionservice.BindRetainedEventsSupplier(svc, supplier)
 }
