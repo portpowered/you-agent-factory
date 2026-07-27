@@ -49,7 +49,10 @@ func (s *service) StartSource(
 		record.mu.Unlock()
 		return automations.StartSourceResult{Outcome: outcome}, terminalErr
 	}
-	return result, nil
+	record.mu.Lock()
+	result, terminalErr := commitStartSuccess(record, *effect, result)
+	record.mu.Unlock()
+	return result, terminalErr
 }
 
 type lifecycleSnapshot struct {
@@ -136,6 +139,19 @@ func existingStartResult(
 	return automations.StartSourceResult{}, false
 }
 
+func commitStartSuccess(
+	record *sourceRecord,
+	effect reconciliation.StartEffect,
+	planned automations.StartSourceResult,
+) (automations.StartSourceResult, error) {
+	if record.desired != automations.DesiredLifecycleRunning ||
+		record.observation != effect.Observation {
+		waitResult, currentErr := currentWaitResult(automations.DesiredLifecycleRunning, record)
+		return automations.StartSourceResult{Outcome: waitResult.Outcome}, currentErr
+	}
+	return planned, nil
+}
+
 func commitStartFailure(
 	record *sourceRecord,
 	effect reconciliation.StartEffect,
@@ -189,7 +205,10 @@ func (s *service) StopSource(
 		record.mu.Unlock()
 		return automations.StopSourceResult{Outcome: outcome}, terminalErr
 	}
-	return result, nil
+	record.mu.Lock()
+	result, terminalErr := commitStopSuccess(record, *effect, result)
+	record.mu.Unlock()
+	return result, terminalErr
 }
 
 func (s *service) planStopLocked(
@@ -255,6 +274,19 @@ func (s *service) planStopLocked(
 			false,
 		),
 	}, &effect, prior, nil
+}
+
+func commitStopSuccess(
+	record *sourceRecord,
+	effect reconciliation.StopEffect,
+	planned automations.StopSourceResult,
+) (automations.StopSourceResult, error) {
+	if record.desired != automations.DesiredLifecycleStopped ||
+		record.observation != effect.Observation {
+		waitResult, currentErr := currentWaitResult(automations.DesiredLifecycleStopped, record)
+		return automations.StopSourceResult{Outcome: waitResult.Outcome}, currentErr
+	}
+	return planned, nil
 }
 
 func commitStopFailure(

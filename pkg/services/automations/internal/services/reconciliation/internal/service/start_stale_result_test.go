@@ -10,6 +10,49 @@ import (
 	reconciliationwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire"
 )
 
+func TestStartSourceSuccessDoesNotReportStartingAfterSupersedingStop(t *testing.T) {
+	t.Parallel()
+
+	identity := sourceIdentity("stale-start-success")
+	effects := newBlockingStartEffects(nil)
+	service := reconciliationwire.NewService(effects.bundle())
+	results, errs := startSourceAsync(service, identity)
+	<-effects.entered
+
+	if _, err := service.StopSource(
+		context.Background(),
+		automations.StopSourceRequest{Identity: identity},
+	); err != nil {
+		t.Fatalf("StopSource superseding start: %v", err)
+	}
+	stopped, err := service.WaitSource(
+		context.Background(),
+		automations.WaitSourceRequest{
+			Identity: identity,
+			Desired:  automations.DesiredLifecycleStopped,
+		},
+	)
+	if err != nil {
+		t.Fatalf("WaitSource stopped during start effect: %v", err)
+	}
+	assertLifecycle(
+		t, stopped.Outcome, automations.DesiredLifecycleStopped,
+		automations.ObservedLifecycleStopped, automations.ConvergenceStatusConverged, false,
+	)
+	assertStatus(t, service, identity, stopped.Outcome.Observation.InstanceID, automations.ObservedLifecycleStopped)
+
+	close(effects.release)
+	if err := <-errs; err != nil {
+		t.Fatalf("stale StartSource success: %v", err)
+	}
+	started := <-results
+	assertLifecycle(
+		t, started.Outcome, automations.DesiredLifecycleRunning,
+		automations.ObservedLifecycleStopped, automations.ConvergenceStatusProgressing, true,
+	)
+	assertStatus(t, service, identity, stopped.Outcome.Observation.InstanceID, automations.ObservedLifecycleStopped)
+}
+
 func TestStartSourceFailureDoesNotOverwriteSupersedingStop(t *testing.T) {
 	t.Parallel()
 

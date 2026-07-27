@@ -317,6 +317,60 @@ func TestStopSourceCommitsStoppingBeforeExactlyOnceEffect(t *testing.T) {
 	}
 }
 
+func TestStopSourceSuccessDoesNotReportStoppingAfterSupersedingStart(t *testing.T) {
+	t.Parallel()
+
+	identity := sourceIdentity("stale-stop-success")
+	effects := newBlockingStopEffects(identity)
+	service := reconciliationwire.NewService(effects.bundle())
+	effects.service = service
+	startAndWait(t, service, identity)
+
+	results := make(chan automations.StopSourceResult, 1)
+	errs := make(chan error, 1)
+	go func() {
+		result, err := service.StopSource(
+			context.Background(),
+			automations.StopSourceRequest{Identity: identity},
+		)
+		results <- result
+		errs <- err
+	}()
+	if err := <-effects.entered; err != nil {
+		t.Fatal(err)
+	}
+
+	restarted, err := service.StartSource(
+		context.Background(),
+		automations.StartSourceRequest{Identity: identity, Kind: "schedule"},
+	)
+	if err != nil {
+		t.Fatalf("StartSource superseding stop: %v", err)
+	}
+	assertLifecycle(
+		t,
+		restarted.Outcome,
+		automations.DesiredLifecycleRunning,
+		automations.ObservedLifecycleStopping,
+		automations.ConvergenceStatusProgressing,
+		true,
+	)
+
+	close(effects.release)
+	if err := <-errs; err != nil {
+		t.Fatalf("stale StopSource success: %v", err)
+	}
+	stopped := <-results
+	assertLifecycle(
+		t,
+		stopped.Outcome,
+		automations.DesiredLifecycleStopped,
+		automations.ObservedLifecycleStopping,
+		automations.ConvergenceStatusProgressing,
+		true,
+	)
+}
+
 func TestStopSourceFailureDoesNotOverwriteNewerStoppedObservation(t *testing.T) {
 	t.Parallel()
 
