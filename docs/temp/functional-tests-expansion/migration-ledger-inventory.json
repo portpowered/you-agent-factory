@@ -379,46 +379,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/automations/cron_root_composition_test.go",
-      "package": "you-agent-factory/tests/functional/automations",
-      "scenario": "TestAutomationsCronActivatesThroughRuntimeLifecycle",
-      "lane": "short",
-      "destination": "tests/functional/workstations/cron/clock_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/automations/cron_root_composition_test.go",
-      "package": "you-agent-factory/tests/functional/automations",
-      "scenario": "TestAutomationsCronJitterProducesStableSubmissionTiming",
-      "lane": "short",
-      "destination": "tests/functional/workstations/cron/clock_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/automations/cron_root_composition_test.go",
-      "package": "you-agent-factory/tests/functional/automations",
-      "scenario": "TestAutomationsCronSkipsMalformedWorkstationAndFiresValid",
-      "lane": "short",
-      "destination": "tests/functional/workstations/cron/clock_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/automations/cron_root_composition_test.go",
-      "package": "you-agent-factory/tests/functional/automations",
-      "scenario": "TestBuildProcessRemainsCronInertBeforeRuntimeLifecycle",
-      "lane": "short",
-      "destination": "tests/functional/workstations/cron/clock_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/bootstrap_portability/agent_factory_export_import_fixture_test.go",
       "package": "you-agent-factory/tests/functional/bootstrap_portability",
       "scenario": "TestAgentFactoryExportImportFixture_AuthoredLayoutInterpolatesProjectSpecificPromptContent",
@@ -1909,6 +1869,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/orchestration/javascript/loading/file_javascript_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/loading",
+      "scenario": "TestJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/loading/file_javascript_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/loading/file_javascript_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/loading",
+      "scenario": "TestJavaScriptFactoryMissingImportFailsActionably",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/loading/file_javascript_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/orchestration/javascript/loading/inline_javascript_test.go",
       "package": "you-agent-factory/tests/functional/orchestration/javascript/loading",
       "scenario": "TestInlineJavaScriptFactoryRunsFromCLI",
@@ -2474,6 +2454,36 @@
       "scenario": "TestCodexHistoricalInspectionSuccessThroughRootBuildProcess",
       "lane": "short",
       "destination": "tests/functional/providers/codex/process_harness_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/cursor/historical_inspection_root_test.go",
+      "package": "you-agent-factory/tests/functional/providers/cursor",
+      "scenario": "TestCursorHistoricalInspectionThroughRootBuildProcess_DegradesAdverseNativeDataSafely",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/details/cursor_details_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/cursor/historical_inspection_root_test.go",
+      "package": "you-agent-factory/tests/functional/providers/cursor",
+      "scenario": "TestCursorHistoricalInspectionThroughRootBuildProcess_PropagatesMissingAndContainmentFailures",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/details/cursor_details_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/cursor/historical_inspection_root_test.go",
+      "package": "you-agent-factory/tests/functional/providers/cursor",
+      "scenario": "TestCursorHistoricalInspectionThroughRootBuildProcess_ReturnsDeterministicNormalizedDetail",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/details/cursor_details_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -5039,6 +5049,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/transport/cli/parameters/json_values_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIInvalidJSONParameterNamesTheParameter",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/json_values_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/json_values_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIJSONNullAndEmptyValuesRemainDistinct",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/json_values_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/json_values_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIJSONParameterPreservesNestedObjectAndArray",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/json_values_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/transport/cli/parameters/working_directory_test.go",
       "package": "you-agent-factory/tests/functional/transport/cli/parameters",
       "scenario": "TestCLIMissingWorkingDirectoryAssetFailsActionably",
@@ -6694,14 +6734,14 @@
       "workflow": 44,
       "workstations": 29
     },
-    "customer_top_level_Test_scenarios": 643,
+    "customer_top_level_Test_scenarios": 650,
     "files_with_customer_Test": 220,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 95,
-    "lane_short": 548,
+    "lane_short": 555,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
       "you-agent-factory/tests/functional/automations": 4,
@@ -6844,15 +6884,15 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T20:26:00Z",
-    "story": "ft-wave1-js-input-mapping-mergeability",
-    "live_customer_scenarios": 643,
-    "ledger_rows": 643,
+    "audited_at_utc": "2026-07-27T21:45:00Z",
+    "story": "ft-wave1-cli-run-wiring-mergeability-17",
+    "live_customer_scenarios": 650,
+    "ledger_rows": 650,
     "unmapped_scenarios": 0,
     "checklist_destinations": 437,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 548,
+    "lane_short": 555,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
