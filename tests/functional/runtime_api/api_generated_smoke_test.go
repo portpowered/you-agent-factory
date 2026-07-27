@@ -20,60 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
-// FND-12 captured HTTP success baseline: live generated server serves a
-// protocol-visible Work submit/read path. Invoked by
-// `make fnd-12-http-behavior-baselines`.
-func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned(t *testing.T) {
-	support.SkipLongFunctional(t, "slow generated API and live runtime alignment smoke")
-
-	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	server := startFunctionalServer(t, dir, true)
-
-	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
-		Name:         stringPtr("generated-api-integration-smoke"),
-		WorkTypeName: "task",
-		Payload:      map[string]string{"title": "generated API integration smoke"},
-	})
-	if traceID == "" {
-		t.Fatal("POST /work returned an empty trace_id")
-	}
-
-	work := waitForGeneratedWorkComplete(t, server.URL(), traceID, 10*time.Second)
-	if len(work.Results) != 1 {
-		t.Fatalf("GET /work result count = %d, want 1", len(work.Results))
-	}
-	item := work.Results[0]
-	if stringPointerValue(item.TraceId) != traceID {
-		t.Fatalf("GET /work trace_id = %q, want %q", stringPointerValue(item.TraceId), traceID)
-	}
-	if stringPointerValue(item.WorkTypeName) != "task" {
-		t.Fatalf("GET /work work type = %q, want task", stringPointerValue(item.WorkTypeName))
-	}
-	if item.Name != "generated-api-integration-smoke" {
-		t.Fatalf("GET /work name = %q, want generated-api-integration-smoke", item.Name)
-	}
-	if generatedWorkStateName(item.State) != "complete" || generatedWorkStateType(item.State) != factoryapi.WorkStateTypeTERMINAL {
-		t.Fatalf("GET /work state = %#v, want complete/TERMINAL", item.State)
-	}
-
-	statusRead := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
-	if statusRead.TotalTokens != 1 {
-		t.Fatalf("GET /status total_tokens = %d, want 1", statusRead.TotalTokens)
-	}
-	if statusRead.Categories.Terminal != 1 {
-		t.Fatalf("GET /status terminal count = %d, want 1", statusRead.Categories.Terminal)
-	}
-
-	assertGeneratedEventsStreamHasCanonicalHistory(t, server.URL())
-	functionalevidence.Covers(
-		t,
-		"rest/getEventsBySessionId",
-		"rest/getStatusBySessionId",
-		"rest/listWorkBySessionId",
-		"rest/submitWorkBySessionId",
-	)
-}
-
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredSubmission(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	server := startFunctionalServer(t, dir, true)

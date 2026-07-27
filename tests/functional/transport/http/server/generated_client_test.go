@@ -20,6 +20,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/restclient"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const generatedClientTestTimeout = 10 * time.Second
@@ -257,6 +258,14 @@ func TestGeneratedClientAndServerSchemaStayAligned(t *testing.T) {
 	if !sessionEvents.JSON200.Retry.OmitAfterEventId {
 		t.Fatalf("generated session events retry = %#v, want omitAfterEventId true for stale cursor", sessionEvents.JSON200.Retry)
 	}
+
+	functionalevidence.Covers(
+		t,
+		"rest/getEventsBySessionId",
+		"rest/getStatusBySessionId",
+		"rest/listWorkBySessionId",
+		"rest/submitWorkBySessionId",
+	)
 }
 
 func setGeneratedClientAcceptJSON(_ context.Context, req *http.Request) error {
