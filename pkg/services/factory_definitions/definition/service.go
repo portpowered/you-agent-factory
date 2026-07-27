@@ -12,6 +12,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
+	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 )
 
@@ -30,6 +31,7 @@ const (
 type Service struct {
 	nonCatalogDefaults
 	catalog.Service
+	validationService validationservice.Service
 	host              Host
 	versionFileSystem factoryroot.VersionFileSystem
 	packagedCatalog   factoryroot.PackagedFactoryCatalogOperations
@@ -111,6 +113,61 @@ func NewWithCatalogPackagesAndInstallation(
 	)
 	service.packagedInstaller = packagedInstaller
 	return service
+}
+
+// NewWithValidation constructs the Definitions root collaborator with private
+// validation ownership for the CTR-DEF validate slice.
+func NewWithValidation(
+	host Host,
+	catalogService catalog.Service,
+	validationService validationservice.Service,
+	versionFileSystems ...factoryroot.VersionFileSystem,
+) *Service {
+	service := NewWithCatalog(host, catalogService, versionFileSystems...)
+	service.validationService = validationService
+	return service
+}
+
+// NewWithCatalogPackagesValidationAndInstallation constructs the complete
+// Definitions root collaborator with catalog, validation, and packaged
+// installation ownership.
+func NewWithCatalogPackagesValidationAndInstallation(
+	host Host,
+	catalogService catalog.Service,
+	validationService validationservice.Service,
+	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
+	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
+	versionFileSystems ...factoryroot.VersionFileSystem,
+) *Service {
+	service := NewWithCatalogPackagesAndInstallation(
+		host,
+		catalogService,
+		packagedCatalog,
+		packagedInstaller,
+		versionFileSystems...,
+	)
+	service.validationService = validationService
+	return service
+}
+
+func (s *Service) ValidateStructuralFactoryDefinition(
+	ctx context.Context,
+	request factoryroot.ValidateStructuralFactoryDefinitionRequest,
+) (factoryroot.ValidateStructuralFactoryDefinitionResult, error) {
+	if s == nil || s.validationService == nil {
+		return factoryroot.UnimplementedService{}.ValidateStructuralFactoryDefinition(ctx, request)
+	}
+	return s.validationService.ValidateStructuralFactoryDefinition(ctx, request)
+}
+
+func (s *Service) ValidateEffectiveFactoryDefinition(
+	ctx context.Context,
+	request factoryroot.ValidateEffectiveFactoryDefinitionRequest,
+) (factoryroot.ValidateEffectiveFactoryDefinitionResult, error) {
+	if s == nil || s.validationService == nil {
+		return factoryroot.UnimplementedService{}.ValidateEffectiveFactoryDefinition(ctx, request)
+	}
+	return s.validationService.ValidateEffectiveFactoryDefinition(ctx, request)
 }
 
 func (s *Service) ListBuiltInPackagedFactories(

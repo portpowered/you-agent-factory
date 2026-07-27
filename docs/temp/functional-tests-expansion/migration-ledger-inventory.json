@@ -3079,36 +3079,6 @@
       "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
-      "source_path": "tests/functional/runtime_api/api_cron_workstations_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestCronWorkstations_ServiceModeExpiryConsumesStaleTriggerWithTerminalOutputAndDefaultWindow",
-      "lane": "short",
-      "destination": "tests/functional/workstations/cron/clock_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-03-workstations-cron"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_cron_workstations_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestCronWorkstations_ServiceModeImplicitFailureRoutingMovesFailedCronWorkIntoFailedState",
-      "lane": "short",
-      "destination": "tests/functional/workstations/cron/clock_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-03-workstations-cron"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_cron_workstations_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetriesDispatchesAndFiltersViews",
-      "lane": "short",
-      "destination": "tests/functional/workstations/cron/clock_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "cron-time-work-smoke",
-      "deletion_only_batch": "runtime_api-delete-03-workstations-cron"
-    },
-    {
       "source_path": "tests/functional/runtime_api/api_event_replay_smoke_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline",
@@ -4569,16 +4539,6 @@
       "deletion_only_batch": "smoke-delete-04-transport-cli"
     },
     {
-      "source_path": "tests/functional/smoke/cli_work_move_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/smoke",
-      "scenario": "TestWorkMove_RealCLIMovesSubmittedWork",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/commands/work_wiring_test.go",
-      "catch_all": "smoke",
-      "specialty_targets": "none",
-      "deletion_only_batch": "smoke-delete-04-transport-cli"
-    },
-    {
       "source_path": "tests/functional/smoke/config_driven_execution_test.go",
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestConfigDrivenExecution_AddWorkType",
@@ -5059,6 +5019,46 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/transport/cli/commands/work_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLIWorkListAndShowReflectSubmittedWork",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/work_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/commands/work_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLIWorkMoveChangesState",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/work_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/commands/work_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLIWorkShowMissingReturnsNotFound",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/work_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/commands/work_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLIWorkVisualizeProducesDeterministicGraph",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/work_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/transport/cli/output/json_result_test.go",
       "package": "you-agent-factory/tests/functional/transport/cli/output",
       "scenario": "TestCLIJSONContainsNoPrivateRuntimeFields",
@@ -5374,6 +5374,36 @@
       "scenario": "TestAPIConcurrentSessionRequestsRemainIsolated",
       "lane": "short",
       "destination": "tests/functional/transport/http/server/concurrent_requests_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/http/server/routing_test.go",
+      "package": "you-agent-factory/tests/functional/transport/http/server",
+      "scenario": "TestAPIRoutesEveryOpenAPIOperationToNon404Handler",
+      "lane": "short",
+      "destination": "tests/functional/transport/http/server/routing_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/http/server/routing_test.go",
+      "package": "you-agent-factory/tests/functional/transport/http/server",
+      "scenario": "TestAPIUnknownRouteReturnsStructuredNotFound",
+      "lane": "short",
+      "destination": "tests/functional/transport/http/server/routing_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/http/server/routing_test.go",
+      "package": "you-agent-factory/tests/functional/transport/http/server",
+      "scenario": "TestAPIWrongMethodReturnsDocumentedMethodError",
+      "lane": "short",
+      "destination": "tests/functional/transport/http/server/routing_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -5769,6 +5799,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/workers/inference/flags_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestProviderPermissionWorktreeAndModelFlagsMapToCommand",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/flags_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/flags_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestUnsupportedProviderFlagReturnsCapabilityError",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/flags_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/workers/inference/cursor/golden_failure_test.go",
       "package": "you-agent-factory/tests/functional/workers/inference/cursor",
       "scenario": "TestCursorGoldenMalformedRecordReturnsStableDiagnostic",
@@ -5834,26 +5884,6 @@
       "scenario": "TestProviderNonZeroExitMapsToPublicFailure",
       "lane": "short",
       "destination": "tests/functional/workers/inference/failure_normalization_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/inference/flags_test.go",
-      "package": "you-agent-factory/tests/functional/workers/inference",
-      "scenario": "TestProviderPermissionWorktreeAndModelFlagsMapToCommand",
-      "lane": "short",
-      "destination": "tests/functional/workers/inference/flags_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/inference/flags_test.go",
-      "package": "you-agent-factory/tests/functional/workers/inference",
-      "scenario": "TestUnsupportedProviderFlagReturnsCapabilityError",
-      "lane": "short",
-      "destination": "tests/functional/workers/inference/flags_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -6639,6 +6669,46 @@
       "deletion_only_batch": "workflow-delete-07-factory-current"
     },
     {
+      "source_path": "tests/functional/workstations/cron/clock_test.go",
+      "package": "you-agent-factory/tests/functional/workstations/cron",
+      "scenario": "TestCronDoesNotDoubleFireForOneScheduleBoundary",
+      "lane": "short",
+      "destination": "tests/functional/workstations/cron/clock_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workstations/cron/clock_test.go",
+      "package": "you-agent-factory/tests/functional/workstations/cron",
+      "scenario": "TestCronFiresAtInjectedTimeWithoutWallClockSleep",
+      "lane": "short",
+      "destination": "tests/functional/workstations/cron/clock_test.go",
+      "catch_all": "none",
+      "specialty_targets": "cron-time-work-smoke",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workstations/cron/clock_test.go",
+      "package": "you-agent-factory/tests/functional/workstations/cron",
+      "scenario": "TestCronImplicitFailureRoutingMovesFailedCronWorkIntoFailedState",
+      "lane": "short",
+      "destination": "tests/functional/workstations/cron/clock_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workstations/cron/clock_test.go",
+      "package": "you-agent-factory/tests/functional/workstations/cron",
+      "scenario": "TestCronShutdownPreventsLaterSubmission",
+      "lane": "short",
+      "destination": "tests/functional/workstations/cron/clock_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/workstations/execution/basic_test.go",
       "package": "you-agent-factory/tests/functional/workstations/execution",
       "scenario": "TestExecutionWorkstationDispatchesEligibleWorkOnce",
@@ -6939,15 +7009,15 @@
       "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-27T19:15:00Z",
+  "scanned_at_utc": "2026-07-27T21:50:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 21,
       "guards_batch": 27,
-      "none": 404,
+      "none": 408,
       "replay_contracts": 23,
       "runtime_api": 105,
-      "smoke": 84,
+      "smoke": 83,
       "workflow": 44
     },
     "by_top_level_package": {
@@ -6966,21 +7036,21 @@
       "runtime_api": 107,
       "sessionparity": 13,
       "sessions": 2,
-      "smoke": 84,
-      "transport": 52,
+      "smoke": 83,
+      "transport": 56,
       "work": 2,
       "workers": 52,
       "workflow": 44,
       "workstations": 29
     },
-    "customer_top_level_Test_scenarios": 674,
-    "files_with_customer_Test": 230,
+    "customer_top_level_Test_scenarios": 681,
+    "files_with_customer_Test": 231,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 95,
-    "lane_short": 579,
+    "lane_short": 586,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
       "you-agent-factory/tests/functional/automations": 6,
@@ -7021,7 +7091,7 @@
       "you-agent-factory/tests/functional/sessionparity": 13,
       "you-agent-factory/tests/functional/sessions/cli": 2,
       "you-agent-factory/tests/functional/smoke": 86,
-      "you-agent-factory/tests/functional/transport/cli/commands": 10,
+      "you-agent-factory/tests/functional/transport/cli/commands": 14,
       "you-agent-factory/tests/functional/transport/cli/output": 9,
       "you-agent-factory/tests/functional/transport/cli/parameters": 13,
       "you-agent-factory/tests/functional/transport/docs": 1,
@@ -7123,15 +7193,15 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T22:40:00Z",
+    "audited_at_utc": "2026-07-27T22:45:00Z",
     "story": "structured-packages-implementation-auto-03-script-pollers-mergeability",
-    "live_customer_scenarios": 674,
-    "ledger_rows": 674,
+    "live_customer_scenarios": 681,
+    "ledger_rows": 681,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 579,
+    "lane_short": 586,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,

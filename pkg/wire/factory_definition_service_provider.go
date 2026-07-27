@@ -23,6 +23,8 @@ func provideFactoryDefinitionsFactory(
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
+	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) factorysessionwire.FactoryDefinitionsFactory {
 	return func(
 		sessionHost factorysessions.DefinitionHost,
@@ -33,6 +35,7 @@ func provideFactoryDefinitionsFactory(
 			clock,
 			versionFileSystem,
 			validator,
+			loader.LoadSourceFromCanonicalJSON,
 			func(
 				factoryDir string,
 				workstationLoader factorydefinitions.WorkstationLoader,
@@ -60,6 +63,8 @@ func provideFactoryDefinitionsFactory(
 			namedFactoryCatalogFileSystem,
 			packagedCatalog,
 			packagedInstaller,
+			requiredToolChecker,
+			orchestratorValidator,
 		)
 		if definitions == nil {
 			return nil

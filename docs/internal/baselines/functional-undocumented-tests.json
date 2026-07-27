@@ -651,14 +651,6 @@
       "name": "TestConfigDriven_RESTAPISubmitAndQuery"
     },
     {
-      "file": "runtime_api/api_cron_workstations_smoke_test.go",
-      "name": "TestCronWorkstations_ServiceModeExpiryConsumesStaleTriggerWithTerminalOutputAndDefaultWindow"
-    },
-    {
-      "file": "runtime_api/api_cron_workstations_smoke_test.go",
-      "name": "TestCronWorkstations_ServiceModeImplicitFailureRoutingMovesFailedCronWorkIntoFailedState"
-    },
-    {
       "file": "runtime_api/api_factory_event_mapping_test.go",
       "name": "TestFactoryEventTransportMappingRejectsMalformedCanonicalPayload"
     },
@@ -1185,10 +1177,6 @@
     {
       "file": "smoke/cli_run_mode_compat_smoke_test.go",
       "name": "TestRunModeCompat_RealCLIOperatorContinuousRunReportsStartupOutputWithoutQuiet"
-    },
-    {
-      "file": "smoke/cli_work_move_smoke_test.go",
-      "name": "TestWorkMove_RealCLIMovesSubmittedWork"
     },
     {
       "file": "smoke/config_driven_execution_test.go",

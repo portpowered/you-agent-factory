@@ -26,7 +26,7 @@ PR_INFERENCE_APPROVAL_REGRESSION ?= TestRealLocalInference_OMNIVOICEModelInvokeA
 SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST := TestProviderCancellationTerminatesCompanionProcesses
 SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT ?= 100
 SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT ?= 120s
-CRON_TIME_WORK_SMOKE_TEST := TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetriesDispatchesAndFiltersViews
+CRON_TIME_WORK_SMOKE_TEST := TestCronFiresAtInjectedTimeWithoutWallClockSleep
 CRON_TIME_WORK_SMOKE_COUNT ?= 10
 CRON_TIME_WORK_SMOKE_TIMEOUT ?= 120s
 CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST := TestCurrentFactoryActivationFixture_ActivatesSecondPersistedFactoryAndResolvesCurrentFactory
@@ -483,7 +483,7 @@ script-timeout-companion-smoke-100:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/inference -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)
 
 cron-time-work-smoke:
-	$(GO) test ./tests/functional/runtime_api -run $(CRON_TIME_WORK_SMOKE_TEST) -count=$(CRON_TIME_WORK_SMOKE_COUNT) -timeout $(CRON_TIME_WORK_SMOKE_TIMEOUT)
+	$(GO) test ./tests/functional/workstations/cron -run $(CRON_TIME_WORK_SMOKE_TEST) -count=$(CRON_TIME_WORK_SMOKE_COUNT) -timeout $(CRON_TIME_WORK_SMOKE_TIMEOUT)
 
 current-factory-watcher-switch-smoke:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/bootstrap_portability -run $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST) -count=$(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT) -timeout $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT)

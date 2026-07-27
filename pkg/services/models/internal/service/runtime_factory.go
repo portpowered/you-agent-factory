@@ -330,24 +330,33 @@ func (o *Root) StopModelHost(
 }
 
 func (o *Root) AcquireModelLease(
-	context.Context,
-	models.AcquireModelLeaseRequest,
+	ctx context.Context,
+	request models.AcquireModelLeaseRequest,
 ) (models.AcquireModelLeaseResult, error) {
-	return models.AcquireModelLeaseResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.runtimeHost == nil {
+		return models.AcquireModelLeaseResult{}, models.ErrUnsupportedOperation
+	}
+	return o.runtimeHost.AcquireModelLease(ctx, request)
 }
 
 func (o *Root) GetModelLease(
-	context.Context,
-	models.GetModelLeaseRequest,
+	ctx context.Context,
+	request models.GetModelLeaseRequest,
 ) (models.GetModelLeaseResult, error) {
-	return models.GetModelLeaseResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.runtimeHost == nil {
+		return models.GetModelLeaseResult{}, models.ErrUnsupportedOperation
+	}
+	return o.runtimeHost.GetModelLease(ctx, request)
 }
 
 func (o *Root) ReleaseModelLease(
-	context.Context,
-	models.ReleaseModelLeaseRequest,
+	ctx context.Context,
+	request models.ReleaseModelLeaseRequest,
 ) (models.ReleaseModelLeaseResult, error) {
-	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.runtimeHost == nil {
+		return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
+	}
+	return o.runtimeHost.ReleaseModelLease(ctx, request)
 }
 
 func (o *Root) InvokeModelWithLease(

@@ -39,7 +39,7 @@ func NewService(
 	if isNilDependency(hostClock) {
 		return nil, fmt.Errorf("%w: model host clock is required", models.ErrInvalidHostDependencies)
 	}
-	return internalservice.New(
+	return internalservice.NewWired(
 		scopes,
 		assets,
 		processLauncher,
@@ -47,7 +47,7 @@ func NewService(
 		hostClock,
 		hostLogger,
 		hostMetrics,
-	), nil
+	)
 }
 
 func isNilDependency(value any) bool {

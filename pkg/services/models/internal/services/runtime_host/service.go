@@ -23,4 +23,16 @@ type Service interface {
 		context.Context,
 		models.StopModelHostRequest,
 	) (models.StopModelHostResult, error)
+	AcquireModelLease(
+		context.Context,
+		models.AcquireModelLeaseRequest,
+	) (models.AcquireModelLeaseResult, error)
+	GetModelLease(
+		context.Context,
+		models.GetModelLeaseRequest,
+	) (models.GetModelLeaseResult, error)
+	ReleaseModelLease(
+		context.Context,
+		models.ReleaseModelLeaseRequest,
+	) (models.ReleaseModelLeaseResult, error)
 }

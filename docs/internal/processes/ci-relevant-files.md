@@ -351,6 +351,18 @@
   `transport` and subsection `http/server` from the path; every top-level
   `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
   viz-compatible.
+  HTTP API server OpenAPI routing functional coverage belongs in
+  `tests/functional/transport/http/server/routing_test.go`: prove every
+  published OpenAPI operation inventory entry reaches a non-404 handler through
+  safe public HTTP requests against `support.StartFunctionalAPIServer` with
+  `WaitForServiceModeRuntime: true` and `UseMockWorkers: true`, prove unknown
+  paths outside the OpenAPI surface return structured `NOT_FOUND` JSON errors
+  via `Server.NotFoundHandler`, and prove wrong HTTP methods on known routes
+  return structured `405` `METHOD_NOT_ALLOWED` errors via
+  `Server.MethodNotAllowedHandler` instead of not-found outcomes that would
+  hide method mismatches. Catalog metadata infers domain `transport` and
+  subsection `http/server` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
   CLI JSON parameter values functional coverage belongs in
   `tests/functional/transport/cli/parameters/json_values_test.go`: prove nested
   JSON object and array named parameters reach canonical `InvocationArguments`
@@ -429,9 +441,14 @@ Wave 0 functional-tests-expansion planning authority lives under
   `tests/functional` inventory coverage, checklist destination validity, and
   lane preservation against the companion JSON. When a deletion-only batch is
   fully consumed (all scenarios owned by destination cells with
-  `deletion_only_batch: n/a`), remove its id from
-  `internal/migrationledgercheck.ExpectedDeletionOnlyBatches` and mark the
-  batch `released` in `migration-ledger.md`.
+  `deletion_only_batch: n/a`; for example `runtime_api-delete-03-workstations-cron`),
+  remove the source scenarios and ledger rows, add destination rows with
+  `deletion_only_batch: n/a`, drop the batch id from
+  `internal/migrationledgercheck/check.go` `ExpectedDeletionOnlyBatches`, mark the
+  batch `released` in `migration-ledger.md`, update summary counts in
+  `migration-ledger-inventory.json`, retarget any specialty Make bindings, and
+  refresh `test-file-checklist.md` plus narrowly coupled baselines
+  (`package-structure-baseline.json`, `functional-undocumented-tests.json`).
   `make pkg-structure` enforces the domain-mirrored functional layout
   `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
   unclassified scenario packages are blocking, while existing nonconforming

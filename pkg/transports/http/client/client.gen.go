@@ -37,6 +37,7 @@ const (
 	ErrorResponseCodeINVALIDFACTORYNAME                         ErrorResponseCode = "INVALID_FACTORY_NAME"
 	ErrorResponseCodeINVALIDRESPONSEEVENTCURSOR                 ErrorResponseCode = "INVALID_RESPONSE_EVENT_CURSOR"
 	ErrorResponseCodeINVALIDRESPONSEEVENTFILTER                 ErrorResponseCode = "INVALID_RESPONSE_EVENT_FILTER"
+	ErrorResponseCodeMETHODNOTALLOWED                           ErrorResponseCode = "METHOD_NOT_ALLOWED"
 	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED              ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
 	ErrorResponseCodeNOTFOUND                                   ErrorResponseCode = "NOT_FOUND"
 	ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND               ErrorResponseCode = "RESPONSE_EVENT_SESSION_NOT_FOUND"

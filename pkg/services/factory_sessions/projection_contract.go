@@ -14,6 +14,7 @@ type ProjectionContext struct {
 	FactorySessionID       string
 	FactoryCfg             *interfaces.FactoryConfig
 	Snapshot               *factory.StateSnapshot
+	Observation            factory.Observation
 	LifecycleControlStatus string
 	BackendScopeID         string
 	LogicalSessionKeyID    string

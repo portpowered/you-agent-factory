@@ -607,7 +607,7 @@ For jsdom coverage of app and component tests, use `make ui-test` or the `UI Cov
 
 Cron behavior crosses service tick production, Petri-net guards, dispatcher identity, event history, API read models, and dashboard projections. Keep [Workstation Kinds and Parameterized Fields](../reference/workstations.md#cron-kind) as the canonical authoring and migration guide instead of duplicating the full cron model in local notes.
 
-`TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetriesDispatchesAndFiltersViews` is the end-to-end integration smoke for the token-backed cron flow. It starts service mode, observes missing-input time work, verifies stale tick expiry and retry, submits the required input, proves normal worker dispatch/output, checks canonical cron metadata, and confirms normal API/dashboard projections hide internal time work.
+`TestCronFiresAtInjectedTimeWithoutWallClockSleep` in `tests/functional/workstations/cron/clock_test.go` is the end-to-end integration smoke for the token-backed cron flow. It starts service mode, observes missing-input time work, verifies stale tick expiry and retry, submits the required input, proves normal worker dispatch/output, checks canonical cron metadata, and confirms normal API/dashboard projections hide internal time work by advancing a controllable external clock rather than wall-clock sleeps.
 
 Use these focused checks before the broader package gates when changing cron behavior:
 
