@@ -543,6 +543,11 @@ Wave 0 functional-tests-expansion planning authority lives under
   (`malformed-record`, `process-failure`, `timeout`) replay through
   `tests/functional/workers/inference/cursor/golden_failure_test.go`. Use
   `stdout.txt` when fixtures include non-JSON stream lines; `.jsonl` loaders
-  reject invalid JSON per line. Retryable timeout cases must queue multiple
+  reject invalid JSON per line.   Retryable timeout cases must queue multiple
   identical `ProviderCommandRunner` results so retries do not fall through to
   the default mock.
+
+- `tests/functional/automations/` owns root.BuildProcess evidence for packaged
+  Automations cron scheduling. Keep cron workstation factories explicit with
+  `"behavior": "CRON"` and observe submissions through `serviceedges.Edges.SubmissionRecorder`
+  on `support.StartFunctionalAPIServer`, matching the runtime_api cron smoke helpers.

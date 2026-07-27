@@ -9,6 +9,8 @@ import (
 	"github.com/jonboulle/clockwork"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
+	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
+	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -35,6 +37,7 @@ type Service struct {
 	executionPolicy   factorydefinitions.WorkstationExecutionPolicyService
 	reconciler        reconciliation.Service
 	scriptPollers     scriptpollers.Service
+	cron              cron.Service
 	schedulerMu       sync.Mutex
 	schedulerSources  map[automations.SourceIdentity]*schedulerSource
 }
@@ -64,6 +67,7 @@ func New(
 	}
 	service.reconciler = service.newSchedulerReconciler()
 	service.scriptPollers = service.newScriptPollers()
+	service.cron = cronwire.NewService()
 	return service
 }
 

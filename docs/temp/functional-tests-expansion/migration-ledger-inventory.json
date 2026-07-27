@@ -339,6 +339,46 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/automations/cron_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsCronActivatesThroughRuntimeLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/workstations/cron/clock_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/cron_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsCronJitterProducesStableSubmissionTiming",
+      "lane": "short",
+      "destination": "tests/functional/workstations/cron/clock_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/cron_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsCronSkipsMalformedWorkstationAndFiresValid",
+      "lane": "short",
+      "destination": "tests/functional/workstations/cron/clock_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/cron_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestBuildProcessRemainsCronInertBeforeRuntimeLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/workstations/cron/clock_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/bootstrap_portability/agent_factory_export_import_fixture_test.go",
       "package": "you-agent-factory/tests/functional/bootstrap_portability",
       "scenario": "TestAgentFactoryExportImportFixture_AuthoredLayoutInterpolatesProjectSpecificPromptContent",
@@ -6853,16 +6893,17 @@
       "workflow": 44,
       "workstations": 29
     },
-    "customer_top_level_Test_scenarios": 662,
+    "customer_top_level_Test_scenarios": 666,
     "files_with_customer_Test": 217,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 113,
-    "lane_short": 549,
+    "lane_short": 553,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
+      "you-agent-factory/tests/functional/automations": 4,
       "you-agent-factory/tests/functional/bootstrap_portability": 25,
       "you-agent-factory/tests/functional/bootstrap_portability/metadata_contract": 2,
       "you-agent-factory/tests/functional/cli/dynamic_workflows": 2,
@@ -7004,13 +7045,13 @@
   "completeness_audit": {
     "audited_at_utc": "2026-07-27T20:30:00Z",
     "story": "structured-packages-implementation-auto-03-script-pollers-mergeability",
-    "live_customer_scenarios": 662,
-    "ledger_rows": 662,
+    "live_customer_scenarios": 666,
+    "ledger_rows": 666,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 549,
+    "lane_short": 553,
     "lane_functionallong": 113,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
