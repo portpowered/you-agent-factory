@@ -98,6 +98,12 @@ primary-result behavior.
   `CompleteStartup` succeeds, so startup failure cannot report false readiness
   or open a browser. Cancellation must join the starter before reverse-order
   Factory Session cleanup returns.
+- Local run/server hosting carries the CLI-validated loopback host through the
+  Factory Sessions host request into `platform/httpserver`; never reduce it to
+  a port-only `:<port>` listener. Automatic collision fallback tries every
+  higher port monotonically through `65535`, publishes the actual host and port
+  from the successful binding, and exposes terminal binding exhaustion as a
+  typed platform failure that the CLI maps to `SERVER_BIND_FAILED`.
 - A one-shot run that owns an API listener must express its terminal
   invocation as part of the Factory Sessions lifecycle plan. Start the runtime,
   workers, and transport first; gate the terminal operation on the published

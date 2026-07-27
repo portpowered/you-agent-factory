@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -92,6 +93,27 @@ func TestMapCurrentFactoryFailureWritesDeclaredStandardErrors(t *testing.T) {
 				t.Fatalf("ErrorResponse = %#v", response)
 			}
 		})
+	}
+}
+
+func TestMapServerFailureWritesDeclaredStandardError(t *testing.T) {
+	t.Parallel()
+
+	cause := &platformhttpserver.BindError{
+		Host: "127.0.0.1", PreferredPort: 65534, Cause: errors.New("address in use"),
+	}
+	mapped := MapServerFailure(fmt.Errorf("host runtime: %w", cause))
+	var stderr bytes.Buffer
+	if !WriteInvocationError(&stderr, mapped, false) {
+		t.Fatal("WriteInvocationError did not recognize server bind failure")
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(stderr.Bytes(), &response); err != nil {
+		t.Fatalf("decode ErrorResponse: %v\n%s", err, stderr.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCode(ServerBindFailedCode) ||
+		response.Family != factoryapi.ErrorFamilyInternalServerError {
+		t.Fatalf("ErrorResponse = %#v", response)
 	}
 }
 

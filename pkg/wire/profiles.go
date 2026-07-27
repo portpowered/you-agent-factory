@@ -863,11 +863,13 @@ func provideDirectJavaScriptHostAdapter(
 		}
 		return newRunner(func(ctx context.Context) error {
 			return start(ctx, platformhttpserver.StartRequest{
-				Handler: handler, Port: request.Host.Port, AutoPort: request.Host.AutoPort,
-				Logger: request.Logger,
+				Handler: handler, Host: request.Host.Host, Port: request.Host.Port,
+				AutoPort: request.Host.AutoPort, Logger: request.Logger,
 				OnBound: func(binding platformhttpserver.Binding) {
 					if request.RuntimeHostObserver != nil {
-						request.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: binding.Port})
+						request.RuntimeHostObserver(factorysessions.RuntimeHostBinding{
+							Host: binding.Host, Port: binding.Port,
+						})
 					}
 				},
 			})

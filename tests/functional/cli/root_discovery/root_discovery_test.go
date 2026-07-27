@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -305,6 +306,78 @@ func runServerLifecycleCase(t *testing.T) {
 		if !strings.Contains(stdout, expected) {
 			t.Fatalf("server stdout omitted %q:\n%s", expected, stdout)
 		}
+	}
+}
+
+func TestServerBindExhaustionWritesDeclaredErrorWithoutResidualEffects(t *testing.T) {
+	workingDirectory := t.TempDir()
+	factoryDir := filepath.Join(workingDirectory, "factory")
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("create Current Factory directory: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(factoryDir, "factory.json"),
+		[]byte(idleCurrentFactoryJSON),
+		0o600,
+	); err != nil {
+		t.Fatalf("write Current Factory: %v", err)
+	}
+
+	var attempts []string
+	starter, err := platformhttpserver.NewStarter(func(_ string, address string) (net.Listener, error) {
+		attempts = append(attempts, address)
+		return nil, errors.New("address unavailable")
+	})
+	if err != nil {
+		t.Fatalf("NewStarter() error = %v", err)
+	}
+	var browserCalls, readinessCalls atomic.Int32
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		APIServerStarter: starter,
+		BrowserOpener: func(context.Context, string) error {
+			browserCalls.Add(1)
+			return nil
+		},
+		RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
+			readinessCalls.Add(1)
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+
+	stdout, stderr, executeErr := executeFactoryArgs(
+		t,
+		process,
+		workingDirectory,
+		[]string{"you", "--server", "http://127.0.0.1:65534", "server"},
+		false,
+		t.Context(),
+	)
+	if executeErr == nil {
+		t.Fatalf("Process.Execute(server) error = nil; stdout=%q stderr=%q", stdout, stderr)
+	}
+	for _, forbidden := range []string{"Factory initiated:", "Dashboard URL:"} {
+		if strings.Contains(stdout, forbidden) {
+			t.Fatalf("server stdout exposed readiness %q before bind failure:\n%s", forbidden, stdout)
+		}
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(stderr), &response); err != nil {
+		t.Fatalf("server stderr is not exactly one ErrorResponse: %v\n%s", err, stderr)
+	}
+	if response.Code != factoryapi.ErrorResponseCode("SERVER_BIND_FAILED") {
+		t.Fatalf("ErrorResponse = %#v, want SERVER_BIND_FAILED", response)
+	}
+	if got, want := strings.Join(attempts, ","), "127.0.0.1:65534,127.0.0.1:65535"; got != want {
+		t.Fatalf("listener attempts = %q, want %q", got, want)
+	}
+	if browserCalls.Load() != 0 || readinessCalls.Load() != 0 {
+		t.Fatalf(
+			"post-failure effects = browser:%d readiness:%d, want none",
+			browserCalls.Load(),
+			readinessCalls.Load(),
+		)
 	}
 }
 

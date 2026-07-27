@@ -83,7 +83,7 @@ func TestNewStarterAutoPortReportsSelectedFallback(t *testing.T) {
 	listener := failingListener{err: errors.New("done")}
 	starter, err := NewStarter(func(_ string, address string) (net.Listener, error) {
 		requests = append(requests, address)
-		if address == ":8123" {
+		if address == "localhost:8123" {
 			return nil, busyErr
 		}
 		return listener, nil
@@ -99,8 +99,84 @@ func TestNewStarterAutoPortReportsSelectedFallback(t *testing.T) {
 	if err == nil || bound.Port != 8124 {
 		t.Fatalf("starter = (bound=%+v, err=%v), want port 8124 and terminal serve error", bound, err)
 	}
-	if got, want := requests, []string{":8123", ":8124"}; fmt.Sprint(got) != fmt.Sprint(want) {
+	if got, want := requests, []string{"localhost:8123", "localhost:8124"}; fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("listener addresses = %v, want %v", got, want)
+	}
+}
+
+func TestNewStarterBindsOnlyRequestedLoopbackHost(t *testing.T) {
+	t.Parallel()
+
+	listener := failingListener{err: errors.New("done")}
+	var address string
+	starter, err := NewStarter(func(_ string, candidate string) (net.Listener, error) {
+		address = candidate
+		return listener, nil
+	})
+	if err != nil {
+		t.Fatalf("NewStarter: %v", err)
+	}
+	var bound Binding
+	err = starter(t.Context(), StartRequest{
+		Handler: http.NotFoundHandler(), Host: "127.0.0.1", Port: 8123,
+		Logger: zap.NewNop(), OnBound: func(value Binding) { bound = value },
+	})
+	if err == nil {
+		t.Fatal("starter error = nil, want terminal serve error")
+	}
+	if address != "127.0.0.1:8123" {
+		t.Fatalf("listener address = %q, want exact IPv4 loopback", address)
+	}
+	if bound.Host != "127.0.0.1" || bound.Port != 8123 {
+		t.Fatalf("binding = %+v, want requested loopback endpoint", bound)
+	}
+}
+
+func TestNewStarterRejectsNonLoopbackHostBeforeListenerEffect(t *testing.T) {
+	t.Parallel()
+
+	var calls int
+	starter, err := NewStarter(func(string, string) (net.Listener, error) {
+		calls++
+		return nil, errors.New("unexpected listener call")
+	})
+	if err != nil {
+		t.Fatalf("NewStarter: %v", err)
+	}
+	err = starter(t.Context(), StartRequest{
+		Handler: http.NotFoundHandler(), Host: "0.0.0.0", Port: 8123,
+		Logger: zap.NewNop(),
+	})
+	if !IsBindError(err) {
+		t.Fatalf("starter error = %v, want BindError", err)
+	}
+	if calls != 0 {
+		t.Fatalf("listener calls = %d, want none for non-loopback host", calls)
+	}
+}
+
+func TestNewStarterAutoPortTriesThrough65535WithoutWrapping(t *testing.T) {
+	t.Parallel()
+
+	busyErr := errors.New("busy")
+	var requests []string
+	starter, err := NewStarter(func(_ string, address string) (net.Listener, error) {
+		requests = append(requests, address)
+		return nil, busyErr
+	})
+	if err != nil {
+		t.Fatalf("NewStarter: %v", err)
+	}
+	err = starter(t.Context(), StartRequest{
+		Handler: http.NotFoundHandler(), Host: "::1", Port: 65534,
+		AutoPort: true, Logger: zap.NewNop(),
+	})
+	if !IsBindError(err) {
+		t.Fatalf("starter error = %v, want BindError", err)
+	}
+	want := []string{"[::1]:65534", "[::1]:65535"}
+	if fmt.Sprint(requests) != fmt.Sprint(want) {
+		t.Fatalf("listener addresses = %v, want %v", requests, want)
 	}
 }
 

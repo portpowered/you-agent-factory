@@ -9,7 +9,9 @@ import (
 	"io/fs"
 	"strings"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -21,6 +23,7 @@ const (
 	CurrentFactoryInvalidCode       = "CURRENT_FACTORY_INVALID"
 	InvocationOutputConflictCode    = "INVOCATION_OUTPUT_CONFLICT"
 	InvocationOutputUnsupportedCode = "INVOCATION_OUTPUT_UNSUPPORTED"
+	ServerBindFailedCode            = "SERVER_BIND_FAILED"
 )
 
 type InvocationError struct {
@@ -109,6 +112,18 @@ func MapCurrentFactoryFailure(err error) error {
 		code = CurrentFactoryNotFoundCode
 	}
 	return &InvocationError{Code: code, Message: strings.TrimSpace(err.Error()), Cause: err}
+}
+
+// MapServerFailure classifies terminal listener binding failures at the CLI
+// boundary while preserving all other errors for their owning mapper.
+func MapServerFailure(err error) error {
+	if err == nil ||
+		(!platformhttpserver.IsBindError(err) && !cliserver.IsLocalBindError(err)) {
+		return err
+	}
+	return &InvocationError{
+		Code: ServerBindFailedCode, Message: strings.TrimSpace(err.Error()), Cause: err,
+	}
 }
 
 // MapInvocationFailure preserves authored invocation errors and classifies

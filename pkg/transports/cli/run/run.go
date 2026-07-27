@@ -266,6 +266,9 @@ func newRuntimeHostObserver(
 ) factorysessions.RuntimeHostObserver {
 	return func(binding factorysessions.RuntimeHostBinding) {
 		resolved := cfg
+		if strings.TrimSpace(binding.Host) != "" {
+			resolved.BindHost = binding.Host
+		}
 		resolved.Port = binding.Port
 		emitVerboseStartupDiagnostics(resolved, recordPath, requestedPort)
 		emitStartupMessages(resolved, diagnostics())

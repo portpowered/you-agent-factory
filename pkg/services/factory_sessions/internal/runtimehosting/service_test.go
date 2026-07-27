@@ -83,11 +83,12 @@ func TestServiceRunHostsAPICompletesStartupAndWaitsForRuntime(t *testing.T) {
 		ctx context.Context,
 		request platformhttpserver.StartRequest,
 	) error {
-		if request.Handler == nil || request.Port != 8123 || !request.AutoPort || request.Logger == nil || request.OnBound == nil {
+		if request.Handler == nil || request.Host != "127.0.0.1" || request.Port != 8123 ||
+			!request.AutoPort || request.Logger == nil || request.OnBound == nil {
 			return errors.New("unexpected API host input")
 		}
 		close(started)
-		request.OnBound(platformhttpserver.Binding{Port: request.Port})
+		request.OnBound(platformhttpserver.Binding{Host: request.Host, Port: request.Port})
 		<-ctx.Done()
 		close(stopped)
 		return ctx.Err()
@@ -102,6 +103,7 @@ func TestServiceRunHostsAPICompletesStartupAndWaitsForRuntime(t *testing.T) {
 		factorysessions.RuntimeHostRequest{
 			RuntimeMode: interfaces.RuntimeModeService,
 			WorkFile:    "work.json",
+			Host:        "127.0.0.1",
 			Port:        8123,
 			AutoPort:    true,
 		},
@@ -126,8 +128,8 @@ func TestServiceRunHostsAPICompletesStartupAndWaitsForRuntime(t *testing.T) {
 	if got := runtime.recordedEvents(); strings.Join(got, ",") != "complete,observe,wait" {
 		t.Fatalf("runtime events = %v, want [complete observe wait]", got)
 	}
-	if got := <-observedBinding; got.Port != 8123 {
-		t.Fatalf("observed binding = %+v, want port 8123", got)
+	if got := <-observedBinding; got.Host != "127.0.0.1" || got.Port != 8123 {
+		t.Fatalf("observed binding = %+v, want 127.0.0.1:8123", got)
 	}
 }
 

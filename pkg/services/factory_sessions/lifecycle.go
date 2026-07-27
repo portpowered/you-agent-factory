@@ -32,12 +32,14 @@ type RuntimeHostRequest struct {
 	RuntimeMode interfaces.RuntimeMode
 	WorkFile    string
 	MockWorkers bool
+	Host        string
 	Port        int
 	AutoPort    bool
 }
 
 // RuntimeHostBinding is the endpoint selected by the external HTTP host.
 type RuntimeHostBinding struct {
+	Host string
 	Port int
 }
 

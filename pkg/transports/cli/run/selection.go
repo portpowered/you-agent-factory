@@ -98,7 +98,7 @@ func (s *selection) Open(
 		}
 		if intent.APIEnabled {
 			request.Host = &factorysessions.RuntimeHostRequest{
-				Directory: cfg.Dir, Port: cfg.Port, AutoPort: cfg.AutoPort,
+				Directory: cfg.Dir, Host: cfg.BindHost, Port: cfg.Port, AutoPort: cfg.AutoPort,
 			}
 			request.RuntimeHostObserver = newRuntimeHostObserver(
 				ctx, cfg, resolvedRunRecordPath{}, cfg.Port,

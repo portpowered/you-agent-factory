@@ -66,13 +66,14 @@ func (service *Service) Run(
 		return runtime.FailStartup(err)
 	}
 	if binding.Port > 0 {
+		request.Host = binding.Host
 		request.Port = binding.Port
 	}
 	if err := runtime.CompleteStartup(ctx); err != nil {
 		return err
 	}
 	if binding.Port > 0 && observer != nil {
-		observer(factorysessions.RuntimeHostBinding{Port: binding.Port})
+		observer(factorysessions.RuntimeHostBinding{Host: binding.Host, Port: binding.Port})
 	}
 	logStartup(logger, runtime.CurrentRuntimeBundle(), request)
 	if err := runtime.WaitForRuntime(ctx); err != nil && !errors.Is(err, context.Canceled) {
@@ -97,7 +98,8 @@ func (service *Service) startAPI(
 	go func() {
 		defer sidecars.Done()
 		err := service.start(ctx, platformhttpserver.StartRequest{
-			Handler: handler, Port: request.Port, AutoPort: request.AutoPort, Logger: logger,
+			Handler: handler, Host: request.Host, Port: request.Port,
+			AutoPort: request.AutoPort, Logger: logger,
 			OnBound: func(binding platformhttpserver.Binding) {
 				bound <- binding
 			},

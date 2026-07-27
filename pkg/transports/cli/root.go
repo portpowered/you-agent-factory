@@ -663,11 +663,7 @@ func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.Run
 	}
 	cfg.BindHost = target.Host
 	cfg.Port = target.Port
-	if cmd.Root().PersistentFlags().Changed("server") {
-		cfg.AutoPort = false
-	} else {
-		cfg.AutoPort = true
-	}
+	cfg.AutoPort = true
 	return nil
 }
 

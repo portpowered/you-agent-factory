@@ -127,7 +127,12 @@ func StartFunctionalAPIServiceModeServer(t *testing.T, factoryDir string, useMoc
 
 func functionalRunArgs(t *testing.T, cfg FunctionalAPIServerConfig) []string {
 	t.Helper()
-	args := []string{"--dir", cfg.FactoryDir, "--continuously", "--quiet"}
+	args := []string{
+		"--dir", cfg.FactoryDir,
+		"--continuously",
+		"--with-server",
+		"--quiet",
+	}
 	if !containsFunctionalArgument(cfg.Args, "--record") {
 		args = append(args, "--no-record")
 	}

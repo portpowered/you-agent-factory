@@ -79,6 +79,7 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 					RuntimeMode: mode,
 					WorkFile:    cfg.WorkFile,
 					MockWorkers: mockWorkers != nil,
+					Host:        cfg.BindHost,
 					Port:        cfg.Port,
 					AutoPort:    cfg.AutoPort,
 				},

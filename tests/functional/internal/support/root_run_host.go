@@ -136,21 +136,19 @@ func rootRunHostStarter(reserved net.Listener, requestedAddress string) platform
 		listener := reserved
 		if listener == nil {
 			var err error
-			_, port, splitErr := net.SplitHostPort(strings.TrimSpace(requestedAddress))
-			if splitErr != nil {
-				return fmt.Errorf("parse requested API listener %s: %w", requestedAddress, splitErr)
-			}
-			listener, err = net.Listen("tcp", ":"+port)
+			listener, err = net.Listen("tcp", strings.TrimSpace(requestedAddress))
 			if err != nil {
 				return fmt.Errorf("bind requested API listener %s: %w", requestedAddress, err)
 			}
 		}
 		if request.OnBound != nil {
+			host := request.Host
 			port := request.Port
 			if address, ok := listener.Addr().(*net.TCPAddr); ok {
+				host = address.IP.String()
 				port = address.Port
 			}
-			request.OnBound(platformhttpserver.Binding{Port: port})
+			request.OnBound(platformhttpserver.Binding{Host: host, Port: port})
 		}
 		return platformhttpserver.Serve(ctx, request.Handler, listener, request.Logger)
 	}
@@ -191,7 +189,8 @@ func (host *RootRunFunctionalHost) run(
 	err := process.Execute(root.Input{
 		Args: []string{
 			"you", "--server", host.endpoint, "run", "--dir", cfg.FactoryRoot,
-			"--continuously", "--quiet", "--verbose", "--no-record", "--with-mock-workers",
+			"--continuously", "--with-server", "--quiet", "--verbose", "--no-record",
+			"--with-mock-workers",
 		},
 		Env:              rootRunHostEnvironment(cfg.SystemRoot),
 		Stderr:           diagnostics,
@@ -222,11 +221,7 @@ func captureRequestedListenerFailure(diagnostics *bytes.Buffer, requestedAddress
 	if address == "" {
 		return
 	}
-	_, port, splitErr := net.SplitHostPort(address)
-	if splitErr != nil {
-		return
-	}
-	listener, err := net.Listen("tcp", ":"+port)
+	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		_, _ = fmt.Fprintf(diagnostics, "requested listener address %s remains unavailable: %v", address, err)
 		return

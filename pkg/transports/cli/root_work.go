@@ -475,6 +475,7 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 	err = runFactoryWithOptions(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy, rootOptions, false)
 	if err != nil {
 		err = factoryload.MaybeFormatOperatorError(err, resolvedConfig.Dir)
+		err = runcli.MapServerFailure(err)
 		if currentFactorySelected {
 			err = runcli.MapCurrentFactoryFailure(err)
 		}

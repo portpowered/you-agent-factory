@@ -156,7 +156,7 @@ func TestRootRunFunctionalHostShutdownIsBoundedAndIdempotent(t *testing.T) {
 func TestRootRunFunctionalHostReportsOccupiedAddressAndAllowsReuse(t *testing.T) {
 	t.Parallel()
 
-	blocker, err := net.Listen("tcp", ":0")
+	blocker, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen on occupied-address fixture: %v", err)
 	}

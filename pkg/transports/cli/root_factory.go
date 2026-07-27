@@ -69,7 +69,8 @@ func executeServerCommand(
 	if err == nil {
 		return nil
 	}
-	mapped := runcli.MapCurrentFactoryFailure(factoryload.MaybeFormatOperatorError(err, cfg.Dir))
+	mapped := runcli.MapServerFailure(err)
+	mapped = runcli.MapCurrentFactoryFailure(factoryload.MaybeFormatOperatorError(mapped, cfg.Dir))
 	_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), mapped, globals.json)
 	return mapped
 }

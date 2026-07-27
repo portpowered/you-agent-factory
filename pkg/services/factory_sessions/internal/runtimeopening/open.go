@@ -355,7 +355,8 @@ func openRuntime(
 		factorysessions.RuntimeHostRequest{
 			Directory: configured.Definition.Directory, RuntimeMode: configured.Runtime.Mode,
 			WorkFile: configured.Session.WorkFile, MockWorkers: configured.Workers.MockWorkers != nil,
-			Port: configured.Session.Host.Port, AutoPort: configured.Session.Host.AutoPort,
+			Host: configured.Session.Host.Host, Port: configured.Session.Host.Port,
+			AutoPort: configured.Session.Host.AutoPort,
 		},
 		edges.RuntimeHostObserver,
 		startupRuntime.RuntimeLogger(),
