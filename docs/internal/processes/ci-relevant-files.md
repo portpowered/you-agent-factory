@@ -200,7 +200,9 @@
   configured mock rejection with stable public `WorkOutcomeFailed` /
   `WorkFailureTypeUnknown` dispatch responses without live provider credentials
   or leaking configured reject stdout/stderr on customer-visible surfaces.
-  Catalog metadata infers domain `workers` and subsection `mock` from the path.
+  Catalog metadata infers domain `workers` and subsection `mock` from the path;
+  every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
   CLI single-JSON result functional coverage belongs in
   `tests/functional/transport/cli/output/json_result_test.go`: invoke
   `support.BuildProcess(t, serviceedges.Edges{}).Execute` with global `--json`
@@ -212,6 +214,17 @@
   `transport` and subsection `cli/output` from the path. Every top-level `Test*`
   needs a customer-readable Go doc so `functionaltestmetadata` stays
   viz-compatible.
+  CLI docs command wiring functional coverage belongs in
+  `tests/functional/transport/cli/commands/docs_wiring_test.go`: prove packaged
+  topic discovery, index-driven non-empty topic rendering, and actionable
+  unknown-topic failure through `support.BuildProcess` + `support.FakeInputs`
+  from an isolated temp working directory without a local `docs/` tree; derive
+  topics from the customer-visible packaged docs index stdout rather than
+  scanning repository files or embedded registries; assert only transport
+  discovery, render-wiring, and failure diagnostics without product/docs content
+  contracts. Catalog metadata infers domain `transport` and subsection
+  `cli/commands` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
   Prove default
   `functional-test-viz` wiring (boundary first, single coverage with profile
   + JSON under `.artifacts/functional-test-viz/`, Markdown generator) with

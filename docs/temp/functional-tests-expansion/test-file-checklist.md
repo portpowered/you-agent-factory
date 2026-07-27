@@ -168,7 +168,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIFactoryFlattenExpandPreservesMeaning` covers portability.
   - `TestCLIFactoryReplaceCurrentChangesSessionFactory` covers current Factory.
 
-- [ ] `tests/functional/transport/cli/commands/docs_wiring_test.go`
+- [x] `tests/functional/transport/cli/commands/docs_wiring_test.go`
   - `TestCLIDocsListsPackagedTopics` covers discovery.
   - `TestCLIDocsEveryTopicRendersNonEmptyContent` iterates the packaged index.
   - `TestCLIDocsUnknownTopicReturnsActionableFailure` covers errors.
