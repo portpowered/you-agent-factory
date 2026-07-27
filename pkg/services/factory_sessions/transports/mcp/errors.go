@@ -26,6 +26,23 @@ const (
 	errorMessageReconnectCursorNotFound = "event reconnect cursor not found in session history"
 )
 
+func decodeInputErrorEnvelope(context string, err error) ToolErrorEnvelope {
+	message := context
+	details := map[string]any{}
+	if err != nil {
+		if trimmed := strings.TrimSpace(err.Error()); trimmed != "" {
+			message = context + ": " + trimmed
+		}
+		details["reason"] = err.Error()
+	}
+	return ToolErrorEnvelope{
+		Code:      errorCodeBadRequest,
+		Message:   message,
+		Retryable: false,
+		Details:   details,
+	}
+}
+
 func requestValidationErrorEnvelope(err error) ToolErrorEnvelope {
 	var validationErr *apisurface.RequestValidationError
 	if errors.As(err, &validationErr) {

@@ -590,8 +590,8 @@ func TestBind_FakeExecutionRootInvokedThroughCanonicalListSessionsTool(t *testin
 
 	var invoked bool
 	fake := fakeExecutionRoot{
+		invoked: &invoked,
 		listSessions: func(_ context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
-			invoked = true
 			if request.Scope != factorysessions.SessionListScopePersisted {
 				t.Fatalf("scope = %q, want persisted", request.Scope)
 			}
@@ -611,6 +611,123 @@ func TestBind_FakeExecutionRootInvokedThroughCanonicalListSessionsTool(t *testin
 	}
 	if !strings.Contains(string(raw), `"scope":"persisted"`) {
 		t.Fatalf("CallTool(list_sessions) = %s, want persisted scope result", raw)
+	}
+}
+
+func TestBind_FakeExecutionRootInvokedThroughCanonicalGetSessionTool(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	fake := fakeExecutionRoot{
+		invoked: &invoked,
+		getSession: func(_ context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
+			if sessionID != runningSessionID {
+				t.Fatalf("sessionId = %q, want %q", sessionID, runningSessionID)
+			}
+			return runningSessionRead(), nil
+		},
+	}
+	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
+		Execution: fake,
+		Prepare:   canonicalMCPRequestPreparation,
+	})
+	raw, err := operation(
+		context.Background(),
+		mcpfactorysession.ToolGetSession,
+		json.RawMessage(`{"sessionId":"`+runningSessionID+`"}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(get_session) error = %v", err)
+	}
+	if !invoked {
+		t.Fatal("fake execution root was not invoked")
+	}
+	if !strings.Contains(string(raw), `"status":"RUNNING"`) || !strings.Contains(string(raw), `"sessionId":"`+runningSessionID+`"`) {
+		t.Fatalf("CallTool(get_session) = %s, want running session read model", raw)
+	}
+}
+
+func TestBind_FakeExecutionRootInvokedThroughCanonicalListDispatchesTool(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	fake := fakeExecutionRoot{
+		invoked: &invoked,
+		queryDispatches: func(_ context.Context, request factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error) {
+			if request.SessionID != successSessionID {
+				t.Fatalf("sessionId = %q, want %q", request.SessionID, successSessionID)
+			}
+			if request.Filters.Phase != "execution" || request.Filters.Status != factorysessions.DispatchStatus("COMPLETED") {
+				t.Fatalf("filters = %#v, want execution/COMPLETED", request.Filters)
+			}
+			return factorysessions.ListDispatchesResult{
+				SessionID: successSessionID,
+				Dispatches: []factorysessions.DispatchSummary{{
+					ID:     "dispatch-001",
+					Phase:  "execution",
+					Status: factorysessions.DispatchStatus("COMPLETED"),
+				}},
+			}, nil
+		},
+	}
+	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
+		Execution: fake,
+		Prepare:   canonicalMCPRequestPreparation,
+	})
+	raw, err := operation(
+		context.Background(),
+		mcpfactorysession.ToolListDispatches,
+		json.RawMessage(`{"sessionId":"`+successSessionID+`","phase":"execution","status":"COMPLETED"}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(list_dispatches) error = %v", err)
+	}
+	if !invoked {
+		t.Fatal("fake execution root was not invoked")
+	}
+	if !strings.Contains(string(raw), `"id":"dispatch-001"`) || !strings.Contains(string(raw), `"sessionId":"`+successSessionID+`"`) {
+		t.Fatalf("CallTool(list_dispatches) = %s, want encoded dispatch list", raw)
+	}
+}
+
+func TestBind_ReadListToolsInvalidJSONDecodeReturnsBadRequestWithoutInvokingFakeRoot(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
+		Execution: fakeExecutionRoot{invoked: &invoked},
+		Prepare:   canonicalMCPRequestPreparation,
+	})
+	raw, err := operation(context.Background(), mcpfactorysession.ToolGetSession, json.RawMessage(`{"sessionId":`))
+	if err != nil {
+		t.Fatalf("CallTool(get_session) transport error = %v, want typed tool response", err)
+	}
+	assertBadRequestToolResponse(t, raw)
+	if invoked {
+		t.Fatal("fake execution root was invoked for invalid JSON decode")
+	}
+}
+
+func TestBind_ReadListToolsValidationFailureReturnsBadRequestWithoutInvokingFakeRoot(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	preparation := mcpRequestPreparation{
+		listSessions: func(factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error) {
+			return factorysessions.ListSessionsRequest{}, errors.New(`unsupported Factory Session scope "workspace"`)
+		},
+	}
+	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
+		Execution: fakeExecutionRoot{invoked: &invoked},
+		Prepare:   preparation,
+	})
+	raw, err := operation(context.Background(), mcpfactorysession.ToolListSessions, json.RawMessage(`{"scope":"workspace"}`))
+	if err != nil {
+		t.Fatalf("CallTool(list_sessions) transport error = %v, want typed tool response", err)
+	}
+	assertBadRequestToolResponse(t, raw)
+	if invoked {
+		t.Fatal("fake execution root was invoked for validation failure")
 	}
 }
 
@@ -975,17 +1092,63 @@ func strPtr(value string) *string { return &value }
 
 type fakeExecutionRoot struct {
 	factorysessions.ExecutionService
-	listSessions func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
+	invoked         *bool
+	listSessions    func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
+	getSession      func(context.Context, string) (factorysessions.SessionReadResult, error)
+	queryDispatches func(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error)
+}
+
+func (root fakeExecutionRoot) markInvoked() {
+	if root.invoked != nil {
+		*root.invoked = true
+	}
 }
 
 func (root fakeExecutionRoot) ListSessions(
 	ctx context.Context,
 	request factorysessions.ListSessionsRequest,
 ) (factorysessions.ListSessionsResult, error) {
+	root.markInvoked()
 	if root.listSessions == nil {
 		panic("unexpected ListSessions on fake execution root")
 	}
 	return root.listSessions(ctx, request)
+}
+
+func (root fakeExecutionRoot) GetSession(
+	ctx context.Context,
+	sessionID string,
+) (factorysessions.SessionReadResult, error) {
+	root.markInvoked()
+	if root.getSession == nil {
+		panic("unexpected GetSession on fake execution root")
+	}
+	return root.getSession(ctx, sessionID)
+}
+
+func (root fakeExecutionRoot) QueryDispatches(
+	ctx context.Context,
+	request factorysessions.DispatchQueryRequest,
+) (factorysessions.ListDispatchesResult, error) {
+	root.markInvoked()
+	if root.queryDispatches == nil {
+		panic("unexpected QueryDispatches on fake execution root")
+	}
+	return root.queryDispatches(ctx, request)
+}
+
+func assertBadRequestToolResponse(t *testing.T, raw json.RawMessage) {
+	t.Helper()
+
+	var response struct {
+		Error *mcpfactorysession.ToolErrorEnvelope `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &response); err != nil {
+		t.Fatalf("decode tool response: %v", err)
+	}
+	if response.Error == nil || response.Error.Code != "BAD_REQUEST" || response.Error.Retryable {
+		t.Fatalf("tool response = %s, want non-retryable BAD_REQUEST envelope", raw)
+	}
 }
 
 func assertPackageDirectImportsForbidden(t *testing.T, packagePath string, forbiddenRoots []string) {

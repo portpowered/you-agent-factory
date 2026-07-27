@@ -65,14 +65,15 @@ func BindToolOperation(
 	})
 }
 
-func callToolJSON[Input any, Response any](
+func callToolJSON[Input any, Output any](
 	input json.RawMessage,
 	decodeErr string,
-	handler func(Input) Response,
+	handler func(Input) ToolResponse[Output],
 ) (json.RawMessage, error) {
 	var request Input
 	if err := json.Unmarshal(input, &request); err != nil {
-		return nil, fmt.Errorf("%s: %w", decodeErr, err)
+		envelope := decodeInputErrorEnvelope(decodeErr, err)
+		return json.Marshal(ToolResponse[Output]{Error: &envelope})
 	}
 	return json.Marshal(handler(request))
 }
