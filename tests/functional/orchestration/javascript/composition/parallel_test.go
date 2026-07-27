@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -27,6 +28,21 @@ const parallelConcurrentDispatchWorkflow = `return (async function () {
   ]);
   return { results };
 })();`
+
+const parallelDeclaredResultOrderingWorkflow = `return (async function () {
+  const results = await parallel([
+    { prompt: "child-alpha", label: "child-alpha" },
+    { prompt: "child-beta", label: "child-beta" },
+    { prompt: "child-gamma", label: "child-gamma" },
+  ]);
+  return { results };
+})();`
+
+var parallelDeclaredResultOrderingLabels = []string{
+	"child-alpha",
+	"child-beta",
+	"child-gamma",
+}
 
 // TestJavaScriptParallelDispatchesChildrenConcurrently proves JavaScript parallel
 // keeps more than one external child call in flight at the same time through the
@@ -51,7 +67,12 @@ func TestJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T) {
 	})
 	baseURL := strings.TrimSuffix(server.URL(), "/")
 
-	started := startParallelCompositionWorkflowAsync(t, baseURL)
+	started := startParallelCompositionWorkflowAsync(
+		t,
+		baseURL,
+		"parallel-composition-concurrent-dispatch",
+		parallelConcurrentDispatchWorkflow,
+	)
 	sessionID := started.SessionId
 	if sessionID == "" {
 		t.Fatal("session id unexpectedly empty")
@@ -87,6 +108,75 @@ func TestJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T) {
 	if provider.peakActive() < 2 {
 		t.Fatalf("provider peak active child calls = %d, want at least 2 concurrent external calls", provider.peakActive())
 	}
+}
+
+// TestJavaScriptParallelPreservesDeclaredResultOrdering proves JavaScript parallel
+// returns child results in declared input order on the public Factory Session result
+// surface even when controllable external edges complete children in a different order.
+func TestJavaScriptParallelPreservesDeclaredResultOrdering(t *testing.T) {
+	t.Parallel()
+
+	dir := support.ScaffoldFactory(t, parallelCompositionFactoryConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
+	homeDir := writeParallelCompositionGlobalConfig(t)
+
+	provider := newLabelGatedParallelChildProvider(parallelDeclaredResultOrderingLabels)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Env: append(os.Environ(),
+			"HOME="+homeDir,
+			"USERPROFILE="+homeDir,
+		),
+		Edges: serviceedges.Edges{ProviderOverride: provider},
+	})
+	baseURL := strings.TrimSuffix(server.URL(), "/")
+
+	started := startParallelCompositionWorkflowAsync(
+		t,
+		baseURL,
+		"parallel-composition-declared-ordering",
+		parallelDeclaredResultOrderingWorkflow,
+	)
+	sessionID := started.SessionId
+	if sessionID == "" {
+		t.Fatal("session id unexpectedly empty")
+	}
+
+	waitForParallelCompositionInFlightDispatches(t, baseURL, sessionID, 3, 5*time.Second)
+	for _, label := range []string{"child-gamma", "child-beta", "child-alpha"} {
+		provider.releaseLabel(label)
+		waitForParallelCompositionLabelCompletion(t, provider, label, 5*time.Second)
+	}
+
+	completed := waitForParallelCompositionSessionStatus(
+		t,
+		baseURL,
+		sessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
+		10*time.Second,
+	)
+	if completed.ResultSummary == nil ||
+		completed.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("resultSummary = %#v, want FINAL", completed.ResultSummary)
+	}
+
+	wantCompletionOrder := []string{"child-gamma", "child-beta", "child-alpha"}
+	if got := provider.completionOrder(); !reflect.DeepEqual(got, wantCompletionOrder) {
+		t.Fatalf("provider completion order = %v, want %v", got, wantCompletionOrder)
+	}
+
+	resultPayload := readParallelCompositionFinalResult(t, baseURL, sessionID)
+	assertParallelCompositionResultLabels(t, resultPayload, parallelDeclaredResultOrderingLabels)
+
+	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
+		t,
+		baseURL+"/factory-sessions/"+sessionID+"/dispatches",
+	)
+	if len(dispatches.Dispatches) != 3 {
+		t.Fatalf("dispatch count = %d, want 3 public child dispatches", len(dispatches.Dispatches))
+	}
+	assertParallelCompositionDispatchLabels(t, dispatches.Dispatches, parallelDeclaredResultOrderingLabels)
 }
 
 func parallelCompositionFactoryConfig() map[string]any {
@@ -134,20 +224,20 @@ func writeParallelCompositionGlobalConfig(t *testing.T) string {
 
 func startParallelCompositionWorkflowAsync(
 	t *testing.T,
-	baseURL string,
+	baseURL, requestID, workflowSource string,
 ) factoryapi.FactorySessionExecutionResponse {
 	t.Helper()
 
 	dialect := "you-workflow-v1"
 	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "parallel-composition-concurrent-dispatch",
+		RequestId: requestID,
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
 			InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
 				Dialect: &dialect,
 				InlineSource: factoryapi.FactoryOrchestratorJavaScriptInlineSource{
 					Encoding: factoryapi.FactoryOrchestratorJavaScriptInlineSourceEncodingUtf8,
-					Inline:   parallelConcurrentDispatchWorkflow,
+					Inline:   workflowSource,
 				},
 			},
 		},
@@ -251,6 +341,105 @@ func intValueOrZero(value *int) int {
 	return *value
 }
 
+func readParallelCompositionFinalResult(
+	t *testing.T,
+	baseURL, sessionID string,
+) map[string]any {
+	t.Helper()
+
+	result := support.GetJSON[factoryapi.FactorySessionResult](
+		t,
+		baseURL+"/factory-sessions/"+sessionID+"/results?mode=final",
+	)
+	if result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("resultStatus = %q, want FINAL", result.ResultStatus)
+	}
+	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
+		t.Fatalf("primaryResult = %#v, want one content part", result.PrimaryResult)
+	}
+	part, err := (*result.PrimaryResult)[0].AsWorkJsonContentPart()
+	if err != nil {
+		t.Fatalf("decode primary result json part: %v", err)
+	}
+	payload, ok := part.Json.(map[string]any)
+	if !ok {
+		t.Fatalf("primary json payload = %#v, want object", part.Json)
+	}
+	return payload
+}
+
+func assertParallelCompositionResultLabels(
+	t *testing.T,
+	payload map[string]any,
+	wantLabels []string,
+) {
+	t.Helper()
+
+	results, ok := payload["results"].([]any)
+	if !ok || len(results) != len(wantLabels) {
+		t.Fatalf("result.results = %#v, want %d entries", payload["results"], len(wantLabels))
+	}
+	for index, wantLabel := range wantLabels {
+		child, ok := results[index].(map[string]any)
+		if !ok {
+			t.Fatalf("results[%d] = %#v, want object child result", index, results[index])
+		}
+		gotLabel, _ := child["label"].(string)
+		gotStatus, _ := child["status"].(string)
+		if gotLabel != wantLabel || gotStatus != "COMPLETED" {
+			t.Fatalf(
+				"results[%d] = label=%q status=%q, want label=%q status=COMPLETED",
+				index,
+				gotLabel,
+				gotStatus,
+				wantLabel,
+			)
+		}
+	}
+}
+
+func assertParallelCompositionDispatchLabels(
+	t *testing.T,
+	dispatches []factoryapi.FactorySessionDispatchSummary,
+	wantLabels []string,
+) {
+	t.Helper()
+
+	gotLabels := make(map[string]factoryapi.FactorySessionDispatchSummary, len(dispatches))
+	for _, dispatch := range dispatches {
+		if dispatch.Label == nil || strings.TrimSpace(*dispatch.Label) == "" {
+			t.Fatalf("dispatch %s missing label, want labeled child dispatches", dispatch.Id)
+		}
+		if dispatch.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
+			t.Fatalf("dispatch %s status = %q, want COMPLETED", dispatch.Id, dispatch.Status)
+		}
+		gotLabels[*dispatch.Label] = dispatch
+	}
+	for _, wantLabel := range wantLabels {
+		if _, ok := gotLabels[wantLabel]; !ok {
+			t.Fatalf("dispatch labels = %v, missing %q", gotLabels, wantLabel)
+		}
+	}
+}
+
+func waitForParallelCompositionLabelCompletion(
+	t *testing.T,
+	provider *labelGatedParallelChildProvider,
+	label string,
+	timeout time.Duration,
+) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if provider.hasCompleted(label) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("label %q did not complete within %s; completion order = %v", label, timeout, provider.completionOrder())
+}
+
 type gatedParallelChildProvider struct {
 	mu         sync.Mutex
 	active     int
@@ -333,3 +522,76 @@ func parallelChildLabelFromRequest(req workerexecution.ProviderInferenceRequest)
 }
 
 var _ workerprovider.Provider = (*gatedParallelChildProvider)(nil)
+
+type labelGatedParallelChildProvider struct {
+	mu              sync.Mutex
+	gates           map[string]chan struct{}
+	releaseOnce     map[string]*sync.Once
+	completedLabels []string
+}
+
+func newLabelGatedParallelChildProvider(labels []string) *labelGatedParallelChildProvider {
+	provider := &labelGatedParallelChildProvider{
+		gates:       make(map[string]chan struct{}, len(labels)),
+		releaseOnce: make(map[string]*sync.Once, len(labels)),
+	}
+	for _, label := range labels {
+		provider.gates[label] = make(chan struct{})
+		provider.releaseOnce[label] = &sync.Once{}
+	}
+	return provider
+}
+
+func (p *labelGatedParallelChildProvider) releaseLabel(label string) {
+	once, ok := p.releaseOnce[label]
+	if !ok {
+		return
+	}
+	once.Do(func() {
+		close(p.gates[label])
+	})
+}
+
+func (p *labelGatedParallelChildProvider) hasCompleted(label string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, completed := range p.completedLabels {
+		if completed == label {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *labelGatedParallelChildProvider) completionOrder() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]string(nil), p.completedLabels...)
+}
+
+func (p *labelGatedParallelChildProvider) Infer(
+	ctx context.Context,
+	req workerexecution.ProviderInferenceRequest,
+) (workerexecution.InferenceResponse, error) {
+	label := parallelChildLabelFromRequest(req)
+	gate, ok := p.gates[label]
+	if !ok {
+		return workerexecution.InferenceResponse{}, fmt.Errorf("unexpected parallel child label %q", label)
+	}
+
+	select {
+	case <-gate:
+	case <-ctx.Done():
+		return workerexecution.InferenceResponse{}, ctx.Err()
+	}
+
+	p.mu.Lock()
+	p.completedLabels = append(p.completedLabels, label)
+	p.mu.Unlock()
+
+	return workerexecution.InferenceResponse{
+		Content: fmt.Sprintf(`{"text":"parallel-child:%s:COMPLETE","label":%q}`, label, label),
+	}, nil
+}
+
+var _ workerprovider.Provider = (*labelGatedParallelChildProvider)(nil)
