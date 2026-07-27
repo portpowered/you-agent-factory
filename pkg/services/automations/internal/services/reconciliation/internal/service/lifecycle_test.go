@@ -236,13 +236,133 @@ func TestSourceLifecycleRejectsInvalidOperationsWithoutEffects(t *testing.T) {
 	})
 	assertLifecycleError(t, err, automations.ErrorCodeInvalid, automations.ErrInvalidRequest)
 
+	_, err = service.StartSource(context.Background(), automations.StartSourceRequest{
+		Identity: sourceIdentity("whitespace-kind"),
+		Kind:     " schedule ",
+	})
+	assertLifecycleError(t, err, automations.ErrorCodeInvalid, automations.ErrInvalidRequest)
+
+	identity := sourceIdentity("malformed-resume")
+	resume := automations.SourceObservation{
+		Identity: identity,
+		State:    automations.ObservedLifecycleRunning,
+	}
+	_, err = service.StartSource(context.Background(), automations.StartSourceRequest{
+		Identity: identity,
+		Kind:     "schedule",
+		Resume:   &resume,
+	})
+	assertLifecycleError(t, err, automations.ErrorCodeInvalid, automations.ErrInvalidRequest)
+
+	_, err = service.StopSource(context.Background(), automations.StopSourceRequest{})
+	assertLifecycleError(t, err, automations.ErrorCodeInvalid, automations.ErrInvalidRequest)
+
 	_, err = service.StopSource(context.Background(), automations.StopSourceRequest{
 		Identity: sourceIdentity("missing"),
 	})
 	assertLifecycleError(t, err, automations.ErrorCodeNotFound, automations.ErrNotFound)
+
+	_, err = service.WaitSource(context.Background(), automations.WaitSourceRequest{})
+	assertLifecycleError(t, err, automations.ErrorCodeInvalid, automations.ErrInvalidRequest)
+
+	_, err = service.WaitSource(context.Background(), automations.WaitSourceRequest{
+		Identity: sourceIdentity("missing-wait"),
+		Desired:  automations.DesiredLifecycleRunning,
+	})
+	assertLifecycleError(t, err, automations.ErrorCodeNotFound, automations.ErrNotFound)
+
+	_, err = service.SourceStatus(context.Background(), automations.SourceStatusRequest{})
+	assertLifecycleError(t, err, automations.ErrorCodeInvalid, automations.ErrInvalidRequest)
+
 	if got := effects.counts(); got != (effectCounts{}) {
 		t.Fatalf("invalid operations invoked effects: %+v", got)
 	}
+}
+
+func TestSourceLifecycleReportsUnavailableEffects(t *testing.T) {
+	t.Parallel()
+
+	service := reconciliationwire.NewService()
+	identity := sourceIdentity("unavailable-effects")
+	_, err := service.StartSource(context.Background(), automations.StartSourceRequest{
+		Identity: identity,
+		Kind:     "schedule",
+	})
+	assertLifecycleError(t, err, automations.ErrorCodeNotReady, automations.ErrNotReady)
+
+	_, err = service.StopSource(context.Background(), automations.StopSourceRequest{
+		Identity: identity,
+	})
+	assertLifecycleError(t, err, automations.ErrorCodeNotReady, automations.ErrNotReady)
+
+	_, err = service.WaitSource(context.Background(), automations.WaitSourceRequest{
+		Identity: identity,
+		Desired:  automations.DesiredLifecycleRunning,
+	})
+	assertLifecycleError(t, err, automations.ErrorCodeNotReady, automations.ErrNotReady)
+}
+
+func TestSourceLifecycleRejectsKindDriftAndForeignWaitObservation(t *testing.T) {
+	t.Parallel()
+
+	identity := sourceIdentity("effect-validation")
+	resume := automations.SourceObservation{
+		Identity:   identity,
+		InstanceID: "persisted-effect-validation",
+		State:      automations.ObservedLifecycleRunning,
+	}
+	service := reconciliationwire.NewService()
+	if _, err := service.StartSource(context.Background(), automations.StartSourceRequest{
+		Identity: identity,
+		Kind:     "hosted",
+		Resume:   &resume,
+	}); err != nil {
+		t.Fatalf("restore running source: %v", err)
+	}
+	_, err := service.StartSource(context.Background(), automations.StartSourceRequest{
+		Identity: identity,
+		Kind:     "schedule",
+	})
+	assertLifecycleError(t, err, automations.ErrorCodeConflict, automations.ErrConflict)
+
+	waited, err := service.WaitSource(context.Background(), automations.WaitSourceRequest{
+		Identity: identity,
+		Desired:  automations.DesiredLifecycleRunning,
+	})
+	if err != nil {
+		t.Fatalf("WaitSource for converged source: %v", err)
+	}
+	if !waited.Outcome.Idempotent ||
+		waited.Outcome.Convergence != automations.ConvergenceStatusConverged {
+		t.Fatalf("WaitSource outcome = %+v, want idempotent convergence", waited.Outcome)
+	}
+
+	foreignEffects := reconciliation.Effects{
+		Start: func(context.Context, reconciliation.StartEffect) error {
+			return nil
+		},
+		Wait: func(
+			_ context.Context,
+			effect reconciliation.WaitEffect,
+		) (automations.SourceObservation, error) {
+			observation := effect.Observation
+			observation.InstanceID = "foreign-instance"
+			return observation, nil
+		},
+	}
+	foreignService := reconciliationwire.NewService(foreignEffects)
+	foreignIdentity := sourceIdentity("foreign-wait")
+	if _, err := foreignService.StartSource(
+		context.Background(),
+		automations.StartSourceRequest{Identity: foreignIdentity, Kind: "watcher"},
+	); err != nil {
+		t.Fatalf("StartSource before foreign wait: %v", err)
+	}
+	_, err = foreignService.WaitSource(context.Background(), automations.WaitSourceRequest{
+		Identity: foreignIdentity,
+		Desired:  automations.DesiredLifecycleRunning,
+	})
+	assertLifecycleError(t, err, automations.ErrorCodeInvalid, automations.ErrInvalidRequest)
 }
 
 type effectCounts struct {

@@ -127,6 +127,27 @@ func TestReconcileEquivalentDetachedInputsProduceStableCanonicalResults(t *testi
 	}
 }
 
+func TestReconcileOrdersSourcesWithinOneAutomation(t *testing.T) {
+	t.Parallel()
+
+	service := reconciliationwire.NewService()
+	result, err := service.Reconcile(context.Background(), automations.ReconcileRequest{
+		Desired: []automations.DesiredSpec{
+			{AutomationID: "automation", SourceID: "source-b", Kind: "schedule", State: automations.DesiredLifecycleRunning},
+			{AutomationID: "automation", SourceID: "source-a", Kind: "schedule", State: automations.DesiredLifecycleRunning},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if got := []string{
+		result.Outcomes[0].SourceID,
+		result.Outcomes[1].SourceID,
+	}; !equalStrings(got, []string{"source-a", "source-b"}) {
+		t.Fatalf("decision source order = %v, want source-a then source-b", got)
+	}
+}
+
 func TestReconcileRejectsInvalidAndContradictoryInputs(t *testing.T) {
 	t.Parallel()
 
