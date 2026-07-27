@@ -1394,11 +1394,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/batch_ideation_pipeline_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/code_review_loop_long_test.go",
       "target": "workflow"
     },
@@ -1420,11 +1415,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/dispatcher_lifecycle_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/dispatcher_workflow_long_test.go",
       "target": "workflow"
     },
     {
