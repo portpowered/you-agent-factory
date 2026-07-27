@@ -16,7 +16,11 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const kiroGoldenTextSuccessCase = "text-success"
+const (
+	kiroGoldenTextSuccessCase       = "text-success"
+	kiroGoldenAuthFailureCase       = "auth-failure"
+	kiroGoldenStructuredFailureCase = "structured-failure"
+)
 
 // TestKiroGoldenTextSuccess replays a sanitized Kiro text-success transcript through
 // the customer process boundary and proves successful text output with matching
@@ -122,6 +126,206 @@ func TestKiroGoldenTextSuccess(t *testing.T) {
 	}
 }
 
+// TestKiroGoldenAuthAndStructuredFailure replays sanitized Kiro auth-failure
+// and structured-failure transcripts through the customer process boundary and
+// proves those public failure classes remain distinct without leaking private detail.
+//golden: docs/temp/functional/provider-sessions/kiro/auth-failure/manifest.json
+//golden: docs/temp/functional/provider-sessions/kiro/structured-failure/manifest.json
+func TestKiroGoldenAuthAndStructuredFailure(t *testing.T) {
+	t.Run("auth-failure", func(t *testing.T) {
+		runKiroFailureGoldenCase(
+			t,
+			kiroGoldenAuthFailureCase,
+			"kiro-auth-failure",
+			support.ProviderSessionFidelityFinalOnly,
+			factoryapi.WorkFailureTypeAuthFailure,
+			factoryapi.WorkFailureTypeInternalServerError,
+			[]string{
+				`C:\private\kiro-token.txt`,
+				"kiro-token",
+			},
+		)
+	})
+	t.Run("structured-failure", func(t *testing.T) {
+		runKiroFailureGoldenCase(
+			t,
+			kiroGoldenStructuredFailureCase,
+			"kiro-structured-failure",
+			support.ProviderSessionFidelityFinalOnly,
+			factoryapi.WorkFailureTypePermanentBadRequest,
+			factoryapi.WorkFailureTypeAuthFailure,
+			[]string{
+				"private customer request detail",
+			},
+		)
+	})
+}
+
+func runKiroFailureGoldenCase(
+	t *testing.T,
+	caseName string,
+	manifestID string,
+	fidelityClass string,
+	wantReason factoryapi.WorkFailureType,
+	notReason factoryapi.WorkFailureType,
+	forbiddenNeedles []string,
+) {
+	t.Helper()
+
+	repoRoot := testutil.MustRepoRoot(t)
+	caseDir := filepath.Join(
+		repoRoot,
+		filepath.FromSlash(support.ProviderSessionFixturePath("kiro", caseName)),
+	)
+
+	loaded, err := support.LoadProviderSessionCase(caseDir)
+	if err != nil {
+		t.Fatalf("LoadProviderSessionCase: %v", err)
+	}
+	if loaded.Manifest.ID != manifestID {
+		t.Fatalf("manifest.ID = %q, want %s", loaded.Manifest.ID, manifestID)
+	}
+	if loaded.Manifest.FidelityClass != fidelityClass {
+		t.Fatalf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, fidelityClass)
+	}
+
+	var request struct {
+		Model     string `json:"model"`
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(loaded.Request, &request); err != nil {
+		t.Fatalf("decode request.json: %v", err)
+	}
+	if request.Model == "" {
+		t.Fatalf("request.json = %#v, want model", request)
+	}
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
+		support.BuildModelWorkerConfig(modelprovider.ProviderKiro, request.Model),
+		"stopToken: COMPLETE",
+		"skipPermissions: true\nstopToken: COMPLETE",
+		1,
+	))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"kiro golden `+caseName+`"}`))
+
+	exitCode := 1
+	if loaded.Process.ExitCode != nil {
+		exitCode = *loaded.Process.ExitCode
+	}
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
+		Stderr:   []byte(loaded.Stderr),
+		ExitCode: exitCode,
+	})
+
+	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		30*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
+		t.Fatalf("completed work = %d, want 0; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want 1", runner.CallCount())
+	}
+
+	inferencePayload := kiroGoldenFailedInferenceObservation(t, events)
+	if inferencePayload.Outcome != factoryapi.InferenceOutcomeFailed {
+		t.Fatalf("inference outcome = %q, want FAILED", inferencePayload.Outcome)
+	}
+	if inferencePayload.FailureDetail == nil {
+		t.Fatal("inference response missing failure detail")
+	}
+	if got := inferencePayload.FailureDetail.Reason; got != wantReason {
+		t.Fatalf("failure reason = %q, want %q", got, wantReason)
+	}
+	if notReason != "" && inferencePayload.FailureDetail.Reason == notReason {
+		t.Fatalf("failure reason = %q, must remain distinct from %q", inferencePayload.FailureDetail.Reason, notReason)
+	}
+	if request.SessionID != "" {
+		if inferencePayload.ProviderSession == nil || inferencePayload.ProviderSession.Id == nil {
+			t.Fatal("inference response missing provider session identity")
+		}
+		if got := support.StringPointerValue(inferencePayload.ProviderSession.Id); got != request.SessionID {
+			t.Fatalf("provider session id = %q, want golden session %q", got, request.SessionID)
+		}
+	}
+	assertKiroFailureDoesNotLeakSensitiveOutput(t, events, responseEvents, forbiddenNeedles)
+
+	observed := support.ProviderSessionObservedGoldens{
+		ProviderSession:   observeKiroProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ResponseEvents:   observeKiroResponseEventGoldens(responseEvents),
+		InvocationResult: observeKiroFailedInvocationResultGolden(inferencePayload),
+	}
+	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
+		var updated *support.ProviderSessionGoldensUpdatedError
+		if errors.As(err, &updated) {
+			t.Fatalf("%v", err)
+		}
+		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
+	}
+}
+
+func assertKiroFailureDoesNotLeakSensitiveOutput(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	responseEvents []factoryapi.FactoryResponseEvent,
+	forbidden []string,
+) {
+	t.Helper()
+
+	encoded, err := json.Marshal(struct {
+		Events         []factoryapi.FactoryEvent
+		ResponseEvents []factoryapi.FactoryResponseEvent
+	}{events, responseEvents})
+	if err != nil {
+		t.Fatalf("marshal observed events: %v", err)
+	}
+	payload := string(encoded)
+	for _, needle := range forbidden {
+		if strings.Contains(payload, needle) {
+			t.Fatalf("public observation leaked sensitive Kiro output containing %q", needle)
+		}
+	}
+}
+
+func kiroGoldenFailedInferenceObservation(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+) factoryapi.InferenceResponseEventPayload {
+	t.Helper()
+
+	var (
+		inferencePayload factoryapi.InferenceResponseEventPayload
+		foundInference   bool
+	)
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+			continue
+		}
+		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode inference response: %v", err)
+		}
+		if payload.Outcome != factoryapi.InferenceOutcomeFailed {
+			continue
+		}
+		inferencePayload = payload
+		foundInference = true
+	}
+	if !foundInference {
+		t.Fatal("missing failed INFERENCE_RESPONSE in factory events")
+	}
+	return inferencePayload
+}
+
 func kiroGoldenInferenceObservation(
 	t *testing.T,
 	events []factoryapi.FactoryEvent,
@@ -191,33 +395,67 @@ func observeKiroProviderSessionGolden(
 	return mustMarshalJSON(record)
 }
 
+func observeKiroFailedInvocationResultGolden(
+	payload factoryapi.InferenceResponseEventPayload,
+) json.RawMessage {
+	record := map[string]any{
+		"ok": false,
+	}
+	if payload.FailureDetail != nil {
+		record["failureReason"] = payload.FailureDetail.Reason
+		record["message"] = payload.FailureDetail.Message
+	}
+	return mustMarshalJSON(record)
+}
+
 func observeKiroResponseEventGoldens(events []factoryapi.FactoryResponseEvent) []json.RawMessage {
 	records := make([]json.RawMessage, 0, len(events))
 	for _, event := range events {
-		if event.Kind != factoryapi.FactoryResponseEventKindMessage {
-			continue
+		switch event.Kind {
+		case factoryapi.FactoryResponseEventKindError:
+			if event.Phase != factoryapi.FactoryResponseEventPhaseFailed {
+				continue
+			}
+			errorPayload, err := event.Payload.AsFactoryResponseEventErrorPayload()
+			if err != nil {
+				continue
+			}
+			record := map[string]any{
+				"type":             "error.failed",
+				"eventId":          event.EventId,
+				"factorySessionId": event.FactorySessionId,
+				"runId":            event.RunId,
+				"itemId":           kiroGoldenItemID(event),
+				"code":             errorPayload.Code,
+				"message":          errorPayload.Message,
+			}
+			if errorPayload.Retryable != nil {
+				record["retryable"] = *errorPayload.Retryable
+			}
+			records = append(records, mustMarshalJSON(record))
+		case factoryapi.FactoryResponseEventKindMessage:
+			if event.Phase != factoryapi.FactoryResponseEventPhaseCompleted {
+				continue
+			}
+			message, err := event.Payload.AsFactoryResponseEventMessagePayload()
+			if err != nil {
+				continue
+			}
+			text := kiroGoldenMessageText(message)
+			if text == "" {
+				continue
+			}
+			record := map[string]any{
+				"type":             "message.completed",
+				"eventId":          event.EventId,
+				"factorySessionId": event.FactorySessionId,
+				"runId":            event.RunId,
+				"itemId":           kiroGoldenItemID(event),
+				"text":             text,
+				"finishReason":     "stop",
+			}
+			records = append(records, mustMarshalJSON(record))
 		}
-		if event.Phase != factoryapi.FactoryResponseEventPhaseCompleted {
-			continue
-		}
-		message, err := event.Payload.AsFactoryResponseEventMessagePayload()
-		if err != nil {
-			continue
-		}
-		text := kiroGoldenMessageText(message)
-		if text == "" {
-			continue
-		}
-		record := map[string]any{
-			"type":             "message.completed",
-			"eventId":          event.EventId,
-			"factorySessionId": event.FactorySessionId,
-			"runId":            event.RunId,
-			"itemId":           kiroGoldenItemID(event),
-			"text":             text,
-			"finishReason":     "stop",
-		}
-		records = append(records, mustMarshalJSON(record))
 	}
 	return records
 }
