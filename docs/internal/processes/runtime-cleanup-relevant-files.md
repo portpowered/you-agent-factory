@@ -751,7 +751,15 @@ peer-facing loader); publish distinct `ErrInvalidAuthoredFactorySource` vs
 `ValidationResult` success shapes (not a peer-facing nested `Validator`
 interface); publish distinct `ErrInvalidFactoryDefinitionPayload` vs
 `FactoryDefinitionValidationFailure` (`ErrFactoryDefinitionValidationFailed`
-with blocking `ValidationTarget` findings and no Petri vocabulary). Snapshot
+with blocking `ValidationTarget` findings and no Petri vocabulary). The
+parent-private nested validation subservice locks its public surface in
+`internal/services/validation/boundary_test.go`: `service.go` exports only
+`Service` and `Dependencies` with factory_definitions root request/result
+vocabulary and contracts injected ports, direct imports avoid Wire/Runtime/
+Petri/peer/sibling-lease paths, and `wire/wire.go` constructs from injected
+ports without selecting Runtime/Petri implementations or sibling catalog/
+authoring_layout/compilation/snapshots_portability/distribution leases.
+Snapshot
 slices stay on the singular `Service` via `CaptureFactorySnapshot`,
 `PrepareFactorySnapshotImport`, and `MaterializeFactorySnapshot` returning
 detached `FactorySnapshot` / `PortableFactorySnapshotFacts` (not
