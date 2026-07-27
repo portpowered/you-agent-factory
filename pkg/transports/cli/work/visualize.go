@@ -1,6 +1,7 @@
 package work
 
 import (
+	"context"
 	"fmt"
 	"io"
 
@@ -9,6 +10,7 @@ import (
 
 // VisualizeConfig holds parameters for the work visualize command.
 type VisualizeConfig struct {
+	Context   context.Context
 	BatchFile string
 	Format    string
 	Output    io.Writer
@@ -27,9 +29,19 @@ func Visualize(visualize workdomain.VisualizationOperation, cfg VisualizeConfig)
 	if visualize == nil {
 		return fmt.Errorf("Work visualization operation is required")
 	}
+	if cfg.Context != nil {
+		if err := cfg.Context.Err(); err != nil {
+			return err
+		}
+	}
 	output, err := visualize(workdomain.VisualizationRequest{BatchFile: cfg.BatchFile, Format: cfg.Format})
 	if err != nil {
 		return err
+	}
+	if cfg.Context != nil {
+		if err := cfg.Context.Err(); err != nil {
+			return err
+		}
 	}
 	_, err = io.WriteString(cfg.Output, output)
 	return err

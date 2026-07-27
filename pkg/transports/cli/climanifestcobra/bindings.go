@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
@@ -74,21 +73,6 @@ type GenericBindings struct {
 	SourceValues            SourceCandidateProvider
 	RootInputs              ResolvedInputsBinding
 	GuardUnknownSubcommands bool
-}
-
-// SessionFamilyBindings supplies the retained production compatibility option
-// structs while root composition remains leased.
-//
-// Deprecated: construct the Session family with
-// NewSessionFamilyCommandFromManifest and a resolved handler registry.
-type SessionFamilyBindings struct {
-	Create     *sessioncli.CreateConfig
-	List       *sessioncli.ListConfig
-	Delete     *sessioncli.DeleteConfig
-	Dispatches *sessioncli.DispatchesConfig
-	Pause      *sessioncli.LifecycleControlConfig
-	Resume     *sessioncli.LifecycleControlConfig
-	FlagUsages map[string]string
 }
 
 type persistentInputResolver struct {
