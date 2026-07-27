@@ -57,6 +57,40 @@ func TestHandlerOpenFactorySessionRejectsInvalidPayloadBeforeServiceInvocation(t
 	}
 }
 
+func TestRequestAcceptsJSONContentType(t *testing.T) {
+	tests := []struct {
+		header string
+		want   bool
+	}{
+		{header: "", want: true},
+		{header: "application/json", want: true},
+		{header: "application/problem+json", want: true},
+		{header: "application/json; charset=utf-8", want: true},
+		{header: "text/plain", want: false},
+		{header: "application/xml", want: false},
+		{header: "not-a-media-type", want: false},
+	}
+	for _, tc := range tests {
+		if got := requestAcceptsJSONContentType(tc.header); got != tc.want {
+			t.Fatalf("requestAcceptsJSONContentType(%q) = %v, want %v", tc.header, got, tc.want)
+		}
+	}
+}
+
+func TestHandlerOpenFactorySessionRejectsUnsupportedMediaTypeBeforeServiceInvocation(t *testing.T) {
+	handler := NewHandler(Dependencies{Sessions: liveSessionAPIFake{}}, zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/factory-sessions", strings.NewReader(`{"target":{"kind":"default"}}`))
+	request.Header.Set("Content-Type", "text/plain")
+
+	handler.OpenFactorySession(recorder, request)
+
+	if recorder.Code != http.StatusUnsupportedMediaType ||
+		!strings.Contains(recorder.Body.String(), `"code":"UNSUPPORTED_MEDIA_TYPE"`) {
+		t.Fatalf("response = %d %s, want unsupported media type", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestHandlerGetFactorySessionMapsUnavailableDependency(t *testing.T) {
 	handler := NewHandler(Dependencies{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
