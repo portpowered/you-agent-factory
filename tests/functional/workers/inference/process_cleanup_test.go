@@ -124,9 +124,43 @@ func TestProcessTreeHelper(t *testing.T) {
 		writeProcessCleanupPID(pidFile)
 		time.Sleep(30 * time.Second)
 		os.Exit(0)
+	case "companion-timeout-once":
+		runCompanionTimeoutOnceHelper(pidFile)
 	default:
 		return
 	}
+}
+
+func runCompanionTimeoutOnceHelper(attemptFile string) {
+	attempt := readProcessCleanupAttempt(attemptFile) + 1
+	if err := os.WriteFile(attemptFile, []byte(strconv.Itoa(attempt)), 0o600); err != nil {
+		fmt.Fprintf(os.Stderr, "write attempt file: %v\n", err)
+		os.Exit(2)
+	}
+	if attempt == 1 {
+		spawnProcessCleanupChild(attemptFile + ".companion.pid")
+		time.Sleep(30 * time.Second)
+		os.Exit(0)
+	}
+	fmt.Println("recovered after companion timeout")
+	os.Exit(0)
+}
+
+func readProcessCleanupAttempt(attemptFile string) int {
+	raw, err := os.ReadFile(attemptFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0
+		}
+		fmt.Fprintf(os.Stderr, "read attempt file: %v\n", err)
+		os.Exit(2)
+	}
+	attempt, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse attempt file %q: %v\n", raw, err)
+		os.Exit(2)
+	}
+	return attempt
 }
 
 func spawnProcessCleanupChild(pidFile string) {
