@@ -2033,3 +2033,10 @@ response-stream output.
   Compatibility command edges that expose only `Run` may publish one complete
   stdout chunk followed by one complete stderr chunk; real process edges retain
   live mixed-stream ordering through `RunStreaming`.
+- Providers-backed Agent Runners map typed one-attempt failure kinds at the
+  Workers boundary: authentication and invalid requests remain terminal,
+  throttling enters the throttle family, dependency and timeout failures remain
+  retryable, and unknown failures remain terminal. Publish detached failure
+  progress before returning the single normalized failure, preserve the
+  Providers error as a cause, and let caller context cancellation or deadline
+  win any concurrent provider failure classification; the Runner never retries.

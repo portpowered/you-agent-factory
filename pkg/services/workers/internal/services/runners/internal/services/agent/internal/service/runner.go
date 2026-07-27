@@ -48,15 +48,34 @@ func (s *service) Execute(
 	}
 	result, err := s.providers.Execute(ctx, providerRequest(request))
 	if err != nil {
-		if contextErr := ctx.Err(); contextErr != nil {
-			return workers.RunnerExecutionResult{}, contextErr
+		if failure, ok := providerFailure(err); ok {
+			response := runnerFailureResult(failure, request)
+			s.publishFailureProgress(
+				request.Dispatch.DispatchID,
+				failure,
+				response.ProviderSession,
+			)
+			return response, normalizeProviderFailure(ctx, failure, err, response)
 		}
-		return workers.RunnerExecutionResult{}, normalizeExecutionError(err)
+		return workers.RunnerExecutionResult{}, normalizeExecutionError(ctx, err)
 	}
 	result = result.Clone()
 	response := runnerResult(result, providers.ID(request.RunnerID))
 	s.publishProgress(request.Dispatch.DispatchID, result, response.ProviderSession)
 	return response, nil
+}
+
+func (s *service) publishFailureProgress(
+	dispatchID string,
+	failure providers.ExecuteFailure,
+	session *workers.ProviderSessionMetadata,
+) {
+	if failure.Diagnostics == nil {
+		return
+	}
+	s.publishProgress(dispatchID, providers.ExecuteResult{
+		Diagnostics: failure.Diagnostics,
+	}, session)
 }
 
 func (s *service) publishProgress(
@@ -155,20 +174,111 @@ func runnerResult(
 	return response
 }
 
-func normalizeExecutionError(err error) error {
-	var failure providers.ExecuteFailure
-	if errors.As(err, &failure) {
-		return workers.NewProviderError(
-			workers.WorkFailureTypeInternalServerError,
-			strings.TrimSpace(failure.Message),
-			err,
-		)
+func runnerFailureResult(
+	failure providers.ExecuteFailure,
+	request workers.RunnerExecutionRequest,
+) workers.RunnerExecutionResult {
+	response := runnerResult(providers.ExecuteResult{
+		Diagnostics: failure.Diagnostics,
+	}, providers.ID(request.RunnerID))
+	if strings.TrimSpace(request.SessionID) != "" {
+		response.ProviderSession = &workers.ProviderSessionMetadata{
+			Provider: request.RunnerID,
+			Kind:     providers.SessionIDKind,
+			ID:       request.SessionID,
+		}
+	}
+	return response
+}
+
+func providerFailure(err error) (providers.ExecuteFailure, bool) {
+	var value providers.ExecuteFailure
+	if errors.As(err, &value) {
+		return value.Clone(), true
+	}
+	var pointer *providers.ExecuteFailure
+	if errors.As(err, &pointer) && pointer != nil {
+		return pointer.Clone(), true
+	}
+	return providers.ExecuteFailure{}, false
+}
+
+func normalizeProviderFailure(
+	ctx context.Context,
+	failure providers.ExecuteFailure,
+	cause error,
+	result workers.RunnerExecutionResult,
+) error {
+	interruption := ctx.Err()
+	if errors.Is(interruption, context.Canceled) {
+		return errors.Join(context.Canceled, cause)
+	}
+	if interruption == nil {
+		switch failure.Kind {
+		case providers.ExecuteFailureKindCanceled:
+			interruption = context.Canceled
+		case providers.ExecuteFailureKindTimeout:
+			interruption = context.DeadlineExceeded
+		}
+	}
+	if failure.Kind == providers.ExecuteFailureKindCanceled {
+		return errors.Join(interruption, cause)
+	}
+	failureType := failureTypeForProviderKind(failure.Kind)
+	if errors.Is(interruption, context.DeadlineExceeded) {
+		failureType = workers.WorkFailureTypeTimeout
+	}
+	normalized := workers.NewProviderError(
+		failureType,
+		boundedFailureMessage(failure.Message),
+		errors.Join(interruption, cause),
+	)
+	normalized.ProviderSession = workers.CloneProviderSessionMetadata(
+		result.ProviderSession,
+	)
+	normalized.Diagnostics = workers.CloneWorkDiagnostics(result.Diagnostics)
+	return normalized
+}
+
+func normalizeExecutionError(ctx context.Context, err error) error {
+	if contextErr := ctx.Err(); contextErr != nil {
+		return errors.Join(contextErr, err)
 	}
 	return workers.NewProviderError(
 		workers.WorkFailureTypeInternalServerError,
 		"agent provider execution failed",
 		err,
 	)
+}
+
+func failureTypeForProviderKind(
+	kind providers.ExecuteFailureKind,
+) workers.WorkFailureType {
+	switch kind {
+	case providers.ExecuteFailureKindAuthentication:
+		return workers.WorkFailureTypeAuthFailure
+	case providers.ExecuteFailureKindInvalidRequest:
+		return workers.WorkFailureTypePermanentBadRequest
+	case providers.ExecuteFailureKindThrottled:
+		return workers.WorkFailureTypeThrottled
+	case providers.ExecuteFailureKindDependency:
+		return workers.WorkFailureTypeInternalServerError
+	case providers.ExecuteFailureKindTimeout:
+		return workers.WorkFailureTypeTimeout
+	default:
+		return workers.WorkFailureTypeUnknown
+	}
+}
+
+const failureMessageRuneLimit = 512
+
+func boundedFailureMessage(message string) string {
+	message = strings.TrimSpace(message)
+	runes := []rune(message)
+	if len(runes) <= failureMessageRuneLimit {
+		return message
+	}
+	return string(runes[:failureMessageRuneLimit])
 }
 
 func cloneMetadata(values map[string]string) map[string]string {
