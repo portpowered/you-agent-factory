@@ -30,8 +30,8 @@ func (s *service) invokeWithDeadline(parent context.Context) (context.Context, c
 	if duration <= 0 {
 		return parent, func() {}
 	}
-	if parentDeadline, ok := parent.Deadline(); ok {
-		remaining := time.Until(parentDeadline)
+	if parentDeadline, ok := parent.Deadline(); ok && s.clock != nil {
+		remaining := parentDeadline.Sub(s.clock())
 		if remaining > 0 && remaining < duration {
 			return parent, func() {}
 		}

@@ -248,6 +248,10 @@
     "pkg/services/models/internal/services/catalog",
     "pkg/services/models/internal/services/catalog/internal/service",
     "pkg/services/models/internal/services/catalog/wire",
+    "pkg/services/models/internal/services/inference",
+    "pkg/services/models/internal/services/inference/internal/artifacts",
+    "pkg/services/models/internal/services/inference/internal/service",
+    "pkg/services/models/internal/services/inference/wire",
     "pkg/services/models/internal/services/runtime_host",
     "pkg/services/models/internal/services/runtime_host/internal/service",
     "pkg/services/models/internal/services/runtime_host/internal/services/leases",
@@ -291,6 +295,9 @@
     "pkg/services/recordings/internal/services/artifacts_export",
     "pkg/services/recordings/internal/services/artifacts_export/internal/service",
     "pkg/services/recordings/internal/services/artifacts_export/wire",
+    "pkg/services/recordings/internal/services/canonical_ledger",
+    "pkg/services/recordings/internal/services/canonical_ledger/internal/service",
+    "pkg/services/recordings/internal/services/canonical_ledger/wire",
     "pkg/services/recordings/internal/services/projection_query",
     "pkg/services/recordings/internal/services/projection_query/internal/service",
     "pkg/services/recordings/internal/services/projection_query/wire",
@@ -1477,6 +1484,26 @@
       "destination": "models/internal/services/catalog"
     },
     {
+      "packagePath": "pkg/services/models/internal/services/inference",
+      "disposition": "retain",
+      "destination": "models/internal/services/inference"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference/internal/artifacts",
+      "disposition": "retain",
+      "destination": "models/internal/services/inference"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference/internal/service",
+      "disposition": "retain",
+      "destination": "models/internal/services/inference"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference/wire",
+      "disposition": "retain",
+      "destination": "models/internal/services/inference"
+    },
+    {
       "packagePath": "pkg/services/models/internal/services/runtime_host",
       "disposition": "retain",
       "destination": "models/internal/services/runtime_host"
@@ -1690,6 +1717,21 @@
       "packagePath": "pkg/services/recordings/internal/services/artifacts_export/wire",
       "disposition": "retain",
       "destination": "recordings/internal/services/artifacts_export"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/internal/service",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/wire",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/canonical_ledger"
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/projection_query",
