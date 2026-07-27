@@ -268,15 +268,17 @@ func TestFailureBaseline_RunFactoryQuietWritesStructuredInvocationFailure(t *tes
 }
 
 func TestFailureBaseline_NoServer_ModelsInvokeCommandUsesBootstrapInsteadOfUnreachableEndpoint(t *testing.T) {
-	originalInvokeModel := invokeModel
+	originalModelsCLI := rootModelsCLI
 	defer func() {
-		invokeModel = originalInvokeModel
+		rootModelsCLI = originalModelsCLI
 	}()
 
 	var got modelscli.InvokeConfig
-	invokeModel = func(cfg modelscli.InvokeConfig) error {
-		got = cfg
-		return nil
+	rootModelsCLI = modelsCLIServiceFunctions{
+		invoke: func(cfg modelscli.InvokeConfig) error {
+			got = cfg
+			return nil
+		},
 	}
 
 	outputPath := filepath.Join(t.TempDir(), "speech.wav")
