@@ -237,7 +237,8 @@ func TestRecordingsRootFailedExportLeavesNoReadablePublicArtifact(t *testing.T) 
 		}
 	}
 	_, err = root.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
-		Reference: recordings.RecordingArtifactReference(destination),
+		RecordingID: bound.Status.RecordingID,
+		Reference:   recordings.RecordingArtifactReference(destination),
 	})
 	if !errors.Is(err, recordings.ErrPortableArtifactUnavailable) &&
 		!errors.Is(err, recordings.ErrInvalidPortableArtifact) {
@@ -245,5 +246,62 @@ func TestRecordingsRootFailedExportLeavesNoReadablePublicArtifact(t *testing.T) 
 	}
 	if _, err := os.Stat(filepath.Join(destination, filepath.Base(destination))); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("nested publish path stat = %v, want not exist", err)
+	}
+}
+
+func TestRecordingsRootReadPortableArtifactRejectsMissingAndForeignHandles(t *testing.T) {
+	t.Parallel()
+
+	root := recordingsservice.NewService(
+		&unusedLedger{},
+		recordingsservice.NewProjectionService(),
+	)
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-root-read-guards"}
+	owner, err := root.BindRecording(recordings.BindRecordingRequest{
+		RecordingID: "recording-root-owner",
+		Artifact:    "artifact:root-owner",
+		Scope:       scope,
+	})
+	if err != nil {
+		t.Fatalf("BindRecording owner: %v", err)
+	}
+	other, err := root.BindRecording(recordings.BindRecordingRequest{
+		RecordingID: "recording-root-other",
+		Artifact:    "artifact:root-other",
+		Scope:       scope,
+	})
+	if err != nil {
+		t.Fatalf("BindRecording other: %v", err)
+	}
+	if _, err := root.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: owner.Status.RecordingID,
+		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
+	}); err != nil {
+		t.Fatalf("FinishRecording owner: %v", err)
+	}
+	if _, err := root.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: other.Status.RecordingID,
+		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
+	}); err != nil {
+		t.Fatalf("FinishRecording other: %v", err)
+	}
+
+	_, err = root.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+		RecordingID: owner.Status.RecordingID,
+		Reference:   owner.Status.Artifact,
+	})
+	if !errors.Is(err, recordings.ErrPortableArtifactUnavailable) {
+		t.Fatalf("missing published artifact = %v, want ErrPortableArtifactUnavailable", err)
+	}
+
+	_, err = root.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+		RecordingID: other.Status.RecordingID,
+		Reference:   owner.Status.Artifact,
+	})
+	if !errors.Is(err, recordings.ErrForeignPortableArtifact) {
+		t.Fatalf("foreign handle = %v, want ErrForeignPortableArtifact", err)
+	}
+	if strings.Contains(err.Error(), string(owner.Status.Artifact)) {
+		t.Fatalf("foreign handle error leaked owner reference: %v", err)
 	}
 }

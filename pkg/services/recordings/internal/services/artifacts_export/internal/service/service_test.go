@@ -210,7 +210,8 @@ func TestExportPortableArtifactFailedPublishLeavesNoPartialPublicArtifact(t *tes
 		}
 	}
 	_, err = service.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
-		Reference: recordings.RecordingArtifactReference(destination),
+		RecordingID: "recording-failed-export",
+		Reference:   recordings.RecordingArtifactReference(destination),
 	})
 	if !errors.Is(err, recordings.ErrPortableArtifactUnavailable) {
 		t.Fatalf("ReadPortableArtifact after failed export = %v, want ErrPortableArtifactUnavailable", err)
@@ -260,7 +261,8 @@ func TestExportPortableArtifactPublishesCompleteReadableArtifact(t *testing.T) {
 		t.Fatalf("export reference = %q, want %q", exported.Reference, destination)
 	}
 	read, err := service.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
-		Reference: exported.Reference,
+		RecordingID: "recording-export-success",
+		Reference:   exported.Reference,
 	})
 	if err != nil {
 		t.Fatalf("ReadPortableArtifact: %v", err)
@@ -268,6 +270,175 @@ func TestExportPortableArtifactPublishesCompleteReadableArtifact(t *testing.T) {
 	if !reflect.DeepEqual(read.Artifact.Summary, exported.Artifact.Summary) {
 		t.Fatalf("read summary = %#v, want %#v", read.Artifact.Summary, exported.Artifact.Summary)
 	}
+}
+
+func TestReadPortableArtifactRejectsMissingRecordingAndHandle(t *testing.T) {
+	t.Parallel()
+
+	finalizedAt := time.Unix(1_700_000_000, 0).UTC()
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-missing-read"}
+	snapshot := recordinglifecycle.Snapshot{
+		Status: recordings.RecordingStatusFacts{
+			RecordingID: "recording-missing-read",
+			Artifact:    "artifact:missing-read",
+			Scope:       scope,
+			State:       recordings.RecordingFinalized,
+			FinalizedAt: &finalizedAt,
+		},
+	}
+	publication, err := artifactsexportservice.NewOSPublication()
+	if err != nil {
+		t.Fatalf("NewOSPublication: %v", err)
+	}
+	service := artifactsexportservice.New(snapshotSourceFake{snapshot: snapshot}, publication)
+
+	_, err = service.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+		RecordingID: "recording-missing-read",
+		Reference:   "artifact:missing-read",
+	})
+	if !errors.Is(err, recordings.ErrPortableArtifactUnavailable) {
+		t.Fatalf("missing published artifact = %v, want ErrPortableArtifactUnavailable", err)
+	}
+
+	_, err = service.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+		RecordingID: "recording-absent",
+		Reference:   "artifact:missing-read",
+	})
+	if !errors.Is(err, recordings.ErrPortableArtifactUnavailable) {
+		t.Fatalf("missing recording = %v, want ErrPortableArtifactUnavailable", err)
+	}
+}
+
+func TestReadPortableArtifactRejectsForeignHandle(t *testing.T) {
+	t.Parallel()
+
+	finalizedAt := time.Unix(1_700_000_000, 0).UTC()
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-foreign-read"}
+	event := recordings.CanonicalEvent{
+		ID: "event-foreign-read", Kind: "WORK_REQUEST",
+		Sequence: 0,
+		Scope:    scope,
+		Cursor: recordings.CanonicalEventCursor{
+			StreamGenerationID: "generation-foreign-read",
+			Sequence:           0,
+		},
+		RecordedAt: time.Unix(1_700_000_000, 0).UTC(),
+		Payload:    `{"public":true}`,
+	}
+	destination := filepath.Join(t.TempDir(), "foreign-read.json")
+	publication, err := artifactsexportservice.NewOSPublication()
+	if err != nil {
+		t.Fatalf("NewOSPublication: %v", err)
+	}
+	ownerSnapshot := recordinglifecycle.Snapshot{
+		Status: recordings.RecordingStatusFacts{
+			RecordingID: "recording-owner",
+			Artifact:    recordings.RecordingArtifactReference(destination),
+			Scope:       scope,
+			State:       recordings.RecordingFinalized,
+			FinalizedAt: &finalizedAt,
+		},
+		Events: []recordings.CanonicalEvent{event},
+	}
+	otherSnapshot := recordinglifecycle.Snapshot{
+		Status: recordings.RecordingStatusFacts{
+			RecordingID: "recording-other",
+			Artifact:    "artifact:other-handle",
+			Scope:       scope,
+			State:       recordings.RecordingFinalized,
+			FinalizedAt: &finalizedAt,
+		},
+	}
+	snapshots := map[recordings.RecordingID]recordinglifecycle.Snapshot{
+		"recording-owner": ownerSnapshot,
+		"recording-other": otherSnapshot,
+	}
+	service := artifactsexportservice.New(snapshotSourceMapFake{snapshots: snapshots}, publication)
+	exported, err := service.ExportPortableArtifact(recordings.ExportPortableArtifactRequest{
+		RecordingID: "recording-owner",
+	})
+	if err != nil {
+		t.Fatalf("ExportPortableArtifact: %v", err)
+	}
+
+	_, err = service.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+		RecordingID: "recording-other",
+		Reference:   exported.Reference,
+	})
+	if !errors.Is(err, recordings.ErrForeignPortableArtifact) {
+		t.Fatalf("foreign handle by reference = %v, want ErrForeignPortableArtifact", err)
+	}
+
+	_, err = service.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+		RecordingID: "recording-owner",
+		Reference:   "artifact:other-handle",
+	})
+	if !errors.Is(err, recordings.ErrForeignPortableArtifact) {
+		t.Fatalf("foreign handle by owner = %v, want ErrForeignPortableArtifact", err)
+	}
+}
+
+func TestReadPortableArtifactErrorsOmitPrivatePaths(t *testing.T) {
+	t.Parallel()
+
+	const privateServiceTarget = "/private/ledger/storage/recording-internal.json"
+	finalizedAt := time.Unix(1_700_000_000, 0).UTC()
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-private-read-error"}
+	snapshot := recordinglifecycle.Snapshot{
+		Status: recordings.RecordingStatusFacts{
+			RecordingID: "recording-private-read-error",
+			Artifact:    "artifact:reported-read-error",
+			Scope:       scope,
+			State:       recordings.RecordingFinalized,
+			FinalizedAt: &finalizedAt,
+		},
+	}
+	publication, err := artifactsexportservice.NewOSPublication()
+	if err != nil {
+		t.Fatalf("NewOSPublication: %v", err)
+	}
+	service := artifactsexportservice.New(snapshotSourceFake{snapshot: snapshot}, publication)
+
+	_, err = service.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+		RecordingID: "recording-private-read-error",
+		Reference:   "artifact:foreign-handle",
+	})
+	if !errors.Is(err, recordings.ErrForeignPortableArtifact) {
+		t.Fatalf("foreign handle = %v, want ErrForeignPortableArtifact", err)
+	}
+	if strings.Contains(err.Error(), privateServiceTarget) ||
+		strings.Contains(err.Error(), "artifact:reported-read-error") {
+		t.Fatalf("foreign handle error leaked private path: %v", err)
+	}
+
+	_, err = service.ReadPortableArtifact(recordings.ReadPortableArtifactRequest{
+		RecordingID: "recording-private-read-error",
+		Reference:   "artifact:reported-read-error",
+	})
+	if !errors.Is(err, recordings.ErrPortableArtifactUnavailable) {
+		t.Fatalf("missing artifact = %v, want ErrPortableArtifactUnavailable", err)
+	}
+	if strings.Contains(err.Error(), privateServiceTarget) {
+		t.Fatalf("missing artifact error leaked private path: %v", err)
+	}
+}
+
+type snapshotSourceMapFake struct {
+	snapshots map[recordings.RecordingID]recordinglifecycle.Snapshot
+	err       error
+}
+
+func (fake snapshotSourceMapFake) Snapshot(
+	id recordings.RecordingID,
+) (recordinglifecycle.Snapshot, error) {
+	if fake.err != nil {
+		return recordinglifecycle.Snapshot{}, fake.err
+	}
+	snapshot, ok := fake.snapshots[id]
+	if !ok {
+		return recordinglifecycle.Snapshot{}, recordings.ErrMissingRecordingTarget
+	}
+	return snapshot, nil
 }
 
 func assertPortableArtifactRoundTrip(

@@ -671,7 +671,8 @@ func (fake *peerRootServiceFake) ExportPortableArtifact(
 func (fake *peerRootServiceFake) ReadPortableArtifact(
 	request recordings.ReadPortableArtifactRequest,
 ) (recordings.ReadPortableArtifactResult, error) {
-	if strings.TrimSpace(string(request.Reference)) == "" {
+	if strings.TrimSpace(string(request.RecordingID)) == "" ||
+		strings.TrimSpace(string(request.Reference)) == "" {
 		return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
 	}
 	return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable

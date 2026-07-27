@@ -557,6 +557,10 @@ var (
 	// ErrPortableArtifactExportFailed reports persistence failure while
 	// publishing a completed portable artifact to its public destination.
 	ErrPortableArtifactExportFailed = errors.New("portable recording artifact export failed")
+
+	// ErrForeignPortableArtifact reports a public artifact handle that is not
+	// owned by the selected recording export scope.
+	ErrForeignPortableArtifact = errors.New("foreign portable recording artifact handle")
 )
 
 // PortableArtifactIntegrity contains the completed artifact digest. Digest is
@@ -653,10 +657,11 @@ type ExportPortableArtifactResult struct {
 	Artifact  PortableArtifact
 }
 
-// ReadPortableArtifactRequest reads one published portable artifact by its
-// public reference.
+// ReadPortableArtifactRequest reads one published portable artifact for the
+// selected recording export scope.
 type ReadPortableArtifactRequest struct {
-	Reference RecordingArtifactReference
+	RecordingID RecordingID
+	Reference   RecordingArtifactReference
 }
 
 // ReadPortableArtifactResult contains the validated detached artifact read from

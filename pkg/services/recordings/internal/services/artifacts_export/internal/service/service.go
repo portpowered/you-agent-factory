@@ -156,12 +156,22 @@ func (service *Service) ExportPortableArtifact(
 func (service *Service) ReadPortableArtifact(
 	request recordings.ReadPortableArtifactRequest,
 ) (recordings.ReadPortableArtifactResult, error) {
-	if service.publication == nil {
+	if service.publication == nil || service.snapshots == nil {
+		return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
+	}
+	if strings.TrimSpace(string(request.RecordingID)) == "" {
 		return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
 	}
 	destination := strings.TrimSpace(string(request.Reference))
 	if destination == "" {
 		return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
+	}
+	snapshot, err := service.snapshots.Snapshot(request.RecordingID)
+	if err != nil {
+		return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
+	}
+	if snapshot.Status.Artifact != request.Reference {
+		return recordings.ReadPortableArtifactResult{}, recordings.ErrForeignPortableArtifact
 	}
 	payload, err := service.publication.Read(destination)
 	if err != nil {
@@ -175,6 +185,9 @@ func (service *Service) ReadPortableArtifact(
 	})
 	if err != nil {
 		return recordings.ReadPortableArtifactResult{}, err
+	}
+	if decoded.Artifact.Summary.RecordingID != request.RecordingID {
+		return recordings.ReadPortableArtifactResult{}, recordings.ErrForeignPortableArtifact
 	}
 	return recordings.ReadPortableArtifactResult{Artifact: decoded.Artifact}, nil
 }
