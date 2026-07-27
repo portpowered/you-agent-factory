@@ -309,6 +309,19 @@ func assertProjectionQuery(t *testing.T, svc recordings.Service) {
 	}); err != nil {
 		t.Fatalf("QueryWorkstationRequests: %v", err)
 	}
+	if _, err := svc.QuerySimpleDashboard(recordings.SimpleDashboardQueryRequest{
+		WorldState: recordings.WorldStateView{
+			SchemaVersion: recordings.WorldStateViewSchemaV1,
+			Payload:       "{",
+		},
+	}); !errors.Is(err, recordings.ErrInvalidProjectionInput) {
+		t.Fatalf("QuerySimpleDashboard invalid payload = %v, want ErrInvalidProjectionInput", err)
+	}
+	if _, err := svc.QueryWorkstationRequests(recordings.WorkstationRequestsQueryRequest{
+		WorldState: recordings.WorldStateView{SchemaVersion: "unsupported", Payload: "{}"},
+	}); !errors.Is(err, recordings.ErrUnsupportedProjectionView) {
+		t.Fatalf("QueryWorkstationRequests unsupported view = %v, want ErrUnsupportedProjectionView", err)
+	}
 	assertReconnectReplayValidation(t, svc)
 }
 
