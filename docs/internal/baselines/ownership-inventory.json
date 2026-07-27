@@ -2316,6 +2316,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/automations/internal/services/reconciliation",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/reconciliation/internal/service",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/reconciliation/wire",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/automations/service",
       "disposition": "retain",
       "destination": "automations",
