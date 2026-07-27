@@ -32,161 +32,143 @@ const (
 func TestEligibleWorkstationContentionChoosesOneDispatchOnly(t *testing.T) {
 	support.SkipLongFunctional(t, "slow execution-workstation contention sweep")
 
-	t.Run("competing_workstations_choose_exactly_one_dispatch", func(t *testing.T) {
-		dir := support.ScaffoldFactory(t, contendingExecutionFactoryConfig())
-		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
-		support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
-		testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"contended"}`))
+	t.Run("competing_workstations_choose_exactly_one_dispatch", runCompetingWorkstations)
+	t.Run("shared_executor_resolves_distinct_workstations_in_order", runSharedExecutorWorkstations)
+	t.Run("distinct_workers_resolve_their_bound_workstations", runDistinctWorkerWorkstations)
+}
 
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
-		)
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-			t,
-			dir,
-			serviceedges.Edges{ProviderOverride: provider},
-			15*time.Second,
-		)
-		dispatches := support.ObserveDispatchEvents(t, events)
+func runCompetingWorkstations(t *testing.T) {
+	dir := support.ScaffoldFactory(t, contendingExecutionFactoryConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"contended"}`))
 
-		if provider.CallCount() != 1 {
-			t.Fatalf("provider call count = %d, want 1 when competing workstations contend", provider.CallCount())
-		}
-		if session.Runtime.Progress.Categories.Terminal != 1 || session.Runtime.Progress.Categories.Failed != 0 {
-			t.Fatalf("session progress categories = %+v, want one terminal and zero failed", session.Runtime.Progress.Categories)
-		}
-		if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "complete")); got != 1 {
-			t.Fatalf("CountWorkAtCustomerState(task:complete) = %d, want 1; listed=%#v", got, listed)
-		}
-		if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "init")); got != 0 {
-			t.Fatalf("CountWorkAtCustomerState(task:init) = %d, want 0 after completion", got)
-		}
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "Done. COMPLETE"})
+	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		15*time.Second,
+	)
+	dispatches := support.ObserveDispatchEvents(t, events)
 
-		workID := terminalTaskWorkIDAtState(t, listed, "complete")
-		if completed := countCompletedDispatchesForWork(dispatches, workID); completed != 1 {
-			t.Fatalf("completed dispatch count for work %q = %d, want 1; dispatches=%#v", workID, completed, dispatches)
-		}
-		fired := competingWorkstationsThatDispatched(dispatches, workID)
-		if len(fired) != 1 {
-			t.Fatalf("competing workstations that dispatched work %q = %v, want exactly one", workID, fired)
-		}
-		if fired[0] != contendingPrimaryWorkstation && fired[0] != contendingAlternateWorkstation {
-			t.Fatalf("dispatch workstation = %q, want %q or %q", fired[0], contendingPrimaryWorkstation, contendingAlternateWorkstation)
-		}
-	})
+	if provider.CallCount() != 1 {
+		t.Fatalf("provider call count = %d, want 1 when competing workstations contend", provider.CallCount())
+	}
+	if session.Runtime.Progress.Categories.Terminal != 1 || session.Runtime.Progress.Categories.Failed != 0 {
+		t.Fatalf("session progress categories = %+v, want one terminal and zero failed", session.Runtime.Progress.Categories)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "complete")); got != 1 {
+		t.Fatalf("CountWorkAtCustomerState(task:complete) = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "init")); got != 0 {
+		t.Fatalf("CountWorkAtCustomerState(task:init) = %d, want 0 after completion", got)
+	}
 
-	t.Run("shared_executor_resolves_distinct_workstations_in_order", func(t *testing.T) {
-		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
-		testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"shared-executor"}`))
+	workID := terminalTaskWorkIDAtState(t, listed, "complete")
+	if completed := countCompletedDispatchesForWork(dispatches, workID); completed != 1 {
+		t.Fatalf("completed dispatch count for work %q = %d, want 1; dispatches=%#v", workID, completed, dispatches)
+	}
+	fired := competingWorkstationsThatDispatched(dispatches, workID)
+	if len(fired) != 1 {
+		t.Fatalf("competing workstations that dispatched work %q = %v, want exactly one", workID, fired)
+	}
+	if fired[0] != contendingPrimaryWorkstation && fired[0] != contendingAlternateWorkstation {
+		t.Fatalf("dispatch workstation = %q, want %q or %q", fired[0], contendingPrimaryWorkstation, contendingAlternateWorkstation)
+	}
+}
 
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "Stage 1 done. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Stage 2 done. COMPLETE"},
-		)
-		_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-			t,
-			dir,
-			serviceedges.Edges{ProviderOverride: provider},
-			15*time.Second,
-		)
-		dispatches := support.ObserveDispatchEvents(t, events)
+func runSharedExecutorWorkstations(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"shared-executor"}`))
 
-		if provider.CallCount() != 2 {
-			t.Fatalf("provider call count = %d, want 2 for shared-executor staged completion", provider.CallCount())
-		}
-		if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "done")); got != 1 {
-			t.Fatalf("CountWorkAtCustomerState(task:done) = %d, want 1; listed=%#v", got, listed)
-		}
+	provider := testutil.NewMockProvider(
+		workerexecution.InferenceResponse{Content: "Stage 1 done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Stage 2 done. COMPLETE"},
+	)
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		15*time.Second,
+	)
+	dispatches := support.ObserveDispatchEvents(t, events)
 
-		workID := terminalTaskWorkIDAtState(t, listed, "done")
-		assertExactlyOneCompletedDispatchPerWorkAtWorkstation(
-			t,
-			dispatches,
-			workID,
-			statelessCollectorStage1Workstation,
-		)
-		assertExactlyOneCompletedDispatchPerWorkAtWorkstation(
-			t,
-			dispatches,
-			workID,
-			statelessCollectorStage2Workstation,
-		)
+	if provider.CallCount() != 2 {
+		t.Fatalf("provider call count = %d, want 2 for shared-executor staged completion", provider.CallCount())
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "done")); got != 1 {
+		t.Fatalf("CountWorkAtCustomerState(task:done) = %d, want 1; listed=%#v", got, listed)
+	}
 
-		calls := provider.Calls()
-		if calls[0].WorkstationType != statelessCollectorStage1Workstation {
-			t.Fatalf("first dispatch workstation = %q, want %q", calls[0].WorkstationType, statelessCollectorStage1Workstation)
-		}
-		if calls[1].WorkstationType != statelessCollectorStage2Workstation {
-			t.Fatalf("second dispatch workstation = %q, want %q", calls[1].WorkstationType, statelessCollectorStage2Workstation)
-		}
-		if calls[0].Model != "test-model" || calls[1].Model != "test-model" {
-			t.Fatalf("expected shared model test-model, got %q and %q", calls[0].Model, calls[1].Model)
-		}
-		if !strings.Contains(calls[0].UserMessage, "Step 1 workstation.") {
-			t.Fatalf("first dispatch prompt = %q, want step1 workstation prompt", calls[0].UserMessage)
-		}
-		if !strings.Contains(calls[1].UserMessage, "Step 2 workstation.") {
-			t.Fatalf("second dispatch prompt = %q, want step2 workstation prompt", calls[1].UserMessage)
-		}
-	})
+	workID := terminalTaskWorkIDAtState(t, listed, "done")
+	assertExactlyOneCompletedDispatchPerWorkAtWorkstation(t, dispatches, workID, statelessCollectorStage1Workstation)
+	assertExactlyOneCompletedDispatchPerWorkAtWorkstation(t, dispatches, workID, statelessCollectorStage2Workstation)
 
-	t.Run("distinct_workers_resolve_their_bound_workstations", func(t *testing.T) {
-		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
-		testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"different-workers"}`))
-		rewriteStatelessCollectorForDifferentWorkers(t, dir)
+	calls := provider.Calls()
+	if calls[0].WorkstationType != statelessCollectorStage1Workstation {
+		t.Fatalf("first dispatch workstation = %q, want %q", calls[0].WorkstationType, statelessCollectorStage1Workstation)
+	}
+	if calls[1].WorkstationType != statelessCollectorStage2Workstation {
+		t.Fatalf("second dispatch workstation = %q, want %q", calls[1].WorkstationType, statelessCollectorStage2Workstation)
+	}
+	if calls[0].Model != "test-model" || calls[1].Model != "test-model" {
+		t.Fatalf("expected shared model test-model, got %q and %q", calls[0].Model, calls[1].Model)
+	}
+	if !strings.Contains(calls[0].UserMessage, "Step 1 workstation.") {
+		t.Fatalf("first dispatch prompt = %q, want step1 workstation prompt", calls[0].UserMessage)
+	}
+	if !strings.Contains(calls[1].UserMessage, "Step 2 workstation.") {
+		t.Fatalf("second dispatch prompt = %q, want step2 workstation prompt", calls[1].UserMessage)
+	}
+}
 
-		work := map[string][]workerexecution.InferenceResponse{
-			"agent-a": {{Content: "Stage 1 done. COMPLETE"}},
-			"agent-b": {{Content: "Stage 2 done. COMPLETE"}},
-		}
-		provider := testutil.NewMockWorkerMapProvider(work)
-		_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-			t,
-			dir,
-			serviceedges.Edges{ProviderOverride: provider},
-			15*time.Second,
-		)
-		dispatches := support.ObserveDispatchEvents(t, events)
+func runDistinctWorkerWorkstations(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"different-workers"}`))
+	rewriteStatelessCollectorForDifferentWorkers(t, dir)
 
-		if provider.CallCount("agent-a") != 1 {
-			t.Fatalf("agent-a call count = %d, want 1", provider.CallCount("agent-a"))
-		}
-		if provider.CallCount("agent-b") != 1 {
-			t.Fatalf("agent-b call count = %d, want 1", provider.CallCount("agent-b"))
-		}
-		if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "done")); got != 1 {
-			t.Fatalf("CountWorkAtCustomerState(task:done) = %d, want 1; listed=%#v", got, listed)
-		}
+	work := map[string][]workerexecution.InferenceResponse{
+		"agent-a": {{Content: "Stage 1 done. COMPLETE"}},
+		"agent-b": {{Content: "Stage 2 done. COMPLETE"}},
+	}
+	provider := testutil.NewMockWorkerMapProvider(work)
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		15*time.Second,
+	)
+	dispatches := support.ObserveDispatchEvents(t, events)
 
-		workID := terminalTaskWorkIDAtState(t, listed, "done")
-		assertExactlyOneCompletedDispatchPerWorkAtWorkstation(
-			t,
-			dispatches,
-			workID,
-			statelessCollectorStage1Workstation,
-		)
-		assertExactlyOneCompletedDispatchPerWorkAtWorkstation(
-			t,
-			dispatches,
-			workID,
-			statelessCollectorStage2Workstation,
-		)
+	if provider.CallCount("agent-a") != 1 {
+		t.Fatalf("agent-a call count = %d, want 1", provider.CallCount("agent-a"))
+	}
+	if provider.CallCount("agent-b") != 1 {
+		t.Fatalf("agent-b call count = %d, want 1", provider.CallCount("agent-b"))
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "done")); got != 1 {
+		t.Fatalf("CountWorkAtCustomerState(task:done) = %d, want 1; listed=%#v", got, listed)
+	}
 
-		first := provider.Calls("agent-a")[0]
-		second := provider.Calls("agent-b")[0]
-		if first.WorkstationType != statelessCollectorStage1Workstation {
-			t.Fatalf("agent-a workstation = %q, want %q", first.WorkstationType, statelessCollectorStage1Workstation)
-		}
-		if second.WorkstationType != statelessCollectorStage2Workstation {
-			t.Fatalf("agent-b workstation = %q, want %q", second.WorkstationType, statelessCollectorStage2Workstation)
-		}
-		if !strings.Contains(first.UserMessage, "Step 1 workstation.") {
-			t.Fatalf("agent-a prompt = %q, want step1 workstation prompt", first.UserMessage)
-		}
-		if !strings.Contains(second.UserMessage, "Step 2 workstation.") {
-			t.Fatalf("agent-b prompt = %q, want step2 workstation prompt", second.UserMessage)
-		}
-	})
+	workID := terminalTaskWorkIDAtState(t, listed, "done")
+	assertExactlyOneCompletedDispatchPerWorkAtWorkstation(t, dispatches, workID, statelessCollectorStage1Workstation)
+	assertExactlyOneCompletedDispatchPerWorkAtWorkstation(t, dispatches, workID, statelessCollectorStage2Workstation)
+
+	first := provider.Calls("agent-a")[0]
+	second := provider.Calls("agent-b")[0]
+	if first.WorkstationType != statelessCollectorStage1Workstation {
+		t.Fatalf("agent-a workstation = %q, want %q", first.WorkstationType, statelessCollectorStage1Workstation)
+	}
+	if second.WorkstationType != statelessCollectorStage2Workstation {
+		t.Fatalf("agent-b workstation = %q, want %q", second.WorkstationType, statelessCollectorStage2Workstation)
+	}
+	if !strings.Contains(first.UserMessage, "Step 1 workstation.") {
+		t.Fatalf("agent-a prompt = %q, want step1 workstation prompt", first.UserMessage)
+	}
+	if !strings.Contains(second.UserMessage, "Step 2 workstation.") {
+		t.Fatalf("agent-b prompt = %q, want step2 workstation prompt", second.UserMessage)
+	}
 }
 
 // TestContentionMakesProgressAcrossRepeatedWork proves that submitting

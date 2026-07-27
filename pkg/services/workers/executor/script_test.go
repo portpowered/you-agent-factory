@@ -993,21 +993,3 @@ func assertEventDoesNotLeakScriptInternals(t *testing.T, event workerexecution.S
 		}
 	}
 }
-
-func equalOptionalScriptFailureType(left, right *workerexecution.ScriptFailureType) bool {
-	if left == nil || right == nil {
-		return left == nil && right == nil
-	}
-	return *left == *right
-}
-
-func equalOptionalInt(left, right *int) bool {
-	if left == nil || right == nil {
-		return left == nil && right == nil
-	}
-	return *left == *right
-}
-
-func intPtr(value int) *int {
-	return &value
-}
