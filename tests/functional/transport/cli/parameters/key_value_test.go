@@ -120,6 +120,62 @@ func TestRunKeyValuePreservesEqualsInValue(t *testing.T) {
 	assertInvocationArgumentValues(t, arguments, "callback", []string{callbackValue})
 }
 
+// TestRunDuplicateKeyUsesDocumentedPrecedence proves duplicate key=value
+// parameters on you run follow the documented within-tier precedence: scalar
+// parameters reject a second supply, while REPEATED parameters append each
+// customer-supplied value in CLI observation order.
+func TestRunDuplicateKeyUsesDocumentedPrecedence(t *testing.T) {
+	firstTagValue := "alpha"
+	secondTagValue := "beta"
+
+	factoryDir := scaffoldNamedKeyValueInvocationFactory(t)
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName:      "processor",
+			WorkstationName: "process",
+			RunType:         workers.MockWorkerRunTypeAccept,
+		}},
+	})
+
+	submissions := &invocationSubmissionObservation{}
+	process := support.BuildProcess(t, serviceedges.Edges{
+		SubmissionRecorder: submissions.observe,
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--factory", factoryPath,
+		"--no-record",
+		"--with-mock-workers", mockWorkersPath,
+		"invoke marker",
+		"--topic=Ship the café résumé plan",
+		"--priority=urgent",
+		"--tag=" + firstTagValue,
+		"--tag=" + secondTagValue,
+	})
+	inputs.WorkingDirectory = t.TempDir()
+
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(duplicate key=value invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+
+	records := submissions.snapshot()
+	if len(records) != 1 {
+		t.Fatalf("canonical submissions = %d, want 1; records=%#v", len(records), records)
+	}
+	arguments := records[0].Request.InvocationArguments
+	if arguments == nil {
+		t.Fatal("submitted invocation arguments = nil")
+	}
+	assertInvocationArgumentValues(t, arguments, "tag", []string{firstTagValue, secondTagValue})
+}
+
 type invocationSubmissionObservation struct {
 	mu      sync.Mutex
 	records []work.FactorySubmissionRecord
@@ -199,6 +255,12 @@ func scaffoldNamedKeyValueInvocationFactory(t *testing.T) string {
 				map[string]any{
 					"name":     "callback",
 					"bindings": []any{map[string]any{"kind": "NAMED"}},
+				},
+				map[string]any{
+					"name":         "tag",
+					"externalName": "tag",
+					"valueMode":    "REPEATED",
+					"bindings":     []any{map[string]any{"kind": "NAMED"}},
 				},
 			},
 		},
