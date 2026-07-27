@@ -156,6 +156,18 @@
   `orchestration` and subsection `javascript/loading` from the path; every
   top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
   stays viz-compatible.
+  Named JavaScript Factory loading functional coverage belongs in
+  `tests/functional/orchestration/javascript/loading/named_factory_test.go`:
+  register inline factories with `support.CreateNamedFactory`, invoke by name
+  through `you --json run --named` from an unrelated working directory with
+  `HOME` pinned to the test catalog, and prove terminal `COMPLETED` primary
+  outcomes tied to the named Factory identity; prove the same named Factory
+  through `POST /factory-sessions/sync` with `source.kind=FACTORY_ID` and
+  `edges.FactoryRuntimeWorkflowHome` so global catalog lookup resolves; prove
+  pause/resume Factory Session controls on async durable sessions started with
+  `POST /factory-sessions/async` plus matching CLI `session pause|resume` with
+  `--server`, asserting durable `status` and `resolvedSource.sourceRef` on the
+  named identity. Substitute external effects only through `edges.Edges`.
   JavaScript agent composition functional coverage belongs in
   `tests/functional/orchestration/javascript/composition/agent_test.go`:
   drive sync Factory Session execution through

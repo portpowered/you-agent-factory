@@ -346,7 +346,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     resolution.
   - `TestJavaScriptFactoryMissingImportFailsActionably` covers load failure.
 
-- [ ] `tests/functional/orchestration/javascript/loading/named_factory_test.go`
+- [x] `tests/functional/orchestration/javascript/loading/named_factory_test.go`
   - `TestNamedJavaScriptFactoryRunsThroughStandardCLI` covers named resolution.
   - `TestNamedJavaScriptFactoryRunsThroughAPIInvocation` covers HTTP entry.
   - `TestNamedJavaScriptFactoryUsesSameFactorySessionControls` covers pause.
@@ -694,6 +694,11 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCodexHistoricalInspectionContainmentRejectionThroughRootBuildProcess`.
   - `TestCodexHistoricalInspectionBoundedWalkThroughRootBuildProcess`.
   - `TestCodexHistoricalInspectionCancelledDiscoveryThroughRootBuildProcess`.
+
+- [x] `tests/functional/providers/cursor/historical_inspection_root_test.go`
+  - `TestCursorHistoricalInspectionThroughRootBuildProcess_ReturnsDeterministicNormalizedDetail`.
+  - `TestCursorHistoricalInspectionThroughRootBuildProcess_PropagatesMissingAndContainmentFailures`.
+  - `TestCursorHistoricalInspectionThroughRootBuildProcess_DegradesAdverseNativeDataSafely`.
 
 - [ ] `tests/functional/provider_sessions/details/codex_details_test.go`
   - `TestCodexProviderSessionDetailsLoadFromGoldenMetadata` covers API detail.
