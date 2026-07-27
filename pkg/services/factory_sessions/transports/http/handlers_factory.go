@@ -9,7 +9,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/scopedlisting"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -128,7 +127,7 @@ func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, par
 
 	response, err := s.mergeScopedFactorySessionList(r.Context(), raw)
 	if err != nil {
-		if errors.Is(err, scopedlisting.ErrDurableReaderRequired) {
+		if errors.Is(err, ErrDurableReaderRequired) {
 			s.writeError(w, http.StatusNotImplemented, "durable factory session listing is not implemented", "INTERNAL_ERROR")
 			return
 		}
@@ -154,6 +153,21 @@ func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessi
 			return
 		}
 		s.writeJSON(w, http.StatusOK, response)
+		return
+	}
+
+	if s.sessionsRoot != nil {
+		projection, err := s.sessionsRoot.GetFactorySession(r.Context(), string(sessionID))
+		if err != nil {
+			if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+				s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+				return
+			}
+			s.logger.Error("get factory session failed", zap.Error(err))
+			s.writeError(w, http.StatusInternalServerError, "failed to get factory session", "INTERNAL_ERROR")
+			return
+		}
+		s.writeJSON(w, http.StatusOK, factorysession.SessionResponseToAPI(projection))
 		return
 	}
 
@@ -937,9 +951,18 @@ func (s *Server) mergeScopedFactorySessionList(
 	ctx context.Context,
 	normalized factorysessionexecution.ListSessionsRequest,
 ) (factoryapi.ListFactorySessionsResponse, error) {
-	result, err := scopedlisting.List(
-		ctx, normalized, s.liveSessionLister, s.durableLister,
-	)
+	var live scopedLiveReader
+	var durable scopedDurableReader
+
+	if s.sessionsRoot != nil {
+		live = ReadProjectionSessionListReader{Reader: s.sessionsRoot}
+		durable = s.sessionsRoot
+	} else {
+		live = s.liveSessionLister
+		durable = s.durableLister
+	}
+
+	result, err := mergeScopedSessionList(ctx, normalized, live, durable)
 	if err != nil {
 		return factoryapi.ListFactorySessionsResponse{}, err
 	}
