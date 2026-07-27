@@ -1211,9 +1211,29 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/cli/root_discovery/root_discovery_test.go",
-      "package": "you-agent-factory/tests/functional/cli/root_discovery",
-      "scenario": "TestRemovedInitInputFailsBeforeConfigurationMutation",
+      "source_path": "tests/functional/transport/cli/parameters/flags_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIFlagAfterPositionalValueUsesDocumentedParsing",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/flags_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/flags_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIStringBooleanAndRepeatedFlagsReachRequest",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/flags_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/flags_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIUnknownFlagFailsBeforeLifecycleStart",
       "lane": "short",
       "destination": "tests/functional/transport/cli/parameters/flags_test.go",
       "catch_all": "none",

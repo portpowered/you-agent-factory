@@ -60,40 +60,6 @@ func TestBareRootPrintsConciseHelpWithoutProductEffects(t *testing.T) {
 	}
 }
 
-// TestRemovedInitInputFailsBeforeConfigurationMutation proves an unsupported
-// init input is rejected before operator configuration can change.
-func TestRemovedInitInputFailsBeforeConfigurationMutation(t *testing.T) {
-	var mutations atomic.Int32
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		OperatorSettingsFileSystem: mutationTrackingOperatorSettingsFileSystem{
-			mutations: &mutations,
-		},
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-
-	stdout, stderr, executeErr := executeFactoryArgs(
-		t,
-		process,
-		t.TempDir(),
-		[]string{"you", "init", "--dir", "legacy-factory"},
-		false,
-		t.Context(),
-	)
-	if executeErr == nil || !strings.Contains(executeErr.Error(), "unknown flag: --dir") {
-		t.Fatalf(
-			"removed init input error = %v, want unknown flag; stdout=%q stderr=%q",
-			executeErr,
-			stdout,
-			stderr,
-		)
-	}
-	if mutations.Load() != 0 {
-		t.Fatalf("removed init input configuration mutations = %d, want 0", mutations.Load())
-	}
-}
-
 // TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs proves the
 // generated Session and Work leaves reach their typed transport handlers through
 // the public process root with the canonical argument and flag shapes.
@@ -834,30 +800,3 @@ func (fileSystem failingOperatorSettingsFileSystem) Rename(string, string) error
 	return fs.ErrPermission
 }
 
-type mutationTrackingOperatorSettingsFileSystem struct {
-	mutations *atomic.Int32
-}
-
-func (mutationTrackingOperatorSettingsFileSystem) ReadFile(string) ([]byte, error) {
-	return nil, fs.ErrNotExist
-}
-
-func (fileSystem mutationTrackingOperatorSettingsFileSystem) MkdirAll(string, fs.FileMode) error {
-	fileSystem.mutations.Add(1)
-	return nil
-}
-
-func (fileSystem mutationTrackingOperatorSettingsFileSystem) Remove(string) error {
-	fileSystem.mutations.Add(1)
-	return nil
-}
-
-func (fileSystem mutationTrackingOperatorSettingsFileSystem) Chmod(string, fs.FileMode) error {
-	fileSystem.mutations.Add(1)
-	return nil
-}
-
-func (fileSystem mutationTrackingOperatorSettingsFileSystem) Rename(string, string) error {
-	fileSystem.mutations.Add(1)
-	return nil
-}
