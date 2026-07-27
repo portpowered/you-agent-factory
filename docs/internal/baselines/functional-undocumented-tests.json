@@ -147,7 +147,7 @@
       "name": "TestRunJavaScriptFactoryResponseStreamPublishesCanonicalLifecycle"
     },
     {
-      "file": "cli/factory_run/events/javascript_test.go",
+      "file": "transport/cli/output/javascript_test.go",
       "name": "TestJavaScriptInvocationEmitsCanonicalPhaseAndCheckpointEvents"
     },
     {
