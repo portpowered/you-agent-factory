@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
+	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 )
 
 // Root is the singular peer-facing Factory Visualization contract.
@@ -255,110 +255,50 @@ func mapActivationLifecycleError(err error) error {
 	return err
 }
 
-// Observe implements Root by validating observe inputs, reading a detached
-// engine-state snapshot, reconstructing the retained projection, and returning
-// Visualization-owned view facts without exposing Recordings or Runtime types.
+// Observe implements Root by delegating live projection to the private
+// live_view_projection owner and mapping detached view facts to the published
+// root contract.
 func (s *Service) Observe(ctx context.Context, req ObserveRequest) (ObserveResult, error) {
-	if s == nil {
+	if s == nil || s.projection == nil {
 		return ObserveResult{}, &ProjectionError{
 			Kind:    ProjectionErrorInvalidInput,
 			Message: "observe Factory visualization: service is required",
 		}
 	}
-	if ctx == nil {
-		return ObserveResult{}, &ProjectionError{
-			Kind:    ProjectionErrorInvalidInput,
-			Message: "observe Factory visualization: context is required",
-		}
-	}
-	if err := ctx.Err(); err != nil {
-		return ObserveResult{}, err
-	}
-	if req.Mode == "" {
-		return ObserveResult{}, &ProjectionError{
-			Kind:    ProjectionErrorInvalidInput,
-			Message: "observe Factory visualization: required request parameters are missing",
-		}
-	}
-	if req.Mode != ObserveModeRetainedThenLive {
-		return ObserveResult{}, &ProjectionError{
-			Kind:    ProjectionErrorInvalidInput,
-			Message: fmt.Sprintf("observe Factory visualization: observe mode %q is not supported", req.Mode),
-		}
-	}
-	if err := validateObserveReconnect(req.Reconnect); err != nil {
-		return ObserveResult{}, err
-	}
-
-	snapshot, err := s.source.GetEngineStateSnapshot(ctx)
+	result, err := s.projection.Observe(ctx, mapObserveRequest(req))
 	if err != nil {
-		return ObserveResult{}, &ProjectionError{
-			Kind:    ProjectionErrorSnapshotUnavailable,
-			Message: "observe Factory visualization: snapshot is unavailable",
-			Cause:   err,
-		}
+		return ObserveResult{}, mapProjectionError(err)
 	}
-	if snapshot == nil {
-		return ObserveResult{}, &ProjectionError{
-			Kind:    ProjectionErrorSnapshotUnavailable,
-			Message: "observe Factory visualization: snapshot is unavailable",
-		}
-	}
-
-	events := s.activation.RetainedEvents()
-
-	if req.Reconnect != nil {
-		cursor := factorydefinitions.FactoryEventReconnectCursor{
-			AfterEventID:  req.Reconnect.AfterEventID,
-			AfterSequence: req.Reconnect.AfterSequence,
-		}
-		if err := s.projections.ValidateReconnectReplay(
-			events,
-			cursor,
-			factorydefinitions.FactoryEventReconnectScope{},
-		); err != nil {
-			return ObserveResult{}, &ProjectionError{
-				Kind:    ProjectionErrorInvalidInput,
-				Message: "observe Factory visualization: reconnect observe input is invalid",
-				Cause:   err,
-			}
-		}
-	}
-
-	if _, err := s.projections.ReconstructFactoryWorldState(events, snapshot.TickCount); err != nil {
-		return ObserveResult{}, &ProjectionError{
-			Kind:    ProjectionErrorReconstructionFailed,
-			Message: "observe Factory visualization: projection reconstruction failed",
-			Cause:   err,
-		}
-	}
-
 	return ObserveResult{
 		View: ProjectedView{
-			TickCount:          snapshot.TickCount,
-			RetainedEventCount: len(events),
-			ObservedAt:         s.clock.Now(),
+			TickCount:          result.View.TickCount,
+			RetainedEventCount: result.View.RetainedEventCount,
+			ObservedAt:         result.View.ObservedAt,
 		},
 	}, nil
 }
 
-func validateObserveReconnect(reconnect *ObserveReconnectCursor) error {
-	if reconnect == nil {
-		return nil
-	}
-	if reconnect.AfterEventID == "" && reconnect.AfterSequence == nil {
-		return &ProjectionError{
-			Kind:    ProjectionErrorInvalidInput,
-			Message: "observe Factory visualization: reconnect cursor is empty",
+func mapObserveRequest(req ObserveRequest) liveviewprojection.ObserveRequest {
+	mapped := liveviewprojection.ObserveRequest{Mode: liveviewprojection.ObserveMode(req.Mode)}
+	if req.Reconnect != nil {
+		mapped.Reconnect = &liveviewprojection.ObserveReconnectCursor{
+			AfterEventID:  req.Reconnect.AfterEventID,
+			AfterSequence: req.Reconnect.AfterSequence,
 		}
 	}
-	if reconnect.AfterSequence != nil && *reconnect.AfterSequence < 0 {
+	return mapped
+}
+
+func mapProjectionError(err error) error {
+	var projErr *liveviewprojection.ProjectionError
+	if errors.As(err, &projErr) {
 		return &ProjectionError{
-			Kind:    ProjectionErrorInvalidInput,
-			Message: "observe Factory visualization: reconnect after_sequence is invalid",
+			Kind:    ProjectionErrorKind(projErr.Kind),
+			Message: projErr.Message,
+			Cause:   projErr.Cause,
 		}
 	}
-	return nil
+	return err
 }
 
 // PresentationDeliveryMode selects Visualization-owned drain/backpressure policy.

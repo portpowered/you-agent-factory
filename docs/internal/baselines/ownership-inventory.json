@@ -1051,7 +1051,7 @@
       "toOwner": "automations",
       "class": "external_effect",
       "architectureException": true,
-      "evidence": "pkg/services/edges -\u003e pkg/services/workers/services/hosted_logic"
+      "evidence": "pkg/services/edges -\u003e pkg/services/automations"
     },
     {
       "fromOwner": "edges",
@@ -1303,7 +1303,7 @@
       "fromOwner": "factory_visualization",
       "toOwner": "factory_runtime",
       "class": "command",
-      "evidence": "pkg/services/factory_visualization -\u003e pkg/services/factory_runtime"
+      "evidence": "pkg/services/factory_visualization/internal/services/live_view_projection -\u003e pkg/services/factory_runtime"
     },
     {
       "fromOwner": "factory_visualization",
@@ -1316,6 +1316,12 @@
       "toOwner": "recordings",
       "class": "event",
       "evidence": "pkg/services/factory_visualization/internal/services/activation_lifecycle -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "recordings",
+      "class": "event",
+      "evidence": "pkg/services/factory_visualization/internal/services/live_view_projection/internal/service -\u003e pkg/services/recordings"
     },
     {
       "fromOwner": "initializer",
@@ -1376,6 +1382,12 @@
       "toOwner": "factory_definitions",
       "class": "query",
       "evidence": "pkg/services/operator_settings -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "operator_settings",
+      "toOwner": "providers",
+      "class": "query",
+      "evidence": "pkg/services/operator_settings/internal/services/resolution/internal/service -\u003e pkg/services/providers"
     },
     {
       "fromOwner": "platform",
@@ -1666,12 +1678,6 @@
       "toOwner": "factory_sessions",
       "class": "command",
       "evidence": "pkg/services/work/service -\u003e pkg/services/factory_sessions"
-    },
-    {
-      "fromOwner": "workers",
-      "toOwner": "automations",
-      "class": "command",
-      "evidence": "pkg/services/workers/service -\u003e pkg/services/automations"
     },
     {
       "fromOwner": "workers",
@@ -2359,6 +2365,30 @@
     },
     {
       "packagePath": "pkg/services/automations/internal/services/filesystem_watchers/wire",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources/internal/linear",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources/internal/service",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources/wire",
       "disposition": "retain",
       "destination": "automations",
       "destinationKind": "owner"
@@ -3486,6 +3516,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_visualization/internal/services/live_view_projection",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/live_view_projection/internal/service",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/live_view_projection/wire",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation",
       "disposition": "retain",
       "destination": "factory_visualization",
@@ -3667,6 +3715,36 @@
     },
     {
       "packagePath": "pkg/services/operator_settings/identityinventory",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/service",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/services/resolution",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/services/resolution/internal/service",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/services/resolution/wire",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/wire",
       "disposition": "retain",
       "destination": "operator_settings",
       "destinationKind": "owner"
@@ -3961,6 +4039,12 @@
     },
     {
       "packagePath": "pkg/services/recordings/service",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/wire",
       "disposition": "retain",
       "destination": "recordings",
       "destinationKind": "owner"
@@ -4368,22 +4452,6 @@
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/services/hosted_logic",
-      "disposition": "move",
-      "destination": "automations",
-      "destinationKind": "owner",
-      "successor": "pkg/services/automations/internal/services/hosted_sources",
-      "deletionCondition": "delete Workers hosted_logic after Automation Hosted Sources cutover proof (IMP-automations-hosted-sources)"
-    },
-    {
-      "packagePath": "pkg/services/workers/services/hosted_logic/linear",
-      "disposition": "move",
-      "destination": "automations",
-      "destinationKind": "owner",
-      "successor": "pkg/services/automations/internal/services/hosted_sources",
-      "deletionCondition": "delete Workers hosted_logic after Automation Hosted Sources cutover proof (IMP-automations-hosted-sources)"
     },
     {
       "packagePath": "pkg/services/workers/services/inference",

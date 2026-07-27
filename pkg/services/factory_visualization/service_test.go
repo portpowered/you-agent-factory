@@ -8,7 +8,7 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -66,7 +66,7 @@ func TestServiceProjectsRetainedAndLiveFactoryEvents(t *testing.T) {
 			History: []factorydefinitions.FactoryEvent{history},
 			Events:  live,
 		},
-		snapshot: &factoryruntime.StateSnapshot{TickCount: 3},
+		snapshot: visualizationSnapshotFacts(3),
 	}
 	projected := make(chan []factorydefinitions.FactoryEvent, 2)
 	projections := projectionStub{
@@ -98,7 +98,7 @@ func TestServiceProjectsRetainedAndLiveFactoryEvents(t *testing.T) {
 	if got := <-projected; len(got) != 1 || got[0].Id != history.Id {
 		t.Fatalf("initial projection events = %#v", got)
 	}
-	if got := <-rendered; !got.ObservedAt.Equal(now) || got.EngineState.TickCount != 3 {
+	if got := <-rendered; !got.ObservedAt.Equal(now) || got.Runtime.TickCount != 3 {
 		t.Fatalf("initial view = %#v", got)
 	}
 
@@ -169,7 +169,7 @@ func TestServiceRootLifecycleInertConstructionAndTypedActivate(t *testing.T) {
 	live := make(chan factorydefinitions.FactoryEvent)
 	source := &sourceStub{
 		stream:   &factorydefinitions.FactoryEventStream{Events: live},
-		snapshot: &factoryruntime.StateSnapshot{TickCount: 1},
+		snapshot: visualizationSnapshotFacts(1),
 	}
 	source.subscribeHook = func() { subscribeCalls++ }
 	presentCalls := 0
@@ -239,7 +239,7 @@ func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
 			History: []factorydefinitions.FactoryEvent{history},
 			Events:  live,
 		},
-		snapshot: &factoryruntime.StateSnapshot{TickCount: 9},
+		snapshot: visualizationSnapshotFacts(9),
 	}
 	service, err := New(
 		source,
@@ -265,18 +265,38 @@ func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
 		t.Fatalf("Observe unavailable snapshot: error = %v, want SnapshotUnavailable", err)
 	}
 
-	source.snapshot = &factoryruntime.StateSnapshot{TickCount: 9}
-	service.projections = projectionStub{
-		reconstruct: func([]factorydefinitions.FactoryEvent, int) (factorydefinitions.FactoryWorldState, error) {
-			return factorydefinitions.FactoryWorldState{}, errors.New("reconstruct boom")
+	source.snapshot = visualizationSnapshotFacts(9)
+	service, err = New(
+		source,
+		projectionStub{
+			reconstruct: func([]factorydefinitions.FactoryEvent, int) (factorydefinitions.FactoryWorldState, error) {
+				return factorydefinitions.FactoryWorldState{}, errors.New("reconstruct boom")
+			},
 		},
+		fixedClock{now: now},
+		SinkFunc(func(View) {}),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() after reconstruction stub: error = %v", err)
 	}
+	root = service
 	_, err = root.Observe(context.Background(), ObserveRequest{Mode: ObserveModeRetainedThenLive})
 	if !errors.As(err, &projErr) || projErr.Kind != ProjectionErrorReconstructionFailed {
 		t.Fatalf("Observe reconstruction failure: error = %v, want ReconstructionFailed", err)
 	}
 
-	service.projections = projectionStub{}
+	service, err = New(
+		source,
+		projectionStub{},
+		fixedClock{now: now},
+		SinkFunc(func(View) {}),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() after success stub: error = %v", err)
+	}
+	root = service
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if _, err := root.Activate(ctx, ActivateRequest{Mode: ActivateModeRetainedThenLive}); err != nil {
@@ -325,7 +345,7 @@ func mustNewRootPresentationService(t *testing.T) *Service {
 	service, err := New(
 		&sourceStub{
 			stream:   &factorydefinitions.FactoryEventStream{Events: live},
-			snapshot: &factoryruntime.StateSnapshot{TickCount: 1},
+			snapshot: visualizationSnapshotFacts(1),
 		},
 		projectionStub{},
 		fixedClock{now: time.Unix(1, 0)},
@@ -458,7 +478,7 @@ type sourceStub struct {
 	stream        *factorydefinitions.FactoryEventStream
 	subscribeErr  error
 	subscribeHook func()
-	snapshot      *factoryruntime.StateSnapshot
+	snapshot      *liveviewprojection.RuntimeSnapshotFacts
 	snapshotErr   error
 }
 
@@ -473,8 +493,14 @@ func (s *sourceStub) SubscribeFactoryEvents(
 	return s.stream, s.subscribeErr
 }
 
-func (s *sourceStub) GetEngineStateSnapshot(context.Context) (*factoryruntime.StateSnapshot, error) {
+func (s *sourceStub) GetRuntimeSnapshotFacts(context.Context) (*liveviewprojection.RuntimeSnapshotFacts, error) {
 	return s.snapshot, s.snapshotErr
+}
+
+func visualizationSnapshotFacts(tick int) *liveviewprojection.RuntimeSnapshotFacts {
+	return &liveviewprojection.RuntimeSnapshotFacts{
+		RuntimeObservation: liveviewprojection.RuntimeObservation{TickCount: tick},
+	}
 }
 
 type projectionStub struct {

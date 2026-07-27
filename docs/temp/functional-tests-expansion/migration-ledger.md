@@ -630,9 +630,10 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/smoke/cli_named_goal_run_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalRun_RealCLIExitsAfterBatchCompletionWithoutContinuousMode | short | tests/functional/factory/packaged/goal/invocation_test.go | smoke | none | smoke-delete-05-factory-packaged |
 | tests/functional/smoke/cli_named_quorum_invocation_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedQuorumRun_RealCLIAcceptsRoleFlagsAndReturnsOneMergeResult | short | tests/functional/factory/packaged/quorum/invocation_test.go | smoke | none | smoke-delete-05-factory-packaged |
 | tests/functional/smoke/cli_named_review_invocation_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedReviewInvocationVariants_RealCLIRequireApprovalAfterRejection | short | tests/functional/factory/packaged/review/invocation_test.go | smoke | none | smoke-delete-05-factory-packaged |
-| tests/functional/smoke/cli_run_mode_compat_smoke_test.go | you-agent-factory/tests/functional/smoke | TestRunModeCompat_RealCLIFactoryTextInvocationSuppressesOperatorChatter | short | tests/functional/transport/cli/output/text_stream_test.go | smoke | none | smoke-delete-04-transport-cli |
-| tests/functional/smoke/cli_run_mode_compat_smoke_test.go | you-agent-factory/tests/functional/smoke | TestRunModeCompat_RealCLINamedGoalBatchStdoutDoesNotIncludeOperatorChatter | short | tests/functional/transport/cli/output/text_stream_test.go | smoke | none | smoke-delete-04-transport-cli |
-| tests/functional/smoke/cli_run_mode_compat_smoke_test.go | you-agent-factory/tests/functional/smoke | TestRunModeCompat_RealCLIOperatorContinuousRunReportsStartupOutputWithoutQuiet | short | tests/functional/transport/cli/output/text_stream_test.go | smoke | none | smoke-delete-04-transport-cli |
+| tests/functional/transport/cli/output/text_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise | short | tests/functional/transport/cli/output/text_stream_test.go | none | none | n/a |
+| tests/functional/transport/cli/output/text_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLITextStreamInterruptedRunDoesNotClaimCompletion | short | tests/functional/transport/cli/output/text_stream_test.go | none | none | n/a |
+| tests/functional/transport/cli/output/text_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet | short | tests/functional/transport/cli/output/text_stream_test.go | none | none | n/a |
+| tests/functional/transport/cli/output/text_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLITextStreamSurfacesIncrementalMessages | short | tests/functional/transport/cli/output/text_stream_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryInitValidateAndQuery | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryFlattenExpandPreservesMeaning | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryReplaceCurrentChangesSessionFactory | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
@@ -989,7 +990,7 @@ can execute independently until package ownership reaches zero.
 | --- | --- | ---: | --- | --- |
 | `smoke-delete-02-workstations-execution` | smoke | 4 | workstations/execution | released |
 | `smoke-delete-03-factory-definitions` | smoke | 3 | factory/definitions | none |
-| `smoke-delete-04-transport-cli` | smoke | 13 | transport/cli | none |
+| `smoke-delete-04-transport-cli` | smoke | 10 | transport/cli | none |
 | `smoke-delete-05-factory-packaged` | smoke | 12 | factory/packaged, work/routing | none |
 | `smoke-delete-06-factory-packaged-cross` | smoke | 6 | factory/packaged/cross | none |
 | `smoke-delete-07-sessions-controls` | smoke | 4 | sessions/controls | none |
@@ -1098,9 +1099,10 @@ Batch execution guidance for later move work:
 | tests/functional/smoke/cli_named_goal_run_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalRun_RealCLIExitsAfterBatchCompletionWithoutContinuousMode | short | tests/functional/factory/packaged/goal/invocation_test.go | smoke | none | smoke-delete-05-factory-packaged |
 | tests/functional/smoke/cli_named_quorum_invocation_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedQuorumRun_RealCLIAcceptsRoleFlagsAndReturnsOneMergeResult | short | tests/functional/factory/packaged/quorum/invocation_test.go | smoke | none | smoke-delete-05-factory-packaged |
 | tests/functional/smoke/cli_named_review_invocation_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedReviewInvocationVariants_RealCLIRequireApprovalAfterRejection | short | tests/functional/factory/packaged/review/invocation_test.go | smoke | none | smoke-delete-05-factory-packaged |
-| tests/functional/smoke/cli_run_mode_compat_smoke_test.go | you-agent-factory/tests/functional/smoke | TestRunModeCompat_RealCLIFactoryTextInvocationSuppressesOperatorChatter | short | tests/functional/transport/cli/output/text_stream_test.go | smoke | none | smoke-delete-04-transport-cli |
-| tests/functional/smoke/cli_run_mode_compat_smoke_test.go | you-agent-factory/tests/functional/smoke | TestRunModeCompat_RealCLINamedGoalBatchStdoutDoesNotIncludeOperatorChatter | short | tests/functional/transport/cli/output/text_stream_test.go | smoke | none | smoke-delete-04-transport-cli |
-| tests/functional/smoke/cli_run_mode_compat_smoke_test.go | you-agent-factory/tests/functional/smoke | TestRunModeCompat_RealCLIOperatorContinuousRunReportsStartupOutputWithoutQuiet | short | tests/functional/transport/cli/output/text_stream_test.go | smoke | none | smoke-delete-04-transport-cli |
+| tests/functional/transport/cli/output/text_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise | short | tests/functional/transport/cli/output/text_stream_test.go | none | none | n/a |
+| tests/functional/transport/cli/output/text_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLITextStreamInterruptedRunDoesNotClaimCompletion | short | tests/functional/transport/cli/output/text_stream_test.go | none | none | n/a |
+| tests/functional/transport/cli/output/text_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet | short | tests/functional/transport/cli/output/text_stream_test.go | none | none | n/a |
+| tests/functional/transport/cli/output/text_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLITextStreamSurfacesIncrementalMessages | short | tests/functional/transport/cli/output/text_stream_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryInitValidateAndQuery | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryFlattenExpandPreservesMeaning | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryReplaceCurrentChangesSessionFactory | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
@@ -1698,7 +1700,7 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `runtime_api-delete-11-wrong-layer` | runtime_api | 2 | approved wrong-layer (unit / contract-smoke-outside-functional) | planned |
 | `smoke-delete-02-workstations-execution` | smoke | 4 | workstations/execution | released |
 | `smoke-delete-03-factory-definitions` | smoke | 3 | factory/definitions | planned |
-| `smoke-delete-04-transport-cli` | smoke | 13 | transport/cli | planned |
+| `smoke-delete-04-transport-cli` | smoke | 10 | transport/cli | planned |
 | `smoke-delete-05-factory-packaged` | smoke | 12 | factory/packaged, work/routing | planned |
 | `smoke-delete-06-factory-packaged-cross` | smoke | 6 | factory/packaged/cross | planned |
 | `smoke-delete-07-sessions-controls` | smoke | 4 | sessions/controls | planned |
