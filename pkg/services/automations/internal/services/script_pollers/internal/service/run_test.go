@@ -7,17 +7,14 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
-	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"go.uber.org/zap"
 )
 
 const (
@@ -249,8 +246,9 @@ func (r *recordingSubmitter) submit(ctx context.Context, request work.WorkReques
 }
 
 type runOutcome struct {
-	result workers.CommandResult
-	err    error
+	result        workers.CommandResult
+	err           error
+	waitForCancel bool
 }
 
 type sequenceCommandRunner struct {
@@ -261,7 +259,6 @@ type sequenceCommandRunner struct {
 
 func (r *sequenceCommandRunner) Run(ctx context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.calls++
 	index := r.calls - 1
 	var outcome runOutcome
@@ -270,23 +267,23 @@ func (r *sequenceCommandRunner) Run(ctx context.Context, req workers.CommandRequ
 	} else if len(r.outcomes) > 0 {
 		outcome = r.outcomes[len(r.outcomes)-1]
 	}
+	r.mu.Unlock()
+
+	if outcome.waitForCancel {
+		<-ctx.Done()
+		return outcome.result, ctx.Err()
+	}
 	return outcome.result, outcome.err
 }
 
+func (r *sequenceCommandRunner) callCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.calls
+}
+
 func newScriptPollersService(runner workers.CommandRunner) scriptpollers.Service {
-	return scriptpollerswire.NewService(scriptpollers.Dependencies{
-		Logger: func(workstationName, workerName string) *zap.Logger {
-			return zap.NewNop()
-		},
-		CommandRunner: func() workers.CommandRunner {
-			return runner
-		},
-		ExecutionPolicy: factorydefinitionfixtures.WorkstationExecutionPolicy{
-			Resolve: func(*interfaces.FactoryWorkstationConfig) (time.Duration, error) {
-				return 0, nil
-			},
-		},
-	})
+	return newScriptPollersServiceWithOptions(scriptPollersServiceOptions{runner: runner})
 }
 
 func newCanonicalScriptPollerWorkstation() interfaces.FactoryWorkstationConfig {
