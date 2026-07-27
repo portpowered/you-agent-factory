@@ -5993,14 +5993,14 @@
       "you-agent-factory/tests/functional/workstations/execution": 2,
       "you-agent-factory/tests/functional/workstations/poller": 3
     },
-    "customer_top_level_Test_scenarios": 572,
+    "customer_top_level_Test_scenarios": 571,
     "files_with_customer_Test": 200,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 115,
-    "lane_short": 457
+    "lane_short": 456
   },
   "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. Non-catch-all rows mapped by FND-007-006; catch-all rows mapped by FND-007-003\u2026005.",
   "runtime_api_mapping": {
@@ -6075,8 +6075,8 @@
   "completeness_audit": {
     "audited_at_utc": "2026-07-27T14:30:00Z",
     "story": "ft-wave1-codex-golden-success-003",
-    "live_customer_scenarios": 571,
-    "ledger_rows": 571,
+    "live_customer_scenarios": 570,
+    "ledger_rows": 570,
     "unmapped_scenarios": 0,
     "checklist_destinations": 434,
     "wrong_layer_destinations": 69,
