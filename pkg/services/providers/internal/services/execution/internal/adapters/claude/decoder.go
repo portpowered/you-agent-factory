@@ -234,10 +234,7 @@ func (decoder *decoder) decodeSystemRecord(envelope nativeEnvelope) {
 
 func (decoder *decoder) decodeResultRecord(envelope nativeEnvelope) {
 	if envelope.Subtype != "success" || envelope.IsError {
-		decoder.declareFailure(providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindUnknown,
-			Message: "Claude returned a terminal failure",
-		})
+		decoder.declareFailure(classifyResultFailure(envelope))
 		return
 	}
 	decoder.finalContent = strings.TrimSpace(envelope.Result)
@@ -547,6 +544,56 @@ func (decoder *decoder) declareFailure(failure providers.ExecuteFailure) {
 		decoder.declaredFailure = &failure
 	}
 	decoder.declaredKnown = decoder.declaredKnown || known
+}
+
+func classifyResultFailure(envelope nativeEnvelope) providers.ExecuteFailure {
+	subtype := strings.ToLower(strings.TrimSpace(envelope.Subtype))
+	message := strings.ToLower(strings.TrimSpace(envelope.Result))
+	kind := providers.ExecuteFailureKindUnknown
+	switch subtype {
+	case "authentication_error", "permission_error":
+		kind = providers.ExecuteFailureKindAuthentication
+	case "invalid_request_error":
+		kind = providers.ExecuteFailureKindInvalidRequest
+	case "rate_limit_error", "overloaded_error":
+		kind = providers.ExecuteFailureKindThrottled
+	case "api_error", "server_error":
+		kind = providers.ExecuteFailureKindDependency
+	case "cancel", "canceled", "cancelled":
+		kind = providers.ExecuteFailureKindCanceled
+	}
+	if kind == providers.ExecuteFailureKindUnknown {
+		switch {
+		case strings.Contains(message, "request timed out"),
+			strings.Contains(message, "request timeout"),
+			strings.Contains(message, "deadline exceeded"),
+			strings.Contains(message, "timed out"):
+			kind = providers.ExecuteFailureKindTimeout
+		}
+	}
+	return providers.ExecuteFailure{
+		Kind:    kind,
+		Message: claudeDeclaredFailureMessage(kind),
+	}
+}
+
+func claudeDeclaredFailureMessage(kind providers.ExecuteFailureKind) string {
+	switch kind {
+	case providers.ExecuteFailureKindAuthentication:
+		return "Claude authentication failed"
+	case providers.ExecuteFailureKindInvalidRequest:
+		return "Claude rejected the request as invalid"
+	case providers.ExecuteFailureKindThrottled:
+		return "Claude is temporarily unavailable due to usage or capacity limits"
+	case providers.ExecuteFailureKindTimeout:
+		return "Claude request timed out"
+	case providers.ExecuteFailureKindDependency:
+		return "Claude encountered a temporary server error"
+	case providers.ExecuteFailureKindCanceled:
+		return "Claude execution was canceled"
+	default:
+		return "Claude returned a terminal failure"
+	}
 }
 
 func (decoder *decoder) stableMessageID() string {

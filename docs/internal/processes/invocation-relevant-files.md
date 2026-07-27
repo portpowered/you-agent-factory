@@ -328,7 +328,9 @@ primary-result behavior.
   Providers Execution boundary. Keep its stream-json partial-record buffer,
   message/content-block/tool correlation, mixed text/tool progress projection,
   deferred message completion, flush guard, authoritative result record
-  selection, and detached session extraction invocation-local. Inject the
+  selection, and detached session extraction invocation-local. Classify terminal
+  `result` records by subtype and bounded result text before declaring failure,
+  mirroring Codex declared-record precedence over native effect errors. Inject the
   native effect into the adapter registration and keep system/control records
   out of customer-visible content; reconcile lifecycle failures with the same
   precedence rules as other Providers-owned adapters.
