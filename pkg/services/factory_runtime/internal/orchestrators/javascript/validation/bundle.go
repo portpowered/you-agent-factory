@@ -68,12 +68,25 @@ func BundleFactoryRelativeImports(
 	}
 
 	modules := make(map[string]bundledModule)
+	visiting := make(map[string]struct{})
 	var walk func(sourceRef, source string) []Issue
 	walk = func(sourceRef, source string) []Issue {
 		sourceRef = normalizeFactorySourceRef(sourceRef)
 		if _, seen := modules[sourceRef]; seen {
 			return nil
 		}
+		if _, inProgress := visiting[sourceRef]; inProgress {
+			return []Issue{{
+				Code: CodeUnsupportedLoader,
+				Message: fmt.Sprintf(
+					"circular factory-relative import detected involving %q",
+					sourceRef,
+				),
+				Path: sourceRef,
+			}}
+		}
+		visiting[sourceRef] = struct{}{}
+		defer delete(visiting, sourceRef)
 
 		ast, err := js.Parse(parse.NewInputString(source), js.Options{})
 		if err != nil {

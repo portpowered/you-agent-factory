@@ -212,3 +212,47 @@ workflow.final(importedDefault);`
 		t.Fatalf("primary result = %s, want \"default-export\"", outcome.Value.JSON)
 	}
 }
+
+func TestLoad_BundlesCircularRelativeImportReturnsUnsupportedLoader(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "a.js"),
+		[]byte(`import { b } from "./b.js";
+export const a = b;`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write a module: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "b.js"),
+		[]byte(`import { a } from "./a.js";
+export const b = a;`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write b module: %v", err)
+	}
+	entry := `import { a } from "./lib/a.js";
+workflow.final(a);`
+	reader := factory.NewWorkflowSourceReader(dir, localWorkflowSourceFiles{})
+
+	_, issues := validationLoaderWorkflows.LoadSource(factory.WorkflowValidationLoadRequest{
+		SourceRef:    "workflow.js",
+		Content:      entry,
+		FactoryRoot:  dir,
+		BundleReader: reader,
+	})
+	if len(issues) == 0 {
+		t.Fatal("load issues = nil, want circular import failure")
+	}
+	if issues[0].Code != "workflow.source.unsupportedLoader" {
+		t.Fatalf("issue code = %q, want workflow.source.unsupportedLoader", issues[0].Code)
+	}
+	if !strings.Contains(issues[0].Message, "circular factory-relative import") {
+		t.Fatalf("issue message = %q, want circular import diagnostic", issues[0].Message)
+	}
+}

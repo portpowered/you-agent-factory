@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dop251/goja"
 )
@@ -412,6 +413,97 @@ workflow.final(mid);`
 	}
 	if finalValue != "LEAF-MID" {
 		t.Fatalf("workflow.final value = %q, want LEAF-MID", finalValue)
+	}
+}
+
+func TestBundleFactoryRelativeImportsCircularImportReturnsUnsupportedLoader(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "a.js"),
+		[]byte(`import { b } from "./b.js";
+export const a = b;`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write a module: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "b.js"),
+		[]byte(`import { a } from "./a.js";
+export const b = a;`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write b module: %v", err)
+	}
+	entry := `import { a } from "./lib/a.js";
+workflow.final(a);`
+	reader := FileSourceReader(dir, bundleTestFileSystem{})
+
+	done := make(chan struct{})
+	var issues []Issue
+	go func() {
+		_, issues = BundleFactoryRelativeImports("workflow.js", entry, reader)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("BundleFactoryRelativeImports hung, want circular import failure")
+	}
+	if len(issues) == 0 {
+		t.Fatal("bundle issues = nil, want circular import failure")
+	}
+	if issues[0].Code != CodeUnsupportedLoader {
+		t.Fatalf("issue code = %q, want %q", issues[0].Code, CodeUnsupportedLoader)
+	}
+	if !strings.Contains(issues[0].Message, "circular factory-relative import") {
+		t.Fatalf("issue message = %q, want circular import diagnostic", issues[0].Message)
+	}
+}
+
+func TestLoadBundlesCircularRelativeImportReturnsUnsupportedLoader(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "a.js"),
+		[]byte(`import { b } from "./b.js";
+export const a = b;`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write a module: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "b.js"),
+		[]byte(`import { a } from "./a.js";
+export const b = a;`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write b module: %v", err)
+	}
+	entry := `import { a } from "./lib/a.js";
+workflow.final(a);`
+	reader := FileSourceReader(dir, bundleTestFileSystem{})
+
+	_, issues := Load(LoadRequest{
+		SourceRef:    "workflow.js",
+		Content:      entry,
+		FactoryRoot:  dir,
+		BundleReader: reader,
+	})
+	if len(issues) == 0 {
+		t.Fatal("load issues = nil, want circular import failure")
+	}
+	if issues[0].Code != CodeUnsupportedLoader {
+		t.Fatalf("issue code = %q, want %q", issues[0].Code, CodeUnsupportedLoader)
 	}
 }
 
