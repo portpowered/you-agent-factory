@@ -1,6 +1,8 @@
 package inference_test
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +21,14 @@ const (
 )
 
 const providerExitNormalizationSessionID = "provider-exit-normalization-session"
+
+const (
+	failureRedactionPromptNeedle       = "probe-prompt-redaction-9f3a7c"
+	failureRedactionEnvKey             = "FACTORY_PROBE_SECRET"
+	failureRedactionEnvNeedle          = "probe-env-redaction-8e2b1d"
+	failureRedactionCredentialEnvKey   = "OPENAI_API_KEY"
+	failureRedactionCredentialNeedle   = "sk-probe-credential-redaction-7d4c0b"
+)
 
 // TestProviderNonZeroExitMapsToPublicFailure proves a provider process that exits
 // non-zero is normalized into a public failed Work outcome with matching Factory
@@ -168,6 +178,82 @@ func TestProviderAuthRateLimitAndTimeoutRemainDistinct(t *testing.T) {
 	}
 }
 
+// TestProviderFailureRedactsPromptEnvironmentAndCredentials proves provider
+// failure diagnostics on Work, Factory Events, and Provider Session surfaces
+// omit prompt bodies, environment values, and credential material while still
+// exposing a stable public failure signal.
+func TestProviderFailureRedactsPromptEnvironmentAndCredentials(t *testing.T) {
+	t.Setenv(failureRedactionCredentialEnvKey, failureRedactionCredentialNeedle)
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
+		modelprovider.ProviderCodex,
+		"gpt-5-codex",
+	))
+	support.WriteWorkstationConfig(t, dir, "process", `---
+type: MODEL_WORKSTATION
+env:
+  `+failureRedactionEnvKey+`: `+failureRedactionEnvNeedle+`
+---
+Test workstation with private prompt `+failureRedactionPromptNeedle+`.
+`)
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider failure redaction"}`))
+
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte(codexAuthFailureStderr),
+	})
+	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		20*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed place tokens = %d, want 1; listed=%#v", got, listed)
+	}
+	if session.Runtime.Progress.Categories.Failed != 1 {
+		t.Fatalf(
+			"session progress categories = %+v, want one failed work item",
+			session.Runtime.Progress.Categories,
+		)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want 1", runner.CallCount())
+	}
+
+	request := runner.LastRequest()
+	if !strings.Contains(string(request.Stdin), failureRedactionPromptNeedle) {
+		t.Fatalf("provider stdin = %q, want private prompt needle %q", request.Stdin, failureRedactionPromptNeedle)
+	}
+	if !commandEnvContains(request.Env, failureRedactionEnvKey+"="+failureRedactionEnvNeedle) {
+		t.Fatalf("provider command env missing workstation secret %q=%q", failureRedactionEnvKey, failureRedactionEnvNeedle)
+	}
+	if !commandEnvContains(request.Env, failureRedactionCredentialEnvKey+"="+failureRedactionCredentialNeedle) {
+		t.Fatalf(
+			"provider command env missing credential %q=%q",
+			failureRedactionCredentialEnvKey,
+			failureRedactionCredentialNeedle,
+		)
+	}
+
+	reason := terminalInferenceFailureReason(t, events)
+	if reason != factoryapi.WorkFailureTypeAuthFailure {
+		t.Fatalf("terminal inference failure reason = %q, want %q", reason, factoryapi.WorkFailureTypeAuthFailure)
+	}
+
+	assertPublicProviderFailureSurfacesRedactSensitiveMaterial(
+		t,
+		session,
+		listed,
+		events,
+		failureRedactionPromptNeedle,
+		failureRedactionEnvNeedle,
+		failureRedactionCredentialNeedle,
+	)
+}
+
 func repeatedCodexThrottleCommandResults(count int) []platformprocess.CommandResult {
 	results := make([]platformprocess.CommandResult, count)
 	for i := range results {
@@ -212,4 +298,66 @@ func terminalInferenceFailureObservation(t *testing.T, events []factoryapi.Facto
 		t.Fatalf("factory events missing terminal INFERENCE_RESPONSE failure")
 	}
 	return terminal
+}
+
+func commandEnvContains(env []string, want string) bool {
+	for _, entry := range env {
+		if entry == want {
+			return true
+		}
+	}
+	return false
+}
+
+func assertPublicProviderFailureSurfacesRedactSensitiveMaterial(
+	t *testing.T,
+	session factoryapi.FactorySession,
+	listed factoryapi.ListWorkResponse,
+	events []factoryapi.FactoryEvent,
+	needles ...string,
+) {
+	t.Helper()
+
+	failure := terminalInferenceFailureObservation(t, events)
+	if failure.FailureDetail == nil || failure.FailureDetail.Message == "" {
+		t.Fatalf("terminal inference failure detail = %#v, want stable public failure message", failure.FailureDetail)
+	}
+
+	failureEvents := make([]factoryapi.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		switch event.Type {
+		case factoryapi.FactoryEventTypeInferenceResponse,
+			factoryapi.FactoryEventTypeDispatchResponse,
+			factoryapi.FactoryEventTypeModelResponse:
+			failureEvents = append(failureEvents, event)
+		}
+	}
+
+	publicObservation, err := json.Marshal(struct {
+		Session       factoryapi.FactorySession              `json:"session"`
+		Work          factoryapi.ListWorkResponse            `json:"work"`
+		FailureEvents []factoryapi.FactoryEvent              `json:"failureEvents"`
+		Inference     factoryapi.InferenceResponseEventPayload `json:"inferenceFailure"`
+	}{
+		Session:       session,
+		Work:          listed,
+		FailureEvents: failureEvents,
+		Inference:     failure,
+	})
+	if err != nil {
+		t.Fatalf("marshal public provider failure surfaces: %v", err)
+	}
+	payload := string(publicObservation)
+	for _, needle := range needles {
+		if strings.Contains(payload, needle) {
+			t.Fatalf("public provider failure surfaces leaked %q: %s", needle, payload)
+		}
+	}
+	if err := support.ValidateProviderSessionFixtureContent(
+		"failure-normalization-redaction",
+		"public-provider-failure-surfaces",
+		publicObservation,
+	); err != nil {
+		t.Fatalf("public provider failure surfaces failed sanitization: %v", err)
+	}
 }
