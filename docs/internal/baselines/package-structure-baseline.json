@@ -169,11 +169,6 @@
     },
     {
       "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_throttle_failure_regression_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_unified_event_log_smoke_test.go",
       "target": "tests/functional/runtime_api"
     },
@@ -459,11 +454,6 @@
     },
     {
       "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_ootb_experience_smoke_long_test.go",
-      "target": "TestOOTBExperience_APIStatusStaysQueryableAcrossCompletion"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_packaged_deep_research_invocation_test.go",
       "target": "TestSessionInvocationAPI_PackagedDeepResearchUsesMaterializedFactorySource"
     },
@@ -606,11 +596,6 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_submit_runtime_work_trace_shaping_smoke_test.go",
       "target": "TestSubmitRuntimeWork_EmitsCanonicalTraceAwareBatchEvent"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_throttle_failure_regression_test.go",
-      "target": "TestRetryableThrottleFailureWithoutGuardUsesDefaultRetryLimitAndFailsWork"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -1379,11 +1364,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/stateless_collector_long_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/stateless_execution_long_test.go",
       "target": "smoke"
     },
@@ -1396,11 +1376,6 @@
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/verify_fast_command_smoke_test.go",
       "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/batch_ideation_pipeline_test.go",
-      "target": "workflow"
     },
     {
       "rule": "functional-test-missing-subsection",
@@ -1425,11 +1400,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/dispatcher_lifecycle_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/dispatcher_workflow_long_test.go",
       "target": "workflow"
     },
     {
@@ -1545,11 +1515,6 @@
     {
       "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/cli/dynamic_workflows/dynamic_workflow_run_test.go",
-      "target": "cli"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/cli/factory_run/events/events_test.go",
       "target": "cli"
     },
     {

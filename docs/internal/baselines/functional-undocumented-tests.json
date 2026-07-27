@@ -147,10 +147,6 @@
       "name": "TestRunJavaScriptFactoryResponseStreamPublishesCanonicalLifecycle"
     },
     {
-      "file": "cli/factory_run/events/events_test.go",
-      "name": "TestSuccessfulInvocationEmitsCanonicalNDJSON"
-    },
-    {
       "file": "cli/factory_run/events/javascript_test.go",
       "name": "TestJavaScriptInvocationEmitsCanonicalPhaseAndCheckpointEvents"
     },
@@ -839,10 +835,6 @@
       "name": "TestOOTBExperience_APIPreseededTwoStagePipelineCompletes"
     },
     {
-      "file": "runtime_api/api_ootb_experience_smoke_long_test.go",
-      "name": "TestOOTBExperience_APIStatusStaysQueryableAcrossCompletion"
-    },
-    {
       "file": "runtime_api/api_packaged_deep_research_invocation_test.go",
       "name": "TestSessionInvocationAPI_PackagedDeepResearchUsesMaterializedFactorySource"
     },
@@ -953,10 +945,6 @@
     {
       "file": "runtime_api/api_submit_runtime_work_trace_shaping_smoke_test.go",
       "name": "TestSubmitRuntimeWork_EmitsCanonicalTraceAwareBatchEvent"
-    },
-    {
-      "file": "runtime_api/api_throttle_failure_regression_test.go",
-      "name": "TestRetryableThrottleFailureWithoutGuardUsesDefaultRetryLimitAndFailsWork"
     },
     {
       "file": "runtime_api/dashboard_engine_state_test.go",
@@ -1549,26 +1537,6 @@
     {
       "file": "workflow/conflict_resolution_test.go",
       "name": "TestConflictResolution_ReviewFailResolveReReview"
-    },
-    {
-      "file": "workflow/dispatcher_workflow_long_test.go",
-      "name": "TestDispatcherWorkflow_ExecutionPoolIsolation"
-    },
-    {
-      "file": "workflow/dispatcher_workflow_long_test.go",
-      "name": "TestDispatcherWorkflow_MultipleSeedFiles"
-    },
-    {
-      "file": "workflow/dispatcher_workflow_long_test.go",
-      "name": "TestDispatcherWorkflow_ReviewFailurePerItem"
-    },
-    {
-      "file": "workflow/dispatcher_workflow_long_test.go",
-      "name": "TestDispatcherWorkflow_SingleSeedFile"
-    },
-    {
-      "file": "workflow/dispatcher_workflow_long_test.go",
-      "name": "TestDispatcherWorkflow_TwoSeedFiles"
     },
     {
       "file": "workflow/idea_plan_review_execute_with_limits_long_test.go",

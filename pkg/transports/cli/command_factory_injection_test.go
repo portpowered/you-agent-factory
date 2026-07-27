@@ -38,7 +38,7 @@ func TestNewCommandFactoryDoesNotInstallTransportDefaults(t *testing.T) {
 
 	factory := NewCommandFactory(CommandOperations{})
 	if factory.SubmitWork != nil ||
-		factory.ListSessions != nil ||
+		factory.SessionsCLI != nil ||
 		factory.ModelsCLI != nil ||
 		factory.FlattenFactoryConfig != nil ||
 		factory.InitFactory != nil ||

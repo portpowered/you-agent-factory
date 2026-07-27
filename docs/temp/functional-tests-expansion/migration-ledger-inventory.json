@@ -30,6 +30,10 @@
       "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
     },
     {
+      "path": "tests/functional/cli/factory_run/events/events_test.go",
+      "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
+    },
+    {
       "path": "tests/functional/cli/mcp_resume/stdio_client_test.go",
       "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
     },
@@ -187,13 +191,33 @@
   ],
   "rows": [
     {
-      "source_path": "tests/functional/cli/root_discovery/root_discovery_test.go",
-      "package": "you-agent-factory/tests/functional/cli/root_discovery",
-      "scenario": "TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs",
+      "source_path": "tests/functional/acceptance/harness_smoke_test.go",
+      "package": "you-agent-factory/tests/functional/acceptance",
+      "scenario": "TestBuiltCLIHarness_IsolatesHomeAndLogDirectoriesAcrossSessions",
       "lane": "short",
-      "destination": "tests/functional/transport/cli/process/help_and_version_test.go",
+      "destination": "wrong-layer: package-integration \u2014 built CLI acceptance harness session isolation contracts without proving a customer product scenario. Replacement evidence owner: internal/builtcliacceptance package-integration tests.",
       "catch_all": "none",
-      "specialty_targets": "test-built-cli-acceptance",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/acceptance/harness_smoke_test.go",
+      "package": "you-agent-factory/tests/functional/acceptance",
+      "scenario": "TestBuiltCLIHarness_NonZeroExitIncludesDiagnostics",
+      "lane": "short",
+      "destination": "wrong-layer: package-integration \u2014 built CLI acceptance harness session isolation contracts without proving a customer product scenario. Replacement evidence owner: internal/builtcliacceptance package-integration tests.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/acceptance/harness_smoke_test.go",
+      "package": "you-agent-factory/tests/functional/acceptance",
+      "scenario": "TestBuiltCLIHarness_WithNoExternalServerReservesUnusedPort",
+      "lane": "short",
+      "destination": "wrong-layer: package-integration \u2014 built CLI acceptance harness session isolation contracts without proving a customer product scenario. Replacement evidence owner: internal/builtcliacceptance package-integration tests.",
+      "catch_all": "none",
+      "specialty_targets": "none",
       "deletion_only_batch": "n/a"
     },
     {
@@ -211,37 +235,7 @@
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestBuiltCLI_HelpPrintsUsageAndExitsSuccessfully",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — built CLI acceptance harness session isolation contracts without proving a customer product scenario. Replacement evidence owner: internal/builtcliacceptance package-integration tests.",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/acceptance/harness_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/acceptance",
-      "scenario": "TestBuiltCLIHarness_IsolatesHomeAndLogDirectoriesAcrossSessions",
-      "lane": "short",
-      "destination": "wrong-layer: package-integration — built CLI acceptance harness session isolation contracts without proving a customer product scenario. Replacement evidence owner: internal/builtcliacceptance package-integration tests.",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/acceptance/harness_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/acceptance",
-      "scenario": "TestBuiltCLIHarness_NonZeroExitIncludesDiagnostics",
-      "lane": "short",
-      "destination": "wrong-layer: package-integration — built CLI acceptance harness session isolation contracts without proving a customer product scenario. Replacement evidence owner: internal/builtcliacceptance package-integration tests.",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/acceptance/harness_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/acceptance",
-      "scenario": "TestBuiltCLIHarness_WithNoExternalServerReservesUnusedPort",
-      "lane": "short",
-      "destination": "wrong-layer: package-integration — built CLI acceptance harness session isolation contracts without proving a customer product scenario. Replacement evidence owner: internal/builtcliacceptance package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 built CLI acceptance harness session isolation contracts without proving a customer product scenario. Replacement evidence owner: internal/builtcliacceptance package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -409,7 +403,7 @@
     {
       "source_path": "tests/functional/bootstrap_portability/automat_portability_fixture_test.go",
       "package": "you-agent-factory/tests/functional/bootstrap_portability",
-      "scenario": "TestAutomatPortabilityFixture_ExpandedLayoutIsDispatchReadyForBoundedSmoke",
+      "scenario": "TestAutomatPortabilityFixture_ExpandRestoresPortableRuntimeLayout",
       "lane": "short",
       "destination": "tests/functional/factory/definitions/import_export_test.go",
       "catch_all": "bootstrap_portability",
@@ -419,7 +413,7 @@
     {
       "source_path": "tests/functional/bootstrap_portability/automat_portability_fixture_test.go",
       "package": "you-agent-factory/tests/functional/bootstrap_portability",
-      "scenario": "TestAutomatPortabilityFixture_ExpandRestoresPortableRuntimeLayout",
+      "scenario": "TestAutomatPortabilityFixture_ExpandedLayoutIsDispatchReadyForBoundedSmoke",
       "lane": "short",
       "destination": "tests/functional/factory/definitions/import_export_test.go",
       "catch_all": "bootstrap_portability",
@@ -627,9 +621,29 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/cli/factory_run/events/events_test.go",
-      "package": "you-agent-factory/tests/functional/cli/factory_run/events",
-      "scenario": "TestSuccessfulInvocationEmitsCanonicalNDJSON",
+      "source_path": "tests/functional/transport/cli/output/ndjson_stream_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/output",
+      "scenario": "TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/output/ndjson_stream_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/output/ndjson_stream_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/output",
+      "scenario": "TestCLINDJSONFailureEndsWithOneTerminalResult",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/output/ndjson_stream_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/output/ndjson_stream_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/output",
+      "scenario": "TestCLINDJSONSequenceIsMonotonic",
       "lane": "short",
       "destination": "tests/functional/transport/cli/output/ndjson_stream_test.go",
       "catch_all": "none",
@@ -751,7 +765,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestCanonicalFactoryGroupRejectsUnknownSubcommand",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -761,7 +775,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestCanonicalRunInputCompositionAndResolution",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -771,7 +785,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestGenericRepresentativeProjectionIsObservableThroughApplicationRoot",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -781,7 +795,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestGenericSessionProjectionCoversProductionCommandShapes",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -791,7 +805,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestGenericSessionProjectionEnforcesProductionInputContracts",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -801,7 +815,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestGenericSessionProjectionParsesVariadicInputsThroughApplicationRoot",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -811,7 +825,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeAcceptsRepresentativeGeneratedFlagRecords",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -821,7 +835,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeAppliesOptionalDefaultsAndFixedCardinality",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -831,7 +845,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeAppliesTypedDefaultsAndRejectsInvalidInvocations",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -841,7 +855,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeAssignsTypedPositionalArgumentsByStableInputID",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -851,7 +865,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeBuildsSyntheticHierarchyDeterministically",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -861,7 +875,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeEnforcesEveryRelationshipKindBeforeHandler",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -871,7 +885,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeParsesSchemaNeutralTypedFlagsByStableInputID",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -881,7 +895,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeRejectsInvalidArgumentAndRelationshipRecords",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -891,7 +905,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeRejectsInvalidFlagRecordsBeforeReturningTree",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -901,7 +915,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeRejectsInvalidManifestBeforeReturningTree",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -911,7 +925,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeDispatchesByStableHandlerIDWithNormalizedInputs",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -921,7 +935,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeDispatchesScalarBooleanAndInt64Arguments",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -931,7 +945,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeKeepsNonRunnableCommandsOnCobraHelpPath",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -941,7 +955,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeProjectsMatchingInheritedPresentation",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -951,7 +965,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeProjectsSchemaHelpLifecycleAndCompletion",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -961,7 +975,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeRejectsInvalidHandlerBindingsBeforeExecution",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -971,7 +985,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeRejectsInvalidLifecycleAndCompletionBeforeProjection",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -981,7 +995,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeRejectsRepeatedScalarArgumentValueTypes",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -991,7 +1005,7 @@
       "package": "you-agent-factory/tests/functional/cli/input_contract",
       "scenario": "TestNewCommandTreeRejectsInvalidCanonicalFlagValuesBeforeDispatch",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 CLI manifest/generic command-tree constructor contracts via pkg/transports/cli without root.BuildProcess customer scenarios. Replacement evidence owner: pkg/transports/cli/climanifest and commandidentity package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1189,7 +1203,37 @@
     {
       "source_path": "tests/functional/cli/root_discovery/root_discovery_test.go",
       "package": "you-agent-factory/tests/functional/cli/root_discovery",
-      "scenario": "TestRemovedInitInputFailsBeforeConfigurationMutation",
+      "scenario": "TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/process/help_and_version_test.go",
+      "catch_all": "none",
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/flags_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIFlagAfterPositionalValueUsesDocumentedParsing",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/flags_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/flags_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIStringBooleanAndRepeatedFlagsReachRequest",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/flags_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/flags_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIUnknownFlagFailsBeforeLifecycleStart",
       "lane": "short",
       "destination": "tests/functional/transport/cli/parameters/flags_test.go",
       "catch_all": "none",
@@ -1232,6 +1276,36 @@
       "scenario": "TestServerNonTTYReadinessGatesBrowserAndCancellationJoinsOwnedServer",
       "lane": "short",
       "destination": "tests/functional/transport/cli/process/help_and_version_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/cli/session/session_enumeration_test.go",
+      "package": "you-agent-factory/tests/functional/cli/session",
+      "scenario": "TestSessionCreateInitializesNewFactoryThroughSupportedAPI",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/session_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/cli/session/session_enumeration_test.go",
+      "package": "you-agent-factory/tests/functional/cli/session",
+      "scenario": "TestSessionEnumeration",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/session_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/cli/session/session_enumeration_test.go",
+      "package": "you-agent-factory/tests/functional/cli/session",
+      "scenario": "TestSessionEnumerationJSON",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/session_wiring_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1292,36 +1366,6 @@
       "scenario": "TestCLIResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead",
       "lane": "short",
       "destination": "tests/functional/sessions/restart/logical_identity_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/cli/session/session_enumeration_test.go",
-      "package": "you-agent-factory/tests/functional/cli/session",
-      "scenario": "TestSessionCreateInitializesNewFactoryThroughSupportedAPI",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/commands/session_wiring_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/cli/session/session_enumeration_test.go",
-      "package": "you-agent-factory/tests/functional/cli/session",
-      "scenario": "TestSessionEnumeration",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/commands/session_wiring_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/cli/session/session_enumeration_test.go",
-      "package": "you-agent-factory/tests/functional/cli/session",
-      "scenario": "TestSessionEnumerationJSON",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/commands/session_wiring_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1701,7 +1745,7 @@
       "package": "you-agent-factory/tests/functional/observability/coverage",
       "scenario": "TestBackendCoverageAliasesSmoke_UnitLaneDoesNotRequireFunctionalBoundary",
       "lane": "short",
-      "destination": "wrong-layer: maintenance harness contract — coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
+      "destination": "wrong-layer: maintenance harness contract \u2014 coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1711,7 +1755,7 @@
       "package": "you-agent-factory/tests/functional/observability/coverage",
       "scenario": "TestFunctionalCoverageCommandSmoke_BoundaryFailureStopsCoverage",
       "lane": "short",
-      "destination": "wrong-layer: maintenance harness contract — coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
+      "destination": "wrong-layer: maintenance harness contract \u2014 coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1721,7 +1765,7 @@
       "package": "you-agent-factory/tests/functional/observability/coverage",
       "scenario": "TestFunctionalCoverageCommandSmoke_RunsBoundaryBeforeCoverage",
       "lane": "short",
-      "destination": "wrong-layer: maintenance harness contract — coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
+      "destination": "wrong-layer: maintenance harness contract \u2014 coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1731,7 +1775,7 @@
       "package": "you-agent-factory/tests/functional/observability/coverage",
       "scenario": "TestFunctionalTestVizContract_DefaultWiringDryRun",
       "lane": "short",
-      "destination": "wrong-layer: maintenance harness contract — coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
+      "destination": "wrong-layer: maintenance harness contract \u2014 coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1741,7 +1785,7 @@
       "package": "you-agent-factory/tests/functional/observability/coverage",
       "scenario": "TestFunctionalTestVizContract_DefaultWiringIgnoresAmbientCIVizDir",
       "lane": "short",
-      "destination": "wrong-layer: maintenance harness contract — coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
+      "destination": "wrong-layer: maintenance harness contract \u2014 coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1751,7 +1795,7 @@
       "package": "you-agent-factory/tests/functional/observability/coverage",
       "scenario": "TestFunctionalTestVizContract_WiresBoundarySingleCoverageThenMarkdown",
       "lane": "short",
-      "destination": "wrong-layer: maintenance harness contract — coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
+      "destination": "wrong-layer: maintenance harness contract \u2014 coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1761,7 +1805,7 @@
       "package": "you-agent-factory/tests/functional/observability/coverage",
       "scenario": "TestFunctionalTestVizFailClosed_BoundaryFailureStopsCoverageAndViz",
       "lane": "short",
-      "destination": "wrong-layer: maintenance harness contract — coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
+      "destination": "wrong-layer: maintenance harness contract \u2014 coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1771,7 +1815,7 @@
       "package": "you-agent-factory/tests/functional/observability/coverage",
       "scenario": "TestFunctionalTestVizFailClosed_CoverageFailurePreservesWrittenArtifacts",
       "lane": "short",
-      "destination": "wrong-layer: maintenance harness contract — coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
+      "destination": "wrong-layer: maintenance harness contract \u2014 coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1781,7 +1825,7 @@
       "package": "you-agent-factory/tests/functional/observability/coverage",
       "scenario": "TestFunctionalTestVizFailClosed_RenderFailurePreservesEarlierArtifacts",
       "lane": "short",
-      "destination": "wrong-layer: maintenance harness contract — coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
+      "destination": "wrong-layer: maintenance harness contract \u2014 coverage and visualization orchestration belongs in internal package-integration tests rather than the customer functional tree.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1791,7 +1835,7 @@
       "package": "you-agent-factory/tests/functional/operator_settings/configcore",
       "scenario": "TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — direct operator_settings service calls without root.BuildProcess / public CLI boundary. Replacement evidence owner: pkg/services/operator_settings package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 direct operator_settings service calls without root.BuildProcess / public CLI boundary. Replacement evidence owner: pkg/services/operator_settings package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -2177,6 +2221,16 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/providers/codex/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/codex",
+      "scenario": "TestRootBuiltProcessExecutesThroughSharedSupport",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/codex/golden_success_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/providers/codex_content_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestCodexContentDispatch_MixedContentEmitsOrderedImageArgs",
@@ -2207,11 +2261,51 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/providers/codex/process_harness_test.go",
-      "package": "you-agent-factory/tests/functional/providers/codex",
-      "scenario": "TestRootBuiltProcessExecutesThroughSharedSupport",
+      "source_path": "tests/functional/providers/cursor/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/cursor",
+      "scenario": "TestCursorAdverseOutcomesThroughRootBuildProcess",
       "lane": "short",
-      "destination": "tests/functional/workers/inference/codex/golden_success_test.go",
+      "destination": "tests/functional/workers/inference/cursor/golden_failure_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/cursor/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/cursor",
+      "scenario": "TestCursorRejectsUnsupportedCapabilityBeforeExternalIO",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/cursor/golden_failure_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/cursor/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/cursor",
+      "scenario": "TestCursorResumeContinuityThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/cursor/golden_success_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/cursor/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/cursor",
+      "scenario": "TestCursorShortPromptSuccessThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/cursor/golden_success_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/cursor/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/cursor",
+      "scenario": "TestCursorWindowsLongPromptThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/cursor/golden_success_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -2731,7 +2825,7 @@
       "package": "you-agent-factory/tests/functional/replay_contracts",
       "scenario": "TestFactoryRelationsValueReturnsUnderlyingSlice",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — package-local replay helper contracts (replayEventCount, factoryRelationsValue) without root.BuildProcess / public transport boundary. Replacement evidence owner: tests/functional/internal/support/deadcode_contract_test.go.",
+      "destination": "wrong-layer: package-integration \u2014 package-local replay helper contracts (replayEventCount, factoryRelationsValue) without root.BuildProcess / public transport boundary. Replacement evidence owner: tests/functional/internal/support/deadcode_contract_test.go.",
       "catch_all": "replay_contracts",
       "specialty_targets": "none",
       "deletion_only_batch": "replay_contracts-delete-06-wrong-layer"
@@ -2741,7 +2835,7 @@
       "package": "you-agent-factory/tests/functional/replay_contracts",
       "scenario": "TestReplayEventCountCountsMatchingEventTypes",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — package-local replay helper contracts (replayEventCount, factoryRelationsValue) without root.BuildProcess / public transport boundary. Replacement evidence owner: tests/functional/internal/support/deadcode_contract_test.go.",
+      "destination": "wrong-layer: package-integration \u2014 package-local replay helper contracts (replayEventCount, factoryRelationsValue) without root.BuildProcess / public transport boundary. Replacement evidence owner: tests/functional/internal/support/deadcode_contract_test.go.",
       "catch_all": "replay_contracts",
       "specialty_targets": "none",
       "deletion_only_batch": "replay_contracts-delete-06-wrong-layer"
@@ -2831,7 +2925,7 @@
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestFactoryEventTransportMappingRejectsMalformedCanonicalPayload",
       "lane": "short",
-      "destination": "wrong-layer: unit — calls pkg/transports/mapping.FactoryEventsToAPI directly without root.BuildProcess / public HTTP. Replacement evidence owner: pkg/transports/mapping unit or package-integration tests.",
+      "destination": "wrong-layer: unit \u2014 calls pkg/transports/mapping.FactoryEventsToAPI directly without root.BuildProcess / public HTTP. Replacement evidence owner: pkg/transports/mapping unit or package-integration tests.",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
       "deletion_only_batch": "runtime_api-delete-11-wrong-layer"
@@ -2851,7 +2945,7 @@
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestRuntimeAPI_CompilesWithFunctionalLongTag",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — compile-only `go test -tags=functionallong -run ^$` package check; not a customer Process/HTTP/MCP scenario. Replacement evidence: package compile / pkg-structure lanes once runtime_api is empty.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 compile-only `go test -tags=functionallong -run ^$` package check; not a customer Process/HTTP/MCP scenario. Replacement evidence: package compile / pkg-structure lanes once runtime_api is empty.",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
       "deletion_only_batch": "runtime_api-delete-11-wrong-layer"
@@ -3107,14 +3201,24 @@
       "deletion_only_batch": "runtime_api-delete-10-observability-product"
     },
     {
-      "source_path": "tests/functional/runtime_api/api_ootb_experience_smoke_long_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestOOTBExperience_APIStatusStaysQueryableAcrossCompletion",
-      "lane": "functionallong",
+      "source_path": "tests/functional/transport/http/status/status_test.go",
+      "package": "you-agent-factory/tests/functional/transport/http/status",
+      "scenario": "TestAPIStatusDoesNotLeakInternalConfiguration",
+      "lane": "short",
       "destination": "tests/functional/transport/http/status/status_test.go",
-      "catch_all": "runtime_api",
+      "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-10-observability-product"
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/http/status/status_test.go",
+      "package": "you-agent-factory/tests/functional/transport/http/status",
+      "scenario": "TestAPIStatusReportsReadyAfterStartup",
+      "lane": "short",
+      "destination": "tests/functional/transport/http/status/status_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/runtime_api/api_packaged_deep_research_invocation_test.go",
@@ -3407,14 +3511,34 @@
       "deletion_only_batch": "runtime_api-delete-02-work-submission"
     },
     {
-      "source_path": "tests/functional/runtime_api/api_throttle_failure_regression_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestRetryableThrottleFailureWithoutGuardUsesDefaultRetryLimitAndFailsWork",
+      "source_path": "tests/functional/workers/inference/failure_normalization_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestProviderNonZeroExitMapsToPublicFailure",
       "lane": "short",
       "destination": "tests/functional/workers/inference/failure_normalization_test.go",
-      "catch_all": "runtime_api",
+      "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-09-workers-resilience"
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/failure_normalization_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestProviderAuthRateLimitAndTimeoutRemainDistinct",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/failure_normalization_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/failure_normalization_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestProviderFailureRedactsPromptEnvironmentAndCredentials",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/failure_normalization_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/runtime_api/api_unified_event_log_smoke_test.go",
@@ -3589,7 +3713,7 @@
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_variants_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_AcceptsPortableLayoutMultipleNodesWithoutSize",
+      "scenario": "TestCurrentFactoryPUT_AcceptsPortableLayoutMultipleNodesWithSize",
       "lane": "short",
       "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
@@ -3599,7 +3723,7 @@
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_variants_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_AcceptsPortableLayoutMultipleNodesWithSize",
+      "scenario": "TestCurrentFactoryPUT_AcceptsPortableLayoutMultipleNodesWithoutSize",
       "lane": "short",
       "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "runtime_api",
@@ -3749,26 +3873,6 @@
     {
       "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestFactoryTransformation_CreateNamedFactory_ReturnsBobOnFailureTarget",
-      "lane": "short",
-      "destination": "tests/functional/factory/definitions/validation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestFactoryTransformation_CreateNamedFactory_ReturnsMultipleTopologyValidationTargets",
-      "lane": "short",
-      "destination": "tests/functional/factory/definitions/validation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
       "scenario": "TestFactoryTransformation_CreateNamedFactoryEmitsCanonicalFactoryChangeEvent",
       "lane": "short",
       "destination": "tests/functional/factory/definitions/import_export_test.go",
@@ -3782,6 +3886,26 @@
       "scenario": "TestFactoryTransformation_CreateNamedFactoryReadbackAndWorkSurface",
       "lane": "short",
       "destination": "tests/functional/factory/definitions/import_export_test.go",
+      "catch_all": "runtime_api",
+      "specialty_targets": "none",
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
+    },
+    {
+      "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_test.go",
+      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
+      "scenario": "TestFactoryTransformation_CreateNamedFactory_ReturnsBobOnFailureTarget",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
+      "catch_all": "runtime_api",
+      "specialty_targets": "none",
+      "deletion_only_batch": "runtime_api-delete-06-factory-current"
+    },
+    {
+      "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_test.go",
+      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
+      "scenario": "TestFactoryTransformation_CreateNamedFactory_ReturnsMultipleTopologyValidationTargets",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
       "deletion_only_batch": "runtime_api-delete-06-factory-current"
@@ -3841,7 +3965,7 @@
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestCompare_ReportsAdjacentLargeEventSequences",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -3851,7 +3975,7 @@
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestCompare_ReportsEveryRetainedFactMismatch",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -3861,7 +3985,7 @@
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestCompare_ReportsMissingUnexpectedDuplicateAndReorderedFacts",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -3871,7 +3995,7 @@
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestNormalizers_ExcludeTransportDetailsAndRetainSessionFacts",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -3881,7 +4005,7 @@
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestProjectionContract_PreservesOptionalStableFactAbsence",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -3891,7 +4015,7 @@
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestProjectionContract_RetainsEveryStableFactorySessionFact",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -3901,7 +4025,7 @@
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestTerminalFixtureObservations_AreDeterministic",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -3911,7 +4035,7 @@
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestTerminalFixtureObservations_NormalizeAcrossCustomerInterfaces",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -3921,7 +4045,7 @@
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestNormalizeCLIJSON_PreservesCustomerVisibleCollectionOrder",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -3931,7 +4055,7 @@
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestNormalizeMCP_RejectsReorderedCanonicalEventCursors",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -3941,7 +4065,7 @@
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestNormalizers_MapRepresentativeRealCustomerShapes",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -3951,7 +4075,7 @@
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestNormalizers_PreserveDistinctLargeIntegerResultValues",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -3961,7 +4085,27 @@
       "package": "you-agent-factory/tests/functional/sessionparity",
       "scenario": "TestNormalizers_RejectEveryMissingRequiredScalarFact",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
+      "destination": "wrong-layer: package-integration \u2014 sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/cli/resolved_session_family_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/cli",
+      "scenario": "TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/session_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/cli/resolved_session_family_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/cli",
+      "scenario": "TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/session_wiring_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -4637,26 +4781,6 @@
       "deletion_only_batch": "smoke-delete-01-orchestration-petri"
     },
     {
-      "source_path": "tests/functional/smoke/stateless_collector_long_test.go",
-      "package": "you-agent-factory/tests/functional/smoke",
-      "scenario": "TestStatelessCollector_MultipleWorkItems",
-      "lane": "functionallong",
-      "destination": "tests/functional/workstations/execution/basic_test.go",
-      "catch_all": "smoke",
-      "specialty_targets": "none",
-      "deletion_only_batch": "smoke-delete-02-workstations-execution"
-    },
-    {
-      "source_path": "tests/functional/smoke/stateless_collector_long_test.go",
-      "package": "you-agent-factory/tests/functional/smoke",
-      "scenario": "TestStatelessCollector_TwoStagePipeline",
-      "lane": "functionallong",
-      "destination": "tests/functional/workstations/execution/basic_test.go",
-      "catch_all": "smoke",
-      "specialty_targets": "none",
-      "deletion_only_batch": "smoke-delete-02-workstations-execution"
-    },
-    {
       "source_path": "tests/functional/smoke/stateless_execution_long_test.go",
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestStatelessExecution_DifferentWorkstationsResolveDifferentWorkers",
@@ -4691,7 +4815,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestBackendCoverageAliasesSmoke_RedirectToIndependentLanes",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4701,7 +4825,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestBackendVerificationLaneScriptSmoke_PreservesFailureExitAndLog",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4711,7 +4835,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestBackendVerificationLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4721,7 +4845,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestConcurrentUIVerificationLanesScriptSmoke_DoesNotWaitForDetachedLogHandle",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4731,7 +4855,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestConcurrentUIVerificationLanesScriptSmoke_FailureReportsExactLaneRerun",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4741,7 +4865,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestConcurrentUIVerificationLanesScriptSmoke_RunsBothOwnedLanesConcurrently",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4751,7 +4875,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestLongTestsCommandSmoke_FailureReportsExactSpecialtyLaneRerun",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4761,7 +4885,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestUICoverageCommandSmoke_RunsPackageCoverageThenReplayCheck",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4771,7 +4895,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestUIPackageCoverageCommandSmoke_InvokesPackageOwnedCoverageScript",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4781,7 +4905,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4791,7 +4915,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4801,7 +4925,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestVerifyFastCommandSmoke_ContractFailureStopsLaterSuites",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4811,7 +4935,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestVerifyFastCommandSmoke_FailureReportsOwnedSuiteAndRerunCommand",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4821,7 +4945,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4831,7 +4955,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4841,7 +4965,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestVerifyPRCommandSmoke_UsesRequiredLanesOnce",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4851,7 +4975,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestVerifyPRInferenceCommandSmoke_FailureReportsOwnedRerunCommand",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4861,7 +4985,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestVerifyPRInferenceCommandSmoke_RunsSingleNamedRegressionOnly",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4871,7 +4995,7 @@
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers",
       "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional — exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
+      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 exercises Makefile verify-* tier wiring, wrapper scripts, and CI lane ordering via stub Make targets; not a customer Process/HTTP/MCP/CLI functional scenario. Replacement evidence: Makefile/script contract tests or pkg-structure lanes.",
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
@@ -4897,9 +5021,9 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/transport/mcp_serve/resolved_serve_handler_test.go",
-      "package": "you-agent-factory/tests/functional/transport/mcp_serve",
-      "scenario": "TestProcessMCPServe_RuntimeRejectsMissingHomeEnvironment",
+      "source_path": "tests/functional/transport/mcp/stdio/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/transport/mcp/stdio",
+      "scenario": "TestMCPDiscoveryContainsCanonicalFactorySessionTools",
       "lane": "short",
       "destination": "tests/functional/transport/mcp/stdio/discovery_test.go",
       "catch_all": "none",
@@ -4907,9 +5031,9 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/transport/mcp_serve/resolved_serve_handler_test.go",
-      "package": "you-agent-factory/tests/functional/transport/mcp_serve",
-      "scenario": "TestResolvedServeHandler_FixtureAndRuntimePathsReachInitializer",
+      "source_path": "tests/functional/transport/mcp/stdio/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/transport/mcp/stdio",
+      "scenario": "TestMCPStdioFixtureAndRuntimePathsReachInitializer",
       "lane": "short",
       "destination": "tests/functional/transport/mcp/stdio/discovery_test.go",
       "catch_all": "none",
@@ -4917,9 +5041,9 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/transport/mcp_serve/resolved_serve_handler_test.go",
-      "package": "you-agent-factory/tests/functional/transport/mcp_serve",
-      "scenario": "TestResolvedServeHandler_ReportsMissingCanonicalInputsBeforeInitializer",
+      "source_path": "tests/functional/transport/mcp/stdio/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/transport/mcp/stdio",
+      "scenario": "TestMCPStdioInitializeAndToolDiscovery",
       "lane": "short",
       "destination": "tests/functional/transport/mcp/stdio/discovery_test.go",
       "catch_all": "none",
@@ -4927,9 +5051,29 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/transport/mcp_serve/resolved_serve_handler_test.go",
-      "package": "you-agent-factory/tests/functional/transport/mcp_serve",
-      "scenario": "TestResolvedServeHandler_RequiresInjectedDependencies",
+      "source_path": "tests/functional/transport/mcp/stdio/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/transport/mcp/stdio",
+      "scenario": "TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot",
+      "lane": "short",
+      "destination": "tests/functional/transport/mcp/stdio/discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/mcp/stdio/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/transport/mcp/stdio",
+      "scenario": "TestMCPStdioRuntimeRejectsMissingHomeEnvironment",
+      "lane": "short",
+      "destination": "tests/functional/transport/mcp/stdio/discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/mcp/stdio/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/transport/mcp/stdio",
+      "scenario": "TestMCPUnknownToolReturnsProtocolError",
       "lane": "short",
       "destination": "tests/functional/transport/mcp/stdio/discovery_test.go",
       "catch_all": "none",
@@ -5027,11 +5171,41 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/transport/submit/submit_test.go",
+      "package": "you-agent-factory/tests/functional/transport/submit",
+      "scenario": "TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/submit_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/submit/submit_test.go",
+      "package": "you-agent-factory/tests/functional/transport/submit",
+      "scenario": "TestSubmitFamilyExecutesThroughRootBuiltProcess",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/submit_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/cli/resolved_work_family_test.go",
+      "package": "you-agent-factory/tests/functional/work/cli",
+      "scenario": "TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/work_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/work/visualization/dependency_graph_test.go",
       "package": "you-agent-factory/tests/functional/work/visualization",
       "scenario": "TestDependencyGraphVisualization_RendersCompleteEscapedFlowchart",
       "lane": "short",
-      "destination": "wrong-layer: unit — calls pkg/services/work graph helpers directly without root.BuildProcess or CLI visualize command. Replacement evidence owner: pkg/services/work unit tests.",
+      "destination": "wrong-layer: unit \u2014 calls pkg/services/work graph helpers directly without root.BuildProcess or CLI visualize command. Replacement evidence owner: pkg/services/work unit tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -5057,24 +5231,34 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/workflow/batch_ideation_pipeline_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestBatchIdeationPipeline_ConcurrencyLimit2",
+      "source_path": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/petri/dispatch",
+      "scenario": "TestPetriIndependentWorkDispatchesConcurrently",
       "lane": "short",
       "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
-      "catch_all": "workflow",
+      "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
+      "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/workflow/batch_ideation_pipeline_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestSerialIdeationPipeline_ConcurrencyLimit1",
+      "source_path": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/petri/dispatch",
+      "scenario": "TestPetriConcurrentResultsCorrelateToOriginalWork",
       "lane": "short",
       "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
-      "catch_all": "workflow",
+      "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/petri/dispatch",
+      "scenario": "TestPetriConcurrentFailureDoesNotDuplicateDispatch",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/workflow/code_review_loop_long_test.go",
@@ -5167,56 +5351,6 @@
       "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
     },
     {
-      "source_path": "tests/functional/workflow/dispatcher_workflow_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestDispatcherWorkflow_ExecutionPoolIsolation",
-      "lane": "functionallong",
-      "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
-    },
-    {
-      "source_path": "tests/functional/workflow/dispatcher_workflow_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestDispatcherWorkflow_MultipleSeedFiles",
-      "lane": "functionallong",
-      "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
-    },
-    {
-      "source_path": "tests/functional/workflow/dispatcher_workflow_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestDispatcherWorkflow_ReviewFailurePerItem",
-      "lane": "functionallong",
-      "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
-    },
-    {
-      "source_path": "tests/functional/workflow/dispatcher_workflow_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestDispatcherWorkflow_SingleSeedFile",
-      "lane": "functionallong",
-      "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
-    },
-    {
-      "source_path": "tests/functional/workflow/dispatcher_workflow_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestDispatcherWorkflow_TwoSeedFiles",
-      "lane": "functionallong",
-      "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
-    },
-    {
       "source_path": "tests/functional/workflow/executor_context_long_test.go",
       "package": "you-agent-factory/tests/functional/workflow",
       "scenario": "TestExecutorContext_InputTokenColors",
@@ -5279,16 +5413,6 @@
     {
       "source_path": "tests/functional/workflow/idea_plan_review_execute_with_limits_long_test.go",
       "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestIdeaPlanExecuteReviewWithLimits_TraceLineageAndOutcomes",
-      "lane": "functionallong",
-      "destination": "tests/functional/orchestration/petri/dispatch/simple_run_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
-    },
-    {
-      "source_path": "tests/functional/workflow/idea_plan_review_execute_with_limits_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
       "scenario": "TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorDueToRepeatingTooMuch",
       "lane": "functionallong",
       "destination": "tests/functional/orchestration/petri/dispatch/simple_run_test.go",
@@ -5320,6 +5444,16 @@
       "source_path": "tests/functional/workflow/idea_plan_review_execute_with_limits_long_test.go",
       "package": "you-agent-factory/tests/functional/workflow",
       "scenario": "TestIdeaPlanExecuteReviewWithLimitsFailsOnScriptExecution",
+      "lane": "functionallong",
+      "destination": "tests/functional/orchestration/petri/dispatch/simple_run_test.go",
+      "catch_all": "workflow",
+      "specialty_targets": "none",
+      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
+    },
+    {
+      "source_path": "tests/functional/workflow/idea_plan_review_execute_with_limits_long_test.go",
+      "package": "you-agent-factory/tests/functional/workflow",
+      "scenario": "TestIdeaPlanExecuteReviewWithLimits_TraceLineageAndOutcomes",
       "lane": "functionallong",
       "destination": "tests/functional/orchestration/petri/dispatch/simple_run_test.go",
       "catch_all": "workflow",
@@ -5459,7 +5593,7 @@
     {
       "source_path": "tests/functional/workflow/multi_output_long_test.go",
       "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestMultiOutput_WithoutStopWord",
+      "scenario": "TestMultiOutput_WithStopWord",
       "lane": "functionallong",
       "destination": "tests/functional/workstations/repeater/reject_accept_test.go",
       "catch_all": "workflow",
@@ -5469,7 +5603,7 @@
     {
       "source_path": "tests/functional/workflow/multi_output_long_test.go",
       "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestMultiOutput_WithStopWord",
+      "scenario": "TestMultiOutput_WithoutStopWord",
       "lane": "functionallong",
       "destination": "tests/functional/workstations/repeater/reject_accept_test.go",
       "catch_all": "workflow",
@@ -5765,53 +5899,106 @@
       "catch_all": "workflow",
       "specialty_targets": "none",
       "deletion_only_batch": "workflow-delete-05-workstations-repeater"
+    },
+    {
+      "source_path": "tests/functional/workstations/execution/basic_test.go",
+      "package": "you-agent-factory/tests/functional/workstations/execution",
+      "scenario": "TestExecutionWorkstationDispatchesEligibleWorkOnce",
+      "lane": "functionallong",
+      "destination": "tests/functional/workstations/execution/basic_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workstations/execution/basic_test.go",
+      "package": "you-agent-factory/tests/functional/workstations/execution",
+      "scenario": "TestExecutionWorkstationFailureProjectsPublicFailedState",
+      "lane": "functionallong",
+      "destination": "tests/functional/workstations/execution/basic_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workstations/poller/poller_test.go",
+      "package": "you-agent-factory/tests/functional/workstations/poller",
+      "scenario": "TestPollerCreatesWorkFromExternalItems",
+      "lane": "short",
+      "destination": "tests/functional/workstations/poller/poller_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workstations/poller/poller_test.go",
+      "package": "you-agent-factory/tests/functional/workstations/poller",
+      "scenario": "TestPollerEmptyResultCreatesNoWork",
+      "lane": "short",
+      "destination": "tests/functional/workstations/poller/poller_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workstations/poller/poller_test.go",
+      "package": "you-agent-factory/tests/functional/workstations/poller",
+      "scenario": "TestPollerRecoverableFailureRetriesWithoutDuplicates",
+      "lane": "short",
+      "destination": "tests/functional/workstations/poller/poller_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-27T05:22:30Z",
+  "scanned_at_utc": "2026-07-27T12:57:10Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 27,
       "guards_batch": 28,
-      "none": 209,
+      "none": 234,
       "replay_contracts": 24,
-      "runtime_api": 108,
-      "smoke": 91,
-      "workflow": 71
+      "runtime_api": 106,
+      "smoke": 89,
+      "workflow": 64
     },
     "by_top_level_package": {
       "acceptance": 14,
       "bootstrap_portability": 27,
-      "cli": 73,
+      "cli": 72,
       "factory": 4,
       "guards_batch": 28,
       "models": 5,
       "observability": 9,
       "operator_settings": 1,
+      "orchestration": 3,
       "product": 10,
-      "providers": 62,
+      "providers": 67,
       "replay_contracts": 24,
-      "runtime_api": 108,
+      "runtime_api": 106,
       "sessionparity": 13,
-      "smoke": 91,
-      "transport": 15,
-      "work": 1,
-      "workers": 2,
-      "workflow": 71
+      "sessions": 2,
+      "smoke": 89,
+      "transport": 22,
+      "work": 2,
+      "workers": 5,
+      "workflow": 64,
+      "workstations": 5
     },
-    "customer_top_level_Test_scenarios": 558,
-    "files_with_customer_Test": 186,
-    "functional_test_go_files": 225,
-    "helper_only_non_customer_files": 34,
+    "customer_top_level_Test_scenarios": 572,
+    "files_with_customer_Test": 200,
+    "functional_test_go_files": 251,
+    "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
-    "lane_functionallong": 122,
-    "lane_short": 436
+    "lane_functionallong": 116,
+    "lane_short": 456
   },
-  "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. Non-catch-all rows mapped by FND-007-006; catch-all rows mapped by FND-007-003…005.",
+  "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. Non-catch-all rows mapped by FND-007-006; catch-all rows mapped by FND-007-003\u2026005.",
   "runtime_api_mapping": {
     "mapped_at": "2026-07-24T02:25:00Z",
     "story": "fnd-007-migration-ledger-003",
-    "scenario_count": 108,
+    "scenario_count": 107,
     "batch_ids": [
       "runtime_api-delete-01-transport-http",
       "runtime_api-delete-02-work-submission",
@@ -5830,7 +6017,7 @@
   "smoke_workflow_mapping": {
     "mapped_at_utc": "2026-07-24T02:26:56Z",
     "smoke_scenarios": 94,
-    "workflow_scenarios": 73
+    "workflow_scenarios": 66
   },
   "guards_bootstrap_replay_mapping": {
     "mapped_at_utc": "2026-07-24T02:29:50Z",
@@ -5878,16 +6065,16 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T00:58:39Z",
-    "story": "fnd-007-migration-ledger-007",
-    "live_customer_scenarios": 547,
-    "ledger_rows": 547,
+    "audited_at_utc": "2026-07-27T13:05:00Z",
+    "story": "ft-wave1-cli-ndjson-stream-004",
+    "live_customer_scenarios": 572,
+    "ledger_rows": 572,
     "unmapped_scenarios": 0,
     "checklist_destinations": 434,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 425,
-    "lane_functionallong": 122,
+    "lane_short": 456,
+    "lane_functionallong": 116,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
     "validator": "go run ./cmd/migrationledgercheck"

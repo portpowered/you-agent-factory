@@ -193,15 +193,15 @@ func TestSessionResolvedHandlersRejectMissingOperations(t *testing.T) {
 
 	registry, err = commandregistry.NewSessionResolvedRegistry(
 		manifest,
-		commandregistry.SessionResolvedServices{
-			CreateSession:  func(sessioncli.CreateConfig) error { return nil },
-			DeleteSession:  func(sessioncli.DeleteConfig) error { return nil },
-			ListSessions:   func(sessioncli.ListConfig) error { return nil },
-			ShowSession:    func(sessioncli.ShowConfig) error { return nil },
+		commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+			Create:         func(sessioncli.CreateConfig) error { return nil },
+			Delete:         func(sessioncli.DeleteConfig) error { return nil },
+			List:           func(sessioncli.ListConfig) error { return nil },
+			Show:           func(sessioncli.ShowConfig) error { return nil },
 			ListDispatches: func(sessioncli.DispatchesConfig) error { return nil },
-			PauseSession:   func(sessioncli.LifecycleControlConfig) error { return nil },
-			ResumeSession:  func(sessioncli.LifecycleControlConfig) error { return nil },
-		},
+			Pause:          func(sessioncli.LifecycleControlConfig) error { return nil },
+			Resume:         func(sessioncli.LifecycleControlConfig) error { return nil },
+		}, nil, nil),
 	)
 	if err != nil {
 		t.Fatalf("NewSessionResolvedRegistry(valid services) error = %v", err)
