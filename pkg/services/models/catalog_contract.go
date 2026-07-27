@@ -145,6 +145,7 @@ func (detail Detail) Clone() Detail {
 	detail.Capabilities = make([]Capability, len(capabilities))
 	for i, capability := range capabilities {
 		detail.Capabilities[i] = capability
+		detail.Capabilities[i].ModelProvider = cloneStringPointer(capability.ModelProvider)
 		detail.Capabilities[i].Operations = cloneOperations(capability.Operations)
 		detail.Capabilities[i].ResourceNames = append([]string(nil), capability.ResourceNames...)
 	}

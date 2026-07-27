@@ -30,8 +30,6 @@ import { resetCurrentActivityGraphLayoutCacheForTests } from "../../../hooks/rea
 import type { CurrentActivitySelection } from "../../../lib/react-flow-current-activity-card-types";
 import { ReactFlowCurrentActivityCard } from "../../react-flow-current-activity-card";
 
-export const PADDING_CLASS_PATTERN = /(^|\s)p[trblxy]?-[^\s]+/;
-
 export interface RenderCurrentActivityOptions {
   activateFactory?: (
     input: FactoryImportConfirmInput,
@@ -222,54 +220,6 @@ export function renderWithQueryClient(view: ReactElement) {
   );
 }
 
-export function createFactoryImportValue(): FactoryPngImportValue {
-  return {
-    factory: {
-      name: "Dropped Factory",
-      workTypes: [],
-      workers: [],
-      workstations: [],
-    },
-    previewImageSrc: "blob:factory-preview",
-    revokePreviewImageSrc: vi.fn(),
-    schemaVersion: "portos.agent-factory.png.v1",
-  };
-}
-
-export function createImportController(
-  overrides: Partial<CurrentActivityImportController> = {},
-): CurrentActivityImportController {
-  return {
-    activateImport: vi.fn().mockResolvedValue(undefined),
-    activationState: { status: "idle" },
-    clearActivationError: vi.fn(),
-    clearError: vi.fn(),
-    closeImportPreview: vi.fn(),
-    dropState: { status: "idle" },
-    importPreviewState: { status: "idle" },
-    onDragEnter: vi.fn(),
-    onDragLeave: vi.fn(),
-    onDragOver: vi.fn(),
-    onDrop: vi.fn(),
-    ...overrides,
-  };
-}
-
-export function createFileDropTransfer(files: File[]): {
-  dataTransfer: {
-    dropEffect: string;
-    files: File[];
-    types: string[];
-  };
-} {
-  return {
-    dataTransfer: {
-      dropEffect: "none",
-      files,
-      types: ["Files"],
-    },
-  };
-}
 let restoreBrowserTestShims: (() => void) | null = null;
 
 export function registerCurrentActivityCardTestLifecycle(): void {

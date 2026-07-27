@@ -119,8 +119,8 @@ func TestConcurrentResolveAndCloseReturnOnlyLiveOrStaleOutcomes(t *testing.T) {
 						errCh <- fmt.Errorf("closing scope resolved %q, want closing", got)
 						return
 					}
-				case errors.Is(err, runtimescopes.ErrScopeUnknown):
-				// Close linearized first, so the stale outcome is contract-valid.
+				case errors.Is(err, runtimescopes.ErrScopeClosed):
+					// Close linearized first, so the closed outcome is contract-valid.
 				default:
 					errCh <- fmt.Errorf("resolve closing scope: %w", err)
 					return
@@ -156,8 +156,8 @@ func TestConcurrentResolveAndCloseReturnOnlyLiveOrStaleOutcomes(t *testing.T) {
 		t.Error(err)
 	}
 
-	if _, err := service.Resolve(closingRef); !errors.Is(err, runtimescopes.ErrScopeUnknown) {
-		t.Fatalf("Resolve closed scope error = %v, want ErrScopeUnknown", err)
+	if _, err := service.Resolve(closingRef); !errors.Is(err, runtimescopes.ErrScopeClosed) {
+		t.Fatalf("Resolve closed scope error = %v, want ErrScopeClosed", err)
 	}
 	assertFactoryDirectory(t, service, liveRef, "live")
 }
