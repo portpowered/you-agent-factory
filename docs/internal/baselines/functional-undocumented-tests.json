@@ -1479,26 +1479,6 @@
       "name": "TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers"
     },
     {
-      "file": "sessions/cli/resolved_session_family_test.go",
-      "name": "TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch"
-    },
-    {
-      "file": "sessions/cli/resolved_session_family_test.go",
-      "name": "TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition"
-    },
-    {
-      "file": "transport/submit/submit_test.go",
-      "name": "TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure"
-    },
-    {
-      "file": "transport/submit/submit_test.go",
-      "name": "TestSubmitFamilyExecutesThroughRootBuiltProcess"
-    },
-    {
-      "file": "work/cli/resolved_work_family_test.go",
-      "name": "TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs"
-    },
-    {
       "file": "work/visualization/dependency_graph_test.go",
       "name": "TestDependencyGraphVisualization_RendersCompleteEscapedFlowchart"
     },
