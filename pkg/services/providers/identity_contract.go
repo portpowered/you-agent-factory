@@ -48,19 +48,24 @@ func (id ID) String() string {
 }
 
 // Descriptor is the Providers-owned enumeration value for one catalog provider.
-// Availability, capability, and prerequisite facts publish on later catalog
-// slices; this value carries the identity facts peers need to list and name
-// providers without importing Workers provider internals.
+// It carries identity, availability, capability, and prerequisite facts peers
+// need to list and select providers without importing Workers provider internals.
 type Descriptor struct {
-	ID          ID
-	Aliases     []string
-	DisplayName string
+	ID            ID
+	Aliases       []string
+	DisplayName   string
+	Availability  Availability
+	Readiness     Readiness
+	Prerequisites []Prerequisite
+	Capabilities  []Capability
 }
 
 // Clone returns a detached descriptor copy.
 func (descriptor Descriptor) Clone() Descriptor {
 	cloned := descriptor
 	cloned.Aliases = append([]string(nil), descriptor.Aliases...)
+	cloned.Prerequisites = clonePrerequisites(descriptor.Prerequisites)
+	cloned.Capabilities = append([]Capability(nil), descriptor.Capabilities...)
 	return cloned
 }
 
