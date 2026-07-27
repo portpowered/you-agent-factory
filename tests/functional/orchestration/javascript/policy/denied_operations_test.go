@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -35,15 +37,46 @@ func TestJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic(t *testing.
 	first := runPolicyDeniedJavaScriptInvocation(t, dir)
 	second := runPolicyDeniedJavaScriptInvocation(t, dir)
 
-	assertPolicyDeniedInvocationOutcome(t, first)
-	assertPolicyDeniedInvocationOutcome(t, second)
-	if first.policyDiagnostic != second.policyDiagnostic {
+	assertPolicyDeniedInvocationOutcome(t, first.outcome)
+	assertPolicyDeniedInvocationOutcome(t, second.outcome)
+	if first.outcome.policyDiagnostic != second.outcome.policyDiagnostic {
 		t.Fatalf(
 			"policy diagnostic = %q then %q, want identical stable denial across repeated runs",
-			first.policyDiagnostic,
-			second.policyDiagnostic,
+			first.outcome.policyDiagnostic,
+			second.outcome.policyDiagnostic,
 		)
 	}
+}
+
+// TestJavaScriptPolicyFailureDoesNotDispatchExternalWork proves a denied child
+// operation fails through the public invocation boundary before any external
+// worker or provider work is dispatched when external effects are substituted
+// only through edges.Edges.
+func TestJavaScriptPolicyFailureDoesNotDispatchExternalWork(t *testing.T) {
+	t.Parallel()
+
+	dir := scaffoldPolicyDeniedJavaScriptFactory(t)
+	run := runPolicyDeniedJavaScriptInvocation(t, dir)
+
+	assertPolicyDeniedInvocationOutcome(t, run.outcome)
+	if run.providerRunner.CallCount() != 0 {
+		t.Fatalf(
+			"provider command runner call count = %d, want 0 before policy-denied child dispatch",
+			run.providerRunner.CallCount(),
+		)
+	}
+	if run.workerProvider.CallCount() != 0 {
+		t.Fatalf(
+			"worker provider inference call count = %d, want 0 before policy-denied child dispatch",
+			run.workerProvider.CallCount(),
+		)
+	}
+}
+
+type policyDeniedInvocationRun struct {
+	providerRunner *support.RecordingCommandRunner
+	workerProvider *testutil.MockProvider
+	outcome        policyDeniedInvocationOutcome
 }
 
 type policyDeniedInvocationOutcome struct {
@@ -92,10 +125,13 @@ func scaffoldPolicyDeniedJavaScriptFactory(t *testing.T) string {
 	return dir
 }
 
-func runPolicyDeniedJavaScriptInvocation(t *testing.T, dir string) policyDeniedInvocationOutcome {
+func runPolicyDeniedJavaScriptInvocation(t *testing.T, dir string) policyDeniedInvocationRun {
 	t.Helper()
 
 	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	workerProvider := testutil.NewMockProvider(
+		workerexecution.InferenceResponse{Content: `{"text":"should not run"}`},
+	)
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
@@ -109,25 +145,30 @@ func runPolicyDeniedJavaScriptInvocation(t *testing.T, dir string) policyDeniedI
 
 	err := support.BuildProcess(t, serviceedges.Edges{
 		ProviderCommandRunner: runner,
+		ProviderOverride:      workerProvider,
 	}).Execute(inputs.Input)
 	if err == nil {
 		t.Fatalf("Process.Execute() error = nil; stdout:\n%s\nstderr:\n%s", inputs.Stdout(), inputs.Stderr())
 	}
 
-	outcome := policyDeniedInvocationOutcome{
+	runOutcome := policyDeniedInvocationOutcome{
 		policyDiagnostic: extractPolicyDiagnostic(t, inputs.Stdout(), inputs.Stderr(), err.Error()),
 	}
 	if stdout := strings.TrimSpace(inputs.Stdout()); stdout != "" {
-		if decodeErr := json.Unmarshal([]byte(stdout), &outcome.response); decodeErr != nil {
+		if decodeErr := json.Unmarshal([]byte(stdout), &runOutcome.response); decodeErr != nil {
 			t.Fatalf("decode InvocationResponse: %v\nstdout:\n%s", decodeErr, stdout)
 		}
 	}
 	if stderr := strings.TrimSpace(inputs.Stderr()); stderr != "" {
-		if decodeErr := json.Unmarshal([]byte(stderr), &outcome.errorResponse); decodeErr != nil {
+		if decodeErr := json.Unmarshal([]byte(stderr), &runOutcome.errorResponse); decodeErr != nil {
 			t.Fatalf("decode ErrorResponse: %v\nstderr:\n%s", decodeErr, stderr)
 		}
 	}
-	return outcome
+	return policyDeniedInvocationRun{
+		providerRunner: runner,
+		workerProvider: workerProvider,
+		outcome:        runOutcome,
+	}
 }
 
 func assertPolicyDeniedInvocationOutcome(t *testing.T, outcome policyDeniedInvocationOutcome) {
