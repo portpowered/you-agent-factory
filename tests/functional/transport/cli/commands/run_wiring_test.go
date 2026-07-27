@@ -193,6 +193,60 @@ func TestCLIRunNamedFactory(t *testing.T) {
 	})
 }
 
+// TestCLIRunInvalidFactoryReturnsValidationFailure proves you run fails with an
+// actionable Factory load validation diagnostic when the selected Factory cannot
+// be loaded, and writes no success primary-result payload to stdout.
+func TestCLIRunInvalidFactoryReturnsValidationFailure(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI run invalid factory wiring")
+	}
+
+	factoryDir := support.ScaffoldFactory(t, runWiringFactoryConfigWithoutDefault())
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	prompt := "missing-default-handling"
+
+	binaryPath := buildRunWiringYouCLIBinary(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(
+		ctx,
+		binaryPath,
+		"run",
+		"--factory", factoryPath,
+		"--no-record",
+		"--quiet",
+		prompt,
+	)
+	cmd.Dir = factoryDir
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err == nil {
+		t.Fatal("expected you run to fail for invalid Factory load")
+	}
+
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("you run error = %v, want *exec.ExitError", err)
+	}
+	if exitErr.ExitCode() != 1 {
+		t.Fatalf("you run exit code = %d, want validation failure exit code 1", exitErr.ExitCode())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want no success primary-result payload on load validation failure", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "handlingBehavior DEFAULT") {
+		t.Fatalf(
+			"stderr = %q, want actionable load/validation diagnostic for missing DEFAULT handling",
+			stderr.String(),
+		)
+	}
+}
+
 // TestCLIRunFactoryByPath proves you run executes against an authored Factory
 // filesystem path and writes the invocation primary result to stdout on success.
 func TestCLIRunFactoryByPath(t *testing.T) {
@@ -238,6 +292,24 @@ func TestCLIRunFactoryByPath(t *testing.T) {
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty stderr on successful path run", stderr.String())
 	}
+}
+
+func runWiringFactoryConfigWithoutDefault() map[string]any {
+	cfg := runWiringFactoryConfig()
+	workTypes := cfg["workTypes"].([]map[string]any)
+	withoutDefault := make([]map[string]any, len(workTypes))
+	for i, workType := range workTypes {
+		cloned := make(map[string]any, len(workType))
+		for key, value := range workType {
+			if key == "handlingBehavior" {
+				continue
+			}
+			cloned[key] = value
+		}
+		withoutDefault[i] = cloned
+	}
+	cfg["workTypes"] = withoutDefault
+	return cfg
 }
 
 func runWiringFactoryConfig() map[string]any {
