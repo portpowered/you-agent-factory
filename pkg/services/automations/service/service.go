@@ -73,7 +73,7 @@ func NewService(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-) automations.Service {
+) *Service {
 	return New(
 		logger,
 		clock,
@@ -84,6 +84,64 @@ func NewService(
 		resolveTemplates,
 		executionPolicy,
 	)
+}
+
+// Root returns the inert published Automation operations backed by the same
+// reconciliation owner used for runtime scheduler supervision.
+func (s *Service) Root() automations.Root {
+	if s == nil || s.reconciler == nil {
+		return automations.Root{}
+	}
+	return automations.Root{Operations: s}
+}
+
+func (s *Service) Reconcile(
+	ctx context.Context,
+	request automations.ReconcileRequest,
+) (automations.ReconcileResult, error) {
+	return s.reconciler.Reconcile(ctx, request)
+}
+
+func (s *Service) StartSource(
+	ctx context.Context,
+	request automations.StartSourceRequest,
+) (automations.StartSourceResult, error) {
+	return s.reconciler.StartSource(ctx, request)
+}
+
+func (s *Service) StopSource(
+	ctx context.Context,
+	request automations.StopSourceRequest,
+) (automations.StopSourceResult, error) {
+	return s.reconciler.StopSource(ctx, request)
+}
+
+func (s *Service) WaitSource(
+	ctx context.Context,
+	request automations.WaitSourceRequest,
+) (automations.WaitSourceResult, error) {
+	return s.reconciler.WaitSource(ctx, request)
+}
+
+func (s *Service) SourceStatus(
+	ctx context.Context,
+	request automations.SourceStatusRequest,
+) (automations.SourceStatusResult, error) {
+	return s.reconciler.SourceStatus(ctx, request)
+}
+
+func (s *Service) GetStatus(
+	ctx context.Context,
+	request automations.GetStatusRequest,
+) (automations.GetStatusResult, error) {
+	return s.reconciler.GetStatus(ctx, request)
+}
+
+func (s *Service) GetCursor(
+	ctx context.Context,
+	request automations.GetCursorRequest,
+) (automations.GetCursorResult, error) {
+	return s.reconciler.GetCursor(ctx, request)
 }
 
 func (s *Service) logger() *zap.Logger {

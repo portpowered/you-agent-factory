@@ -161,6 +161,190 @@ func TestSchedulerSourceObservationAttachesBeforeStartEffectInitialization(t *te
 	sidecars.Wait()
 }
 
+func TestProductionRootUsesSchedulerReconciliationOwner(t *testing.T) {
+	t.Parallel()
+
+	const workflowID = "workflow-production-root"
+	service, identity, sidecars, cancel := startProductionRootScheduler(t, workflowID)
+	defer cancel()
+	root := service.Root()
+	observation := assertProductionRootStatus(t, root, identity)
+	assertProductionRootReconcile(t, root, observation)
+	assertProductionRootRepeatedStart(t, root, observation)
+	assertProductionRootInstanceReads(t, root, observation)
+	stopProductionRootScheduler(t, root, identity, sidecars)
+}
+
+func startProductionRootScheduler(
+	t *testing.T,
+	workflowID string,
+) (*Service, automations.SourceIdentity, *sync.WaitGroup, context.CancelFunc) {
+	t.Helper()
+	service := NewService(
+		zap.NewNop(), clockwork.NewFakeClock(), nil, workflowID, "", nil, nil, nil,
+	)
+	identity := automations.SourceIdentity{
+		AutomationID: workflowID,
+		SourceID:     runtimeSchedulerSourceID,
+	}
+	factoryConfig := &interfaces.FactoryConfig{}
+	runtimeConfig := runtimefixtures.RuntimeConfigLookupFixture{
+		Factory:     factoryConfig,
+		FactoryPath: t.TempDir(),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	sidecars := &sync.WaitGroup{}
+	if err := service.StartSchedulerSidecarsForRuntime(
+		ctx,
+		sidecars,
+		runtimeConfig.FactoryDir(),
+		factoryConfig,
+		runtimeConfig,
+		func(context.Context, work.WorkRequest) error { return nil },
+	); err != nil {
+		t.Fatalf("StartSchedulerSidecarsForRuntime: %v", err)
+	}
+	return service, identity, sidecars, cancel
+}
+
+func assertProductionRootStatus(
+	t *testing.T,
+	root automations.Root,
+	identity automations.SourceIdentity,
+) automations.SourceObservation {
+	t.Helper()
+	status, err := root.SourceStatus(
+		context.Background(),
+		automations.SourceStatusRequest{Identity: identity},
+	)
+	if err != nil {
+		t.Fatalf("Root.SourceStatus: %v", err)
+	}
+	if status.Observation.State != automations.ObservedLifecycleRunning {
+		t.Fatalf("Root.SourceStatus state = %q, want %q",
+			status.Observation.State, automations.ObservedLifecycleRunning)
+	}
+	return status.Observation
+}
+
+func assertProductionRootReconcile(
+	t *testing.T,
+	root automations.Root,
+	observation automations.SourceObservation,
+) {
+	t.Helper()
+	reconciled, err := root.Reconcile(
+		context.Background(),
+		automations.ReconcileRequest{
+			Desired: []automations.DesiredSpec{{
+				AutomationID: observation.Identity.AutomationID,
+				SourceID:     observation.Identity.SourceID,
+				Kind:         runtimeSchedulerSourceKind,
+				State:        automations.DesiredLifecycleRunning,
+			}},
+			Observed: []automations.ObservedInstance{{
+				AutomationID: observation.Identity.AutomationID,
+				SourceID:     observation.Identity.SourceID,
+				InstanceID:   observation.InstanceID,
+				State:        observation.State,
+			}},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Root.Reconcile: %v", err)
+	}
+	if len(reconciled.Outcomes) != 1 ||
+		reconciled.Outcomes[0].Convergence != automations.ConvergenceStatusConverged {
+		t.Fatalf("Root.Reconcile outcomes = %+v, want one converged source",
+			reconciled.Outcomes)
+	}
+}
+
+func assertProductionRootRepeatedStart(
+	t *testing.T,
+	root automations.Root,
+	observation automations.SourceObservation,
+) {
+	t.Helper()
+	started, err := root.StartSource(
+		context.Background(),
+		automations.StartSourceRequest{
+			Identity: observation.Identity,
+			Kind:     runtimeSchedulerSourceKind,
+		},
+	)
+	if err != nil {
+		t.Fatalf("Root.StartSource: %v", err)
+	}
+	if !started.Outcome.Idempotent ||
+		started.Outcome.Observation.InstanceID != observation.InstanceID {
+		t.Fatalf("Root.StartSource outcome = %+v, want same idempotent instance",
+			started.Outcome)
+	}
+}
+
+func assertProductionRootInstanceReads(
+	t *testing.T,
+	root automations.Root,
+	observation automations.SourceObservation,
+) {
+	t.Helper()
+	instanceStatus, err := root.GetStatus(
+		context.Background(),
+		automations.GetStatusRequest{InstanceID: observation.InstanceID},
+	)
+	if err != nil {
+		t.Fatalf("Root.GetStatus: %v", err)
+	}
+	if instanceStatus.AutomationID != observation.Identity.AutomationID ||
+		instanceStatus.Status != automations.ObservedLifecycleRunning {
+		t.Fatalf("Root.GetStatus = %+v, want workflow %q running",
+			instanceStatus, observation.Identity.AutomationID)
+	}
+	cursor, err := root.GetCursor(
+		context.Background(),
+		automations.GetCursorRequest{InstanceID: observation.InstanceID},
+	)
+	if err != nil {
+		t.Fatalf("Root.GetCursor: %v", err)
+	}
+	if cursor.AutomationID != observation.Identity.AutomationID ||
+		cursor.InstanceID != observation.InstanceID {
+		t.Fatalf("Root.GetCursor = %+v, want workflow/instance %q/%q",
+			cursor, observation.Identity.AutomationID, observation.InstanceID)
+	}
+}
+
+func stopProductionRootScheduler(
+	t *testing.T,
+	root automations.Root,
+	identity automations.SourceIdentity,
+	sidecars *sync.WaitGroup,
+) {
+	t.Helper()
+	if _, err := root.StopSource(
+		context.Background(),
+		automations.StopSourceRequest{Identity: identity},
+	); err != nil {
+		t.Fatalf("Root.StopSource: %v", err)
+	}
+	stopped, err := root.WaitSource(
+		context.Background(),
+		automations.WaitSourceRequest{
+			Identity: identity,
+			Desired:  automations.DesiredLifecycleStopped,
+		},
+	)
+	if err != nil {
+		t.Fatalf("Root.WaitSource: %v", err)
+	}
+	if stopped.Outcome.Observation.State != automations.ObservedLifecycleStopped ||
+		stopped.Outcome.Convergence != automations.ConvergenceStatusConverged {
+		t.Fatalf("Root.WaitSource outcome = %+v, want stopped/converged", stopped.Outcome)
+	}
+	sidecars.Wait()
+}
+
 func startSchedulerConcurrently(
 	t *testing.T,
 	service *Service,

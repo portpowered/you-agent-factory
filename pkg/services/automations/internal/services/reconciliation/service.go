@@ -18,6 +18,8 @@ type Service interface {
 	StopSource(context.Context, automations.StopSourceRequest) (automations.StopSourceResult, error)
 	WaitSource(context.Context, automations.WaitSourceRequest) (automations.WaitSourceResult, error)
 	SourceStatus(context.Context, automations.SourceStatusRequest) (automations.SourceStatusResult, error)
+	GetStatus(context.Context, automations.GetStatusRequest) (automations.GetStatusResult, error)
+	GetCursor(context.Context, automations.GetCursorRequest) (automations.GetCursorResult, error)
 }
 
 // Effects applies source-specific lifecycle effects without owning

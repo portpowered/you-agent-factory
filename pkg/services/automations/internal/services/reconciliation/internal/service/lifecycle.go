@@ -45,7 +45,7 @@ func (s *service) StartSource(
 	}
 	if err := s.effects.Start(ctx, *effect); err != nil {
 		record.mu.Lock()
-		outcome, terminalErr := commitStartFailure(record, prior, err)
+		outcome, terminalErr := commitStartFailure(record, *effect, prior, err)
 		record.mu.Unlock()
 		return automations.StartSourceResult{Outcome: outcome}, terminalErr
 	}
@@ -138,9 +138,15 @@ func existingStartResult(
 
 func commitStartFailure(
 	record *sourceRecord,
+	effect reconciliation.StartEffect,
 	prior lifecycleSnapshot,
 	err error,
 ) (automations.LifecycleOutcome, error) {
+	if record.desired != automations.DesiredLifecycleRunning ||
+		record.observation != effect.Observation {
+		result, currentErr := currentWaitResult(automations.DesiredLifecycleRunning, record)
+		return result.Outcome, currentErr
+	}
 	if isCancellation(err) {
 		record.desired = prior.desired
 		record.observation = prior.observation
@@ -415,6 +421,66 @@ func (s *service) SourceStatus(
 	record.mu.Lock()
 	defer record.mu.Unlock()
 	return automations.SourceStatusResult{Observation: record.observation}, nil
+}
+
+func (s *service) GetStatus(
+	_ context.Context,
+	request automations.GetStatusRequest,
+) (automations.GetStatusResult, error) {
+	record, err := s.recordByInstanceID("GetStatus", request.InstanceID)
+	if err != nil {
+		return automations.GetStatusResult{}, err
+	}
+	record.mu.Lock()
+	defer record.mu.Unlock()
+	return automations.GetStatusResult{
+		AutomationID: record.observation.Identity.AutomationID,
+		InstanceID:   record.observation.InstanceID,
+		Status:       record.observation.State,
+	}, nil
+}
+
+func (s *service) GetCursor(
+	_ context.Context,
+	request automations.GetCursorRequest,
+) (automations.GetCursorResult, error) {
+	record, err := s.recordByInstanceID("GetCursor", request.InstanceID)
+	if err != nil {
+		return automations.GetCursorResult{}, err
+	}
+	record.mu.Lock()
+	defer record.mu.Unlock()
+	if request.ExpectedCursor != "" && request.ExpectedCursor != record.observation.Cursor {
+		return automations.GetCursorResult{}, operationError(
+			"GetCursor", automations.ErrorCodeConflict, automations.ErrConflict,
+			"expected cursor differs from the authoritative cursor",
+		)
+	}
+	return automations.GetCursorResult{
+		AutomationID: record.observation.Identity.AutomationID,
+		InstanceID:   record.observation.InstanceID,
+		Cursor:       record.observation.Cursor,
+	}, nil
+}
+
+func (s *service) recordByInstanceID(op, instanceID string) (*sourceRecord, error) {
+	if strings.TrimSpace(instanceID) == "" || instanceID != strings.TrimSpace(instanceID) {
+		return nil, invalidOperationError(op, "malformed instance identity")
+	}
+	s.recordsMu.RLock()
+	defer s.recordsMu.RUnlock()
+	for _, record := range s.records {
+		record.mu.Lock()
+		matches := record.observation.InstanceID == instanceID
+		record.mu.Unlock()
+		if matches {
+			return record, nil
+		}
+	}
+	return nil, operationError(
+		op, automations.ErrorCodeNotFound, automations.ErrNotFound,
+		"source instance is not supervised",
+	)
 }
 
 func (s *service) recordForStart(
