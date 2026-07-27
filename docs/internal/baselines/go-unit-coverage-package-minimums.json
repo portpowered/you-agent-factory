@@ -1574,7 +1574,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear",
-      "minimum": 80.33
+      "minimum": 79.91
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/services/inference",

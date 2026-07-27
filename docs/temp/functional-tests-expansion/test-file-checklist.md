@@ -58,7 +58,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIQuietModeSuppressesNonResultNoise` verifies quiet output remains
     script-safe.
 
-- [ ] `tests/functional/transport/cli/process/exit_codes_test.go`
+- [x] `tests/functional/transport/cli/process/exit_codes_test.go`
   - `TestCLIValidationFailureExitCode` covers invalid customer input.
   - `TestCLIWorkerFailureExitCode` covers a terminal worker failure.
   - `TestCLIInterruptedExitCode` covers cancellation/interruption.
