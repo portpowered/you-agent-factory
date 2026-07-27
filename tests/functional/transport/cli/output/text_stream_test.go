@@ -2,6 +2,7 @@ package output_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"strings"
 	"sync"
@@ -11,6 +12,7 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -66,6 +68,119 @@ func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
 			t.Fatalf("stdout line %q is not canonical customer lifecycle output\nstdout:\n%s", line, stdout)
 		}
 	}
+}
+
+// TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise proves human text
+// presentation on stdout stays free of NDJSON envelopes, single-JSON
+// InvocationResponse wrappers, retired automation record shapes, and operator
+// lifecycle chatter that clean invocation output must suppress.
+func TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise(t *testing.T) {
+	t.Run("human response-stream lifecycle presentation", func(t *testing.T) {
+		stdout := runGoalHumanInvocation(t, []string{"--output", "response-stream"})
+		assertHumanStdoutFreeOfStructuredEnvelopeNoise(t, stdout)
+		for _, line := range nonEmptyStdoutLines(stdout) {
+			if line == "--- primary result ---" || line == textStreamPrimaryResult {
+				continue
+			}
+			if !isHumanFactoryLifecycleLine(line) {
+				t.Fatalf("stdout line %q is not canonical customer lifecycle output\nstdout:\n%s", line, stdout)
+			}
+		}
+	})
+
+	t.Run("quiet clean primary result", func(t *testing.T) {
+		stdout := runGoalHumanInvocation(t, []string{"--quiet"})
+		assertHumanStdoutFreeOfStructuredEnvelopeNoise(t, stdout)
+		if strings.TrimSpace(stdout) != textStreamPrimaryResult {
+			t.Fatalf("stdout = %q, want only raw primary result %q", stdout, textStreamPrimaryResult)
+		}
+	})
+}
+
+var humanTextStreamForbiddenEnvelopeLiterals = []string{
+	`"recordType":"factory_event"`, `"recordType":"invocation_result"`,
+	`"recordType":"progress"`, `"recordType":"compaction"`, `"recordType":"primary_result"`,
+	"recordType=factory_event", "recordType=invocation_result",
+	"recordType=progress", "recordType=compaction", "recordType=primary_result",
+	"FactoryResponseEvent", "response_event", "provider_session", "providerSession",
+	"textDelta", "toolCallId", "toolCalls",
+	`"primary_result":`, `"marking":`, `"placeId":`, `"Petri":`,
+}
+
+var humanTextStreamForbiddenOperatorChatter = []string{
+	"Factory initiated",
+	"Dashboard URL",
+	"Runtime log",
+	"Opening dashboard",
+	"Recording saved to",
+	"Factory:",
+}
+
+func assertHumanStdoutFreeOfStructuredEnvelopeNoise(t *testing.T, stdout string) {
+	t.Helper()
+
+	for _, forbidden := range humanTextStreamForbiddenEnvelopeLiterals {
+		if strings.Contains(stdout, forbidden) {
+			t.Fatalf("stdout contains structured envelope noise %q:\n%s", forbidden, stdout)
+		}
+	}
+	for _, forbidden := range humanTextStreamForbiddenOperatorChatter {
+		if strings.Contains(stdout, forbidden) {
+			t.Fatalf("stdout contains operator lifecycle chatter %q:\n%s", forbidden, stdout)
+		}
+	}
+	for _, line := range nonEmptyStdoutLines(stdout) {
+		if !strings.HasPrefix(line, "{") {
+			continue
+		}
+		var record struct {
+			RecordType string `json:"recordType"`
+		}
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			continue
+		}
+		if record.RecordType != "" {
+			t.Fatalf("stdout line decodes as NDJSON recordType %q:\n%s", record.RecordType, line)
+		}
+	}
+	if trimmed := strings.TrimSpace(stdout); strings.HasPrefix(trimmed, "{") {
+		var response factoryapi.InvocationResponse
+		if err := json.Unmarshal([]byte(trimmed), &response); err == nil && response.Status != "" {
+			t.Fatalf("stdout decodes as single-JSON InvocationResponse wrapper:\n%s", stdout)
+		}
+	}
+}
+
+func runGoalHumanInvocation(t *testing.T, runArgs []string) string {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	support.InstallPackagedFactory(t, homeDir, goalFactoryName)
+	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName:      "goal-executor",
+			WorkstationName: "execute-goal",
+			RunType:         workers.MockWorkerRunTypeAccept,
+		}},
+	})
+	args := []string{
+		"you", "run", "--named", goalFactoryName,
+		"--with-mock-workers", mockWorkersPath,
+		"--no-record",
+	}
+	args = append(args, runArgs...)
+	args = append(args, "deterministic human text-stream envelope contract")
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
+	}
+	if inputs.Stderr() != "" {
+		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
+	}
+	return inputs.Stdout()
 }
 
 type firstChunkGatedStdoutWriter struct {
