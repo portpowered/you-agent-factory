@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
@@ -76,15 +75,22 @@ type GenericBindings struct {
 	GuardUnknownSubcommands bool
 }
 
-// SessionFamilyBindings supplies the legacy typed option structs updated by
-// stable input-ID bindings while Session handlers migrate to normalized values.
-type SessionFamilyBindings struct {
-	Create     *sessioncli.CreateConfig
-	List       *sessioncli.ListConfig
-	Delete     *sessioncli.DeleteConfig
-	Dispatches *sessioncli.DispatchesConfig
-	Pause      *sessioncli.LifecycleControlConfig
-	Resume     *sessioncli.LifecycleControlConfig
+// InputChanged reports whether the CLI explicitly supplied a manifest input.
+// Callers identify the input only by stable ID; public flag spellings remain
+// private to the generated Cobra projection.
+func InputChanged(cmd *cobra.Command, inputID string) (bool, error) {
+	if cmd == nil {
+		return false, fmt.Errorf("read generic command input state: command is required")
+	}
+	longName, ok := cmd.Annotations[genericInputAnnotationPrefix+inputID]
+	if !ok {
+		return false, fmt.Errorf("read generic command input state %q: input is unavailable", inputID)
+	}
+	flag := lookupCommandFlag(cmd, longName)
+	if flag == nil {
+		return false, fmt.Errorf("read generic command input state %q: projected flag is unavailable", inputID)
+	}
+	return flag.Changed, nil
 }
 
 type persistentInputResolver struct {

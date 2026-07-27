@@ -31,14 +31,13 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 	if err != nil {
 		panic(fmt.Sprintf("build representative handler registry: %v", err))
 	}
-	sessionRegistry, sessionBindings, err := newSessionHandlerRegistry(globals, diagnostics, options)
+	sessionHandlers, err := newSessionHandlerRegistry(options)
 	if err != nil {
 		panic(fmt.Sprintf("build session handler registry: %v", err))
 	}
 	root, err := newGenericRepresentativeFamily(
 		registry,
-		sessionRegistry,
-		sessionBindings,
+		sessionHandlers,
 		representativeSourceValues(options),
 		func(inputs resolvedinput.Inputs) error {
 			return applyRepresentativeResolvedInputs(
@@ -74,8 +73,7 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 
 func newGenericRepresentativeFamily(
 	representativeRegistry *commandregistry.Registry,
-	sessionRegistry *commandregistry.Registry,
-	sessionBindings climanifestcobra.SessionFamilyBindings,
+	sessionHandlers climanifestcobra.CobraHandlerRegistry,
 	sourceValues climanifestcobra.SourceCandidateProvider,
 	rootInputs climanifestcobra.ResolvedInputsBinding,
 ) (*cobra.Command, error) {
@@ -95,11 +93,15 @@ func newGenericRepresentativeFamily(
 		if !record.Runnable {
 			continue
 		}
-		registry := sessionRegistry
-		if commandID == "you" {
-			registry = representativeRegistry
+		if commandID != "you" {
+			handler := sessionHandlers[record.Handler.ID]
+			if handler == nil {
+				return nil, fmt.Errorf("session command %q has no stable-ID handler", commandID)
+			}
+			handlers[record.Handler.ID] = handler
+			continue
 		}
-		registered, lookupErr := registry.LookupHandlers(commandID)
+		registered, lookupErr := representativeRegistry.LookupHandlers(commandID)
 		if lookupErr != nil {
 			return nil, lookupErr
 		}
@@ -108,13 +110,8 @@ func newGenericRepresentativeFamily(
 			registered,
 		)
 	}
-	inputs := make(climanifestcobra.InputBindingRegistry)
-	for inputID, binding := range sessionInputBindings(sessionBindings) {
-		inputs[inputID] = binding
-	}
 	root, err := climanifestcobra.NewCommandTree(manifest, climanifestcobra.GenericBindings{
 		CobraHandlers: handlers,
-		Inputs:        inputs,
 		SourceValues:  sourceValues,
 		RootInputs:    rootInputs,
 	})
@@ -123,36 +120,6 @@ func newGenericRepresentativeFamily(
 	}
 	root.SilenceUsage = true
 	return root, nil
-}
-
-func sessionInputBindings(
-	bindings climanifestcobra.SessionFamilyBindings,
-) climanifestcobra.InputBindingRegistry {
-	targets := map[string]any{
-		"you.session.create.flag.dir":              &bindings.Create.Dir,
-		"you.session.create.flag.init-new-factory": &bindings.Create.InitNewFactory,
-		"you.session.create.flag.port":             &bindings.Create.Port,
-		"you.session.create.flag.target-kind":      &bindings.Create.TargetKind,
-		"you.session.create.flag.target-name":      &bindings.Create.TargetName,
-		"you.session.create.flag.validate-only":    &bindings.Create.ValidateOnly,
-		"you.session.delete.flag.port":             &bindings.Delete.Port,
-		"you.session.dispatches.flag.phase":        &bindings.Dispatches.Phase,
-		"you.session.dispatches.flag.status":       &bindings.Dispatches.Status,
-		"you.session.list.flag.port":               &bindings.List.Port,
-		"you.session.list.flag.scope":              &bindings.List.Scope,
-	}
-	result := make(climanifestcobra.InputBindingRegistry, len(targets))
-	for inputID, target := range targets {
-		stableID, bindingTarget := inputID, target
-		result[stableID] = func(value any) error {
-			return assignRepresentativeGenericValue(
-				map[string]any{stableID: value},
-				stableID,
-				bindingTarget,
-			)
-		}
-	}
-	return result
 }
 
 func productionGenericCobraHandler(
@@ -165,26 +132,12 @@ func productionGenericCobraHandler(
 		values map[string]any,
 		_ resolvedinput.Inputs,
 	) error {
-		if genericSessionUsesDeprecatedPort(commandID) {
-			if err := rejectDeprecatedPortFlag(cmd, args); err != nil {
-				return err
-			}
-		}
 		if handlers.PreRunE != nil {
 			if err := handlers.PreRunE(cmd, args); err != nil {
 				return err
 			}
 		}
 		return handlers.RunE(cmd, args)
-	}
-}
-
-func genericSessionUsesDeprecatedPort(commandID string) bool {
-	switch commandID {
-	case "you.session.show", "you.session.pause", "you.session.resume", "you.session.dispatches":
-		return true
-	default:
-		return false
 	}
 }
 
@@ -225,36 +178,6 @@ func applyRepresentativeResolvedInputs(
 	globals.json = jsonOutput
 	globals.server = server
 	diagnostics.verbose = verbose
-	return nil
-}
-
-func assignRepresentativeGenericValue(values map[string]any, inputID string, target any) error {
-	value, exists := values[inputID]
-	if !exists {
-		return nil
-	}
-	switch typed := target.(type) {
-	case *bool:
-		resolved, ok := value.(bool)
-		if !ok || typed == nil {
-			return fmt.Errorf("input %q has incompatible boolean binding", inputID)
-		}
-		*typed = resolved
-	case *string:
-		resolved, ok := value.(string)
-		if !ok || typed == nil {
-			return fmt.Errorf("input %q has incompatible string binding", inputID)
-		}
-		*typed = resolved
-	case *int:
-		resolved, ok := value.(int)
-		if !ok || typed == nil {
-			return fmt.Errorf("input %q has incompatible integer binding", inputID)
-		}
-		*typed = resolved
-	default:
-		return fmt.Errorf("input %q has unsupported production binding", inputID)
-	}
 	return nil
 }
 

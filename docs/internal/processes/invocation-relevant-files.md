@@ -1786,6 +1786,14 @@ response-stream output.
   executable/manifest parity tests under `pkg/transports/cli/baseline` and
   `climanifestcobra` protect that seam. Keep source scanning out of the
   behavioral Go test suite.
+- Generated command-family handlers should translate invocation-local values
+  addressed by stable manifest input ID into a fresh typed transport config for
+  each execution. Do not retain shared config pointers as parser storage across
+  `application.Process.Execute` calls. When compatibility behavior depends on
+  whether a projected flag was explicitly supplied, use
+  `climanifestcobra.InputChanged` with the stable input ID so public spellings
+  remain private to the generated Cobra projection. Prove omitted and explicit
+  values on repeated executions through `root.BuildProcess`.
 - Raw JavaScript `you run --factory workflow.js` owns a standalone durable
   execution service rather than a Factory Runtime. When hosting that run, bind
   the same execution service to the generated HTTP/dashboard transport, gate
