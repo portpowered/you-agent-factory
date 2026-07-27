@@ -76,7 +76,7 @@
         ]
       },
       {
-        "id": "worker-assignment:worker:planner-\u003eworkstation:ideafy",
+        "id": "worker-assignment:worker:ideafier-\u003eworkstation:ideafy",
         "waypoints": [
           {
             "x": -165.4157,
@@ -327,8 +327,8 @@
       {
         "id": "resource:concurrent-planners",
         "position": {
-          "x": -88.58247,
-          "y": 396.74365
+          "x": -79.439995,
+          "y": 376.17307
         }
       },
       {
@@ -369,15 +369,15 @@
     ],
     "schemaVersion": 1,
     "viewport": {
-      "x": 341.12927,
-      "y": 123.05057,
-      "zoom": 0.87503606
+      "x": -286.87537,
+      "y": -542.9691,
+      "zoom": 1.0755962
     }
   },
-  "name": "UNDEFINED",
+  "name": "factory",
   "resources": [
     {
-      "capacity": 8,
+      "capacity": 16,
       "id": "executor-slot",
       "name": "executor-slot"
     },
@@ -416,8 +416,8 @@
     ]
   },
   "version": {
-    "logical": "1780219232503513625",
-    "physical": "2026-06-17T05:42:49.56944Z"
+    "logical": "1780219232503513624",
+    "physical": "2026-06-17T05:43:19.294602Z"
   },
   "workTypes": [
     {
@@ -549,8 +549,8 @@
   "workers": [
     {
       "executorProvider": "SCRIPT_WRAP",
-      "id": "processor",
-      "modelProvider": "CODEX",
+      "modelProvider": "CURSOR",
+      "model": "composer-2.5",
       "name": "processor",
       "skipPermissions": true,
       "stopToken": "\u003cCOMPLETE\u003e",
@@ -569,10 +569,20 @@
     {
       "executorProvider": "SCRIPT_WRAP",
       "id": "planner",
-      "modelProvider": "CODEX",
+      "modelProvider": "CURSOR",
+      "model": "grok-4.5-high",
       "name": "planner",
       "skipPermissions": true,
       "stopToken": "\u003cCOMPLETE\u003e",
+      "type": "AGENT_WORKER"
+    },
+    {
+      "executorProvider": "SCRIPT_WRAP",
+      "id": "ideafier",
+      "modelProvider": "CURSOR",
+      "model": "grok-4.5-medium",
+      "name": "ideafier",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     }
   ],
@@ -605,7 +615,7 @@
         }
       ],
       "type": "AGENT_RUN",
-      "worker": "planner"
+      "worker": "ideafier"
     },
     {
       "id": "plan",

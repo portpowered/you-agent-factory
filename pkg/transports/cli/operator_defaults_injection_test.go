@@ -55,7 +55,7 @@ func TestResolveOperatorDefaultsDelegatesExactObservedLayers(t *testing.T) {
 
 func TestRootGlobalResolutionIsAvailableToAttachedCommandFamilies(t *testing.T) {
 	factory := withTestInjectedPlatformRoles(CommandFactory{
-		ModelsCLI: legacyModelsCLIService{},
+		ModelsCLI: rootModelsCLI,
 	})
 	root := factory.NewCommand(
 		func() (string, error) { return t.TempDir(), nil },
@@ -88,7 +88,7 @@ func TestRootGlobalResolutionIsAvailableToAttachedCommandFamilies(t *testing.T) 
 
 func TestRunCompatibilityParsingRefreshesResolvedGlobals(t *testing.T) {
 	factory := withTestInjectedPlatformRoles(CommandFactory{
-		ModelsCLI: legacyModelsCLIService{},
+		ModelsCLI: rootModelsCLI,
 	})
 	root := factory.NewCommand(
 		func() (string, error) { return t.TempDir(), nil },

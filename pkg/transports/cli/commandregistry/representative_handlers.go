@@ -169,18 +169,25 @@ const (
 	sessionResumePortInputID       = "you.session.resume.flag.port"
 )
 
-// SessionResolvedServices are the existing injected Factory Session
-// operations consumed by stable-input transport adapters.
+// SessionResolvedServices are the injected Factory Session CLI adapter and
+// invocation-local collaborators consumed by stable-input transport adapters.
 type SessionResolvedServices struct {
-	CreateSession  func(sessioncli.CreateConfig) error
-	DeleteSession  func(sessioncli.DeleteConfig) error
-	ListSessions   func(sessioncli.ListConfig) error
-	ShowSession    func(sessioncli.ShowConfig) error
-	ListDispatches func(sessioncli.DispatchesConfig) error
-	PauseSession   func(sessioncli.LifecycleControlConfig) error
-	ResumeSession  func(sessioncli.LifecycleControlConfig) error
-	PrepareList    func(context.Context, *sessioncli.ListConfig) error
-	Diagnostics    func(*cobra.Command) io.Writer
+	Sessions    sessioncli.Service
+	PrepareList func(context.Context, *sessioncli.ListConfig) error
+	Diagnostics func(*cobra.Command) io.Writer
+}
+
+// SessionResolvedServicesFromOps binds accepted session operations into registry services.
+func SessionResolvedServicesFromOps(
+	ops sessioncli.Operations,
+	prepareList func(context.Context, *sessioncli.ListConfig) error,
+	diagnostics func(*cobra.Command) io.Writer,
+) SessionResolvedServices {
+	return SessionResolvedServices{
+		Sessions:    sessioncli.Bind(ops),
+		PrepareList: prepareList,
+		Diagnostics: diagnostics,
+	}
 }
 
 // SessionResolvedHandler translates stable resolved inputs into the existing
@@ -310,7 +317,7 @@ func (h *SessionResolvedHandler) Create(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.CreateSession == nil {
+	if h == nil || h.services.Sessions == nil {
 		return fmt.Errorf("session create service is required")
 	}
 	dir, err := inputs.String(sessionCreateDirInputID)
@@ -342,7 +349,7 @@ func (h *SessionResolvedHandler) Create(
 		return fmt.Errorf("resolve session create inputs: %w", err)
 	}
 	portState, _ := inputs.State(sessionCreatePortInputID)
-	return h.services.CreateSession(sessioncli.CreateConfig{
+	return h.services.Sessions.Create(sessioncli.CreateConfig{
 		Server: globals.server, Port: port, PortExplicit: portState.Changed,
 		Dir: dir, InitNewFactory: initNew, ValidateOnly: validateOnly,
 		TargetKind: targetKind, TargetName: targetName, JSON: globals.json,
@@ -356,7 +363,7 @@ func (h *SessionResolvedHandler) Delete(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.DeleteSession == nil {
+	if h == nil || h.services.Sessions == nil {
 		return fmt.Errorf("session delete service is required")
 	}
 	sessionID, err := inputs.String(sessionDeleteIDInputID)
@@ -371,7 +378,7 @@ func (h *SessionResolvedHandler) Delete(
 	if err != nil {
 		return fmt.Errorf("resolve session delete inputs: %w", err)
 	}
-	return h.services.DeleteSession(sessioncli.DeleteConfig{
+	return h.services.Sessions.Delete(sessioncli.DeleteConfig{
 		Port: port, SessionID: sessionID, JSON: globals.json,
 		Verbose: globals.verbose, Debug: globals.debug,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics,
@@ -383,7 +390,7 @@ func (h *SessionResolvedHandler) List(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.ListSessions == nil {
+	if h == nil || h.services.Sessions == nil {
 		return fmt.Errorf("session list service is required")
 	}
 	port, err := inputs.Int(sessionListPortInputID)
@@ -411,7 +418,7 @@ func (h *SessionResolvedHandler) List(
 			return err
 		}
 	}
-	return h.services.ListSessions(cfg)
+	return h.services.Sessions.List(cfg)
 }
 
 func (h *SessionResolvedHandler) Show(
@@ -419,7 +426,7 @@ func (h *SessionResolvedHandler) Show(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.ShowSession == nil {
+	if h == nil || h.services.Sessions == nil {
 		return fmt.Errorf("session show service is required")
 	}
 	if err := rejectDeprecatedSessionPort(inputs, sessionShowPortInputID); err != nil {
@@ -433,7 +440,7 @@ func (h *SessionResolvedHandler) Show(
 	if err != nil {
 		return fmt.Errorf("resolve session show inputs: %w", err)
 	}
-	return h.services.ShowSession(sessioncli.ShowConfig{
+	return h.services.Sessions.Show(sessioncli.ShowConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
 		JSON: globals.json, Verbose: globals.verbose, Debug: globals.debug,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics,
@@ -445,7 +452,7 @@ func (h *SessionResolvedHandler) Dispatches(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.ListDispatches == nil {
+	if h == nil || h.services.Sessions == nil {
 		return fmt.Errorf("session dispatches service is required")
 	}
 	if err := rejectDeprecatedSessionPort(inputs, sessionDispatchesPortInputID); err != nil {
@@ -467,7 +474,7 @@ func (h *SessionResolvedHandler) Dispatches(
 	if err != nil {
 		return fmt.Errorf("resolve session dispatches inputs: %w", err)
 	}
-	return h.services.ListDispatches(sessioncli.DispatchesConfig{
+	return h.services.Sessions.ListDispatches(sessioncli.DispatchesConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
 		Phase: phase, Status: status, JSON: globals.json,
 		Verbose: globals.verbose, Debug: globals.debug,
@@ -512,10 +519,13 @@ func (h *SessionResolvedHandler) Pause(
 	if h == nil {
 		return fmt.Errorf("session pause handler is required")
 	}
+	if h == nil || h.services.Sessions == nil {
+		return fmt.Errorf("session pause service is required")
+	}
 	return h.lifecycle(
 		cmd, inputs, inherited,
 		sessionPauseIDInputID, sessionPausePortInputID,
-		h.services.PauseSession,
+		h.services.Sessions.Pause,
 	)
 }
 
@@ -527,10 +537,13 @@ func (h *SessionResolvedHandler) Resume(
 	if h == nil {
 		return fmt.Errorf("session resume handler is required")
 	}
+	if h == nil || h.services.Sessions == nil {
+		return fmt.Errorf("session resume service is required")
+	}
 	return h.lifecycle(
 		cmd, inputs, inherited,
 		sessionResumeIDInputID, sessionResumePortInputID,
-		h.services.ResumeSession,
+		h.services.Sessions.Resume,
 	)
 }
 
