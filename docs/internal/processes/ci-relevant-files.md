@@ -308,6 +308,18 @@
   metadata infers domain `transport` and subsection `cli/parameters` from the
   path; every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+  HTTP API server startup/shutdown functional coverage belongs in
+  `tests/functional/transport/http/server/startup_shutdown_test.go`: prove
+  configured `--server` loopback listeners serve non-empty `GET /status`
+  readiness after start through `support.StartFunctionalAPIServer`, prove
+  shutdown closes the listener and terminates active public streams (including
+  in-flight Factory Session invocations) without leaking ports, and prove bind
+  failure through `platformhttpserver.NewStarter` on `edges.Edges.APIServerStarter`
+  reports `SERVER_BIND_FAILED` with zero browser/readiness side effects and
+  rebound availability on the requested address. Catalog metadata infers domain
+  `transport` and subsection `http/server` from the path; every top-level
+  `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
   CLI JSON parameter values functional coverage belongs in
   `tests/functional/transport/cli/parameters/json_values_test.go`: prove nested
   JSON object and array named parameters reach canonical `InvocationArguments`

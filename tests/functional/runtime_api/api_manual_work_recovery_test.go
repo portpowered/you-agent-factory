@@ -83,7 +83,8 @@ func assertManualWorkMoveRootRuntimeAndScopedStatusStayAligned(t *testing.T) {
 		server.URL()+"/factory-sessions/"+opened.Session.Id+"/status",
 	)
 	closeFactorySession(t, server.URL(), opened.Session.Id)
-	closeFactorySession(t, server.URL(), "~default")
+	// Do not close ~default here; service-mode hosts tear down when the last live
+	// runtime closes, so DELETE on the default session returns EOF before 204.
 }
 
 func closeFactorySession(t *testing.T, baseURL, sessionID string) {
