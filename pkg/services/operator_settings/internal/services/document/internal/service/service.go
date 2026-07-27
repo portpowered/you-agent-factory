@@ -61,5 +61,5 @@ func (service *Service) ApplyDocumentUpdate(
 	if err := request.Validate(); err != nil {
 		return operatorsettings.ApplyDocumentUpdateResult{}, err
 	}
-	return operatorsettings.ApplyDocumentUpdateResult{}, errDocumentOwnerUnavailable
+	return service.applyDocumentUpdate(request)
 }

@@ -35,3 +35,29 @@ func documentRuntimeFromConfig(runtime operatorsettings.RuntimeSettings) operato
 		Metrics: operatorsettings.DocumentRuntimeArtifactSettings(runtime.Metrics),
 	}
 }
+
+func configFromDocument(document operatorsettings.Document) operatorsettings.Config {
+	config := operatorsettings.Config{
+		BackendScopeID: document.BackendScopeID,
+		Defaults: operatorsettings.Defaults{
+			WorkerModelProvider: document.Defaults.WorkerModelProvider,
+			WorkerModel:         document.Defaults.WorkerModel,
+		},
+		Runtime: operatorsettings.RuntimeSettings{
+			Logging: operatorsettings.RuntimeArtifactSettings(document.Runtime.Logging),
+			Metrics: operatorsettings.RuntimeArtifactSettings(document.Runtime.Metrics),
+		},
+	}
+	if document.WorkerPresets != nil {
+		config.WorkerPresets = make([]operatorsettings.WorkerPreset, len(document.WorkerPresets))
+		for i, preset := range document.WorkerPresets {
+			config.WorkerPresets[i] = operatorsettings.WorkerPreset{
+				ID:              preset.ID,
+				ModelProvider:   preset.ModelProvider,
+				Model:           preset.Model,
+				ReasoningEffort: preset.ReasoningEffort,
+			}
+		}
+	}
+	return config
+}
