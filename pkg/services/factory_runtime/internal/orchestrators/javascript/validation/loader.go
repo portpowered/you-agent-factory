@@ -56,7 +56,7 @@ func Load(req LoadRequest) (LoadedSource, []Issue) {
 	switch format {
 	case FormatJavaScript:
 		executable := content
-		if strings.TrimSpace(req.FactoryRoot) != "" && req.BundleReader != nil {
+		if strings.TrimSpace(req.FactoryRoot) != "" && req.BundleReader != nil && ContainsFactoryRelativeImports(content) {
 			bundled, bundleIssues := BundleFactoryRelativeImports(sourceRef, content, req.BundleReader)
 			if len(bundleIssues) > 0 {
 				return loaded, bundleIssues

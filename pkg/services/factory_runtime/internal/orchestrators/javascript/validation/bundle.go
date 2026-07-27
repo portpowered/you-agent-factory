@@ -32,6 +32,25 @@ type resolvedImport struct {
 	defaultAs  string
 }
 
+// ContainsFactoryRelativeImports reports whether source includes factory-relative
+// ES module import statements that require bundling before validation or execution.
+func ContainsFactoryRelativeImports(source string) bool {
+	ast, err := js.Parse(parse.NewInputString(source), js.Options{})
+	if err != nil {
+		return false
+	}
+	for _, stmt := range ast.BlockStmt.List {
+		importStmt, ok := stmt.(*js.ImportStmt)
+		if !ok {
+			continue
+		}
+		if isFactoryRelativeImportSpecifier(unquoteJSModuleSpecifier(string(importStmt.Module))) {
+			return true
+		}
+	}
+	return false
+}
+
 // BundleFactoryRelativeImports resolves factory-relative ES module imports and
 // returns one executable JavaScript source for the workflow runtime.
 func BundleFactoryRelativeImports(
