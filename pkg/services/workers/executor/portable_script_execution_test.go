@@ -293,9 +293,6 @@ func TestScriptFactoryConstructsRegistryBackedExecutor(t *testing.T) {
 		t.Fatalf("Execute() result = %#v, want accepted factory output", result)
 	}
 
-	if got, err := factory.WithCommandRunner(nil); err != nil || got != factory {
-		t.Fatalf("WithCommandRunner(nil) = (%p, %v), want original factory", got, err)
-	}
 	replaced, err := factory.WithCommandRunner(streamingTestCommandRunner(fixedCommandRunner{stdout: []byte("replacement")}))
 	if err != nil || replaced == factory {
 		t.Fatalf("WithCommandRunner(replacement) = (%p, %v), want detached factory", replaced, err)
@@ -321,52 +318,24 @@ func TestScriptFactoryRejectsIncompleteDependencies(t *testing.T) {
 			}
 		})
 	}
-	var factory *ScriptFactory
-	if _, err := factory.New(nil, nil, "", nil, nil, time.Now); err == nil {
-		t.Fatal("nil ScriptFactory.New() error = nil")
-	}
-	if _, err := factory.WithCommandRunner(fixedCommandRunner{}); err == nil {
-		t.Fatal("nil ScriptFactory.WithCommandRunner() error = nil")
-	}
 }
 
 func TestNewScriptExecutorRejectsIncompleteRegistryDependencies(t *testing.T) {
-	definition := &interfaces.FactoryWorkerConfig{Command: "fixture"}
 	command := fixedCommandRunner{}
 	docs := func(string) (map[string]string, error) { return nil, nil }
-	for _, tc := range []struct {
-		name       string
-		definition *interfaces.FactoryWorkerConfig
-		command    CommandRunner
-		docs       workerexecution.FactoryDocsLoader
-		now        func() time.Time
-	}{
-		{name: "definition", command: command, docs: docs, now: time.Now},
-		{name: "command", definition: definition, docs: docs, now: time.Now},
-		{name: "Factory docs", definition: definition, command: command, now: time.Now},
-		{name: "clock", definition: definition, command: command, docs: docs},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if _, err := newScriptExecutor(
-				tc.definition, tc.command, nil, "", nil, nil, tc.now, tc.docs,
-			); err == nil {
-				t.Fatalf("newScriptExecutor() error = nil, want missing %s", tc.name)
-			}
-		})
+	if _, err := newScriptExecutor(
+		nil, command, nil, "", nil, nil, time.Now, docs,
+	); err == nil {
+		t.Fatal("newScriptExecutor() error = nil, want missing definition")
 	}
 	if executor := NewScriptExecutor(nil, nil, "", nil, time.Now); executor == nil {
 		t.Fatal("NewScriptExecutor(nil) = nil, want compatibility executor")
 	}
 }
 
-func TestExecutionWorkDir_FallsBackFromWorktreeToContext(t *testing.T) {
-	request := testScriptRequest(work.WorkDispatch{}, withScriptWorktree("/tmp/worktree"))
-	if got := executionWorkDir(request); got != "/tmp/worktree" {
-		t.Fatalf("executionWorkDir() = %q, want %q", got, "/tmp/worktree")
-	}
-
-	request = testScriptRequest(work.WorkDispatch{}, withScriptWorkingDirectory("/tmp/context"))
-	if got := executionWorkDir(request); got != "/tmp/context" {
-		t.Fatalf("executionWorkDir() = %q, want %q", got, "/tmp/context")
+func TestScriptExecutionErrorMessageFallsBackForUnclassifiedError(t *testing.T) {
+	err := errors.New("unclassified")
+	if got := scriptExecutionErrorMessage(err); got != "execution cancelled: unclassified" {
+		t.Fatalf("scriptExecutionErrorMessage() = %q", got)
 	}
 }

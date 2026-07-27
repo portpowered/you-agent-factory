@@ -113,3 +113,98 @@ func TestWorkstationBehaviorRouter_RoutesInferenceRunToInferenceExecutor(t *test
 		t.Fatalf("Output = %q, want inference routing", result.Output)
 	}
 }
+
+func TestWorkstationBehaviorRouter_InvalidAgentRunClassificationRoutesInference(t *testing.T) {
+	t.Parallel()
+
+	agentConfig := staticRuntimeConfig{
+		Workers: map[string]*interfaces.FactoryWorkerConfig{
+			"agent-worker": {Type: interfaces.WorkerTypeAgent},
+		},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"execute-story": {Type: interfaces.WorkstationTypeAgent},
+		},
+	}
+	tests := []struct {
+		name          string
+		runtimeConfig interfaces.RuntimeDefinitionLookup
+		agentExecutor WorkstationRequestExecutor
+		workstation   string
+		worker        string
+	}{
+		{
+			name:          "agent executor unavailable",
+			runtimeConfig: agentConfig,
+			workstation:   "execute-story",
+			worker:        "agent-worker",
+		},
+		{
+			name:          "workstation unavailable",
+			runtimeConfig: agentConfig,
+			agentExecutor: &routingStubExecutor{name: "agent-run"},
+			workstation:   "missing",
+			worker:        "agent-worker",
+		},
+		{
+			name: "worker unavailable",
+			runtimeConfig: staticRuntimeConfig{
+				Workstations: agentConfig.Workstations,
+			},
+			agentExecutor: &routingStubExecutor{name: "agent-run"},
+			workstation:   "execute-story",
+			worker:        "missing",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			router := &WorkstationBehaviorRouter{
+				RuntimeConfig:     tc.runtimeConfig,
+				InferenceExecutor: &routingStubExecutor{name: "inference"},
+				AgentRunExecutor:  tc.agentExecutor,
+			}
+			result, err := router.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{
+				Dispatch: work.WorkDispatch{
+					WorkstationName: tc.workstation,
+					WorkerType:      tc.worker,
+				},
+				WorkerType: tc.worker,
+			})
+			if err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			if result.Output != "inference" {
+				t.Fatalf("Output = %q, want inference routing", result.Output)
+			}
+		})
+	}
+}
+
+func TestWorkstationBehaviorRouter_UsesDispatchWorkerForAgentRunRouting(t *testing.T) {
+	t.Parallel()
+
+	router := &WorkstationBehaviorRouter{
+		RuntimeConfig: staticRuntimeConfig{
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				"agent-worker": {Type: interfaces.WorkerTypeAgent},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"execute-story": {Type: interfaces.WorkstationTypeAgent},
+			},
+		},
+		InferenceExecutor: &routingStubExecutor{name: "inference"},
+		AgentRunExecutor:  &routingStubExecutor{name: "agent-run"},
+	}
+	result, err := router.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{
+		Dispatch: work.WorkDispatch{
+			WorkstationName: "execute-story",
+			WorkerType:      "agent-worker",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Output != "agent-run" {
+		t.Fatalf("Output = %q, want agent-run routing", result.Output)
+	}
+}

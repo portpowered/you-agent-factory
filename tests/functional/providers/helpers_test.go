@@ -28,6 +28,12 @@ func (f *fakeCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequ
 	return platformprocess.CommandResult{Stdout: []byte(f.stdout), Stderr: []byte(f.stderr), ExitCode: f.exitCode}, nil
 }
 
+type canceledCommandRunner struct{}
+
+func (canceledCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, context.Canceled
+}
+
 type captureCommandRunner struct {
 	mu       sync.Mutex
 	workDirs []string

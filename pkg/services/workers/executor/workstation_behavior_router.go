@@ -22,14 +22,6 @@ func (router *WorkstationBehaviorRouter) Execute(ctx context.Context, request wo
 	if router != nil && router.shouldUseAgentRunExecutor(request) {
 		return router.AgentRunExecutor.Execute(ctx, request)
 	}
-	if router == nil || router.InferenceExecutor == nil {
-		return workerexecution.WorkResult{
-			DispatchID:   request.Dispatch.DispatchID,
-			TransitionID: request.Dispatch.TransitionID,
-			Outcome:      workerexecution.OutcomeFailed,
-			Error:        "inference executor unavailable",
-		}, nil
-	}
 	return router.InferenceExecutor.Execute(ctx, request)
 }
 

@@ -76,9 +76,6 @@ func (f *ScriptFactory) New(
 	record workers.ScriptEventRecorder,
 	now func() time.Time,
 ) (*ScriptExecutor, error) {
-	if f == nil {
-		return nil, errors.New("construct script worker: factory is required")
-	}
 	commandRunner := workerprocess.CommandRunnerWithLogging(
 		f.commandRunner,
 		logger,
@@ -98,12 +95,6 @@ func (f *ScriptFactory) New(
 
 // WithCommandRunner returns a validated copy with a per-runtime wrapper edge.
 func (f *ScriptFactory) WithCommandRunner(runner CommandRunner) (*ScriptFactory, error) {
-	if f == nil {
-		return nil, errors.New("construct script worker factory: base factory is required")
-	}
-	if runner == nil {
-		return f, nil
-	}
 	return NewScriptFactory(runner, f.commandClock, f.factoryDocs)
 }
 
@@ -119,15 +110,6 @@ func newScriptExecutor(
 ) (*ScriptExecutor, error) {
 	if definition == nil {
 		return nil, errors.New("construct script worker: definition is required")
-	}
-	if commandRunner == nil {
-		return nil, errors.New("construct script worker: command runner is required")
-	}
-	if factoryDocs == nil {
-		return nil, errors.New("construct script worker: Factory docs loader is required")
-	}
-	if now == nil {
-		return nil, errors.New("construct script worker: clock is required")
 	}
 	binding, err := resolveScriptRunner(
 		definition,
@@ -279,13 +261,6 @@ func scriptExecutionErrorMessage(err error) string {
 		return providerErr.Message
 	}
 	return "execution cancelled: " + err.Error()
-}
-
-func executionWorkDir(request workers.WorkstationExecutionRequest) string {
-	if request.WorkingDirectory != "" {
-		return request.WorkingDirectory
-	}
-	return request.Worktree
 }
 
 var _ WorkstationRequestExecutor = (*ScriptExecutor)(nil)
