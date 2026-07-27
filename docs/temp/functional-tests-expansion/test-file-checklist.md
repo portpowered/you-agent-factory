@@ -144,7 +144,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIRunNamedFactory` covers packaged/named Factory resolution.
   - `TestCLIRunInvalidFactoryReturnsValidationFailure` covers load failure.
 
-- [ ] `tests/functional/transport/cli/commands/submit_wiring_test.go`
+- [x] `tests/functional/transport/cli/commands/submit_wiring_test.go`
   - `TestCLISubmitBatchInlineJSON` covers inline canonical batch input.
   - `TestCLISubmitBatchFile` covers a file path.
   - `TestCLISubmitUnavailableServer` covers connection failure and exit code.
