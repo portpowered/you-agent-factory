@@ -11,6 +11,7 @@ import (
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	validationserviceimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/service"
 	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 )
 
@@ -81,6 +82,53 @@ func newValidationService(t *testing.T, operations stubOperations) validationser
 		t.Fatalf("validationwire.NewService: %v", err)
 	}
 	return svc
+}
+
+func newValidationServiceWithConfig(
+	t *testing.T,
+	cfg *factorycontracts.FactoryConfig,
+) validationservice.Service {
+	t.Helper()
+	validator := factoryvalidation.New(nil)
+	svc, err := validationwire.NewService(validationservice.Dependencies{
+		Operations:    validator,
+		Effective:     validator,
+		LoadCanonical: stubLoadCanonicalForConfig(cfg),
+	})
+	if err != nil {
+		t.Fatalf("validationwire.NewService: %v", err)
+	}
+	return svc
+}
+
+func stubLoadCanonicalForConfig(
+	cfg *factorycontracts.FactoryConfig,
+) factorycontracts.CanonicalFactoryJSONLoader {
+	return func(_ []byte, _ factorycontracts.WorkstationLoader) (factorycontracts.MutableLoadedFactorySource, error) {
+		return stubLoadedSource{cfg: cfg}, nil
+	}
+}
+
+func validPetriFactoryConfig() *factorycontracts.FactoryConfig {
+	return &factorycontracts.FactoryConfig{
+		Name: "structural-validation",
+		WorkTypes: []factorycontracts.WorkTypeConfig{{
+			Name: "task",
+			States: []factorycontracts.StateConfig{
+				{Name: "init", Type: factorycontracts.StateTypeInitial},
+				{Name: "done", Type: factorycontracts.StateTypeTerminal},
+				{Name: "failed", Type: factorycontracts.StateTypeFailed},
+			},
+		}},
+		Workers: []workerconfig.Config{{Name: "worker-a"}},
+		Workstations: []factorycontracts.FactoryWorkstationConfig{{
+			Name:           "process",
+			WorkerTypeName: "worker-a",
+			Inputs:         []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			OnFailure:      []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+		}},
+	}
 }
 
 func TestValidationService_RejectsMissingDependencies(t *testing.T) {
@@ -173,5 +221,58 @@ func TestValidationService_ValidEffectiveDefinitionSucceeds(t *testing.T) {
 	}
 	if result.Validation.HasBlockingTargets() {
 		t.Fatalf("validation findings = %#v, want none", result.Validation)
+	}
+}
+
+func TestValidationService_WiredStructuralValidationSucceedsForValidPetriFactory(t *testing.T) {
+	t.Parallel()
+
+	svc := newValidationServiceWithConfig(t, validPetriFactoryConfig())
+	result, err := svc.ValidateStructuralFactoryDefinition(
+		context.Background(),
+		factoryroot.ValidateStructuralFactoryDefinitionRequest{
+			Canonical: []byte(`{"name":"structural-validation"}`),
+			Profile:   factoryroot.ValidationProfileTopology,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ValidateStructuralFactoryDefinition: %v", err)
+	}
+	if result.Validation.HasBlockingTargets() {
+		t.Fatalf("validation findings = %#v, want none", result.Validation)
+	}
+}
+
+func TestValidationService_WiredStructuralValidationReturnsTypedDuplicateWorkerTarget(t *testing.T) {
+	t.Parallel()
+
+	cfg := validPetriFactoryConfig()
+	cfg.Workers = append(cfg.Workers, workerconfig.Config{Name: "worker-a"})
+	svc := newValidationServiceWithConfig(t, cfg)
+
+	_, err := svc.ValidateStructuralFactoryDefinition(
+		context.Background(),
+		factoryroot.ValidateStructuralFactoryDefinitionRequest{
+			Canonical: []byte(`{"name":"structural-validation"}`),
+			Profile:   factoryroot.ValidationProfileTopology,
+		},
+	)
+	var validationFailure *factoryroot.FactoryDefinitionValidationFailure
+	if !errors.As(err, &validationFailure) {
+		t.Fatalf("error = %v, want FactoryDefinitionValidationFailure", err)
+	}
+	if !errors.Is(err, factoryroot.ErrFactoryDefinitionValidationFailed) {
+		t.Fatalf("error = %v, want %v", err, factoryroot.ErrFactoryDefinitionValidationFailed)
+	}
+	found := false
+	for _, target := range validationFailure.Validation.Targets {
+		if target.Code == factoryvalidation.CodeDuplicateIdentifier &&
+			target.Severity == factorycontracts.ValidationSeverityError &&
+			target.Subject.Type == factorycontracts.ValidationSubjectTypeWorker {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("validation targets = %#v, want duplicate worker structural target", validationFailure.Validation.Targets)
 	}
 }

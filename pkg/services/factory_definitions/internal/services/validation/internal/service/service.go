@@ -9,6 +9,7 @@ import (
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/structural"
 )
 
 // Service is the private nested validation implementation behind the CTR-DEF
@@ -55,7 +56,7 @@ func (s *Service) ValidateStructuralFactoryDefinition(
 	if err != nil {
 		return factoryroot.ValidateStructuralFactoryDefinitionResult{}, err
 	}
-	result, err := s.operations.ValidateDefinition(ctx, factorycontracts.DefinitionValidationRequest{
+	profileResult, err := s.operations.ValidateDefinition(ctx, factorycontracts.DefinitionValidationRequest{
 		Profile:                factorycontracts.ResolveValidationProfile(request.Profile),
 		Config:                 cfg,
 		CanonicalPayload:       canonical,
@@ -64,6 +65,7 @@ func (s *Service) ValidateStructuralFactoryDefinition(
 	if err != nil {
 		return factoryroot.ValidateStructuralFactoryDefinitionResult{}, err
 	}
+	result := mergeValidationResults(structural.Validate(cfg), profileResult)
 	return finishStructuralResult(result)
 }
 
@@ -139,6 +141,32 @@ func finishEffectiveResult(
 		}
 	}
 	return factoryroot.ValidateEffectiveFactoryDefinitionResult{Validation: rootResult}, nil
+}
+
+func mergeValidationResults(parts ...factorycontracts.ValidationResult) factorycontracts.ValidationResult {
+	seen := make(map[string]struct{})
+	var targets []factorycontracts.ValidationTarget
+	for _, part := range parts {
+		for _, target := range part.Targets {
+			signature := structuralTargetSignature(target)
+			if _, ok := seen[signature]; ok {
+				continue
+			}
+			seen[signature] = struct{}{}
+			targets = append(targets, target)
+		}
+	}
+	return factorycontracts.ValidationResult{Targets: targets}
+}
+
+func structuralTargetSignature(target factorycontracts.ValidationTarget) string {
+	return target.Code + "|" +
+		string(target.Severity) + "|" +
+		string(target.Subject.Type) + "|" +
+		target.Subject.ID + "|" +
+		string(target.Subject.Location) + "|" +
+		target.Path + "|" +
+		target.Message
 }
 
 func (s *Service) requirePorts() error {
