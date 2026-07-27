@@ -37,8 +37,7 @@ func (h *Handler) GetProviderSessionDetails(
 			h.writeError(w, http.StatusBadRequest, validationErr.message, "BAD_REQUEST")
 			return
 		}
-		h.logger.Error("load provider session details failed", zap.Error(err))
-		h.writeError(w, http.StatusInternalServerError, "failed to load provider session details", "INTERNAL_ERROR")
+		h.writeProviderSessionError(w, params, err)
 		return
 	}
 	h.writeJSON(w, http.StatusOK, response)

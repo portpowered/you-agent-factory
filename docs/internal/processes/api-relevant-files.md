@@ -18,8 +18,9 @@ Use this map when changing the public REST contract.
   adapters consume Factory Sessions root contracts and do not import or
   construct its implementation packages or private subservices.
 - Provider Session HTTP decoding, generated-contract mapping, service
-  invocation, error mapping, and response encoding for owned Provider Sessions
-  operations live in `pkg/services/provider_sessions/transports/http`. The
+  invocation, typed root error mapping (`error_mapping.go`), and response
+  encoding for owned Provider Sessions operations live in
+  `pkg/services/provider_sessions/transports/http`. The
   top-level `pkg/transports/http` server still hosts the generated route until
   PSS-I02 fan-in; the owner-local adapter consumes `providersessions.Service`
   (or a fake root in tests) and must not import
