@@ -55,6 +55,29 @@ func TestRepeater_ResourceReleaseBetweenIterations(t *testing.T) {
 	assertRepeaterWorkStates(t, listed, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
 }
 
+// TestRalphLoop_ConvergesOnReviewerAccept proves that a Ralph-style
+// executor/reviewer repeater loop converges when the reviewer accepts, leaving
+// story Work completed with the expected public dispatch counts.
+func TestRalphLoop_ConvergesOnReviewerAccept(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "ralph_loop"))
+
+	testutil.WriteSeedFile(t, dir, "story", []byte(`{"title": "implement feature"}`))
+
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+		"executor-worker": {{Content: "code with missing error handling <COMPLETE>"}},
+		"reviewer-worker": {{Content: "code with missing error handling <COMPLETE>"}},
+	})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+
+	if provider.CallCount("executor-worker") != 1 {
+		t.Errorf("executor-worker call count = %d, want 1", provider.CallCount("executor-worker"))
+	}
+	if provider.CallCount("reviewer-worker") != 1 {
+		t.Errorf("reviewer-worker call count = %d, want 1", provider.CallCount("reviewer-worker"))
+	}
+	assertRepeaterWorkStates(t, listed, map[string]int{"story:complete": 1, "story:init": 0, "story:failed": 0})
+}
+
 func assertRepeaterWorkStates(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
 	t.Helper()
 	for placeID, want := range wants {

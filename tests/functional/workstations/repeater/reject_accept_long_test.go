@@ -247,6 +247,57 @@ func TestMultiOutput_OutputTokensInheritInputLineage(t *testing.T) {
 	assertListedLineage(t, listed, map[string]string{"plan": inputTraceID, "task": inputTraceID})
 }
 
+// TestRalphLoop_TemplateFieldsResolvePerIteration proves that per-iteration
+// template fields resolve on each executor dispatch while reject-then-accept
+// still reaches story Work completion.
+func TestRalphLoop_TemplateFieldsResolvePerIteration(t *testing.T) {
+	support.SkipLongFunctional(t, "slow Ralph-loop template-field resolution sweep")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "ralph_loop"))
+
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "story",
+		Payload:    []byte(`{"title": "template test"}`),
+		Tags: map[string]string{
+			"project":      "inventory-service",
+			"branch":       "ralph/ralph-loop",
+			"iteration_id": "iter-001",
+		},
+	})
+
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+		"executor-worker": {
+			{Content: "code with missing error handling <COMPLETE>"},
+			{Content: "code with missing error handling <COMPLETE>"},
+		},
+		"reviewer-worker": {
+			{Content: "missing error handling"},
+			{Content: "looks good<COMPLETE>"},
+		},
+	})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	assertRepeaterWorkStates(t, listed, map[string]int{"story:complete": 1})
+
+	if provider.CallCount("executor-worker") != 2 {
+		t.Fatalf("executor-worker call count = %d, want 2 reject-then-accept iterations", provider.CallCount("executor-worker"))
+	}
+
+	expectedDir := support.ResolvedRuntimePath(dir, "/workspaces/ralph-loop-fixture/ralph/ralph-loop")
+	for i, dispatch := range provider.Calls("executor-worker") {
+		if dispatch.WorkingDirectory == "" {
+			t.Errorf("dispatch %d: expected WorkingDirectory to be set, got empty", i)
+		} else if dispatch.WorkingDirectory != expectedDir {
+			t.Errorf("dispatch %d: expected WorkingDirectory %q, got %q", i, expectedDir, dispatch.WorkingDirectory)
+		}
+		if dispatch.EnvVars["PROJECT"] != "ralph-loop-fixture" {
+			t.Errorf("dispatch %d: expected env PROJECT=ralph-loop-fixture, got %s", i, dispatch.EnvVars["PROJECT"])
+		}
+		if dispatch.EnvVars["ITERATION_ID"] != "iter-001" {
+			t.Errorf("dispatch %d: expected env ITERATION_ID=iter-001, got %s", i, dispatch.EnvVars["ITERATION_ID"])
+		}
+	}
+}
+
 func assertPublicDispatchRoute(t *testing.T, events []factoryapi.FactoryEvent, transitionID, toPlaceID string) {
 	t.Helper()
 	var sawDispatch bool
