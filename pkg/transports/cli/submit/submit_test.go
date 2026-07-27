@@ -747,10 +747,10 @@ func TestSubmit_NonJSONErrorBodyIsNotExposed(t *testing.T) {
 }
 
 func TestSubmitFailureErrorRejectsUntrustedTypedFields(t *testing.T) {
-	const secret = "credential-secret"
+	const secret = "sk-proj-secret123"
 	err := submitFailureError(http.StatusBadGateway, []byte(
 		`{"message":"payload-secret","code":"`+secret+`","family":"`+
-			secret+`","workId":"`+secret+` with spaces"}`,
+			secret+`","workId":"`+secret+`"}`,
 	))
 	if got := err.Error(); got != "submission failed (502)" {
 		t.Fatalf("error = %q, want status-only safe failure", got)
@@ -760,13 +760,13 @@ func TestSubmitFailureErrorRejectsUntrustedTypedFields(t *testing.T) {
 	}
 	var httpErr *SubmissionHTTPError
 	if !errors.As(err, &httpErr) || httpErr.Code != "" ||
-		httpErr.Family != "" || httpErr.WorkID != "" {
+		httpErr.Family != "" {
 		t.Fatalf("typed error retained untrusted fields: %#v", httpErr)
 	}
 }
 
-func TestSubmit_ErrorIncludesWorkIdWhenPresent(t *testing.T) {
-	workID := "batch-req-duplicate-submit"
+func TestSubmit_ErrorExcludesUntrustedWorkID(t *testing.T) {
+	const credential = "sk-proj-secret123"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
@@ -774,7 +774,7 @@ func TestSubmit_ErrorIncludesWorkIdWhenPresent(t *testing.T) {
 			"message": "work already accepted",
 			"family":  "client",
 			"code":    "BAD_REQUEST",
-			"workId":  workID,
+			"workId":  credential,
 		}); err != nil {
 			t.Errorf("encode error response: %v", err)
 		}
@@ -798,8 +798,11 @@ func TestSubmit_ErrorIncludesWorkIdWhenPresent(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when API returns workId")
 	}
-	if got := err.Error(); got != "submission failed (409): code=BAD_REQUEST workId="+workID {
-		t.Fatalf("error = %q, want safe typed fields and stable workId", got)
+	if got := err.Error(); got != "submission failed (409): code=BAD_REQUEST" {
+		t.Fatalf("error = %q, want only allowlisted typed fields", got)
+	}
+	if strings.Contains(err.Error(), credential) {
+		t.Fatalf("error leaked credential-shaped workId: %v", err)
 	}
 	if out.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty on API failure", out.String())

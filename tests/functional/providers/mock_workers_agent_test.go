@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,34 +26,6 @@ func TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace(t *testing.T) {
 	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
 	listed := support.ListDefaultSessionWork(t, server.URL())
 	for placeID, want := range map[string]int{"task:done": 1, "task:init": 0} {
-		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
-			t.Errorf("%s token count = %d, want %d", placeID, got, want)
-		}
-	}
-}
-
-func TestMockWorkers_AgentInvalidStructuredOutputRoutesFailure(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	workstationPath := filepath.Join(dir, "workstations", "process", "AGENTS.md")
-	if err := os.WriteFile(workstationPath, []byte(`---
-type: MODEL_WORKSTATION
-outputSchema: '{"type":"object"}'
----
-
-Test workstation.
-`), 0o600); err != nil {
-		t.Fatalf("write structured-output workstation: %v", err)
-	}
-	testutil.WriteSeedFile(t, dir, "task", []byte("mock output is not JSON"))
-
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     dir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	listed := support.ListDefaultSessionWork(t, server.URL())
-	for placeID, want := range map[string]int{"task:failed": 1, "task:init": 0} {
 		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}

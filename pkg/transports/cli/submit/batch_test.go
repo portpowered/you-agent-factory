@@ -436,6 +436,7 @@ func TestSubmitBatch_ValidationFailsBeforeHTTP(t *testing.T) {
 }
 
 func TestSubmitBatch_HTTPErrorReturnsTypedSafeFields(t *testing.T) {
+	const credential = "sk-proj-secret123"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -443,7 +444,7 @@ func TestSubmitBatch_HTTPErrorReturnsTypedSafeFields(t *testing.T) {
 			"message":"payload-secret access-token-secret",
 			"code":"BAD_REQUEST",
 			"family":"BAD_REQUEST",
-			"workId":"work-safe"
+			"workId":"`+credential+`"
 		}`)
 	}))
 	defer srv.Close()
@@ -463,22 +464,23 @@ func TestSubmitBatch_HTTPErrorReturnsTypedSafeFields(t *testing.T) {
 	}
 	if httpErr.StatusCode != http.StatusBadRequest ||
 		httpErr.Code != factoryapi.ErrorResponseCodeBADREQUEST ||
-		httpErr.Family != factoryapi.ErrorFamilyBadRequest ||
-		httpErr.WorkID != "work-safe" {
+		httpErr.Family != factoryapi.ErrorFamilyBadRequest {
 		t.Fatalf("typed HTTP error = %#v", httpErr)
 	}
-	if strings.Contains(err.Error(), "payload-secret") || strings.Contains(err.Error(), "access-token") {
+	if strings.Contains(err.Error(), "payload-secret") ||
+		strings.Contains(err.Error(), "access-token") ||
+		strings.Contains(err.Error(), credential) {
 		t.Fatalf("error leaked unsafe server response: %v", err)
 	}
 }
 
 func TestSubmitBatch_HTTPErrorRejectsUnsafeTypedFields(t *testing.T) {
-	const secret = "credential-secret"
+	const secret = "sk-proj-secret123"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = io.WriteString(w, `{"message":"payload-secret","code":"`+secret+
-			`","family":"`+secret+`","workId":"`+secret+` with spaces"}`)
+			`","family":"`+secret+`","workId":"`+secret+`"}`)
 	}))
 	defer srv.Close()
 
@@ -495,7 +497,7 @@ func TestSubmitBatch_HTTPErrorRejectsUnsafeTypedFields(t *testing.T) {
 	if !errors.As(err, &httpErr) {
 		t.Fatalf("error type = %T, want *SubmissionHTTPError", err)
 	}
-	if httpErr.Code != "" || httpErr.Family != "" || httpErr.WorkID != "" {
+	if httpErr.Code != "" || httpErr.Family != "" {
 		t.Fatalf("unsafe typed fields were retained: %#v", httpErr)
 	}
 	if strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), "payload-secret") {

@@ -11,9 +11,12 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const functionalBatch = `{
@@ -100,6 +103,53 @@ func TestSubmitFamilyExecutesThroughRootBuiltProcess(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure(t *testing.T) {
+	factoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.ClearSeedInputs(t, factoryDir)
+	support.WriteWorkstationConfig(t, factoryDir, "process", `---
+type: MODEL_WORKSTATION
+outputSchema: '{}'
+---
+Return structured JSON.
+`)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	payloadPath := filepath.Join(t.TempDir(), "request.md")
+	if err := os.WriteFile(payloadPath, []byte("execute live submit"), 0o600); err != nil {
+		t.Fatalf("write unary payload: %v", err)
+	}
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := process.Execute(functionalInput(
+		t,
+		[]string{
+			"you", "--server", server.URL(),
+			"submit", "--name", "live-submit", "--work-type-name", "task",
+			"--payload", payloadPath,
+		},
+		&stdout,
+	)); err != nil {
+		t.Fatalf("Process.Execute(live unary submit) error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Submitted: live-submit (task)") {
+		t.Fatalf("live unary output = %q", stdout.String())
+	}
+
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed CLI-submitted work = %d, want 1 after invalid mock structured output: %#v", got, listed)
+	}
 }
 
 func functionalInput(t *testing.T, args []string, stdout io.Writer) root.Input {

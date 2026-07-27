@@ -17,20 +17,16 @@ type SubmissionHTTPError struct {
 	StatusCode int
 	Code       factoryapi.ErrorResponseCode
 	Family     factoryapi.ErrorFamily
-	WorkID     string
 	operation  string
 }
 
 func (e *SubmissionHTTPError) Error() string {
-	details := make([]string, 0, 3)
+	details := make([]string, 0, 2)
 	if e.Code != "" {
 		details = append(details, "code="+string(e.Code))
 	}
 	if e.Family != "" {
 		details = append(details, "family="+string(e.Family))
-	}
-	if e.WorkID != "" {
-		details = append(details, "workId="+e.WorkID)
 	}
 	operation := e.operation
 	if operation == "" {
@@ -50,14 +46,12 @@ func submissionFailureError(operation string, statusCode int, body []byte) error
 	var response struct {
 		Code   factoryapi.ErrorResponseCode `json:"code"`
 		Family factoryapi.ErrorFamily       `json:"family"`
-		WorkID string                       `json:"workId"`
 	}
 	_ = json.Unmarshal(body, &response)
 	return &SubmissionHTTPError{
 		StatusCode: statusCode,
 		Code:       safeSubmitErrorCode(response.Code),
 		Family:     safeSubmitErrorFamily(response.Family),
-		WorkID:     safeSubmitWorkID(response.WorkID),
 		operation:  operation,
 	}
 }
@@ -103,22 +97,4 @@ func safeSubmitErrorCode(value factoryapi.ErrorResponseCode) factoryapi.ErrorRes
 		}
 	}
 	return ""
-}
-
-func safeSubmitWorkID(value string) string {
-	const maxWorkIDLength = 128
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" || len(trimmed) > maxWorkIDLength {
-		return ""
-	}
-	for _, character := range trimmed {
-		if (character >= 'a' && character <= 'z') ||
-			(character >= 'A' && character <= 'Z') ||
-			(character >= '0' && character <= '9') ||
-			strings.ContainsRune("-._~", character) {
-			continue
-		}
-		return ""
-	}
-	return trimmed
 }
