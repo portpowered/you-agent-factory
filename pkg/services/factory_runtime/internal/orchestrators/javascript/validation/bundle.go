@@ -188,31 +188,34 @@ func emitBundledExecutable(modules map[string]bundledModule, entrySourceRef stri
 
 func importBindingLine(imp resolvedImport) string {
 	moduleRef := jsStringLiteral(imp.resolved)
+	var lines []string
 	if imp.isDefault {
 		name := strings.TrimSpace(imp.defaultAs)
 		if name == "" {
 			name = "default"
 		}
-		return fmt.Sprintf("const %s = __factoryRequire(%s);", name, moduleRef)
+		lines = append(lines, fmt.Sprintf("const %s = __factoryRequire(%s).default;", name, moduleRef))
 	}
-	if len(imp.bindings) == 1 && imp.bindings[0].localName == "*" {
-		return fmt.Sprintf("const %s = __factoryRequire(%s);", imp.bindings[0].importedAs, moduleRef)
-	}
-	parts := make([]string, 0, len(imp.bindings))
-	for _, binding := range imp.bindings {
-		if binding.localName == binding.importedAs {
-			parts = append(parts, binding.localName)
-		} else {
-			parts = append(parts, binding.importedAs+": "+binding.localName)
+	if len(imp.bindings) == 1 && imp.bindings[0].importedAs == "*" {
+		lines = append(lines, fmt.Sprintf("const %s = __factoryRequire(%s);", imp.bindings[0].localName, moduleRef))
+	} else if len(imp.bindings) > 0 {
+		parts := make([]string, 0, len(imp.bindings))
+		for _, binding := range imp.bindings {
+			if binding.localName == binding.importedAs {
+				parts = append(parts, binding.localName)
+			} else {
+				parts = append(parts, binding.importedAs+": "+binding.localName)
+			}
 		}
+		lines = append(lines, fmt.Sprintf("const {%s} = __factoryRequire(%s);", strings.Join(parts, ", "), moduleRef))
 	}
-	return fmt.Sprintf("const {%s} = __factoryRequire(%s);", strings.Join(parts, ", "), moduleRef)
+	if len(lines) == 0 {
+		return fmt.Sprintf("__factoryRequire(%s);", moduleRef)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func importBindingsFromStmt(stmt *js.ImportStmt) []importBinding {
-	if len(stmt.Default) > 0 {
-		return nil
-	}
 	bindings := make([]importBinding, 0, len(stmt.List))
 	for _, alias := range stmt.List {
 		localName := string(alias.Binding)
@@ -220,9 +223,10 @@ func importBindingsFromStmt(stmt *js.ImportStmt) []importBinding {
 		if importedAs == "" {
 			importedAs = localName
 		}
-		if localName == "" && len(alias.Name) == 1 && alias.Name[0] == '*' {
-			localName = "*"
-			importedAs = "*"
+		if len(importedAs) == 1 && importedAs[0] == '*' {
+			if localName == "" {
+				localName = "namespace"
+			}
 		}
 		bindings = append(bindings, importBinding{
 			localName:  localName,
