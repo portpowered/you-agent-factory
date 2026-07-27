@@ -206,8 +206,6 @@ pkg/services/workers/prompting/prompt.go: unreachable func: NewDefaultPromptRend
 pkg/services/workers/prompting/prompt_contract.go: unreachable func: NewService
 pkg/services/workers/prompting/prompt_contract.go: unreachable func: Service.BuildPromptTemplateContract
 pkg/services/workers/prompting/prompt_contract.go: unreachable func: Service.ValidatePromptTemplate
-pkg/services/workers/provider/inference_progress.go: unreachable func: NewInferenceProgressPublishingCommandRunner
-pkg/services/workers/provider/provider_behavior.go: unreachable func: providerFailureDecisionForFamily
 pkg/services/workers/service/composition.go: unreachable func: NewHostedPollers
 pkg/services/workers/services/testing/runner_test.go: unreachable func: shellArgsForTest
 pkg/services/workers/services/testing/runner_test.go: unreachable func: shellCommandForTest

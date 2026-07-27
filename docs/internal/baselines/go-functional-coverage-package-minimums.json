@@ -1233,10 +1233,6 @@
       "minimum": 14.16
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor/progress",
-      "minimum": 0.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini",
       "minimum": 0.00
     },

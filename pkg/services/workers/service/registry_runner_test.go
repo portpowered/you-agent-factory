@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
+	cursorpkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
@@ -246,6 +247,47 @@ func TestConductorInvocationRunnerRoutesExternalIntegrationsThroughConductor(t *
 	}
 }
 
+func TestConductorCollectingDestinationPublishesCanonicalResponseDrafts(t *testing.T) {
+	t.Parallel()
+
+	payload, err := json.Marshal(workers.RunPayload{Status: string(workers.PhaseStarted)})
+	if err != nil {
+		t.Fatalf("marshal run payload: %v", err)
+	}
+	event, err := inference.NewEventDraft(inference.EventDraftInput{
+		RunID: "dispatch-conductor-progress", Kind: workers.KindRun, Phase: workers.PhaseStarted,
+		Provenance: workers.Provenance{
+			Provider: "customer.provider", Delivery: workers.DeliverySynthesized,
+			Representation: workers.RepresentationNotification,
+			Fidelity:       workers.FidelityLifecycleOnly,
+		},
+		Payload: payload,
+	})
+	if err != nil {
+		t.Fatalf("NewEventDraft() error = %v", err)
+	}
+	var published []workers.ProgressFragment
+	destination := conductorCollectingDestination{
+		dispatchID: "dispatch-conductor-progress",
+		publish: func(fragment workers.ProgressFragment) {
+			published = append(published, fragment)
+		},
+	}
+
+	if err := destination.WriteEvent(context.Background(), event); err != nil {
+		t.Fatalf("WriteEvent() error = %v", err)
+	}
+	if len(published) != 1 {
+		t.Fatalf("published response drafts = %d, want 1", len(published))
+	}
+	for index, fragment := range published {
+		draft, ok := fragment.CanonicalDraft.(workers.Draft)
+		if !ok || draft.DispatchID != "dispatch-conductor-progress" {
+			t.Fatalf("published[%d] = %#v, want correlated canonical draft", index, fragment)
+		}
+	}
+}
+
 func TestConductorInvocationRunnerPreservesRetryableUnknownFailurePolicy(t *testing.T) {
 	t.Parallel()
 
@@ -373,6 +415,58 @@ func TestConductorInvocationRunnerRoutesMigratedGeminiThroughConductor(t *testin
 	}
 }
 
+func TestConductorInvocationRunnerRoutesMigratedCursorThroughConductor(t *testing.T) {
+	t.Parallel()
+
+	commandRunner := &builtInConductorCommandRunner{
+		result: workers.CommandResult{
+			Stdout: cursorpkg.SuccessStdoutJSON("cursor via conductor", "cursor-session-123"),
+		},
+	}
+	registrations, err := providerregistry.BuiltInRegistrations(
+		providerregistry.BuiltInDependencies{
+			CommandRunner:   commandRunner,
+			OperatingSystem: "linux",
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuiltInRegistrations() error = %v", err)
+	}
+	providers, err := providerregistry.New(registrations...)
+	if err != nil {
+		t.Fatalf("registry.New() error = %v", err)
+	}
+	native := &conductorRouteRecordingRunner{}
+	runner := conductorInvocationRunner{
+		next:      native,
+		conductor: conductor.New(providers),
+		providers: providers,
+	}
+
+	result, err := runner.Execute(context.Background(), workers.RunnerExecutionRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-cursor-conductor"},
+		RunnerID:      workers.RunnerIDCursorCLI,
+		ModelProvider: workers.RunnerIDCursorCLI,
+		Model:         "cursor-model",
+		UserMessage:   "hello cursor",
+	})
+	if err != nil {
+		t.Fatalf("Execute(cursor) error = %v", err)
+	}
+	if result.Content != "cursor via conductor" {
+		t.Fatalf("Execute(cursor) content = %q, want cursor via conductor", result.Content)
+	}
+	if native.calls != 0 {
+		t.Fatalf("native runner calls = %d, want 0 for migrated Cursor", native.calls)
+	}
+	if commandRunner.calls != 1 || commandRunner.request.Command != "agent" {
+		t.Fatalf("Cursor command calls = %d request = %#v", commandRunner.calls, commandRunner.request)
+	}
+	if providers.UsesNativeRunner("cursor") || providers.UsesNativeRunner("agent") {
+		t.Fatal("UsesNativeRunner(cursor) = true, want conductor route")
+	}
+}
+
 func TestConductorInvocationRunnerPreservesKiroResumeSessionWithoutReplacement(t *testing.T) {
 	t.Parallel()
 
@@ -470,7 +564,7 @@ func TestConductorInvocationRunnerBypassedWhenProviderOverrideDisablesRegistryDe
 		providerRegistry:    providers,
 		invocationConductor: conductor.New(providers),
 	}
-	decorators := service.runtimeRunnerDecorators(nil, nil, nil, nil, false)
+	decorators := service.runtimeRunnerDecorators(nil, nil, nil, nil, false, nil)
 	for _, decorator := range decorators {
 		runner := decorator(&conductorRouteRecordingRunner{}, nil)
 		if _, ok := runner.(conductorInvocationRunner); ok {
@@ -530,7 +624,7 @@ func TestNewRuntimeWithSelectionComposesConductorFromRegistry(t *testing.T) {
 	if service.invocationConductor == nil {
 		t.Fatal("invocationConductor = nil")
 	}
-	decorators := service.runtimeRunnerDecorators(nil, nil, nil, nil, true)
+	decorators := service.runtimeRunnerDecorators(nil, nil, nil, nil, true, nil)
 	var sawConductor bool
 	for _, decorator := range decorators {
 		runner := decorator(&conductorRouteRecordingRunner{}, nil)

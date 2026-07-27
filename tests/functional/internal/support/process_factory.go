@@ -34,7 +34,7 @@ func RunFactoryToCompletionWithEdges(
 	overrides serviceedges.Edges,
 	timeout time.Duration,
 ) factoryapi.FactorySession {
-	session, _, _ := runFactoryToCompletion(t, dir, overrides, timeout)
+	session, _, _, _ := runFactoryToCompletion(t, dir, overrides, timeout, false)
 	return session
 }
 
@@ -46,7 +46,7 @@ func RunFactoryToCompletionWithEdgesAndWork(
 	overrides serviceedges.Edges,
 	timeout time.Duration,
 ) (factoryapi.FactorySession, factoryapi.ListWorkResponse) {
-	session, work, _ := runFactoryToCompletion(t, dir, overrides, timeout)
+	session, work, _, _ := runFactoryToCompletion(t, dir, overrides, timeout, false)
 	return session, work
 }
 
@@ -58,7 +58,24 @@ func RunFactoryToCompletionWithEdgesAndObservations(
 	overrides serviceedges.Edges,
 	timeout time.Duration,
 ) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
-	return runFactoryToCompletion(t, dir, overrides, timeout)
+	session, work, events, _ := runFactoryToCompletion(t, dir, overrides, timeout, false)
+	return session, work, events
+}
+
+// RunFactoryToCompletionWithEdgesAndResponseEvents also reads the public
+// ephemeral response-event stream before stopping the root-built process.
+func RunFactoryToCompletionWithEdgesAndResponseEvents(
+	t testing.TB,
+	dir string,
+	overrides serviceedges.Edges,
+	timeout time.Duration,
+) (
+	factoryapi.FactorySession,
+	factoryapi.ListWorkResponse,
+	[]factoryapi.FactoryEvent,
+	[]factoryapi.FactoryResponseEvent,
+) {
+	return runFactoryToCompletion(t, dir, overrides, timeout, true)
 }
 
 func runFactoryToCompletion(
@@ -66,7 +83,13 @@ func runFactoryToCompletion(
 	dir string,
 	overrides serviceedges.Edges,
 	timeout time.Duration,
-) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
+	captureResponseEvents bool,
+) (
+	factoryapi.FactorySession,
+	factoryapi.ListWorkResponse,
+	[]factoryapi.FactoryEvent,
+	[]factoryapi.FactoryResponseEvent,
+) {
 	t.Helper()
 
 	server := NewProcessAPIServer()
@@ -102,6 +125,10 @@ func runFactoryToCompletion(
 	session := GetDefaultSession(t, baseURL)
 	work := ListDefaultSessionWork(t, baseURL)
 	events := GetFactoryEventsAt(t, baseURL)
+	var responseEvents []factoryapi.FactoryResponseEvent
+	if captureResponseEvents {
+		responseEvents = GetFactoryResponseEventsAt(t, baseURL, session.Id)
+	}
 	daemon.Stop(t)
-	return session, work, events
+	return session, work, events, responseEvents
 }

@@ -157,15 +157,6 @@ func TestScriptWrapProvider_Infer_GenericNonCodexExitFailuresPreserveMessageAndC
 	}
 }
 
-func TestScriptWrapProvider_Infer_CursorAndCodexUseProviderOwnedFailureParsers(t *testing.T) {
-	t.Parallel()
-	for _, tc := range providerOwnedCursorAndCodexFailureTestCases() {
-		t.Run(tc.name, func(t *testing.T) {
-			assertInferenceExitFailure(t, tc)
-		})
-	}
-}
-
 func TestScriptWrapProvider_Infer_CodexGPT56SolFailureUsesCanonicalResultAndDecision(t *testing.T) {
 	t.Parallel()
 	entry := providerErrorCorpusEntryForTest(t, "codex_gpt_5_6_sol_requires_newer_cli")
@@ -477,8 +468,6 @@ func TestProgressStreamIdentity_SelectsProviderOwnedObservers(t *testing.T) {
 		command  string
 		identity adapter.Identity
 	}{
-		{command: "agent", identity: adapter.Identity(modelprovider.ProviderCursor)},
-		{command: "agent.exe", identity: adapter.Identity(modelprovider.ProviderCursor)},
 		{command: "codex", identity: adapter.Identity(modelprovider.ProviderCodex)},
 		{command: `C:\tools\codex.cmd`, identity: adapter.Identity(modelprovider.ProviderCodex)},
 		{command: "claude", identity: adapter.Identity(modelprovider.ProviderClaude)},
@@ -679,21 +668,6 @@ func TestNewProviderError_AssignsDeterministicFamilyFromType(t *testing.T) {
 				t.Fatalf("expected Family %q, got %q", tc.wantFamily, err.Family)
 			}
 		})
-	}
-}
-
-func TestNormalizeProviderExitFailure_CursorCommandLineTooLongHasExplicitType(t *testing.T) {
-	t.Parallel()
-	providerErr := normalizeProviderExitFailure(string(modelprovider.ProviderCursor), CommandResult{
-		ExitCode: 1,
-		Stderr:   []byte("The command line is too long.\r\n"),
-	}, nil, nil)
-	if providerErr.Type != workerexecution.WorkFailureTypeCommandLineTooLong {
-		t.Fatalf("Type = %q, want %q", providerErr.Type, workerexecution.WorkFailureTypeCommandLineTooLong)
-	} else if providerErr.Family != workerexecution.WorkFailureFamilyTerminal {
-		t.Fatalf("Family = %q, want terminal", providerErr.Family)
-	} else if providerErr.Message != "The command line is too long." {
-		t.Fatalf("Message = %q, want bounded Cursor diagnostic", providerErr.Message)
 	}
 }
 

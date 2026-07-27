@@ -283,7 +283,6 @@
     "pkg/services/workers/provider/commandenv",
     "pkg/services/workers/provider/conductor",
     "pkg/services/workers/provider/cursor",
-    "pkg/services/workers/provider/cursor/progress",
     "pkg/services/workers/provider/functionaltests",
     "pkg/services/workers/provider/gemini",
     "pkg/services/workers/provider/inferencecontract",
@@ -1583,11 +1582,6 @@
     },
     {
       "packagePath": "pkg/services/workers/provider/cursor",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/workers/provider/cursor/progress",
       "disposition": "move",
       "destination": "providers/internal/services/execution"
     },

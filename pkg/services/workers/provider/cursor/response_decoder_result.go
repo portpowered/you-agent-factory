@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	responseevents "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -18,7 +16,7 @@ const cursorDiagnosticInvalidResult = "cursor_invalid_result"
 func (d *ResponseEventDecoder) decodeResult(record cursorStreamRecord) (adapter.DecodeResult, error) {
 	providerRef := d.providerRef(record.SessionID)
 	if record.Subtype == ResultSubtypeSuccess && !record.IsError {
-		if canonicalProviderSession(string(modelprovider.ProviderCursor), record.SessionID) == nil {
+		if providerRef == "" {
 			return cursorDiagnostic(cursorDiagnosticInvalidResult, "Cursor success result omitted a valid session identifier"), nil
 		}
 		closed, err := d.closeUnresolvedTools(cursorToolCloseOutcome{reason: cursorToolGapTerminal})
@@ -76,7 +74,7 @@ func (d *ResponseEventDecoder) decodeResult(record cursorStreamRecord) (adapter.
 }
 
 func (d *ResponseEventDecoder) cursorResultSnapshot(record cursorStreamRecord, providerRef string) (adapter.DecodeResult, error) {
-	result := boundedText(record.Result, PublishedTextLimit)
+	result := safeCursorPublishedText(record.Result)
 	fidelity := responseevents.FidelityLossless
 	if result != record.Result {
 		fidelity = responseevents.FidelityLossy

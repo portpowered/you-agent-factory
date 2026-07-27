@@ -92,7 +92,8 @@ func (r commandRunner) Run(
 ) (workerprocess.CommandResult, error) {
 	switch r.runner.(type) {
 	case workerprovider.InferenceProgressPublishingCommandRunner, *workerprovider.InferenceProgressPublishingCommandRunner,
-		workerprocess.ExecCommandRunner, *workerprocess.ExecCommandRunner:
+		workerprocess.ExecCommandRunner, *workerprocess.ExecCommandRunner,
+		workerprocess.StreamingAdaptedCommandRunner, *workerprocess.StreamingAdaptedCommandRunner:
 		return runObservedCommand(ctx, req, observe, r.runner, r.logger)
 	}
 	runner := r.runner

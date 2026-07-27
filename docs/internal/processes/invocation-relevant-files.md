@@ -68,6 +68,38 @@ primary-result behavior.
   environment and working-directory delivery through `root.BuildProcess` with
   an injected command-runner edge; do not expose configured secrets in events
   or assertion output.
+- A provider command-ownership migration should move pure argv, prompt,
+  environment, and dispatch assembly into the provider package before replacing
+  an aggregate path that still owns effectful materialization or cleanup.
+  Preserve the catalog-declared executable identity even when it differs from
+  the canonical registry identity, and cut the aggregate path over only after
+  its typed effects have moved with equivalent terminal-path cleanup evidence.
+  Provider-owned command preparation can return an idempotent cleanup through
+  `adapter.CommandBuildResult`; neutral orchestration defers it across command,
+  decoder, and final-result handling. Close a temporary prompt before command
+  launch, make removal safe under concurrent terminal signals, and clean an
+  exact created path immediately when preparation fails before a command exists.
+- A native-streaming integration should keep decode state invocation-local,
+  publish each provider-neutral draft through the response writer in observed
+  subprocess order, and use the parsed terminal record only for the authoritative
+  completion. Guard the publication callback so the first writer failure stops
+  later publication and prevents a terminal close; successful, malformed,
+  failed, canceled, and timed-out paths must otherwise reach at most one close.
+  Start a stable message lifecycle before its first delta and complete that same
+  item from the authoritative terminal snapshot; otherwise the neutral protocol
+  correctly rejects the delta before it can reach a Factory Session. The
+  conductor-to-Runner destination must forward each validated draft through the
+  injected `ProgressPublisher` as a canonical draft with the dispatch ID restored,
+  rather than collecting only the terminal response, so the session-owned store
+  remains the sole owner of public response-event identity, ordering, retention,
+  and SSE delivery.
+  Initialize invocation-local decode and final-parse state with a validated
+  requested Provider Session, replace it only from accepted structured native
+  records with valid identifiers, and carry the effective session through both
+  successful and retryable failed completions; free-form, malformed, empty, and
+  unsupported records must never create or replace session continuity.
+  Exercise the same integration concurrently under `go test -race` so decoder
+  state, writer state, and cleanup remain isolated per invocation.
 - Final-only provider integrations should keep native final stdout as response
   content and derive resumable Provider Session metadata only from explicit
   structured fields that satisfy the provider's identifier contract. If a
@@ -275,8 +307,8 @@ primary-result behavior.
   resolve onto their canonical conductor identity. Bundled built-ins remain on
   the provider-native Infer/command path until their package-owned Integration
   replaces the native-runtime compatibility stub; `UsesNativeRunner` keeps the
-  stub on the native path and routes migrated Integrations (currently Gemini
-  and Kiro)
+  stub on the native path and routes migrated Integrations (currently Gemini,
+  Kiro, and Cursor)
   through the conductor without a concrete-provider switch in shared
   orchestration. Aggregate dispatch/failure branches and `ProviderOverride`
   remain intact and bypass the registry/conductor decorators. Concurrent cancel,
@@ -1097,14 +1129,19 @@ response-stream output.
   `inferencecontract.ExecuteInvocation` remains the single owner of canonical,
   non-retryable cancellation. Bind the
   migrated providers as registry catalog Integrations
-  (`gemini.NewIntegration`, `kiro.NewIntegration`) from
+  (`gemini.NewIntegration`, `kiro.NewIntegration`, `cursor.NewIntegration`) from
   `BuiltInRegistrations`, and let
   `UsesNativeRunner` route Integrations that no longer advertise the
   native-runtime compatibility marker through `conductor.Invoke` without adding
   a concrete-provider switch in shared orchestration. Process composition
   passes the shared `ProviderCommandRunner` edge into
   `BuiltInRegistrations(BuiltInDependencies{CommandRunner})` so migrated
-  Integrations and native executors share one command boundary. Worker
+  Integrations and native executors share one command boundary. Cursor also
+  receives the resolved Workers operating system and exact
+  `WorkersProviderTemporaryFileSystem` edge through those dependencies; its
+  provider-scoped root-process functional tests replace only those two typed
+  effects and prove that every created oversized-prompt file is closed and
+  removed on success and adverse outcomes. Worker
   construction resolves persisted plus invocation-override permission policy
   once, then an outer invocation-policy runner records the effective value on
   `ProviderInferenceRequest`; this outer boundary must wrap the conductor
@@ -1245,7 +1282,15 @@ response-stream output.
   `codex_failure_internal_cause_test.go`. Invocation error code compatibility
   coverage lives in `provider_invocation_error_compatibility_test.go` and should
   lock stable `WorkFailureType` / `FailureDetail.Reason` values across corpus
-  normalization and Codex reporting-path agreement probes. A streaming decoder must hold
+  normalization and Codex reporting-path agreement probes.
+  Provider-owned failure classifiers may inspect bounded native stdout/stderr
+  to select a stable category, but customer-visible messages and terminal
+  drafts must come from category-specific product guidance rather than native
+  excerpts. Keep the original command surfaces only in internal diagnostics,
+  give context or command-boundary deadlines timeout precedence, and propagate
+  cancellation to the inference protocol so its validating writer creates the
+  single canonical canceled completion.
+  A streaming decoder must hold
   terminal `ERROR` drafts until the shared executor flushes it with the process
   outcome; discard a native failure when cancellation, deadline, or exit 124 wins.
   When multiple typed terminal records arrive, the held canonical draft and
@@ -1820,6 +1865,12 @@ response-stream output.
   mount as well as any intentional standalone development path. Prove new routes
   with a built-preview browser test that navigates the hosted path directly;
   component tests that inject a pathname do not verify production routing.
+- Registry-migrated provider integrations receive subprocess and filesystem
+  effects through `pkg/wire` when built-in registrations are constructed.
+  Preserve optional subprocess capabilities when adapting those effects:
+  expose Workers `RunStreaming` only when the injected Platform runner actually
+  implements streaming, so buffered functional overrides continue through the
+  same registry route without a false streaming capability.
 - A Runner that starts an injected command must retain partial stdout/stderr in
   detached result and failure diagnostics, then emit exactly one terminal event
   after all progress fragments. Normal non-zero exits keep their exact exit code

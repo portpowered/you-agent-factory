@@ -32,9 +32,14 @@ const (
 	ResponseMetadataCacheWriteTokens = "cache_write_tokens"
 
 	ProviderSessionKindSessionID = "session_id"
+
+	cursorSensitiveOutputMessage = "Cursor output was omitted because it contained sensitive details."
 )
 
-var safeCursorProviderSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+var (
+	safeCursorProviderSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+	cursorWindowsAbsolutePathPattern   = regexp.MustCompile(`(?i)(?:^|[\s"'(])(?:[a-z]:[\\/]|\\\\)`)
+)
 
 type resultPayload struct {
 	Type          string       `json:"type"`
@@ -90,47 +95,75 @@ func (f *ParseFailure) Error() string {
 // ParseInferenceResult parses Cursor success stdout from either terminal json
 // or stream-json output.
 func ParseInferenceResult(provider string, stdout []byte) (*InferenceResult, *ParseFailure) {
+	return parseInferenceResult(provider, stdout, nil)
+}
+
+func parseInferenceResult(
+	provider string,
+	stdout []byte,
+	requestedSession *workerexecution.ProviderSessionMetadata,
+) (*InferenceResult, *ParseFailure) {
 	trimmed := strings.TrimSpace(string(stdout))
 	if trimmed == "" {
-		return nil, resultParseFailure(provider, "cursor JSON output was empty", nil)
+		return nil, resultParseFailureWithSession(
+			provider, "cursor JSON output was empty", nil, requestedSession,
+		)
 	}
 
 	var payload resultPayload
 	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
 		if strings.Contains(trimmed, "\n") {
-			return ParseInferenceStreamResult(provider, stdout)
+			return parseInferenceStreamResult(provider, stdout, requestedSession)
 		}
-		return nil, resultParseFailure(provider, fmt.Sprintf("cursor JSON output was not valid JSON: %v", err), err)
+		return nil, resultParseFailureWithSession(
+			provider, fmt.Sprintf("cursor JSON output was not valid JSON: %v", err), err, requestedSession,
+		)
 	}
 
 	if payload.Type != ResultTypeResult {
 		if strings.Contains(trimmed, "\n") {
-			return ParseInferenceStreamResult(provider, stdout)
+			return parseInferenceStreamResult(provider, stdout, requestedSession)
 		}
-		return nil, resultParseFailure(provider, fmt.Sprintf("cursor JSON output had unexpected type %q, want %q", payload.Type, ResultTypeResult), nil)
+		return nil, resultParseFailureWithSession(
+			provider,
+			fmt.Sprintf("cursor JSON output had unexpected type %q, want %q", payload.Type, ResultTypeResult),
+			nil,
+			requestedSession,
+		)
 	}
 	if payload.Subtype != ResultSubtypeSuccess {
-		return nil, resultErrorSubtype(provider, payload)
+		return nil, resultErrorSubtypeWithSession(provider, payload, requestedSession)
 	}
 	if payload.IsError {
-		return nil, resultErrorSubtype(provider, payload)
+		return nil, resultErrorSubtypeWithSession(provider, payload, requestedSession)
 	}
 
 	session := canonicalProviderSession(provider, payload.SessionID)
 	if session == nil {
-		return nil, resultParseFailure(provider, "cursor JSON success result is missing or invalid session_id", nil)
+		session = cloneCursorProviderSession(requestedSession)
+	}
+	if session == nil {
+		return nil, resultParseFailure(
+			provider, "cursor JSON success result is missing or invalid session_id", nil,
+		)
 	}
 
 	return &InferenceResult{
-		Content:          payload.Result,
+		Content:          safeCursorPublishedText(payload.Result),
 		ProviderSession:  session,
 		ResponseMetadata: responseMetadataFromPayload(payload),
 	}, nil
 }
 
-func resultErrorSubtype(provider string, payload resultPayload) *ParseFailure {
-	_ = provider
+func resultErrorSubtypeWithSession(
+	provider string,
+	payload resultPayload,
+	requestedSession *workerexecution.ProviderSessionMetadata,
+) *ParseFailure {
 	failure := failureResultFromPayload(payload)
+	if failure.ProviderSession == nil {
+		failure.ProviderSession = cloneCursorProviderSession(requestedSession)
+	}
 	return &ParseFailure{
 		Type:            failure.Reason,
 		Message:         failure.Message,
@@ -140,11 +173,20 @@ func resultErrorSubtype(provider string, payload resultPayload) *ParseFailure {
 }
 
 func resultParseFailure(provider, message string, cause error) *ParseFailure {
+	return resultParseFailureWithSession(provider, message, cause, nil)
+}
+
+func resultParseFailureWithSession(
+	provider, message string,
+	cause error,
+	session *workerexecution.ProviderSessionMetadata,
+) *ParseFailure {
 	_ = provider
 	return &ParseFailure{
-		Type:    workerexecution.WorkFailureTypeUnknown,
-		Message: message,
-		Cause:   cause,
+		Type:            workerexecution.WorkFailureTypeUnknown,
+		Message:         message,
+		ProviderSession: cloneCursorProviderSession(session),
+		Cause:           cause,
 	}
 }
 
@@ -158,6 +200,17 @@ func canonicalProviderSession(provider, sessionID string) *workerexecution.Provi
 		Kind:     ProviderSessionKindSessionID,
 		ID:       normalized,
 	}
+}
+
+func cloneCursorProviderSession(
+	session *workerexecution.ProviderSessionMetadata,
+) *workerexecution.ProviderSessionMetadata {
+	if session == nil ||
+		workerexecution.CanonicalProviderSessionProvider(session.Provider) != "cursor" ||
+		strings.TrimSpace(session.Kind) != ProviderSessionKindSessionID {
+		return nil
+	}
+	return canonicalProviderSession("cursor", session.ID)
 }
 
 func responseMetadataFromPayload(payload resultPayload) map[string]string {
@@ -215,6 +268,37 @@ func boundedText(value string, limit int) string {
 		return value
 	}
 	return value[:limit] + "..."
+}
+
+// safeCursorPublishedText preserves ordinary assistant output while replacing
+// provider text that carries credential, prompt, transcript, control-character,
+// or machine-local path signals with stable customer-safe guidance.
+func safeCursorPublishedText(value string) string {
+	value = boundedText(value, PublishedTextLimit)
+	if value == "" {
+		return ""
+	}
+	if strings.ContainsAny(value, "\x00\r") || cursorPublishedTextIsSensitive(value) {
+		return cursorSensitiveOutputMessage
+	}
+	return value
+}
+
+func cursorPublishedTextIsSensitive(value string) bool {
+	normalized := strings.ToLower(value)
+	markers := []string{
+		"authorization:", "bearer ", "api_key=", "api_key:", "api-key=", "api-key:",
+		"apikey=", "apikey:", "token=", "token:", "secret=", "secret:", "password=",
+		"password:", "credential=", "credential:", "-----begin", "sk-", "ghp_", "aiza",
+		"ya29.", "private prompt", "customer prompt", "user prompt", "secret request",
+		"prompt:", "transcript:", "/home/", "/users/", "$home", "${", "%appdata%",
+	}
+	for _, marker := range markers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return cursorWindowsAbsolutePathPattern.MatchString(value)
 }
 
 // WithCommandOutputExcerpts attaches bounded stdout/stderr excerpts to provider diagnostics.
