@@ -22,14 +22,6 @@ Every plan must reflect these quality expectations:
 - readability and maintainability
 - direct test evidence for changed behavior
 - no broad unrelated cleanup inside a narrow behavior lane
-- an explicit delivery loop that continues through implementation, review,
-  required CI, conflict/shared-file reconciliation, and actual PR merge
-
-Every Markdown PRD must include a `Delivery Loop` section stating that the
-worker/reviewer cycle continues until required CI is terminal and passing, all
-blocking PR conversation feedback is explicitly addressed, merge conflicts are
-resolved, and the PR is merged. A PR that is merely opened, green, approved, or
-ready to merge is not complete.
 
 When the ask touches backend, plan for clear package ownership, explicit state,
 isolated side effects, aligned contracts, and direct verification at the right
@@ -74,8 +66,7 @@ The JSON file must be implementation-ready and contain:
 - `context.problem`
 - `context.solution`
 - `acceptanceCriteria` with 3-7 project-level criteria plus a final quality-gate
-  criterion for typecheck, lint, and tests and a delivery criterion requiring
-  the implementation/review loop to continue until the PR is actually merged
+  criterion for typecheck, lint, and tests
 - `userStories` with sequential  ids, title, description,
   acceptanceCriteria, priority, `passes: false`, and empty `notes`
 - Ids for storeis should be shaped like {{ (index .Inputs 0).Name }}-001, 002, etc. 
