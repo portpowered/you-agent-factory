@@ -20,6 +20,7 @@ const (
 	geminiGoldenTextSuccessCase         = "text-success"
 	geminiGoldenRateLimitCase           = "rate-limit"
 	geminiGoldenStructuredFailureCase   = "structured-failure"
+	geminiGoldenTimeoutCase             = "timeout"
 	geminiThrottleFailureReplayAttempts = 12
 )
 
@@ -129,7 +130,7 @@ func TestGeminiGoldenRateLimitAndStructuredFailure(t *testing.T) {
 			geminiGoldenRateLimitCase,
 			"gemini-rate-limit",
 			factoryapi.WorkFailureTypeThrottled,
-			factoryapi.WorkFailureTypePermanentBadRequest,
+			[]factoryapi.WorkFailureType{factoryapi.WorkFailureTypePermanentBadRequest},
 			true,
 		)
 	})
@@ -139,10 +140,28 @@ func TestGeminiGoldenRateLimitAndStructuredFailure(t *testing.T) {
 			geminiGoldenStructuredFailureCase,
 			"gemini-structured-failure",
 			factoryapi.WorkFailureTypePermanentBadRequest,
-			factoryapi.WorkFailureTypeThrottled,
+			[]factoryapi.WorkFailureType{factoryapi.WorkFailureTypeThrottled},
 			false,
 		)
 	})
+}
+
+// TestGeminiGoldenTimeout replays a sanitized Gemini timeout transcript through
+// the customer process boundary and proves a public timeout outcome distinct from
+// rate-limit throttle and structured non-throttle failure classes.
+//golden: docs/temp/functional/provider-sessions/gemini/timeout/manifest.json
+func TestGeminiGoldenTimeout(t *testing.T) {
+	runGeminiFailureGoldenCase(
+		t,
+		geminiGoldenTimeoutCase,
+		"gemini-timeout",
+		factoryapi.WorkFailureTypeTimeout,
+		[]factoryapi.WorkFailureType{
+			factoryapi.WorkFailureTypeThrottled,
+			factoryapi.WorkFailureTypePermanentBadRequest,
+		},
+		true,
+	)
 }
 
 func runGeminiFailureGoldenCase(
@@ -150,7 +169,7 @@ func runGeminiFailureGoldenCase(
 	caseName string,
 	manifestID string,
 	wantReason factoryapi.WorkFailureType,
-	notReason factoryapi.WorkFailureType,
+	notReasons []factoryapi.WorkFailureType,
 	replayThrottleExhaustion bool,
 ) {
 	t.Helper()
@@ -238,10 +257,13 @@ func runGeminiFailureGoldenCase(
 	if got := inferencePayload.FailureDetail.Reason; got != wantReason {
 		t.Fatalf("failure reason = %q, want %q", got, wantReason)
 	}
-	if notReason != "" && inferencePayload.FailureDetail.Reason == notReason {
-		t.Fatalf("failure reason = %q, must remain distinct from %q", inferencePayload.FailureDetail.Reason, notReason)
+	for _, notReason := range notReasons {
+		if inferencePayload.FailureDetail.Reason == notReason {
+			t.Fatalf("failure reason = %q, must remain distinct from %q", inferencePayload.FailureDetail.Reason, notReason)
+		}
 	}
-	if inferencePayload.FailureDetail.Reason == factoryapi.WorkFailureTypeTimeout {
+	if wantReason != factoryapi.WorkFailureTypeTimeout &&
+		inferencePayload.FailureDetail.Reason == factoryapi.WorkFailureTypeTimeout {
 		t.Fatalf("failure reason = %q, want non-timeout failure class", inferencePayload.FailureDetail.Reason)
 	}
 
