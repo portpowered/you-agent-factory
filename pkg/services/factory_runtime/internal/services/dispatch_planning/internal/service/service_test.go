@@ -338,6 +338,188 @@ func TestPublishCancellationLeavesAcceptedIntentPending(t *testing.T) {
 	}
 }
 
+func TestRetireAcceptsEachTerminalOutcomeExactlyOnce(t *testing.T) {
+	t.Parallel()
+
+	outcomes := []dispatchplanning.TerminalResultOutcome{
+		dispatchplanning.TerminalResultOutcomeSuccess,
+		dispatchplanning.TerminalResultOutcomeFailure,
+		dispatchplanning.TerminalResultOutcomeCancelled,
+	}
+	for _, outcome := range outcomes {
+		outcome := outcome
+		t.Run(string(outcome), func(t *testing.T) {
+			t.Parallel()
+			planner, result := publishedTerminalResult(t, outcome)
+
+			first, err := planner.Retire(context.Background(), result)
+			if err != nil {
+				t.Fatalf("Retire(first) error = %v", err)
+			}
+			if first.Outcome != dispatchplanning.RetirementOutcomeRetired {
+				t.Fatalf("Retire(first) outcome = %q, want RETIRED", first.Outcome)
+			}
+			duplicate, err := planner.Retire(context.Background(), result)
+			if err != nil {
+				t.Fatalf("Retire(duplicate) error = %v", err)
+			}
+			if duplicate.Outcome != dispatchplanning.RetirementOutcomeDuplicateIdempotent {
+				t.Fatalf("Retire(duplicate) outcome = %q, want DUPLICATE_IDEMPOTENT", duplicate.Outcome)
+			}
+
+			intent, ok := planner.Intent(result.DispatchID)
+			if !ok || intent.Status != dispatchplanning.OutboxIntentStatusRetired {
+				t.Fatalf("retired intent = (%#v, %t), want RETIRED", intent, ok)
+			}
+			if intent.Result == nil || !reflect.DeepEqual(*intent.Result, result) {
+				t.Fatalf("retained terminal result = %#v, want %#v", intent.Result, result)
+			}
+		})
+	}
+}
+
+func TestRetireRejectsUnknownAndConflictingResultsWithoutMutation(t *testing.T) {
+	t.Parallel()
+
+	planner, accepted := publishedTerminalResult(t, dispatchplanning.TerminalResultOutcomeFailure)
+	unknown := accepted
+	unknown.CorrelationID = "correlation-unknown"
+	if _, err := planner.Retire(context.Background(), unknown); !errors.Is(err, dispatchplanning.ErrUnknownDispatchCorrelation) {
+		t.Fatalf("Retire(unknown) error = %v, want ErrUnknownDispatchCorrelation", err)
+	}
+
+	first, err := planner.Retire(context.Background(), accepted)
+	if err != nil || first.Outcome != dispatchplanning.RetirementOutcomeRetired {
+		t.Fatalf("Retire(first) = (%#v, %v), want RETIRED", first, err)
+	}
+	conflicts := []dispatchplanning.TerminalResult{
+		{
+			DispatchID:    "dispatch-other",
+			CorrelationID: accepted.CorrelationID,
+			WorkID:        accepted.WorkID,
+			Outcome:       accepted.Outcome,
+		},
+		{
+			DispatchID:    accepted.DispatchID,
+			CorrelationID: accepted.CorrelationID,
+			WorkID:        "work-other",
+			Outcome:       accepted.Outcome,
+		},
+		{
+			DispatchID:    accepted.DispatchID,
+			CorrelationID: accepted.CorrelationID,
+			WorkID:        accepted.WorkID,
+			Outcome:       dispatchplanning.TerminalResultOutcomeSuccess,
+		},
+	}
+	for _, conflict := range conflicts {
+		if _, err := planner.Retire(context.Background(), conflict); !errors.Is(err, dispatchplanning.ErrInvalidDispatchResultBoundary) {
+			t.Fatalf("Retire(conflict %#v) error = %v, want ErrInvalidDispatchResultBoundary", conflict, err)
+		}
+	}
+	intent, ok := planner.Intent(accepted.DispatchID)
+	if !ok || intent.Result == nil || !reflect.DeepEqual(*intent.Result, accepted) {
+		t.Fatalf("first accepted result was not preserved: (%#v, %t)", intent, ok)
+	}
+}
+
+func TestRetireRejectsResultForUnpublishedIntent(t *testing.T) {
+	t.Parallel()
+
+	planner := New(nil)
+	action := plannedAction(t, planner, runnableDecision(
+		"dispatch-1",
+		"correlation-1",
+		"review",
+		"reviewer",
+		"work-1",
+	))
+	if _, err := planner.Publish(context.Background(), action); err == nil {
+		t.Fatal("Publish() error = nil, want unavailable publisher")
+	}
+	result := dispatchplanning.TerminalResult{
+		DispatchID:    "dispatch-1",
+		CorrelationID: "correlation-1",
+		WorkID:        "work-1",
+		Outcome:       dispatchplanning.TerminalResultOutcomeSuccess,
+	}
+	if _, err := planner.Retire(context.Background(), result); !errors.Is(err, dispatchplanning.ErrInvalidDispatchResultBoundary) {
+		t.Fatalf("Retire(unpublished) error = %v, want ErrInvalidDispatchResultBoundary", err)
+	}
+	intent, ok := planner.Intent(result.DispatchID)
+	if !ok || intent.Status != dispatchplanning.OutboxIntentStatusPending || intent.Result != nil {
+		t.Fatalf("unpublished intent mutated = (%#v, %t)", intent, ok)
+	}
+}
+
+func TestRetireConcurrentDuplicateProducesOneCompletionOutcome(t *testing.T) {
+	t.Parallel()
+
+	planner, result := publishedTerminalResult(t, dispatchplanning.TerminalResultOutcomeSuccess)
+	const submissions = 64
+	type retireResponse struct {
+		result dispatchplanning.RetirementResult
+		err    error
+	}
+	responses := make(chan retireResponse, submissions)
+	var wg sync.WaitGroup
+	for index := 0; index < submissions; index++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			got, err := planner.Retire(context.Background(), result)
+			responses <- retireResponse{result: got, err: err}
+		}()
+	}
+	wg.Wait()
+	close(responses)
+
+	retired := 0
+	duplicates := 0
+	for response := range responses {
+		if response.err != nil {
+			t.Fatalf("Retire() error = %v", response.err)
+		}
+		switch response.result.Outcome {
+		case dispatchplanning.RetirementOutcomeRetired:
+			retired++
+		case dispatchplanning.RetirementOutcomeDuplicateIdempotent:
+			duplicates++
+		default:
+			t.Fatalf("Retire() outcome = %q", response.result.Outcome)
+		}
+	}
+	if retired != 1 || duplicates != submissions-1 {
+		t.Fatalf("retirement outcomes = (%d retired, %d duplicates), want (1, %d)", retired, duplicates, submissions-1)
+	}
+}
+
+func publishedTerminalResult(
+	t *testing.T,
+	outcome dispatchplanning.TerminalResultOutcome,
+) (*Planner, dispatchplanning.TerminalResult) {
+	t.Helper()
+	planner := New(func(context.Context, workers.WorkstationDispatchRequest) error {
+		return nil
+	})
+	action := plannedAction(t, planner, runnableDecision(
+		"dispatch-1",
+		"correlation-1",
+		"review",
+		"reviewer",
+		"work-1",
+	))
+	if _, err := planner.Publish(context.Background(), action); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+	return planner, dispatchplanning.TerminalResult{
+		DispatchID:    "dispatch-1",
+		CorrelationID: "correlation-1",
+		WorkID:        "work-1",
+		Outcome:       outcome,
+	}
+}
+
 func plannedAction(
 	t *testing.T,
 	planner *Planner,

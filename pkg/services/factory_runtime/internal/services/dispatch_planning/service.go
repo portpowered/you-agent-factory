@@ -19,6 +19,14 @@ var ErrInvalidRunnableDecision = errors.New("invalid Factory Runtime runnable de
 // identity for content that differs from the accepted outbox intent.
 var ErrDuplicateDispatchIntent = errors.New("factory runtime duplicate dispatch intent")
 
+// ErrUnknownDispatchCorrelation reports a terminal result whose correlation
+// identity is not present in the Runtime outbox.
+var ErrUnknownDispatchCorrelation = errors.New("factory runtime unknown dispatch correlation")
+
+// ErrInvalidDispatchResultBoundary reports a terminal result that conflicts
+// with its accepted intent or falls outside the terminal-result vocabulary.
+var ErrInvalidDispatchResultBoundary = errors.New("factory runtime invalid dispatch result boundary")
+
 // ExecutionFacts carries the detached worker-selection and invocation facts
 // selected for one runnable decision. Runtime supplies values, not a Workers
 // service, executor, provider, model, script, or hosted-runner implementation.
@@ -91,6 +99,7 @@ const (
 	OutboxIntentStatusPending    OutboxIntentStatus = "PENDING"
 	OutboxIntentStatusPublishing OutboxIntentStatus = "PUBLISHING"
 	OutboxIntentStatusPublished  OutboxIntentStatus = "PUBLISHED"
+	OutboxIntentStatusRetired    OutboxIntentStatus = "RETIRED"
 )
 
 // PublicationResult identifies the accepted logical intent and its outcome.
@@ -105,6 +114,43 @@ type OutboxIntent struct {
 	Action   OutboxAction
 	Status   OutboxIntentStatus
 	Attempts int
+	Result   *TerminalResult
+}
+
+// TerminalResultOutcome is the orchestration-neutral terminal Workers result
+// vocabulary accepted by dispatch planning.
+type TerminalResultOutcome string
+
+const (
+	TerminalResultOutcomeSuccess   TerminalResultOutcome = "SUCCESS"
+	TerminalResultOutcomeFailure   TerminalResultOutcome = "FAILURE"
+	TerminalResultOutcomeCancelled TerminalResultOutcome = "CANCELLED"
+)
+
+// TerminalResult carries the identities, Work scope, and terminal fact needed
+// to correlate one Workers result without exposing Workers implementation or
+// orchestrator types.
+type TerminalResult struct {
+	DispatchID    string
+	CorrelationID string
+	WorkID        string
+	Outcome       TerminalResultOutcome
+}
+
+// RetirementOutcome reports whether this delivery produced the one observable
+// completion outcome or repeated the already accepted terminal fact.
+type RetirementOutcome string
+
+const (
+	RetirementOutcomeRetired             RetirementOutcome = "RETIRED"
+	RetirementOutcomeDuplicateIdempotent RetirementOutcome = "DUPLICATE_IDEMPOTENT"
+)
+
+// RetirementResult identifies the correlated intent and delivery outcome.
+type RetirementResult struct {
+	Outcome       RetirementOutcome
+	DispatchID    string
+	CorrelationID string
 }
 
 // Service owns deterministic decision validation and Workers request
@@ -114,5 +160,6 @@ type Service interface {
 	Plan(context.Context, PlanRequest) (PlanResult, error)
 	Publish(context.Context, OutboxAction) (PublicationResult, error)
 	Retry(context.Context, string) (PublicationResult, error)
+	Retire(context.Context, TerminalResult) (RetirementResult, error)
 	Intent(string) (OutboxIntent, bool)
 }

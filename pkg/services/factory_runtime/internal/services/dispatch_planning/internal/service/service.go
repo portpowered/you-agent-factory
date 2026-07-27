@@ -25,6 +25,7 @@ type intentRecord struct {
 	action   dispatchplanning.OutboxAction
 	status   dispatchplanning.OutboxIntentStatus
 	attempts int
+	result   *dispatchplanning.TerminalResult
 }
 
 var _ dispatchplanning.Service = (*Planner)(nil)
@@ -145,6 +146,7 @@ func (p *Planner) Intent(dispatchID string) (dispatchplanning.OutboxIntent, bool
 		Action:   cloneAction(record.action),
 		Status:   record.status,
 		Attempts: record.attempts,
+		Result:   cloneTerminalResult(record.result),
 	}, true
 }
 
@@ -172,6 +174,10 @@ func (p *Planner) publish(ctx context.Context, record *intentRecord) error {
 	}
 
 	p.mu.Lock()
+	if record.status == dispatchplanning.OutboxIntentStatusRetired {
+		p.mu.Unlock()
+		return err
+	}
 	if err != nil {
 		record.status = dispatchplanning.OutboxIntentStatusPending
 	} else {

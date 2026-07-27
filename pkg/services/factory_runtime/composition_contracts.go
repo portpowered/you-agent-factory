@@ -41,11 +41,11 @@ var (
 
 	// ErrUnknownDispatchCorrelation indicates accept/retire targeted a correlation
 	// that is not present in the Runtime dispatch outbox.
-	ErrUnknownDispatchCorrelation = errors.New("factory runtime unknown dispatch correlation")
+	ErrUnknownDispatchCorrelation = dispatchplanning.ErrUnknownDispatchCorrelation
 
 	// ErrInvalidDispatchResultBoundary indicates the correlated worker result fell
 	// outside the published result-boundary vocabulary peers may submit.
-	ErrInvalidDispatchResultBoundary = errors.New("factory runtime invalid dispatch result boundary")
+	ErrInvalidDispatchResultBoundary = dispatchplanning.ErrInvalidDispatchResultBoundary
 
 	// ErrCheckpointNotFound indicates capture/load/restore targeted a checkpoint
 	// identity that is not present in Runtime mutable checkpoint state.
