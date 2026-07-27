@@ -508,9 +508,16 @@ Wave 0 functional-tests-expansion planning authority lives under
   `pkg/services/factory_definitions/packages/goal/prompt_drift.go`). Factory
   Definitions list/resolve/install must continue to consume detached catalog
   bytes through `PackagedFactoryCatalogOperations` rather than alternate embed
-  or filesystem paths. Focused unknown-identity resolve/install rejection
+  or filesystem paths.   Focused unknown-identity resolve/install rejection
   evidence lives in `pkg/wire/packaged_factory_guard_failure_test.go` and
   `tests/functional/product/packaged_factory_guard_failure/`.
+  First-party definition guard closeout verification runs, in order,
+  `make packaged-factory-source-check`, `make packaged-factory-consumption-check`,
+  `make packaged-factory-catalog-check`, and `make packaged-factory-package-verify`
+  (or the focused `packaged-factory-package-consumer-smoke` subset for
+  clean-consumer proof). No additional coverage, ownership, or package-target
+  manifest edits are required when those gates already register the new cmd
+  surfaces through default `make lint`.
   Public Go packages under `packages/` are not selected by the default unit
   lane. Classify passive publication boundaries explicitly in
   `internal/testlanes` and list them in `make test-maintenance`; the
