@@ -117,7 +117,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIJSONFailureRemainsValidJSON` verifies structured failure output.
   - `TestCLIJSONContainsNoPrivateRuntimeFields` guards the public boundary.
 
-- [ ] `tests/functional/transport/cli/output/ndjson_stream_test.go`
+- [x] `tests/functional/transport/cli/output/ndjson_stream_test.go`
   - `TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult` verifies
     record order and final record type.
   - `TestCLINDJSONSequenceIsMonotonic` verifies event ordering.

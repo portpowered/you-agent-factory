@@ -105,6 +105,9 @@ func TestCLINDJSONSequenceIsMonotonic(t *testing.T) {
 	if factoryEventCount == 0 {
 		t.Fatal("response stream contains no Factory Event records to order")
 	}
+	if previousSessionSequence < 0 {
+		t.Fatal("Factory Event records contain no public Factory Session sequence data")
+	}
 	if !invocationResultSeen {
 		t.Fatal("response stream missing terminal invocation_result")
 	}
