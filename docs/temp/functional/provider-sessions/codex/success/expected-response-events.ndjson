@@ -1,0 +1,3 @@
+{"type":"tool.started","itemId":"tool_fixture_1","toolName":"mcp:docs/lookup"}
+{"type":"tool.completed","itemId":"tool_fixture_1","toolName":"mcp:docs/lookup"}
+{"type":"message.completed","itemId":"message_fixture_1","text":"Codex fixture answer COMPLETE"}
