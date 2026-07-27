@@ -244,6 +244,30 @@ func (e *passExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (w
 	}, nil
 }
 
+type panicExecutor struct {
+	message string
+}
+
+func (e *panicExecutor) Execute(_ context.Context, _ work.WorkDispatch) (workerexecution.WorkResult, error) {
+	panic(e.message)
+}
+
+type asyncRecordingExecutor struct {
+	started chan work.WorkDispatch
+	release chan struct{}
+}
+
+func (e *asyncRecordingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	e.started <- dispatch
+	<-e.release
+	return workerexecution.WorkResult{
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      workerexecution.OutcomeAccepted,
+		Output:       "async-executor-output",
+	}, nil
+}
+
 type acceptedNoOutputExecutor struct{}
 
 func (*acceptedNoOutputExecutor) Execute(
