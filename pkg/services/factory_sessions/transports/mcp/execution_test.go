@@ -731,6 +731,127 @@ func TestBind_ReadListToolsValidationFailureReturnsBadRequestWithoutInvokingFake
 	}
 }
 
+func TestBind_FakeExecutionRootInvokedThroughCanonicalStartAsyncTool(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	fake := fakeExecutionRoot{
+		invoked: &invoked,
+		startAsync: func(_ context.Context, request factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+			if request.RequestID != "req-js-run-n-001" {
+				t.Fatalf("requestId = %q, want req-js-run-n-001", request.RequestID)
+			}
+			if request.Source.FactoryID != "customer-support-triage" {
+				t.Fatalf("factoryId = %q, want customer-support-triage", request.Source.FactoryID)
+			}
+			return runningAsyncStart(), nil
+		},
+	}
+	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
+		Execution: fake,
+		Prepare:   canonicalMCPRequestPreparation,
+	})
+	raw, err := operation(
+		context.Background(),
+		mcpfactorysession.ToolStartAsync,
+		json.RawMessage(`{"requestId":"req-js-run-n-001","source":{"kind":"FACTORY_ID","factoryId":"customer-support-triage"}}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(start_async) error = %v", err)
+	}
+	if !invoked {
+		t.Fatal("fake execution root was not invoked")
+	}
+	if !strings.Contains(string(raw), `"sessionId":"`+runningSessionID+`"`) ||
+		!strings.Contains(string(raw), `"status":"RUNNING"`) {
+		t.Fatalf("CallTool(start_async) = %s, want encoded async start response", raw)
+	}
+}
+
+func TestBind_FakeExecutionRootInvokedThroughCanonicalControlTool(t *testing.T) {
+	t.Parallel()
+
+	const pauseReason = "host maintenance"
+	var invoked bool
+	fake := fakeExecutionRoot{
+		invoked: &invoked,
+		pause: func(_ context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+			if sessionID != runningSessionID {
+				t.Fatalf("sessionId = %q, want %q", sessionID, runningSessionID)
+			}
+			if request.Reason != pauseReason {
+				t.Fatalf("reason = %q, want %q", request.Reason, pauseReason)
+			}
+			return acceptedControl(runningSessionID, "PAUSE", factorysessions.LifecycleStatusPaused), nil
+		},
+	}
+	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
+		Execution: fake,
+		Prepare:   canonicalMCPRequestPreparation,
+	})
+	raw, err := operation(
+		context.Background(),
+		mcpfactorysession.ToolControl,
+		json.RawMessage(`{"sessionId":"`+runningSessionID+`","operation":"PAUSE","reason":"`+pauseReason+`"}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(control) error = %v", err)
+	}
+	if !invoked {
+		t.Fatal("fake execution root was not invoked")
+	}
+	if !strings.Contains(string(raw), `"outcome":"ACCEPTED"`) ||
+		!strings.Contains(string(raw), `"status":"PAUSED"`) ||
+		!strings.Contains(string(raw), `"sessionId":"`+runningSessionID+`"`) {
+		t.Fatalf("CallTool(control) = %s, want encoded lifecycle control response", raw)
+	}
+}
+
+func TestBind_StartControlToolsInvalidJSONDecodeReturnsBadRequestWithoutInvokingFakeRoot(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
+		Execution: fakeExecutionRoot{invoked: &invoked},
+		Prepare:   canonicalMCPRequestPreparation,
+	})
+	raw, err := operation(context.Background(), mcpfactorysession.ToolStartAsync, json.RawMessage(`{"requestId":`))
+	if err != nil {
+		t.Fatalf("CallTool(start_async) transport error = %v, want typed tool response", err)
+	}
+	assertBadRequestToolResponse(t, raw)
+	if invoked {
+		t.Fatal("fake execution root was invoked for invalid JSON decode")
+	}
+}
+
+func TestBind_StartControlToolsValidationFailureReturnsBadRequestWithoutInvokingFakeRoot(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	preparation := mcpRequestPreparation{
+		start: func(factorysessions.StartRequest) (factorysessions.StartRequest, error) {
+			return factorysessions.StartRequest{}, errors.New("factory session source factoryId is required")
+		},
+	}
+	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
+		Execution: fakeExecutionRoot{invoked: &invoked},
+		Prepare:   preparation,
+	})
+	raw, err := operation(
+		context.Background(),
+		mcpfactorysession.ToolStartAsync,
+		json.RawMessage(`{"requestId":"req-malformed-001","source":{"kind":"FACTORY_ID"}}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(start_async) transport error = %v, want typed tool response", err)
+	}
+	assertBadRequestToolResponse(t, raw)
+	if invoked {
+		t.Fatal("fake execution root was invoked for validation failure")
+	}
+}
+
 func TestToolOperationPropagatesCallerContextAndCancellation(t *testing.T) {
 	type markerKey struct{}
 	const markerValue = "mcp-request-context"
@@ -1096,6 +1217,8 @@ type fakeExecutionRoot struct {
 	listSessions    func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
 	getSession      func(context.Context, string) (factorysessions.SessionReadResult, error)
 	queryDispatches func(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error)
+	startAsync      func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
+	pause           func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 }
 
 func (root fakeExecutionRoot) markInvoked() {
@@ -1135,6 +1258,29 @@ func (root fakeExecutionRoot) QueryDispatches(
 		panic("unexpected QueryDispatches on fake execution root")
 	}
 	return root.queryDispatches(ctx, request)
+}
+
+func (root fakeExecutionRoot) StartAsync(
+	ctx context.Context,
+	request factorysessions.StartRequest,
+) (factorysessions.AsyncStartResult, error) {
+	root.markInvoked()
+	if root.startAsync == nil {
+		panic("unexpected StartAsync on fake execution root")
+	}
+	return root.startAsync(ctx, request)
+}
+
+func (root fakeExecutionRoot) Pause(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ControlRequest,
+) (factorysessions.LifecycleControlResult, error) {
+	root.markInvoked()
+	if root.pause == nil {
+		panic("unexpected Pause on fake execution root")
+	}
+	return root.pause(ctx, sessionID, request)
 }
 
 func assertBadRequestToolResponse(t *testing.T, raw json.RawMessage) {
