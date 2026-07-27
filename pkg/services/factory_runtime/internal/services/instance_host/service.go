@@ -4,6 +4,7 @@
 package instance_host
 
 import (
+	"context"
 	"errors"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -22,4 +23,6 @@ type Dependencies struct {
 // implementation consumes this parent-private contract.
 type Service interface {
 	factoryruntime.Lifecycle
+	Pause(context.Context, factoryruntime.HostedHandle) (factoryruntime.PauseResult, error)
+	Resume(context.Context, factoryruntime.HostedHandle) (factoryruntime.ResumeResult, error)
 }
