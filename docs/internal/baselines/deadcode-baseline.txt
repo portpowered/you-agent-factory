@@ -215,14 +215,6 @@ pkg/transports/cli/baseline/run_flags.go: unreachable func: SerializeRunFlags
 pkg/transports/cli/climanifestcobra/work_constructor_test.go: unreachable func: workCommandWithInheritedFlags
 pkg/transports/cli/factory/validation_test_helper_test.go: unreachable func: testPersistableFactoryDefinitionValidator
 pkg/transports/cli/factory/validation_test_helper_test.go: unreachable func: testValidPersistableFactoryDefinitionValidator
-pkg/transports/cli/root_run_test.go: unreachable func: InspectModelAccessor
-pkg/transports/cli/root_run_test.go: unreachable func: InvokeModelAccessor
-pkg/transports/cli/root_run_test.go: unreachable func: ListModelsAccessor
-pkg/transports/cli/root_run_test.go: unreachable func: PullModelAccessor
-pkg/transports/cli/root_run_test.go: unreachable func: SetInspectModelAccessor
-pkg/transports/cli/root_run_test.go: unreachable func: SetInvokeModelAccessor
-pkg/transports/cli/root_run_test.go: unreachable func: SetListModelsAccessor
-pkg/transports/cli/root_run_test.go: unreachable func: SetPullModelAccessor
 pkg/transports/cli/root_run_test.go: unreachable func: SetShowSessionAccessor
 pkg/transports/cli/root_run_test.go: unreachable func: ShowSessionAccessor
 pkg/transports/cli/root_test_validator_test.go: unreachable func: uncheckedPersistenceValidator.PruneLayout

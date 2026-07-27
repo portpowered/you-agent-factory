@@ -267,6 +267,7 @@
     "pkg/services/workers/executor/agentrun",
     "pkg/services/workers/interface",
     "pkg/services/workers/internal/services/runners",
+    "pkg/services/workers/internal/services/runners/internal/inference",
     "pkg/services/workers/internal/services/runners/internal/script",
     "pkg/services/workers/internal/services/runners/internal/service",
     "pkg/services/workers/internal/services/runners/internal/testkit",
@@ -1512,6 +1513,11 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",
+      "disposition": "retain",
+      "destination": "workers/internal/services/runners"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/inference",
       "disposition": "retain",
       "destination": "workers/internal/services/runners"
     },

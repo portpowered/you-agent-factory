@@ -335,3 +335,20 @@ func NewHostedPollers(
 func LocalRuntimeHooks() models.LocalRuntimeHooks {
 	return modelrecording.Hooks()
 }
+
+func resolveInferenceRunner(
+	inner workers.Runner,
+	modelsService models.Service,
+	factoryCfg *factorydefinitions.FactoryConfig,
+	workerCfg *factorydefinitions.FactoryWorkerConfig,
+) workers.Runner {
+	if factoryCfg == nil {
+		return runnerswire.NewInferenceCompositionRunner(inner, modelsService, workerCfg, nil)
+	}
+	return runnerswire.NewInferenceCompositionRunner(
+		inner,
+		modelsService,
+		workerCfg,
+		factoryCfg.Resources,
+	)
+}

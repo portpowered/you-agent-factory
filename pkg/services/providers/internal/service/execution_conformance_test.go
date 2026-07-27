@@ -6,12 +6,17 @@ import (
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
+	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
+	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 	executiontest "github.com/portpowered/infinite-you/pkg/services/providers/internal/testutil/execution"
 )
 
 func TestStreamingAdapterConformance(t *testing.T) {
 	executiontest.Run(t, executiontest.Subject{
 		NewAdapter:       newStreamingAdapter,
+		NewRoot:          newConformanceRoot,
 		SupportsProgress: true,
 	})
 }
@@ -19,7 +24,28 @@ func TestStreamingAdapterConformance(t *testing.T) {
 func TestFinalOnlyAdapterConformance(t *testing.T) {
 	executiontest.Run(t, executiontest.Subject{
 		NewAdapter: newFinalOnlyAdapter,
+		NewRoot:    newConformanceRoot,
 	})
+}
+
+func newConformanceRoot(
+	attempt execution.Attempt,
+) (providers.Service, error) {
+	catalogService, err := catalogwire.NewService()
+	if err != nil {
+		return nil, err
+	}
+	executionService, err := executionwire.NewService(
+		catalogService,
+		execution.Registration{
+			Provider: providers.IDCodex,
+			Attempt:  attempt,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return providerservice.New(catalogService, executionService)
 }
 
 type streamingAdapter struct {

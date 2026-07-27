@@ -5,6 +5,7 @@ package wire
 import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
+	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
@@ -19,6 +20,10 @@ func NewService(options ...Option) (providers.Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	return newRoot(catalogService)
+}
+
+func newRoot(catalogService catalog.Service) (providers.Service, error) {
 	executionService, err := executionwire.NewService(catalogService)
 	if err != nil {
 		return nil, err

@@ -11,10 +11,7 @@ import (
 	"time"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
-	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
-	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
 
 const (
@@ -64,6 +61,7 @@ type Adapter struct {
 // bounded progress scenario in addition to the common final-only contract.
 type Subject struct {
 	NewAdapter       func(Plan) Adapter
+	NewRoot          func(execution.Attempt) (providers.Service, error)
 	SupportsProgress bool
 }
 
@@ -266,21 +264,7 @@ func newSubjectRoot(
 	t.Helper()
 	adapter := subject.NewAdapter(plan)
 	requireAdapter(t, adapter)
-	catalogService, err := catalogwire.NewService()
-	if err != nil {
-		t.Fatalf("construct conformance Catalog: %v", err)
-	}
-	executionService, err := executionwire.NewService(
-		catalogService,
-		execution.Registration{
-			Provider: providers.IDCodex,
-			Attempt:  adapter.Attempt,
-		},
-	)
-	if err != nil {
-		t.Fatalf("construct conformance Execution: %v", err)
-	}
-	root, err := providerservice.New(catalogService, executionService)
+	root, err := subject.NewRoot(adapter.Attempt)
 	if err != nil {
 		t.Fatalf("construct conformance Providers root: %v", err)
 	}
@@ -408,8 +392,8 @@ func progressPhase(index int) string {
 
 func requireSubject(t *testing.T, subject Subject) {
 	t.Helper()
-	if subject.NewAdapter == nil {
-		t.Fatal("conformance Subject.NewAdapter is required")
+	if subject.NewAdapter == nil || subject.NewRoot == nil {
+		t.Fatal("conformance Subject.NewAdapter and NewRoot are required")
 	}
 }
 
