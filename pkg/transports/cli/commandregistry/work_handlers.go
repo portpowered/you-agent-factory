@@ -29,6 +29,8 @@ const (
 	workMoveStateNameInputID    = "you.work.move.arg.1"
 	workMoveSessionInputID      = "you.work.move.flag.session"
 	workMoveRequestIDInputID    = "you.work.move.flag.request-id"
+	workVisualizeBatchInputID   = "you.work.visualize.arg.0"
+	workVisualizeFormatInputID  = "you.work.visualize.flag.format"
 	workServerInputID           = "you.flag.server"
 	workJSONInputID             = "you.flag.json"
 	workVerboseInputID          = "you.flag.verbose"
@@ -71,6 +73,12 @@ type ResolvedShowBinding struct {
 type ResolvedMoveBinding struct {
 	MoveWork          func(workcli.MoveConfig) error
 	DiagnosticsWriter func(*cobra.Command) io.Writer
+}
+
+// ResolvedVisualizeBinding supplies the local operation used by the Work
+// visualize stable-input adapter.
+type ResolvedVisualizeBinding struct {
+	VisualizeWork func(workcli.VisualizeConfig) error
 }
 
 // ResolvedListRunE maps canonical Work list input IDs into one transport
@@ -250,6 +258,32 @@ func resolvedMoveConfig(
 		JSON: globals.json, Verbose: globals.verbose || globals.debug,
 		Debug: globals.debug, Output: cmd.OutOrStdout(),
 	}, nil
+}
+
+// ResolvedVisualizeRunE maps canonical Work visualize input IDs into one local
+// request without retaining Cobra-backed pointers between invocations.
+func ResolvedVisualizeRunE(binding ResolvedVisualizeBinding) ResolvedWorkRunE {
+	return func(
+		cmd *cobra.Command,
+		inputs resolvedinput.Inputs,
+		_ resolvedinput.Inputs,
+	) error {
+		if binding.VisualizeWork == nil {
+			return fmt.Errorf("work visualize service is required")
+		}
+		batchFile, err := inputs.String(workVisualizeBatchInputID)
+		if err != nil {
+			return fmt.Errorf("resolve work visualize inputs: %w", err)
+		}
+		format, err := inputs.String(workVisualizeFormatInputID)
+		if err != nil {
+			return fmt.Errorf("resolve work visualize inputs: %w", err)
+		}
+		return binding.VisualizeWork(workcli.VisualizeConfig{
+			Context: cmd.Context(), BatchFile: batchFile,
+			Format: format, Output: cmd.OutOrStdout(),
+		})
+	}
 }
 
 type resolvedWorkGlobalValues struct {
@@ -517,6 +551,7 @@ func VisualizeRunE(binding VisualizeBinding) RunE {
 			format = *binding.Format
 		}
 		return binding.Visualize(workcli.VisualizeConfig{
+			Context:   cmd.Context(),
 			BatchFile: args[0],
 			Format:    format,
 			Output:    cmd.OutOrStdout(),
