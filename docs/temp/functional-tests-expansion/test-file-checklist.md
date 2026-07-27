@@ -326,7 +326,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Mock workers
 
-- [ ] `tests/functional/workers/mock/replacement_test.go`
+- [x] `tests/functional/workers/mock/replacement_test.go`
   - `TestMockWorkersReplaceOnlyNamedChildren`.
   - `TestUnknownWorkerOverrideFailsActionably`.
   - `TestMockWorkerFailureReturnsStablePublicFailure`.
@@ -409,7 +409,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestJavaScriptMockWorkersReplaceOnlyNamedChildren` covers partial mocks.
   - `TestJavaScriptUnknownWorkerOverrideFailsActionably` covers error.
 
-- [ ] `tests/functional/orchestration/javascript/policy/denied_operations_test.go`
+- [x] `tests/functional/orchestration/javascript/policy/denied_operations_test.go`
   - `TestJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic` covers
     policy failure.
   - `TestJavaScriptPolicyFailureDoesNotDispatchExternalWork` covers safety.

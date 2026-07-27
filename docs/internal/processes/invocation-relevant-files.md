@@ -631,6 +631,8 @@ response-stream output.
   must retain the stable error code and parameter identity while replacing the
   rejected value with the Work-owned redaction marker.
 - JavaScript named-factory lookup carries the authored `argsSchema` and `defaultPolicy` through `pkg/orchestrators/javascript/source/` into `pkg/factory/sessions/execution/PrepareStart`. Validate resolved arguments before runtime execution and resolve policy with that default; `workflowruntime.Request.ArgsSchema` preserves the same no-side-effect guard for direct runtime callers.
+- `WORKFLOW_FILE` JavaScript factories with authored `defaultPolicy` also attach an `InlineWorkflow` overlay in `pkg/services/factory_sessions/internal/runtimeopening/invocation/operation.go` so durable execution receives the same policy defaults as inline workflows.
+- JavaScript one-shot invocation maps terminal failures in `javaScriptInvocationResult` (`pkg/services/factory_sessions/internal/runtimeopening/invocation/operation.go`). When `GetResult` final-mode projection returns `UNAVAILABLE` without `Failure`, fall back to `GetSession().Failure` so policy/runtime denials surface the actionable message on CLI/API invocation responses instead of the generic "did not produce a final result" placeholder.
 - `pkg/work/invocation/interpolation.go` owns runtime `${parameter}` interpolation
   for signature-backed worker and workstation fields plus pre-dispatch
   interpolation validation. Keep file-contents substitution, omitted-exact-field
