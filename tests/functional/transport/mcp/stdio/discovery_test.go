@@ -57,6 +57,37 @@ func TestMCPStdioInitializeAndToolDiscovery(t *testing.T) {
 	}
 }
 
+// TestMCPUnknownToolReturnsProtocolError proves tools/call for a tool name that
+// is not in the discovered catalog returns a protocol-visible JSON-RPC error
+// rather than a success result or typed Factory Session domain envelope.
+func TestMCPUnknownToolReturnsProtocolError(t *testing.T) {
+	client, shutdown, serveErr := startFixtureBackedMCPServer(t)
+	defer func() {
+		shutdown()
+		closeMCPServer(t, serveErr)
+	}()
+
+	initializeMCPClient(t, client)
+
+	const unknownTool = "you.factory_session.definitely_not_a_real_tool"
+	callResult := client.call("tools/call", map[string]any{
+		"name":      unknownTool,
+		"arguments": map[string]any{},
+	})
+	if callResult.Error == nil {
+		t.Fatalf("tools/call for unknown tool %q succeeded with result %#v, want JSON-RPC error", unknownTool, callResult.Result)
+	}
+	if callResult.Result != nil {
+		t.Fatalf("tools/call for unknown tool %q returned result %#v alongside error %#v", unknownTool, callResult.Result, callResult.Error)
+	}
+	if callResult.Error.Code != -32602 {
+		t.Fatalf("tools/call error code = %d, want -32602 (invalid params); error = %#v", callResult.Error.Code, callResult.Error)
+	}
+	if !strings.Contains(callResult.Error.Message, "unknown tool") {
+		t.Fatalf("tools/call error message = %q, want protocol-visible unknown-tool message; error = %#v", callResult.Error.Message, callResult.Error)
+	}
+}
+
 // TestMCPDiscoveryContainsCanonicalFactorySessionTools proves tools/list exposes
 // the canonical Factory Session tool names published for MCP hosts without
 // asserting Session lifecycle or tool execution semantics.
