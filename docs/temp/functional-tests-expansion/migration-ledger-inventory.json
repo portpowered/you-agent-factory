@@ -5439,6 +5439,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/workers/inference/codex/golden_failure_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/codex",
+      "scenario": "TestCodexGoldenStructuredFailure",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/codex/golden_failure_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/codex/golden_failure_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/codex",
+      "scenario": "TestCodexGoldenTimeoutHasNoFalseTerminalMessage",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/codex/golden_failure_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/workers/inference/codex/worktree_workstation_test.go",
       "package": "you-agent-factory/tests/functional/workers/inference/codex",
       "scenario": "TestCodexWorktreeWorkstationDispatch_MaterializesCheckoutAndOmitsCLIWorktreeFlag",
@@ -6713,14 +6733,14 @@
       "workflow": 44,
       "workstations": 29
     },
-    "customer_top_level_Test_scenarios": 648,
+    "customer_top_level_Test_scenarios": 650,
     "files_with_customer_Test": 217,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 113,
-    "lane_short": 535,
+    "lane_short": 537,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
       "you-agent-factory/tests/functional/bootstrap_portability": 25,
@@ -6775,7 +6795,7 @@
       "you-agent-factory/tests/functional/workers/inference": 9,
       "you-agent-factory/tests/functional/workers/inference/agy": 3,
       "you-agent-factory/tests/functional/workers/inference/claude": 2,
-      "you-agent-factory/tests/functional/workers/inference/codex": 3,
+      "you-agent-factory/tests/functional/workers/inference/codex": 5,
       "you-agent-factory/tests/functional/workers/inference/cursor": 4,
       "you-agent-factory/tests/functional/workers/inference/gemini": 12,
       "you-agent-factory/tests/functional/workers/inference/kiro": 3,
@@ -6860,15 +6880,15 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T19:50:00Z",
-    "story": "ft-wave1-inference-process-cleanup-mergeability-15",
-    "live_customer_scenarios": 648,
-    "ledger_rows": 648,
+    "audited_at_utc": "2026-07-27T20:10:00Z",
+    "story": "ft-wave1-codex-golden-failure-mergeability-rebase11",
+    "live_customer_scenarios": 650,
+    "ledger_rows": 650,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 535,
+    "lane_short": 537,
     "lane_functionallong": 113,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
