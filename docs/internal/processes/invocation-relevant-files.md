@@ -807,6 +807,20 @@ response-stream output.
   should opt into `GenericBindings.GuardUnknownSubcommands`; keep that
   compatibility behavior in the generic projector instead of reintroducing
   family-owned flag parsing or public-name dispatch.
+  The Session-family production seam loads
+  `generated.SessionFamilyManifest`, constructs
+  `commandregistry.NewSessionResolvedRegistry`, and adds every runnable record
+  to the representative root's `GenericBindings.ResolvedCobraHandlers` by the
+  record's manifest-declared `Handler.ID`. Each invocation maps fresh local and
+  inherited `resolvedinput.Inputs` into the injected Factory Sessions
+  operations; `sessionListPrepare(options)` and `diagnostics.writer` remain the
+  injected `PrepareList` and `Diagnostics` roles. The former
+  `SessionFamilyBindings`, command-ID registry, mutable input-binding table,
+  handwritten Session `RunE` adapters, flag-usage patching, and duplicate
+  representative `session show` handler have been removed. Preserve this
+  split when extending the family: the representative registry owns only the
+  root lifecycle handler, while Session execution identity comes exclusively
+  from the Session manifest handler IDs.
   Validate the complete input and inheritance plan before registering any pflag
   values, and register inherited records against their persistent ancestor's
   canonical storage rather than allocating command-local copies.

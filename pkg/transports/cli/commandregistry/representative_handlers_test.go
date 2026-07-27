@@ -1,20 +1,62 @@
 package commandregistry_test
 
 import (
-	"bytes"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
 
 func noopRunE(*cobra.Command, []string) error { return nil }
+
+func TestVerifySessionHandlerIDCoverageRequiresExactManifestBindings(t *testing.T) {
+	manifest, err := generated.SessionFamilyManifest()
+	if err != nil {
+		t.Fatalf("SessionFamilyManifest() error = %v", err)
+	}
+	handlerIDs, err := commandregistry.RunnableSessionHandlerIDs(manifest)
+	if err != nil {
+		t.Fatalf("RunnableSessionHandlerIDs() error = %v", err)
+	}
+	registry := commandregistry.NewRegistry()
+	for _, handlerID := range handlerIDs {
+		if err := registry.Register(handlerID, noopRunE); err != nil {
+			t.Fatalf("Register(%q) error = %v", handlerID, err)
+		}
+	}
+	if err := registry.VerifySessionHandlerIDCoverage(manifest); err != nil {
+		t.Fatalf("VerifySessionHandlerIDCoverage() error = %v", err)
+	}
+
+	if err := registry.Register("you.work.list.handler", noopRunE); err != nil {
+		t.Fatalf("Register(cross-family) error = %v", err)
+	}
+	err = registry.VerifySessionHandlerIDCoverage(manifest)
+	if err == nil || !strings.Contains(err.Error(), "you.work.list.handler") {
+		t.Fatalf("VerifySessionHandlerIDCoverage() error = %v, want cross-family binding", err)
+	}
+}
+
+func TestRunnableSessionHandlerIDsRejectsDuplicateManifestBinding(t *testing.T) {
+	manifest, err := generated.SessionFamilyManifest()
+	if err != nil {
+		t.Fatalf("SessionFamilyManifest() error = %v", err)
+	}
+	create := manifest.Commands["you.session.create"]
+	deleteCommand := manifest.Commands["you.session.delete"]
+	deleteCommand.Handler.ID = create.Handler.ID
+	manifest.Commands[deleteCommand.ID] = deleteCommand
+
+	_, err = commandregistry.RunnableSessionHandlerIDs(manifest)
+	if err == nil || !strings.Contains(err.Error(), "duplicated") {
+		t.Fatalf("RunnableSessionHandlerIDs() error = %v, want duplicate handler ID", err)
+	}
+}
 
 func TestRunnableRepresentativeCommandIDsFromGeneratedManifest(t *testing.T) {
 	manifest, err := generated.RepresentativeFamilyManifest()
@@ -25,9 +67,8 @@ func TestRunnableRepresentativeCommandIDsFromGeneratedManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunnableRepresentativeCommandIDs() error = %v", err)
 	}
-	want := []string{"you", "you.session.show"}
-	if strings.Join(ids, ",") != strings.Join(want, ",") {
-		t.Fatalf("runnable IDs = %v, want %v", ids, want)
+	if len(ids) != 2 || ids[0] != "you" || ids[1] != "you.session.show" {
+		t.Fatalf("runnable IDs = %#v, want [you you.session.show]", ids)
 	}
 }
 
@@ -37,99 +78,156 @@ func TestVerifyRepresentativeRunnableCoverage(t *testing.T) {
 		t.Fatalf("RepresentativeFamilyManifest() error = %v", err)
 	}
 	registry := commandregistry.NewRegistry()
-	if err := registry.Register("you", noopRunE); err != nil {
+	if err := registry.Register("you.session.show", noopRunE); err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
 	if err := registry.VerifyRepresentativeRunnableCoverage(manifest); err == nil {
-		t.Fatal("VerifyRepresentativeRunnableCoverage() missing session show = nil, want error")
+		t.Fatal("missing root handler = nil, want error")
+	}
+	if err := registry.Register("you", noopRunE); err != nil {
+		t.Fatalf("Register(you) error = %v", err)
+	}
+	if err := registry.VerifyRepresentativeRunnableCoverage(manifest); err != nil {
+		t.Fatalf("complete coverage error = %v", err)
 	}
 }
 
 func TestNewRepresentativeRegistryRegistersContractedRunnableIDs(t *testing.T) {
 	registry, err := commandregistry.NewRepresentativeRegistry(commandregistry.RepresentativeHandlers{
-		RootRunE:        noopRunE,
-		SessionShowRunE: noopRunE,
+		RootRunE: noopRunE,
 	})
 	if err != nil {
 		t.Fatalf("NewRepresentativeRegistry() error = %v", err)
 	}
-	for _, commandID := range []string{"you", "you.session.show"} {
-		if _, err := registry.Lookup(commandID); err != nil {
-			t.Fatalf("Lookup(%q) error = %v", commandID, err)
+	if _, lookupErr := registry.Lookup("you"); lookupErr != nil {
+		t.Fatalf("Lookup(you) error = %v", lookupErr)
+	}
+}
+
+func TestNewSessionResolvedRegistryRejectsInvalidManifestBindings(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(map[string]climanifest.Command)
+		want   string
+	}{
+		{
+			name: "missing command",
+			mutate: func(commands map[string]climanifest.Command) {
+				delete(commands, "you.session.create")
+			},
+			want: "you.session.create",
+		},
+		{
+			name: "missing handler",
+			mutate: func(commands map[string]climanifest.Command) {
+				record := commands["you.session.create"]
+				record.Handler = nil
+				commands[record.ID] = record
+			},
+			want: "has no handler ID",
+		},
+		{
+			name: "duplicate handler",
+			mutate: func(commands map[string]climanifest.Command) {
+				record := commands["you.session.create"]
+				record.Handler.ID = commands["you.session.delete"].Handler.ID
+				commands[record.ID] = record
+			},
+			want: "duplicate handler registration",
+		},
+		{
+			name: "extra command",
+			mutate: func(commands map[string]climanifest.Command) {
+				commands["foreign"] = commands["you.session"]
+			},
+			want: "command count",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest, err := generated.SessionFamilyManifest()
+			if err != nil {
+				t.Fatalf("SessionFamilyManifest() error = %v", err)
+			}
+			test.mutate(manifest.Commands)
+			if _, err := commandregistry.NewSessionResolvedRegistry(
+				manifest,
+				commandregistry.SessionResolvedServices{},
+			); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("NewSessionResolvedRegistry() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestSessionResolvedHandlersRejectMissingOperations(t *testing.T) {
+	manifest, err := generated.SessionFamilyManifest()
+	if err != nil {
+		t.Fatalf("SessionFamilyManifest() error = %v", err)
+	}
+	registry, err := commandregistry.NewSessionResolvedRegistry(
+		manifest,
+		commandregistry.SessionResolvedServices{},
+	)
+	if err != nil {
+		t.Fatalf("NewSessionResolvedRegistry() error = %v", err)
+	}
+	handlerIDs, err := commandregistry.RunnableSessionHandlerIDs(manifest)
+	if err != nil {
+		t.Fatalf("RunnableSessionHandlerIDs() error = %v", err)
+	}
+	for _, handlerID := range handlerIDs {
+		handlers, err := registry.LookupHandlers(handlerID)
+		if err != nil {
+			t.Fatalf("LookupHandlers(%q) error = %v", handlerID, err)
+		}
+		err = handlers.ResolvedRunE(
+			&cobra.Command{Use: handlerID},
+			resolvedinput.Inputs{},
+			resolvedinput.Inputs{},
+		)
+		if err == nil {
+			t.Fatalf("resolved handler %q missing operation error = nil", handlerID)
+		}
+	}
+
+	registry, err = commandregistry.NewSessionResolvedRegistry(
+		manifest,
+		commandregistry.SessionResolvedServices{
+			CreateSession:  func(sessioncli.CreateConfig) error { return nil },
+			DeleteSession:  func(sessioncli.DeleteConfig) error { return nil },
+			ListSessions:   func(sessioncli.ListConfig) error { return nil },
+			ShowSession:    func(sessioncli.ShowConfig) error { return nil },
+			ListDispatches: func(sessioncli.DispatchesConfig) error { return nil },
+			PauseSession:   func(sessioncli.LifecycleControlConfig) error { return nil },
+			ResumeSession:  func(sessioncli.LifecycleControlConfig) error { return nil },
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewSessionResolvedRegistry(valid services) error = %v", err)
+	}
+	for _, handlerID := range handlerIDs {
+		handlers, err := registry.LookupHandlers(handlerID)
+		if err != nil {
+			t.Fatalf("LookupHandlers(%q) error = %v", handlerID, err)
+		}
+		err = handlers.ResolvedRunE(
+			&cobra.Command{Use: handlerID},
+			resolvedinput.Inputs{},
+			resolvedinput.Inputs{},
+		)
+		if err == nil {
+			t.Fatalf("resolved handler %q missing input error = nil", handlerID)
 		}
 	}
 }
 
-func TestSessionShowRunEUsesHandwrittenServicePath(t *testing.T) {
-	var gotMethod, gotPath string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod = r.Method
-		gotPath = r.URL.Path
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"session-beta","runtime":{"orchestratorKind":"JAVASCRIPT"}}`))
-	}))
-	defer srv.Close()
-
-	registry, err := commandregistry.NewRepresentativeRegistry(commandregistry.RepresentativeHandlers{
-		RootRunE: noopRunE,
-		SessionShowRunE: commandregistry.SessionShowRunE(commandregistry.SessionShowBinding{
-			Server:      stringPtr(srv.URL),
-			JSON:        boolPtr(true),
-			ShowSession: sessioncli.NewShow(testHTTPProtocol(t)),
-		}),
-	})
-	if err != nil {
-		t.Fatalf("NewRepresentativeRegistry() error = %v", err)
-	}
-	cmd := &cobra.Command{Use: "show"}
-	if err := registry.AttachRunE(cmd, "you.session.show"); err != nil {
-		t.Fatalf("AttachRunE() error = %v", err)
-	}
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetArgs([]string{"session-beta"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if gotMethod != http.MethodGet || gotPath != "/factory-sessions/session-beta" {
-		t.Fatalf("request = %s %s, want GET /factory-sessions/session-beta", gotMethod, gotPath)
-	}
-}
-
-func TestSessionShowRunEMapsDiagnosticsVerboseAndDebug(t *testing.T) {
-	var diagnostic bytes.Buffer
-	debug := true
-	runE := commandregistry.SessionShowRunE(commandregistry.SessionShowBinding{
-		Verbose: func() bool { return true },
-		Debug:   &debug,
-		DiagnosticsWriter: func(*cobra.Command) io.Writer {
-			return &diagnostic
-		},
-		ShowSession: func(cfg sessioncli.ShowConfig) error {
-			if cfg.Diagnostics != &diagnostic || !cfg.Verbose || !cfg.Debug {
-				t.Fatalf("show config = %#v, want diagnostic, verbose, and debug bindings", cfg)
-			}
-			return nil
-		},
-	})
-	if err := runE(&cobra.Command{Use: "show"}, nil); err != nil {
-		t.Fatalf("RunE() error = %v", err)
-	}
-}
-
-func TestRepresentativeRegistriesRejectMissingHandlers(t *testing.T) {
-	if _, err := commandregistry.NewRepresentativeRegistry(commandregistry.RepresentativeHandlers{
-		SessionShowRunE: noopRunE,
-	}); err == nil {
+func TestNewRepresentativeRegistryRejectsMissingHandlers(t *testing.T) {
+	if _, err := commandregistry.NewRepresentativeRegistry(commandregistry.RepresentativeHandlers{}); err == nil {
 		t.Fatal("NewRepresentativeRegistry() missing root handler = nil, want error")
 	}
-	if _, err := commandregistry.NewRepresentativeRegistry(commandregistry.RepresentativeHandlers{
-		RootRunE: noopRunE,
-	}); err == nil {
-		t.Fatal("NewRepresentativeRegistry() missing session show handler = nil, want error")
-	}
 }
 
-func stringPtr(value string) *string { return &value }
-
-func boolPtr(value bool) *bool { return &value }
+func stringPtr(value string) *string {
+	return &value
+}

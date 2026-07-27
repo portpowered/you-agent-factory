@@ -8,8 +8,78 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
+
+// NewSessionFamilyCommandFromManifest constructs an independently executable
+// `you session` family from the generated Session manifest snapshot. Registry
+// entries are addressed exclusively by stable handler IDs from that manifest.
+func NewSessionFamilyCommandFromManifest(
+	manifest climanifest.Manifest,
+	registry *commandregistry.Registry,
+) (*cobra.Command, error) {
+	if registry == nil {
+		return nil, fmt.Errorf("build session family command: registry is required")
+	}
+	if err := registry.VerifySessionHandlerIDCoverage(manifest); err != nil {
+		return nil, fmt.Errorf("build session family command: %w", err)
+	}
+
+	handlers := make(CobraHandlerRegistry)
+	resolvedHandlers := make(ResolvedCobraHandlerRegistry)
+	for _, record := range manifest.Commands {
+		if !record.Runnable {
+			continue
+		}
+		registered, err := registry.LookupHandlers(record.Handler.ID)
+		if err != nil {
+			return nil, fmt.Errorf("build session family command: %w", err)
+		}
+		handler := registered
+		if handler.ResolvedRunE != nil {
+			resolvedHandlers[record.Handler.ID] = handler.ResolvedRunE
+			continue
+		}
+		handlers[record.Handler.ID] = func(
+			cmd *cobra.Command,
+			args []string,
+			_ map[string]any,
+			_ resolvedinput.Inputs,
+		) error {
+			if handler.PreRunE != nil {
+				if err := handler.PreRunE(cmd, args); err != nil {
+					return err
+				}
+			}
+			return handler.RunE(cmd, args)
+		}
+	}
+
+	rootManifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		return nil, fmt.Errorf("build session family command: %w", err)
+	}
+	rootRecord, err := rootManifest.CommandByID("you")
+	if err != nil {
+		return nil, fmt.Errorf("build session family command: %w", err)
+	}
+	manifest.Commands[rootRecord.ID] = rootRecord
+
+	root, err := NewCommandTree(manifest, GenericBindings{
+		Handlers: HandlerRegistry{
+			rootRecord.Handler.ID: func(context.Context, map[string]any) error { return nil },
+		},
+		CobraHandlers:           handlers,
+		ResolvedCobraHandlers:   resolvedHandlers,
+		GuardUnknownSubcommands: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build session family command: %w", err)
+	}
+	root.SilenceUsage = true
+	return root, nil
+}
 
 // FactoryConfigInitFamilyComponents holds detached factory/config/init commands
 // before production root wiring attaches them as siblings.

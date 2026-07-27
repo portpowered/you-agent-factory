@@ -820,15 +820,18 @@ func (sessionListRequestPreparation) PrepareEventReconnect(
 	return fse.EventReconnectRequest{}, fmt.Errorf("unexpected PrepareEventReconnect call")
 }
 
-func TestNewRepresentativeHandlerRegistryWiresHandwrittenSessionShow(t *testing.T) {
+func TestNewRepresentativeHandlerRegistryLeavesSessionShowToResolvedRegistry(t *testing.T) {
 	globals := &cliGlobalOptions{}
 	diagnostics := &cliDiagnosticsOptions{}
 	registry, err := newRepresentativeHandlerRegistry(globals, diagnostics, &cliOperatorDefaultsOptions{}, CommandFactory{})
 	if err != nil {
 		t.Fatalf("newRepresentativeHandlerRegistry() error = %v", err)
 	}
-	if _, err := registry.Lookup("you.session.show"); err != nil {
-		t.Fatalf("Lookup(you.session.show) error = %v", err)
+	if _, err := registry.Lookup("you"); err != nil {
+		t.Fatalf("Lookup(you) error = %v", err)
+	}
+	if _, err := registry.Lookup("you.session.show"); err == nil {
+		t.Fatal("Lookup(you.session.show) error = nil, want Session resolved registry ownership")
 	}
 }
 
@@ -850,7 +853,7 @@ func TestProductionRootUsesGeneratedSessionFamilyCutover(t *testing.T) {
 			t.Fatalf("Find(session %s) error = %v", name, findErr)
 		}
 		if command.RunE == nil {
-			t.Fatalf("session %s must attach handwritten RunE through generated cutover", name)
+			t.Fatalf("session %s must attach resolved RunE through generated cutover", name)
 		}
 	}
 	for _, name := range []string{"run", "submit", "factory", "models", "work"} {
