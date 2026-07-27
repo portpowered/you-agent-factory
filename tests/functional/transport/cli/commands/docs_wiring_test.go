@@ -68,6 +68,25 @@ func TestCLIDocsEveryTopicRendersNonEmptyContent(t *testing.T) {
 	}
 }
 
+// TestCLIDocsUnknownTopicReturnsActionableFailure proves you docs with an
+// unsupported topic fails with a clear diagnostic naming the topic and does not
+// write misleading success content to stdout.
+func TestCLIDocsUnknownTopicReturnsActionableFailure(t *testing.T) {
+	workingDir := isolatedWorkingDirectoryWithoutDocsTree(t)
+	const unknownTopic = "unknown"
+
+	stdout, err := executeDocsWiringCommandResult(t, workingDir, "docs", unknownTopic)
+	if err == nil {
+		t.Fatal("expected unknown docs topic to fail")
+	}
+	if !strings.Contains(err.Error(), `unsupported docs topic "`+unknownTopic+`"`) {
+		t.Fatalf("unexpected unsupported topic error %q", err.Error())
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("unsupported docs topic should not write stdout, got %q", stdout)
+	}
+}
+
 func isolatedWorkingDirectoryWithoutDocsTree(t *testing.T) string {
 	t.Helper()
 
@@ -82,13 +101,21 @@ func isolatedWorkingDirectoryWithoutDocsTree(t *testing.T) string {
 func executeDocsWiringCommand(t *testing.T, workingDir string, args ...string) string {
 	t.Helper()
 
+	stdout, err := executeDocsWiringCommandResult(t, workingDir, args...)
+	if err != nil {
+		t.Fatalf("execute root command %v: %v\nstdout:\n%s", args, err, stdout)
+	}
+	return stdout
+}
+
+func executeDocsWiringCommandResult(t *testing.T, workingDir string, args ...string) (stdout string, err error) {
+	t.Helper()
+
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	inputs := support.FakeInputs(t.Context(), append([]string{"you"}, args...))
 	inputs.WorkingDirectory = workingDir
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf("execute root command %v: %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
-	}
-	return inputs.Stdout()
+	err = process.Execute(inputs.Input)
+	return inputs.Stdout(), err
 }
 
 func parsePackagedDocsIndexTopics(index string) []string {
