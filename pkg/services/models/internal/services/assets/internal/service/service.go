@@ -438,5 +438,9 @@ func assetContextError(ctx context.Context) error {
 	if ctx == nil || ctx.Err() == nil {
 		return nil
 	}
-	return fmt.Errorf("%w: %w", models.ErrAssetCancelled, ctx.Err())
+	return fmt.Errorf(
+		"%w: %w",
+		models.ErrAssetCancelled,
+		errors.Join(ctx.Err(), context.Cause(ctx)),
+	)
 }

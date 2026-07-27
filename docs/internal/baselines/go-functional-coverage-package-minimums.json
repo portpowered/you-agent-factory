@@ -858,7 +858,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/internal/service",
-      "minimum": 0.26
+      "minimum": 0.24
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire",

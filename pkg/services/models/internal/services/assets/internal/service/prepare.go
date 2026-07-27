@@ -122,7 +122,9 @@ func (s *service) inspectVerifiedCache(
 			return unavailableSnapshot(spec.modelName, source, revision, artifacts), false, nil
 		}
 		artifact, err := s.verifyCachedFile(
-			filepath.Join(root, revision, filepath.FromSlash(name)), expected,
+			ctx,
+			filepath.Join(root, revision, filepath.FromSlash(name)),
+			expected,
 		)
 		if errors.Is(err, os.ErrNotExist) {
 			return unavailableSnapshot(spec.modelName, source, revision, artifacts), false, nil
@@ -143,7 +145,11 @@ func (s *service) inspectVerifiedCache(
 	return snapshot, true, nil
 }
 
-func (s *service) verifyCachedFile(path string, expected metadataFile) (models.AssetArtifact, error) {
+func (s *service) verifyCachedFile(
+	ctx context.Context,
+	path string,
+	expected metadataFile,
+) (models.AssetArtifact, error) {
 	artifact := models.AssetArtifact{
 		Name:   expected.Path,
 		SHA256: strings.ToLower(strings.TrimSpace(expected.SHA256)),
@@ -163,7 +169,7 @@ func (s *service) verifyCachedFile(path string, expected metadataFile) (models.A
 		)
 	}
 	if artifact.SHA256 != "" {
-		actual, hashErr := s.fileSHA256(path)
+		actual, hashErr := s.fileSHA256(ctx, path)
 		if hashErr != nil {
 			return artifact, fmt.Errorf("verify cached asset %q: %w", expected.Path, hashErr)
 		}
@@ -191,8 +197,14 @@ func (s *service) fetchManifest(ctx context.Context, spec assetSpec) (remoteMani
 		return remoteManifest{}, fmt.Errorf("%w: fetch model asset manifest: %v", models.ErrSourceFetchFailed, err)
 	}
 	defer response.Body.Close()
+	if contextErr := assetContextError(ctx); contextErr != nil {
+		return remoteManifest{}, contextErr
+	}
 	if response.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 512))
+		if contextErr := assetContextError(ctx); contextErr != nil {
+			return remoteManifest{}, contextErr
+		}
 		return remoteManifest{}, fmt.Errorf(
 			"%w: fetch model asset manifest failed (%d): %s",
 			models.ErrSourceFetchFailed, response.StatusCode, strings.TrimSpace(string(body)),
@@ -200,6 +212,9 @@ func (s *service) fetchManifest(ctx context.Context, spec assetSpec) (remoteMani
 	}
 	var payload upstreamModel
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		if contextErr := assetContextError(ctx); contextErr != nil {
+			return remoteManifest{}, contextErr
+		}
 		return remoteManifest{}, fmt.Errorf("%w: decode model asset manifest: %v", models.ErrSourceFetchFailed, err)
 	}
 	revision := strings.TrimSpace(payload.SHA)
@@ -243,7 +258,7 @@ func (s *service) publishManifest(
 	spec assetSpec,
 	source models.SourceMetadata,
 	manifest remoteManifest,
-) (models.AssetSnapshot, error) {
+) (snapshot models.AssetSnapshot, resultErr error) {
 	root, err := s.modelCacheRoot(cacheDirectory, spec.modelName)
 	if err != nil {
 		return missingSnapshot(spec.modelName, source), err
@@ -256,26 +271,22 @@ func (s *service) publishManifest(
 		return missingSnapshot(spec.modelName, source), err
 	}
 	if err := s.makeDirectory(stagePath, 0o755); err != nil {
-		return missingSnapshot(spec.modelName, source), fmt.Errorf("prepare asset staging directory: %w", err)
+		return missingSnapshot(spec.modelName, source),
+			interruptedAssetError("prepare asset staging directory", err)
 	}
 
 	created := make([]string, 0, len(manifest.files))
 	promoted := false
-	cleanup := func() {
-		base := stagePath
-		if promoted {
-			base = finalPath
-		}
-		for index := len(created) - 1; index >= 0; index-- {
-			_ = s.removePath(filepath.Join(base, filepath.FromSlash(created[index])))
-		}
-		_ = s.removePath(base)
-		_ = s.removePath(metadataStagePath)
-	}
 	success := false
 	defer func() {
 		if !success {
-			cleanup()
+			base := stagePath
+			if promoted {
+				base = finalPath
+			}
+			if cleanupErr := s.cleanupAttempt(base, metadataStagePath, created); cleanupErr != nil {
+				resultErr = errors.Join(resultErr, cleanupErr)
+			}
 		}
 	}()
 
@@ -291,22 +302,76 @@ func (s *service) publishManifest(
 		}
 		artifacts = append(artifacts, artifact)
 	}
-	if err := s.writeMetadata(metadataStagePath, spec, manifest); err != nil {
+	if err := assetContextError(ctx); err != nil {
 		return failedSnapshot(spec.modelName, source, manifest.revision, artifacts), err
 	}
-	if err := s.renamePath(stagePath, finalPath); err != nil {
+	if err := s.writeMetadata(metadataStagePath, spec, manifest); err != nil {
 		return failedSnapshot(spec.modelName, source, manifest.revision, artifacts),
-			fmt.Errorf("publish verified asset revision: %w", err)
+			interruptedAssetError("stage asset metadata", err)
 	}
-	promoted = true
-	if err := s.renamePath(metadataStagePath, metadataPath); err != nil {
+	if err := assetContextError(ctx); err != nil {
+		return failedSnapshot(spec.modelName, source, manifest.revision, artifacts), err
+	}
+	promoted, err = s.promoteAttempt(
+		ctx, stagePath, finalPath, metadataStagePath, metadataPath,
+	)
+	if err != nil {
 		return failedSnapshot(spec.modelName, source, manifest.revision, artifacts),
-			fmt.Errorf("publish verified asset metadata: %w", err)
+			err
 	}
 	success = true
-	snapshot := availableSnapshot(spec.modelName, source, manifest.revision, artifacts)
+	snapshot = availableSnapshot(spec.modelName, source, manifest.revision, artifacts)
 	snapshot.Integrity = models.AssetIntegrityVerified
 	return snapshot, nil
+}
+
+func (s *service) cleanupAttempt(basePath, metadataStagePath string, created []string) error {
+	paths := make([]string, 0, len(created)+2)
+	directories := make(map[string]struct{})
+	for index := len(created) - 1; index >= 0; index-- {
+		relative := filepath.FromSlash(created[index])
+		paths = append(paths, filepath.Join(basePath, relative))
+		for directory := filepath.Dir(relative); directory != "."; directory = filepath.Dir(directory) {
+			directories[filepath.Join(basePath, directory)] = struct{}{}
+		}
+	}
+	nested := make([]string, 0, len(directories))
+	for directory := range directories {
+		nested = append(nested, directory)
+	}
+	sort.Slice(nested, func(i, j int) bool { return len(nested[i]) > len(nested[j]) })
+	paths = append(paths, nested...)
+	paths = append(paths, basePath, metadataStagePath)
+
+	var cleanupErr error
+	for _, path := range paths {
+		if err := s.removePath(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			cleanupErr = errors.Join(
+				cleanupErr,
+				fmt.Errorf("clean up asset preparation path %q: %w", filepath.Base(path), err),
+			)
+		}
+	}
+	return cleanupErr
+}
+
+func (s *service) promoteAttempt(
+	ctx context.Context,
+	stagePath string,
+	finalPath string,
+	metadataStagePath string,
+	metadataPath string,
+) (bool, error) {
+	if err := s.renamePath(stagePath, finalPath); err != nil {
+		return false, interruptedAssetError("publish verified asset revision", err)
+	}
+	if err := assetContextError(ctx); err != nil {
+		return true, err
+	}
+	if err := s.renamePath(metadataStagePath, metadataPath); err != nil {
+		return true, interruptedAssetError("publish verified asset metadata", err)
+	}
+	return true, nil
 }
 
 func (s *service) ensureStageAbsent(path string) error {
@@ -340,35 +405,24 @@ func (s *service) downloadFile(
 		)
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(response.Body, 512))
-		return models.AssetArtifact{}, fmt.Errorf(
-			"%w: download asset %q failed (%d): %s",
-			models.ErrSourceFetchFailed, remote.path, response.StatusCode, strings.TrimSpace(string(body)),
-		)
+	if err := validateDownloadResponse(ctx, response, remote.path); err != nil {
+		return models.AssetArtifact{}, err
 	}
 
 	target := filepath.Join(stagePath, filepath.FromSlash(remote.path))
 	if err := s.makeDirectory(filepath.Dir(target), 0o755); err != nil {
-		return models.AssetArtifact{}, fmt.Errorf("prepare asset directory for %q: %w", remote.path, err)
+		return models.AssetArtifact{},
+			interruptedAssetError("prepare asset directory for "+remote.path, err)
 	}
 	output, err := s.createFile(target)
 	if err != nil {
-		return models.AssetArtifact{}, fmt.Errorf("create staged asset %q: %w", remote.path, err)
+		return models.AssetArtifact{},
+			interruptedAssetError("create staged asset "+remote.path, err)
 	}
-	hasher := sha256.New()
-	written, copyErr := io.Copy(io.MultiWriter(output, hasher), response.Body)
-	closeErr := output.Close()
-	if copyErr != nil {
-		if contextErr := assetContextError(ctx); contextErr != nil {
-			return models.AssetArtifact{}, contextErr
-		}
-		return models.AssetArtifact{}, fmt.Errorf("write staged asset %q: %w", remote.path, copyErr)
+	written, checksum, err := copyStagedAsset(ctx, output, response.Body, remote.path)
+	if err != nil {
+		return models.AssetArtifact{}, err
 	}
-	if closeErr != nil {
-		return models.AssetArtifact{}, fmt.Errorf("close staged asset %q: %w", remote.path, closeErr)
-	}
-	checksum := hex.EncodeToString(hasher.Sum(nil))
 	if remote.bytes > 0 && written != remote.bytes {
 		return models.AssetArtifact{}, fmt.Errorf(
 			"%w: asset %q contains %d bytes, expected %d",
@@ -384,6 +438,50 @@ func (s *service) downloadFile(
 		checksum = ""
 	}
 	return models.AssetArtifact{Name: remote.path, Bytes: written, SHA256: checksum}, nil
+}
+
+func validateDownloadResponse(ctx context.Context, response *http.Response, assetPath string) error {
+	if contextErr := assetContextError(ctx); contextErr != nil {
+		return contextErr
+	}
+	if response.StatusCode == http.StatusOK {
+		return nil
+	}
+	body, _ := io.ReadAll(io.LimitReader(response.Body, 512))
+	if contextErr := assetContextError(ctx); contextErr != nil {
+		return contextErr
+	}
+	return fmt.Errorf(
+		"%w: download asset %q failed (%d): %s",
+		models.ErrSourceFetchFailed,
+		assetPath,
+		response.StatusCode,
+		strings.TrimSpace(string(body)),
+	)
+}
+
+func copyStagedAsset(
+	ctx context.Context,
+	output io.WriteCloser,
+	input io.Reader,
+	assetPath string,
+) (int64, string, error) {
+	hasher := sha256.New()
+	written, copyErr := io.Copy(io.MultiWriter(output, hasher), input)
+	closeErr := output.Close()
+	if copyErr != nil {
+		if contextErr := assetContextError(ctx); contextErr != nil {
+			return 0, "", contextErr
+		}
+		return 0, "", interruptedAssetError("write staged asset "+assetPath, copyErr)
+	}
+	if closeErr != nil {
+		return 0, "", interruptedAssetError("close staged asset "+assetPath, closeErr)
+	}
+	if contextErr := assetContextError(ctx); contextErr != nil {
+		return 0, "", contextErr
+	}
+	return written, hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
 func (s *service) writeMetadata(path string, spec assetSpec, manifest remoteManifest) error {
@@ -407,14 +505,14 @@ func (s *service) writeMetadata(path string, spec assetSpec, manifest remoteMani
 	return nil
 }
 
-func (s *service) fileSHA256(path string) (string, error) {
+func (s *service) fileSHA256(ctx context.Context, path string) (string, error) {
 	input, err := s.openFile(path)
 	if err != nil {
 		return "", err
 	}
 	defer input.Close()
 	hasher := sha256.New()
-	if _, err := io.Copy(hasher, input); err != nil {
+	if _, err := io.Copy(hasher, contextAssetReader{ctx: ctx, input: input}); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(hasher.Sum(nil)), nil
@@ -423,6 +521,9 @@ func (s *service) fileSHA256(path string) (string, error) {
 func (s *service) doWithRetry(request *http.Request) (*http.Response, error) {
 	var lastErr error
 	for attempt := 1; attempt <= assetSourceMaxAttempts; attempt++ {
+		if err := request.Context().Err(); err != nil {
+			return nil, err
+		}
 		response, err := s.client.Do(request.Clone(request.Context()))
 		if err == nil {
 			if shouldRetryResponse(response) && attempt < assetSourceMaxAttempts {
@@ -438,6 +539,22 @@ func (s *service) doWithRetry(request *http.Request) (*http.Response, error) {
 		}
 	}
 	return nil, lastErr
+}
+
+func interruptedAssetError(operation string, cause error) error {
+	return fmt.Errorf("%w: %s: %w", models.ErrAssetPreparationInterrupted, operation, cause)
+}
+
+type contextAssetReader struct {
+	ctx   context.Context
+	input io.Reader
+}
+
+func (reader contextAssetReader) Read(buffer []byte) (int, error) {
+	if err := assetContextError(reader.ctx); err != nil {
+		return 0, err
+	}
+	return reader.input.Read(buffer)
 }
 
 func shouldRetryResponse(response *http.Response) bool {
