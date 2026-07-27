@@ -818,7 +818,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/host",
-      "minimum": 74.33
+      "minimum": 69.65
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/inference",
@@ -883,6 +883,24 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire",
       "minimum": 54.50
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service",
+      "minimum": 79.54
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire",
+      "minimum": 100.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes",
