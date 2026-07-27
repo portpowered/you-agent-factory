@@ -1,6 +1,9 @@
 package parameters_test
 
 import (
+	"io/fs"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -53,4 +56,61 @@ func TestCLIStringBooleanAndRepeatedFlagsReachRequest(t *testing.T) {
 	if !found || !phase.Changed || phase.Value != "active" {
 		t.Fatalf("observed repeated --phase parse = %#v found=%v, want last supplied value active", phase, found)
 	}
+}
+
+// TestCLIUnknownFlagFailsBeforeLifecycleStart proves an unknown or removed CLI
+// flag is rejected with a stable diagnostic before operator configuration or
+// other lifecycle-mutating external effects can start.
+func TestCLIUnknownFlagFailsBeforeLifecycleStart(t *testing.T) {
+	var mutations atomic.Int32
+	process := support.BuildProcess(t, serviceedges.Edges{
+		OperatorSettingsFileSystem: mutationTrackingOperatorSettingsFileSystem{
+			mutations: &mutations,
+		},
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "init", "--dir", "legacy-factory",
+	})
+	inputs.WorkingDirectory = t.TempDir()
+
+	executeErr := process.Execute(inputs.Input)
+	if executeErr == nil || !strings.Contains(executeErr.Error(), "unknown flag: --dir") {
+		t.Fatalf(
+			"removed init flag error = %v, want unknown flag: --dir; stdout=%q stderr=%q",
+			executeErr,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	if mutations.Load() != 0 {
+		t.Fatalf("configuration mutations after unknown flag = %d, want 0", mutations.Load())
+	}
+}
+
+type mutationTrackingOperatorSettingsFileSystem struct {
+	mutations *atomic.Int32
+}
+
+func (mutationTrackingOperatorSettingsFileSystem) ReadFile(string) ([]byte, error) {
+	return nil, fs.ErrNotExist
+}
+
+func (fileSystem mutationTrackingOperatorSettingsFileSystem) MkdirAll(string, fs.FileMode) error {
+	fileSystem.mutations.Add(1)
+	return nil
+}
+
+func (fileSystem mutationTrackingOperatorSettingsFileSystem) Remove(string) error {
+	fileSystem.mutations.Add(1)
+	return nil
+}
+
+func (fileSystem mutationTrackingOperatorSettingsFileSystem) Chmod(string, fs.FileMode) error {
+	fileSystem.mutations.Add(1)
+	return nil
+}
+
+func (fileSystem mutationTrackingOperatorSettingsFileSystem) Rename(string, string) error {
+	fileSystem.mutations.Add(1)
+	return nil
 }
