@@ -2033,6 +2033,12 @@ response-stream output.
   Compatibility command edges that expose only `Run` may publish one complete
   stdout chunk followed by one complete stderr chunk; real process edges retain
   live mixed-stream ordering through `RunStreaming`.
+- Agent Runner root-built functional evidence belongs in
+  `tests/functional/workers/agent/` for `root.BuildProcess` construction
+  inertness and in `pkg/services/workers/service/agent_runner_root_test.go`
+  for Workers-service composition of the registered Agent Runner over an
+  injected `providers.Service`. Do not import `pkg/root` from
+  `runners/wire` tests; that creates a `wire -> root -> wire` cycle.
 - Providers-backed Agent Runners map typed one-attempt failure kinds at the
   Workers boundary: authentication and invalid requests remain terminal,
   throttling enters the throttle family, dependency and timeout failures remain
