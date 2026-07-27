@@ -13,6 +13,7 @@ import (
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
+	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	"go.uber.org/zap"
 )
@@ -30,6 +31,7 @@ type Root struct {
 	runtimeTempFile localmodels.CreateTempFile
 	runtimeScopes   runtimescopes.Service
 	assets          scopedassets.Service
+	runtimeHost     runtimehost.Service
 	runtimeMu       sync.RWMutex
 	runtimeByScope  map[models.RuntimeScopeRef]models.Service
 	catalog         modelcatalog.Service
@@ -51,6 +53,7 @@ func NewRoot(
 	runtimeScopes runtimescopes.Service,
 	catalogService modelcatalog.Service,
 	assetService scopedassets.Service,
+	runtimeHostService runtimehost.Service,
 	processDependencies ...models.ProcessDependencies,
 ) (*Root, error) {
 	if processLauncher == nil {
@@ -86,6 +89,9 @@ func NewRoot(
 	if assetService == nil {
 		return nil, missingDependencyError("Models Assets service")
 	}
+	if runtimeHostService == nil {
+		return nil, missingDependencyError("Models Runtime Host service")
+	}
 	process := models.ProcessDependencies{}
 	if len(processDependencies) > 0 {
 		process = processDependencies[0]
@@ -101,6 +107,7 @@ func NewRoot(
 		runtimeRunner: runtimeRunner, runtimeHTTP: runtimeHTTP,
 		runtimeInspect: runtimeInspect, runtimeTempDir: runtimeTempDir, runtimeTempFile: runtimeTempFile,
 		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
+		runtimeHost: runtimeHostService,
 		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
 		process:        process,
 	}, nil
@@ -285,24 +292,33 @@ func (o *Root) RemoveModelAssets(
 }
 
 func (o *Root) EnsureModelHost(
-	context.Context,
-	models.EnsureModelHostRequest,
+	ctx context.Context,
+	request models.EnsureModelHostRequest,
 ) (models.EnsureModelHostResult, error) {
-	return models.EnsureModelHostResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.runtimeHost == nil {
+		return models.EnsureModelHostResult{}, models.ErrUnsupportedOperation
+	}
+	return o.runtimeHost.EnsureModelHost(ctx, request)
 }
 
 func (o *Root) InspectModelHost(
-	context.Context,
-	models.InspectModelHostRequest,
+	ctx context.Context,
+	request models.InspectModelHostRequest,
 ) (models.InspectModelHostResult, error) {
-	return models.InspectModelHostResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.runtimeHost == nil {
+		return models.InspectModelHostResult{}, models.ErrUnsupportedOperation
+	}
+	return o.runtimeHost.InspectModelHost(ctx, request)
 }
 
 func (o *Root) StopModelHost(
-	context.Context,
-	models.StopModelHostRequest,
+	ctx context.Context,
+	request models.StopModelHostRequest,
 ) (models.StopModelHostResult, error) {
-	return models.StopModelHostResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.runtimeHost == nil {
+		return models.StopModelHostResult{}, models.ErrUnsupportedOperation
+	}
+	return o.runtimeHost.StopModelHost(ctx, request)
 }
 
 func (o *Root) AcquireModelLease(
