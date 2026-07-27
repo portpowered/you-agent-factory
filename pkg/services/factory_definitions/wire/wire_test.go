@@ -304,6 +304,29 @@ func TestNewServiceServesPublishedPackagedCatalogPeerBehavior(t *testing.T) {
 	}
 }
 
+func TestStaticClockReturnsFixedInstant(t *testing.T) {
+	t.Parallel()
+
+	instant := time.Unix(42, 0)
+	clock := factorydefinitionswire.StaticClock(instant)
+	if got := clock.Now(); !got.Equal(instant) {
+		t.Fatalf("StaticClock.Now() = %v, want %v", got, instant)
+	}
+}
+
+func TestEffectiveFactoryDefinitionNormalizerFromMapperHonorsCancelledContext(t *testing.T) {
+	t.Parallel()
+
+	normalizer := factorydefinitionswire.EffectiveFactoryDefinitionNormalizerFromMapper()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := normalizer(ctx, factorydefinitions.EffectiveFactoryCatalogCandidate{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("normalizer() error = %v, want context.Canceled", err)
+	}
+}
+
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
