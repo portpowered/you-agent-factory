@@ -124,10 +124,6 @@ type codexProviderBehavior struct {
 	logger logging.Logger
 }
 
-type kiroProviderBehavior struct {
-	logger logging.Logger
-}
-
 type cursorProviderBehavior struct {
 	sharedNonCodexProviderBehavior
 	logger logging.Logger
@@ -147,8 +143,6 @@ func providerBehaviorFor(provider string, logger logging.Logger) providerBehavio
 	switch provider {
 	case string(modelprovider.ProviderCodex):
 		return codexProviderBehavior{logger: logger}
-	case string(modelprovider.ProviderKiro):
-		return kiroProviderBehavior{logger: logger}
 	case string(modelprovider.ProviderCursor):
 		return cursorProviderBehavior{logger: logger}
 	case string(modelprovider.ProviderOpenCode):
@@ -251,27 +245,6 @@ func BuildCodexStructuredCommand(
 	return behavior.BuildCommandRequest(req, args), cleanup, nil
 }
 
-func (b kiroProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
-	if err := validateKiroOptionalCapabilities(req); err != nil {
-		return nil, err
-	}
-	args := []string{"chat", "--no-interactive"}
-	if req.SessionID != "" {
-		args = append(args, "--resume-id", req.SessionID)
-	}
-	if skipPermissions {
-		args = append(args, "--trust-all-tools")
-	}
-	if prompt := buildKiroPrompt(req); prompt != "" {
-		args = append(args, prompt)
-	}
-	return args, nil
-}
-
-func (kiroProviderBehavior) BuildCommandRequest(req workerexecution.ProviderInferenceRequest, args []string) CommandRequest {
-	return buildBaseProviderCommandRequest(req, args)
-}
-
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func (b cursorProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, buildCtx *ProviderBuildContext) ([]string, error) {
 	if err := validateCursorOptionalCapabilities(req); err != nil {
@@ -329,7 +302,7 @@ func (b cursorProviderBehavior) BuildArgs(_ context.Context, req workerexecution
 func buildCursorPrompt(req workerexecution.ProviderInferenceRequest) string {
 	prompt := strings.TrimSpace(req.UserMessage)
 	if strings.TrimSpace(req.SystemPrompt) != "" {
-		prompt = buildKiroPrompt(req)
+		prompt = buildCombinedPrompt(req)
 	}
 	return prompt
 }
@@ -410,21 +383,6 @@ func validateCodexOptionalCapabilities(req workerexecution.ProviderInferenceRequ
 	return nil
 }
 
-func validateKiroOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {
-	unsupported := map[workerexecution.RunnerOptionalCapability]string{
-		workerexecution.RunnerOptionalCapabilityImageInput:       "image input is not supported by the kiro runner in v1",
-		workerexecution.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the kiro runner in v1",
-		workerexecution.RunnerOptionalCapabilityWorkingDirectory: "working directory is not supported by the kiro runner in v1",
-		workerexecution.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the kiro runner in v1",
-	}
-	for _, capability := range req.RequiredOptionalCapabilities {
-		if message, blocked := unsupported[capability]; blocked {
-			return errors.New(message)
-		}
-	}
-	return nil
-}
-
 func validateCursorOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {
 	unsupported := map[workerexecution.RunnerOptionalCapability]string{
 		workerexecution.RunnerOptionalCapabilityImageInput:       "image input is not supported by the cursor-cli runner in v1",
@@ -452,7 +410,7 @@ func validateOpenCodeOptionalCapabilities(req workerexecution.ProviderInferenceR
 	return nil
 }
 
-func buildKiroPrompt(req workerexecution.ProviderInferenceRequest) string {
+func buildCombinedPrompt(req workerexecution.ProviderInferenceRequest) string {
 	systemPrompt := strings.TrimSpace(req.SystemPrompt)
 	userMessage := strings.TrimSpace(req.UserMessage)
 	switch {

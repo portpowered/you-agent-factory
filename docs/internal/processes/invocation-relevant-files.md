@@ -55,6 +55,24 @@ primary-result behavior.
   environment and working-directory delivery through `root.BuildProcess` with
   an injected command-runner edge; do not expose configured secrets in events
   or assertion output.
+- Final-only provider integrations should keep native final stdout as response
+  content and derive resumable Provider Session metadata only from explicit
+  structured fields that satisfy the provider's identifier contract. If a
+  successful resumed invocation emits no replacement identifier, preserve the
+  validated requested Provider Session; never recover identifiers from
+  free-form assistant text. The product runner carries configured resume state
+  in the cloned `ProviderInferenceRequest.SessionID`, while direct protocol
+  callers can use `InvocationRequest.ProviderSession`; a migrated provider must
+  normalize both accepted inputs before applying its emitted-session rules.
+- Retryable conductor failures must preserve both retry posture and any
+  Provider Session when they cross into the Worker failure contract. A neutral
+  `unknown` failure with `Retryable=true` maps to retryable
+  `internal_server_error`, and the next attempt must require session-resume
+  capability while carrying that session ID. Wrap provider-boundary recording
+  around the final decorated runner so registry-selected conductor calls and
+  retained native calls each emit one canonical inference request/response
+  pair; otherwise conductor failures and replacement sessions disappear from
+  Factory events.
 
 - Review-gated factories that must revise rejected work should preserve the
   original input on the work-stage route, retain non-empty worker output in the
@@ -209,7 +227,8 @@ primary-result behavior.
   resolve onto their canonical conductor identity. Bundled built-ins remain on
   the provider-native Infer/command path until their package-owned Integration
   replaces the native-runtime compatibility stub; `UsesNativeRunner` keeps the
-  stub on the native path and routes migrated Integrations (currently Gemini)
+  stub on the native path and routes migrated Integrations (currently Gemini
+  and Kiro)
   through the conductor without a concrete-provider switch in shared
   orchestration. Aggregate dispatch/failure branches and `ProviderOverride`
   remain intact and bypass the registry/conductor decorators. Concurrent cancel,
@@ -1018,7 +1037,7 @@ response-stream output.
   only that provider's corresponding aggregate command/decode/failure/timeout/
   session branches (and relocate aggregate-owned tests into the provider
   package); leave the aggregate shell, ProviderOverride, and other providers
-  intact. Move Gemini-native failure and timeout parsing into the same package
+  intact. Move provider-native failure and timeout parsing into the same package
   (`ParseProviderFailure`, `TimeoutFailureResult`, `Adapter.ClassifyFailure`) so
   the conductor path consumes provider-owned normalized facts; aggregate exit
   and timeout bridges may only thin-delegate until legacy deletion. Treat all
@@ -1029,8 +1048,9 @@ response-stream output.
   that error before closing the provider response writer so
   `inferencecontract.ExecuteInvocation` remains the single owner of canonical,
   non-retryable cancellation. Bind the
-  migrated provider as a registry catalog Integration
-  (`gemini.NewIntegration`) from `BuiltInRegistrations`, and let
+  migrated providers as registry catalog Integrations
+  (`gemini.NewIntegration`, `kiro.NewIntegration`) from
+  `BuiltInRegistrations`, and let
   `UsesNativeRunner` route Integrations that no longer advertise the
   native-runtime compatibility marker through `conductor.Invoke` without adding
   a concrete-provider switch in shared orchestration. Process composition
@@ -1053,11 +1073,13 @@ response-stream output.
   Integration against the shared inference contract through
   `inferencecontract.ExecuteInvocation` for the success and failure postures
   that apply to that provider's authored support/capability set (for Gemini:
-  prompt_submission + message_snapshots success, plus native
-  auth/invalid/throttle/timeout/unknown failures). Do not invent streaming or
-  tool-lifecycle factories just to call `inferencecontract/testkit.Run` when the
-  manifest does not advertise those capabilities; keep selection on the
-  registry Integration boundary rather than Adapter internals. Native
+  prompt_submission + message_snapshots success; for Kiro:
+  prompt_submission + session_resume + message_snapshots success; plus each
+  provider's native auth/invalid/throttle/timeout/unknown failures). Do not
+  invent streaming or tool-lifecycle factories just to call
+  `inferencecontract/testkit.Run` when the manifest does not advertise those
+  capabilities; keep selection on the registry Integration boundary rather
+  than Adapter internals. Native
   JSONL fixture tests should
   fragment reads and flush an unterminated final record so command selection,
   decoder buffering, and final-result parsing are proven independently.

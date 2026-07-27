@@ -23,7 +23,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
-	kiropkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro"
 )
 
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
@@ -154,48 +153,6 @@ func TestScriptWrapProvider_Infer_GenericNonCodexExitFailuresPreserveMessageAndC
 	for _, tc := range genericNonCodexExitFailureTestCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			assertInferenceExitFailure(t, tc)
-		})
-	}
-}
-
-func TestScriptWrapProvider_Infer_NormalizedIdentitySelectsOneCanonicalFailureResult(t *testing.T) {
-	t.Parallel()
-	testCases := []struct {
-		provider    string
-		result      CommandResult
-		runErr      error
-		wantReason  workerexecution.WorkFailureType
-		wantFamily  workerexecution.WorkFailureFamily
-		wantMessage string
-	}{
-		{
-			provider:    "  KIRO-CLI  ",
-			result:      CommandResult{ExitCode: 1, Stderr: []byte("ERROR: Unauthorized")},
-			wantReason:  workerexecution.WorkFailureTypeAuthFailure,
-			wantFamily:  workerexecution.WorkFailureFamilyTerminal,
-			wantMessage: "Kiro authentication failed. Sign in again and retry.",
-		},
-		{
-			provider:    "  KIRO-CLI  ",
-			result:      CommandResult{Stderr: []byte("private timeout transcript")},
-			runErr:      context.DeadlineExceeded,
-			wantReason:  workerexecution.WorkFailureTypeTimeout,
-			wantFamily:  workerexecution.WorkFailureFamilyRetryable,
-			wantMessage: kiropkg.TimeoutFailureMessage,
-		},
-	}
-
-	for _, tc := range testCases {
-		wantTerminal := tc.wantFamily == workerexecution.WorkFailureFamilyTerminal
-		provider := NewScriptWrapProviderWithDependencies(false, nil, &recordingProviderExec{result: tc.result, err: tc.runErr}, nil, nil, nil, "", nil, nil)
-		_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{ModelProvider: tc.provider, UserMessage: "private prompt"})
-		assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
-			wantType:          tc.wantReason,
-			wantFamily:        tc.wantFamily,
-			wantMessage:       tc.wantMessage,
-			wantRetryable:     tc.wantReason == workerexecution.WorkFailureTypeTimeout || tc.wantReason == workerexecution.WorkFailureTypeThrottled,
-			wantTerminal:      wantTerminal,
-			wantThrottlePause: tc.wantReason == workerexecution.WorkFailureTypeThrottled,
 		})
 	}
 }
@@ -476,13 +433,6 @@ type exitFailureInferenceTestCase struct {
 
 func genericNonCodexExitFailureTestCases() []exitFailureInferenceTestCase {
 	return []exitFailureInferenceTestCase{
-		{
-			name:        "KiroFallsBackToProviderExitCodeWhenOutputMissing",
-			provider:    string(modelprovider.ProviderKiro),
-			result:      CommandResult{ExitCode: 9},
-			wantMessage: "kiro-cli exited with code 9",
-			wantType:    workerexecution.WorkFailureTypeUnknown,
-		},
 		{
 			name:     "OpenCodeUsesStructuredAuthenticationFailure",
 			provider: string(modelprovider.ProviderOpenCode),
