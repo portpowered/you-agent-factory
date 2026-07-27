@@ -14,7 +14,7 @@ import (
 )
 
 func TestSessionInvocationAPI_PackagedReviewReturnsApprovedCandidate(t *testing.T) {
-	runner := testutil.NewProviderCommandRunner(
+	runner := support.NewShapedProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte("candidate work")},
 		platformprocess.CommandResult{Stdout: []byte(`{"decision":"ACCEPTED","output":"approved candidate work"}`)},
 	)
@@ -27,7 +27,7 @@ func TestSessionInvocationAPI_PackagedReviewReturnsApprovedCandidate(t *testing.
 }
 
 func TestSessionInvocationAPI_PackagedReviewRejectsThenApprovesRevision(t *testing.T) {
-	runner := testutil.NewProviderCommandRunner(
+	runner := support.NewShapedProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte("first candidate")},
 		platformprocess.CommandResult{Stdout: []byte(`{"decision":"REJECTED","feedback":"add the missing release date"}`)},
 		platformprocess.CommandResult{Stdout: []byte("revised candidate")},

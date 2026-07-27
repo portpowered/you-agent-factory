@@ -75,7 +75,7 @@ func messageEvent(
 	var payload []byte
 	var err error
 	representation := workerexecution.RepresentationSnapshot
-	fidelity := workerexecution.FidelityFinalOnly
+	fidelity := workerexecution.FidelityNormalized
 	switch workerPhase {
 	case workerexecution.PhaseDelta:
 		blockIndex := 0
@@ -230,7 +230,7 @@ func authoritativeMessageCompletedEvent(
 			Provider:        string(providers.IDClaude),
 			Delivery:        workerexecution.DeliveryNativeStream,
 			Representation:  workerexecution.RepresentationSnapshot,
-			Fidelity:        workerexecution.FidelityFinalOnly,
+			Fidelity:        workerexecution.FidelityNormalized,
 			NativeEventType: "message.completed",
 		},
 	})
@@ -263,8 +263,8 @@ func writeFailureProgress(
 			Provider:        string(providers.IDClaude),
 			Delivery:        workerexecution.DeliverySynthesized,
 			Representation:  workerexecution.RepresentationNotification,
-			Fidelity:        workerexecution.FidelityLifecycleOnly,
-			NativeEventType: "provider_failure",
+			Fidelity:        workerexecution.FidelityNormalized,
+			NativeEventType: "STREAM_FAILED",
 		},
 	})
 	if err != nil {

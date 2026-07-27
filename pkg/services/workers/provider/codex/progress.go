@@ -96,7 +96,7 @@ func messageEvent(
 	if err != nil {
 		return inference.EventDraft{}, false
 	}
-	fidelity := workerexecution.FidelityFinalOnly
+	fidelity := workerexecution.FidelityNormalized
 	if workerPhase == workerexecution.PhaseDelta {
 		fidelity = workerexecution.FidelityNormalized
 	}
@@ -195,7 +195,7 @@ func authoritativeMessageCompletedEvent(
 			Provider:        string(providers.IDCodex),
 			Delivery:        workerexecution.DeliveryNativeStream,
 			Representation:  workerexecution.RepresentationSnapshot,
-			Fidelity:        workerexecution.FidelityFinalOnly,
+			Fidelity:        workerexecution.FidelityNormalized,
 			NativeEventType: "message.completed",
 		},
 	})
@@ -228,8 +228,8 @@ func writeFailureProgress(
 			Provider:        string(providers.IDCodex),
 			Delivery:        workerexecution.DeliverySynthesized,
 			Representation:  workerexecution.RepresentationNotification,
-			Fidelity:        workerexecution.FidelityLifecycleOnly,
-			NativeEventType: "provider_failure",
+			Fidelity:        workerexecution.FidelityNormalized,
+			NativeEventType: "STREAM_FAILED",
 		},
 	})
 	if err != nil {

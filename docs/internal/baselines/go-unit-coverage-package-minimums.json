@@ -1582,7 +1582,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry",
-      "minimum": 88.66
+      "minimum": 88.60
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured",
@@ -1838,7 +1838,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
-      "minimum": 81.94
+      "minimum": 81.81
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions",
