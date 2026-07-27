@@ -54,6 +54,14 @@
       "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
     },
     {
+      "path": "tests/functional/workers/inference/process_cleanup_process_unix_test.go",
+      "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
+    },
+    {
+      "path": "tests/functional/workers/inference/process_cleanup_process_windows_test.go",
+      "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
+    },
+    {
       "path": "tests/functional/providers/helpers_long_test.go",
       "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
     },
@@ -539,6 +547,36 @@
       "catch_all": "bootstrap_portability",
       "specialty_targets": "none",
       "deletion_only_batch": "bootstrap_portability-delete-05-factory-current"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
+      "scenario": "TestJavaScriptChildProgressPublishesCanonicalResponseEvents",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "workflow-delete-09-orchestration-javascript"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
+      "scenario": "TestJavaScriptTerminalResultFollowsFinalResponseEvent",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
+      "scenario": "TestJavaScriptPhaseCheckpointLifecyclePublishesCanonicalFactoryEvents",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/cli/factory_run/output/failure_test.go",
@@ -1681,26 +1719,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/orchestration/javascript/composition/nested_test.go",
-      "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
-      "scenario": "TestJavaScriptNestedFailureNamesChildAndStage",
-      "lane": "short",
-      "destination": "tests/functional/orchestration/javascript/composition/nested_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/orchestration/javascript/composition/nested_test.go",
-      "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
-      "scenario": "TestJavaScriptNestedPipelineParallelCompositionCompletes",
-      "lane": "short",
-      "destination": "tests/functional/orchestration/javascript/composition/nested_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/orchestration/javascript/composition/parallel_test.go",
       "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
       "scenario": "TestJavaScriptParallelDispatchesChildrenConcurrently",
@@ -1801,31 +1819,21 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
-      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
-      "scenario": "TestJavaScriptChildProgressPublishesCanonicalResponseEvents",
+      "source_path": "tests/functional/orchestration/javascript/composition/nested_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
+      "scenario": "TestJavaScriptNestedFailureNamesChildAndStage",
       "lane": "short",
-      "destination": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-09-orchestration-javascript"
-    },
-    {
-      "source_path": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
-      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
-      "scenario": "TestJavaScriptPhaseCheckpointLifecyclePublishesCanonicalFactoryEvents",
-      "lane": "short",
-      "destination": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
+      "destination": "tests/functional/orchestration/javascript/composition/nested_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
-      "package": "you-agent-factory/tests/functional/orchestration/javascript/contracts",
-      "scenario": "TestJavaScriptTerminalResultFollowsFinalResponseEvent",
+      "source_path": "tests/functional/orchestration/javascript/composition/nested_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/composition",
+      "scenario": "TestJavaScriptNestedPipelineParallelCompositionCompletes",
       "lane": "short",
-      "destination": "tests/functional/orchestration/javascript/contracts/response_events_test.go",
+      "destination": "tests/functional/orchestration/javascript/composition/nested_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1931,26 +1939,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/orchestration/petri/cross/session_compatibility_test.go",
-      "package": "you-agent-factory/tests/functional/orchestration/petri/cross",
-      "scenario": "TestPetriAndJavaScriptSessionsExposeCompatibleStatusFacts",
-      "lane": "short",
-      "destination": "tests/functional/orchestration/petri/cross/session_compatibility_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/orchestration/petri/cross/session_compatibility_test.go",
-      "package": "you-agent-factory/tests/functional/orchestration/petri/cross",
-      "scenario": "TestPetriAndJavaScriptSessionsShareLifecycleControls",
-      "lane": "short",
-      "destination": "tests/functional/orchestration/petri/cross/session_compatibility_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
       "package": "you-agent-factory/tests/functional/orchestration/petri/dispatch",
       "scenario": "TestPetriConcurrentFailureDoesNotDuplicateDispatch",
@@ -1976,6 +1964,26 @@
       "scenario": "TestPetriIndependentWorkDispatchesConcurrently",
       "lane": "short",
       "destination": "tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/petri/cross/session_compatibility_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/petri/cross",
+      "scenario": "TestPetriAndJavaScriptSessionsExposeCompatibleStatusFacts",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/petri/cross/session_compatibility_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/petri/cross/session_compatibility_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/petri/cross",
+      "scenario": "TestPetriAndJavaScriptSessionsShareLifecycleControls",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/petri/cross/session_compatibility_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -4801,66 +4809,6 @@
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
     },
     {
-      "source_path": "tests/functional/transport/cli/commands/docs_wiring_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/commands",
-      "scenario": "TestCLIDocsEveryTopicRendersNonEmptyContent",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/commands/docs_wiring_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/commands/docs_wiring_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/commands",
-      "scenario": "TestCLIDocsListsPackagedTopics",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/commands/docs_wiring_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/commands/docs_wiring_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/commands",
-      "scenario": "TestCLIDocsUnknownTopicReturnsActionableFailure",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/commands/docs_wiring_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/commands/factory_wiring_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/commands",
-      "scenario": "TestCLIFactoryFlattenExpandPreservesMeaning",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/commands/factory_wiring_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/commands/factory_wiring_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/commands",
-      "scenario": "TestCLIFactoryInitValidateAndQuery",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/commands/factory_wiring_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/commands/factory_wiring_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/commands",
-      "scenario": "TestCLIFactoryReplaceCurrentChangesSessionFactory",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/commands/factory_wiring_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/transport/cli/commands/submit_wiring_test.go",
       "package": "you-agent-factory/tests/functional/transport/cli/commands",
       "scenario": "TestCLISubmitBackendErrorPreservesPublicMessage",
@@ -4896,6 +4844,66 @@
       "scenario": "TestCLISubmitUnavailableServer",
       "lane": "short",
       "destination": "tests/functional/transport/cli/commands/submit_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/commands/factory_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLIFactoryFlattenExpandPreservesMeaning",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/factory_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/commands/factory_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLIFactoryInitValidateAndQuery",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/factory_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/commands/factory_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLIFactoryReplaceCurrentChangesSessionFactory",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/factory_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/commands/docs_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLIDocsEveryTopicRendersNonEmptyContent",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/docs_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/commands/docs_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLIDocsListsPackagedTopics",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/docs_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/commands/docs_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLIDocsUnknownTopicReturnsActionableFailure",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/docs_wiring_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -5771,6 +5779,46 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/workers/inference/process_cleanup_long_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestProviderCancellationTerminatesCompanionProcesses",
+      "lane": "functionallong",
+      "destination": "tests/functional/workers/inference/process_cleanup_test.go",
+      "catch_all": "none",
+      "specialty_targets": "script-timeout-companion-smoke-100",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/process_cleanup_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestProcessTreeHelper",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/process_cleanup_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/process_cleanup_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestProviderSuccessWaitsForProcessAndStreamClosure",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/process_cleanup_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/process_cleanup_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference",
+      "scenario": "TestProviderTimeoutTerminatesChildProcessTree",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/process_cleanup_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/workers/script/environment_long_test.go",
       "package": "you-agent-factory/tests/functional/workers/script",
       "scenario": "TestScriptWorkerDropsResourceTokensFromArgTemplates",
@@ -6631,7 +6679,7 @@
       "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-27T17:22:00Z",
+  "scanned_at_utc": "2026-07-27T19:15:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 21,
@@ -6644,8 +6692,8 @@
     },
     "by_top_level_package": {
       "acceptance": 14,
-      "bootstrap_portability": 21,
-      "cli": 66,
+      "bootstrap_portability": 26,
+      "cli": 68,
       "factory": 4,
       "guards_batch": 27,
       "models": 5,
@@ -6665,19 +6713,21 @@
       "workflow": 44,
       "workstations": 29
     },
-    "customer_top_level_Test_scenarios": 644,
+    "customer_top_level_Test_scenarios": 648,
     "files_with_customer_Test": 217,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
-    "lane_functionallong": 112,
-    "lane_short": 532,
+    "lane_functionallong": 113,
+    "lane_short": 535,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
-      "you-agent-factory/tests/functional/bootstrap_portability": 19,
+      "you-agent-factory/tests/functional/bootstrap_portability": 25,
       "you-agent-factory/tests/functional/bootstrap_portability/metadata_contract": 2,
-      "you-agent-factory/tests/functional/cli/factory_run/output": 2,
+      "you-agent-factory/tests/functional/cli/dynamic_workflows": 2,
+      "you-agent-factory/tests/functional/cli/factory_run/events": 2,
+      "you-agent-factory/tests/functional/cli/factory_run/output": 3,
       "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity": 6,
       "you-agent-factory/tests/functional/cli/input_contract": 25,
       "you-agent-factory/tests/functional/cli/mcp_resume": 8,
@@ -6695,28 +6745,26 @@
       "you-agent-factory/tests/functional/orchestration/javascript/composition": 14,
       "you-agent-factory/tests/functional/orchestration/javascript/contracts": 3,
       "you-agent-factory/tests/functional/orchestration/javascript/durability": 3,
-      "you-agent-factory/tests/functional/orchestration/javascript/loading": 2,
-      "you-agent-factory/tests/functional/orchestration/javascript/policy": 2,
-      "you-agent-factory/tests/functional/orchestration/javascript/workers": 3,
       "you-agent-factory/tests/functional/orchestration/petri/cross": 2,
       "you-agent-factory/tests/functional/orchestration/petri/dispatch": 3,
       "you-agent-factory/tests/functional/product/init_setup": 10,
-      "you-agent-factory/tests/functional/providers": 37,
+      "you-agent-factory/tests/functional/providers": 39,
+      "you-agent-factory/tests/functional/providers/codex": 1,
       "you-agent-factory/tests/functional/providers/cursor": 5,
+      "you-agent-factory/tests/functional/providers/gemini": 9,
       "you-agent-factory/tests/functional/providers/kiro": 4,
       "you-agent-factory/tests/functional/replay_contracts": 23,
       "you-agent-factory/tests/functional/runtime_api": 66,
       "you-agent-factory/tests/functional/runtime_api/factory_transformation": 39,
       "you-agent-factory/tests/functional/sessionparity": 13,
       "you-agent-factory/tests/functional/sessions/cli": 2,
-      "you-agent-factory/tests/functional/smoke": 84,
+      "you-agent-factory/tests/functional/smoke": 86,
       "you-agent-factory/tests/functional/transport/cli/commands": 10,
       "you-agent-factory/tests/functional/transport/cli/output": 9,
       "you-agent-factory/tests/functional/transport/cli/parameters": 9,
       "you-agent-factory/tests/functional/transport/docs": 1,
       "you-agent-factory/tests/functional/transport/http": 1,
       "you-agent-factory/tests/functional/transport/http/status": 2,
-      "you-agent-factory/tests/functional/transport/mcp/protocol": 3,
       "you-agent-factory/tests/functional/transport/mcp/stdio": 6,
       "you-agent-factory/tests/functional/transport/run_scoped_server": 6,
       "you-agent-factory/tests/functional/transport/server_binding": 2,
@@ -6724,7 +6772,7 @@
       "you-agent-factory/tests/functional/transport/submit": 2,
       "you-agent-factory/tests/functional/work/cli": 1,
       "you-agent-factory/tests/functional/work/visualization": 1,
-      "you-agent-factory/tests/functional/workers/inference": 5,
+      "you-agent-factory/tests/functional/workers/inference": 9,
       "you-agent-factory/tests/functional/workers/inference/agy": 3,
       "you-agent-factory/tests/functional/workers/inference/claude": 2,
       "you-agent-factory/tests/functional/workers/inference/codex": 3,
@@ -6812,15 +6860,15 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T18:20:00Z",
-    "story": "ft-wave1-cli-session-wiring-mergeability-rebase6",
-    "live_customer_scenarios": 643,
-    "ledger_rows": 643,
+    "audited_at_utc": "2026-07-27T19:50:00Z",
+    "story": "ft-wave1-inference-process-cleanup-mergeability-15",
+    "live_customer_scenarios": 648,
+    "ledger_rows": 648,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 530,
+    "lane_short": 535,
     "lane_functionallong": 113,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
