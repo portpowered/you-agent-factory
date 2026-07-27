@@ -72,6 +72,11 @@ primary-result behavior.
   completion. Guard the publication callback so the first writer failure stops
   later publication and prevents a terminal close; successful, malformed,
   failed, canceled, and timed-out paths must otherwise reach at most one close.
+  Initialize invocation-local decode and final-parse state with a validated
+  requested Provider Session, replace it only from accepted structured native
+  records with valid identifiers, and carry the effective session through both
+  successful and retryable failed completions; free-form, malformed, empty, and
+  unsupported records must never create or replace session continuity.
   Exercise the same integration concurrently under `go test -race` so decoder
   state, writer state, and cleanup remain isolated per invocation.
 - Final-only provider integrations should keep native final stdout as response

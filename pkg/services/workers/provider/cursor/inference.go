@@ -90,35 +90,57 @@ func (f *ParseFailure) Error() string {
 // ParseInferenceResult parses Cursor success stdout from either terminal json
 // or stream-json output.
 func ParseInferenceResult(provider string, stdout []byte) (*InferenceResult, *ParseFailure) {
+	return parseInferenceResult(provider, stdout, nil)
+}
+
+func parseInferenceResult(
+	provider string,
+	stdout []byte,
+	requestedSession *workerexecution.ProviderSessionMetadata,
+) (*InferenceResult, *ParseFailure) {
 	trimmed := strings.TrimSpace(string(stdout))
 	if trimmed == "" {
-		return nil, resultParseFailure(provider, "cursor JSON output was empty", nil)
+		return nil, resultParseFailureWithSession(
+			provider, "cursor JSON output was empty", nil, requestedSession,
+		)
 	}
 
 	var payload resultPayload
 	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
 		if strings.Contains(trimmed, "\n") {
-			return ParseInferenceStreamResult(provider, stdout)
+			return parseInferenceStreamResult(provider, stdout, requestedSession)
 		}
-		return nil, resultParseFailure(provider, fmt.Sprintf("cursor JSON output was not valid JSON: %v", err), err)
+		return nil, resultParseFailureWithSession(
+			provider, fmt.Sprintf("cursor JSON output was not valid JSON: %v", err), err, requestedSession,
+		)
 	}
 
 	if payload.Type != ResultTypeResult {
 		if strings.Contains(trimmed, "\n") {
-			return ParseInferenceStreamResult(provider, stdout)
+			return parseInferenceStreamResult(provider, stdout, requestedSession)
 		}
-		return nil, resultParseFailure(provider, fmt.Sprintf("cursor JSON output had unexpected type %q, want %q", payload.Type, ResultTypeResult), nil)
+		return nil, resultParseFailureWithSession(
+			provider,
+			fmt.Sprintf("cursor JSON output had unexpected type %q, want %q", payload.Type, ResultTypeResult),
+			nil,
+			requestedSession,
+		)
 	}
 	if payload.Subtype != ResultSubtypeSuccess {
-		return nil, resultErrorSubtype(provider, payload)
+		return nil, resultErrorSubtypeWithSession(provider, payload, requestedSession)
 	}
 	if payload.IsError {
-		return nil, resultErrorSubtype(provider, payload)
+		return nil, resultErrorSubtypeWithSession(provider, payload, requestedSession)
 	}
 
 	session := canonicalProviderSession(provider, payload.SessionID)
 	if session == nil {
-		return nil, resultParseFailure(provider, "cursor JSON success result is missing or invalid session_id", nil)
+		session = cloneCursorProviderSession(requestedSession)
+	}
+	if session == nil {
+		return nil, resultParseFailure(
+			provider, "cursor JSON success result is missing or invalid session_id", nil,
+		)
 	}
 
 	return &InferenceResult{
@@ -128,9 +150,15 @@ func ParseInferenceResult(provider string, stdout []byte) (*InferenceResult, *Pa
 	}, nil
 }
 
-func resultErrorSubtype(provider string, payload resultPayload) *ParseFailure {
-	_ = provider
+func resultErrorSubtypeWithSession(
+	provider string,
+	payload resultPayload,
+	requestedSession *workerexecution.ProviderSessionMetadata,
+) *ParseFailure {
 	failure := failureResultFromPayload(payload)
+	if failure.ProviderSession == nil {
+		failure.ProviderSession = cloneCursorProviderSession(requestedSession)
+	}
 	return &ParseFailure{
 		Type:            failure.Reason,
 		Message:         failure.Message,
@@ -140,11 +168,20 @@ func resultErrorSubtype(provider string, payload resultPayload) *ParseFailure {
 }
 
 func resultParseFailure(provider, message string, cause error) *ParseFailure {
+	return resultParseFailureWithSession(provider, message, cause, nil)
+}
+
+func resultParseFailureWithSession(
+	provider, message string,
+	cause error,
+	session *workerexecution.ProviderSessionMetadata,
+) *ParseFailure {
 	_ = provider
 	return &ParseFailure{
-		Type:    workerexecution.WorkFailureTypeUnknown,
-		Message: message,
-		Cause:   cause,
+		Type:            workerexecution.WorkFailureTypeUnknown,
+		Message:         message,
+		ProviderSession: cloneCursorProviderSession(session),
+		Cause:           cause,
 	}
 }
 
@@ -158,6 +195,17 @@ func canonicalProviderSession(provider, sessionID string) *workerexecution.Provi
 		Kind:     ProviderSessionKindSessionID,
 		ID:       normalized,
 	}
+}
+
+func cloneCursorProviderSession(
+	session *workerexecution.ProviderSessionMetadata,
+) *workerexecution.ProviderSessionMetadata {
+	if session == nil ||
+		workerexecution.CanonicalProviderSessionProvider(session.Provider) != "cursor" ||
+		strings.TrimSpace(session.Kind) != ProviderSessionKindSessionID {
+		return nil
+	}
+	return canonicalProviderSession("cursor", session.ID)
 }
 
 func responseMetadataFromPayload(payload resultPayload) map[string]string {

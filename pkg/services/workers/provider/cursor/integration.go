@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -71,7 +72,8 @@ func (i *Integration) Invoke(
 	request inference.InvocationRequest,
 	writer inference.ResponseWriter,
 ) error {
-	providerAdapter := i.newAdapter()
+	requestedSession := cursorRequestedSession(request)
+	providerAdapter := i.newAdapter(requestedSession)
 	registry, err := adapter.NewRegistry(providerAdapter)
 	if err != nil {
 		return err
@@ -123,12 +125,16 @@ func (i *Integration) Invoke(
 	return writer.Close(ctx, inference.SuccessfulCompletion(cursorInferenceResponse(result.Response)))
 }
 
-func (i *Integration) newAdapter() *Adapter {
-	return NewAdapter(AdapterDependencies{
+func (i *Integration) newAdapter(
+	requestedSession *workerexecution.ProviderSessionMetadata,
+) *Adapter {
+	result := NewAdapter(AdapterDependencies{
 		OperatingSystem: i.dependencies.OperatingSystem,
 		TemporaryDir:    i.dependencies.TemporaryDir,
 		TemporaryFiles:  i.dependencies.TemporaryFiles,
 	})
+	result.requestedSession = cloneCursorProviderSession(requestedSession)
+	return result
 }
 
 type cursorPublication struct {
@@ -257,10 +263,21 @@ func cursorRequestFromInvocation(request inference.InvocationRequest) workerexec
 	providerRequest.SystemPrompt = request.SystemPrompt()
 	providerRequest.UserMessage = request.UserMessage()
 	providerRequest.OutputSchema = request.OutputSchema()
-	if session := request.ProviderSession(); session != nil {
-		providerRequest.SessionID = session.ID()
+	if session := cursorRequestedSession(request); session != nil {
+		providerRequest.SessionID = session.ID
 	}
 	return providerRequest
+}
+
+func cursorRequestedSession(
+	request inference.InvocationRequest,
+) *workerexecution.ProviderSessionMetadata {
+	if session := request.ProviderSession(); session != nil &&
+		workerexecution.CanonicalProviderSessionProvider(session.Provider()) == "cursor" &&
+		strings.TrimSpace(session.Kind()) == ProviderSessionKindSessionID {
+		return canonicalProviderSession("cursor", session.ID())
+	}
+	return canonicalProviderSession("cursor", request.Execution().SessionID)
 }
 
 type cursorStreamingRunner struct {
@@ -299,12 +316,16 @@ func (r cursorStreamingRunner) Run(
 	return result, runErr
 }
 
-func (*Adapter) NewDecoder(_ context.Context, input adapter.DecoderContext) (adapter.Decoder, error) {
-	return NewResponseEventDecoder(input), nil
+func (a *Adapter) NewDecoder(_ context.Context, input adapter.DecoderContext) (adapter.Decoder, error) {
+	return newResponseEventDecoderWithSession(input, a.requestedSession), nil
 }
 
-func (*Adapter) ParseFinal(_ context.Context, input adapter.FinalParseContext) (adapter.FinalParseResult, error) {
-	parsed, failure := ParseInferenceResult(string(modelprovider.ProviderCursor), input.CommandResult.Stdout)
+func (a *Adapter) ParseFinal(_ context.Context, input adapter.FinalParseContext) (adapter.FinalParseResult, error) {
+	parsed, failure := parseInferenceResult(
+		string(modelprovider.ProviderCursor),
+		input.CommandResult.Stdout,
+		a.requestedSession,
+	)
 	if failure != nil {
 		return adapter.FinalParseResult{}, failure
 	}
@@ -322,7 +343,7 @@ func (*Adapter) Capabilities(context.Context, adapter.CapabilityContext) (adapte
 	}}, nil
 }
 
-func (*Adapter) ClassifyFailure(_ context.Context, input adapter.FailureContext) adapter.FailureResult {
+func (a *Adapter) ClassifyFailure(_ context.Context, input adapter.FailureContext) adapter.FailureResult {
 	if input.CommandError == nil && input.CommandResult.ExitCode == 0 &&
 		input.DecodeError == nil && input.FlushError == nil && input.ParseError == nil {
 		return adapter.FailureResult{}
@@ -331,6 +352,13 @@ func (*Adapter) ClassifyFailure(_ context.Context, input adapter.FailureContext)
 		Stdout: input.CommandResult.Stdout, Stderr: input.CommandResult.Stderr,
 		ExitCode: input.CommandResult.ExitCode, FallbackReason: workerexecution.WorkFailureTypeUnknown,
 	})
+	if failure.ProviderSession == nil {
+		failure.ProviderSession = latestCursorProviderSession(
+			string(modelprovider.ProviderCursor),
+			input.CommandResult.Stdout,
+			a.requestedSession,
+		)
+	}
 	family := workerexecution.WorkFailureFamilyTerminal
 	retryable := cursorFailureRetryable(failure.Reason)
 	if failure.Reason == workerexecution.WorkFailureTypeThrottled {
@@ -343,6 +371,20 @@ func (*Adapter) ClassifyFailure(_ context.Context, input adapter.FailureContext)
 		Retry:           adapter.RetryGuidance{Retryable: retryable},
 		ProviderSession: failure.ProviderSession,
 	}}
+}
+
+func latestCursorProviderSession(
+	provider string,
+	stdout []byte,
+	requestedSession *workerexecution.ProviderSessionMetadata,
+) *workerexecution.ProviderSessionMetadata {
+	session := cloneCursorProviderSession(requestedSession)
+	for _, line := range splitNonEmptyLines(stdout) {
+		if observed := cursorProviderSessionFromStructuredLine(provider, line); observed != nil {
+			session = observed
+		}
+	}
+	return session
 }
 
 var _ adapter.Adapter = (*Adapter)(nil)

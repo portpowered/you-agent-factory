@@ -38,6 +38,17 @@ func NewResponseEventDecoder(input adapter.DecoderContext) *ResponseEventDecoder
 	return &ResponseEventDecoder{context: input, tools: make(map[string]cursorToolState)}
 }
 
+func newResponseEventDecoderWithSession(
+	input adapter.DecoderContext,
+	session *workerexecution.ProviderSessionMetadata,
+) *ResponseEventDecoder {
+	decoder := NewResponseEventDecoder(input)
+	if normalized := cloneCursorProviderSession(session); normalized != nil {
+		decoder.providerSessionRef = normalized.ID
+	}
+	return decoder
+}
+
 // Observe accepts ordered subprocess chunks without assuming record-aligned IO.
 func (d *ResponseEventDecoder) Observe(_ context.Context, observation adapter.Observation) (adapter.DecodeResult, error) {
 	if observation.Stream == adapter.OutputStreamStderr {

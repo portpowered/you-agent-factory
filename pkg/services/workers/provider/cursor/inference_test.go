@@ -164,18 +164,18 @@ func TestParseInferenceResult_InvalidSessionID(t *testing.T) {
 	}
 }
 
-func TestParseInferenceResult_StreamJSONInvalidSessionID(t *testing.T) {
+func TestParseInferenceResult_StreamJSONRejectsInvalidReplacement(t *testing.T) {
 	stdout := []byte(
 		"{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"cursor-stream-session\"}\n" +
 			"{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"Plan done\",\"session_id\":\"../cursor-stream-session\"}\n",
 	)
 
-	_, err := ParseInferenceResult(string(modelprovider.ProviderCursor), stdout)
-	if err == nil {
-		t.Fatal("expected parse error for invalid stream session_id")
+	parsed, err := ParseInferenceResult(string(modelprovider.ProviderCursor), stdout)
+	if err != nil {
+		t.Fatalf("ParseInferenceResult() failure = %#v, want accepted initialization session", err)
 	}
-	if err.Type != workerexecution.WorkFailureTypeUnknown {
-		t.Fatalf("error type = %q, want unknown", err.Type)
+	if parsed.ProviderSession == nil || parsed.ProviderSession.ID != "cursor-stream-session" {
+		t.Fatalf("provider session = %#v, want initialization session", parsed.ProviderSession)
 	}
 }
 
@@ -416,6 +416,156 @@ func TestIntegrationMalformedOrIncompleteStreamClosesWithSafeFailure(t *testing.
 				t.Fatalf("failure message leaked %q: %q", unsafe, message)
 			}
 		}
+	}
+}
+
+func TestIntegrationPreservesOrReplacesResumedProviderSession(t *testing.T) {
+	requested := inference.NewProviderSession(
+		"cursor", ProviderSessionKindSessionID, "cursor-requested", nil,
+	)
+	tests := []struct {
+		name   string
+		stdout string
+		wantID string
+	}{
+		{
+			name:   "preserves requested session without replacement",
+			stdout: `{"type":"result","subtype":"success","is_error":false,"result":"continued","session_id":""}`,
+			wantID: "cursor-requested",
+		},
+		{
+			name: "accepted initialization replaces requested session",
+			stdout: strings.Join([]string{
+				`{"type":"system","subtype":"init","session_id":"cursor-replacement"}`,
+				`{"type":"result","subtype":"success","is_error":false,"result":"continued","session_id":""}`,
+			}, "\n"),
+			wantID: "cursor-replacement",
+		},
+		{
+			name: "invalid replacement preserves requested session",
+			stdout: strings.Join([]string{
+				`{"type":"system","subtype":"init","session_id":"../invalid"}`,
+				`{"type":"result","subtype":"success","is_error":false,"result":"continued","session_id":""}`,
+			}, "\n"),
+			wantID: "cursor-requested",
+		},
+		{
+			name: "unaccepted record cannot replace requested session",
+			stdout: strings.Join([]string{
+				`{"type":"assistant","session_id":"cursor-unaccepted"}`,
+				`{"type":"result","subtype":"success","is_error":false,"result":"continued","session_id":""}`,
+			}, "\n"),
+			wantID: "cursor-requested",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stdout := []byte(test.stdout)
+			writer := &cursorIntegrationWriter{}
+			err := NewIntegration(IntegrationDependencies{
+				CommandRunner: &cursorIntegrationRunner{
+					chunks: [][]byte{stdout},
+					result: workerprocess.CommandResult{Stdout: stdout},
+				},
+				OperatingSystem: "linux",
+			}).Invoke(context.Background(), inference.NewInvocationRequest(inference.InvocationInput{
+				InvocationID:    "inv-cursor-resume",
+				UserMessage:     "continue",
+				ProviderSession: &requested,
+			}), writer)
+			if err != nil {
+				t.Fatalf("Invoke() error = %v", err)
+			}
+			response := writer.completion.Response()
+			if response == nil || response.ProviderSession() == nil ||
+				response.ProviderSession().ID() != test.wantID {
+				t.Fatalf("completion response = %#v, want session %q", response, test.wantID)
+			}
+			if writer.closeCalls != 1 {
+				t.Fatalf("close calls = %d, want 1", writer.closeCalls)
+			}
+		})
+	}
+}
+
+func TestIntegrationPreservesExecutionResumeProviderSession(t *testing.T) {
+	stdout := []byte(
+		`{"type":"result","subtype":"success","is_error":false,"result":"continued","session_id":""}`,
+	)
+	writer := &cursorIntegrationWriter{}
+	err := NewIntegration(IntegrationDependencies{
+		CommandRunner: &cursorIntegrationRunner{
+			chunks: [][]byte{stdout},
+			result: workerprocess.CommandResult{Stdout: stdout},
+		},
+		OperatingSystem: "linux",
+	}).Invoke(context.Background(), inference.NewInvocationRequest(inference.InvocationInput{
+		InvocationID: "inv-cursor-product-resume",
+		UserMessage:  "continue",
+		Execution: workerexecution.ProviderInferenceRequest{
+			SessionID: "cursor-product-session",
+		},
+	}), writer)
+	if err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	response := writer.completion.Response()
+	if response == nil || response.ProviderSession() == nil ||
+		response.ProviderSession().ID() != "cursor-product-session" {
+		t.Fatalf("completion response = %#v, want execution resume session", response)
+	}
+}
+
+func TestIntegrationRetainsObservedProviderSessionOnRetryableFailure(t *testing.T) {
+	requested := inference.NewProviderSession(
+		"cursor", ProviderSessionKindSessionID, "cursor-requested", nil,
+	)
+	tests := []struct {
+		name   string
+		stdout string
+		wantID string
+	}{
+		{
+			name:   "requested session survives without replacement",
+			stdout: `{"type":"result","subtype":"rate_limit_error","is_error":true,"result":"capacity unavailable","session_id":""}`,
+			wantID: "cursor-requested",
+		},
+		{
+			name: "observed session replaces requested session",
+			stdout: strings.Join([]string{
+				`{"type":"system","subtype":"init","session_id":"cursor-retry"}`,
+				`{"type":"result","subtype":"rate_limit_error","is_error":true,"result":"capacity unavailable","session_id":""}`,
+			}, "\n"),
+			wantID: "cursor-retry",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stdout := []byte(test.stdout)
+			writer := &cursorIntegrationWriter{}
+			err := NewIntegration(IntegrationDependencies{
+				CommandRunner: &cursorIntegrationRunner{
+					chunks: [][]byte{stdout},
+					result: workerprocess.CommandResult{Stdout: stdout, ExitCode: 1},
+				},
+				OperatingSystem: "linux",
+			}).Invoke(context.Background(), inference.NewInvocationRequest(inference.InvocationInput{
+				InvocationID:    "inv-cursor-retry",
+				UserMessage:     "continue",
+				ProviderSession: &requested,
+			}), writer)
+			if err != nil {
+				t.Fatalf("Invoke() error = %v", err)
+			}
+			failure := writer.completion.Failure()
+			if failure == nil || !failure.Retryable() || failure.ProviderSession() == nil ||
+				failure.ProviderSession().ID() != test.wantID {
+				t.Fatalf("completion failure = %#v, want retryable %s session", failure, test.wantID)
+			}
+			if writer.closeCalls != 1 {
+				t.Fatalf("close calls = %d, want 1", writer.closeCalls)
+			}
+		})
 	}
 }
 

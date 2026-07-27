@@ -25,9 +25,10 @@ type AdapterDependencies struct {
 // Adapter owns Cursor command construction for the registry-backed conductor
 // path, including Windows long-prompt materialization and cleanup.
 type Adapter struct {
-	operatingSystem string
-	temporaryDir    string
-	temporaryFiles  platformfilesystem.TemporaryFileSystem
+	operatingSystem  string
+	temporaryDir     string
+	temporaryFiles   platformfilesystem.TemporaryFileSystem
+	requestedSession *workerexecution.ProviderSessionMetadata
 }
 
 // NewAdapter constructs a Cursor adapter. Omitted dependencies are valid for
