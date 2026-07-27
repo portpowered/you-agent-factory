@@ -45,6 +45,7 @@ import (
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -81,11 +82,13 @@ func provideLiveRecordingTargetPlanner() recordings.LiveRecordingTargetPlanner {
 
 func provideCLIRunDefaults(
 	recordingTargets recordings.LiveRecordingTargetPlanner,
+	recordingsCLI recordingscli.Adapter,
 ) runcli.RunConfig {
 	return runcli.RunConfig{
 		RuntimeLogConfig:       logging.DefaultRuntimeLogConfig(),
 		RuntimeMetricsConfig:   platformmetrics.DefaultRuntimeMetricsConfig(),
 		RecordingTargetPlanner: recordingTargets,
+		RecordingsCLI:          recordingsCLI,
 		Clock:                  platformclock.Real{},
 	}
 }

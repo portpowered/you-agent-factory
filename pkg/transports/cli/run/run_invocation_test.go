@@ -89,13 +89,13 @@ func TestOpenInvocationRetainsInjectedOperationWithoutOpeningRuntime(t *testing.
 	}
 
 	factory := testRunnerOpeners{invocation: openTestInvocationRunner}
-	operation, err := Open(context.Background(), RunConfig{
+	operation, err := Open(context.Background(), ensureTestRecordingsCLI(RunConfig{
 		Dir:                      t.TempDir(),
 		InvocationPositionalText: &text,
 		StdinIsTTY:               func() bool { return true },
 		Output:                   io.Discard,
 		DisableDefaultRecording:  true,
-	}, factory.BuildRunner, factory.Invocation(), testResponsePresentation(), nil, testMockWorkersConfigLoader, testRuntimeOpeningRequestFactory)
+	}), factory.BuildRunner, factory.Invocation(), testResponsePresentation(), nil, testMockWorkersConfigLoader, testRuntimeOpeningRequestFactory)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}

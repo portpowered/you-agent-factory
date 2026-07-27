@@ -28,9 +28,13 @@ func TestCLIRunDefaultsRetainWireSelectedRecordingTargetPlanner(t *testing.T) {
 	planner := recordings.LiveRecordingTargetPlannerFunc(func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
 		return recordings.LiveRecordingTarget{}, nil
 	})
-	defaults := provideCLIRunDefaults(planner)
+	recordingsCLI := provideRecordingsCLIAdapter()
+	defaults := provideCLIRunDefaults(planner, recordingsCLI)
 	if defaults.RecordingTargetPlanner == nil {
 		t.Fatal("CLI run defaults dropped the Wire-selected recording target planner")
+	}
+	if defaults.RecordingsCLI == nil {
+		t.Fatal("CLI run defaults dropped the Wire-selected Recordings CLI adapter")
 	}
 }
 

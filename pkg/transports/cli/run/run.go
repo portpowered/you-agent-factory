@@ -400,7 +400,10 @@ func loadSelectedMockWorkersConfig(
 }
 
 func resolveRecordPathForRun(cfg RunConfig) (resolvedRunRecordPath, error) {
-	resolved, err := recordingscli.New().ResolveRecordPath(recordingscli.InvocationRequest{
+	if cfg.RecordingsCLI == nil {
+		return resolvedRunRecordPath{}, fmt.Errorf("Recordings CLI adapter is required")
+	}
+	resolved, err := cfg.RecordingsCLI.ResolveRecordPath(recordingscli.InvocationRequest{
 		RecordPath:              cfg.RecordPath,
 		ReplayPath:              cfg.ReplayPath,
 		DisableDefaultRecording: cfg.DisableDefaultRecording,
