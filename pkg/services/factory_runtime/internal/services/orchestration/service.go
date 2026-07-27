@@ -6,6 +6,8 @@ package orchestration
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -54,7 +56,12 @@ func (e *CompileError) Error() string {
 	if len(e.Diagnostics) == 0 {
 		return e.Err.Error()
 	}
-	return e.Diagnostics[0].Message
+	diagnostic := e.Diagnostics[0]
+	message := diagnostic.Message
+	if code := strings.TrimSpace(diagnostic.Code); code != "" {
+		message = fmt.Sprintf("[%s] %s", code, message)
+	}
+	return message
 }
 
 func (e *CompileError) Unwrap() error {

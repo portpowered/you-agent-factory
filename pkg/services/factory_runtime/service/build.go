@@ -3,9 +3,12 @@ package service
 import (
 	"context"
 	"fmt"
+	"io/fs"
+
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/context"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/definitionmapping"
 	factoryingest "github.com/portpowered/infinite-you/pkg/services/factory_runtime/ingest"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/scheduler"
@@ -187,13 +190,9 @@ func (f *RuntimeFactory) Build(
 			_ = factoryhost.CloseBundleSinks(logSink, metricsSink)
 		}
 	}()
-	net, err := f.orchestrationCompilation.CompilePetriNet(ctx, factory.OrchestrationCompileRequest{
-		Config:     loadedFactoryCfg.FactoryConfig(),
-		FactoryDir: dir,
-	})
+	net, err := f.compileOrchestrationNet(ctx, dir, loadedFactoryCfg.FactoryConfig(), logger)
 	if err != nil {
-		logger.Error("failed to compile factory orchestration", zap.Error(err))
-		return nil, fmt.Errorf("compile factory orchestration: %w", err)
+		return nil, err
 	}
 
 	effectiveFactoryRunnerID := effectiveFactoryRunnerID(runnerID, loadedFactoryCfg.FactoryConfig())
@@ -400,6 +399,62 @@ func RuntimeWorkflowContext(cfg *interfaces.FactoryConfig, sessionID string) *fa
 		ProjectID: projectID,
 		EnvVars:   make(map[string]string),
 		SessionID: sessionID,
+	}
+}
+
+type inputWorkflowSourceFiles struct {
+	files factory.InputFileSystem
+}
+
+func (f inputWorkflowSourceFiles) ReadDir(path string) ([]fs.DirEntry, error) {
+	return f.files.ReadDir(path)
+}
+
+func (f inputWorkflowSourceFiles) ReadFile(path string) ([]byte, error) {
+	return f.files.ReadFile(path)
+}
+
+func (f inputWorkflowSourceFiles) Stat(path string) (fs.FileInfo, error) {
+	return f.files.Stat(path)
+}
+
+func (f *RuntimeFactory) compileOrchestrationNet(
+	ctx context.Context,
+	dir string,
+	cfg *interfaces.FactoryConfig,
+	logger *zap.Logger,
+) (*state.Net, error) {
+	compileReq := factory.OrchestrationCompileRequest{
+		Config:       cfg,
+		FactoryDir:   dir,
+		SourceReader: factory.NewWorkflowSourceReader(dir, inputWorkflowSourceFiles{files: f.inputFiles}),
+	}
+	compiled, err := f.orchestrationCompilation.Compile(ctx, compileReq)
+	if err != nil {
+		logger.Error("failed to compile factory orchestration", zap.Error(err))
+		return nil, fmt.Errorf("compile factory orchestration: %w", err)
+	}
+	switch compiled.Kind {
+	case factory.OrchestrationKindPetri:
+		net, err := f.orchestrationCompilation.CompilePetriNet(ctx, compileReq)
+		if err != nil {
+			logger.Error("failed to compile factory orchestration", zap.Error(err))
+			return nil, fmt.Errorf("compile factory orchestration: %w", err)
+		}
+		return net, nil
+	case factory.OrchestrationKindJavaScript:
+		mapper, err := definitionmapping.New(f.newID)
+		if err != nil {
+			return nil, err
+		}
+		net, err := mapper.Map(ctx, cfg)
+		if err != nil {
+			logger.Error("failed to map JavaScript factory runtime net", zap.Error(err))
+			return nil, fmt.Errorf("compile factory orchestration: %w", err)
+		}
+		return net, nil
+	default:
+		return nil, fmt.Errorf("compile factory orchestration: unsupported orchestration kind %q", compiled.Kind)
 	}
 }
 

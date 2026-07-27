@@ -282,10 +282,8 @@ func (c *Compiler) compileJavaScript(
 			},
 		)
 	}
-	loaded, loadIssues := c.workflows.LoadSource(factoryruntime.WorkflowValidationLoadRequest{
-		SourceRef: sourceRef,
-		Content:   content,
-	})
+	loadReq := workflowValidationLoadRequest(req.SourceReader, sourceRef, content)
+	loaded, loadIssues := c.workflows.LoadSource(loadReq)
 	if len(loadIssues) > 0 {
 		return nil, compileError(
 			orchestration.ErrInvalidDefinition,
@@ -321,6 +319,26 @@ func (c *Compiler) compileJavaScript(
 		)
 	}
 	return orchestration.NewJavaScriptBinding(sourceRef, loaded.SourceHash, false), nil
+}
+
+type factoryRootWorkflowSourceReader interface {
+	FactoryRoot() string
+}
+
+func workflowValidationLoadRequest(
+	reader factoryruntime.WorkflowSourceReader,
+	sourceRef string,
+	content string,
+) factoryruntime.WorkflowValidationLoadRequest {
+	request := factoryruntime.WorkflowValidationLoadRequest{
+		SourceRef: sourceRef,
+		Content:   content,
+	}
+	if rootReader, ok := reader.(factoryRootWorkflowSourceReader); ok {
+		request.FactoryRoot = rootReader.FactoryRoot()
+		request.BundleReader = reader
+	}
+	return request
 }
 
 func javascriptConfigDiagnostics(

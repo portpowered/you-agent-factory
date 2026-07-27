@@ -138,6 +138,59 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 	}
 }
 
+func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, map[string]any{
+		"name": "inline-javascript-build",
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"inlineSource": map[string]any{
+					"encoding": "utf-8",
+					"inline":   `workflow.final("ok");`,
+				},
+				"argsSchema": map[string]any{
+					"type":                 "object",
+					"additionalProperties": false,
+				},
+			},
+		},
+	})
+
+	loaded, err := loadedFactoryFixture(dir)
+	if err != nil {
+		t.Fatalf("loadedFactoryFixture: %v", err)
+	}
+	workflows := cutoverJavaScriptWorkflows()
+	bundle, err := factoryservice.NewRuntimeFactory(
+		nil, nil, nil, nil, testRuntimeLoggerFactory, nil, nil,
+		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
+		factoryruntimeorchestrationowner.NewCompilation(testRuntimeID, workflows, workflows),
+	).Build(
+		context.Background(), dir, dir, "~default",
+		"", factorydefinitions.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
+		"", factory.RuntimeLogStorageConfig{},
+		factoryservice.RuntimeFileLoggingPolicyDisabled,
+		factoryservice.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
+		loaded, zap.NewNop(), "runtime-cutover-js", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
+		nil,
+		newTestRuntimeLedger,
+		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
+			return nil, nil
+		},
+		testRuntimeWorkers{},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if bundle == nil || bundle.Factory == nil {
+		t.Fatal("bundle missing runnable JavaScript runtime")
+	}
+}
+
 type netStructure struct {
 	WorkTypeNames   []string
 	PlaceCount      int
