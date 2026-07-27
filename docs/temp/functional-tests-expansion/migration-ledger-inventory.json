@@ -6665,14 +6665,14 @@
       "workflow": 44,
       "workstations": 29
     },
-    "customer_top_level_Test_scenarios": 643,
+    "customer_top_level_Test_scenarios": 644,
     "files_with_customer_Test": 217,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
-    "lane_functionallong": 113,
-    "lane_short": 530,
+    "lane_functionallong": 112,
+    "lane_short": 532,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
       "you-agent-factory/tests/functional/bootstrap_portability": 19,
