@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -91,6 +92,84 @@ func TestExplicitProviderAndModelReachSelectedProviderEdge(t *testing.T) {
 			"alternate provider side effects = progress:%d terminal:%d, want inert when not selected",
 			alternateStats.ProgressWrites,
 			alternateStats.TerminalCloses,
+		)
+	}
+}
+
+// TestWorkerProviderOverridesGlobalDefault proves that when a global default
+// provider is configured and both the default and worker provider edges are
+// registered, a worker-authored modelProvider dispatches through the worker
+// provider edge and leaves the global default provider edge inert for that work.
+func TestWorkerProviderOverridesGlobalDefault(t *testing.T) {
+	const (
+		defaultProviderID    = "global.default.provider"
+		defaultProviderAlias = "global-default"
+		workerProviderID     = "worker.override.provider"
+		workerProviderAlias  = "worker-override"
+		workerModel          = "worker-override-model"
+		globalDefaultModel   = "global-default-model"
+	)
+
+	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, defaultProviderAlias)
+	t.Setenv(operatorsettings.EnvDefaultWorkerModel, globalDefaultModel)
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	writeExplicitSelectionWorker(t, dir, workerProviderAlias, workerModel)
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"worker provider overrides global default"}`))
+
+	defaultIntegration := inference.ProgressingExternalIntegration(
+		defaultProviderID,
+		"global default provider must not run",
+	)
+	workerIntegration := inference.ProgressingExternalIntegration(
+		workerProviderID,
+		"structured progress COMPLETE",
+	)
+
+	defaultManifest := externalProviderManifest(t, defaultProviderID, defaultProviderAlias)
+	workerManifest := externalProviderManifest(t, workerProviderID, workerProviderAlias)
+
+	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+		ProviderRegistrations: []inference.Registration{
+			{Manifest: defaultManifest, Integration: defaultIntegration},
+			{Manifest: workerManifest, Integration: workerIntegration},
+		},
+	}, 20*time.Second)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
+		t.Fatalf("terminal place tokens = %d, want 1 completed work item", got)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
+		t.Fatalf("failed place tokens = %d, want 0", got)
+	}
+
+	workerStats := workerIntegration.Stats()
+	if workerStats.InvokeCalls != 1 {
+		t.Fatalf("worker provider invoke calls = %d, want 1", workerStats.InvokeCalls)
+	}
+	if workerStats.ProgressWrites < 1 {
+		t.Fatalf(
+			"worker provider progress writes = %d, want at least 1 through the conductor response writer",
+			workerStats.ProgressWrites,
+		)
+	}
+	if workerStats.TerminalCloses != 1 {
+		t.Fatalf("worker provider terminal closes = %d, want exactly one terminal outcome", workerStats.TerminalCloses)
+	}
+
+	defaultStats := defaultIntegration.Stats()
+	if defaultStats.InvokeCalls != 0 {
+		t.Fatalf(
+			"global default provider invoke calls = %d, want 0 when worker selected %q",
+			defaultStats.InvokeCalls,
+			workerProviderAlias,
+		)
+	}
+	if defaultStats.ProgressWrites != 0 || defaultStats.TerminalCloses != 0 {
+		t.Fatalf(
+			"global default provider side effects = progress:%d terminal:%d, want inert when worker provider overrides",
+			defaultStats.ProgressWrites,
+			defaultStats.TerminalCloses,
 		)
 	}
 }
