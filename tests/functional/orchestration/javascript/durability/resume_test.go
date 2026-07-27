@@ -131,6 +131,76 @@ func TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren(t 
 	}
 }
 
+// TestJavaScriptResumeRestoresCheckpointAndFinalResult proves that a durable
+// JavaScript Factory Session interrupted after writing a workflow checkpoint
+// resumes through the public lifecycle boundary with restored durable progress
+// (latest checkpoint and dispatch counts preserved, not a blank restart) and
+// reaches the expected terminal primary result for the completed workflow.
+func TestJavaScriptResumeRestoresCheckpointAndFinalResult(t *testing.T) {
+	const workflowName = "resumable-two-step-fake-children"
+	projectRoot := setupJavaScriptDurabilityResumeWorkflowFixture(t, workflowName)
+	provider := newJavaScriptDurabilityResumeBlockingProvider(workflowName)
+
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: projectRoot,
+		Edges:      serviceedges.Edges{ProviderOverride: provider},
+	})
+	baseURL := strings.TrimSuffix(server.URL(), "/")
+
+	sessionID := startInterruptedJavaScriptDurabilitySession(t, baseURL, provider, workflowName)
+
+	before := readDurableJavaScriptSession(t, baseURL, sessionID)
+	assertDurableProgressCounts(t, before.Progress, 1, 2, 0)
+	if before.Status != factoryapi.FactorySessionDurableLifecycleStatusInterrupted {
+		t.Fatalf("pre-resume status = %q, want INTERRUPTED", before.Status)
+	}
+	checkpointBefore := requireLatestCheckpointLabel(t, before, "after-step-one")
+
+	resumeResponse := resumeJavaScriptSession(t, baseURL, sessionID)
+	if resumeResponse.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("resume outcome = %q, want ACCEPTED", resumeResponse.Outcome)
+	}
+
+	after := waitForDurableJavaScriptSessionStatus(
+		t,
+		baseURL,
+		sessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
+		8*time.Second,
+	)
+	assertDurableProgressCounts(t, after.Progress, 2, 2, 0)
+	checkpointAfter := requireLatestCheckpointLabel(t, after, "after-step-one")
+	if checkpointAfter.Id != checkpointBefore.Id {
+		t.Fatalf(
+			"latestCheckpoint id changed across resume: before=%q after=%q",
+			checkpointBefore.Id,
+			checkpointAfter.Id,
+		)
+	}
+	if after.Lifecycle == nil || after.Lifecycle.InterruptedAt == nil || after.Lifecycle.ResumedAt == nil {
+		t.Fatalf("post-resume lifecycle = %#v, want interruptedAt and resumedAt continuity", after.Lifecycle)
+	}
+	if before.Lifecycle == nil || before.Lifecycle.InterruptedAt == nil {
+		t.Fatal("pre-resume lifecycle missing interruptedAt")
+	}
+	if !after.Lifecycle.InterruptedAt.Equal(*before.Lifecycle.InterruptedAt) {
+		t.Fatalf(
+			"interruptedAt changed across resume: before=%s after=%s",
+			before.Lifecycle.InterruptedAt,
+			after.Lifecycle.InterruptedAt,
+		)
+	}
+	if after.ResultSummary == nil || after.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("post-resume resultSummary = %#v, want FINAL", after.ResultSummary)
+	}
+
+	result := readJavaScriptSessionFinalResult(t, baseURL, sessionID)
+	if result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("terminal resultStatus = %q, want FINAL", result.ResultStatus)
+	}
+	assertResumableTwoStepFinalPrimaryResult(t, result, workflowName)
+}
+
 func setupJavaScriptDurabilityResumeWorkflowFixture(t *testing.T, workflowName string) string {
 	t.Helper()
 
@@ -337,6 +407,81 @@ func postJavaScriptDurabilityJSON[T any](t *testing.T, endpoint string, request 
 		t.Fatalf("decode POST %s response: %v\n%s", endpoint, err, body)
 	}
 	return decoded
+}
+
+func requireLatestCheckpointLabel(
+	t *testing.T,
+	session factoryapi.FactorySessionDurableReadModel,
+	wantLabel string,
+) factoryapi.FactorySessionCheckpointRef {
+	t.Helper()
+	if session.LatestCheckpoint == nil {
+		t.Fatalf("latestCheckpoint = nil, want label %q", wantLabel)
+	}
+	if session.LatestCheckpoint.Id == "" {
+		t.Fatal("latestCheckpoint.id unexpectedly empty")
+	}
+	if session.LatestCheckpoint.Label == nil || *session.LatestCheckpoint.Label != wantLabel {
+		t.Fatalf("latestCheckpoint.label = %#v, want %q", session.LatestCheckpoint.Label, wantLabel)
+	}
+	return *session.LatestCheckpoint
+}
+
+func readJavaScriptSessionFinalResult(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+) factoryapi.FactorySessionResult {
+	t.Helper()
+
+	result := support.GetJSON[factoryapi.FactorySessionResult](
+		t,
+		baseURL+"/factory-sessions/"+sessionID+"/results",
+	)
+	if result.SessionId != sessionID {
+		t.Fatalf("result sessionId = %q, want %q", result.SessionId, sessionID)
+	}
+	return result
+}
+
+func assertResumableTwoStepFinalPrimaryResult(
+	t *testing.T,
+	result factoryapi.FactorySessionResult,
+	workflowName string,
+) {
+	t.Helper()
+
+	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
+		t.Fatalf("primaryResult = %#v, want exactly one content part", result.PrimaryResult)
+	}
+	part, err := (*result.PrimaryResult)[0].AsWorkJsonContentPart()
+	if err != nil {
+		t.Fatalf("decode primary result content part: %v", err)
+	}
+	payload, ok := part.Json.(map[string]any)
+	if !ok {
+		t.Fatalf("primary json payload = %#v, want object", part.Json)
+	}
+	if payload["label"] != workflowName {
+		t.Fatalf("result label = %#v, want %q", payload["label"], workflowName)
+	}
+	if payload["subject"] != "workflows" {
+		t.Fatalf("result subject = %#v, want workflows", payload["subject"])
+	}
+	first, ok := payload["first"].(map[string]any)
+	if !ok {
+		t.Fatalf("result first = %#v, want object with step-one label", payload["first"])
+	}
+	if first["label"] != "step-one" {
+		t.Fatalf("result first.label = %#v, want step-one", first["label"])
+	}
+	second, ok := payload["second"].(map[string]any)
+	if !ok {
+		t.Fatalf("result second = %#v, want object with step-two label", payload["second"])
+	}
+	if second["label"] != "step-two" {
+		t.Fatalf("result second.label = %#v, want step-two", second["label"])
+	}
 }
 
 func assertDurableProgressCounts(
