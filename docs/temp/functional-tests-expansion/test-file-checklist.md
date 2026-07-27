@@ -249,7 +249,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestProviderAuthRateLimitAndTimeoutRemainDistinct` covers error classes.
   - `TestProviderFailureRedactsPromptEnvironmentAndCredentials` covers safety.
 
-- [ ] `tests/functional/workers/inference/stream_fidelity_test.go`
+- [x] `tests/functional/workers/inference/stream_fidelity_test.go`
   - `TestProviderFullStreamClaimsDeltasAndSnapshotsTruthfully`.
   - `TestProviderPartialStreamDoesNotFabricateMissingDeltas`.
   - `TestProviderSnapshotOnlyEmitsCompletedSnapshotsOnly`.
