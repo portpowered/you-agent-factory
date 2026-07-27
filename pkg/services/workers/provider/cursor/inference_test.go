@@ -351,11 +351,11 @@ func assertCursorIntegrationEvents(t *testing.T, writer *cursorIntegrationWriter
 	if writer.closeCalls != 1 || writer.writeAfterClose != 0 {
 		t.Fatalf("writer close calls = %d, writes after close = %d; want 1 and 0", writer.closeCalls, writer.writeAfterClose)
 	}
-	if len(writer.events) != 6 {
+	if len(writer.events) != 7 {
 		t.Fatalf("events = %#v, want run boundaries around assistant, tool lifecycle, and terminal snapshot", writer.events)
 	}
 	wantKinds := []workerexecution.Kind{
-		workerexecution.KindRun, workerexecution.KindMessage, workerexecution.KindTool,
+		workerexecution.KindRun, workerexecution.KindMessage, workerexecution.KindMessage, workerexecution.KindTool,
 		workerexecution.KindTool, workerexecution.KindMessage, workerexecution.KindRun,
 	}
 	for index, event := range writer.events {
@@ -415,7 +415,62 @@ func TestIntegrationMalformedOrIncompleteStreamClosesWithSafeFailure(t *testing.
 				t.Fatalf("failure message leaked %q: %q", unsafe, message)
 			}
 		}
+		published := cursorPublishedOutput(t, writer)
+		for _, unsafe := range []string{"private prompt", "/Users/alice", "secret request"} {
+			if strings.Contains(published, unsafe) {
+				t.Fatalf("published Cursor output leaked %q: %s", unsafe, published)
+			}
+		}
 	}
+}
+
+func TestIntegrationSanitizesSensitiveAssistantAndResultText(t *testing.T) {
+	stdout := []byte(strings.Join([]string{
+		`{"type":"assistant","timestamp_ms":1,"message":{"content":[{"type":"text","text":"token=secret at C:\\Users\\alice\\key"}]},"session_id":"cursor-safe-publication"}`,
+		`{"type":"result","subtype":"success","is_error":false,"result":"private prompt /Users/alice/key","session_id":"cursor-safe-publication"}`,
+	}, "\n"))
+	writer := &cursorIntegrationWriter{}
+
+	err := NewIntegration(IntegrationDependencies{
+		CommandRunner: &cursorIntegrationRunner{
+			chunks: [][]byte{stdout}, result: workerprocess.CommandResult{Stdout: stdout},
+		},
+		OperatingSystem: "linux",
+	}).Invoke(context.Background(), inference.NewInvocationRequest(inference.InvocationInput{
+		InvocationID: "inv-cursor-safe-publication", UserMessage: "secret request",
+	}), writer)
+	if err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	published := cursorPublishedOutput(t, writer)
+	for _, unsafe := range []string{"token=secret", `C:\\Users\\alice`, "private prompt", "/Users/alice", "secret request"} {
+		if strings.Contains(published, unsafe) {
+			t.Fatalf("published Cursor output leaked %q: %s", unsafe, published)
+		}
+	}
+	if response := writer.completion.Response(); response == nil ||
+		response.Content() != cursorSensitiveOutputMessage {
+		t.Fatalf("completion = %#v, want sanitized Cursor response", writer.completion)
+	}
+}
+
+func cursorPublishedOutput(t *testing.T, writer *cursorIntegrationWriter) string {
+	t.Helper()
+	var published strings.Builder
+	for _, event := range writer.events {
+		payload, err := json.Marshal(event.Draft())
+		if err != nil {
+			t.Fatalf("marshal published Cursor event: %v", err)
+		}
+		published.Write(payload)
+	}
+	if response := writer.completion.Response(); response != nil {
+		published.WriteString(response.Content())
+	}
+	if failure := writer.completion.Failure(); failure != nil {
+		published.WriteString(failure.Message())
+	}
+	return published.String()
 }
 
 func TestIntegrationPreservesOrReplacesResumedProviderSession(t *testing.T) {

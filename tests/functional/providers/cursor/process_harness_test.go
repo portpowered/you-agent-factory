@@ -40,11 +40,15 @@ Test workstation.
 		Stdout: cursorSuccessStream(cursorSessionID, "Cursor answer COMPLETE"),
 	})
 
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(t, dir, serviceedges.Edges{
 		ProviderCommandRunner:              runner,
 		WorkersProviderTemporaryFileSystem: files,
 	}, 20*time.Second)
 
+	if support.CountWorkAtCustomerState(listed, "task:done") != 1 {
+		encoded, _ := json.Marshal(events)
+		t.Logf("Cursor failure events: %s", encoded)
+	}
 	assertWorkOutcome(t, listed, 1, 0)
 	if runner.CallCount() != 1 {
 		t.Fatalf("Cursor command runner calls = %d, want 1", runner.CallCount())
@@ -71,7 +75,8 @@ Test workstation.
 	if files.CreateCount() != 0 {
 		t.Fatalf("short prompt temporary-file creates = %d, want 0", files.CreateCount())
 	}
-	assertOrderedCorrelatedCompletion(t, events, "Cursor answer COMPLETE")
+	dispatchID := assertOrderedCorrelatedCompletion(t, events, "Cursor answer COMPLETE")
+	assertCursorResponseLifecycle(t, responseEvents, dispatchID, "working", "Cursor answer COMPLETE")
 }
 
 // TestCursorWindowsLongPromptThroughRootBuildProcess proves oversized Windows
@@ -308,7 +313,7 @@ func cursorWorkerConfig(skipPermissions bool, timeout string) string {
 func cursorSuccessStream(sessionID, result string) []byte {
 	records := []string{
 		`{"type":"system","subtype":"init","session_id":"` + sessionID + `"}`,
-		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"working"}]},"session_id":"` + sessionID + `"}`,
+		`{"type":"assistant","timestamp_ms":1,"message":{"role":"assistant","content":[{"type":"text","text":"working"}]},"session_id":"` + sessionID + `"}`,
 		`{"type":"tool_call","subtype":"started","call_id":"call-1","tool_call":{"readToolCall":{"args":{"path":"README.md"}}},"session_id":"` + sessionID + `"}`,
 		`{"type":"tool_call","subtype":"completed","call_id":"call-1","tool_call":{"readToolCall":{"result":{"success":{}}}},"session_id":"` + sessionID + `"}`,
 		string(cursorTerminalRecord(sessionID, result)),
@@ -334,14 +339,16 @@ func mustJSON(value string) string {
 func assertWorkOutcome(t *testing.T, listed factoryapi.ListWorkResponse, done, failed int) {
 	t.Helper()
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != done {
-		t.Fatalf("completed work = %d, want %d; listed=%#v", got, done, listed)
+		encoded, _ := json.Marshal(listed)
+		t.Fatalf("completed work = %d, want %d; listed=%s", got, done, encoded)
 	}
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != failed {
-		t.Fatalf("failed work = %d, want %d; listed=%#v", got, failed, listed)
+		encoded, _ := json.Marshal(listed)
+		t.Fatalf("failed work = %d, want %d; listed=%s", got, failed, encoded)
 	}
 }
 
-func assertOrderedCorrelatedCompletion(t *testing.T, events []factoryapi.FactoryEvent, wantOutput string) {
+func assertOrderedCorrelatedCompletion(t *testing.T, events []factoryapi.FactoryEvent, wantOutput string) string {
 	t.Helper()
 	requestIndex, responseIndex, dispatchResponseIndex := -1, -1, -1
 	dispatchID := ""
@@ -379,6 +386,60 @@ func assertOrderedCorrelatedCompletion(t *testing.T, events []factoryapi.Factory
 			"event order dispatch=%q inference request=%d response=%d dispatch response=%d",
 			dispatchID, requestIndex, responseIndex, dispatchResponseIndex,
 		)
+	}
+	return dispatchID
+}
+
+func assertCursorResponseLifecycle(
+	t *testing.T,
+	events []factoryapi.FactoryResponseEvent,
+	dispatchID, wantDelta, wantFinal string,
+) {
+	t.Helper()
+	want := []struct {
+		kind  factoryapi.FactoryResponseEventKind
+		phase factoryapi.FactoryResponseEventPhase
+	}{
+		{factoryapi.FactoryResponseEventKindRun, factoryapi.FactoryResponseEventPhaseStarted},
+		{factoryapi.FactoryResponseEventKindMessage, factoryapi.FactoryResponseEventPhaseStarted},
+		{factoryapi.FactoryResponseEventKindMessage, factoryapi.FactoryResponseEventPhaseDelta},
+		{factoryapi.FactoryResponseEventKindTool, factoryapi.FactoryResponseEventPhaseStarted},
+		{factoryapi.FactoryResponseEventKindTool, factoryapi.FactoryResponseEventPhaseCompleted},
+		{factoryapi.FactoryResponseEventKindMessage, factoryapi.FactoryResponseEventPhaseCompleted},
+		{factoryapi.FactoryResponseEventKindRun, factoryapi.FactoryResponseEventPhaseCompleted},
+	}
+	if len(events) != len(want) {
+		t.Fatalf("Cursor response events = %#v, want exactly %d lifecycle events", events, len(want))
+	}
+	runID := events[0].RunId
+	for index, event := range events {
+		if event.Kind != want[index].kind || event.Phase != want[index].phase {
+			t.Fatalf("response event[%d] = %s/%s, want %s/%s", index, event.Kind, event.Phase, want[index].kind, want[index].phase)
+		}
+		if event.DispatchId == nil || *event.DispatchId != dispatchID ||
+			event.RunId != runID || event.Sequence != int64(index+1) {
+			t.Fatalf("response event[%d] correlation = %#v, want dispatch %q run %q sequence %d", index, event, dispatchID, runID, index+1)
+		}
+	}
+	delta, err := events[2].Payload.AsFactoryResponseEventMessageDeltaPayload()
+	if err != nil || delta.TextDelta == nil || *delta.TextDelta != wantDelta {
+		t.Fatalf("assistant delta = %#v, %v; want %q", delta, err, wantDelta)
+	}
+	started, err := events[3].Payload.AsFactoryResponseEventToolPayload()
+	if err != nil || started.ToolCallId != "call-1" || started.ToolName != "readToolCall" {
+		t.Fatalf("started tool = %#v, %v", started, err)
+	}
+	completed, err := events[4].Payload.AsFactoryResponseEventToolPayload()
+	if err != nil || completed.ToolCallId != started.ToolCallId {
+		t.Fatalf("completed tool = %#v, %v; want call %q", completed, err, started.ToolCallId)
+	}
+	message, err := events[5].Payload.AsFactoryResponseEventMessagePayload()
+	if err != nil || len(message.ContentBlocks) != 1 {
+		t.Fatalf("terminal message = %#v, %v", message, err)
+	}
+	text, err := message.ContentBlocks[0].AsFactoryResponseEventTextContentBlock()
+	if err != nil || text.Text != wantFinal {
+		t.Fatalf("terminal message text = %#v, %v; want %q", text, err, wantFinal)
 	}
 }
 

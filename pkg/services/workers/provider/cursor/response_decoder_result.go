@@ -74,7 +74,7 @@ func (d *ResponseEventDecoder) decodeResult(record cursorStreamRecord) (adapter.
 }
 
 func (d *ResponseEventDecoder) cursorResultSnapshot(record cursorStreamRecord, providerRef string) (adapter.DecodeResult, error) {
-	result := boundedText(record.Result, PublishedTextLimit)
+	result := safeCursorPublishedText(record.Result)
 	fidelity := responseevents.FidelityLossless
 	if result != record.Result {
 		fidelity = responseevents.FidelityLossy

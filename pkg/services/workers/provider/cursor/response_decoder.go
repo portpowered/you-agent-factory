@@ -30,6 +30,7 @@ type ResponseEventDecoder struct {
 	context            adapter.DecoderContext
 	pendingStdout      []byte
 	providerSessionRef string
+	messageStarted     bool
 	tools              map[string]cursorToolState
 }
 
@@ -179,15 +180,14 @@ func (d *ResponseEventDecoder) decodeAssistant(record cursorStreamRecord) (adapt
 	if err := json.Unmarshal(record.Message, &message); err != nil {
 		return cursorDiagnostic(cursorDiagnosticMalformedRecord, "Cursor stream ignored a malformed assistant record"), nil
 	}
-	text := cursorAssistantText(message.Content)
-	if text == "" {
+	originalText := cursorAssistantText(message.Content)
+	if originalText == "" {
 		return adapter.DecodeResult{}, nil
 	}
 	providerRef := d.providerRef(record.SessionID)
-	originalLength := len(text)
-	text = boundedText(text, PublishedTextLimit)
+	text := safeCursorPublishedText(originalText)
 	fidelity := responseevents.FidelityLossless
-	if len(text) != originalLength {
+	if text != originalText {
 		fidelity = responseevents.FidelityLossy
 	}
 	payload, err := json.Marshal(responseevents.MessageDeltaPayload{
@@ -198,13 +198,34 @@ func (d *ResponseEventDecoder) decodeAssistant(record cursorStreamRecord) (adapt
 	if err != nil {
 		return adapter.DecodeResult{}, fmt.Errorf("marshal Cursor assistant payload: %w", err)
 	}
-	return adapter.DecodeResult{Drafts: []responseevents.Draft{{
+	delta := responseevents.Draft{
 		RunID: d.context.RunID, DispatchID: d.context.DispatchID,
 		Kind: responseevents.KindMessage, Phase: responseevents.PhaseDelta,
 		ItemID: d.messageItemID(), ProviderSessionRef: providerRef,
 		Provenance: cursorResponseProvenance("assistant", "", responseevents.RepresentationDelta, fidelity),
 		Payload:    payload,
-	}}}, nil
+	}
+	if d.messageStarted {
+		return adapter.DecodeResult{Drafts: []responseevents.Draft{delta}}, nil
+	}
+	startedPayload, err := json.Marshal(responseevents.MessagePayload{
+		Role:          "assistant",
+		ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText}},
+	})
+	if err != nil {
+		return adapter.DecodeResult{}, fmt.Errorf("marshal Cursor assistant start payload: %w", err)
+	}
+	d.messageStarted = true
+	started := responseevents.Draft{
+		RunID: d.context.RunID, DispatchID: d.context.DispatchID,
+		Kind: responseevents.KindMessage, Phase: responseevents.PhaseStarted,
+		ItemID: d.messageItemID(), ProviderSessionRef: providerRef,
+		Provenance: cursorResponseProvenance(
+			"assistant", "", responseevents.RepresentationSnapshot, responseevents.FidelityLifecycleOnly,
+		),
+		Payload: startedPayload,
+	}
+	return adapter.DecodeResult{Drafts: []responseevents.Draft{started, delta}}, nil
 }
 
 func (d *ResponseEventDecoder) providerRef(sessionID string) string {

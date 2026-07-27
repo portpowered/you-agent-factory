@@ -247,6 +247,47 @@ func TestConductorInvocationRunnerRoutesExternalIntegrationsThroughConductor(t *
 	}
 }
 
+func TestConductorCollectingDestinationPublishesCanonicalResponseDrafts(t *testing.T) {
+	t.Parallel()
+
+	payload, err := json.Marshal(workers.RunPayload{Status: string(workers.PhaseStarted)})
+	if err != nil {
+		t.Fatalf("marshal run payload: %v", err)
+	}
+	event, err := inference.NewEventDraft(inference.EventDraftInput{
+		RunID: "dispatch-conductor-progress", Kind: workers.KindRun, Phase: workers.PhaseStarted,
+		Provenance: workers.Provenance{
+			Provider: "customer.provider", Delivery: workers.DeliverySynthesized,
+			Representation: workers.RepresentationNotification,
+			Fidelity:       workers.FidelityLifecycleOnly,
+		},
+		Payload: payload,
+	})
+	if err != nil {
+		t.Fatalf("NewEventDraft() error = %v", err)
+	}
+	var published []workers.ProgressFragment
+	destination := conductorCollectingDestination{
+		dispatchID: "dispatch-conductor-progress",
+		publish: func(fragment workers.ProgressFragment) {
+			published = append(published, fragment)
+		},
+	}
+
+	if err := destination.WriteEvent(context.Background(), event); err != nil {
+		t.Fatalf("WriteEvent() error = %v", err)
+	}
+	if len(published) != 1 {
+		t.Fatalf("published response drafts = %d, want 1", len(published))
+	}
+	for index, fragment := range published {
+		draft, ok := fragment.CanonicalDraft.(workers.Draft)
+		if !ok || draft.DispatchID != "dispatch-conductor-progress" {
+			t.Fatalf("published[%d] = %#v, want correlated canonical draft", index, fragment)
+		}
+	}
+}
+
 func TestConductorInvocationRunnerPreservesRetryableUnknownFailurePolicy(t *testing.T) {
 	t.Parallel()
 
@@ -523,7 +564,7 @@ func TestConductorInvocationRunnerBypassedWhenProviderOverrideDisablesRegistryDe
 		providerRegistry:    providers,
 		invocationConductor: conductor.New(providers),
 	}
-	decorators := service.runtimeRunnerDecorators(nil, nil, nil, nil, false)
+	decorators := service.runtimeRunnerDecorators(nil, nil, nil, nil, false, nil)
 	for _, decorator := range decorators {
 		runner := decorator(&conductorRouteRecordingRunner{}, nil)
 		if _, ok := runner.(conductorInvocationRunner); ok {
@@ -583,7 +624,7 @@ func TestNewRuntimeWithSelectionComposesConductorFromRegistry(t *testing.T) {
 	if service.invocationConductor == nil {
 		t.Fatal("invocationConductor = nil")
 	}
-	decorators := service.runtimeRunnerDecorators(nil, nil, nil, nil, true)
+	decorators := service.runtimeRunnerDecorators(nil, nil, nil, nil, true, nil)
 	var sawConductor bool
 	for _, decorator := range decorators {
 		runner := decorator(&conductorRouteRecordingRunner{}, nil)

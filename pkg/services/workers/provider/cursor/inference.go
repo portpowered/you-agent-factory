@@ -32,9 +32,14 @@ const (
 	ResponseMetadataCacheWriteTokens = "cache_write_tokens"
 
 	ProviderSessionKindSessionID = "session_id"
+
+	cursorSensitiveOutputMessage = "Cursor output was omitted because it contained sensitive details."
 )
 
-var safeCursorProviderSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+var (
+	safeCursorProviderSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+	cursorWindowsAbsolutePathPattern   = regexp.MustCompile(`(?i)(?:^|[\s"'(])(?:[a-z]:[\\/]|\\\\)`)
+)
 
 type resultPayload struct {
 	Type          string       `json:"type"`
@@ -144,7 +149,7 @@ func parseInferenceResult(
 	}
 
 	return &InferenceResult{
-		Content:          payload.Result,
+		Content:          safeCursorPublishedText(payload.Result),
 		ProviderSession:  session,
 		ResponseMetadata: responseMetadataFromPayload(payload),
 	}, nil
@@ -263,6 +268,37 @@ func boundedText(value string, limit int) string {
 		return value
 	}
 	return value[:limit] + "..."
+}
+
+// safeCursorPublishedText preserves ordinary assistant output while replacing
+// provider text that carries credential, prompt, transcript, control-character,
+// or machine-local path signals with stable customer-safe guidance.
+func safeCursorPublishedText(value string) string {
+	value = boundedText(value, PublishedTextLimit)
+	if value == "" {
+		return ""
+	}
+	if strings.ContainsAny(value, "\x00\r") || cursorPublishedTextIsSensitive(value) {
+		return cursorSensitiveOutputMessage
+	}
+	return value
+}
+
+func cursorPublishedTextIsSensitive(value string) bool {
+	normalized := strings.ToLower(value)
+	markers := []string{
+		"authorization:", "bearer ", "api_key=", "api_key:", "api-key=", "api-key:",
+		"apikey=", "apikey:", "token=", "token:", "secret=", "secret:", "password=",
+		"password:", "credential=", "credential:", "-----begin", "sk-", "ghp_", "aiza",
+		"ya29.", "private prompt", "customer prompt", "user prompt", "secret request",
+		"prompt:", "transcript:", "/home/", "/users/", "$home", "${", "%appdata%",
+	}
+	for _, marker := range markers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return cursorWindowsAbsolutePathPattern.MatchString(value)
 }
 
 // WithCommandOutputExcerpts attaches bounded stdout/stderr excerpts to provider diagnostics.

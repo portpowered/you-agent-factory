@@ -85,6 +85,14 @@ primary-result behavior.
   completion. Guard the publication callback so the first writer failure stops
   later publication and prevents a terminal close; successful, malformed,
   failed, canceled, and timed-out paths must otherwise reach at most one close.
+  Start a stable message lifecycle before its first delta and complete that same
+  item from the authoritative terminal snapshot; otherwise the neutral protocol
+  correctly rejects the delta before it can reach a Factory Session. The
+  conductor-to-Runner destination must forward each validated draft through the
+  injected `ProgressPublisher` as a canonical draft with the dispatch ID restored,
+  rather than collecting only the terminal response, so the session-owned store
+  remains the sole owner of public response-event identity, ordering, retention,
+  and SSE delivery.
   Initialize invocation-local decode and final-parse state with a validated
   requested Provider Session, replace it only from accepted structured native
   records with valid identifiers, and carry the effective session through both

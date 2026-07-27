@@ -63,6 +63,7 @@ type conductorInvocationRunner struct {
 	next      workers.Runner
 	conductor *conductor.Conductor
 	providers *providerregistry.Registry
+	publish   workers.ProgressPublisher
 }
 
 func (r conductorInvocationRunner) Execute(
@@ -79,7 +80,10 @@ func (r conductorInvocationRunner) Execute(
 		}
 		return r.next.Execute(ctx, request)
 	}
-	destination := &conductorCollectingDestination{}
+	destination := &conductorCollectingDestination{
+		dispatchID: request.Dispatch.DispatchID,
+		publish:    r.publish,
+	}
 	err := r.conductor.Invoke(ctx, request.RunnerID, invocationRequestFromRunner(request), destination)
 	if err != nil {
 		return workers.RunnerExecutionResult{}, mapConductorInvocationError(err)
@@ -139,9 +143,16 @@ func mapConductorInvocationError(err error) error {
 
 type conductorCollectingDestination struct {
 	completion *inference.Completion
+	dispatchID string
+	publish    workers.ProgressPublisher
 }
 
-func (d *conductorCollectingDestination) WriteEvent(context.Context, inference.EventDraft) error {
+func (d *conductorCollectingDestination) WriteEvent(_ context.Context, event inference.EventDraft) error {
+	if d != nil && d.publish != nil {
+		draft := event.Draft()
+		draft.DispatchID = d.dispatchID
+		d.publish(workerprovider.CanonicalDraftFragment(draft.DispatchID, draft))
+	}
 	return nil
 }
 

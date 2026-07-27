@@ -250,7 +250,7 @@ func parseStreamResultLine(
 	}
 
 	return &InferenceResult{
-		Content:          payload.Result,
+		Content:          safeCursorPublishedText(payload.Result),
 		ProviderSession:  session,
 		ResponseMetadata: responseMetadataFromPayload(payload),
 	}, true, nil
