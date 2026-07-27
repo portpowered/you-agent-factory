@@ -522,3 +522,10 @@ Wave 0 functional-tests-expansion planning authority lives under
   `ProviderSessionLoadError` naming case id, role (`request`, `process`, `stdout`,
   `stderr`, `expected-provider-session`, `expected-response-events`,
   `expected-invocation-result`), and path—never silent skip.
+  Cursor failure goldens under `docs/temp/functional/provider-sessions/cursor/`
+  (`malformed-record`, `process-failure`, `timeout`) replay through
+  `tests/functional/workers/inference/cursor/golden_failure_test.go`. Use
+  `stdout.txt` when fixtures include non-JSON stream lines; `.jsonl` loaders
+  reject invalid JSON per line. Retryable timeout cases must queue multiple
+  identical `ProviderCommandRunner` results so retries do not fall through to
+  the default mock.
