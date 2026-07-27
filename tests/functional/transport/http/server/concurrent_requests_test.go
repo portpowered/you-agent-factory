@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -76,11 +78,19 @@ func TestAPIConcurrentSessionRequestsRemainIsolated(t *testing.T) {
 			wg.Add(1)
 			go func(expectedID string) {
 				defer wg.Done()
-				session := getFactorySession(t, server.URL(), expectedID)
+				session, err := fetchFactorySession(server.URL(), expectedID)
+				if err != nil {
+					recordMismatch(expectedID + " session GET: " + err.Error())
+					return
+				}
 				if session.Id != expectedID {
 					recordMismatch(expectedID + " returned " + session.Id)
 				}
-				status := getFactorySessionStatus(t, server.URL(), expectedID)
+				status, err := fetchFactorySessionStatus(server.URL(), expectedID)
+				if err != nil {
+					recordMismatch(expectedID + " status GET: " + err.Error())
+					return
+				}
 				if status.RuntimeStatus == "" {
 					recordMismatch(expectedID + " status missing runtimeStatus")
 				}
@@ -236,11 +246,9 @@ func openFactorySession(t *testing.T, baseURL, folderPath string) string {
 func getFactorySession(t *testing.T, baseURL, sessionID string) factoryapi.FactorySession {
 	t.Helper()
 
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID
-	response := support.GetJSON[factoryapi.FactorySessionGetResponse](t, endpoint)
-	session, err := response.AsFactorySession()
+	session, err := fetchFactorySession(baseURL, sessionID)
 	if err != nil {
-		t.Fatalf("decode factory session %s: %v", sessionID, err)
+		t.Fatalf("GET factory session %s: %v", sessionID, err)
 	}
 	return session
 }
@@ -248,8 +256,61 @@ func getFactorySession(t *testing.T, baseURL, sessionID string) factoryapi.Facto
 func getFactorySessionStatus(t *testing.T, baseURL, sessionID string) factoryapi.StatusResponse {
 	t.Helper()
 
+	status, err := fetchFactorySessionStatus(baseURL, sessionID)
+	if err != nil {
+		t.Fatalf("GET factory session status %s: %v", sessionID, err)
+	}
+	return status
+}
+
+func fetchFactorySession(baseURL, sessionID string) (factoryapi.FactorySession, error) {
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID
+	response, err := http.Get(endpoint)
+	if err != nil {
+		return factoryapi.FactorySession{}, fmt.Errorf("GET %s: %w", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		payload, _ := io.ReadAll(response.Body)
+		return factoryapi.FactorySession{}, fmt.Errorf(
+			"GET %s status = %d: %s",
+			endpoint,
+			response.StatusCode,
+			strings.TrimSpace(string(payload)),
+		)
+	}
+	var body factoryapi.FactorySessionGetResponse
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		return factoryapi.FactorySession{}, fmt.Errorf("decode GET %s: %w", endpoint, err)
+	}
+	session, err := body.AsFactorySession()
+	if err != nil {
+		return factoryapi.FactorySession{}, fmt.Errorf("decode factory session %s: %w", sessionID, err)
+	}
+	return session, nil
+}
+
+func fetchFactorySessionStatus(baseURL, sessionID string) (factoryapi.StatusResponse, error) {
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/status"
-	return support.GetJSON[factoryapi.StatusResponse](t, endpoint)
+	response, err := http.Get(endpoint)
+	if err != nil {
+		return factoryapi.StatusResponse{}, fmt.Errorf("GET %s: %w", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		payload, _ := io.ReadAll(response.Body)
+		return factoryapi.StatusResponse{}, fmt.Errorf(
+			"GET %s status = %d: %s",
+			endpoint,
+			response.StatusCode,
+			strings.TrimSpace(string(payload)),
+		)
+	}
+	var status factoryapi.StatusResponse
+	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
+		return factoryapi.StatusResponse{}, fmt.Errorf("decode GET %s: %w", endpoint, err)
+	}
+	return status, nil
 }
 
 func postBlockingInvocation(

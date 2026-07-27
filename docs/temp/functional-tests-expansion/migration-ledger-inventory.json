@@ -2431,16 +2431,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/providers/mock_workers_cli_http_stability_smoke_long_test.go",
-      "package": "you-agent-factory/tests/functional/providers",
-      "scenario": "TestMockWorkers_CLIServiceModeStartupWorkFileSupportsRepeatedLiveHTTPPollingBeforeCompletion",
-      "lane": "functionallong",
-      "destination": "tests/functional/transport/http/server/concurrent_requests_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/providers/mock_workers_end_to_end_smoke_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials",
@@ -5096,6 +5086,26 @@
       "scenario": "TestDocsTopicInventory_AliasesRemainQueryableThroughPackagedSurface",
       "lane": "short",
       "destination": "tests/functional/product/docs/contract_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/http/server/concurrent_requests_test.go",
+      "package": "you-agent-factory/tests/functional/transport/http/server",
+      "scenario": "TestAPIConcurrentSessionRequestsRemainIsolated",
+      "lane": "short",
+      "destination": "tests/functional/transport/http/server/concurrent_requests_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/http/server/concurrent_requests_test.go",
+      "package": "you-agent-factory/tests/functional/transport/http/server",
+      "scenario": "TestAPICancelledRequestDoesNotCancelUnrelatedSession",
+      "lane": "short",
+      "destination": "tests/functional/transport/http/server/concurrent_requests_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
