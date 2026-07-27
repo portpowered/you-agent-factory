@@ -2,10 +2,6 @@
   "format_version": 1,
   "helper_only": [
     {
-      "path": "tests/functional/bootstrap_portability/cli_relative_working_directory_functionallong_helpers_test.go",
-      "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
-    },
-    {
       "path": "tests/functional/bootstrap_portability/export_import_harness_test.go",
       "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
     },
@@ -449,16 +445,6 @@
       "catch_all": "bootstrap_portability",
       "specialty_targets": "artifact-contract-closeout",
       "deletion_only_batch": "bootstrap_portability-delete-04-portable-config"
-    },
-    {
-      "source_path": "tests/functional/bootstrap_portability/cli_relative_working_directory_long_test.go",
-      "package": "you-agent-factory/tests/functional/bootstrap_portability",
-      "scenario": "TestRelativeWorkingDirectory_UsesFactoryRuntimeRoot",
-      "lane": "functionallong",
-      "destination": "tests/functional/transport/cli/parameters/working_directory_test.go",
-      "catch_all": "bootstrap_portability",
-      "specialty_targets": "none",
-      "deletion_only_batch": "bootstrap_portability-delete-06-transport-cli"
     },
     {
       "source_path": "tests/functional/bootstrap_portability/export_import_fixture_test.go",
@@ -1871,6 +1857,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/orchestration/javascript/loading/inline_javascript_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/loading",
+      "scenario": "TestInlineJavaScriptFactoryRunsFromCLI",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/loading/inline_javascript_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/loading/inline_javascript_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/loading",
+      "scenario": "TestInlineJavaScriptSyntaxErrorReturnsSourceLocation",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/loading/inline_javascript_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/orchestration/javascript/policy/denied_operations_test.go",
       "package": "you-agent-factory/tests/functional/orchestration/javascript/policy",
       "scenario": "TestJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic",
@@ -1886,6 +1892,36 @@
       "scenario": "TestJavaScriptPolicyFailureDoesNotDispatchExternalWork",
       "lane": "short",
       "destination": "tests/functional/orchestration/javascript/policy/denied_operations_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/workers/overrides_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/workers",
+      "scenario": "TestJavaScriptChildrenSelectDifferentProvidersAndModels",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/workers/overrides_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/workers/overrides_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/workers",
+      "scenario": "TestJavaScriptMockWorkersReplaceOnlyNamedChildren",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/workers/overrides_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/workers/overrides_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/workers",
+      "scenario": "TestJavaScriptUnknownWorkerOverrideFailsActionably",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/workers/overrides_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -4071,56 +4107,6 @@
       "deletion_only_batch": "smoke-delete-04-transport-cli"
     },
     {
-      "source_path": "tests/functional/orchestration/javascript/loading/inline_javascript_test.go",
-      "package": "you-agent-factory/tests/functional/orchestration/javascript/loading",
-      "scenario": "TestInlineJavaScriptFactoryRunsFromCLI",
-      "lane": "short",
-      "destination": "tests/functional/orchestration/javascript/loading/inline_javascript_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/orchestration/javascript/loading/inline_javascript_test.go",
-      "package": "you-agent-factory/tests/functional/orchestration/javascript/loading",
-      "scenario": "TestInlineJavaScriptSyntaxErrorReturnsSourceLocation",
-      "lane": "short",
-      "destination": "tests/functional/orchestration/javascript/loading/inline_javascript_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/orchestration/javascript/workers/overrides_test.go",
-      "package": "you-agent-factory/tests/functional/orchestration/javascript/workers",
-      "scenario": "TestJavaScriptChildrenSelectDifferentProvidersAndModels",
-      "lane": "short",
-      "destination": "tests/functional/orchestration/javascript/workers/overrides_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/orchestration/javascript/workers/overrides_test.go",
-      "package": "you-agent-factory/tests/functional/orchestration/javascript/workers",
-      "scenario": "TestJavaScriptMockWorkersReplaceOnlyNamedChildren",
-      "lane": "short",
-      "destination": "tests/functional/orchestration/javascript/workers/overrides_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/orchestration/javascript/workers/overrides_test.go",
-      "package": "you-agent-factory/tests/functional/orchestration/javascript/workers",
-      "scenario": "TestJavaScriptUnknownWorkerOverrideFailsActionably",
-      "lane": "short",
-      "destination": "tests/functional/orchestration/javascript/workers/overrides_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/smoke/cli_named_deep_research_smoke_test.go",
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestNamedDeepResearchCLI_DefaultInvocationReturnsLeadSynthesis",
@@ -4961,6 +4947,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/transport/cli/parameters/working_directory_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIMissingWorkingDirectoryAssetFailsActionably",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/working_directory_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/working_directory_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIRelativeFactoryPathResolvesFromInvocationDirectory",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/working_directory_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/working_directory_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIWorkingDirectoryDoesNotLeakIntoOutput",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/working_directory_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/transport/docs/topic_inventory_test.go",
       "package": "you-agent-factory/tests/functional/transport/docs",
       "scenario": "TestDocsTopicInventory_AliasesRemainQueryableThroughPackagedSurface",
@@ -5216,6 +5232,36 @@
       "scenario": "TestDependencyGraphVisualization_RendersCompleteEscapedFlowchart",
       "lane": "short",
       "destination": "wrong-layer: unit \u2014 calls pkg/services/work graph helpers directly without root.BuildProcess or CLI visualize command. Replacement evidence owner: pkg/services/work unit tests.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/agy/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/agy",
+      "scenario": "TestAgyGoldenFinalOnlySuccess",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/agy/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/agy/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/agy",
+      "scenario": "TestAgyGoldenStructuredFailure",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/agy/golden_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/agy/golden_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/agy",
+      "scenario": "TestAgyGoldenTimeout",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/agy/golden_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -6359,83 +6405,53 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/inference/agy/golden_test.go",
-      "package": "you-agent-factory/tests/functional/workers/inference/agy",
-      "scenario": "TestAgyGoldenFinalOnlySuccess",
-      "lane": "short",
-      "destination": "tests/functional/workers/inference/agy/golden_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/inference/agy/golden_test.go",
-      "package": "you-agent-factory/tests/functional/workers/inference/agy",
-      "scenario": "TestAgyGoldenStructuredFailure",
-      "lane": "short",
-      "destination": "tests/functional/workers/inference/agy/golden_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/inference/agy/golden_test.go",
-      "package": "you-agent-factory/tests/functional/workers/inference/agy",
-      "scenario": "TestAgyGoldenTimeout",
-      "lane": "short",
-      "destination": "tests/functional/workers/inference/agy/golden_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-27T15:30:00Z",
+  "scanned_at_utc": "2026-07-27T16:16:30Z",
   "summary": {
     "by_catch_all": {
-      "bootstrap_portability": 27,
+      "bootstrap_portability": 26,
       "guards_batch": 28,
-      "none": 276,
+      "none": 290,
       "replay_contracts": 24,
       "runtime_api": 106,
-      "smoke": 82,
+      "smoke": 84,
       "workflow": 64
     },
     "by_top_level_package": {
       "acceptance": 14,
-      "bootstrap_portability": 27,
-      "cli": 69,
+      "bootstrap_portability": 26,
+      "cli": 68,
       "factory": 4,
       "guards_batch": 28,
       "models": 5,
       "observability": 9,
       "operator_settings": 1,
-      "orchestration": 17,
+      "orchestration": 22,
       "product": 10,
-      "providers": 49,
+      "providers": 46,
       "replay_contracts": 24,
       "runtime_api": 106,
       "sessionparity": 13,
       "sessions": 2,
       "smoke": 84,
-      "transport": 37,
+      "transport": 41,
       "work": 2,
-      "workers": 40,
+      "workers": 46,
       "workflow": 64,
       "workstations": 7
     },
-    "customer_top_level_Test_scenarios": 620,
+    "customer_top_level_Test_scenarios": 622,
     "files_with_customer_Test": 200,
     "functional_test_go_files": 251,
-    "helper_only_non_customer_files": 51,
+    "helper_only_non_customer_files": 34,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
-    "lane_functionallong": 118,
-    "lane_short": 502,
+    "lane_functionallong": 117,
+    "lane_short": 505,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
-      "you-agent-factory/tests/functional/bootstrap_portability": 25,
+      "you-agent-factory/tests/functional/bootstrap_portability": 24,
       "you-agent-factory/tests/functional/bootstrap_portability/metadata_contract": 2,
       "you-agent-factory/tests/functional/cli/dynamic_workflows": 2,
       "you-agent-factory/tests/functional/cli/factory_run/output": 2,
@@ -6457,11 +6473,11 @@
       "you-agent-factory/tests/functional/orchestration/javascript/durability": 3,
       "you-agent-factory/tests/functional/orchestration/javascript/events": 2,
       "you-agent-factory/tests/functional/orchestration/javascript/loading": 2,
+      "you-agent-factory/tests/functional/orchestration/javascript/policy": 2,
       "you-agent-factory/tests/functional/orchestration/javascript/workers": 3,
       "you-agent-factory/tests/functional/orchestration/petri/dispatch": 3,
       "you-agent-factory/tests/functional/product/init_setup": 10,
-      "you-agent-factory/tests/functional/providers": 39,
-      "you-agent-factory/tests/functional/providers/codex": 1,
+      "you-agent-factory/tests/functional/providers": 37,
       "you-agent-factory/tests/functional/providers/cursor": 5,
       "you-agent-factory/tests/functional/providers/kiro": 4,
       "you-agent-factory/tests/functional/replay_contracts": 24,
@@ -6469,10 +6485,10 @@
       "you-agent-factory/tests/functional/runtime_api/factory_transformation": 39,
       "you-agent-factory/tests/functional/sessionparity": 13,
       "you-agent-factory/tests/functional/sessions/cli": 2,
-      "you-agent-factory/tests/functional/smoke": 82,
+      "you-agent-factory/tests/functional/smoke": 84,
       "you-agent-factory/tests/functional/transport/cli/commands": 4,
       "you-agent-factory/tests/functional/transport/cli/output": 7,
-      "you-agent-factory/tests/functional/transport/cli/parameters": 3,
+      "you-agent-factory/tests/functional/transport/cli/parameters": 6,
       "you-agent-factory/tests/functional/transport/docs": 1,
       "you-agent-factory/tests/functional/transport/http": 1,
       "you-agent-factory/tests/functional/transport/http/status": 2,
@@ -6485,7 +6501,9 @@
       "you-agent-factory/tests/functional/work/cli": 1,
       "you-agent-factory/tests/functional/work/visualization": 1,
       "you-agent-factory/tests/functional/workers/inference": 5,
+      "you-agent-factory/tests/functional/workers/inference/agy": 3,
       "you-agent-factory/tests/functional/workers/inference/claude": 2,
+      "you-agent-factory/tests/functional/workers/inference/codex": 3,
       "you-agent-factory/tests/functional/workers/inference/cursor": 2,
       "you-agent-factory/tests/functional/workers/inference/gemini": 12,
       "you-agent-factory/tests/functional/workers/inference/kiro": 3,
@@ -6495,8 +6513,7 @@
       "you-agent-factory/tests/functional/workers/script": 7,
       "you-agent-factory/tests/functional/workflow": 64,
       "you-agent-factory/tests/functional/workstations/execution": 4,
-      "you-agent-factory/tests/functional/workstations/poller": 3,
-      "you-agent-factory/tests/functional/workers/inference/agy": 3
+      "you-agent-factory/tests/functional/workstations/poller": 3
     }
   },
   "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. Non-catch-all rows mapped by FND-007-006; catch-all rows mapped by FND-007-003\u2026005.",
@@ -6544,7 +6561,6 @@
       "bootstrap_portability-delete-03-factory-definitions-import-export",
       "bootstrap_portability-delete-04-portable-config",
       "bootstrap_portability-delete-05-factory-current",
-      "bootstrap_portability-delete-06-transport-cli",
       "replay_contracts-delete-01-events-replay",
       "replay_contracts-delete-02-events-factory-events",
       "replay_contracts-delete-03-events-response-events",
@@ -6570,16 +6586,16 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T16:05:00Z",
-    "story": "ft-wave1-cli-json-result-mergeability-6",
-    "live_customer_scenarios": 620,
-    "ledger_rows": 620,
+    "audited_at_utc": "2026-07-27T16:16:30Z",
+    "story": "ft-wave1-cli-working-directory-mergeability-7",
+    "live_customer_scenarios": 622,
+    "ledger_rows": 622,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 502,
-    "lane_functionallong": 118,
+    "lane_short": 505,
+    "lane_functionallong": 117,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
     "validator": "go run ./cmd/migrationledgercheck"
