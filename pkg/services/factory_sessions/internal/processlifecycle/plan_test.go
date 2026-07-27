@@ -301,6 +301,43 @@ func TestDirectJavaScriptLifecycleRunsCompletionAndClosesExecution(t *testing.T)
 	}
 }
 
+func TestDirectJavaScriptLifecycleJoinsOwnedTransport(t *testing.T) {
+	transport := &blockingPlanComponent{
+		started: make(chan struct{}),
+		stopped: make(chan struct{}),
+	}
+	completed := make(chan struct{})
+	plan, err := BuildDirectJavaScriptLifecyclePlan(
+		transport,
+		func(ctx context.Context) error {
+			select {
+			case <-transport.started:
+				close(completed)
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("BuildDirectJavaScriptLifecyclePlan: %v", err)
+	}
+	if err := lifecycle.NewManager().Run(t.Context(), plan); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	select {
+	case <-completed:
+	default:
+		t.Fatal("terminal completion did not run after transport activation")
+	}
+	select {
+	case <-transport.stopped:
+	default:
+		t.Fatal("terminal completion did not join the owned transport")
+	}
+}
+
 func TestDirectJavaScriptLifecycleRejectsMissingCompletion(t *testing.T) {
 	if _, err := BuildDirectJavaScriptLifecyclePlan(nil, nil, nil); err == nil ||
 		!strings.Contains(err.Error(), "completion is required") {

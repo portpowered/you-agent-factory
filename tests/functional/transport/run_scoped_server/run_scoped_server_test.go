@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -149,6 +152,131 @@ func TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness(t *testing.T) {
 				t.Fatalf("browser calls = %d, want %d", browserCalls.Load(), test.wantBrowser)
 			}
 		})
+	}
+}
+
+// TestRunScopedServerUsesProductionListenerAndReportsFallback proves the
+// customer CLI path binds, reports, and joins the concrete HTTP server.
+func TestRunScopedServerUsesProductionListenerAndReportsFallback(t *testing.T) {
+	busyListener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve requested loopback port: %v", err)
+	}
+	defer busyListener.Close()
+	requestedPort := busyListener.Addr().(*net.TCPAddr).Port
+	if requestedPort >= 65535 {
+		t.Skip("OS selected the terminal TCP port; no higher fallback candidate exists")
+	}
+
+	workingDirectory := t.TempDir()
+	workflowPath := filepath.Join(workingDirectory, "workflow.js")
+	if err := os.WriteFile(workflowPath, []byte(`return "hosted JavaScript";`), 0o600); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	homeDir := t.TempDir()
+	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	requestedURL := "http://127.0.0.1:" + strconv.Itoa(requestedPort)
+	stdout, stderr := execute(t, process, environment, workingDirectory, []string{
+		"you", "--server", requestedURL, "run", "--factory", workflowPath,
+		"--with-mock-workers", "--with-server",
+	}, "")
+	if stderr != "" || !strings.Contains(stdout, "completed (SUCCEEDED)") {
+		t.Fatalf("JavaScript stdout=%q stderr=%q", stdout, stderr)
+	}
+
+	var actualURL string
+	for _, line := range strings.Split(stdout, "\n") {
+		if value, ok := strings.CutPrefix(line, "Dashboard URL: "); ok {
+			actualURL = strings.TrimSpace(value)
+			break
+		}
+	}
+	parsed, err := url.Parse(actualURL)
+	if err != nil || parsed.Hostname() != "127.0.0.1" {
+		t.Fatalf("reported dashboard URL = %q, parse error = %v", actualURL, err)
+	}
+	actualPort, err := strconv.Atoi(parsed.Port())
+	if err != nil || actualPort <= requestedPort {
+		t.Fatalf("reported dashboard URL = %q, want fallback above %d", actualURL, requestedPort)
+	}
+	rebound, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(actualPort)))
+	if err != nil {
+		t.Fatalf("production listener remained bound after completion: %v", err)
+	}
+	_ = rebound.Close()
+}
+
+func TestRunScopedServerRejectsRemoteBindTargetAtCLIBoundary(t *testing.T) {
+	workingDirectory := t.TempDir()
+	workflowPath := filepath.Join(workingDirectory, "workflow.js")
+	if err := os.WriteFile(workflowPath, []byte(`return "unreachable";`), 0o600); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+	homeDir := t.TempDir()
+	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	err = process.Execute(root.Input{
+		Args: []string{
+			"you", "--server", "https://remote.example.com:7443",
+			"run", "--factory", workflowPath, "--with-mock-workers", "--with-server",
+		},
+		Env:              environment,
+		Context:          t.Context(),
+		WorkingDirectory: workingDirectory,
+		Stdout:           &stdout,
+		Stderr:           &stderr,
+	})
+	if err == nil || !strings.Contains(err.Error(), "not a local bind target") {
+		t.Fatalf(
+			"bind error = %v, want local-target guidance; stdout=%q stderr=%q",
+			err, stdout.String(), stderr.String(),
+		)
+	}
+}
+
+func TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary(t *testing.T) {
+	busyListener, err := net.Listen("tcp4", "127.0.0.1:65535")
+	if err != nil {
+		t.Skipf("terminal loopback port unavailable for exhaustion contract: %v", err)
+	}
+	defer busyListener.Close()
+
+	workingDirectory := t.TempDir()
+	workflowPath := filepath.Join(workingDirectory, "workflow.js")
+	if err := os.WriteFile(workflowPath, []byte(`return "unreachable";`), 0o600); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	homeDir := t.TempDir()
+	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	var stdout, stderr bytes.Buffer
+	err = process.Execute(root.Input{
+		Args: []string{
+			"you", "--server", "http://127.0.0.1:65535",
+			"run", "--factory", workflowPath, "--with-mock-workers", "--with-server",
+		},
+		Env:              environment,
+		Context:          t.Context(),
+		WorkingDirectory: workingDirectory,
+		Stdout:           &stdout,
+		Stderr:           &stderr,
+	})
+	if err == nil || !strings.Contains(err.Error(), "through 65535") {
+		t.Fatalf(
+			"terminal-port bind error = %v, want exhaustion guidance; stdout=%q stderr=%q",
+			err, stdout.String(), stderr.String(),
+		)
 	}
 }
 
