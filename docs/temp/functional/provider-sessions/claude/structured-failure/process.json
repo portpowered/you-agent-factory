@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "claude",
+    "-p",
+    "--model",
+    "claude-sonnet-4",
+    "--output-format",
+    "stream-json",
+    "--include-partial-messages",
+    "Trigger the Claude structured-failure golden."
+  ],
+  "provider": "claude",
+  "model": "claude-sonnet-4",
+  "exitCode": 1,
+  "stdoutStream": true,
+  "stderrStream": true,
+  "workingDirectoryRole": "factory-root",
+  "timeoutCancelClass": "none",
+  "terminalErrorClass": "structured"
+}
