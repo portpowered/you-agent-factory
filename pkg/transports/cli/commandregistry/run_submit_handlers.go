@@ -5,23 +5,22 @@ import (
 	"sort"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 )
 
-// RunSubmitHandlers carries handwritten PreRunE/RunE lifecycles for every
-// runnable command in the run/submit family.
-type RunSubmitHandlers struct {
-	Run         CommandHandlers
-	Server      CommandHandlers
-	Submit      CommandHandlers
-	SubmitBatch CommandHandlers
+var runServerCommandIDs = []string{"you.run", "you.server"}
+
+// RunServerHandlers carries handwritten PreRunE/RunE lifecycles for the
+// retained run and server commands.
+type RunServerHandlers struct {
+	Run    CommandHandlers
+	Server CommandHandlers
 }
 
-// RunnableRunSubmitCommandIDs returns contracted runnable command IDs in stable order.
-func RunnableRunSubmitCommandIDs(manifest climanifest.Manifest) ([]string, error) {
-	ids := make([]string, 0, len(climanifestgen.RunSubmitFamilyCommandIDs))
-	for _, commandID := range climanifestgen.RunSubmitFamilyCommandIDs {
+// RunnableRunServerCommandIDs returns contracted runnable command IDs in stable order.
+func RunnableRunServerCommandIDs(manifest climanifest.Manifest) ([]string, error) {
+	ids := make([]string, 0, len(runServerCommandIDs))
+	for _, commandID := range runServerCommandIDs {
 		record, err := manifest.CommandByID(commandID)
 		if err != nil {
 			return nil, err
@@ -34,18 +33,22 @@ func RunnableRunSubmitCommandIDs(manifest climanifest.Manifest) ([]string, error
 	return ids, nil
 }
 
-// VerifyRunSubmitRunnableCoverage fails when a contracted runnable command is
+// VerifyRunServerRunnableCoverage fails when a retained runnable command is
 // missing its handwritten lifecycle binding.
-func (r *Registry) VerifyRunSubmitRunnableCoverage(manifest climanifest.Manifest) error {
+func (r *Registry) VerifyRunServerRunnableCoverage(manifest climanifest.Manifest) error {
 	if r == nil {
-		return fmt.Errorf("verify run/submit handlers: registry is nil")
+		return fmt.Errorf("verify run/server handlers: registry is nil")
+	}
+	expected := make(map[string]bool, len(runServerCommandIDs))
+	for _, commandID := range runServerCommandIDs {
+		expected[commandID] = true
 	}
 	for commandID := range r.handlers {
-		if err := climanifestgen.AssertRunSubmitFamilyCommandID(commandID); err != nil {
-			return fmt.Errorf("run/submit handler registry: %w", err)
+		if !expected[commandID] {
+			return fmt.Errorf("run/server handler registry: command %q is not retained", commandID)
 		}
 	}
-	runnableIDs, err := RunnableRunSubmitCommandIDs(manifest)
+	runnableIDs, err := RunnableRunServerCommandIDs(manifest)
 	if err != nil {
 		return err
 	}
@@ -56,44 +59,39 @@ func (r *Registry) VerifyRunSubmitRunnableCoverage(manifest climanifest.Manifest
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("run/submit runnable command handlers missing for: %v", missing)
+		return fmt.Errorf("run/server runnable command handlers missing for: %v", missing)
 	}
 	return nil
 }
 
-// NewRunSubmitRegistry registers the retained handwritten lifecycles by stable
-// command ID and verifies complete generated-family coverage.
-func NewRunSubmitRegistry(handlers RunSubmitHandlers) (*Registry, error) {
+// NewRunServerRegistry registers the retained handwritten lifecycles by stable
+// command ID and verifies complete run/server coverage.
+func NewRunServerRegistry(handlers RunServerHandlers) (*Registry, error) {
 	registrations := []struct {
 		commandID string
 		handlers  CommandHandlers
 	}{
 		{commandID: "you.run", handlers: handlers.Run},
 		{commandID: "you.server", handlers: handlers.Server},
-		{commandID: "you.submit", handlers: handlers.Submit},
-		{commandID: "you.submit.batch", handlers: handlers.SubmitBatch},
 	}
 	registry := NewRegistry()
 	for _, registration := range registrations {
-		if err := climanifestgen.AssertRunSubmitFamilyCommandID(registration.commandID); err != nil {
-			return nil, fmt.Errorf("build run/submit handler registry: %w", err)
-		}
 		if registration.handlers.PreRunE == nil {
 			return nil, fmt.Errorf(
-				"build run/submit handler registry: %s pre-run handler is required",
+				"build run/server handler registry: %s pre-run handler is required",
 				registration.commandID,
 			)
 		}
 		if err := registry.RegisterHandlers(registration.commandID, registration.handlers); err != nil {
-			return nil, fmt.Errorf("build run/submit handler registry: %w", err)
+			return nil, fmt.Errorf("build run/server handler registry: %w", err)
 		}
 	}
 	manifest, err := generated.RunSubmitFamilyManifest()
 	if err != nil {
-		return nil, fmt.Errorf("build run/submit handler registry: %w", err)
+		return nil, fmt.Errorf("build run/server handler registry: %w", err)
 	}
-	if err := registry.VerifyRunSubmitRunnableCoverage(manifest); err != nil {
-		return nil, fmt.Errorf("build run/submit handler registry: %w", err)
+	if err := registry.VerifyRunServerRunnableCoverage(manifest); err != nil {
+		return nil, fmt.Errorf("build run/server handler registry: %w", err)
 	}
 	return registry, nil
 }

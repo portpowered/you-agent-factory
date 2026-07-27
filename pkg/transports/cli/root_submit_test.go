@@ -119,11 +119,11 @@ func TestSubmitCommand_MissingWorkTypeNameReturnsLocalValidationError(t *testing
 	if err == nil {
 		t.Fatal("expected missing work type name to fail")
 	}
-	if !called {
-		t.Fatal("expected submit validation to run")
+	if called {
+		t.Fatal("submit operation ran before stable-input validation")
 	}
-	if got := err.Error(); got != "--work-type-name is required" {
-		t.Fatalf("missing work type error = %q, want --work-type-name is required", got)
+	if got := err.Error(); !strings.Contains(got, `"--work-type-name" not set`) {
+		t.Fatalf("missing work type error = %q, want required flag diagnostic", got)
 	}
 }
 
@@ -148,11 +148,11 @@ func TestSubmitCommand_MissingNameReturnsLocalValidationError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing name to fail")
 	}
-	if !called {
-		t.Fatal("expected submit validation to run")
+	if called {
+		t.Fatal("submit operation ran before stable-input validation")
 	}
-	if got := err.Error(); got != "--name is required" {
-		t.Fatalf("missing name error = %q, want --name is required", got)
+	if got := err.Error(); !strings.Contains(got, `"--name" not set`) {
+		t.Fatalf("missing name error = %q, want required flag diagnostic", got)
 	}
 }
 
@@ -177,11 +177,11 @@ func TestSubmitCommand_MissingPayloadReturnsLocalValidationError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing payload to fail")
 	}
-	if !called {
-		t.Fatal("expected submit validation to run")
+	if called {
+		t.Fatal("submit operation ran before stable-input validation")
 	}
-	if got := err.Error(); got != "--payload is required" {
-		t.Fatalf("missing payload error = %q, want --payload is required", got)
+	if got := err.Error(); !strings.Contains(got, `"--payload" not set`) {
+		t.Fatalf("missing payload error = %q, want required flag diagnostic", got)
 	}
 }
 
@@ -349,34 +349,6 @@ func TestSubmitCommand_HelpMentionsBatchSubcommand(t *testing.T) {
 		if !strings.Contains(help, want) {
 			t.Fatalf("submit help missing %q:\n%s", want, help)
 		}
-	}
-}
-
-func TestSubmitBatchCommand_InvokesSubmitBatchHandler(t *testing.T) {
-	originalSubmitBatch := submitBatch
-	defer func() {
-		submitBatch = originalSubmitBatch
-	}()
-
-	called := false
-	submitBatch = func(cfg submitcli.BatchConfig) error {
-		called = true
-		if cfg.DryRun {
-			t.Fatal("dry-run should default false")
-		}
-		return nil
-	}
-
-	root := newLegacyTestRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"submit", "batch", "batch.json"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute submit batch: %v", err)
-	}
-	if !called {
-		t.Fatal("expected submit batch handler to run")
 	}
 }
 

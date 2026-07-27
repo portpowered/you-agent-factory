@@ -112,7 +112,7 @@ func submit(read workdomain.PayloadFileReader, cfg SubmitConfig) error {
 
 	if resp.StatusCode != http.StatusCreated {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s status=%d durationMillis=%d", endpointPath, resp.StatusCode, response.Duration.Milliseconds())
-		respBody, err := io.ReadAll(resp.Body)
+		respBody, err := io.ReadAll(io.LimitReader(resp.Body, submitErrorBodyReadLimit))
 		if err != nil {
 			return fmt.Errorf("read response: %w", err)
 		}
