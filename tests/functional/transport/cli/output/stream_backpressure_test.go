@@ -331,11 +331,6 @@ func newInFlightFailureStdoutWriter(
 	return writer
 }
 
-func (writer *inFlightFailureStdoutWriter) armFailure() {
-	writer.failArmed.Store(true)
-	writer.release()
-}
-
 func (writer *inFlightFailureStdoutWriter) release() {
 	writer.releaseOnce.Do(func() {
 		close(writer.gate)
