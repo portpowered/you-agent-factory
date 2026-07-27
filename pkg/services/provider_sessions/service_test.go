@@ -419,6 +419,56 @@ func TestNewRejectsMissingProcessEdges(t *testing.T) {
 	}
 }
 
+func TestNewPropagatesHomeResolverFailure(t *testing.T) {
+	_, err := providersessionsservice.New(
+		platformfilesystem.Local{},
+		func() (string, error) { return "", errors.New("home unavailable") },
+		filepath.WalkDir,
+		filepath.EvalSymlinks,
+		filepath.WalkDir,
+		filepath.EvalSymlinks,
+		sql.Open,
+		providersessions.OperatingSystem(runtime.GOOS),
+	)
+	if err == nil {
+		t.Fatal("New() error = nil, want home resolver failure")
+	}
+}
+
+func TestNewRejectsEmptyHomeDirectory(t *testing.T) {
+	_, err := providersessionsservice.New(
+		platformfilesystem.Local{},
+		func() (string, error) { return "   ", nil },
+		filepath.WalkDir,
+		filepath.EvalSymlinks,
+		filepath.WalkDir,
+		filepath.EvalSymlinks,
+		sql.Open,
+		providersessions.OperatingSystem(runtime.GOOS),
+	)
+	if err == nil {
+		t.Fatal("New() error = nil, want empty home rejection")
+	}
+}
+
+func TestInspectSucceedsWithNilRequestContext(t *testing.T) {
+	root := writeCodexSessionFixture(t, "session-nil-ctx")
+	svc := newServiceForRoots(t, root, "")
+	ref := providersessions.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providersessions.SessionIDKind,
+		ID:       "session-nil-ctx",
+	}
+
+	result, err := svc.Inspect(providersessions.InspectRequest{Session: ref})
+	if err != nil {
+		t.Fatalf("Inspect: %v", err)
+	}
+	if result.Session != ref {
+		t.Fatalf("InspectResult.Session = %#v, want %#v", result.Session, ref)
+	}
+}
+
 func TestNewConstructsServiceWithValidDependencies(t *testing.T) {
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".cursor", "chats"), 0o755); err != nil {
