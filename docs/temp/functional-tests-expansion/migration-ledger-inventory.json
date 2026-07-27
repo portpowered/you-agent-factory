@@ -379,6 +379,46 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/automations/cron_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsCronActivatesThroughRuntimeLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/workstations/cron/clock_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/cron_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsCronJitterProducesStableSubmissionTiming",
+      "lane": "short",
+      "destination": "tests/functional/workstations/cron/clock_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/cron_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsCronSkipsMalformedWorkstationAndFiresValid",
+      "lane": "short",
+      "destination": "tests/functional/workstations/cron/clock_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/cron_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestBuildProcessRemainsCronInertBeforeRuntimeLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/workstations/cron/clock_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/bootstrap_portability/agent_factory_export_import_fixture_test.go",
       "package": "you-agent-factory/tests/functional/bootstrap_portability",
       "scenario": "TestAgentFactoryExportImportFixture_AuthoredLayoutInterpolatesProjectSpecificPromptContent",
@@ -4151,16 +4191,6 @@
     {
       "source_path": "tests/functional/smoke/cli_factory_prompt_run_smoke_test.go",
       "package": "you-agent-factory/tests/functional/smoke",
-      "scenario": "TestFactoryPromptRun_RealCLIRejectsFactoryWithoutDefaultHandling",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/commands/run_wiring_test.go",
-      "catch_all": "smoke",
-      "specialty_targets": "none",
-      "deletion_only_batch": "smoke-delete-04-transport-cli"
-    },
-    {
-      "source_path": "tests/functional/smoke/cli_factory_prompt_run_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestFactoryPromptRun_RealCLIStdinOnlyCleanInvocationStdoutRemainsPipeable",
       "lane": "short",
       "destination": "tests/functional/transport/cli/commands/run_wiring_test.go",
@@ -4171,37 +4201,7 @@
     {
       "source_path": "tests/functional/smoke/cli_factory_prompt_run_smoke_test.go",
       "package": "you-agent-factory/tests/functional/smoke",
-      "scenario": "TestFactoryPromptRun_RealCLIWritesPrimaryResultFromPositionalText",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/commands/run_wiring_test.go",
-      "catch_all": "smoke",
-      "specialty_targets": "none",
-      "deletion_only_batch": "smoke-delete-04-transport-cli"
-    },
-    {
-      "source_path": "tests/functional/smoke/cli_factory_prompt_run_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestFactoryPromptRun_RealCLIWritesPrimaryResultFromStdin",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/commands/run_wiring_test.go",
-      "catch_all": "smoke",
-      "specialty_targets": "none",
-      "deletion_only_batch": "smoke-delete-04-transport-cli"
-    },
-    {
-      "source_path": "tests/functional/smoke/cli_factory_prompt_run_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/smoke",
-      "scenario": "TestNamedFactoryRun_RealCLIResolvesGlobalFactoryFromUnrelatedWorkingDirectory",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/commands/run_wiring_test.go",
-      "catch_all": "smoke",
-      "specialty_targets": "none",
-      "deletion_only_batch": "smoke-delete-04-transport-cli"
-    },
-    {
-      "source_path": "tests/functional/smoke/cli_factory_prompt_run_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/smoke",
-      "scenario": "TestPackagedGoalRun_RealCLIWritesSummaryPrimaryResult",
       "lane": "short",
       "destination": "tests/functional/transport/cli/commands/run_wiring_test.go",
       "catch_all": "smoke",
@@ -4787,6 +4787,36 @@
       "catch_all": "smoke",
       "specialty_targets": "none",
       "deletion_only_batch": "smoke-delete-13-wrong-layer"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/commands/run_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLIRunFactoryByPath",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/run_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/commands/run_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLIRunInvalidFactoryReturnsValidationFailure",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/run_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/commands/run_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLIRunNamedFactory",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/run_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/transport/cli/commands/submit_wiring_test.go",
