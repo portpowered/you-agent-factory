@@ -77,14 +77,18 @@ func sentinelForExecuteFailureKind(kind ExecuteFailureKind) error {
 // exactly one normalized native attempt per call; callers own selection,
 // retry, throttle, and scheduling policy.
 type ExecuteRequest struct {
-	Provider         ID
-	AttemptID        string
-	SystemPrompt     string
-	UserMessage      string
-	OutputSchema     string
-	ResumeSession    *SessionRef
-	WorkingDirectory string
-	Worktree         string
+	Provider            ID
+	AttemptID           string
+	Model               string
+	SkipPermissions     bool
+	SystemPrompt        string
+	UserMessage         string
+	OutputSchema        string
+	ResumeSession       *SessionRef
+	WorkingDirectory    string
+	Worktree            string
+	ProcessEnvironment  []string
+	EnvVars             map[string]string
 }
 
 // Validate checks request fields whose validity does not depend on catalog
@@ -107,6 +111,8 @@ func (request ExecuteRequest) Validate() error {
 // Clone returns a detached execute-request copy.
 func (request ExecuteRequest) Clone() ExecuteRequest {
 	cloned := request
+	cloned.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
+	cloned.EnvVars = cloneStringMap(request.EnvVars)
 	if request.ResumeSession != nil {
 		resume := request.ResumeSession.Clone()
 		cloned.ResumeSession = &resume

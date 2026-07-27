@@ -1,0 +1,239 @@
+package claude
+
+import (
+	"context"
+	"errors"
+	"strings"
+
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+)
+
+// IntegrationDependencies are the Providers collaborators used by Claude's
+// registry-backed integration on the neutral conductor path.
+type IntegrationDependencies struct {
+	ProvidersService providers.Service
+}
+
+// Integration routes Claude through the Providers root execution boundary.
+type Integration struct {
+	providers providers.Service
+}
+
+// NewIntegration constructs Claude's registry-backed integration.
+func NewIntegration(deps ...IntegrationDependencies) *Integration {
+	integration := &Integration{}
+	if len(deps) > 0 {
+		integration.providers = deps[0].ProvidersService
+	}
+	return integration
+}
+
+func (*Integration) Identity() inference.Identity {
+	return inference.Identity(providers.IDClaude)
+}
+
+func (*Integration) MaximumCapabilities() inference.CapabilitySet {
+	return inference.NewCapabilitySet(
+		inference.CapabilityPromptSubmission,
+		inference.CapabilitySessionResume,
+		inference.CapabilityNativeStreaming,
+		inference.CapabilityMessageSnapshots,
+		inference.CapabilityMessageDeltas,
+		inference.CapabilityToolLifecycle,
+		inference.CapabilityToolOutputDeltas,
+		inference.CapabilityStableItemIDs,
+	)
+}
+
+func (*Integration) Discover(context.Context) (inference.Discovery, error) {
+	return inference.NewDiscovery(inference.ReadinessReady), nil
+}
+
+func (i *Integration) Capabilities(context.Context, inference.InvocationRequest) (inference.CapabilitySet, error) {
+	return i.MaximumCapabilities(), nil
+}
+
+// Invoke executes Claude through providers.Service and publishes progress
+// before closing with exactly one terminal outcome.
+func (i *Integration) Invoke(
+	ctx context.Context,
+	request inference.InvocationRequest,
+	writer inference.ResponseWriter,
+) error {
+	if err := unsupportedImageContentError(request.Execution().InputTokens); err != nil {
+		return writer.Close(ctx, inference.FailedCompletion(inference.NewFailure(inference.FailureInput{
+			Kind:    inference.FailureInvalidRequest,
+			Message: err.Error(),
+		})))
+	}
+	if i == nil || i.providers == nil {
+		return writer.Close(ctx, inference.FailedCompletion(inference.NewFailure(inference.FailureInput{
+			Kind:    inference.FailureDependency,
+			Message: "Claude Providers service is unavailable",
+		})))
+	}
+	result, err := i.providers.Execute(ctx, executeRequestFromInvocation(request))
+	if errors.Is(ctx.Err(), context.Canceled) && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return ctx.Err()
+	}
+	if err != nil {
+		return writer.Close(ctx, inference.FailedCompletion(
+			failureFromExecuteError(err, sessionRefFromResult(result.SessionRef)),
+		))
+	}
+	if err := writeProgressEvents(ctx, writer, request.InvocationID(), result.Diagnostics); err != nil {
+		return err
+	}
+	return writer.Close(ctx, inference.SuccessfulCompletion(inference.NewResponse(inference.ResponseInput{
+		Content:         result.Content,
+		ProviderSession: sessionRefToInference(result.SessionRef),
+	})))
+}
+
+func executeRequestFromInvocation(request inference.InvocationRequest) providers.ExecuteRequest {
+	execution := request.Execution()
+	executeRequest := providers.ExecuteRequest{
+		Provider:           providers.IDClaude,
+		AttemptID:          request.InvocationID(),
+		Model:              request.Model(),
+		SkipPermissions:    execution.SkipPermissions,
+		SystemPrompt:       request.SystemPrompt(),
+		UserMessage:        request.UserMessage(),
+		OutputSchema:       request.OutputSchema(),
+		WorkingDirectory:   execution.WorkingDirectory,
+		Worktree:           execution.Worktree,
+		ProcessEnvironment: append([]string(nil), execution.ProcessEnvironment...),
+		EnvVars:            cloneStringMap(execution.EnvVars),
+	}
+	if session := requestedSession(request); session != nil {
+		executeRequest.ResumeSession = session
+	}
+	return executeRequest
+}
+
+func requestedSession(request inference.InvocationRequest) *providers.SessionRef {
+	if session := request.ProviderSession(); session != nil &&
+		strings.TrimSpace(session.Provider()) == string(providers.IDClaude) &&
+		strings.TrimSpace(session.Kind()) == providers.SessionIDKind {
+		return &providers.SessionRef{
+			Provider: providers.IDClaude,
+			Kind:     providers.SessionIDKind,
+			ID:       strings.TrimSpace(session.ID()),
+		}
+	}
+	if sessionID := strings.TrimSpace(request.Execution().SessionID); sessionID != "" {
+		return &providers.SessionRef{
+			Provider: providers.IDClaude,
+			Kind:     providers.SessionIDKind,
+			ID:       sessionID,
+		}
+	}
+	return nil
+}
+
+func unsupportedImageContentError(tokens []any) error {
+	for _, token := range tokens {
+		record, ok := token.(map[string]any)
+		if !ok {
+			continue
+		}
+		if kind, _ := record["type"].(string); strings.EqualFold(kind, "image") {
+			return errors.New("image content is not supported by model provider claude; configure modelProvider codex for image input")
+		}
+	}
+	return nil
+}
+
+func failureFromExecuteError(err error, session *inference.ProviderSession) inference.Failure {
+	var failure providers.ExecuteFailure
+	if errors.As(err, &failure) {
+		return inference.NewFailure(inference.FailureInput{
+			Kind:            executeFailureKind(failure.Kind),
+			Message:         failure.Message,
+			ProviderSession: session,
+		})
+	}
+	if errors.Is(err, providers.ErrExecuteCancelled) {
+		return inference.NewFailure(inference.FailureInput{
+			Kind:    inference.FailureCanceled,
+			Message: "provider invocation was canceled",
+		})
+	}
+	if errors.Is(err, providers.ErrExecuteTimeout) {
+		return inference.NewFailure(inference.FailureInput{
+			Kind:    inference.FailureTimeout,
+			Message: "provider execution timed out",
+		})
+	}
+	return inference.NewFailure(inference.FailureInput{
+		Kind:            inference.FailureUnknown,
+		Message:         "Claude invocation failed.",
+		ProviderSession: session,
+	})
+}
+
+func executeFailureKind(kind providers.ExecuteFailureKind) inference.FailureKind {
+	switch kind {
+	case providers.ExecuteFailureKindCanceled:
+		return inference.FailureCanceled
+	case providers.ExecuteFailureKindTimeout:
+		return inference.FailureTimeout
+	case providers.ExecuteFailureKindAuthentication:
+		return inference.FailureAuthentication
+	case providers.ExecuteFailureKindInvalidRequest:
+		return inference.FailureInvalidRequest
+	case providers.ExecuteFailureKindThrottled:
+		return inference.FailureThrottled
+	case providers.ExecuteFailureKindDependency:
+		return inference.FailureDependency
+	default:
+		return inference.FailureUnknown
+	}
+}
+
+func sessionRefFromResult(ref *providers.SessionRef) *inference.ProviderSession {
+	return sessionRefToInference(ref)
+}
+
+func sessionRefToInference(ref *providers.SessionRef) *inference.ProviderSession {
+	if ref == nil || strings.TrimSpace(ref.ID) == "" {
+		return nil
+	}
+	session := inference.NewProviderSession(string(ref.Provider), ref.Kind, ref.ID, nil)
+	return &session
+}
+
+func writeProgressEvents(
+	ctx context.Context,
+	writer inference.ResponseWriter,
+	runID string,
+	diagnostics *providers.ExecuteDiagnostics,
+) error {
+	if diagnostics == nil {
+		return nil
+	}
+	for _, progress := range diagnostics.Progress {
+		event, ok := progressEvent(runID, progress)
+		if !ok {
+			continue
+		}
+		if err := writer.WriteEvent(ctx, event); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if values == nil {
+		return nil
+	}
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+var _ inference.Integration = (*Integration)(nil)

@@ -3,6 +3,7 @@
 package wire
 
 import (
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
@@ -10,21 +11,67 @@ import (
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
 
-// Option configures catalog construction for the root facade.
-type Option = catalogwire.Option
+// Option configures Providers root construction.
+type Option interface {
+	apply(*wireOptions)
+}
+
+type wireOptions struct {
+	catalog       []catalogwire.Option
+	commandRunner platformprocess.CommandRunner
+}
+
+type catalogOption struct {
+	value catalogwire.Option
+}
+
+func (o catalogOption) apply(opts *wireOptions) {
+	opts.catalog = append(opts.catalog, o.value)
+}
+
+// CatalogOption adapts a catalog subservice option for root construction.
+func CatalogOption(option catalogwire.Option) Option {
+	return catalogOption{value: option}
+}
+
+type commandRunnerOption struct {
+	runner platformprocess.CommandRunner
+}
+
+func (o commandRunnerOption) apply(opts *wireOptions) {
+	opts.commandRunner = o.runner
+}
+
+// WithCommandRunner injects the shared streaming subprocess runner used by
+// built-in Codex and Claude command effects.
+func WithCommandRunner(runner platformprocess.CommandRunner) Option {
+	return commandRunnerOption{runner: runner}
+}
 
 // NewService constructs one inert Providers root over sibling Catalog and
 // Execution capabilities sharing the same private catalog identity authority.
 func NewService(options ...Option) (providers.Service, error) {
-	catalogService, err := catalogwire.NewService(options...)
+	var config wireOptions
+	for _, option := range options {
+		if option != nil {
+			option.apply(&config)
+		}
+	}
+	catalogService, err := catalogwire.NewService(config.catalog...)
 	if err != nil {
 		return nil, err
 	}
-	return newRoot(catalogService)
+	return newRoot(catalogService, config.commandRunner)
 }
 
-func newRoot(catalogService catalog.Service) (providers.Service, error) {
-	executionService, err := executionwire.NewBuiltInService(catalogService)
+func newRoot(
+	catalogService catalog.Service,
+	commandRunner platformprocess.CommandRunner,
+) (providers.Service, error) {
+	executionService, err := executionwire.NewBuiltInService(
+		catalogService,
+		executionwire.BuiltInDependenciesFromRunner(commandRunner),
+	)
 	if err != nil {
 		return nil, err
 	}

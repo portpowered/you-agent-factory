@@ -292,14 +292,10 @@
     "pkg/services/workers/provider/adapter/testkit",
     "pkg/services/workers/provider/agy",
     "pkg/services/workers/provider/claude",
-    "pkg/services/workers/provider/claude/exitfailure",
     "pkg/services/workers/provider/codex",
-    "pkg/services/workers/provider/codex/exitfailure",
-    "pkg/services/workers/provider/codex/progress",
     "pkg/services/workers/provider/commandenv",
     "pkg/services/workers/provider/conductor",
     "pkg/services/workers/provider/cursor",
-    "pkg/services/workers/provider/functionaltests",
     "pkg/services/workers/provider/gemini",
     "pkg/services/workers/provider/inferencecontract",
     "pkg/services/workers/provider/inferencecontract/testkit",
@@ -1647,22 +1643,7 @@
       "destination": "providers/internal/services/execution"
     },
     {
-      "packagePath": "pkg/services/workers/provider/claude/exitfailure",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
       "packagePath": "pkg/services/workers/provider/codex",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/workers/provider/codex/exitfailure",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/workers/provider/codex/progress",
       "disposition": "move",
       "destination": "providers/internal/services/execution"
     },
@@ -1678,11 +1659,6 @@
     },
     {
       "packagePath": "pkg/services/workers/provider/cursor",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/workers/provider/functionaltests",
       "disposition": "move",
       "destination": "providers/internal/services/execution"
     },

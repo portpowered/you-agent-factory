@@ -192,7 +192,7 @@ func TestRootCatalogTypedFailuresMatchPrivateCatalog(t *testing.T) {
 func TestRootCatalogProbeFailureMatchesPrivateCatalog(t *testing.T) {
 	t.Parallel()
 
-	root, err := providerswire.NewService(catalogwire.WithProbeQuery(func(
+	root, err := providerswire.NewService(providerswire.CatalogOption(catalogwire.WithProbeQuery(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
 	) (catalog.ProbeFacts, error) {
@@ -203,7 +203,7 @@ func TestRootCatalogProbeFailureMatchesPrivateCatalog(t *testing.T) {
 			Readiness:     descriptor.Readiness,
 			Prerequisites: descriptor.Prerequisites,
 		}, nil
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -252,13 +252,13 @@ func TestRootConstructionIsInert(t *testing.T) {
 	t.Parallel()
 
 	probeCalls := 0
-	root, err := providerswire.NewService(catalogwire.WithProbeQuery(func(
+	root, err := providerswire.NewService(providerswire.CatalogOption(catalogwire.WithProbeQuery(func(
 		context.Context,
 		providers.Descriptor,
 	) (catalog.ProbeFacts, error) {
 		probeCalls++
 		return catalog.ProbeFacts{}, nil
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}

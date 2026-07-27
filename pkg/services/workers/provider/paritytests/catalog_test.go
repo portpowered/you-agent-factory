@@ -45,36 +45,6 @@ type Fixture struct {
 func Catalog() []Fixture {
 	return []Fixture{
 		{
-			ID:             FixtureFullStreamClaude,
-			FidelityClass:  FidelityFullStream,
-			Provider:       adapter.Identity(modelprovider.ProviderClaude),
-			TranscriptFile: "testdata/full_stream_claude.jsonl",
-			Request: workerexecution.ProviderInferenceRequest{
-				Dispatch: work.WorkDispatch{DispatchID: "dispatch-parity-full-stream"},
-				Model:    "claude-sonnet-4", UserMessage: "parity fixture prompt",
-			},
-			WantContent: "Parity hello world",
-			WantCapabilities: adapter.Capabilities{
-				NativeStreaming: true, MessageDeltas: true, MessageSnapshots: true,
-				ToolLifecycle: true, ToolOutputDeltas: true, StableItemIDs: true,
-			},
-		},
-		{
-			ID:             FixturePartialStreamCodex,
-			FidelityClass:  FidelityPartialStream,
-			Provider:       adapter.Identity(modelprovider.ProviderCodex),
-			TranscriptFile: "testdata/partial_stream_codex.jsonl",
-			Request: workerexecution.ProviderInferenceRequest{
-				Dispatch: work.WorkDispatch{DispatchID: "dispatch-parity-partial-stream"},
-				Model:    "gpt-test", UserMessage: "parity fixture prompt",
-			},
-			WantContent: "Parity codex answer",
-			WantCapabilities: adapter.Capabilities{
-				NativeStreaming: true, MessageSnapshots: true, ReasoningSummaries: true,
-				ToolLifecycle: true, ToolOutputDeltas: true, StableItemIDs: true,
-			},
-		},
-		{
 			ID:             FixtureSnapshotOnlyOpenCode,
 			FidelityClass:  FidelitySnapshotOnly,
 			Provider:       adapter.Identity(modelprovider.ProviderOpenCode),
@@ -101,22 +71,6 @@ func Catalog() []Fixture {
 			WantCapabilities: adapter.Capabilities{
 				MessageSnapshots: true, FinalOnly: true,
 			},
-		},
-		{
-			ID:             FixtureToolLifecycleClaude,
-			FidelityClass:  FidelityFullStream,
-			Provider:       adapter.Identity(modelprovider.ProviderClaude),
-			TranscriptFile: "testdata/tool_lifecycle_claude.jsonl",
-			Request: workerexecution.ProviderInferenceRequest{
-				Dispatch: work.WorkDispatch{DispatchID: "dispatch-parity-tool-lifecycle"},
-				Model:    "claude-sonnet-4", UserMessage: "parity fixture prompt",
-			},
-			WantContent: "Parity tool lifecycle complete",
-			WantCapabilities: adapter.Capabilities{
-				NativeStreaming: true, MessageDeltas: true, MessageSnapshots: true,
-				ToolLifecycle: true, ToolOutputDeltas: true, StableItemIDs: true,
-			},
-			ToolLifecycle: true,
 		},
 		{
 			ID:             FixtureAgyFinalOnly,

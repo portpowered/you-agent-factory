@@ -346,7 +346,7 @@ func TestConductorInvocationRunnerPreservesRetryableUnknownFailurePolicy(t *test
 	}
 }
 
-func TestConductorInvocationRunnerPreservesNativeBuiltInPath(t *testing.T) {
+func TestConductorInvocationRunnerRoutesCodexThroughConductor(t *testing.T) {
 	t.Parallel()
 
 	providers, integration := externalConductorRegistry(t)
@@ -357,21 +357,18 @@ func TestConductorInvocationRunnerPreservesNativeBuiltInPath(t *testing.T) {
 		providers: providers,
 	}
 
-	result, err := runner.Execute(context.Background(), workers.RunnerExecutionRequest{
-		Dispatch: work.WorkDispatch{DispatchID: "dispatch-native-1"},
+	_, err := runner.Execute(context.Background(), workers.RunnerExecutionRequest{
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-codex-1"},
 		RunnerID: workers.RunnerIDCodex,
 	})
-	if err != nil {
-		t.Fatalf("Execute(codex) error = %v", err)
+	if err == nil {
+		t.Fatal("Execute(codex) error = nil, want conductor dependency failure without Providers service")
 	}
-	if result.Content != "native" {
-		t.Fatalf("Execute(codex) content = %q, want native", result.Content)
-	}
-	if native.calls != 1 {
-		t.Fatalf("native runner calls = %d, want 1", native.calls)
+	if native.calls != 0 {
+		t.Fatalf("native runner calls = %d, want 0", native.calls)
 	}
 	if integration.calls != 0 {
-		t.Fatalf("integration invoke calls = %d, want 0", integration.calls)
+		t.Fatalf("integration invoke calls = %d, want 0 without Providers wiring", integration.calls)
 	}
 }
 
@@ -407,8 +404,11 @@ func TestConductorInvocationRunnerRoutesMigratedGeminiThroughConductor(t *testin
 	if commandRunner.calls != 1 {
 		t.Fatalf("gemini command runner calls = %d, want 1", commandRunner.calls)
 	}
-	if !providers.UsesNativeRunner(workers.RunnerIDCodex) {
-		t.Fatal("UsesNativeRunner(codex) = false, want unmigrated built-ins retained")
+	if providers.UsesNativeRunner(workers.RunnerIDCodex) {
+		t.Fatal("UsesNativeRunner(codex) = true, want conductor route")
+	}
+	if providers.UsesNativeRunner("claude") {
+		t.Fatal("UsesNativeRunner(claude) = true, want conductor route")
 	}
 	if providers.UsesNativeRunner("gemini") {
 		t.Fatal("UsesNativeRunner(gemini) = true, want conductor route")

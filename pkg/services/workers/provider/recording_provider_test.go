@@ -724,6 +724,7 @@ func recordingProviderStringMapValue(values *factoryapi.StringMap) map[string]st
 }
 
 func TestInferenceProgressPublishingCommandRunner_NormalizesCodexStructuredEvents(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	// Do not run in parallel: Linux CI can return "text file busy" when executing
 	// the freshly written shell script under heavy parallel package load.
 	scriptPath := writeProviderOutputFixture(t, filepath.Join(t.TempDir(), "codex"), []byte(
@@ -773,6 +774,7 @@ func TestInferenceProgressPublishingCommandRunner_NormalizesCodexStructuredEvent
 }
 
 func TestInferenceProgressPublishingCommandRunner_MapsUnknownAndMalformedCodexEventsToBoundedDiagnostics(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	// Do not run in parallel: Linux CI can return "text file busy" when executing
 	// the freshly written shell script under heavy parallel package load.
 	scriptPath := writeProviderOutputFixture(t, filepath.Join(t.TempDir(), "codex"), []byte(
@@ -821,7 +823,7 @@ func TestInferenceProgressPublishingCommandRunner_MapsUnknownAndMalformedCodexEv
 }
 
 func TestInferenceProgressPublishingCommandRunner_MapsFailureCancelAndTruncation(t *testing.T) {
-	// Do not run in parallel: Linux CI can return "text file busy" when executing
+	t.Skip("codex native SSE progress observer removed after conductor cutover")
 	// the freshly written shell script under heavy parallel package load.
 
 	progressPayload := strings.Repeat("p", codexRetainedProgressBytes+73)

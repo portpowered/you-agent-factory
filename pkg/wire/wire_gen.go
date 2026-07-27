@@ -180,7 +180,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	registry, err := provideProviderRegistry(edges2)
+	providersService, err := provideProvidersService(edges2)
+	if err != nil {
+		return nil, err
+	}
+	registry, err := provideProviderRegistry(edges2, providersService)
 	if err != nil {
 		return nil, err
 	}
@@ -544,6 +548,7 @@ var platformSet = wire2.NewSet(logging.NewDefaultLogger)
 var apiSet = wire2.NewSet(composition.NewWorkAPI, composition.NewHTTPBinder, apisurface.NewRuntimeAPI, composition.NewLiveSessionAPI, factorydefinition.NewAPI, factorysession.NewDurableAPI, factorysession.NewLiveAPI, factorysession.NewInvocationAPI, stdio.NewOpener, application2.NewHandler)
 
 var servicesSet = wire2.NewSet(
+	provideProvidersService,
 	provideProviderRegistry, wire2.Bind(new(application.ProviderRegistry), new(*registry.Registry)), provideFactorySessionProviderIdentityResolver, wire.NewRequestPreparation, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsProviderCatalog,

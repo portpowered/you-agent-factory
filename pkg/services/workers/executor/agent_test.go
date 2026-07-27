@@ -652,18 +652,15 @@ func TestAgentExecutor_RetryJitterUsesInjectedRandomSource(t *testing.T) {
 
 func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryableProviderMetadata(t *testing.T) {
 	provider := &agentMockProvider{
-		err: workerprovider.NormalizeProviderExitFailure(
-			string(modelprovider.ProviderCodex),
-			CommandResult{
-				ExitCode: codexWindowsProcessFailureExitCode,
-				Stderr:   []byte("OpenAI Codex v0.118.0 (research preview)\n--------\nERROR: Windows provider subprocess exited unexpectedly"),
-			},
+		err: workerprovider.NewProviderErrorWithSession(
+			workerexecution.WorkFailureTypeInternalServerError,
+			"Codex encountered a temporary server error.",
+			nil,
 			&workerexecution.ProviderSessionMetadata{
 				Provider: string(modelprovider.ProviderCodex),
 				Kind:     providerSessionKindSessionID,
 				ID:       "sess-codex-windows-4294967295",
 			},
-			nil,
 		),
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{

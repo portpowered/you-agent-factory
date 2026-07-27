@@ -29,7 +29,7 @@ func TestNewServiceBindsCodexAndClaudeFromCatalogWithoutEffects(t *testing.T) {
 	t.Parallel()
 
 	probeCalls := 0
-	root, err := NewService(catalogwire.WithProbeQuery(func(
+	root, err := NewService(CatalogOption(catalogwire.WithProbeQuery(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
 	) (catalog.ProbeFacts, error) {
@@ -38,7 +38,7 @@ func TestNewServiceBindsCodexAndClaudeFromCatalogWithoutEffects(t *testing.T) {
 			Readiness:     descriptor.Readiness,
 			Prerequisites: descriptor.Prerequisites,
 		}, nil
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -74,7 +74,7 @@ func TestNewServiceBindsCodexAndClaudeFromCatalogWithoutEffects(t *testing.T) {
 }
 
 func TestNewRootRejectsMissingCatalog(t *testing.T) {
-	root, err := newRoot(nil)
+	root, err := newRoot(nil, nil)
 	if err == nil || root != nil {
 		t.Fatalf("newRoot(nil) = (%v, %v), want construction error", root, err)
 	}

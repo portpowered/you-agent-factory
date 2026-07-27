@@ -34,6 +34,8 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	providersessionsservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -58,15 +60,30 @@ import (
 	"go.uber.org/zap"
 )
 
-func provideProviderRegistry(edges serviceedges.Edges) (*providerregistry.Registry, error) {
+func provideProvidersService(edges serviceedges.Edges) (providers.Service, error) {
+	if edges.ProviderCommandRunner != nil {
+		return providerswire.NewService(providerswire.WithCommandRunner(edges.ProviderCommandRunner))
+	}
+	commandRunner, err := providePlatformProcessCommandRunner(edges)
+	if err != nil {
+		return nil, err
+	}
+	return providerswire.NewService(providerswire.WithCommandRunner(commandRunner))
+}
+
+func provideProviderRegistry(
+	edges serviceedges.Edges,
+	providersService providers.Service,
+) (*providerregistry.Registry, error) {
 	commandRunner, err := provideWorkersProviderCommandRunner(edges)
 	if err != nil {
 		return nil, err
 	}
 	builtIns, err := providerregistry.BuiltInRegistrations(providerregistry.BuiltInDependencies{
-		CommandRunner:   commandRunner,
-		OperatingSystem: string(resolveWorkersOperatingSystem(edges)),
-		TemporaryFiles:  provideWorkersProviderTemporaryFileSystem(edges),
+		CommandRunner:    commandRunner,
+		OperatingSystem:  string(resolveWorkersOperatingSystem(edges)),
+		TemporaryFiles:   provideWorkersProviderTemporaryFileSystem(edges),
+		ProvidersService: providersService,
 	})
 	if err != nil {
 		return nil, err

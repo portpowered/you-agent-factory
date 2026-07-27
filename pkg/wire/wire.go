@@ -45,6 +45,7 @@ var apiSet = wire.NewSet(
 )
 
 var servicesSet = wire.NewSet(
+	provideProvidersService,
 	provideProviderRegistry,
 	wire.Bind(new(initializerapplication.ProviderRegistry), new(*providerregistry.Registry)),
 	provideFactorySessionProviderIdentityResolver,
