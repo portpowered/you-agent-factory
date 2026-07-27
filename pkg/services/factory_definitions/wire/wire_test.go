@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -223,6 +224,83 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 			runtime.NumGoroutine(),
 			leaked,
 		)
+	}
+}
+
+func TestNewServiceServesPublishedPackagedCatalogPeerBehavior(t *testing.T) {
+	t.Parallel()
+
+	packagedCatalog, err := factorydefinitionsservice.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{
+		{
+			Name: "@you/review", Project: "builtin-review",
+			JSON: []byte(`{"name":"review"}`),
+			Formats: []factorydefinitions.PackagedFactoryFormat{
+				factorydefinitions.PackagedFactoryFormatJSON,
+			},
+		},
+		{
+			Name: "@you/goal", Project: "builtin-goal",
+			JSON: []byte(`{"name":"goal"}`),
+			Formats: []factorydefinitions.PackagedFactoryFormat{
+				factorydefinitions.PackagedFactoryFormatJSON,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewPackagedFactoryCatalog() error = %v", err)
+	}
+
+	ports := validConstructionPorts(t)
+	ports.packagedCatalog = packagedCatalog
+	service, err := factorydefinitionswire.NewService(
+		ports.sessionHost,
+		ports.validator,
+		ports.persistence,
+		ports.loader,
+		ports.applySupportedFiles,
+		ports.applyStarterWork,
+		ports.namedPaths,
+		ports.namedFactoryCatalogFileSystem,
+		ports.clock,
+		ports.versionFileSystem,
+		ports.listEffective,
+		ports.packagedCatalog,
+		ports.packagedInstaller,
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	var root factorydefinitions.Service = service
+
+	listed, err := root.ListBuiltInPackagedFactories(
+		t.Context(),
+		factorydefinitions.ListBuiltInPackagedFactoriesRequest{},
+	)
+	if err != nil {
+		t.Fatalf("ListBuiltInPackagedFactories() error = %v", err)
+	}
+	gotNames := []string{listed.Entries[0].Name, listed.Entries[1].Name}
+	if !reflect.DeepEqual(gotNames, []string{"@you/goal", "@you/review"}) {
+		t.Fatalf("ListBuiltInPackagedFactories names = %v, want [@you/goal @you/review]", gotNames)
+	}
+
+	resolved, err := root.ResolveBuiltInPackagedFactory(
+		t.Context(),
+		factorydefinitions.ResolveBuiltInPackagedFactoryRequest{Name: "@you/goal"},
+	)
+	if err != nil {
+		t.Fatalf("ResolveBuiltInPackagedFactory() error = %v", err)
+	}
+	if resolved.Definition.Project != "builtin-goal" {
+		t.Fatalf("ResolveBuiltInPackagedFactory result = %#v, want builtin-goal project", resolved)
+	}
+
+	_, err = root.ResolveBuiltInPackagedFactory(
+		t.Context(),
+		factorydefinitions.ResolveBuiltInPackagedFactoryRequest{Name: "@you/missing"},
+	)
+	if !errors.Is(err, factorydefinitions.ErrUnknownPackagedFactoryIdentity) {
+		t.Fatalf("ResolveBuiltInPackagedFactory(missing) error = %v, want ErrUnknownPackagedFactoryIdentity", err)
 	}
 }
 
