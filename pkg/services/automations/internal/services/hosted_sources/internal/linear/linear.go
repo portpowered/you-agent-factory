@@ -153,7 +153,7 @@ func RunPollCycle(
 	if len(submissions) > 0 {
 		request := work.WorkRequestFromSubmitRequests(submissions)
 		if err := submitter(ctx, request); err != nil {
-			return CycleResult{}, err
+			return CycleResult{}, fmt.Errorf("%w: %w", ErrWorkAdmission, err)
 		}
 	}
 	if err := checkpoints.Save(checkpointPath, nextCheckpoint); err != nil {
