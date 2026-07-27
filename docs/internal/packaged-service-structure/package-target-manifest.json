@@ -304,6 +304,7 @@
     "pkg/services/recordings/projections/dashboard",
     "pkg/services/recordings/replay",
     "pkg/services/recordings/service",
+    "pkg/services/recordings/wire",
     "pkg/services/system_initialization",
     "pkg/services/work",
     "pkg/services/work/internal/services/state_access",
@@ -1753,6 +1754,11 @@
     },
     {
       "packagePath": "pkg/services/recordings/service",
+      "disposition": "retain",
+      "destination": "recordings"
+    },
+    {
+      "packagePath": "pkg/services/recordings/wire",
       "disposition": "retain",
       "destination": "recordings"
     },
