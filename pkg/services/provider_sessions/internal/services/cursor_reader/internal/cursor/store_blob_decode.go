@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"unicode/utf8"
 )
@@ -14,7 +15,7 @@ import (
 // backendsizecheck:ignore-function MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor.
 // pkgmaintcheck:ignore-function-lines MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor.
 // pkgmaintcheck:ignore-cyclomatic-complexity MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor.
-func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParseFailures *int) (map[string]interface{}, *RawBubble, bool) {
+func decodeBlobEntryValue(ins *inspection, blob BlobEntry, index int, sessionID string, jsonParseFailures *int) (map[string]interface{}, *RawBubble, bool) {
 	var data map[string]interface{}
 	valueBytes := []byte(blob.Value)
 
@@ -117,14 +118,15 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 					}
 				} else {
 					// Not base64 and no JSON in binary - try protobuf decode
-					if protobufFields, found := tryProtobufDecode(valueBytes); found {
+					if protobufFields, found := tryProtobufDecode(ins, valueBytes); found {
 						// Initialize data map if it's nil
 						if data == nil {
 							data = make(map[string]interface{})
 						}
 						// Extract strings from protobuf fields
 						var extractedStrings []string
-						for key, value := range protobufFields {
+						for _, key := range sortedInterfaceKeys(protobufFields) {
+							value := protobufFields[key]
 							if str, ok := value.(string); ok && isReadableText(str) {
 								extractedStrings = append(extractedStrings, str)
 								// Try to parse as JSON if it looks like JSON
@@ -140,7 +142,8 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 								}
 							} else if nestedMap, ok := value.(map[string]interface{}); ok {
 								// Nested protobuf - extract strings from it
-								for nestedKey, nestedValue := range nestedMap {
+								for _, nestedKey := range sortedInterfaceKeys(nestedMap) {
+									nestedValue := nestedMap[nestedKey]
 									if nestedStr, ok := nestedValue.(string); ok && isReadableText(nestedStr) {
 										extractedStrings = append(extractedStrings, nestedStr)
 										// Try to parse as JSON
@@ -172,8 +175,11 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 									LogInfo("Blob %d parsed as text message format (user message): bubbleId='%s', text='%s', chatId='%s'", index+1, bubble.BubbleID, bubble.Text, bubble.ChatID)
 									return nil, nil, false
 								}
-								(*jsonParseFailures)++
-								return nil, nil, false
+							(*jsonParseFailures)++
+							if ins != nil {
+								ins.recordMalformedBlob(index + 1)
+							}
+							return nil, nil, false
 							}
 						} else {
 							// Protobuf decoded but no readable strings found
@@ -229,6 +235,15 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 	}
 
 	return data, nil, true
+}
+
+func sortedInterfaceKeys(data map[string]interface{}) []string {
+	keys := make([]string, 0, len(data))
+	for key := range data {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func containsString(slice []string, item string) bool {

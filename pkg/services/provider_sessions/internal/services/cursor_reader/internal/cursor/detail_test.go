@@ -1,6 +1,7 @@
 package cursor
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"os"
@@ -15,7 +16,7 @@ import (
 func TestLoadDetails_ReadsReadableSessionFromConfiguredRoot(t *testing.T) {
 	root, sessionID := writeReadableCursorAgentStorageFixture(t)
 
-	resp, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(root), sessionID)
+	resp, err := LoadDetails(context.Background(), testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(root), sessionID)
 	if err != nil {
 		t.Fatalf("LoadDetails: %v", err)
 	}
@@ -53,7 +54,7 @@ func assertReadableFixtureTokenUsage(t *testing.T, usage *providersessions.Token
 func TestLoadDetails_ReadsUUIDShapedSessionFromConfiguredRoot(t *testing.T) {
 	root, sessionID := writeUUIDShapedCursorAgentStorageFixture(t)
 
-	resp, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(root), sessionID)
+	resp, err := LoadDetails(context.Background(), testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(root), sessionID)
 	if err != nil {
 		t.Fatalf("LoadDetails: %v", err)
 	}
@@ -72,7 +73,7 @@ func TestLoadDetails_ReadsUUIDShapedSessionFromConfiguredRoot(t *testing.T) {
 func TestLoadDetails_UnavailableContentHasNoPlaintextTranscript(t *testing.T) {
 	root, sessionID := writeUnavailableCursorAgentStorageFixture(t)
 
-	resp, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(root), sessionID)
+	resp, err := LoadDetails(context.Background(), testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(root), sessionID)
 	if err != nil {
 		t.Fatalf("LoadDetails: %v", err)
 	}
@@ -85,14 +86,14 @@ func TestLoadDetails_UnavailableContentHasNoPlaintextTranscript(t *testing.T) {
 }
 
 func TestLoadDetails_NotFoundIsDistinguishable(t *testing.T) {
-	_, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(t.TempDir()), "missing-session")
+	_, err := LoadDetails(context.Background(), testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(t.TempDir()), "missing-session")
 	if !errors.Is(err, providersessions.ErrSessionNotFound) {
 		t.Fatalf("err = %v, want ErrSessionNotFound", err)
 	}
 }
 
 func TestLoadDetails_ReturnsNotFoundForEmptyRoot(t *testing.T) {
-	_, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(""), "missing-session")
+	_, err := LoadDetails(context.Background(), testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(""), "missing-session")
 	if !errors.Is(err, providersessions.ErrSessionNotFound) {
 		t.Fatalf("err = %v, want ErrSessionNotFound", err)
 	}
@@ -100,7 +101,7 @@ func TestLoadDetails_ReturnsNotFoundForEmptyRoot(t *testing.T) {
 
 func TestLoadDetails_ReturnsNotFoundForMissingRootDirectory(t *testing.T) {
 	missingRoot := filepath.Join(t.TempDir(), "does-not-exist")
-	_, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(missingRoot), "missing-session")
+	_, err := LoadDetails(context.Background(), testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(missingRoot), "missing-session")
 	if !errors.Is(err, providersessions.ErrSessionNotFound) {
 		t.Fatalf("err = %v, want ErrSessionNotFound", err)
 	}
@@ -109,7 +110,7 @@ func TestLoadDetails_ReturnsNotFoundForMissingRootDirectory(t *testing.T) {
 func TestLoadDetails_RejectsPathLikeIdentifiers(t *testing.T) {
 	for _, id := range []string{"../secret", "/tmp/store.db", "session.with.dot"} {
 		t.Run(id, func(t *testing.T) {
-			_, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(t.TempDir()), id)
+			_, err := LoadDetails(context.Background(), testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(t.TempDir()), id)
 			if !errors.Is(err, providersessions.ErrInvalidIdentifier) {
 				t.Fatalf("err = %v, want ErrInvalidIdentifier", err)
 			}
@@ -118,14 +119,14 @@ func TestLoadDetails_RejectsPathLikeIdentifiers(t *testing.T) {
 }
 
 func TestGetProviderSessionDetails_CursorNotFoundIsDistinguishable(t *testing.T) {
-	_, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(t.TempDir()), "missing-session")
+	_, err := LoadDetails(context.Background(), testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(t.TempDir()), "missing-session")
 	if !errors.Is(err, providersessions.ErrSessionNotFound) {
 		t.Fatalf("err = %v, want ErrSessionNotFound", err)
 	}
 }
 
 func TestGetProviderSessionDetails_CursorNotFoundWithUnavailableRoot(t *testing.T) {
-	_, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(""), "missing-session")
+	_, err := LoadDetails(context.Background(), testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(""), "missing-session")
 	if !errors.Is(err, providersessions.ErrSessionNotFound) {
 		t.Fatalf("err = %v, want ErrSessionNotFound", err)
 	}
@@ -133,7 +134,7 @@ func TestGetProviderSessionDetails_CursorNotFoundWithUnavailableRoot(t *testing.
 
 func TestGetProviderSessionDetails_CursorNotFoundWithMissingRootDirectory(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "does-not-exist")
-	_, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(root), "missing-session")
+	_, err := LoadDetails(context.Background(), testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(root), "missing-session")
 	if !errors.Is(err, providersessions.ErrSessionNotFound) {
 		t.Fatalf("err = %v, want ErrSessionNotFound", err)
 	}
@@ -150,7 +151,7 @@ func TestGetProviderSessionDetails_LegacyAgentCursorRejectsPathLikeAndMalformedI
 func assertCursorProviderSessionIdentifiersRejected(t *testing.T) {
 	t.Helper()
 	for _, id := range []string{"../secret", "/tmp/store.db", "session.with.dot"} {
-		_, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(t.TempDir()), id)
+		_, err := LoadDetails(context.Background(), testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(t.TempDir()), id)
 		if !errors.Is(err, providersessions.ErrInvalidIdentifier) {
 			t.Fatalf("LoadDetails(%q) error = %v, want ErrInvalidIdentifier", id, err)
 		}
@@ -159,7 +160,7 @@ func assertCursorProviderSessionIdentifiersRejected(t *testing.T) {
 
 func TestGetProviderSessionDetails_LoadsCursorSessionFromConfiguredRoot(t *testing.T) {
 	root, sessionID := writeReadableCursorAgentStorageFixture(t)
-	detail, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(root), sessionID)
+	detail, err := LoadDetails(context.Background(), testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(root), sessionID)
 	if err != nil || detail.ProviderSession.Provider != providersessions.ProviderCursor || detail.ProviderSession.ID != sessionID {
 		t.Fatalf("detail = %#v, error = %v", detail, err)
 	}
@@ -167,7 +168,7 @@ func TestGetProviderSessionDetails_LoadsCursorSessionFromConfiguredRoot(t *testi
 
 func TestGetProviderSessionDetails_LoadsCursorUUIDSessionFromConfiguredRoot(t *testing.T) {
 	root, sessionID := writeUUIDShapedCursorAgentStorageFixture(t)
-	detail, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(root), sessionID)
+	detail, err := LoadDetails(context.Background(), testFiles, testWalkDirectory, testResolveSymlinks, testOpenSQLDatabase, AgentStorageRoot(root), sessionID)
 	if err != nil || detail.ProviderSession.ID != sessionID {
 		t.Fatalf("detail = %#v, error = %v", detail, err)
 	}

@@ -10,9 +10,9 @@ import (
 )
 
 // rootServiceFake is a peer-shaped Provider Sessions root Service that uses
-// only Provider Sessions and canonical Providers identity contracts. It never
-// imports Codex/Cursor reader packages, filesystem/SQL/OS effect ports,
-// Providers catalog/execution services, or Workers selection-policy types.
+// only accepted Provider Sessions values and the Providers-owned SessionRef.
+// It never imports Codex/Cursor reader packages, filesystem/SQL/OS effect
+// ports, Providers catalog/execution services, or Workers policy types.
 type rootServiceFake struct {
 	detail    providersessions.Detail
 	detailErr error
@@ -305,7 +305,7 @@ func newProjectSuccessFixture() projectSuccessFixture {
 		outputTokens:  outputTokens,
 		totalTokens:   totalTokens,
 		detail: providersessions.Detail{
-			ProviderSession: providersessions.Ref{Provider: providersessions.Provider(ref.Provider), Kind: ref.Kind, ID: ref.ID},
+			ProviderSession: providersessions.Ref{Provider: detailProvider(ref.Provider), Kind: ref.Kind, ID: ref.ID},
 			Source: providersessions.SourceMetadata{
 				ModifiedAt:   &modifiedAt,
 				RelativePath: "2026/07/24/rollout-session-project-1.jsonl",
@@ -420,7 +420,7 @@ func TestRootService_Project_Characterization_NormalizedDetailSuccess(t *testing
 		t.Fatalf("ProjectResult.Session = %#v, want %#v", result.Session, fx.ref)
 	}
 	detail := result.Detail
-	if detail.ProviderSession.Provider != providersessions.Provider(fx.ref.Provider) ||
+	if detail.ProviderSession.Provider != detailProvider(fx.ref.Provider) ||
 		detail.ProviderSession.Kind != fx.ref.Kind ||
 		detail.ProviderSession.ID != fx.ref.ID {
 		t.Fatalf("Detail.ProviderSession = %#v", detail.ProviderSession)
@@ -493,7 +493,7 @@ func sealRootFake(ref providersessions.SessionRef, assistantText string, inputTo
 		project: providersessions.ProjectResult{
 			Session: ref,
 			Detail: providersessions.Detail{
-				ProviderSession: providersessions.Ref{Provider: providersessions.Provider(ref.Provider), Kind: ref.Kind, ID: ref.ID},
+				ProviderSession: providersessions.Ref{Provider: detailProvider(ref.Provider), Kind: ref.Kind, ID: ref.ID},
 				Source: providersessions.SourceMetadata{
 					ModifiedAt:   &modifiedAt,
 					RelativePath: "2026/07/24/rollout-session-seal-1.jsonl",
@@ -573,4 +573,11 @@ func TestRootService_Seal_PublishedSlicesOnSingularRoot(t *testing.T) {
 		t.Fatalf("fake recorded Inspect=%#v Project=%#v, want both %#v", fake.lastInspected, fake.lastProjected, ref)
 	}
 	assertSealTypedFailures(t, svc, fake, ref)
+}
+
+func detailProvider(id providers.ID) providersessions.Provider {
+	if id == providers.IDCursor {
+		return providersessions.ProviderCursor
+	}
+	return providersessions.Provider(id)
 }

@@ -37,7 +37,7 @@ type ResolvedStoreDB struct {
 }
 
 // ResolveStoreDB locates {root}/{hash}/{sessionID}/store.db without accepting client filesystem paths.
-func ResolveStoreDB(files providersessions.FileSystem, walkDirectory providersessions.CursorWalkDirectory, resolveSymlinks providersessions.CursorResolveSymlinks, root AgentStorageRoot, sessionID string) (ResolvedStoreDB, error) {
+func ResolveStoreDB(ins *inspection, files providersessions.FileSystem, walkDirectory providersessions.CursorWalkDirectory, resolveSymlinks providersessions.CursorResolveSymlinks, root AgentStorageRoot, sessionID string) (ResolvedStoreDB, error) {
 	if walkDirectory == nil {
 		return ResolvedStoreDB{}, fmt.Errorf("cursor session directory walker is required")
 	}
@@ -57,7 +57,7 @@ func ResolveStoreDB(files providersessions.FileSystem, walkDirectory providerses
 	}
 
 	targetName := "store.db"
-	matches, err := collectStoreDBMatches(walkDirectory, cleanRoot, sessionID, targetName)
+	matches, err := collectStoreDBMatches(ins, walkDirectory, cleanRoot, sessionID, targetName)
 	if err != nil {
 		return ResolvedStoreDB{}, err
 	}
@@ -68,6 +68,9 @@ func ResolveStoreDB(files providersessions.FileSystem, walkDirectory providerses
 
 	candidates := make([]ResolvedStoreDB, 0, len(matches))
 	for _, match := range matches {
+		if err := ins.recordCandidate(); err != nil {
+			return ResolvedStoreDB{}, err
+		}
 		candidate, candidateErr := resolvedStoreDBCandidate(resolveSymlinks, cleanRoot, resolvedRoot, match, sessionID)
 		if candidateErr != nil {
 			return ResolvedStoreDB{}, candidateErr
@@ -105,11 +108,14 @@ func resolveAgentStorageRoot(files providersessions.FileSystem, resolveSymlinks 
 	return cleanRoot, resolvedRoot, nil
 }
 
-func collectStoreDBMatches(walkDirectory providersessions.CursorWalkDirectory, cleanRoot, sessionID, targetName string) ([]string, error) {
+func collectStoreDBMatches(ins *inspection, walkDirectory providersessions.CursorWalkDirectory, cleanRoot, sessionID, targetName string) ([]string, error) {
 	matches := make([]string, 0, 1)
 	err := walkDirectory(cleanRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if err := ins.recordWalkEntry(); err != nil {
+			return err
 		}
 		if entry.IsDir() {
 			return nil
