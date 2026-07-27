@@ -199,6 +199,46 @@
   ],
   "rows": [
     {
+      "source_path": "tests/functional/automations/cron_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsCronActivatesThroughRuntimeLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/automations/cron_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/cron_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsCronJitterProducesStableSubmissionTiming",
+      "lane": "short",
+      "destination": "tests/functional/automations/cron_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/cron_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsCronSkipsMalformedWorkstationAndFiresValid",
+      "lane": "short",
+      "destination": "tests/functional/automations/cron_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/cron_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestBuildProcessRemainsCronInertBeforeRuntimeLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/automations/cron_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/acceptance/harness_smoke_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestBuiltCLIHarness_IsolatesHomeAndLogDirectoriesAcrossSessions",
@@ -2326,6 +2366,76 @@
       "destination": "tests/functional/workers/inference/process_cleanup_test.go",
       "catch_all": "none",
       "specialty_targets": "script-timeout-companion-smoke-100",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/codex/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/codex",
+      "scenario": "TestCodexHistoricalInspectionBoundedWalkThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/providers/codex/process_harness_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/codex/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/codex",
+      "scenario": "TestCodexHistoricalInspectionCancelledDiscoveryThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/providers/codex/process_harness_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/codex/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/codex",
+      "scenario": "TestCodexHistoricalInspectionContainmentRejectionThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/providers/codex/process_harness_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/codex/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/codex",
+      "scenario": "TestCodexHistoricalInspectionDetachedRepeatedRunsThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/providers/codex/process_harness_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/codex/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/codex",
+      "scenario": "TestCodexHistoricalInspectionMalformedJSONLThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/providers/codex/process_harness_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/codex/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/codex",
+      "scenario": "TestCodexHistoricalInspectionMissingSessionThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/providers/codex/process_harness_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/codex/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/codex",
+      "scenario": "TestCodexHistoricalInspectionSuccessThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/providers/codex/process_harness_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
       "deletion_only_batch": "n/a"
     },
     {
@@ -6474,7 +6584,7 @@
     "by_catch_all": {
       "bootstrap_portability": 21,
       "guards_batch": 27,
-      "none": 329,
+      "none": 340,
       "replay_contracts": 23,
       "runtime_api": 105,
       "smoke": 84,
@@ -6482,6 +6592,7 @@
     },
     "by_top_level_package": {
       "acceptance": 14,
+      "automations": 4,
       "bootstrap_portability": 26,
       "cli": 68,
       "factory": 4,
@@ -6491,7 +6602,7 @@
       "operator_settings": 1,
       "orchestration": 32,
       "product": 10,
-      "providers": 46,
+      "providers": 53,
       "replay_contracts": 24,
       "runtime_api": 107,
       "sessionparity": 13,
@@ -6503,16 +6614,17 @@
       "workflow": 44,
       "workstations": 29
     },
-    "customer_top_level_Test_scenarios": 658,
-    "files_with_customer_Test": 218,
+    "customer_top_level_Test_scenarios": 638,
+    "files_with_customer_Test": 219,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
-    "lane_functionallong": 113,
-    "lane_short": 545,
+    "lane_functionallong": 95,
+    "lane_short": 543,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 14,
+      "you-agent-factory/tests/functional/automations": 4,
       "you-agent-factory/tests/functional/bootstrap_portability": 25,
       "you-agent-factory/tests/functional/bootstrap_portability/metadata_contract": 2,
       "you-agent-factory/tests/functional/cli/dynamic_workflows": 2,
@@ -6539,7 +6651,7 @@
       "you-agent-factory/tests/functional/orchestration/petri/dispatch": 3,
       "you-agent-factory/tests/functional/product/init_setup": 10,
       "you-agent-factory/tests/functional/providers": 39,
-      "you-agent-factory/tests/functional/providers/codex": 1,
+      "you-agent-factory/tests/functional/providers/codex": 8,
       "you-agent-factory/tests/functional/providers/cursor": 5,
       "you-agent-factory/tests/functional/providers/gemini": 9,
       "you-agent-factory/tests/functional/providers/kiro": 4,
@@ -6650,16 +6762,16 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T20:45:00Z",
-    "story": "ft-wave1-cli-key-value",
-    "live_customer_scenarios": 658,
-    "ledger_rows": 658,
+    "audited_at_utc": "2026-07-27T19:45:00Z",
+    "story": "ft-wave1-petri-simple-run-mergeability-21",
+    "live_customer_scenarios": 638,
+    "ledger_rows": 638,
     "unmapped_scenarios": 0,
-    "checklist_destinations": 435,
+    "checklist_destinations": 437,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 545,
-    "lane_functionallong": 113,
+    "lane_short": 543,
+    "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
     "validator": "go run ./cmd/migrationledgercheck"
