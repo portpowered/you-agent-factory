@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 )
@@ -22,6 +23,27 @@ type staticSuccessCommandRunner struct {
 
 func NewStaticSuccessCommandRunner(stdout string) platformprocess.CommandRunner {
 	return &staticSuccessCommandRunner{stdout: []byte(stdout)}
+}
+
+// NewShapedProviderCommandRunner wraps the shared test runner so Codex and Claude
+// stdout is emitted in provider-native JSONL after conductor cutover.
+func NewShapedProviderCommandRunner(results ...platformprocess.CommandResult) *ShapedProviderCommandRunner {
+	return &ShapedProviderCommandRunner{
+		ProviderCommandRunner: testutil.NewProviderCommandRunner(results...),
+	}
+}
+
+type ShapedProviderCommandRunner struct {
+	*testutil.ProviderCommandRunner
+}
+
+func (r *ShapedProviderCommandRunner) Run(ctx context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	result, err := r.ProviderCommandRunner.Run(ctx, req)
+	if err != nil {
+		return result, err
+	}
+	result.Stdout = shapedProviderCommandStdout(req.Command, result.Stdout)
+	return result, nil
 }
 
 func NewRecordingCommandRunner(stdout string) *RecordingCommandRunner {
@@ -87,3 +109,4 @@ func shapedProviderCommandStdout(command string, stdout []byte) []byte {
 
 var _ platformprocess.CommandRunner = (*RecordingCommandRunner)(nil)
 var _ platformprocess.CommandRunner = (*staticSuccessCommandRunner)(nil)
+var _ platformprocess.CommandRunner = (*ShapedProviderCommandRunner)(nil)

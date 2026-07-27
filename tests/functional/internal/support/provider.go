@@ -94,19 +94,29 @@ func CodexSuccessStdout(result string) []byte {
 	if result == "" {
 		result = "Done. COMPLETE"
 	}
-	payload := map[string]any{
+	item, err := json.Marshal(map[string]any{
 		"type": "item.completed",
 		"item": map[string]any{
 			"id":   "codex-functional-message",
 			"type": "agent_message",
 			"text": result,
 		},
-	}
-	encoded, err := json.Marshal(payload)
+	})
 	if err != nil {
 		panic(err)
 	}
-	return append(encoded, '\n')
+	turnCompleted, err := json.Marshal(map[string]any{
+		"type":  "turn.completed",
+		"usage": map[string]any{"input_tokens": 1, "output_tokens": 1},
+	})
+	if err != nil {
+		panic(err)
+	}
+	return []byte(
+		`{"type":"turn.started"}` + "\n" +
+			string(item) + "\n" +
+			string(turnCompleted) + "\n",
+	)
 }
 
 func ClaudeSuccessStdout(result string) []byte {

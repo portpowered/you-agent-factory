@@ -2,6 +2,7 @@ package claude
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -29,7 +30,7 @@ func progressEvent(runID string, progress providers.ExecuteProgress) (inference.
 }
 
 func runEvent(runID string, phase workerexecution.Phase) (inference.EventDraft, bool) {
-	payload, err := json.Marshal(workerexecution.RunPayload{Status: string(phase)})
+	payload, err := json.Marshal(workerexecution.RunPayload{Status: runPayloadStatus(phase)})
 	if err != nil {
 		return inference.EventDraft{}, false
 	}
@@ -59,6 +60,9 @@ func messageEvent(
 ) (inference.EventDraft, bool) {
 	itemID := progress.Metadata["correlation_id"]
 	if itemID == "" {
+		itemID = progress.Metadata["message_id"]
+	}
+	if itemID == "" {
 		itemID = "claude-message"
 	}
 	workerPhase := workerexecution.PhaseCompleted
@@ -67,19 +71,53 @@ func messageEvent(
 	} else if strings.HasSuffix(phase, ".started") {
 		workerPhase = workerexecution.PhaseStarted
 	}
-	payload, err := json.Marshal(workerexecution.MessagePayload{
-		Role: "assistant",
-		ContentBlocks: []workerexecution.ContentBlock{{
-			Kind: workerexecution.ContentBlockText,
-			Text: strings.Clone(progress.Detail),
-		}},
-	})
+	var payload []byte
+	var err error
+	representation := workerexecution.RepresentationSnapshot
+	fidelity := workerexecution.FidelityFinalOnly
+	switch workerPhase {
+	case workerexecution.PhaseDelta:
+		blockIndex := 0
+		if raw := strings.TrimSpace(progress.Metadata["content_block_index"]); raw != "" {
+			if parsed, parseErr := strconv.Atoi(raw); parseErr == nil && parsed >= 0 {
+				blockIndex = parsed
+			}
+		}
+		payload, err = json.Marshal(workerexecution.MessageDeltaPayload{
+			ContentBlockIndex: blockIndex,
+			ContentBlockKind:  workerexecution.ContentBlockText,
+			TextDelta:         strings.Clone(progress.Detail),
+		})
+		representation = workerexecution.RepresentationDelta
+		fidelity = workerexecution.FidelityNormalized
+	case workerexecution.PhaseStarted:
+		contentBlocks := []workerexecution.ContentBlock{}
+		if detail := strings.TrimSpace(progress.Detail); detail != "" {
+			contentBlocks = append(contentBlocks, workerexecution.ContentBlock{
+				Kind: workerexecution.ContentBlockText,
+				Text: detail,
+			})
+		} else {
+			contentBlocks = append(contentBlocks, workerexecution.ContentBlock{
+				Kind: workerexecution.ContentBlockText,
+			})
+		}
+		payload, err = json.Marshal(workerexecution.MessagePayload{
+			Role:          "assistant",
+			ContentBlocks: contentBlocks,
+		})
+		fidelity = workerexecution.FidelityLifecycleOnly
+	default:
+		payload, err = json.Marshal(workerexecution.MessagePayload{
+			Role: "assistant",
+			ContentBlocks: []workerexecution.ContentBlock{{
+				Kind: workerexecution.ContentBlockText,
+				Text: strings.Clone(progress.Detail),
+			}},
+		})
+	}
 	if err != nil {
 		return inference.EventDraft{}, false
-	}
-	fidelity := workerexecution.FidelityFinalOnly
-	if workerPhase == workerexecution.PhaseDelta {
-		fidelity = workerexecution.FidelityNormalized
 	}
 	event, err := inference.NewEventDraft(inference.EventDraftInput{
 		RunID:   runID,
@@ -90,7 +128,7 @@ func messageEvent(
 		Provenance: workerexecution.Provenance{
 			Provider:        string(providers.IDClaude),
 			Delivery:        workerexecution.DeliveryNativeStream,
-			Representation:  workerexecution.RepresentationSnapshot,
+			Representation:  representation,
 			Fidelity:        fidelity,
 			NativeEventType: phase,
 		},
@@ -99,6 +137,21 @@ func messageEvent(
 		return inference.EventDraft{}, false
 	}
 	return event, true
+}
+
+func runPayloadStatus(phase workerexecution.Phase) string {
+	switch phase {
+	case workerexecution.PhaseStarted:
+		return "started"
+	case workerexecution.PhaseCompleted:
+		return "completed"
+	case workerexecution.PhaseFailed:
+		return "failed"
+	case workerexecution.PhaseCanceled:
+		return "canceled"
+	default:
+		return strings.ToLower(string(phase))
+	}
 }
 
 func toolEvent(

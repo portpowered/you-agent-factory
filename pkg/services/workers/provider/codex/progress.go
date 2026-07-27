@@ -15,9 +15,9 @@ func progressEvent(runID string, progress providers.ExecuteProgress) (inference.
 		return inference.EventDraft{}, false
 	}
 	switch {
-	case phase == "run.started":
+	case phase == "run.started", phase == "turn.started":
 		return runEvent(runID, workerexecution.PhaseStarted)
-	case phase == "run.completed":
+	case phase == "run.completed", phase == "turn.completed":
 		return runEvent(runID, workerexecution.PhaseCompleted)
 	case strings.HasPrefix(phase, "message."):
 		return messageEvent(runID, progress, phase)
@@ -29,7 +29,7 @@ func progressEvent(runID string, progress providers.ExecuteProgress) (inference.
 }
 
 func runEvent(runID string, phase workerexecution.Phase) (inference.EventDraft, bool) {
-	payload, err := json.Marshal(workerexecution.RunPayload{Status: string(phase)})
+	payload, err := json.Marshal(workerexecution.RunPayload{Status: runPayloadStatus(phase)})
 	if err != nil {
 		return inference.EventDraft{}, false
 	}
@@ -52,12 +52,30 @@ func runEvent(runID string, phase workerexecution.Phase) (inference.EventDraft, 
 	return event, true
 }
 
+func runPayloadStatus(phase workerexecution.Phase) string {
+	switch phase {
+	case workerexecution.PhaseStarted:
+		return "started"
+	case workerexecution.PhaseCompleted:
+		return "completed"
+	case workerexecution.PhaseFailed:
+		return "failed"
+	case workerexecution.PhaseCanceled:
+		return "canceled"
+	default:
+		return strings.ToLower(string(phase))
+	}
+}
+
 func messageEvent(
 	runID string,
 	progress providers.ExecuteProgress,
 	phase string,
 ) (inference.EventDraft, bool) {
 	itemID := progress.Metadata["correlation_id"]
+	if itemID == "" {
+		itemID = progress.Metadata["item_id"]
+	}
 	if itemID == "" {
 		itemID = "codex-message"
 	}

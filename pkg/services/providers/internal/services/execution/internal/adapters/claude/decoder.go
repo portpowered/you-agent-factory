@@ -145,6 +145,9 @@ func (decoder *decoder) flush() error {
 	}
 	decoder.pending = nil
 	decoder.publishPendingCompletion()
+	if decoder.runStarted {
+		decoder.addProgress("run.completed", "completed", nil)
+	}
 	return nil
 }
 
@@ -294,8 +297,6 @@ func (decoder *decoder) startBlock(event nativeEvent) {
 		if event.ContentBlock.Text != "" {
 			block.text.WriteString(event.ContentBlock.Text)
 			decoder.addMessageProgress("started", boundedDetail(event.ContentBlock.Text), event.Index)
-		} else {
-			decoder.addMessageProgress("started", "", event.Index)
 		}
 	case "tool_use":
 		if block.toolID == "" || block.toolName == "" {

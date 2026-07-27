@@ -216,10 +216,18 @@ func writeProgressEvents(
 	if diagnostics == nil {
 		return nil
 	}
+	completedMessages := make(map[string]struct{})
 	for _, progress := range diagnostics.Progress {
 		event, ok := progressEvent(runID, progress)
 		if !ok {
 			continue
+		}
+		draft := event.Draft()
+		if draft.Kind == workers.KindMessage && draft.Phase == workers.PhaseCompleted {
+			if _, seen := completedMessages[draft.ItemID]; seen {
+				continue
+			}
+			completedMessages[draft.ItemID] = struct{}{}
 		}
 		if err := writer.WriteEvent(ctx, event); err != nil {
 			return err

@@ -421,7 +421,15 @@ primary-result behavior.
   authored public provider vocabulary such as `CODEX` canonicalizes to the
   internal command identity (`codex` / `models.ProviderCodex`) before native
   Infer; packaged-quorum and other built-in smoke assertions must expect that
-  canonical command, not the public enum spelling.   Fake custom Integration E2E
+  canonical command, not the public enum spelling. After the Codex/Claude
+  conductor cutover, functional tests that inject subprocess stdout through
+  `Edges.ProviderCommandRunner` must emit provider-native JSONL
+  (`tests/functional/internal/support.CodexSuccessStdout`,
+  `ClaudeSuccessStdout`, or `NewShapedProviderCommandRunner`); plain-text
+  stdout hangs or fails protocol validation because conductor integrations
+  decode through the Providers-owned adapters. Codex progress maps
+  `turn.started`/`turn.completed` to RUN lifecycle events and lowercases RUN
+  payload status for REST smoke assertions. Fake custom Integration E2E
   proof belongs in `tests/functional/workers/inference/` (approved
   domain/subsection under `make pkg-structure`; leave legacy
   `tests/functional/providers/contract/doc.go` as the required package
