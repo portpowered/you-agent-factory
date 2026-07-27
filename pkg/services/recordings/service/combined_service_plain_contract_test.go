@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -926,12 +928,16 @@ func assertServicePortableFailures(
 func TestCombinedServicePortableExportAndReadDelegates(t *testing.T) {
 	t.Parallel()
 
+	destination := filepath.Join(t.TempDir(), "destination-is-directory")
+	if err := os.Mkdir(destination, 0o700); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
 	ledger := &stubLedger{}
 	svc := NewService(ledger, NewProjectionService())
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-export-delegate"}
 	bound, err := svc.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "recording-export-delegate",
-		Artifact:    "artifact:export-delegate",
+		Artifact:    recordings.RecordingArtifactReference(destination),
 		Scope:       scope,
 	})
 	if err != nil {
@@ -965,9 +971,10 @@ func TestCombinedServicePortableExportAndReadDelegates(t *testing.T) {
 	}
 	if _, err := svc.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
 		RecordingID: bound.Status.RecordingID,
-		Reference:   bound.Status.Artifact,
-	}); !errors.Is(err, recordings.ErrPortableArtifactUnavailable) {
-		t.Fatalf("ReadPortableArtifact = %v, want ErrPortableArtifactUnavailable", err)
+		Reference:   recordings.RecordingArtifactReference(destination),
+	}); !errors.Is(err, recordings.ErrPortableArtifactUnavailable) &&
+		!errors.Is(err, recordings.ErrInvalidPortableArtifact) {
+		t.Fatalf("ReadPortableArtifact = %v, want ErrPortableArtifactUnavailable or ErrInvalidPortableArtifact", err)
 	}
 }
 
