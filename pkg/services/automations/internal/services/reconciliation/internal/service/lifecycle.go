@@ -45,6 +45,9 @@ func (s *service) StartSource(
 			"source kind differs from the authoritative source",
 		)
 	}
+	if err := validateAuthoritativeResume(request.Resume, record.observation); err != nil {
+		return automations.StartSourceResult{}, err
+	}
 	if err := ctx.Err(); err != nil {
 		return automations.StartSourceResult{
 			Outcome: cancelledLifecycleOutcome(
@@ -304,9 +307,28 @@ func (s *service) recordForStart(
 		kind:        request.Kind,
 		desired:     automations.DesiredLifecycleRunning,
 		observation: observation,
+		terminalErr: observationTerminalError("StartSource", observation.State),
+	}
+	if owner, exists := s.instanceOwnerLocked(observation.InstanceID); exists && owner != key {
+		return nil, operationError(
+			"StartSource", automations.ErrorCodeConflict, automations.ErrConflict,
+			"resume instance belongs to another source",
+		)
 	}
 	s.records[key] = record
 	return record, nil
+}
+
+func (s *service) instanceOwnerLocked(instanceID string) (identityKey, bool) {
+	for key, record := range s.records {
+		record.mu.Lock()
+		matches := record.observation.InstanceID == instanceID
+		record.mu.Unlock()
+		if matches {
+			return key, true
+		}
+	}
+	return identityKey{}, false
 }
 
 func (s *service) findRecord(identity automations.SourceIdentity) (*sourceRecord, bool) {
@@ -334,6 +356,19 @@ func validateStartRequest(request automations.StartSourceRequest) error {
 		return invalidOperationError("StartSource", "malformed resume observation")
 	}
 	return nil
+}
+
+func validateAuthoritativeResume(
+	resume *automations.SourceObservation,
+	authoritative automations.SourceObservation,
+) error {
+	if resume == nil || *resume == authoritative {
+		return nil
+	}
+	return operationError(
+		"StartSource", automations.ErrorCodeConflict, automations.ErrConflict,
+		"resume observation is stale or contradicts authoritative state",
+	)
 }
 
 func validateEffectObservation(
