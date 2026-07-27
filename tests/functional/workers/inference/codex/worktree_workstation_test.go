@@ -1,4 +1,4 @@
-package providers
+package codex
 
 import (
 	"os"
@@ -17,6 +17,9 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestCodexWorktreeWorkstationDispatch_MaterializesCheckoutAndOmitsCLIWorktreeFlag
+// proves Codex workstation dispatch materializes a named worktree checkout as the
+// provider working directory and omits the CLI --worktree flag.
 func TestCodexWorktreeWorkstationDispatch_MaterializesCheckoutAndOmitsCLIWorktreeFlag(t *testing.T) {
 	cases := []struct {
 		name                string
@@ -78,7 +81,7 @@ Process the input task.
 			})
 			support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
 			listed := support.ListDefaultSessionWork(t, server.URL())
-			assertCursorProviderCompleted(t, listed)
+			assertCodexWorktreeWorkCompleted(t, listed)
 
 			if runner.CallCount() != 1 {
 				t.Fatalf("provider runner call count = %d, want 1", runner.CallCount())
@@ -99,7 +102,7 @@ Process the input task.
 				t.Fatalf("materialized checkout missing at %s: %v", wantCheckout, err)
 			}
 
-			request := requireInferenceRequestEvent(t, server.GetFactoryEvents(t))
+			request := requireCodexWorktreeInferenceRequestEvent(t, server.GetFactoryEvents(t))
 			if request.Worktree != workName {
 				t.Fatalf("inference request worktree = %q, want %q", request.Worktree, workName)
 			}
@@ -108,6 +111,23 @@ Process the input task.
 			}
 			server.Stop(t)
 		})
+	}
+}
+
+func assertCodexWorktreeWorkCompleted(t *testing.T, listed factoryapi.ListWorkResponse) {
+	t.Helper()
+
+	for _, location := range []struct {
+		location string
+		want     int
+	}{
+		{location: "task:complete", want: 1},
+		{location: "task:init", want: 0},
+		{location: "task:failed", want: 0},
+	} {
+		if got := support.CountWorkAtCustomerState(listed, location.location); got != location.want {
+			t.Fatalf("%s token count = %d, want %d", location.location, got, location.want)
+		}
 	}
 }
 
@@ -197,7 +217,7 @@ func assertArgsDoNotContain(t *testing.T, args []string, forbidden ...string) {
 	}
 }
 
-func requireInferenceRequestEvent(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.InferenceRequestEventPayload {
+func requireCodexWorktreeInferenceRequestEvent(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.InferenceRequestEventPayload {
 	t.Helper()
 
 	for _, event := range events {
@@ -210,11 +230,11 @@ func requireInferenceRequestEvent(t *testing.T, events []factoryapi.FactoryEvent
 		}
 		return payload
 	}
-	t.Fatalf("events missing %s: %v", factoryapi.FactoryEventTypeInferenceRequest, eventTypes(events))
+	t.Fatalf("events missing %s: %v", factoryapi.FactoryEventTypeInferenceRequest, codexWorktreeEventTypes(events))
 	return factoryapi.InferenceRequestEventPayload{}
 }
 
-func eventTypes(events []factoryapi.FactoryEvent) []factoryapi.FactoryEventType {
+func codexWorktreeEventTypes(events []factoryapi.FactoryEvent) []factoryapi.FactoryEventType {
 	types := make([]factoryapi.FactoryEventType, 0, len(events))
 	for _, event := range events {
 		types = append(types, event.Type)

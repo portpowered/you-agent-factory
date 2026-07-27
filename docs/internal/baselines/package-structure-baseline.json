@@ -1019,16 +1019,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/providers/codex_content_test.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/providers/codex_worktree_workstation_test.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/providers/doc.go",
       "target": "providers"
     },
@@ -1759,6 +1749,41 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/assets_contract.go",
+      "target": "ValidatePullModelRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/catalog_contract.go",
+      "target": "ValidateGetModelRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/host_contract.go",
+      "target": "ValidateAcquireLeaseRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/host_contract.go",
+      "target": "ValidateInspectRuntimeRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/host_contract.go",
+      "target": "ValidateReleaseLeaseRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/local_execution_contract.go",
+      "target": "ValidateLocalInvocationRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/runtime_config_contract.go",
+      "target": "ValidateRuntimeBinding"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/operator_settings/environment_resolution.go",
       "target": "ResolveFromHomeWithEnvironment"
     },
@@ -2453,41 +2478,6 @@
       "target": "pkg/services/models/host_diagnostics_contract.go:HostDiagnosticLogger,pkg/services/models/host_diagnostics_contract.go:HostMetricsRecorder,pkg/services/models/invocation_artifacts.go:InvocationArtifactExporter,pkg/services/models/invocation_artifacts.go:InvocationArtifactFileSystem,pkg/services/models/managed_runtime_contract.go:InvocationReadinessError,pkg/services/models/runtime_construction_contract.go:AssetHTTPDoer,pkg/services/models/runtime_construction_contract.go:HostClock,pkg/services/models/runtime_construction_contract.go:HostHTTPDoer,pkg/services/models/runtime_construction_contract.go:HostManagedProcess,pkg/services/models/runtime_construction_contract.go:HostProcessLauncher,pkg/services/models/runtime_construction_contract.go:HostTimer,pkg/services/models/runtime_construction_contract.go:RuntimeHTTPDoer,pkg/services/models/runtime_construction_contract.go:RuntimeTempFile,pkg/services/models/service_contract.go:PullMetricsRecorder,pkg/services/models/service_contract.go:Service"
     },
     {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/assets_contract.go",
-      "target": "ValidatePullModelRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/catalog_contract.go",
-      "target": "ValidateGetModelRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/host_contract.go",
-      "target": "ValidateInspectRuntimeRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/host_contract.go",
-      "target": "ValidateAcquireLeaseRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/host_contract.go",
-      "target": "ValidateReleaseLeaseRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/local_execution_contract.go",
-      "target": "ValidateLocalInvocationRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/runtime_config_contract.go",
-      "target": "ValidateRuntimeBinding"
-    },
-    {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/operator_settings",
       "target": "pkg/services/operator_settings/dependencies.go:FileSystem,pkg/services/operator_settings/dependencies.go:TemporaryFile"
@@ -2987,5 +2977,6 @@
       "filePath": "pkg/services/workers/worktree",
       "target": "pkg/services/workers"
     }
-  ]
+  ],
+  "violations": []
 }
