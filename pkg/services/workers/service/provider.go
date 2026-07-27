@@ -7,13 +7,14 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/invocation"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
+	workerprovidercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
-// NewInvocation constructs the narrow direct-invocation role used by
-// standalone Factory Session execution.
-func NewInvocation(
+// NewProviderFromCommandRunner constructs one provider-backed worker from the
+// supplied command runner using the same production edges as direct invocation.
+func NewProviderFromCommandRunner(
 	commandRunner workers.CommandRunner,
 	commandClock workerprocess.Clock,
 	allocator agypty.PTYAllocator,
@@ -23,23 +24,27 @@ func NewInvocation(
 	executableFiles platformfilesystem.ReadOpener,
 	operatingSystem workers.OperatingSystem,
 	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
-) (workers.InvocationExecutor, error) {
+) (workerprovidercontract.Provider, error) {
 	if commandRunner == nil {
-		return nil, fmt.Errorf("construct Worker invocation: command runner is required")
+		return nil, fmt.Errorf("construct provider-backed worker: command runner is required")
 	}
 	if commandClock == nil {
-		return nil, fmt.Errorf("construct Worker invocation: command clock is required")
+		return nil, fmt.Errorf("construct provider-backed worker: command clock is required")
 	}
 	if allocator == nil {
-		return nil, fmt.Errorf("construct Worker invocation: PTY allocator is required")
+		return nil, fmt.Errorf("construct provider-backed worker: PTY allocator is required")
 	}
-	provider, err := NewProviderFromCommandRunner(
+	factory, err := workerprovider.NewFactory(
 		commandRunner, commandClock, allocator, resolveSymlinks,
 		executableLocator, executableInspector, executableFiles, operatingSystem,
 		temporaryFileSystems...,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("construct provider-backed worker: %w", err)
 	}
-	return workerinvocation.NewExecutor(provider), nil
+	provider, err := factory.New(false, nil, nil, nil, nil, "")
+	if err != nil {
+		return nil, fmt.Errorf("construct provider-backed worker: %w", err)
+	}
+	return provider, nil
 }

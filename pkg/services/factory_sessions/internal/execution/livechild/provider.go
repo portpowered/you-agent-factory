@@ -220,9 +220,11 @@ func providerInferenceRequestFromChild(
 			outputSchema = string(encoded)
 		}
 	}
+	preset := strings.TrimSpace(req.Preset)
 	inferReq := workerexecution.ProviderInferenceRequest{
 		Dispatch: work.WorkDispatch{
 			DispatchID: dispatchID,
+			WorkerType: preset,
 		},
 		UserMessage:   req.Prompt,
 		Model:         req.Model,
@@ -230,6 +232,7 @@ func providerInferenceRequestFromChild(
 		OutputSchema:  outputSchema,
 		SessionID:     sessionID,
 		RunnerID:      strings.TrimSpace(req.Command),
+		WorkerType:    preset,
 	}
 	return inferReq
 }

@@ -225,6 +225,7 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 
 var workerServiceSet = wire.NewSet(
 	provideWorkerInvocationFactory,
+	provideProviderFromCommandRunnerFactory,
 	provideWorkerProcessEnvironment,
 	provideWorkerCurrentWorkingDirectory,
 )

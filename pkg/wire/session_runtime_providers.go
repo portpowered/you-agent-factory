@@ -850,6 +850,40 @@ func provideWorkerInvocationFactory(edges serviceedges.Edges) factorysessionwire
 	}
 }
 
+func provideProviderFromCommandRunnerFactory(
+	edges serviceedges.Edges,
+	allocator agypty.PTYAllocator,
+) factorysessionwire.ProviderFromCommandRunnerFactory {
+	commandClock := edges.Clock
+	if commandClock == nil {
+		commandClock = platformclock.Real{}
+	}
+	resolveSymlinks := edges.WorkersResolveSymlinks
+	if resolveSymlinks == nil {
+		resolveSymlinks = filepath.EvalSymlinks
+	}
+	executableLocator := edges.WorkersExecutableLocator
+	if executableLocator == nil {
+		executableLocator = platformprocess.HostExecutableLocator{}
+	}
+	executableInspector := edges.WorkersExecutablePathInspector
+	if executableInspector == nil {
+		executableInspector = platformfilesystem.Local{}
+	}
+	executableFiles := edges.WorkersExecutableFileReader
+	if executableFiles == nil {
+		executableFiles = platformfilesystem.Local{}
+	}
+	operatingSystem := resolveWorkersOperatingSystem(edges)
+	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
+	return func(runner workers.CommandRunner) (workerprovider.Provider, error) {
+		return workersservice.NewProviderFromCommandRunner(
+			runner, commandClock, allocator, resolveSymlinks,
+			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,
+		)
+	}
+}
+
 func provideSessionExecutionOpeningFactory(
 	runtimes *factorysessionwire.RuntimeOpeningFactory,
 	edges serviceedges.Edges,
