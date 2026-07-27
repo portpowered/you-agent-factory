@@ -3,10 +3,12 @@ package service_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
@@ -14,6 +16,8 @@ import (
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
+
+const maxTestDiagnosticRunes = 512
 
 func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 	t.Parallel()
@@ -238,7 +242,6 @@ func TestExecuteNeverFallsBackForUnknownUnavailableOrUnregisteredProvider(t *tes
 func TestExecuteReturnsFirstAdapterFailureWithoutRetry(t *testing.T) {
 	t.Parallel()
 
-	attemptErr := errors.New("attempt failed")
 	calls := 0
 	executionService, err := executionwire.NewService(
 		mustCatalog(t),
@@ -249,7 +252,8 @@ func TestExecuteReturnsFirstAdapterFailureWithoutRetry(t *testing.T) {
 				_ providers.ExecuteRequest,
 			) (providers.ExecuteResult, error) {
 				calls++
-				return providers.ExecuteResult{Content: "must not escape"}, attemptErr
+				return providers.ExecuteResult{Content: "must not escape"},
+					errors.New("secret native attempt failed")
 			},
 		},
 	)
@@ -264,14 +268,386 @@ func TestExecuteReturnsFirstAdapterFailureWithoutRetry(t *testing.T) {
 			AttemptID: "attempt-1",
 		},
 	)
-	if !errors.Is(executeErr, attemptErr) {
-		t.Fatalf("Execute() error = %v, want %v", executeErr, attemptErr)
+	if !errors.Is(executeErr, providers.ErrExecuteFailed) {
+		t.Fatalf("Execute() error = %v, want ErrExecuteFailed", executeErr)
+	}
+	var failure providers.ExecuteFailure
+	if !errors.As(executeErr, &failure) ||
+		failure.Kind != providers.ExecuteFailureKindUnknown {
+		t.Fatalf("Execute() error = %#v, want unknown ExecuteFailure", executeErr)
+	}
+	if strings.Contains(executeErr.Error(), "secret native") {
+		t.Fatalf("Execute() error leaked native detail: %v", executeErr)
 	}
 	if calls != 1 {
 		t.Fatalf("adapter calls = %d, want 1", calls)
 	}
 	if !reflect.DeepEqual(result, providers.ExecuteResult{}) {
 		t.Fatalf("failed Execute() result = %#v, want zero result", result)
+	}
+}
+
+func TestExecuteNormalizesDeclaredFailureKinds(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		kind providers.ExecuteFailureKind
+		want error
+	}{
+		{kind: providers.ExecuteFailureKindAuthentication, want: providers.ErrExecuteFailed},
+		{kind: providers.ExecuteFailureKindInvalidRequest, want: providers.ErrExecuteFailed},
+		{kind: providers.ExecuteFailureKindThrottled, want: providers.ErrExecuteFailed},
+		{kind: providers.ExecuteFailureKindDependency, want: providers.ErrExecuteFailed},
+		{kind: providers.ExecuteFailureKindUnknown, want: providers.ErrExecuteFailed},
+		{kind: providers.ExecuteFailureKindCanceled, want: providers.ErrExecuteCancelled},
+		{kind: providers.ExecuteFailureKindTimeout, want: providers.ErrExecuteTimeout},
+	}
+
+	for _, test := range tests {
+		t.Run(string(test.kind), func(t *testing.T) {
+			t.Parallel()
+
+			nativeDiagnostics := &providers.ExecuteDiagnostics{
+				DurationMillis: -1,
+				Metadata: map[string]string{
+					"safe":   "kept",
+					"stderr": "native payload",
+					"detail": "prompt-secret",
+				},
+			}
+			executionService := mustExecutionService(t, func(
+				context.Context,
+				providers.ExecuteRequest,
+			) (providers.ExecuteResult, error) {
+				return providers.ExecuteResult{}, providers.ExecuteFailure{
+					Kind:        test.kind,
+					Message:     strings.Repeat("m", maxTestDiagnosticRunes+1) + " prompt-secret",
+					Diagnostics: nativeDiagnostics,
+				}
+			})
+			_, executeErr := executionService.Execute(
+				context.Background(),
+				providers.ExecuteRequest{
+					Provider:     providers.IDCodex,
+					AttemptID:    "attempt-1",
+					SystemPrompt: "prompt-secret",
+				},
+			)
+			if !errors.Is(executeErr, test.want) {
+				t.Fatalf("Execute() error = %v, want %v", executeErr, test.want)
+			}
+			var failure providers.ExecuteFailure
+			if !errors.As(executeErr, &failure) || failure.Kind != test.kind {
+				t.Fatalf("Execute() error = %#v, want kind %q", executeErr, test.kind)
+			}
+			if len([]rune(failure.Message)) > maxTestDiagnosticRunes ||
+				strings.Contains(failure.Message, "prompt-secret") {
+				t.Fatalf("failure message is unbounded or unsafe: %q", failure.Message)
+			}
+			if failure.Diagnostics == nil ||
+				failure.Diagnostics.DurationMillis != 0 ||
+				failure.Diagnostics.Metadata["stderr"] != "<redacted>" ||
+				strings.Contains(failure.Diagnostics.Metadata["detail"], "prompt-secret") {
+				t.Fatalf("failure diagnostics = %#v, want bounded safe facts", failure.Diagnostics)
+			}
+
+			nativeDiagnostics.Metadata["safe"] = "mutated"
+			if failure.Diagnostics.Metadata["safe"] != "kept" {
+				t.Fatal("normalized failure retained adapter-owned diagnostics")
+			}
+		})
+	}
+}
+
+func TestExecutePropagatesCancellationAndDeadlineAndCleansUpOnce(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		newContext func(t *testing.T, started <-chan struct{}) (context.Context, context.CancelFunc)
+		want       error
+		wantKind   providers.ExecuteFailureKind
+	}{
+		{
+			name: "canceled",
+			newContext: func(_ *testing.T, started <-chan struct{}) (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(context.Background())
+				go func() {
+					<-started
+					cancel()
+				}()
+				return ctx, cancel
+			},
+			want:     providers.ErrExecuteCancelled,
+			wantKind: providers.ExecuteFailureKindCanceled,
+		},
+		{
+			name: "deadline",
+			newContext: func(_ *testing.T, _ <-chan struct{}) (context.Context, context.CancelFunc) {
+				return context.WithTimeout(context.Background(), 100*time.Millisecond)
+			},
+			want:     providers.ErrExecuteTimeout,
+			wantKind: providers.ExecuteFailureKindTimeout,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			started := make(chan struct{})
+			cleanupCalls := 0
+			executionService := mustExecutionService(t, func(
+				ctx context.Context,
+				_ providers.ExecuteRequest,
+			) (providers.ExecuteResult, error) {
+				close(started)
+				defer func() { cleanupCalls++ }()
+				<-ctx.Done()
+				return providers.ExecuteResult{Content: "must not escape"}, ctx.Err()
+			})
+			ctx, cancel := test.newContext(t, started)
+			defer cancel()
+			result, executeErr := executionService.Execute(ctx, providers.ExecuteRequest{
+				Provider:  providers.IDCodex,
+				AttemptID: "attempt-1",
+			})
+			if !errors.Is(executeErr, test.want) {
+				t.Fatalf("Execute() error = %v, want %v", executeErr, test.want)
+			}
+			var failure providers.ExecuteFailure
+			if !errors.As(executeErr, &failure) || failure.Kind != test.wantKind {
+				t.Fatalf("Execute() error = %#v, want kind %q", executeErr, test.wantKind)
+			}
+			if cleanupCalls != 1 {
+				t.Fatalf("cleanup calls = %d, want 1", cleanupCalls)
+			}
+			if !reflect.DeepEqual(result, providers.ExecuteResult{}) {
+				t.Fatalf("Execute() result = %#v, want zero terminal result", result)
+			}
+		})
+	}
+}
+
+func TestExecuteUsesDeterministicLifecycleFailurePrecedence(t *testing.T) {
+	t.Parallel()
+
+	executionService := mustExecutionService(t, func(
+		context.Context,
+		providers.ExecuteRequest,
+	) (providers.ExecuteResult, error) {
+		return providers.ExecuteResult{}, execution.AttemptFailure{
+			NativeError:     errors.New("native secret"),
+			DecodeError:     errors.New("decode secret"),
+			FlushError:      errors.New("flush secret"),
+			FinalParseError: errors.New("parse secret"),
+		}
+	})
+
+	for range 20 {
+		_, executeErr := executionService.Execute(
+			context.Background(),
+			providers.ExecuteRequest{
+				Provider:  providers.IDCodex,
+				AttemptID: "attempt-1",
+			},
+		)
+		var failure providers.ExecuteFailure
+		if !errors.As(executeErr, &failure) ||
+			failure.Diagnostics == nil ||
+			failure.Diagnostics.Metadata["failure_stage"] != "final_parse" {
+			t.Fatalf("Execute() error = %#v, want final_parse precedence", executeErr)
+		}
+		for _, unsafe := range []string{"native secret", "decode secret", "flush secret", "parse secret"} {
+			if strings.Contains(executeErr.Error(), unsafe) {
+				t.Fatalf("Execute() leaked %q: %v", unsafe, executeErr)
+			}
+		}
+	}
+}
+
+func TestExecuteNormalizesEveryPrivateFailureShape(t *testing.T) {
+	t.Parallel()
+
+	assertPrivateFailureShapes(t, []privateFailureShape{
+		{
+			name:       "pointer declared failure",
+			attemptErr: &providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication},
+			wantKind:   providers.ExecuteFailureKindAuthentication,
+		},
+		{
+			name: "pointer lifecycle declared failure",
+			attemptErr: &execution.AttemptFailure{
+				Declared: &providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency},
+			},
+			wantKind: providers.ExecuteFailureKindDependency,
+		},
+		{
+			name:       "timeout sentinel",
+			attemptErr: fmt.Errorf("private wrapper: %w", providers.ErrExecuteTimeout),
+			wantKind:   providers.ExecuteFailureKindTimeout,
+		},
+		{
+			name:       "cancel sentinel",
+			attemptErr: fmt.Errorf("private wrapper: %w", providers.ErrExecuteCancelled),
+			wantKind:   providers.ExecuteFailureKindCanceled,
+		},
+		{
+			name:       "invalid declared kind",
+			attemptErr: providers.ExecuteFailure{Kind: "native_private_kind"},
+			wantKind:   providers.ExecuteFailureKindUnknown,
+		},
+		{
+			name:       "native lifecycle failure",
+			attemptErr: execution.AttemptFailure{NativeError: errors.New("native detail")},
+			wantKind:   providers.ExecuteFailureKindUnknown,
+			wantStage:  "native",
+		},
+		{
+			name:       "decode lifecycle failure",
+			attemptErr: execution.AttemptFailure{DecodeError: errors.New("decode detail")},
+			wantKind:   providers.ExecuteFailureKindUnknown,
+			wantStage:  "decode",
+		},
+		{
+			name:       "flush lifecycle failure",
+			attemptErr: execution.AttemptFailure{FlushError: errors.New("flush detail")},
+			wantKind:   providers.ExecuteFailureKindUnknown,
+			wantStage:  "flush",
+		},
+		{
+			name:       "empty lifecycle failure",
+			attemptErr: execution.AttemptFailure{},
+			wantKind:   providers.ExecuteFailureKindUnknown,
+		},
+		{
+			name: "lifecycle deadline wins",
+			attemptErr: execution.AttemptFailure{
+				NativeError: context.DeadlineExceeded,
+				DecodeError: context.Canceled,
+			},
+			wantKind: providers.ExecuteFailureKindTimeout,
+		},
+		{
+			name: "lifecycle cancellation",
+			attemptErr: execution.AttemptFailure{
+				FlushError: context.Canceled,
+			},
+			wantKind: providers.ExecuteFailureKindCanceled,
+		},
+	})
+}
+
+type privateFailureShape struct {
+	name       string
+	attemptErr error
+	wantKind   providers.ExecuteFailureKind
+	wantStage  string
+}
+
+func assertPrivateFailureShapes(t *testing.T, tests []privateFailureShape) {
+	t.Helper()
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			executionService := mustExecutionService(t, func(
+				context.Context,
+				providers.ExecuteRequest,
+			) (providers.ExecuteResult, error) {
+				return providers.ExecuteResult{}, test.attemptErr
+			})
+			_, executeErr := executionService.Execute(
+				context.Background(),
+				providers.ExecuteRequest{
+					Provider:  providers.IDCodex,
+					AttemptID: "attempt-1",
+				},
+			)
+			var failure providers.ExecuteFailure
+			if !errors.As(executeErr, &failure) || failure.Kind != test.wantKind {
+				t.Fatalf("Execute() error = %#v, want kind %q", executeErr, test.wantKind)
+			}
+			if failure.Message == "" {
+				t.Fatal("Execute() returned an empty safe failure message")
+			}
+			if test.wantStage == "" {
+				if failure.Diagnostics != nil {
+					t.Fatalf("failure diagnostics = %#v, want nil", failure.Diagnostics)
+				}
+				return
+			}
+			if failure.Diagnostics == nil ||
+				failure.Diagnostics.Metadata["failure_stage"] != test.wantStage {
+				t.Fatalf(
+					"failure diagnostics = %#v, want stage %q",
+					failure.Diagnostics,
+					test.wantStage,
+				)
+			}
+		})
+	}
+}
+
+func TestExecuteSuppliesSafeDefaultForEveryDeclaredFailureKind(t *testing.T) {
+	t.Parallel()
+
+	for _, kind := range []providers.ExecuteFailureKind{
+		providers.ExecuteFailureKindCanceled,
+		providers.ExecuteFailureKindTimeout,
+		providers.ExecuteFailureKindAuthentication,
+		providers.ExecuteFailureKindInvalidRequest,
+		providers.ExecuteFailureKindThrottled,
+		providers.ExecuteFailureKindDependency,
+		providers.ExecuteFailureKindUnknown,
+	} {
+		t.Run(string(kind), func(t *testing.T) {
+			t.Parallel()
+
+			executionService := mustExecutionService(t, func(
+				context.Context,
+				providers.ExecuteRequest,
+			) (providers.ExecuteResult, error) {
+				return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: kind}
+			})
+			_, executeErr := executionService.Execute(
+				context.Background(),
+				providers.ExecuteRequest{
+					Provider:  providers.IDCodex,
+					AttemptID: "attempt-1",
+				},
+			)
+			var failure providers.ExecuteFailure
+			if !errors.As(executeErr, &failure) || failure.Message == "" {
+				t.Fatalf("Execute() error = %#v, want non-empty safe default", executeErr)
+			}
+		})
+	}
+}
+
+func TestExecuteClassifiesInvalidRequestBeforeAdapterIO(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	executionService := mustExecutionService(t, func(
+		context.Context,
+		providers.ExecuteRequest,
+	) (providers.ExecuteResult, error) {
+		calls++
+		return providers.ExecuteResult{}, nil
+	})
+	_, executeErr := executionService.Execute(context.Background(), providers.ExecuteRequest{
+		Provider: providers.IDCodex,
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(executeErr, &failure) ||
+		failure.Kind != providers.ExecuteFailureKindInvalidRequest ||
+		!errors.Is(executeErr, providers.ErrExecuteFailed) {
+		t.Fatalf("Execute() error = %#v, want invalid-request ExecuteFailure", executeErr)
+	}
+	if calls != 0 {
+		t.Fatalf("adapter calls = %d, want 0", calls)
 	}
 }
 
@@ -553,6 +929,25 @@ func mustCatalog(t *testing.T) catalog.Service {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
 	return catalogService
+}
+
+func mustExecutionService(
+	t *testing.T,
+	attempt execution.Attempt,
+) execution.Service {
+	t.Helper()
+
+	executionService, err := executionwire.NewService(
+		mustCatalog(t),
+		execution.Registration{
+			Provider: providers.IDCodex,
+			Attempt:  attempt,
+		},
+	)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	return executionService
 }
 
 type recordingCatalog struct {

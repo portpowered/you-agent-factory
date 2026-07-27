@@ -53,7 +53,7 @@ func (s *service) Execute(
 ) (providers.ExecuteResult, error) {
 	detached := request.Clone()
 	if err := detached.Validate(); err != nil {
-		return providers.ExecuteResult{}, err
+		return providers.ExecuteResult{}, normalizeValidationFailure(detached)
 	}
 	resolved, err := s.catalog.GetProvider(
 		ctx,
@@ -69,7 +69,7 @@ func (s *service) Execute(
 	detached.Provider = resolved.Provider.ID
 	result, err := attempt(ctx, detached)
 	if err != nil {
-		return providers.ExecuteResult{}, err
+		return providers.ExecuteResult{}, normalizeAttemptFailure(ctx, err, detached)
 	}
 	return normalizeSuccess(result, resolved.Provider.ID, detached)
 }

@@ -276,6 +276,14 @@ primary-result behavior.
   locally owned redefinition even outside `edges`. Preserve the explicit Workers
   inference-contract migration-debt exception. Prove ownership behavior with
   deliberate `run()` fixtures rather than package-local source inventories.
+- Providers Execution is the normalization boundary for private adapter
+  failures. Adapters may return a declared `providers.ExecuteFailure` or
+  parent-private lifecycle facts for native, decode, flush, and final-parse
+  failures; Execution applies deadline/cancellation precedence, then declared
+  classification, then deterministic final-parse/flush/decode/native precedence.
+  It returns only bounded detached Providers diagnostics and never forwards a
+  native error message or error type to peers. Adapter-owned finalization and
+  cleanup must complete before the synchronous attempt returns.
   Invoke implementations
   through `ExecuteInvocation` so provider-authored drafts are validated for
   provenance, invocation and item correlation, lifecycle ordering, terminal
