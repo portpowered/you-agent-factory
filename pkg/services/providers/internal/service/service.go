@@ -8,21 +8,36 @@ import (
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 )
 
 // Service fulfills the published Providers root contract.
 type Service struct {
-	catalog catalog.Service
+	catalog   catalog.Service
+	execution execution.Service
 }
 
 var _ providers.Service = (*Service)(nil)
 
 // New constructs an inert Providers root facade over the supplied catalog.
-func New(catalogService catalog.Service) (providers.Service, error) {
+func New(
+	catalogService catalog.Service,
+	executionServices ...execution.Service,
+) (providers.Service, error) {
 	if catalogService == nil {
 		return nil, fmt.Errorf("construct Providers: catalog is required")
 	}
-	return &Service{catalog: catalogService}, nil
+	if len(executionServices) > 1 {
+		return nil, fmt.Errorf("construct Providers: exactly one execution service is allowed")
+	}
+	var executionService execution.Service
+	if len(executionServices) == 1 {
+		if executionServices[0] == nil {
+			return nil, fmt.Errorf("construct Providers: execution is required")
+		}
+		executionService = executionServices[0]
+	}
+	return &Service{catalog: catalogService, execution: executionService}, nil
 }
 
 func (s *Service) ListProviders(
@@ -39,12 +54,13 @@ func (s *Service) GetProvider(
 	return s.catalog.GetProvider(ctx, request)
 }
 
-// Execute remains unimplemented in IMP-PROV-01; IMP-PROV-02 owns execution
-// absorption behind the published root slice.
 func (s *Service) Execute(
-	_ context.Context,
+	ctx context.Context,
 	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
+	if s.execution != nil {
+		return s.execution.Execute(ctx, request)
+	}
 	if err := request.Validate(); err != nil {
 		return providers.ExecuteResult{}, err
 	}

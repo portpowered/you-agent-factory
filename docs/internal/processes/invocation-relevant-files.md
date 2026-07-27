@@ -3,6 +3,14 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+- Providers-owned one-attempt execution must clone and validate
+  `providers.ExecuteRequest` before consulting request-time catalog readiness,
+  resolve canonical IDs and accepted aliases through the same private Catalog
+  authority used by List/Get, and invoke only the adapter registered for that
+  canonical ID. Keep retry, fallback/default selection, scheduling, throttle,
+  and Work-outcome policy above this boundary; recording fakes should prove
+  validation-before-I/O, full detached request delivery, and exactly one
+  adapter call.
 - Parent-private Runner implementations that expose subprocess progress should
   consume an injected streaming command capability, serialize publication only
   within each invocation, and build terminal diagnostics from the command

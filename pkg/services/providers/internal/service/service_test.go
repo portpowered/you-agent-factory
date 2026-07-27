@@ -14,6 +14,8 @@ import (
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
+	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
@@ -23,6 +25,29 @@ func TestNew_RejectsNilCatalog(t *testing.T) {
 	service, err := providerservice.New(nil)
 	if err == nil || service != nil {
 		t.Fatalf("New(nil) = (%v, %v), want error", service, err)
+	}
+}
+
+func TestNewRejectsInvalidExecutionComposition(t *testing.T) {
+	t.Parallel()
+
+	catalogService, err := catalogwire.NewService()
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	var nilExecution execution.Service
+	for _, executionServices := range [][]execution.Service{
+		{nilExecution},
+		{&stubExecution{}, &stubExecution{}},
+	} {
+		service, constructionErr := providerservice.New(catalogService, executionServices...)
+		if constructionErr == nil || service != nil {
+			t.Fatalf(
+				"New() = (%v, %v), want invalid execution composition error",
+				service,
+				constructionErr,
+			)
+		}
 	}
 }
 
@@ -60,6 +85,50 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 	}
 	if byAlias.Provider.ID != providers.IDCursor {
 		t.Fatalf("GetProvider(cursor).Provider.ID = %q, want agent", byAlias.Provider.ID)
+	}
+}
+
+func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
+	t.Parallel()
+
+	catalogService, err := catalogwire.NewService()
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	calls := 0
+	executionService, err := executionwire.NewService(
+		catalogService,
+		execution.Registration{
+			Provider: providers.IDCursor,
+			Attempt: func(
+				_ context.Context,
+				request providers.ExecuteRequest,
+			) (providers.ExecuteResult, error) {
+				calls++
+				if request.Provider != providers.IDCursor {
+					t.Fatalf("adapter provider = %q, want %q", request.Provider, providers.IDCursor)
+				}
+				return providers.ExecuteResult{Content: "root result"}, nil
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	root, err := providerservice.New(catalogService, executionService)
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	result, err := root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:  providers.ID("cursor"),
+		AttemptID: "attempt-1",
+	})
+	if err != nil {
+		t.Fatalf("Execute() = %v", err)
+	}
+	if result.Content != "root result" || calls != 1 {
+		t.Fatalf("Execute() = (%#v, %d calls), want root result and 1 call", result, calls)
 	}
 }
 
@@ -209,6 +278,15 @@ func indexProviders(descriptors []providers.Descriptor) map[providers.ID]provide
 		byID[descriptor.ID] = descriptor
 	}
 	return byID
+}
+
+type stubExecution struct{}
+
+func (*stubExecution) Execute(
+	context.Context,
+	providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, nil
 }
 
 func assertPackageAvoidsForbiddenPeers(t *testing.T, importPath string) {
