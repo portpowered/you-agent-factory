@@ -279,6 +279,17 @@
   metadata infers domain `transport` and subsection `cli/parameters` from the
   path; every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+  CLI JSON parameter values functional coverage belongs in
+  `tests/functional/transport/cli/parameters/json_values_test.go`: prove nested
+  JSON object and array named parameters reach canonical `InvocationArguments`
+  intact through `SubmissionRecorder`, prove invalid JSON for a `typeHint: "JSON"`
+  parameter fails with a named-parameter diagnostic and zero provider dispatch
+  through `ProviderCommandRunner`, and prove JSON `null`, empty string, empty
+  object, and empty array remain observably distinct without normalization loss
+  at the public `support.BuildProcess` boundary. Catalog metadata infers domain
+  `transport` and subsection `cli/parameters` from the path; every top-level
+  `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
   CLI response-stream backpressure functional coverage belongs in
   `tests/functional/transport/cli/output/stream_backpressure_test.go`:
   invoke `support.BuildProcess` with a gated or mid-stream-failing stdout writer
