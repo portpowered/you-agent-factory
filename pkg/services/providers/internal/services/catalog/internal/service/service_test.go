@@ -5,9 +5,11 @@ import (
 	"errors"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/internal/service"
 )
 
@@ -350,6 +352,91 @@ func TestGetProviderTypedFailures(t *testing.T) {
 	if agy.Availability != providers.AvailabilityNotSupported {
 		t.Fatalf("agy availability = %q, want %q", agy.Availability, providers.AvailabilityNotSupported)
 	}
+}
+
+func TestGetProviderBlocksOnMissingPrerequisiteProbeFacts(t *testing.T) {
+	t.Parallel()
+
+	service, err := internalservice.New(
+		internalservice.WithProbeQuery(func(
+			_ context.Context,
+			descriptor providers.Descriptor,
+		) (catalog.ProbeFacts, error) {
+			if descriptor.ID != providers.IDCodex {
+				return catalog.ProbeFacts{
+					Readiness:     descriptor.Readiness,
+					Prerequisites: descriptor.Prerequisites,
+				}, nil
+			}
+			return catalog.ProbeFacts{
+				Readiness: providers.ReadinessUnavailable,
+				Prerequisites: []providers.Prerequisite{{
+					Kind:        providers.PrerequisiteDependency,
+					Name:        "codex",
+					Status:      providers.PrerequisiteMissing,
+					Description: "install codex CLI",
+				}},
+			}, nil
+		}),
+	)
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	assertGetErrorIs(t, service, providers.GetProviderRequest{ID: providers.IDCodex}, providers.ErrProviderUnavailable)
+
+	list, err := service.ListProviders(context.Background(), providers.ListProvidersRequest{})
+	if err != nil {
+		t.Fatalf("ListProviders() = %v", err)
+	}
+	codex := indexProviders(list.Providers)[providers.IDCodex]
+	if codex.Readiness != providers.ReadinessUnavailable {
+		t.Fatalf("codex readiness = %q, want unavailable", codex.Readiness)
+	}
+	if len(codex.Prerequisites) != 1 ||
+		codex.Prerequisites[0].Status != providers.PrerequisiteMissing {
+		t.Fatalf("codex prerequisites = %#v, want one missing prerequisite", codex.Prerequisites)
+	}
+}
+
+func TestProbeFailureSurfacesUnavailableCatalogFacts(t *testing.T) {
+	t.Parallel()
+
+	service, err := internalservice.New(
+		internalservice.WithProbeQuery(func(
+			_ context.Context,
+			descriptor providers.Descriptor,
+		) (catalog.ProbeFacts, error) {
+			if descriptor.ID == providers.IDCodex {
+				return catalog.ProbeFacts{}, errors.New("native probe stderr: /Users/customer/.codex/output")
+			}
+			return catalog.ProbeFacts{
+				Readiness:     descriptor.Readiness,
+				Prerequisites: descriptor.Prerequisites,
+			}, nil
+		}),
+	)
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	list, err := service.ListProviders(context.Background(), providers.ListProvidersRequest{})
+	if err != nil {
+		t.Fatalf("ListProviders() = %v", err)
+	}
+	codex := indexProviders(list.Providers)[providers.IDCodex]
+	if codex.Readiness != providers.ReadinessUnavailable {
+		t.Fatalf("codex readiness = %q, want unavailable after probe failure", codex.Readiness)
+	}
+	if len(codex.Prerequisites) != 1 ||
+		codex.Prerequisites[0].Status != providers.PrerequisiteMissing {
+		t.Fatalf("codex prerequisites = %#v, want probe-class missing prerequisite", codex.Prerequisites)
+	}
+	if strings.Contains(codex.Prerequisites[0].Description, "/Users/") {
+		t.Fatalf("probe failure description leaked native output: %q", codex.Prerequisites[0].Description)
+	}
+
+	assertGetErrorIs(t, service, providers.GetProviderRequest{ID: providers.IDCodex}, providers.ErrProviderUnavailable)
 }
 
 func assertGetErrorIs(

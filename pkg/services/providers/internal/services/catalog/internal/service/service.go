@@ -12,23 +12,28 @@ type service struct {
 	providers []providers.Descriptor
 	byID      map[providers.ID]providers.Descriptor
 	aliases   map[string]providers.ID
+	probe     catalog.ProbeQuery
 }
 
 var _ catalog.Service = (*service)(nil)
 
 // New constructs an inert catalog over the accepted standardized provider
 // catalog publication.
-func New() (catalog.Service, error) {
+func New(options ...Option) (catalog.Service, error) {
 	descriptors, err := projectPublishedCatalog()
 	if err != nil {
 		return nil, err
 	}
 	byID, aliases := indexDescriptors(descriptors)
-	return &service{
+	s := &service{
 		providers: descriptors,
 		byID:      byID,
 		aliases:   aliases,
-	}, nil
+	}
+	for _, option := range options {
+		option(s)
+	}
+	return s, nil
 }
 
 func indexDescriptors(descriptors []providers.Descriptor) (
@@ -56,7 +61,11 @@ func (s *service) ListProviders(
 	}
 	results := make([]providers.Descriptor, len(s.providers))
 	for i, descriptor := range s.providers {
-		results[i] = descriptor.Clone()
+		merged, err := s.applyProbe(ctx, descriptor)
+		if err != nil {
+			return providers.ListProvidersResult{}, err
+		}
+		results[i] = merged
 	}
 	return providers.ListProvidersResult{Providers: results}, nil
 }
@@ -79,10 +88,71 @@ func (s *service) GetProvider(
 	if !ok {
 		return providers.GetProviderResult{}, providers.ErrUnknownProvider
 	}
-	if !isProviderSelectable(descriptor) {
+	merged, err := s.applyProbe(ctx, descriptor)
+	if err != nil {
+		return providers.GetProviderResult{}, err
+	}
+	if !isProviderSelectable(merged) {
 		return providers.GetProviderResult{}, providers.ErrProviderUnavailable
 	}
-	return providers.GetProviderResult{Provider: descriptor.Clone()}, nil
+	return providers.GetProviderResult{Provider: merged}, nil
+}
+
+func (s *service) applyProbe(
+	ctx context.Context,
+	descriptor providers.Descriptor,
+) (providers.Descriptor, error) {
+	if s.probe == nil {
+		return descriptor.Clone(), nil
+	}
+	if err := ctx.Err(); err != nil {
+		return providers.Descriptor{}, err
+	}
+	facts, err := s.probe(ctx, descriptor.Clone())
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return providers.Descriptor{}, ctxErr
+		}
+		facts = probeFailureFacts(descriptor)
+	}
+	return mergeProbeFacts(descriptor, facts), nil
+}
+
+func mergeProbeFacts(
+	base providers.Descriptor,
+	facts catalog.ProbeFacts,
+) providers.Descriptor {
+	merged := base.Clone()
+	merged.Readiness = facts.Readiness
+	if facts.Prerequisites != nil {
+		merged.Prerequisites = clonePrerequisites(facts.Prerequisites)
+	}
+	return merged
+}
+
+func probeFailureFacts(descriptor providers.Descriptor) catalog.ProbeFacts {
+	name := descriptor.DisplayName
+	if strings.TrimSpace(name) == "" {
+		name = descriptor.ID.String()
+	}
+	return catalog.ProbeFacts{
+		Readiness: providers.ReadinessUnavailable,
+		Prerequisites: []providers.Prerequisite{{
+			Kind:        providers.PrerequisiteDependency,
+			Name:        "readiness-probe",
+			Status:      providers.PrerequisiteMissing,
+			Description: name + " readiness probe failed.",
+		}},
+	}
+}
+
+func clonePrerequisites(prerequisites []providers.Prerequisite) []providers.Prerequisite {
+	if prerequisites == nil {
+		return nil
+	}
+	cloned := make([]providers.Prerequisite, len(prerequisites))
+	copy(cloned, prerequisites)
+	return cloned
 }
 
 func isProviderSelectable(descriptor providers.Descriptor) bool {

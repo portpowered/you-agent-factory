@@ -33,6 +33,11 @@ func projectManifests(manifests []factoryapi.ProviderManifest) ([]providers.Desc
 	return descriptors, nil
 }
 
+// ProjectManifestsForTest projects manifests for focused catalog characterization tests.
+func ProjectManifestsForTest(manifests []factoryapi.ProviderManifest) ([]providers.Descriptor, error) {
+	return projectManifests(manifests)
+}
+
 func projectManifest(manifest factoryapi.ProviderManifest) (providers.Descriptor, error) {
 	canonicalID := canonicalProvidersID(manifest.Id)
 	if err := canonicalID.Validate(); err != nil {
@@ -45,7 +50,7 @@ func projectManifest(manifest factoryapi.ProviderManifest) (providers.Descriptor
 		DisplayName:   localizedValue(manifest.DisplayName),
 		Availability:  availability,
 		Readiness:     projectReadiness(availability),
-		Prerequisites: nil,
+		Prerequisites: projectStaticPrerequisites(manifest),
 		Capabilities:  projectCapabilities(manifest),
 	}, nil
 }
@@ -106,6 +111,62 @@ func projectReadiness(availability providers.Availability) providers.Readiness {
 	default:
 		return providers.ReadinessUnavailable
 	}
+}
+
+func projectStaticPrerequisites(manifest factoryapi.ProviderManifest) []providers.Prerequisite {
+	displayName := localizedValue(manifest.DisplayName)
+	if displayName == "" {
+		displayName = strings.TrimSpace(manifest.Id)
+	}
+	prerequisites := make([]providers.Prerequisite, 0,
+		len(manifest.Discovery.ConfigurationKeys)+
+			len(manifest.Discovery.EndpointKinds)+
+			len(manifest.Discovery.ExecutableNames),
+	)
+	for _, key := range manifest.Discovery.ConfigurationKeys {
+		prerequisites = append(prerequisites, providers.Prerequisite{
+			Kind:        providers.PrerequisiteConfiguration,
+			Name:        strings.TrimSpace(key),
+			Status:      providers.PrerequisiteSatisfied,
+			Description: fmt.Sprintf("%s lists configuration key %q.", displayName, strings.TrimSpace(key)),
+		})
+	}
+	for _, kind := range manifest.Discovery.EndpointKinds {
+		kindName := strings.TrimSpace(string(kind))
+		prerequisites = append(prerequisites, providers.Prerequisite{
+			Kind:        providers.PrerequisiteConfiguration,
+			Name:        kindName,
+			Status:      providers.PrerequisiteSatisfied,
+			Description: fmt.Sprintf("%s supports %s transport.", displayName, kindName),
+		})
+	}
+	for _, executable := range manifest.Discovery.ExecutableNames {
+		executable = strings.TrimSpace(executable)
+		prerequisites = append(prerequisites, providers.Prerequisite{
+			Kind:        providers.PrerequisiteDependency,
+			Name:        executable,
+			Status:      providers.PrerequisiteSatisfied,
+			Description: fmt.Sprintf("%s uses the %q executable.", displayName, executable),
+		})
+	}
+	if len(prerequisites) == 0 {
+		return nil
+	}
+	sort.Slice(prerequisites, func(i, j int) bool {
+		left := prerequisiteSortKey(prerequisites[i])
+		right := prerequisiteSortKey(prerequisites[j])
+		return left < right
+	})
+	return prerequisites
+}
+
+func prerequisiteSortKey(prerequisite providers.Prerequisite) string {
+	return strings.Join([]string{
+		string(prerequisite.Kind),
+		prerequisite.Name,
+		string(prerequisite.Status),
+		prerequisite.Description,
+	}, "\x00")
 }
 
 func projectCapabilities(manifest factoryapi.ProviderManifest) []providers.Capability {
