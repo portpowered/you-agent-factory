@@ -1387,14 +1387,6 @@
       "name": "TestServicePipelineConfigBehavior_TwoStagePipelineCompletesAcrossBothWorkers"
     },
     {
-      "file": "smoke/stateless_execution_long_test.go",
-      "name": "TestStatelessExecution_DifferentWorkstationsResolveDifferentWorkers"
-    },
-    {
-      "file": "smoke/stateless_execution_long_test.go",
-      "name": "TestStatelessExecution_SharedExecutorResolvesDifferentWorkstations"
-    },
-    {
       "file": "smoke/stateless_loaded_config_smoke_long_test.go",
       "name": "TestStatelessExecutionSmoke_LoadedConfigDrivesExecution"
     },
