@@ -12,8 +12,14 @@ import (
 	"testing"
 	"time"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+const (
+	sessionPauseWiringRequestID = "cli-session-pause-wiring"
+	sessionPauseWiringWorkName  = "paused-task"
 )
 
 // TestCLISessionCreateListShowDelete proves you session create, list, show, and
@@ -153,6 +159,88 @@ func TestCLISessionCreateListShowDelete(t *testing.T) {
 	}
 }
 
+// TestCLISessionPauseBuffersAndResumeDispatches proves you session pause keeps
+// accepted work buffered and you session resume restores dispatch through the
+// public CLI against a running Factory Session server.
+func TestCLISessionPauseBuffersAndResumeDispatches(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI session wiring")
+	}
+
+	factoryDir := support.ScaffoldFactory(t, sessionWiringFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	binaryPath := buildYouCLIBinary(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	pauseResponse := runSessionLifecycleCLIJSON(
+		t, ctx, binaryPath, factoryDir, baseURL, "pause", factorysessions.DefaultSessionID,
+	)
+	if pauseResponse.Operation != factoryapi.FactorySessionLifecycleControlKindPause ||
+		pauseResponse.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("session pause response = %#v, want accepted pause", pauseResponse)
+	}
+	if pauseResponse.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("session pause status = %q, want PAUSED", pauseResponse.Status)
+	}
+
+	pausedSession := runSessionShowCLIJSON(t, ctx, binaryPath, factoryDir, baseURL, factorysessions.DefaultSessionID)
+	if pausedSession.Runtime.LifecycleControlStatus == nil ||
+		*pausedSession.Runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("session show after pause missing paused lifecycle marker: %#v", pausedSession.Runtime)
+	}
+
+	inlineBatch := fmt.Sprintf(
+		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":"task","payload":{"title":"Paused session wiring"}}]}`,
+		sessionPauseWiringRequestID,
+		sessionPauseWiringWorkName,
+	)
+	submitOut, err := runYouCLI(ctx, binaryPath, factoryDir, baseURL,
+		"--json",
+		"submit", "batch",
+		inlineBatch,
+	)
+	if err != nil {
+		t.Fatalf("you submit batch while paused: %v\noutput:\n%s", err, submitOut)
+	}
+	var submitted sessionWiringBatchSubmitJSON
+	if err := json.Unmarshal(bytesTrimSpace(submitOut), &submitted); err != nil {
+		t.Fatalf("decode submit batch JSON: %v\noutput:\n%s", err, submitOut)
+	}
+	if submitted.WorkCount != 1 || len(submitted.Works) != 1 || strings.TrimSpace(submitted.Works[0].WorkID) == "" {
+		t.Fatalf("submit batch response missing accepted work identity: %#v", submitted)
+	}
+	workID := submitted.Works[0].WorkID
+
+	assertWorkNotDispatchedViaCLI(t, ctx, binaryPath, factoryDir, baseURL, workID, sessionPauseWiringWorkName)
+
+	resumeResponse := runSessionLifecycleCLIJSON(
+		t, ctx, binaryPath, factoryDir, baseURL, "resume", factorysessions.DefaultSessionID,
+	)
+	if resumeResponse.Operation != factoryapi.FactorySessionLifecycleControlKindResume ||
+		resumeResponse.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("session resume response = %#v, want accepted resume", resumeResponse)
+	}
+	if resumeResponse.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("session resume status = %q, want RUNNING", resumeResponse.Status)
+	}
+
+	resumedSession := runSessionShowCLIJSON(t, ctx, binaryPath, factoryDir, baseURL, factorysessions.DefaultSessionID)
+	if resumedSession.Runtime.LifecycleControlStatus == nil ||
+		*resumedSession.Runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("session show after resume missing running lifecycle marker: %#v", resumedSession.Runtime)
+	}
+
+	waitForWorkStateViaCLI(t, ctx, binaryPath, factoryDir, baseURL, workID, "complete", 30*time.Second)
+}
+
 func sessionWiringFactoryConfig() map[string]any {
 	return map[string]any{
 		"name": "cli-session-wiring",
@@ -231,4 +319,172 @@ func sessionWiringListContains(
 
 func bytesTrimSpace(raw []byte) []byte {
 	return []byte(strings.TrimSpace(string(raw)))
+}
+
+type sessionWiringBatchSubmitJSON struct {
+	WorkCount int `json:"workCount"`
+	Works     []struct {
+		Name   string `json:"name"`
+		WorkID string `json:"workId"`
+	} `json:"works"`
+}
+
+func runSessionLifecycleCLIJSON(
+	t *testing.T,
+	ctx context.Context,
+	binaryPath string,
+	workingDir string,
+	serverURL string,
+	operation string,
+	sessionID string,
+) factoryapi.FactorySessionLifecycleControlResponse {
+	t.Helper()
+
+	out, err := runYouCLI(ctx, binaryPath, workingDir, serverURL,
+		"--json",
+		"session", operation, sessionID,
+	)
+	if err != nil {
+		t.Fatalf("you session %s: %v\noutput:\n%s", operation, err, out)
+	}
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(bytesTrimSpace(out), &response); err != nil {
+		t.Fatalf("decode session %s JSON: %v\noutput:\n%s", operation, err, out)
+	}
+	return response
+}
+
+func runSessionShowCLIJSON(
+	t *testing.T,
+	ctx context.Context,
+	binaryPath string,
+	workingDir string,
+	serverURL string,
+	sessionID string,
+) factoryapi.FactorySession {
+	t.Helper()
+
+	out, err := runYouCLI(ctx, binaryPath, workingDir, serverURL,
+		"--json",
+		"session", "show", sessionID,
+	)
+	if err != nil {
+		t.Fatalf("you session show: %v\noutput:\n%s", err, out)
+	}
+	var session factoryapi.FactorySession
+	if err := json.Unmarshal(bytesTrimSpace(out), &session); err != nil {
+		t.Fatalf("decode session show JSON: %v\noutput:\n%s", err, out)
+	}
+	return session
+}
+
+func runWorkShowCLIJSON(
+	t *testing.T,
+	ctx context.Context,
+	binaryPath string,
+	workingDir string,
+	serverURL string,
+	workID string,
+) (factoryapi.Work, error) {
+	t.Helper()
+
+	out, err := runYouCLI(ctx, binaryPath, workingDir, serverURL,
+		"--json",
+		"work", "show", workID,
+	)
+	if err != nil {
+		return factoryapi.Work{}, err
+	}
+	var work factoryapi.Work
+	if err := json.Unmarshal(bytesTrimSpace(out), &work); err != nil {
+		t.Fatalf("decode work show JSON: %v\noutput:\n%s", err, out)
+	}
+	return work, nil
+}
+
+func runWorkListCLIJSON(
+	t *testing.T,
+	ctx context.Context,
+	binaryPath string,
+	workingDir string,
+	serverURL string,
+	workName string,
+) factoryapi.ListWorkResponse {
+	t.Helper()
+
+	args := []string{"--json", "work", "list"}
+	if strings.TrimSpace(workName) != "" {
+		args = append(args, "--name", workName)
+	}
+	out, err := runYouCLI(ctx, binaryPath, workingDir, serverURL, args...)
+	if err != nil {
+		t.Fatalf("you work list: %v\noutput:\n%s", err, out)
+	}
+	var listed factoryapi.ListWorkResponse
+	if err := json.Unmarshal(bytesTrimSpace(out), &listed); err != nil {
+		t.Fatalf("decode work list JSON: %v\noutput:\n%s", err, out)
+	}
+	return listed
+}
+
+func assertWorkNotDispatchedViaCLI(
+	t *testing.T,
+	ctx context.Context,
+	binaryPath string,
+	workingDir string,
+	serverURL string,
+	workID string,
+	workName string,
+) {
+	t.Helper()
+
+	if work, err := runWorkShowCLIJSON(t, ctx, binaryPath, workingDir, serverURL, workID); err == nil {
+		if work.State != nil && work.State.Name == "complete" {
+			t.Fatalf("work %q reached complete while session was paused: %#v", workID, work)
+		}
+	} else {
+		exitErr, ok := err.(*exec.ExitError)
+		if !ok || exitErr.ExitCode() == 0 {
+			t.Fatalf("you work show %s while paused: %v", workID, err)
+		}
+	}
+
+	listed := runWorkListCLIJSON(t, ctx, binaryPath, workingDir, serverURL, workName)
+	if support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation("task", "complete")) {
+		t.Fatalf("work %q reached task:complete before resume: %#v", workID, listed.Results)
+	}
+	if support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation("task", "init")) {
+		t.Fatalf("work %q reached task:init while session was paused: %#v", workID, listed.Results)
+	}
+}
+
+func waitForWorkStateViaCLI(
+	t *testing.T,
+	ctx context.Context,
+	binaryPath string,
+	workingDir string,
+	serverURL string,
+	workID string,
+	wantState string,
+	timeout time.Duration,
+) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		work, err := runWorkShowCLIJSON(t, ctx, binaryPath, workingDir, serverURL, workID)
+		if err == nil && work.State != nil && work.State.Name == wantState {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("wait for work %q state %q: %v", workID, wantState, ctx.Err())
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	work, err := runWorkShowCLIJSON(t, ctx, binaryPath, workingDir, serverURL, workID)
+	if err != nil {
+		t.Fatalf("work %q missing after resume: %v", workID, err)
+	}
+	t.Fatalf("work %q state = %#v, want %q within %s", workID, work.State, wantState, timeout)
 }
