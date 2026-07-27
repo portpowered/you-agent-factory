@@ -17,7 +17,9 @@
     "recordedAt",
     "factorySessionId",
     "runId",
-    "itemId"
+    "itemId",
+    "modifiedAt",
+    "timestamp"
   ],
   "sanitizerVersion": 1,
   "source": "sanitized-provider-exec"
