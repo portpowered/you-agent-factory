@@ -25,10 +25,11 @@ const (
 // Plan describes one controllable native-attempt outcome without prescribing
 // how an adapter implements its native protocol.
 type Plan struct {
-	Result         providers.ExecuteResult
-	Failure        error
-	WaitForContext bool
-	MutateRequest  bool
+	Result                    providers.ExecuteResult
+	Failure                   error
+	WaitForContext            bool
+	ReturnSuccessAfterContext bool
+	MutateRequest             bool
 }
 
 // Observation reports detached facts retained by a conformance adapter.
@@ -94,6 +95,15 @@ func Run(t *testing.T, subject Subject) {
 	})
 	t.Run("deadline propagates and cleans up", func(t *testing.T) {
 		runContextFailure(t, subject, true)
+	})
+	t.Run("pre-canceled context stops before adapter I/O", func(t *testing.T) {
+		runPreTerminatedContext(t, subject, false)
+	})
+	t.Run("pre-expired deadline stops before adapter I/O", func(t *testing.T) {
+		runPreTerminatedContext(t, subject, true)
+	})
+	t.Run("success after cancellation is suppressed", func(t *testing.T) {
+		runLateSuccessAfterCancellation(t, subject)
 	})
 }
 
@@ -247,6 +257,56 @@ func runContextFailure(t *testing.T, subject Subject, deadline bool) {
 		assertFailure(t, got.result, got.err, wantSentinel, wantKind)
 	case <-time.After(time.Second):
 		t.Fatal("Execute() did not stop after its context ended")
+	}
+	assertObservation(t, adapter, 1, 1, conformanceRequest())
+}
+
+func runPreTerminatedContext(t *testing.T, subject Subject, deadline bool) {
+	t.Helper()
+	adapter, root := newSubjectRoot(t, subject, Plan{
+		Result: successResult(true, nil),
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	wantSentinel := providers.ErrExecuteCancelled
+	wantKind := providers.ExecuteFailureKindCanceled
+	if deadline {
+		ctx, cancel = context.WithDeadline(t.Context(), time.Unix(0, 0))
+		wantSentinel = providers.ErrExecuteTimeout
+		wantKind = providers.ExecuteFailureKindTimeout
+	}
+	cancel()
+
+	result, err := root.Execute(ctx, conformanceRequest())
+	assertFailure(t, result, err, wantSentinel, wantKind)
+	assertObservation(t, adapter, 0, 0, providers.ExecuteRequest{})
+}
+
+func runLateSuccessAfterCancellation(t *testing.T, subject Subject) {
+	t.Helper()
+	adapter, root := newSubjectRoot(t, subject, Plan{
+		Result:                    successResult(true, nil),
+		ReturnSuccessAfterContext: true,
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	outcome := make(chan executeOutcome, 1)
+	go func() {
+		result, err := root.Execute(ctx, conformanceRequest())
+		outcome <- executeOutcome{result: result, err: err}
+	}()
+	awaitStarted(t, adapter.Started)
+	cancel()
+
+	select {
+	case got := <-outcome:
+		assertFailure(
+			t,
+			got.result,
+			got.err,
+			providers.ErrExecuteCancelled,
+			providers.ExecuteFailureKindCanceled,
+		)
+	case <-time.After(time.Second):
+		t.Fatal("Execute() did not suppress success after cancellation")
 	}
 	assertObservation(t, adapter, 1, 1, conformanceRequest())
 }

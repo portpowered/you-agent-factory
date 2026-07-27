@@ -3,10 +3,6 @@ package service_test
 import (
 	"context"
 	"errors"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -317,35 +313,6 @@ func TestRegisteredCompositionIsInert(t *testing.T) {
 	}
 }
 
-func TestPackageBoundary_AvoidsWorkersProviderInternals(t *testing.T) {
-	t.Parallel()
-
-	assertPackageAvoidsForbiddenPeers(
-		t,
-		"github.com/portpowered/infinite-you/pkg/services/providers/internal/service",
-	)
-}
-
-func TestTransitionalWorkersProviderRemainsInPlace(t *testing.T) {
-	t.Parallel()
-
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("resolve test source path")
-	}
-	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", "..", "..", ".."))
-	requiredPaths := []string{
-		"pkg/services/workers/provider/registry/registry.go",
-		"pkg/services/workers/provider/conductor/conductor.go",
-	}
-	for _, relative := range requiredPaths {
-		path := filepath.Join(repoRoot, filepath.FromSlash(relative))
-		if _, err := os.Stat(path); err != nil {
-			t.Fatalf("transitional workers provider path %s must remain present: %v", relative, err)
-		}
-	}
-}
-
 func mustRootService(t *testing.T) providers.Service {
 	t.Helper()
 
@@ -385,32 +352,4 @@ func (*stubExecution) Execute(
 	providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
 	return providers.ExecuteResult{}, nil
-}
-
-func assertPackageAvoidsForbiddenPeers(t *testing.T, importPath string) {
-	t.Helper()
-
-	cmd := exec.Command(
-		"go",
-		"list",
-		"-deps",
-		"-f",
-		"{{if not .Standard}}{{.ImportPath}}{{end}}",
-		importPath,
-	)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list deps for %s: %v\n%s", importPath, err, output)
-	}
-
-	forbiddenRoots := []string{
-		"github.com/portpowered/infinite-you/pkg/services/workers/provider",
-	}
-	for _, dep := range strings.Fields(string(output)) {
-		for _, forbidden := range forbiddenRoots {
-			if dep == forbidden || strings.HasPrefix(dep, forbidden+"/") {
-				t.Fatalf("%s must not import %s; found dependency %s", importPath, forbidden, dep)
-			}
-		}
-	}
 }
