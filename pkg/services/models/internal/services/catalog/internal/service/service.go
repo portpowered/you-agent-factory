@@ -29,13 +29,13 @@ func (s *service) ListCatalog(
 	ctx context.Context,
 	request models.ListModelsRequest,
 ) (models.ListModelsResult, error) {
-	runtimeConfig, err := s.resolveRuntimeConfig(ctx, request.Scope)
+	scopeConfig, err := s.resolveScopeConfig(ctx, request.Scope)
 	if err != nil {
 		return models.ListModelsResult{}, err
 	}
 
 	entries := localmodels.BuildCatalogWithRuntime(
-		runtimeConfig,
+		&scopeConfig.Runtime,
 		nil,
 		localmodels.DefaultManagedRuntimeSourceResolver(),
 	)
@@ -57,11 +57,11 @@ func (s *service) GetCatalogModel(
 	ctx context.Context,
 	request models.GetModelRequest,
 ) (models.GetModelResult, error) {
-	runtimeConfig, err := s.resolveRuntimeConfig(ctx, request.Scope)
+	scopeConfig, err := s.resolveScopeConfig(ctx, request.Scope)
 	if err != nil {
 		return models.GetModelResult{}, err
 	}
-	detail, err := catalogDetail(runtimeConfig, request.Name, request.Operation)
+	detail, err := catalogDetail(&scopeConfig.Runtime, request.Name, request.Operation)
 	if err != nil {
 		return models.GetModelResult{}, err
 	}
@@ -75,18 +75,18 @@ func (s *service) GetModelReadiness(
 	ctx context.Context,
 	request models.GetModelReadinessRequest,
 ) (models.GetModelReadinessResult, error) {
-	runtimeConfig, err := s.resolveRuntimeConfig(ctx, request.Scope)
+	scopeConfig, err := s.resolveScopeConfig(ctx, request.Scope)
 	if err != nil {
 		return models.GetModelReadinessResult{}, err
 	}
-	detail, err := catalogDetail(runtimeConfig, request.Name, request.Operation)
+	detail, err := catalogDetail(&scopeConfig.Runtime, request.Name, request.Operation)
 	if err != nil {
 		return models.GetModelReadinessResult{}, err
 	}
 	if s.readiness == nil {
 		return models.GetModelReadinessResult{}, models.ErrUnavailable
 	}
-	readiness, err := s.readiness(ctx, *runtimeConfig, detail.Clone())
+	readiness, err := s.readiness(ctx, scopeConfig.Clone(), detail.Clone())
 	if err != nil {
 		if contextError := ctx.Err(); contextError != nil {
 			return models.GetModelReadinessResult{}, contextError
@@ -135,32 +135,35 @@ func catalogDetail(
 	return detail, nil
 }
 
-func (s *service) resolveRuntimeConfig(
+func (s *service) resolveScopeConfig(
 	ctx context.Context,
 	scope models.RuntimeScopeRef,
-) (*models.RuntimeConfig, error) {
+) (models.RuntimeScopeConfig, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return models.RuntimeScopeConfig{}, err
 	}
 	if scope.IsZero() {
-		return nil, models.ErrRuntimeScopeInvalid
+		return models.RuntimeScopeConfig{}, models.ErrRuntimeScopeInvalid
 	}
 	if s == nil || s.scopes == nil {
-		return nil, models.ErrUnavailable
+		return models.RuntimeScopeConfig{}, models.ErrUnavailable
 	}
 
 	binding, err := s.scopes.Resolve(runtimescopes.Reference(scope.String()))
 	if err != nil {
-		return nil, catalogScopeError(err)
+		return models.RuntimeScopeConfig{}, catalogScopeError(err)
 	}
 	if binding.RuntimeConfig == nil {
-		return nil, models.ErrUnavailable
+		return models.RuntimeScopeConfig{}, models.ErrUnavailable
 	}
 	runtimeConfig := binding.RuntimeConfig()
 	if runtimeConfig == nil {
-		return nil, models.ErrUnavailable
+		return models.RuntimeScopeConfig{}, models.ErrUnavailable
 	}
-	return runtimeConfig, nil
+	return models.RuntimeScopeConfig{
+		CacheDirectory: binding.CacheDirectory,
+		Runtime:        *runtimeConfig,
+	}.Clone(), nil
 }
 
 func catalogScopeError(err error) error {

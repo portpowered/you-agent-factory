@@ -32,7 +32,7 @@ func NewService(
 
 func catalogReadiness(
 	ctx context.Context,
-	_ models.RuntimeConfig,
+	_ models.RuntimeScopeConfig,
 	detail models.Detail,
 ) (models.Runtime, error) {
 	if err := ctx.Err(); err != nil {

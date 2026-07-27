@@ -343,7 +343,7 @@ func TestRootCatalogMatchesDirectPrivateCatalogBehavior(t *testing.T) {
 	}
 	privateCatalog, err := catalogwire.NewService(
 		scopes,
-		func(context.Context, models.RuntimeConfig, models.Detail) (models.Runtime, error) {
+		func(context.Context, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
 			return currentReadiness.Clone(), nil
 		},
 	)
@@ -394,7 +394,7 @@ func TestRootCatalogMatchesDirectPrivateCatalogFailures(t *testing.T) {
 	readinessErr := error(nil)
 	privateCatalog, err := catalogwire.NewService(
 		scopes,
-		func(context.Context, models.RuntimeConfig, models.Detail) (models.Runtime, error) {
+		func(context.Context, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
 			return models.Runtime{}, readinessErr
 		},
 	)
@@ -476,7 +476,7 @@ func TestScopedCatalogPreservesCompatibilityBehavior(t *testing.T) {
 	}
 	privateCatalog, err := catalogwire.NewService(
 		scopes,
-		func(context.Context, models.RuntimeConfig, models.Detail) (models.Runtime, error) {
+		func(context.Context, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
 			return currentReadiness.Clone(), nil
 		},
 	)

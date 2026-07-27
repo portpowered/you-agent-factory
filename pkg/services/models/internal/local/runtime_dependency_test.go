@@ -2,6 +2,7 @@ package local
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
@@ -153,6 +154,94 @@ func TestManagedRuntimeReadinessForFactory_UsesCacheInspectionWhenProvided(t *te
 	}
 }
 
+func TestManagedRuntimeReadinessForFactoryContext_ReportsDetailedCurrentCacheFacts(t *testing.T) {
+	t.Parallel()
+
+	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	readiness, err := ManagedRuntimeReadinessForFactoryContext(
+		context.Background(),
+		loaded,
+		"OMNIVOICE_Q4_K_M",
+		staticRuntimeCacheInspector{inspection: RuntimeCacheInspection{
+			Supported:          true,
+			Installed:          true,
+			Revision:           "rev-current",
+			CachePath:          "/cache/current",
+			InstalledFileCount: 2,
+		}},
+		DefaultManagedRuntimeSourceResolver(),
+	)
+	if err != nil {
+		t.Fatalf("ManagedRuntimeReadinessForFactoryContext: %v", err)
+	}
+	if readiness.ReadinessState != managedruntime.ReadinessStateReady ||
+		readiness.LifecycleState != managedruntime.LifecycleStateInstalled ||
+		readiness.Diagnostics["revision"] != "rev-current" ||
+		readiness.Diagnostics["cachePath"] != "/cache/current" ||
+		readiness.Diagnostics["installedFileCount"] != "2" {
+		t.Fatalf("current readiness = %#v, want detached detailed cache facts", readiness)
+	}
+}
+
+func TestManagedRuntimeReadinessForFactoryContext_PreservesCancellationAndDependencyFailures(t *testing.T) {
+	t.Parallel()
+
+	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := ManagedRuntimeReadinessForFactoryContext(
+		canceled, loaded, "OMNIVOICE_Q4_K_M", nil, nil,
+	); !errors.Is(err, context.Canceled) {
+		t.Fatalf("pre-canceled readiness error = %v, want context.Canceled", err)
+	}
+	if _, err := ManagedRuntimeReadinessForFactoryContext(
+		context.Background(), nil, "OMNIVOICE_Q4_K_M", nil, nil,
+	); err == nil {
+		t.Fatal("nil runtime config unexpectedly succeeded")
+	}
+	if _, err := ManagedRuntimeReadinessForFactoryContext(
+		context.Background(), loaded, " ", nil, nil,
+	); !errors.Is(err, managedruntime.ErrNotFound) {
+		t.Fatalf("empty model readiness error = %v, want not found", err)
+	}
+	if _, err := ManagedRuntimeReadinessForFactoryContext(
+		context.Background(), loaded, "OMNIVOICE_Q4_K_M", nil, nil,
+	); err != nil {
+		t.Fatalf("readiness without cache inspector: %v", err)
+	}
+	if _, err := ManagedRuntimeReadinessForFactoryContext(
+		context.Background(),
+		loaded,
+		"unknown-model",
+		staticRuntimeCacheInspector{},
+		nil,
+	); !errors.Is(err, managedruntime.ErrNotFound) {
+		t.Fatalf("unknown model readiness error = %v, want not found", err)
+	}
+
+	dependencyErr := errors.New("cache inspection failed")
+	if _, err := ManagedRuntimeReadinessForFactoryContext(
+		context.Background(),
+		loaded,
+		"OMNIVOICE_Q4_K_M",
+		staticRuntimeCacheInspector{err: dependencyErr},
+		nil,
+	); !errors.Is(err, dependencyErr) {
+		t.Fatalf("cache dependency error = %v, want %v", err, dependencyErr)
+	}
+
+	during, cancelDuring := context.WithCancel(context.Background())
+	if _, err := ManagedRuntimeReadinessForFactoryContext(
+		during,
+		loaded,
+		"OMNIVOICE_Q4_K_M",
+		cancelingRuntimeCacheInspector{cancel: cancelDuring},
+		nil,
+	); !errors.Is(err, context.Canceled) {
+		t.Fatalf("during-query cancellation error = %v, want context.Canceled", err)
+	}
+}
+
 type staticRuntimeCacheInspector struct {
 	inspection RuntimeCacheInspection
 	err        error
@@ -160,4 +249,17 @@ type staticRuntimeCacheInspector struct {
 
 func (s staticRuntimeCacheInspector) InspectRuntimeCache(_ context.Context, _ *modelRuntimeConfig, _ string) (RuntimeCacheInspection, error) {
 	return s.inspection, s.err
+}
+
+type cancelingRuntimeCacheInspector struct {
+	cancel context.CancelFunc
+}
+
+func (s cancelingRuntimeCacheInspector) InspectRuntimeCache(
+	context.Context,
+	*modelRuntimeConfig,
+	string,
+) (RuntimeCacheInspection, error) {
+	s.cancel()
+	return RuntimeCacheInspection{}, nil
 }

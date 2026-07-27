@@ -14,6 +14,7 @@ import (
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
+	catalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
@@ -74,7 +75,14 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
-	catalogService, err := catalogwire.NewService(runtimeScopes)
+	catalogService, err := catalogwire.NewService(runtimeScopes, newCatalogReadinessQuery(catalogReadinessEdges{
+		platform: localmodels.HostPlatform(assetPlatform), client: assetHTTP, endpoints: defaultEndpoints,
+		mkdirAll: modelassets.MakeDirectories(assetMkdirAll), stat: modelassets.InspectPath(assetStat),
+		home: modelassets.ResolveHomeDirectory(assetHome), writeFile: modelassets.WriteFile(assetWriteFile),
+		rename: modelassets.RenamePath(assetRename), remove: modelassets.RemovePath(assetRemove),
+		readFile: modelassets.ReadFile(assetReadFile), readDir: modelassets.ReadDirectory(assetReadDir),
+		create: modelassets.CreateFile(assetCreate), open: modelassets.OpenFile(assetOpen),
+	}))
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +106,46 @@ func NewService(
 		return nil, err
 	}
 	return service, nil
+}
+
+type catalogReadinessEdges struct {
+	platform  localmodels.HostPlatform
+	client    modelassets.HTTPDoer
+	endpoints modelassets.Endpoints
+	mkdirAll  modelassets.MakeDirectories
+	stat      modelassets.InspectPath
+	home      modelassets.ResolveHomeDirectory
+	writeFile modelassets.WriteFile
+	rename    modelassets.RenamePath
+	remove    modelassets.RemovePath
+	readFile  modelassets.ReadFile
+	readDir   modelassets.ReadDirectory
+	create    modelassets.CreateFile
+	open      modelassets.OpenFile
+}
+
+func newCatalogReadinessQuery(edges catalogReadinessEdges) catalog.ReadinessQuery {
+	return func(
+		ctx context.Context,
+		scope models.RuntimeScopeConfig,
+		detail models.Detail,
+	) (models.Runtime, error) {
+		puller, err := localmodels.NewAssetPuller(
+			scope.CacheDirectory, edges.platform, edges.client, edges.endpoints,
+			edges.mkdirAll, edges.stat, edges.home, edges.writeFile, edges.rename,
+			edges.remove, edges.readFile, edges.readDir, edges.create, edges.open,
+		)
+		if err != nil {
+			return models.Runtime{}, err
+		}
+		return localmodels.ManagedRuntimeReadinessForFactoryContext(
+			ctx,
+			&scope.Runtime,
+			detail.Name,
+			puller,
+			localmodels.DefaultManagedRuntimeSourceResolver(),
+		)
+	}
 }
 
 func runtimeScopeIssuerID(now func() time.Time, assetHTTP models.AssetHTTPDoer, hostHTTP models.HostHTTPDoer) string {
