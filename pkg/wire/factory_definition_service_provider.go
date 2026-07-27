@@ -33,6 +33,7 @@ func provideFactoryDefinitionsFactory(
 			clock,
 			versionFileSystem,
 			validator,
+			loader.LoadSourceFromCanonicalJSON,
 			func(
 				factoryDir string,
 				workstationLoader factorydefinitions.WorkstationLoader,
