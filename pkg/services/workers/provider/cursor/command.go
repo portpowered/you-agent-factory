@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
@@ -13,13 +14,35 @@ import (
 
 const cursorAgentCommand = "agent"
 
-// Adapter owns Cursor command construction for the registry-backed conductor
-// path. Long-prompt materialization is added by the dedicated Windows prompt
-// migration slice before this adapter replaces the legacy execution path.
-type Adapter struct{}
+// AdapterDependencies are the platform facts and effects used by Cursor
+// command construction.
+type AdapterDependencies struct {
+	OperatingSystem string
+	TemporaryDir    string
+	TemporaryFiles  platformfilesystem.TemporaryFileSystem
+}
 
-// NewAdapter constructs the stateless Cursor adapter.
-func NewAdapter() *Adapter { return &Adapter{} }
+// Adapter owns Cursor command construction for the registry-backed conductor
+// path, including Windows long-prompt materialization and cleanup.
+type Adapter struct {
+	operatingSystem string
+	temporaryDir    string
+	temporaryFiles  platformfilesystem.TemporaryFileSystem
+}
+
+// NewAdapter constructs a Cursor adapter. Omitted dependencies are valid for
+// direct prompts; oversized Windows prompts fail closed without their required
+// temporary-file effect.
+func NewAdapter(dependencies ...AdapterDependencies) *Adapter {
+	result := &Adapter{}
+	if len(dependencies) == 0 {
+		return result
+	}
+	result.operatingSystem = strings.TrimSpace(dependencies[0].OperatingSystem)
+	result.temporaryDir = dependencies[0].TemporaryDir
+	result.temporaryFiles = dependencies[0].TemporaryFiles
+	return result
+}
 
 // Identity returns Cursor's stable registry key.
 func (*Adapter) Identity() adapter.Identity {
@@ -27,12 +50,19 @@ func (*Adapter) Identity() adapter.Identity {
 }
 
 // BuildCommand assembles Cursor argv and subprocess execution context.
-func (*Adapter) BuildCommand(_ context.Context, input adapter.CommandContext) (adapter.CommandBuildResult, error) {
+func (a *Adapter) BuildCommand(ctx context.Context, input adapter.CommandContext) (adapter.CommandBuildResult, error) {
 	args, err := BuildArgs(input.Request, input.SkipPermissions)
 	if err != nil {
 		return adapter.CommandBuildResult{}, err
 	}
-	return adapter.CommandBuildResult{Request: BuildCommandRequest(input.Request, args)}, nil
+	args, cleanup, err := a.materializePrompt(ctx, input.Request, args)
+	if err != nil {
+		return adapter.CommandBuildResult{}, err
+	}
+	return adapter.CommandBuildResult{
+		Request: BuildCommandRequest(input.Request, args),
+		Cleanup: cleanup,
+	}, nil
 }
 
 // BuildArgs constructs Cursor Agent CLI arguments while preserving the

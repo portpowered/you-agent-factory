@@ -61,6 +61,11 @@ primary-result behavior.
   Preserve the catalog-declared executable identity even when it differs from
   the canonical registry identity, and cut the aggregate path over only after
   its typed effects have moved with equivalent terminal-path cleanup evidence.
+  Provider-owned command preparation can return an idempotent cleanup through
+  `adapter.CommandBuildResult`; neutral orchestration defers it across command,
+  decoder, and final-result handling. Close a temporary prompt before command
+  launch, make removal safe under concurrent terminal signals, and clean an
+  exact created path immediately when preparation fails before a command exists.
 - Final-only provider integrations should keep native final stdout as response
   content and derive resumable Provider Session metadata only from explicit
   structured fields that satisfy the provider's identifier contract. If a
