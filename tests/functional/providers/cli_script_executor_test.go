@@ -68,27 +68,23 @@ func TestScriptExecutor_MissingCommandFailsStartup(t *testing.T) {
 	}
 }
 
-func TestScriptMigration_PreservesLogicalMoveWithoutWorkerExecution(t *testing.T) {
+func TestScriptExecutor_InvalidWorkstationTemplateFailsBeforeCommand(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
-		workstation := cfg["workstations"].([]any)[0].(map[string]any)
-		workstation["type"] = "LOGICAL_MOVE"
-		workstation["worker"] = ""
-	})
 	writeFixtureFile(
 		t,
 		dir,
 		[]string{"workstations", "run-script", "AGENTS.md"},
-		"---\ntype: LOGICAL_MOVE\n---\n",
+		"---\ntype: MODEL_WORKSTATION\n---\n{{",
 	)
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
 	runner := &captureCommandRunner{}
 	server, listed := runScriptFactory(t, dir, runner, 5*time.Second)
-	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+	assertSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
 	if calls := runner.CallCount(); calls != 0 {
-		t.Fatalf("script command calls = %d, want none for logical move", calls)
+		t.Fatalf("script command calls = %d, want none after template rejection", calls)
 	}
+	assertDispatchErrorContains(t, server.GetFactoryEvents(t), "prompt render failed")
 	server.Stop(t)
 }
 
