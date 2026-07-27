@@ -288,9 +288,9 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCursorGoldenTextSuccessAndSessionIdentity` covers public metadata.
   - `TestCursorGoldenReadableProviderSessionDetails` covers detail lookup.
 
-- [ ] `tests/functional/workers/inference/cursor/golden_failure_test.go`
-  - `TestCursorGoldenMalformedRecordReturnsStableDiagnostic`.
-  - `TestCursorGoldenProcessFailureAndTimeoutRemainDistinct`.
+- [x] `tests/functional/workers/inference/cursor/golden_failure_test.go`
+  - `TestCursorGoldenMalformedRecordReturnsStableDiagnostic` covers malformed-record diagnostics.
+  - `TestCursorGoldenProcessFailureAndTimeoutRemainDistinct` covers process-failure versus timeout distinction.
 
 - [x] `tests/functional/workers/inference/opencode/golden_test.go`
   - `TestOpenCodeGoldenStructuredSnapshotSuccess`.
