@@ -110,7 +110,7 @@ func TestServiceProjectsRetainedAndLiveFactoryEvents(t *testing.T) {
 	<-rendered
 
 	service.mu.Lock()
-	cursor := service.cursor
+	cursor := service.activation.ReconnectCursor()
 	service.mu.Unlock()
 	if cursor == nil || cursor.AfterEventID != liveEvent.Id ||
 		cursor.AfterSequence == nil || *cursor.AfterSequence != 4 {

@@ -5,13 +5,14 @@ package factory_visualization
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
+	activationlifecyclewire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/wire"
 )
 
 // View is the transport-independent presentation input emitted after the
@@ -65,30 +66,18 @@ type RuntimeFactory func(
 // Service owns the retained event projection, reconnect cursor, and live
 // subscription lifecycle for one Factory visualization.
 type Service struct {
+	activation activationlifecycle.Service
+
 	source      Source
 	projections recordings.ProjectionService
 	clock       Clock
 	sink        Sink
 	reportError ErrorReporter
 
-	mu       sync.Mutex
-	cancel   context.CancelFunc
-	done     chan struct{}
-	runErr   error
-	started  bool
-	stopOnce sync.Once
-
-	events []factorydefinitions.FactoryEvent
-	cursor *factorydefinitions.FactoryEventReconnectCursor
-
+	mu              sync.Mutex
 	presentationSeq int
 	presentations   map[PresentationSessionID]*rootPresentationSession
 }
-
-var (
-	errAlreadyStarted = errors.New("start Factory visualization: already started")
-	errNotStarted     = errors.New("wait for Factory visualization: not started")
-)
 
 // New constructs an inert Factory visualization service.
 func New(
@@ -107,184 +96,63 @@ func New(
 		return nil, errors.New("initialize Factory visualization: clock is required")
 	case sink == nil:
 		return nil, errors.New("initialize Factory visualization: presentation sink is required")
-	default:
-		return &Service{
-			source: source, projections: projections, clock: clock,
-			sink: sink, reportError: reportError,
-		}, nil
 	}
-}
-
-// Start subscribes once to retained-then-live canonical Factory events. It
-// renders the retained projection before returning and then observes deltas.
-func (s *Service) Start(ctx context.Context) error {
-	if s == nil {
-		return errors.New("start Factory visualization: service is required")
-	}
-	if ctx == nil {
-		return errors.New("start Factory visualization: context is required")
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
-	s.mu.Lock()
-	if s.started {
-		s.mu.Unlock()
-		return errAlreadyStarted
-	}
-	runCtx, cancel := context.WithCancel(ctx)
-	stream, err := s.source.SubscribeFactoryEvents(
-		runCtx,
-		s.cursor,
-		factorydefinitions.FactoryEventReconnectScope{},
+	activation, err := activationlifecyclewire.NewService(
+		source,
+		projections,
+		clock,
+		activationSinkAdapter{sink: sink},
+		activationlifecycle.ErrorReporter(reportError),
 	)
 	if err != nil {
-		cancel()
-		s.mu.Unlock()
-		return fmt.Errorf("start Factory visualization: subscribe to Factory events: %w", err)
+		return nil, err
 	}
-	if stream == nil || stream.Events == nil {
-		cancel()
-		s.mu.Unlock()
-		return errors.New("start Factory visualization: event source returned an invalid stream")
-	}
-	s.events = append(s.events[:0], stream.History...)
-	s.advanceCursorLocked(stream.History)
-	s.cancel = cancel
-	s.done = make(chan struct{})
-	s.started = true
-	s.mu.Unlock()
+	return &Service{
+		activation:  activation,
+		source:      source,
+		projections: projections,
+		clock:       clock,
+		sink:        sink,
+		reportError: reportError,
+	}, nil
+}
 
-	s.projectAndPresent(runCtx)
-	go s.run(runCtx, stream.Events)
-	return nil
+// Start subscribes once to retained-then-live canonical Factory events.
+func (s *Service) Start(ctx context.Context) error {
+	if s == nil || s.activation == nil {
+		return errors.New("start Factory visualization: service is required")
+	}
+	return s.activation.Start(ctx)
 }
 
 // Stop cancels and joins the event subscription, then emits one final view
 // while the Factory Runtime is still active.
 func (s *Service) Stop(ctx context.Context) error {
-	if s == nil {
+	if s == nil || s.activation == nil {
 		return nil
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	s.stopOnce.Do(func() {
-		s.mu.Lock()
-		cancel, done := s.cancel, s.done
-		s.mu.Unlock()
-		if cancel == nil || done == nil {
-			return
-		}
-		cancel()
-		<-done
-		s.projectAndPresent(ctx)
-	})
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.runErr
+	return s.activation.Stop(ctx)
 }
 
 // Wait blocks until the live Factory event subscription exits.
 func (s *Service) Wait(ctx context.Context) error {
-	if s == nil {
+	if s == nil || s.activation == nil {
 		return nil
 	}
-	s.mu.Lock()
-	done := s.done
-	s.mu.Unlock()
-	if done == nil {
-		return errNotStarted
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	select {
-	case <-done:
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		return s.runErr
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	return s.activation.Wait(ctx)
 }
 
-func (s *Service) run(
-	ctx context.Context,
-	events <-chan factorydefinitions.FactoryEvent,
-) {
-	defer func() {
-		s.mu.Lock()
-		close(s.done)
-		s.mu.Unlock()
-	}()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case event, ok := <-events:
-			if !ok {
-				s.mu.Lock()
-				if ctx.Err() == nil {
-					s.runErr = errors.New("Factory event stream closed unexpectedly")
-				}
-				s.mu.Unlock()
-				return
-			}
-			s.mu.Lock()
-			s.events = append(s.events, event)
-			s.advanceCursorLocked([]factorydefinitions.FactoryEvent{event})
-			s.mu.Unlock()
-			s.projectAndPresent(ctx)
-		}
-	}
+type activationSinkAdapter struct {
+	sink Sink
 }
 
-func (s *Service) projectAndPresent(ctx context.Context) {
-	snapshot, err := s.source.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		s.report(fmt.Errorf("read Factory visualization snapshot: %w", err))
+func (a activationSinkAdapter) PresentFactoryView(view activationlifecycle.View) {
+	if a.sink == nil {
 		return
 	}
-	if snapshot == nil {
-		s.report(errors.New("read Factory visualization snapshot: snapshot is unavailable"))
-		return
-	}
-	s.mu.Lock()
-	events := append([]factorydefinitions.FactoryEvent(nil), s.events...)
-	s.mu.Unlock()
-	worldState, err := s.projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
-	if err != nil {
-		s.report(fmt.Errorf("project Factory visualization: %w", err))
-		return
-	}
-	renderData := s.projections.SimpleDashboardRenderData(worldState)
-	renderData.ActiveThrottlePauses = s.projections.ProjectActiveThrottlePauses(
-		worldState.Topology,
-		snapshot.ActiveThrottlePauses,
-	)
-	s.sink.PresentFactoryView(View{
-		EngineState: *snapshot,
-		RenderData:  renderData,
-		ObservedAt:  s.clock.Now(),
+	a.sink.PresentFactoryView(View{
+		EngineState: view.EngineState,
+		RenderData:  view.RenderData,
+		ObservedAt:  view.ObservedAt,
 	})
-}
-
-func (s *Service) advanceCursorLocked(events []factorydefinitions.FactoryEvent) {
-	if len(events) == 0 {
-		return
-	}
-	last := events[len(events)-1]
-	sequence := last.Context.Sequence
-	s.cursor = &factorydefinitions.FactoryEventReconnectCursor{
-		AfterEventID:  last.Id,
-		AfterSequence: &sequence,
-	}
-}
-
-func (s *Service) report(err error) {
-	if err != nil && s.reportError != nil {
-		s.reportError(err)
-	}
 }
