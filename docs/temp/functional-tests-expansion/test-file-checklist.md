@@ -255,7 +255,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestProviderSnapshotOnlyEmitsCompletedSnapshotsOnly`.
   - `TestProviderFinalOnlyEmitsTerminalMessageOnly`.
 
-- [ ] `tests/functional/workers/inference/process_cleanup_test.go`
+- [x] `tests/functional/workers/inference/process_cleanup_test.go`
   - `TestProviderTimeoutTerminatesChildProcessTree` covers cleanup.
   - `TestProviderCancellationTerminatesCompanionProcesses` covers cancellation.
   - `TestProviderSuccessWaitsForProcessAndStreamClosure` covers normal cleanup.
@@ -272,7 +272,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     proves named worktree checkout materialization and omits the CLI `--worktree`
     flag.
 
-- [ ] `tests/functional/workers/inference/codex/golden_failure_test.go`
+- [x] `tests/functional/workers/inference/codex/golden_failure_test.go`
   - `TestCodexGoldenStructuredFailure` replays a non-zero structured failure.
   - `TestCodexGoldenTimeoutHasNoFalseTerminalMessage` covers timeout.
 

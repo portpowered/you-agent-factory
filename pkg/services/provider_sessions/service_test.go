@@ -3,6 +3,8 @@ package providersessions_test
 import (
 	"database/sql"
 	"errors"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +16,7 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	providercursor "github.com/portpowered/infinite-you/pkg/services/provider_sessions/cursor"
 	providersessionsservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 func TestDetailsLoadsCodexSessionThroughService(t *testing.T) {
@@ -29,11 +32,43 @@ func TestDetailsLoadsCodexSessionThroughService(t *testing.T) {
 	}
 }
 
+func TestDetailsReconstructsNormalizedCodexJSONLThroughRoot(t *testing.T) {
+	root := writeRichCodexSessionFixture(t, "session-reconstruct-root")
+	svc := newServiceForRoots(t, root, "")
+
+	first, err := svc.Details("codex", providersessions.SessionIDKind, "session-reconstruct-root")
+	if err != nil {
+		t.Fatalf("Details: %v", err)
+	}
+	second, err := svc.Details("codex", providersessions.SessionIDKind, "session-reconstruct-root")
+	if err != nil {
+		t.Fatalf("Details repeat: %v", err)
+	}
+	if first.ProviderSession.ID != "session-reconstruct-root" ||
+		first.Source.RelativePath != "2026/07/27/rollout-session-reconstruct-root.jsonl" {
+		t.Fatalf("detail identity = %#v, want normalized codex session and source", first)
+	}
+	if len(first.Transcript) < 4 || len(first.Parse.FunctionCalls) != 1 || len(first.Parse.Reasoning) != 1 {
+		t.Fatalf("detail = %#v, want transcript, tool, and reasoning facts", first)
+	}
+	if first.Parse.TokenUsage == nil || first.Parse.TokenUsage.TotalTokens == nil ||
+		*first.Parse.TokenUsage.TotalTokens != 130 {
+		t.Fatalf("token usage = %#v, want total 130", first.Parse.TokenUsage)
+	}
+	if first.Transcript[0].Text == nil || !strings.Contains(*first.Transcript[0].Text, "Inspect the failing run") {
+		t.Fatalf("transcript = %#v, want user message text", first.Transcript)
+	}
+	*first.Transcript[0].Text = "mutated"
+	if *second.Transcript[0].Text == "mutated" {
+		t.Fatalf("mutating first inspection affected second inspection transcript")
+	}
+}
+
 func TestInspectLoadsTypedSessionRefThroughService(t *testing.T) {
 	root := writeCodexSessionFixture(t, "session-inspect-1")
 	svc := newServiceForRoots(t, root, "")
 	ref := providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "session-inspect-1",
 	}
@@ -50,10 +85,60 @@ func TestInspectLoadsTypedSessionRefThroughService(t *testing.T) {
 	}
 }
 
+func TestInspectValidatesCanonicalProviderSessionRefBeforeOpeningNativeContent(t *testing.T) {
+	files := &openRecordingFileSystem{base: platformfilesystem.Local{}}
+	svc, err := providersessionsservice.NewForRoots(
+		files,
+		filepath.WalkDir,
+		filepath.EvalSymlinks,
+		filepath.WalkDir,
+		filepath.EvalSymlinks,
+		sql.Open,
+		t.TempDir(),
+		t.TempDir(),
+	)
+	if err != nil {
+		t.Fatalf("NewForRoots: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		ref  providers.SessionRef
+		want error
+	}{
+		{
+			name: "provider",
+			ref:  providers.SessionRef{Provider: "openai", Kind: providers.SessionIDKind, ID: "session-1"},
+			want: providersessions.ErrUnsupportedProvider,
+		},
+		{
+			name: "kind",
+			ref:  providers.SessionRef{Provider: providers.IDCodex, Kind: "path", ID: "session-1"},
+			want: providersessions.ErrUnsupportedKind,
+		},
+		{
+			name: "identifier",
+			ref:  providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "../secret"},
+			want: providersessions.ErrInvalidIdentifier,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, inspectErr := svc.Inspect(providersessions.InspectRequest{Session: test.ref})
+			if !errors.Is(inspectErr, test.want) {
+				t.Fatalf("Inspect error = %v, want %v", inspectErr, test.want)
+			}
+		})
+	}
+	if files.opens != 0 {
+		t.Fatalf("native file opens = %d, want 0", files.opens)
+	}
+}
+
 func TestInspectRejectsInvalidIdentifierAndPropagatesTypedFailures(t *testing.T) {
 	svc := newServiceForRoots(t, t.TempDir(), "")
 	if _, err := svc.Inspect(providersessions.InspectRequest{Session: providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "   ",
 	}}); !errors.Is(err, providersessions.ErrInvalidIdentifier) {
@@ -67,7 +152,7 @@ func TestInspectRejectsInvalidIdentifierAndPropagatesTypedFailures(t *testing.T)
 		t.Fatalf("provider err = %v, want ErrUnsupportedProvider", err)
 	}
 	if _, err := svc.Inspect(providersessions.InspectRequest{Session: providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     "path",
 		ID:       "session-1",
 	}}); !errors.Is(err, providersessions.ErrUnsupportedKind) {
@@ -79,7 +164,7 @@ func TestProjectLoadsNormalizedDetailThroughService(t *testing.T) {
 	root := writeCodexSessionFixture(t, "session-project-1")
 	svc := newServiceForRoots(t, root, "")
 	ref := providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "session-project-1",
 	}
@@ -100,14 +185,14 @@ func TestProjectLoadsNormalizedDetailThroughService(t *testing.T) {
 func TestProjectRejectsInvalidIdentifierAndPropagatesTypedFailures(t *testing.T) {
 	svc := newServiceForRoots(t, t.TempDir(), "")
 	if _, err := svc.Project(providersessions.ProjectRequest{Session: providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "",
 	}}); !errors.Is(err, providersessions.ErrInvalidIdentifier) {
 		t.Fatalf("empty id err = %v, want ErrInvalidIdentifier", err)
 	}
 	if _, err := svc.Project(providersessions.ProjectRequest{Session: providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "missing-session",
 	}}); !errors.Is(err, providersessions.ErrSessionNotFound) {
@@ -170,7 +255,7 @@ func TestGetProviderSessionDetails_RegressionLoadsCodexAndCursorFromConfiguredRo
 	codexRoot, cursorRoot := t.TempDir(), t.TempDir()
 	service := newServiceForRoots(t, codexRoot, cursorRoot)
 	_, codexErr := service.Details("codex", "session_id", "missing-session")
-	assertLookupContext(t, codexErr, providersessions.ProviderCodex, codexRoot)
+	assertLookupContext(t, codexErr, providersessions.ProviderCodex, "")
 	_, cursorErr := service.Details("cursor", "session_id", "missing-session")
 	assertCursorLookupContext(t, cursorErr, cursorRoot)
 }
@@ -183,7 +268,7 @@ func TestGetProviderSessionDetails_EventRefRoundTripLoadsCursorAndCodex(t *testi
 		want     providersessions.Provider
 		root     string
 	}{
-		{"codex", providersessions.ProviderCodex, codexRoot},
+		{"codex", providersessions.ProviderCodex, ""},
 		{"cursor", providersessions.ProviderCursor, cursorRoot},
 		{"agent", providersessions.ProviderCursor, cursorRoot},
 	} {
@@ -274,7 +359,7 @@ func TestNewConstructsServiceWithValidDependencies(t *testing.T) {
 		t.Fatal("New returned nil Service")
 	}
 	if _, err := svc.Inspect(providersessions.InspectRequest{Session: providersessions.SessionRef{
-		Provider: providersessions.ProviderCodex,
+		Provider: providers.IDCodex,
 		Kind:     providersessions.SessionIDKind,
 		ID:       "missing-from-default-root",
 	}}); !errors.Is(err, providersessions.ErrSessionNotFound) {
@@ -312,6 +397,29 @@ func writeCodexSessionFixture(t *testing.T, sessionID string) string {
 	return root
 }
 
+func writeRichCodexSessionFixture(t *testing.T, sessionID string) string {
+	t.Helper()
+	root := t.TempDir()
+	sessionDir := filepath.Join(root, "2026", "07", "27")
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatalf("mkdir session fixture: %v", err)
+	}
+	content := strings.Join([]string{
+		`{"timestamp":"2026-05-18T10:00:00Z","type":"turn_context"}`,
+		`{"timestamp":"2026-05-18T10:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Inspect the failing run."}]}}`,
+		`{"timestamp":"2026-05-18T10:00:02Z","type":"response_item","payload":{"type":"reasoning","summary":["Checking tool output"]}}`,
+		`{"timestamp":"2026-05-18T10:00:03Z","type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec_command","arguments":"go test ./pkg/api"}}`,
+		`{"timestamp":"2026-05-18T10:00:04Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-1","output":"ok"}}`,
+		`{"timestamp":"2026-05-18T10:00:05Z","type":"event_msg","payload":{"type":"agent_message","message":"The package tests passed."}}`,
+		`{"timestamp":"2026-05-18T10:00:06Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":25,"reasoning_output_tokens":5,"total_tokens":130}}}}`,
+	}, "\n") + "\n"
+	path := filepath.Join(sessionDir, "rollout-"+sessionID+".jsonl")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write session fixture: %v", err)
+	}
+	return root
+}
+
 func newServiceForRoots(t *testing.T, codexRoot, cursorRoot string) providersessions.Service {
 	t.Helper()
 	service, err := providersessionsservice.NewForRoots(
@@ -328,4 +436,18 @@ func newServiceForRoots(t *testing.T, codexRoot, cursorRoot string) providersess
 		t.Fatalf("NewForRoots: %v", err)
 	}
 	return service
+}
+
+type openRecordingFileSystem struct {
+	base  providersessions.FileSystem
+	opens int
+}
+
+func (f *openRecordingFileSystem) Open(path string) (io.ReadCloser, error) {
+	f.opens++
+	return f.base.Open(path)
+}
+
+func (f *openRecordingFileSystem) Stat(path string) (fs.FileInfo, error) {
+	return f.base.Stat(path)
 }

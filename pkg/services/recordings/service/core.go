@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -12,23 +11,18 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/events"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
 	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
 	artifactsexportwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/wire"
 	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
+	recordingsreplay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay"
+	replaywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire"
 )
 
 func NewProjectionService() recordings.ProjectionService {
 	return projectionquerywire.NewService()
-}
-
-type neutralReplayPlan struct {
-	facts           recordings.ReplayPlanFacts
-	events          []recordings.CanonicalEvent
-	expectedThrough *recordings.CanonicalEventCursor
-	selectedTick    int
-	processed       int
 }
 
 type combinedService struct {
@@ -36,12 +30,11 @@ type combinedService struct {
 	recordings.ProjectionService
 	recordinglifecycle.Service
 	artifactsExport artifactsexport.Service
+	replayService recordingsreplay.Service
 
-	appendMu       sync.Mutex
-	lifecycleMu    sync.Mutex
-	replayByKey    map[string]*factorydefinitions.ReplayArtifact
-	replayPlans    map[recordings.ReplayPlanHandle]*neutralReplayPlan
-	nextReplayPlan int
+	appendMu    sync.Mutex
+	lifecycleMu sync.Mutex
+	replayByKey map[string]*factorydefinitions.ReplayArtifact
 }
 
 var _ recordings.Service = (*combinedService)(nil)
@@ -49,12 +42,12 @@ var _ recordings.Service = (*combinedService)(nil)
 func (service *combinedService) Append(
 	request recordings.AppendRecordedEventRequest,
 ) (recordings.AppendRecordedEventResult, error) {
-	if !validAppendEvent(request.Event) {
+	if !canonical.ValidAppendEvent(request.Event) {
 		return recordings.AppendRecordedEventResult{}, recordings.ErrInvalidAppendEvent
 	}
 	service.appendMu.Lock()
 	defer service.appendMu.Unlock()
-	legacy := factoryEventFromCanonical(request.Event)
+	legacy := canonical.FactoryEventFromCanonical(request.Event)
 	if request.Event.Scope.FactorySessionID != "" {
 		sequence := int(nextScopedSequence(service.CanonicalEvents(), request.Event.Scope))
 		legacy.Context.SessionSequence = &sequence
@@ -69,44 +62,6 @@ func (service *combinedService) Append(
 		}
 	}
 	return recordings.AppendRecordedEventResult{}, nil
-}
-
-func validAppendEvent(event recordings.CanonicalEvent) bool {
-	return strings.TrimSpace(string(event.ID)) != "" &&
-		strings.TrimSpace(string(event.Kind)) != "" &&
-		!event.RecordedAt.IsZero() &&
-		(event.Scope.FactorySessionID == "" ||
-			strings.TrimSpace(event.Scope.FactorySessionID) != "") &&
-		json.Valid([]byte(event.Payload)) &&
-		(event.SourceContext == "" || json.Valid([]byte(event.SourceContext)))
-}
-
-func factoryEventFromCanonical(event recordings.CanonicalEvent) factorydefinitions.FactoryEvent {
-	context := factorydefinitions.FactoryEventContext{
-		EventTime: event.RecordedAt,
-		Sequence:  int(event.Sequence),
-		Tick:      event.FactoryTick,
-	}
-	hasSourceContext := json.Valid([]byte(event.SourceContext))
-	if hasSourceContext {
-		_ = json.Unmarshal([]byte(event.SourceContext), &context)
-	}
-	var sessionID *string
-	if event.Scope.FactorySessionID != "" {
-		value := event.Scope.FactorySessionID
-		sessionID = &value
-	}
-	legacy := factorydefinitions.FactoryEvent{
-		Context: context,
-		Id:      string(event.ID),
-		Payload: json.RawMessage(event.Payload),
-		Type:    factorydefinitions.FactoryEventType(event.Kind),
-	}
-	if !hasSourceContext && legacy.Context.SessionID == nil {
-		legacy.Context.SessionID = sessionID
-	}
-	legacy.SchemaVersion = factorydefinitions.FactoryEventSchemaVersionV1
-	return legacy
 }
 
 func (service *combinedService) SubscribeFrom(
@@ -181,101 +136,7 @@ func canonicalEventFromFactory(
 func (service *combinedService) ReconstructWorldState(
 	request recordings.ReconstructWorldStateRequest,
 ) (recordings.ReconstructWorldStateResult, error) {
-	if request.SelectedTick < 0 {
-		return recordings.ReconstructWorldStateResult{}, recordings.ErrInvalidProjectionInput
-	}
-	if err := validateProjectionEvents(request.Scope, request.After, request.Events); err != nil {
-		return recordings.ReconstructWorldStateResult{}, err
-	}
-	events := make([]factorydefinitions.FactoryEvent, len(request.Events))
-	for index, event := range request.Events {
-		events[index] = factoryEventFromCanonical(event)
-	}
-	state, err := service.ReconstructFactoryWorldState(events, request.SelectedTick)
-	if err != nil {
-		return recordings.ReconstructWorldStateResult{}, err
-	}
-	payload, err := json.Marshal(state)
-	if err != nil {
-		return recordings.ReconstructWorldStateResult{}, err
-	}
-	through := recordings.CanonicalEventCursor{}
-	if request.After != nil {
-		through = *request.After
-	}
-	if len(request.Events) > 0 {
-		through = request.Events[len(request.Events)-1].Cursor
-	}
-	return recordings.ReconstructWorldStateResult{
-		WorldState: recordings.WorldStateView{
-			SchemaVersion: recordings.WorldStateViewSchemaV1,
-			Scope:         request.Scope,
-			Through:       through,
-			SelectedTick:  request.SelectedTick,
-			Payload:       string(payload),
-		},
-	}, nil
-}
-
-func validateProjectionEvents(
-	scope recordings.CanonicalEventScope,
-	after *recordings.CanonicalEventCursor,
-	events []recordings.CanonicalEvent,
-) error {
-	if scope.FactorySessionID != "" && strings.TrimSpace(scope.FactorySessionID) == "" {
-		return recordings.ErrInvalidProjectionScope
-	}
-	expected := recordings.CanonicalEventSequence(0)
-	generationID := ""
-	if after != nil {
-		if after.StreamGenerationID == "" || after.Sequence < 0 {
-			return recordings.ErrMalformedProjectionOrder
-		}
-		expected = after.Sequence + 1
-		generationID = after.StreamGenerationID
-	}
-	previous := expected - 1
-	for _, event := range events {
-		if err := validateProjectionEvent(
-			scope,
-			event,
-			expected,
-			previous,
-			generationID,
-		); err != nil {
-			return err
-		}
-		generationID = event.Cursor.StreamGenerationID
-		previous = event.Sequence
-		expected++
-	}
-	return nil
-}
-
-func validateProjectionEvent(
-	scope recordings.CanonicalEventScope,
-	event recordings.CanonicalEvent,
-	expected recordings.CanonicalEventSequence,
-	previous recordings.CanonicalEventSequence,
-	generationID string,
-) error {
-	if event.Scope != scope {
-		return recordings.ErrInvalidProjectionScope
-	}
-	if event.Cursor.Sequence != event.Sequence ||
-		event.Cursor.StreamGenerationID == "" {
-		return recordings.ErrMalformedProjectionOrder
-	}
-	if scope.FactorySessionID == "" && event.Sequence != expected {
-		return recordings.ErrMalformedProjectionOrder
-	}
-	if scope.FactorySessionID != "" && event.Sequence <= previous {
-		return recordings.ErrMalformedProjectionOrder
-	}
-	if generationID != "" && event.Cursor.StreamGenerationID != generationID {
-		return recordings.ErrMalformedProjectionOrder
-	}
-	return nil
+	return canonical.ReconstructWorldState(service.ProjectionService, request)
 }
 
 func (service *combinedService) QuerySimpleDashboard(
@@ -327,7 +188,7 @@ func (service *combinedService) ValidateReconnectReplayFrom(
 	afterSequence := int(request.Cursor.Sequence)
 	events := make([]factorydefinitions.FactoryEvent, len(request.Events))
 	for index, event := range request.Events {
-		events[index] = factoryEventFromCanonical(event)
+		events[index] = canonical.FactoryEventFromCanonical(event)
 	}
 	return service.ValidateReconnectReplay(
 		events,
@@ -344,7 +205,7 @@ func validateReconnectReplayHistory(
 	if cursor.StreamGenerationID == "" || cursor.Sequence < 0 {
 		return recordings.ErrMalformedProjectionOrder
 	}
-	if err := validateProjectionEvents(scope, nil, events); err != nil {
+	if err := canonical.ValidateProjectionEvents(scope, nil, events); err != nil {
 		return err
 	}
 	for _, event := range events {
@@ -399,140 +260,19 @@ func (service *combinedService) BindReplayExecution(
 func (service *combinedService) LoadReplayRecording(
 	request recordings.LoadReplayRecordingRequest,
 ) (recordings.LoadReplayRecordingResult, error) {
-	snapshot, err := service.Snapshot(request.RecordingID)
-	if errors.Is(err, recordings.ErrMissingRecordingTarget) {
-		return recordings.LoadReplayRecordingResult{}, recordings.ErrReplayRecordingNotFound
-	}
-	if err != nil {
-		return recordings.LoadReplayRecordingResult{}, err
-	}
-	if snapshot.Status.FinalizedAt == nil {
-		return recordings.LoadReplayRecordingResult{}, recordings.ErrReplayRecordingNotFinalized
-	}
-	return recordings.LoadReplayRecordingResult{
-		Recording: recordings.ReplayRecordingFacts{
-			RecordingID: request.RecordingID,
-			Scope:       snapshot.Status.Scope,
-			Events:      append([]recordings.CanonicalEvent(nil), snapshot.Events...),
-		},
-	}, nil
-}
-
-func validateNeutralReplayPlan(request recordings.CreateReplayPlanRequest) error {
-	if request.SchemaVersion != recordings.ReplayPlanSchemaV1 ||
-		request.Timing != recordings.ReplayTimingOrderOnly ||
-		request.SelectedTick < 0 {
-		return recordings.ErrUnsupportedReplayPlan
-	}
-	if strings.TrimSpace(string(request.Recording.RecordingID)) == "" {
-		return recordings.ErrCorruptReplayInput
-	}
-	for _, event := range request.Recording.Events {
-		if !validAppendEvent(event) {
-			return recordings.ErrCorruptReplayInput
-		}
-	}
-	if err := validateProjectionEvents(
-		request.Recording.Scope,
-		nil,
-		request.Recording.Events,
-	); err != nil {
-		return recordings.ErrCorruptReplayInput
-	}
-	return nil
+	return service.replayService.LoadReplayRecording(request)
 }
 
 func (service *combinedService) CreateReplayPlan(
 	request recordings.CreateReplayPlanRequest,
 ) (recordings.CreateReplayPlanResult, error) {
-	if err := validateNeutralReplayPlan(request); err != nil {
-		return recordings.CreateReplayPlanResult{}, err
-	}
-	service.lifecycleMu.Lock()
-	defer service.lifecycleMu.Unlock()
-	service.nextReplayPlan++
-	handle := recordings.ReplayPlanHandle("replay-plan-" + strconv.Itoa(service.nextReplayPlan))
-	facts := recordings.ReplayPlanFacts{
-		Handle:        handle,
-		RecordingID:   request.Recording.RecordingID,
-		Scope:         request.Recording.Scope,
-		TotalEvents:   len(request.Recording.Events),
-		SchemaVersion: request.SchemaVersion,
-		Timing:        request.Timing,
-	}
-	var expected *recordings.CanonicalEventCursor
-	if request.ExpectedThrough != nil {
-		cursor := *request.ExpectedThrough
-		expected = &cursor
-	}
-	service.replayPlans[handle] = &neutralReplayPlan{
-		facts:           facts,
-		events:          append([]recordings.CanonicalEvent(nil), request.Recording.Events...),
-		expectedThrough: expected,
-		selectedTick:    request.SelectedTick,
-	}
-	return recordings.CreateReplayPlanResult{Plan: facts}, nil
+	return service.replayService.CreateReplayPlan(request)
 }
 
 func (service *combinedService) ObserveReplay(
 	request recordings.ObserveReplayRequest,
 ) (recordings.ObserveReplayResult, error) {
-	service.lifecycleMu.Lock()
-	defer service.lifecycleMu.Unlock()
-	plan, ok := service.replayPlans[request.Plan]
-	if !ok {
-		return recordings.ObserveReplayResult{}, recordings.ErrReplayPlanNotFound
-	}
-	if plan.processed < len(plan.events) {
-		plan.processed++
-	}
-	reduced, err := service.ReconstructWorldState(recordings.ReconstructWorldStateRequest{
-		Scope:        plan.facts.Scope,
-		Events:       append([]recordings.CanonicalEvent(nil), plan.events[:plan.processed]...),
-		SelectedTick: plan.selectedTick,
-	})
-	if err != nil {
-		return recordings.ObserveReplayResult{}, err
-	}
-	observation := recordings.ReplayObservation{
-		Kind:            recordings.ReplayProgress,
-		Plan:            request.Plan,
-		ProcessedEvents: plan.processed,
-		TotalEvents:     len(plan.events),
-		WorldState:      reduced.WorldState,
-	}
-	if plan.processed > 0 {
-		cursor := plan.events[plan.processed-1].Cursor
-		observation.Through = &cursor
-	}
-	if plan.processed == len(plan.events) {
-		observation.Kind = recordings.ReplayCompleted
-		if replayDivergence := replayPlanDivergence(plan, observation.Through); replayDivergence != nil {
-			observation.Kind = recordings.ReplayDiverged
-			observation.Divergence = replayDivergence
-		}
-	}
-	return recordings.ObserveReplayResult{Observation: observation}, nil
-}
-
-func replayPlanDivergence(
-	plan *neutralReplayPlan,
-	through *recordings.CanonicalEventCursor,
-) *recordings.ReplayDivergenceFacts {
-	if plan.expectedThrough == nil {
-		return nil
-	}
-	actual := recordings.CanonicalEventCursor{}
-	if through != nil {
-		actual = *through
-	}
-	if actual == *plan.expectedThrough {
-		return nil
-	}
-	return &recordings.ReplayDivergenceFacts{
-		Expected: *plan.expectedThrough,
-		Observed: actual,
-	}
+	return service.replayService.ObserveReplay(request)
 }
 
 func NewService(
@@ -591,8 +331,8 @@ func NewServiceWithLifecycleEffects(
 		ProjectionService: projection,
 		Service:           lifecycle,
 		artifactsExport:   artifactsexportwire.NewService(lifecycle, publication),
+		replayService:     replaywire.NewService(lifecycle, projection),
 		replayByKey:       make(map[string]*factorydefinitions.ReplayArtifact),
-		replayPlans:       make(map[recordings.ReplayPlanHandle]*neutralReplayPlan),
 	}
 }
 

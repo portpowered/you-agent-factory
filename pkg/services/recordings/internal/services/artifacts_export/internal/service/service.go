@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
 	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
 )
 
@@ -301,7 +302,7 @@ func validatePortableArtifactSummary(artifact recordings.PortableArtifact) error
 func validatePortableArtifactEvents(artifact recordings.PortableArtifact) error {
 	var previous recordings.CanonicalEvent
 	for index, event := range artifact.Events {
-		if !validCanonicalEvent(event) || event.Scope != artifact.Summary.Scope ||
+		if !canonical.ValidAppendEvent(event) || event.Scope != artifact.Summary.Scope ||
 			event.Cursor.StreamGenerationID == "" ||
 			event.Cursor.Sequence != event.Sequence ||
 			event.Sequence < 0 {
@@ -320,16 +321,6 @@ func validatePortableArtifactEvents(artifact recordings.PortableArtifact) error 
 		previous = event
 	}
 	return nil
-}
-
-func validCanonicalEvent(event recordings.CanonicalEvent) bool {
-	return strings.TrimSpace(string(event.ID)) != "" &&
-		strings.TrimSpace(string(event.Kind)) != "" &&
-		!event.RecordedAt.IsZero() &&
-		(event.Scope.FactorySessionID == "" ||
-			strings.TrimSpace(event.Scope.FactorySessionID) != "") &&
-		json.Valid([]byte(event.Payload)) &&
-		(event.SourceContext == "" || json.Valid([]byte(event.SourceContext)))
 }
 
 func portableArtifactDigest(artifact recordings.PortableArtifact) (string, error) {

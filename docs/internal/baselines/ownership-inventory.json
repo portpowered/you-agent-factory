@@ -1378,6 +1378,12 @@
       "evidence": "pkg/platform/contentstaging -\u003e pkg/services/work"
     },
     {
+      "fromOwner": "provider_sessions",
+      "toOwner": "providers",
+      "class": "command",
+      "evidence": "pkg/services/provider_sessions -\u003e pkg/services/providers"
+    },
+    {
       "fromOwner": "providers",
       "toOwner": "models",
       "class": "command",
@@ -3480,13 +3486,25 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/provider_sessions/codex",
+      "packagePath": "pkg/services/provider_sessions/cursor",
       "disposition": "retain",
       "destination": "provider_sessions",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/provider_sessions/cursor",
+      "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader/internal/service",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader/wire",
       "disposition": "retain",
       "destination": "provider_sessions",
       "destinationKind": "owner"

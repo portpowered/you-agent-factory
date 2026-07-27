@@ -10,6 +10,7 @@ import (
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
@@ -447,7 +448,35 @@ func TestFactoryConfigInitCommandHandlerMapsSuppliedSetupInputs(t *testing.T) {
 	}
 }
 
-func TestFactoryConfigInitCommandHandlerRejectsJSONBeforeSetup(t *testing.T) {
+func TestFactoryConfigInitCommandHandlerMapsPackagedInstallStableInputs(t *testing.T) {
+	var got factorydefinitionscli.InstallPackagedFactoryConfig
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			InstallPackagedFactory: func(cfg factorydefinitionscli.InstallPackagedFactoryConfig) error {
+				got = cfg
+				return nil
+			},
+			HomeDir: func() (string, error) { return "operator-home", nil },
+		},
+	)
+	inputs := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.init.flag.package", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("@you/goal")},
+		resolvedTestValue{id: "you.init.flag.dir", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("factories")},
+		resolvedTestValue{id: "you.init.flag.format", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("yaml")},
+		resolvedTestValue{id: "you.init.flag.replace", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(true)},
+	)
+	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
+	if err := handler.Init(cmd, inputs, resolvedFactoryGlobals(t, true, true, false)); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if got.HomeDir != "operator-home" || got.Package != "@you/goal" || got.Dir != "factories" ||
+		!got.DirChanged || got.Format != "yaml" || !got.FormatChanged || !got.Replace || !got.JSON || !got.Verbose {
+		t.Fatalf("packaged init config = %#v, want stable-ID values", got)
+	}
+}
+
+func TestFactoryConfigInitCommandHandlerRejectsJSONForProviderSetup(t *testing.T) {
 	called := false
 	handler := commandregistry.NewFactoryConfigInitCommandHandler(
 		commandregistry.FactoryConfigInitServices{
