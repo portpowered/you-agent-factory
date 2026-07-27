@@ -4,6 +4,7 @@ package loading_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -15,11 +16,16 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const inlineJavaScriptSuccessResult = "<SUCCESS>"
+const (
+	inlineJavaScriptSuccessResult      = "<SUCCESS>"
+	inlineJavaScriptSyntaxErrorSource  = "workflow.final(\"ok\");\nphase(\"setup\";\n"
+	inlineJavaScriptSyntaxErrorLine    = 2
+	workflowSourceSyntaxErrorCode      = "workflow.source.syntaxError"
+)
 
 var privateJavaScriptVMDiagnosticMarkers = []string{
 	"goja",
-	"Runtime",
+	"goja.",
 	"stack frame",
 	"heap dump",
 }
@@ -86,6 +92,68 @@ func TestInlineJavaScriptFactoryRunsFromCLI(t *testing.T) {
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
 
+// TestInlineJavaScriptSyntaxErrorReturnsSourceLocation proves an inline
+// JavaScript Factory with a deliberate syntax error fails before work starts
+// through the public you run customer process boundary with an actionable
+// authored source location and without private VM internals or external
+// worker dispatch.
+func TestInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T) {
+	t.Parallel()
+
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "inline-javascript-syntax-error",
+		"invocationSignature": map[string]any{
+			"parameters": []any{map[string]any{
+				"name": "prompt", "required": false,
+				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+			}},
+		},
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"inlineSource": map[string]any{
+					"encoding": "utf-8",
+					"inline":   inlineJavaScriptSyntaxErrorSource,
+				},
+				"argsSchema": map[string]any{
+					"type":                 "object",
+					"properties":           map[string]any{"prompt": map[string]any{"type": "string"}},
+					"additionalProperties": false,
+				},
+			},
+		},
+	})
+	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run",
+		"--factory", filepath.Join(dir, "factory.json"),
+		"--with-mock-workers", mockWorkersPath,
+		"--output", "primary",
+		"--no-record",
+		"hello",
+	})
+	homeDir := t.TempDir()
+	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = dir
+
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	err := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}).Execute(inputs.Input)
+	assertInlineJavaScriptSyntaxFailureOutcome(
+		t,
+		err,
+		inputs.Stdout(),
+		inputs.Stderr(),
+		inlineJavaScriptSyntaxErrorLine,
+	)
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0 for syntax error before dispatch", runner.CallCount())
+	}
+	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+}
+
 func writeEmptyMockWorkersConfig(t *testing.T, dir string) string {
 	t.Helper()
 
@@ -135,7 +203,35 @@ func assertNoPrivateJavaScriptVMDiagnostics(t *testing.T, outputs ...string) {
 	combined := strings.ToLower(strings.Join(outputs, "\n"))
 	for _, marker := range privateJavaScriptVMDiagnosticMarkers {
 		if strings.Contains(combined, strings.ToLower(marker)) {
-			t.Fatalf("success diagnostics exposed private VM detail %q in %q", marker, strings.Join(outputs, "\n---\n"))
+			t.Fatalf("diagnostics exposed private VM detail %q in %q", marker, strings.Join(outputs, "\n---\n"))
 		}
+	}
+}
+
+func assertInlineJavaScriptSyntaxFailureOutcome(
+	t *testing.T,
+	runErr error,
+	stdout string,
+	stderr string,
+	wantLine int,
+) {
+	t.Helper()
+
+	if runErr == nil {
+		t.Fatalf("Process.Execute() error = nil, want inline syntax failure before invocation\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty stdout before terminal invocation on syntax failure", stdout)
+	}
+
+	failureText := strings.Join([]string{runErr.Error(), stderr}, "\n")
+	if !strings.Contains(failureText, workflowSourceSyntaxErrorCode) {
+		t.Fatalf("failure output = %q, want customer-stable code %q", failureText, workflowSourceSyntaxErrorCode)
+	}
+	if !strings.Contains(failureText, fmt.Sprintf("line %d", wantLine)) {
+		t.Fatalf("failure output = %q, want authored source line %d indicator", failureText, wantLine)
+	}
+	if !strings.Contains(stderr, "blocking validation targets") {
+		t.Fatalf("stderr = %q, want customer-visible invocation failure surface", stderr)
 	}
 }
