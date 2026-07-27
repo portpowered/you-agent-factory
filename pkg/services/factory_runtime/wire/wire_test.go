@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"runtime"
 	"testing"
 	"time"
@@ -114,6 +115,57 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 			"goroutine leak after construction: baseline=%d current=%d delta=%d",
 			baseline, runtime.NumGoroutine(), leaked,
 		)
+	}
+}
+
+func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	service, err := validNewServiceInputs().callNewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewService() returned nil service")
+	}
+	var runtime factoryruntime.Service = service
+	if runtime == nil {
+		t.Fatal("constructed root is nil")
+	}
+
+	_, err = runtime.Observe(ctx, factoryruntime.ObserveRequest{
+		Scope: factoryruntime.ObservationScopeStatus,
+	})
+	if !errors.Is(err, factoryruntime.ErrNotRunning) {
+		t.Fatalf("Observe(valid scope) error = %v, want ErrNotRunning", err)
+	}
+
+	_, err = runtime.Observe(ctx, factoryruntime.ObserveRequest{
+		Scope: factoryruntime.ObservationScope("INVALID"),
+	})
+	if !errors.Is(err, factoryruntime.ErrInvalidObservationScope) {
+		t.Fatalf("Observe(invalid scope) error = %v, want ErrInvalidObservationScope", err)
+	}
+
+	_, err = runtime.ControlPause(ctx, factoryruntime.PauseRequest{})
+	if !errors.Is(err, factoryruntime.ErrNotRunning) {
+		t.Fatalf("ControlPause() error = %v, want ErrNotRunning", err)
+	}
+
+	_, err = runtime.PlanDispatch(ctx, factoryruntime.PlanDispatchRequest{DispatchID: "dispatch-1"})
+	if !errors.Is(err, factoryruntime.ErrNotRunning) {
+		t.Fatalf("PlanDispatch() error = %v, want ErrNotRunning", err)
+	}
+
+	_, err = runtime.AcceptDispatchResult(ctx, factoryruntime.AcceptDispatchResultRequest{})
+	if !errors.Is(err, factoryruntime.ErrUnknownDispatchCorrelation) {
+		t.Fatalf("AcceptDispatchResult(empty correlation) error = %v, want ErrUnknownDispatchCorrelation", err)
+	}
+
+	_, err = runtime.CaptureCheckpoint(ctx, factoryruntime.CaptureCheckpointRequest{CheckpointID: "checkpoint-1"})
+	if !errors.Is(err, factoryruntime.ErrCapabilityUnavailable) {
+		t.Fatalf("CaptureCheckpoint() error = %v, want ErrCapabilityUnavailable", err)
 	}
 }
 
