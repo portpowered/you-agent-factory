@@ -27,10 +27,6 @@ const (
 // delete work as a thin CLI lifecycle against a running Factory Session server,
 // yielding observable session identity and success or failure exit behavior.
 func TestCLISessionCreateListShowDelete(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow CLI session wiring")
-	}
-
 	primaryFactoryDir := support.ScaffoldFactory(t, sessionWiringFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     primaryFactoryDir,
@@ -164,10 +160,6 @@ func TestCLISessionCreateListShowDelete(t *testing.T) {
 // accepted work buffered and you session resume restores dispatch through the
 // public CLI against a running Factory Session server.
 func TestCLISessionPauseBuffersAndResumeDispatches(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow CLI session wiring")
-	}
-
 	factoryDir := support.ScaffoldFactory(t, sessionWiringFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,
@@ -246,10 +238,6 @@ func TestCLISessionPauseBuffersAndResumeDispatches(t *testing.T) {
 // an unknown session ID exit non-success with actionable not-found diagnostics and
 // no false success session payload through the public CLI wiring boundary.
 func TestCLISessionMissingIDReturnsNotFound(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow CLI session wiring")
-	}
-
 	factoryDir := support.ScaffoldFactory(t, sessionWiringFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,
