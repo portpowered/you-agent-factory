@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "kind": "concurrency",
+      "symbol": "sync.Once",
+      "filePath": "pkg/transports/cli/run/factory_invocation_input.go",
+      "count": 1,
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "move the behavior to its owning service, Initializer lifecycle, or an injected external-effect edge and delete this exact entry"
+    },
+    {
+      "kind": "lifecycle",
+      "symbol": "context.WithCancel",
+      "filePath": "pkg/transports/cli/run/factory_invocation_input.go",
+      "count": 1,
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "move the behavior to its owning service, Initializer lifecycle, or an injected external-effect edge and delete this exact entry"
+    }
+  ]
+}
