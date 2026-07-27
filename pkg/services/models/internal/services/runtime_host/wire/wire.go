@@ -7,8 +7,6 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
-	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
-	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
@@ -41,21 +39,15 @@ func NewService(
 	if isNilDependency(hostClock) {
 		return nil, fmt.Errorf("%w: model host clock is required", models.ErrInvalidHostDependencies)
 	}
-	leases, err := leaseswire.NewService(hostClock, hostleases.UnconfiguredSlotFacts{})
-	if err != nil {
-		return nil, err
-	}
-	host := internalservice.New(
+	return internalservice.NewWired(
 		scopes,
 		assets,
-		leases,
 		processLauncher,
 		hostHTTP,
 		hostClock,
 		hostLogger,
 		hostMetrics,
 	)
-	return host, nil
 }
 
 func isNilDependency(value any) bool {

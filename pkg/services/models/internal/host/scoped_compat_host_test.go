@@ -35,6 +35,27 @@ func (s stubPackagedRuntimeHost) StopModelHost(
 	return apisurface.StopModelHostResult{}, apisurface.ErrUnsupportedOperation
 }
 
+func (stubPackagedRuntimeHost) AcquireModelLease(
+	context.Context,
+	apisurface.AcquireModelLeaseRequest,
+) (apisurface.AcquireModelLeaseResult, error) {
+	return apisurface.AcquireModelLeaseResult{}, apisurface.ErrUnsupportedOperation
+}
+
+func (stubPackagedRuntimeHost) GetModelLease(
+	context.Context,
+	apisurface.GetModelLeaseRequest,
+) (apisurface.GetModelLeaseResult, error) {
+	return apisurface.GetModelLeaseResult{}, apisurface.ErrUnsupportedOperation
+}
+
+func (stubPackagedRuntimeHost) ReleaseModelLease(
+	context.Context,
+	apisurface.ReleaseModelLeaseRequest,
+) (apisurface.ReleaseModelLeaseResult, error) {
+	return apisurface.ReleaseModelLeaseResult{}, apisurface.ErrUnsupportedOperation
+}
+
 func TestScopedCompatHostAcquireLease_AllowsCLIPathWithoutSupervisedEndpoint(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, llamaCppCatalogFactoryConfigWithoutHealthEndpoint())
 	scope, err := (apisurface.RuntimeScopeRef{}).Parse("factory-session:test-scope")
