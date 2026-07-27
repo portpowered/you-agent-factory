@@ -31,6 +31,14 @@ const (
 	mockedWorkID          = "named-mock-replacement-mocked-work"
 	realWorkID            = "named-mock-replacement-real-work"
 	injectedProviderOutput = "injected-real-worker-output COMPLETE"
+
+	rejectWorkerName         = "reject-worker"
+	rejectWorkstationName    = "reject-process"
+	rejectWorkType           = "reject-task"
+	rejectWorkID             = "mock-reject-work"
+	configuredRejectStdout   = "configured reject stdout"
+	configuredRejectStderr   = "configured reject stderr"
+	stableUnknownProviderErr = "provider error: unknown: Codex reported a terminal error."
 )
 
 // TestMockWorkersReplaceOnlyNamedChildren proves a partial --with-mock-workers
@@ -154,6 +162,53 @@ func TestUnknownWorkerOverrideFailsActionably(t *testing.T) {
 	}
 }
 
+// TestMockWorkerFailureReturnsStablePublicFailure proves configured mock
+// rejection yields a stable public failed Work / Factory Event outcome without
+// live provider credentials.
+func TestMockWorkerFailureReturnsStablePublicFailure(t *testing.T) {
+	dir := scaffoldMockRejectFactory(t)
+	exitCode := 7
+	runner := testutil.NewProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte("live provider should not run")},
+	)
+
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:        dir,
+		MockWorkersConfig: rejectingMockWorkersConfig(exitCode),
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner,
+		},
+	})
+	defer server.Stop(t)
+
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	for placeID, want := range map[string]int{
+		support.WorkCustomerLocation(rejectWorkType, "failed"): 1,
+		support.WorkCustomerLocation(rejectWorkType, "init"):   0,
+		support.WorkCustomerLocation(rejectWorkType, "done"):   0,
+	} {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
+
+	if runner.CallCount() != 0 {
+		t.Fatalf(
+			"provider command runner calls = %d after mock reject, want 0 without live provider credentials",
+			runner.CallCount(),
+		)
+	}
+
+	observation := dispatchObservationByTransition(
+		t,
+		support.ObserveDispatchEvents(t, server.GetFactoryEvents(t)),
+		rejectWorkstationName,
+	)
+	assertStableMockRejectDispatch(t, observation)
+}
+
 func executeRunWithMockWorkersExpectingFailure(
 	t *testing.T,
 	factoryDir string,
@@ -265,6 +320,55 @@ func namedReplacementWorkType(name string) map[string]any {
 	}
 }
 
+func scaffoldMockRejectFactory(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"workTypes": []map[string]any{
+			namedReplacementWorkType(rejectWorkType),
+		},
+		"workers": []map[string]string{
+			{"name": rejectWorkerName},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":      rejectWorkstationName,
+				"worker":    rejectWorkerName,
+				"inputs":    []map[string]string{{"workType": rejectWorkType, "state": "init"}},
+				"outputs":   []map[string]string{{"workType": rejectWorkType, "state": "done"}},
+				"onFailure": []map[string]string{{"workType": rejectWorkType, "state": "failed"}},
+			},
+		},
+	})
+
+	modelWorker := support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex")
+	support.WriteAgentConfig(t, dir, rejectWorkerName, modelWorker)
+
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkID:     rejectWorkID,
+		WorkTypeID: rejectWorkType,
+		TraceID:    "mock-reject-trace",
+		Payload:    []byte(`{"title":"configured mock reject"}`),
+	})
+	return dir
+}
+
+func rejectingMockWorkersConfig(exitCode int) *workers.MockWorkersConfig {
+	code := exitCode
+	return &workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName:      rejectWorkerName,
+			WorkstationName: rejectWorkstationName,
+			RunType:         workers.MockWorkerRunTypeReject,
+			RejectConfig: &workers.MockWorkerRejectConfig{
+				Stdout:   configuredRejectStdout,
+				Stderr:   configuredRejectStderr,
+				ExitCode: &code,
+			},
+		}},
+	}
+}
+
 func partialNamedMockWorkersConfig() *workers.MockWorkersConfig {
 	return &workers.MockWorkersConfig{
 		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
@@ -308,6 +412,59 @@ func assertMockAcceptedDispatch(t *testing.T, observation support.DispatchEventO
 	output := stringPointerValue(observation.Response.Output)
 	if !strings.Contains(output, "mock worker accepted") {
 		t.Fatalf("mock-process output = %q, want configured mock accept output", output)
+	}
+}
+
+func assertStableMockRejectDispatch(t *testing.T, observation support.DispatchEventObservation) {
+	t.Helper()
+
+	if observation.Response == nil {
+		t.Fatalf("reject-process dispatch response missing: %#v", observation)
+	}
+	payload := observation.Response
+	if payload.Outcome != factoryapi.WorkOutcomeFailed {
+		t.Fatalf(
+			"reject-process outcome = %s, want %s",
+			payload.Outcome,
+			factoryapi.WorkOutcomeFailed,
+		)
+	}
+	if payload.ProviderFailure == nil ||
+		payload.ProviderFailure.Type == nil ||
+		string(*payload.ProviderFailure.Type) != string(workerexecution.WorkFailureTypeUnknown) {
+		t.Fatalf(
+			"reject-process provider failure = %#v, want stable unknown provider failure",
+			payload.ProviderFailure,
+		)
+	}
+	if payload.Error == nil {
+		t.Fatal("reject-process dispatch error missing from public response")
+	}
+	errorText := *payload.Error
+	if !strings.Contains(errorText, stableUnknownProviderErr) {
+		t.Fatalf(
+			"reject-process error = %q, want stable public unknown provider failure",
+			errorText,
+		)
+	}
+	for _, leaked := range []string{configuredRejectStdout, configuredRejectStderr} {
+		if strings.Contains(errorText, leaked) {
+			t.Fatalf(
+				"reject-process error = %q, want customer-safe error without configured command output %q",
+				errorText,
+				leaked,
+			)
+		}
+	}
+	output := stringPointerValue(payload.Output)
+	for _, leaked := range []string{configuredRejectStdout, configuredRejectStderr} {
+		if strings.Contains(output, leaked) {
+			t.Fatalf(
+				"reject-process output = %q, want public surface without configured command output %q",
+				output,
+				leaked,
+			)
+		}
 	}
 }
 
