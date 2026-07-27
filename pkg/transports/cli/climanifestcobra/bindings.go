@@ -445,17 +445,7 @@ func appendResolvedArguments(
 	candidates *[]resolvedinput.Candidate,
 ) error {
 	for _, argument := range record.Arguments {
-		if argument.HandlerBindingID == "" {
-			continue
-		}
-		definition, err := resolvedCommandInputDefinition(
-			argument.ID,
-			argument.ValueType,
-			argument.AcceptedSources,
-			record.Precedence,
-			true,
-			false,
-		)
+		definition, err := resolvedArgumentDefinition(argument, record.Precedence)
 		if err != nil {
 			return fmt.Errorf("resolve argument %q: %w", argument.ID, err)
 		}
@@ -498,23 +488,16 @@ func appendResolvedLocalFlags(
 	candidates *[]resolvedinput.Candidate,
 ) error {
 	for _, flag := range record.Flags {
-		if !isCanonicalFlagRecord(flag) || flag.Scope != "local" {
+		if flag.Scope != "local" {
 			continue
 		}
-		definition, err := resolvedCommandInputDefinition(
-			flag.ID,
-			flag.ValueType,
-			flag.AcceptedSources,
-			record.Precedence,
-			false,
-			flag.Sensitivity != "" && flag.Sensitivity != "public",
-		)
+		definition, err := resolvedLocalFlagDefinition(flag, record.Precedence)
 		if err != nil {
 			return fmt.Errorf("resolve flag %q: %w", flag.ID, err)
 		}
 		*definitions = append(*definitions, definition)
-		if flag.DefaultValue != nil {
-			value, err := typedGenericInputValue(flag.ValueType, flag.DefaultValue)
+		if hasGenericFlagDefault(flag) || !isCanonicalFlagRecord(flag) {
+			value, err := genericFlagDefault(flag)
 			if err != nil {
 				return fmt.Errorf("resolve flag %q default: %w", flag.ID, err)
 			}
@@ -533,6 +516,49 @@ func appendResolvedLocalFlags(
 		}
 	}
 	return nil
+}
+
+func resolvedArgumentDefinition(
+	argument climanifest.Argument,
+	precedence climanifest.Precedence,
+) (resolvedinput.Definition, error) {
+	if argument.HandlerBindingID != "" {
+		return resolvedCommandInputDefinition(
+			argument.ID, argument.ValueType, argument.AcceptedSources,
+			precedence, true, false,
+		)
+	}
+	kind, err := resolvedValueKind(argument.ValueType)
+	if err != nil {
+		return resolvedinput.Definition{}, err
+	}
+	return resolvedinput.Definition{
+		ID: argument.ID, Kind: kind,
+		Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument},
+	}, nil
+}
+
+func resolvedLocalFlagDefinition(
+	flag climanifest.Flag,
+	precedence climanifest.Precedence,
+) (resolvedinput.Definition, error) {
+	if isCanonicalFlagRecord(flag) {
+		return resolvedCommandInputDefinition(
+			flag.ID, flag.ValueType, flag.AcceptedSources, precedence, false,
+			flag.Sensitivity != "" && flag.Sensitivity != "public",
+		)
+	}
+	kind, err := resolvedValueKind(flag.ValueType)
+	if err != nil {
+		return resolvedinput.Definition{}, err
+	}
+	return resolvedinput.Definition{
+		ID: flag.ID, Kind: kind,
+		Precedence: []resolvedinput.Source{
+			resolvedinput.SourceCLIFlag,
+			resolvedinput.SourceManifestDefault,
+		},
+	}, nil
 }
 
 func resolvedCommandInputDefinition(

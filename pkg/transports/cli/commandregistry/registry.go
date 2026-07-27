@@ -3,16 +3,22 @@ package commandregistry
 import (
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
 
 // RunE is a handwritten Cobra handler bound to one stable command ID.
 type RunE func(cmd *cobra.Command, args []string) error
 
+// ResolvedRunE is a handwritten Cobra handler that consumes invocation-local
+// inputs addressed only by stable manifest input IDs.
+type ResolvedRunE func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
+
 // CommandHandlers is the handwritten lifecycle attached to one runnable Cobra command.
 type CommandHandlers struct {
-	PreRunE RunE
-	RunE    RunE
+	PreRunE      RunE
+	RunE         RunE
+	ResolvedRunE ResolvedRunE
 }
 
 // Registry maps stable command IDs to handwritten command handlers.
@@ -31,6 +37,11 @@ func (r *Registry) Register(commandID string, handler RunE) error {
 	return r.RegisterHandlers(commandID, CommandHandlers{RunE: handler})
 }
 
+// RegisterResolved binds one stable handler ID to a resolved-input handler.
+func (r *Registry) RegisterResolved(handlerID string, handler ResolvedRunE) error {
+	return r.RegisterHandlers(handlerID, CommandHandlers{ResolvedRunE: handler})
+}
+
 // RegisterHandlers binds one stable command ID to its handwritten lifecycle.
 // Duplicate registration fails observably.
 func (r *Registry) RegisterHandlers(commandID string, handlers CommandHandlers) error {
@@ -40,7 +51,7 @@ func (r *Registry) RegisterHandlers(commandID string, handlers CommandHandlers) 
 	if commandID == "" {
 		return fmt.Errorf("register handler: command ID is required")
 	}
-	if handlers.RunE == nil {
+	if (handlers.RunE == nil) == (handlers.ResolvedRunE == nil) {
 		return fmt.Errorf("register %q: handler is required", commandID)
 	}
 	if _, exists := r.handlers[commandID]; exists {

@@ -1,10 +1,12 @@
 package climanifestcobra_test
 
 import (
+	"bytes"
 	"io"
 	"strings"
 	"testing"
 
+	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
@@ -297,5 +299,250 @@ func TestFactoryConfigInitFamilyProjectsProviderModelSetupInputs(t *testing.T) {
 func TestNewFactoryConfigInitFamilyComponentsRejectsNilHandler(t *testing.T) {
 	if _, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(nil); err == nil {
 		t.Fatal("NewFactoryConfigInitFamilyComponents(nil) error = nil")
+	}
+}
+
+func TestSessionResolvedHandlersMapDefaultsChangedValuesAndStableArguments(t *testing.T) {
+	var (
+		creates []sessioncli.CreateConfig
+		lists   []sessioncli.ListConfig
+		deletes []sessioncli.DeleteConfig
+		diag    bytes.Buffer
+	)
+	services := commandregistry.SessionResolvedServices{
+		CreateSession: func(cfg sessioncli.CreateConfig) error {
+			creates = append(creates, cfg)
+			return nil
+		},
+		ListSessions: func(cfg sessioncli.ListConfig) error {
+			lists = append(lists, cfg)
+			return nil
+		},
+		DeleteSession: func(cfg sessioncli.DeleteConfig) error {
+			deletes = append(deletes, cfg)
+			return nil
+		},
+		Diagnostics: func(*cobra.Command) io.Writer { return &diag },
+	}
+
+	if err := executeResolvedSession(t, services, "session", "create", "--dir", "fleet"); err != nil {
+		t.Fatalf("default create Execute() error = %v", err)
+	}
+	if len(creates) != 1 {
+		t.Fatalf("create calls = %d, want 1", len(creates))
+	}
+	assertDefaultResolvedCreate(t, creates[0], &diag)
+
+	if err := executeResolvedSession(
+		t,
+		services,
+		"--server", "https://factory.example", "--json", "--verbose", "--debug",
+		"session", "create", "--dir", "fleet", "--port", "9444",
+		"--init-new-factory", "--target-kind", "named", "--target-name", "alpha",
+	); err != nil {
+		t.Fatalf("changed create Execute() error = %v", err)
+	}
+	assertChangedResolvedCreate(t, creates[1])
+
+	if err := executeResolvedSession(t, services, "session", "list"); err != nil {
+		t.Fatalf("default list Execute() error = %v", err)
+	}
+	assertDefaultResolvedList(t, lists[0])
+	if err := executeResolvedSession(
+		t, services, "--server", "https://factory.example",
+		"session", "list", "--scope", "all",
+	); err != nil {
+		t.Fatalf("changed list Execute() error = %v", err)
+	}
+	assertChangedResolvedList(t, lists[1])
+
+	if err := executeResolvedSession(t, services, "--json", "session", "delete", "session-beta"); err != nil {
+		t.Fatalf("delete Execute() error = %v", err)
+	}
+	assertResolvedDelete(t, deletes)
+}
+
+func TestSessionResolvedHandlersRejectInvalidInputsBeforeOperation(t *testing.T) {
+	calls := 0
+	services := commandregistry.SessionResolvedServices{
+		CreateSession: func(sessioncli.CreateConfig) error {
+			calls++
+			return nil
+		},
+		DeleteSession: func(sessioncli.DeleteConfig) error {
+			calls++
+			return nil
+		},
+	}
+	if err := executeResolvedSession(
+		t, services, "session", "create", "--dir", "fleet", "--port", "not-an-int",
+	); err == nil {
+		t.Fatal("invalid typed port error = nil")
+	}
+	if err := executeResolvedSession(t, services, "session", "delete"); err == nil {
+		t.Fatal("missing session ID error = nil")
+	}
+	if calls != 0 {
+		t.Fatalf("operation calls = %d, want 0", calls)
+	}
+}
+
+func TestSessionCompatibilityInputsRetainResolvedProvenance(t *testing.T) {
+	defaultLocal, defaultInherited := observeSessionCreateInputs(
+		t, "session", "create", "--dir", "fleet",
+	)
+	assertSessionResolvedState(
+		t, defaultLocal, "you.session.create.flag.port",
+		resolvedinput.SourceManifestDefault, false, true,
+	)
+	assertSessionResolvedState(
+		t, defaultInherited, "you.flag.server",
+		resolvedinput.SourceManifestDefault, false, true,
+	)
+
+	changedLocal, changedInherited := observeSessionCreateInputs(
+		t,
+		"--server", "https://factory.example",
+		"session", "create", "--dir", "fleet", "--port", "9444",
+	)
+	assertSessionResolvedState(
+		t, changedLocal, "you.session.create.flag.dir",
+		resolvedinput.SourceCLIFlag, true, false,
+	)
+	assertSessionResolvedState(
+		t, changedLocal, "you.session.create.flag.port",
+		resolvedinput.SourceCLIFlag, true, false,
+	)
+	assertSessionResolvedState(
+		t, changedInherited, "you.flag.server",
+		resolvedinput.SourceCLIFlag, true, false,
+	)
+}
+
+func observeSessionCreateInputs(
+	t *testing.T,
+	args ...string,
+) (resolvedinput.Inputs, resolvedinput.Inputs) {
+	t.Helper()
+	manifest := mustSessionManifest(t)
+	registry := commandregistry.NewRegistry()
+	var local, inherited resolvedinput.Inputs
+	for _, record := range manifest.Commands {
+		if !record.Runnable {
+			continue
+		}
+		commandID := record.ID
+		err := registry.RegisterResolved(
+			record.Handler.ID,
+			func(_ *cobra.Command, inputs, globals resolvedinput.Inputs) error {
+				if commandID == "you.session.create" {
+					local, inherited = inputs, globals
+				}
+				return nil
+			},
+		)
+		if err != nil {
+			t.Fatalf("RegisterResolved(%q) error = %v", record.Handler.ID, err)
+		}
+	}
+	root, err := climanifestcobra.NewSessionFamilyCommandFromManifest(manifest, registry)
+	if err != nil {
+		t.Fatalf("NewSessionFamilyCommandFromManifest() error = %v", err)
+	}
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("session create Execute() error = %v", err)
+	}
+	return local, inherited
+}
+
+func assertSessionResolvedState(
+	t *testing.T,
+	inputs resolvedinput.Inputs,
+	inputID string,
+	provenance resolvedinput.Source,
+	changed bool,
+	defaulted bool,
+) {
+	t.Helper()
+	state, ok := inputs.State(inputID)
+	if !ok {
+		t.Fatalf("resolved input %q state is missing", inputID)
+	}
+	if state.Provenance != provenance || state.Changed != changed || state.Default != defaulted {
+		t.Fatalf("resolved input %q state = %#v", inputID, state)
+	}
+}
+
+func executeResolvedSession(
+	t *testing.T,
+	services commandregistry.SessionResolvedServices,
+	args ...string,
+) error {
+	t.Helper()
+	manifest := mustSessionManifest(t)
+	registry, err := commandregistry.NewSessionResolvedRegistry(manifest, services)
+	if err != nil {
+		t.Fatalf("NewSessionResolvedRegistry() error = %v", err)
+	}
+	root, err := climanifestcobra.NewSessionFamilyCommandFromManifest(manifest, registry)
+	if err != nil {
+		t.Fatalf("NewSessionFamilyCommandFromManifest() error = %v", err)
+	}
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs(args)
+	return root.Execute()
+}
+
+func assertDefaultResolvedCreate(
+	t *testing.T,
+	cfg sessioncli.CreateConfig,
+	diagnostics io.Writer,
+) {
+	t.Helper()
+	if cfg.Dir != "fleet" || cfg.Port != 7437 ||
+		cfg.PortExplicit || cfg.Server != "http://localhost:7437" ||
+		cfg.InitNewFactory || cfg.ValidateOnly ||
+		cfg.JSON || cfg.Verbose || cfg.Debug {
+		t.Fatalf("default create config = %#v", cfg)
+	}
+	if cfg.Diagnostics != diagnostics || cfg.Output == nil {
+		t.Fatalf("default create writers = output:%T diagnostics:%T", cfg.Output, cfg.Diagnostics)
+	}
+}
+
+func assertChangedResolvedCreate(t *testing.T, cfg sessioncli.CreateConfig) {
+	t.Helper()
+	if cfg.Server != "https://factory.example" ||
+		cfg.Port != 9444 || !cfg.PortExplicit ||
+		!cfg.JSON || !cfg.Verbose || !cfg.Debug ||
+		!cfg.InitNewFactory ||
+		cfg.TargetKind != "named" || cfg.TargetName != "alpha" {
+		t.Fatalf("changed create config = %#v", cfg)
+	}
+}
+
+func assertDefaultResolvedList(t *testing.T, cfg sessioncli.ListConfig) {
+	t.Helper()
+	if cfg.Scope != "live" || cfg.Port != 7437 || cfg.Server != "" {
+		t.Fatalf("default list config = %#v", cfg)
+	}
+}
+
+func assertChangedResolvedList(t *testing.T, cfg sessioncli.ListConfig) {
+	t.Helper()
+	if cfg.Scope != "all" || cfg.Server != "https://factory.example" {
+		t.Fatalf("changed list config = %#v", cfg)
+	}
+}
+
+func assertResolvedDelete(t *testing.T, configs []sessioncli.DeleteConfig) {
+	t.Helper()
+	if len(configs) != 1 || configs[0].SessionID != "session-beta" ||
+		configs[0].Port != 7437 || !configs[0].JSON {
+		t.Fatalf("delete configs = %#v", configs)
 	}
 }

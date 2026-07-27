@@ -27,6 +27,7 @@ func NewSessionFamilyCommandFromManifest(
 	}
 
 	handlers := make(CobraHandlerRegistry)
+	resolvedHandlers := make(ResolvedCobraHandlerRegistry)
 	for _, record := range manifest.Commands {
 		if !record.Runnable {
 			continue
@@ -36,6 +37,10 @@ func NewSessionFamilyCommandFromManifest(
 			return nil, fmt.Errorf("build session family command: %w", err)
 		}
 		handler := registered
+		if handler.ResolvedRunE != nil {
+			resolvedHandlers[record.Handler.ID] = handler.ResolvedRunE
+			continue
+		}
 		handlers[record.Handler.ID] = func(
 			cmd *cobra.Command,
 			args []string,
@@ -66,6 +71,7 @@ func NewSessionFamilyCommandFromManifest(
 			rootRecord.Handler.ID: func(context.Context, map[string]any) error { return nil },
 		},
 		CobraHandlers:           handlers,
+		ResolvedCobraHandlers:   resolvedHandlers,
 		GuardUnknownSubcommands: true,
 	})
 	if err != nil {
