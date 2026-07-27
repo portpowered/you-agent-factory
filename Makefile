@@ -120,12 +120,12 @@ endef
 
 .PHONY: test test-full test-unit test-unit-fresh test-lane-audit test-maintenance test-integration test-contract test-stress test-release
 .PHONY: test-functional test-functional-long test-backend-functional functional-boundary-check functional-test-viz
-.PHONY: test-ui-coverage-merge test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
+.PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
 .PHONY: test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
 
 .PHONY: verify-fast verify-pr verify-pr-inference verify-extended verify-build verify-lint verify-api
-.PHONY: verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage
+.PHONY: verify-build-contracts verify-tests run-concurrent-ui-verification-lanes verify test-ui-coverage
 
 .PHONY: backend-dependency-graph
 
@@ -423,10 +423,6 @@ verify-extended:
 
 test-ui-coverage:
 	$(MAKE) ui-test-coverage
-	@if [ -z "$$UI_COVERAGE_SHARD" ] && [ -z "$$UI_COVERAGE_MERGE" ]; then $(MAKE) ui-replay-coverage-check; fi
-
-test-ui-coverage-merge:
-	$(MAKE) ui-test-coverage-merge
 	$(MAKE) ui-replay-coverage-check
 
 test-ui-browser-integration:
@@ -607,9 +603,6 @@ verify-build-contracts:
 	$(MAKE) verify-lint
 	$(MAKE) verify-api
 
-run-sharded-ui-coverage:
-	./scripts/ci/run-sharded-ui-coverage.sh
-
 run-concurrent-ui-verification-lanes:
 	./scripts/ci/run-concurrent-ui-verification-lanes.sh
 
@@ -742,9 +735,6 @@ endif
 
 ui-test-coverage:
 	cd ui && $(UI_SCRIPT) test:coverage
-
-ui-test-coverage-merge:
-	cd ui && UI_COVERAGE_MERGE=1 $(UI_SCRIPT) test:coverage
 
 ui-replay-coverage-check:
 ifeq ($(BUN_BIN),)

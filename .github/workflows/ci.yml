@@ -125,60 +125,22 @@ jobs:
           UI_COMPONENT_MAX_DURATION_MS: "300000"
         run: make ui-component-test
 
-  ui-coverage-shard:
-    name: Frontend Coverage Shard (${{ matrix.shard }}/4)
+  ui-coverage:
+    name: Frontend Coverage
     needs: classify
     if: always() && needs.classify.outputs.run_frontend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - run: make ui-deps
-      - name: Run coverage shard
+      - name: Run frontend unit coverage
         env:
-          UI_COVERAGE_SHARD: ${{ matrix.shard }}/4
-          UI_COVERAGE_MAIN_MAX_WORKERS: "2"
-        run: make ui-test-coverage
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ui-coverage-shard-${{ matrix.shard }}
-          include-hidden-files: true
-          path: ui/.vitest-reports/main-shard-${{ matrix.shard }}.json
-          if-no-files-found: error
-          retention-days: 14
-
-  ui-coverage-merge:
-    name: Frontend Coverage
-    needs: [classify, ui-coverage-shard]
-    if: always() && needs.classify.outputs.run_frontend == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - run: make ui-deps
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: ui-coverage-shard-*
-          path: ui/.vitest-reports
-          merge-multiple: true
-      - name: Verify coverage shards
-        shell: bash
-        run: |
-          set -euo pipefail
-          for shard in 1 2 3 4; do
-            test -f "ui/.vitest-reports/main-shard-${shard}.json"
-          done
-      - run: make test-ui-coverage-merge
+          UI_COVERAGE_MAIN_MAX_WORKERS: "4"
+        run: make test-ui-coverage
 
   frontend-browser:
     name: Frontend Browser
@@ -379,7 +341,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, docs-reference, readme, frontend, frontend-component, ui-coverage-merge, frontend-browser, frontend-storybook, backend-coverage, ui-backend-integration, api-package, packaged-factories-package, model-providers-package, api-candidate, packaged-factories-candidate, local-inference]
+    needs: [classify, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, ui-backend-integration, api-package, packaged-factories-package, model-providers-package, api-candidate, packaged-factories-candidate, local-inference]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -406,7 +368,7 @@ jobs:
           PROVIDERS_REASON: ${{ needs.classify.outputs.model_providers_package_reason }}
           INFERENCE_REASON: ${{ needs.classify.outputs.local_inference_reason }}
           RESULTS: >-
-            docs=${{ needs.docs-reference.result }} readme=${{ needs.readme.result }} frontend=${{ needs.frontend.result }} frontend_component=${{ needs.frontend-component.result }} frontend_coverage=${{ needs.ui-coverage-merge.result }} frontend_browser=${{ needs.frontend-browser.result }} frontend_storybook=${{ needs.frontend-storybook.result }} backend=${{ needs.backend-coverage.result }} ui_backend=${{ needs.ui-backend-integration.result }} api=${{ needs.api-package.result }} packaged=${{ needs.packaged-factories-package.result }} providers=${{ needs.model-providers-package.result }} api_candidate=${{ needs.api-candidate.result }} packaged_candidate=${{ needs.packaged-factories-candidate.result }} inference=${{ needs.local-inference.result }}
+            docs=${{ needs.docs-reference.result }} readme=${{ needs.readme.result }} frontend=${{ needs.frontend.result }} frontend_component=${{ needs.frontend-component.result }} frontend_coverage=${{ needs.ui-coverage.result }} frontend_browser=${{ needs.frontend-browser.result }} frontend_storybook=${{ needs.frontend-storybook.result }} backend=${{ needs.backend-coverage.result }} ui_backend=${{ needs.ui-backend-integration.result }} api=${{ needs.api-package.result }} packaged=${{ needs.packaged-factories-package.result }} providers=${{ needs.model-providers-package.result }} api_candidate=${{ needs.api-candidate.result }} packaged_candidate=${{ needs.packaged-factories-candidate.result }} inference=${{ needs.local-inference.result }}
         shell: bash
         run: |
           set -euo pipefail
@@ -421,7 +383,7 @@ jobs:
             "README|$RUN_README|${{ needs.readme.result }}|$README_REASON" \
             "Frontend|$RUN_FRONTEND|${{ needs.frontend.result }}|$FRONTEND_REASON" \
             "Frontend Component|$RUN_FRONTEND|${{ needs.frontend-component.result }}|$FRONTEND_REASON" \
-            "Frontend Coverage|$RUN_FRONTEND|${{ needs.ui-coverage-merge.result }}|$FRONTEND_REASON" \
+            "Frontend Coverage|$RUN_FRONTEND|${{ needs.ui-coverage.result }}|$FRONTEND_REASON" \
             "Frontend Browser|$RUN_FRONTEND|${{ needs.frontend-browser.result }}|$FRONTEND_REASON" \
             "Frontend Storybook|$RUN_FRONTEND|${{ needs.frontend-storybook.result }}|$FRONTEND_REASON" \
             "Backend Coverage|$RUN_BACKEND|${{ needs.backend-coverage.result }}|$BACKEND_REASON" \
