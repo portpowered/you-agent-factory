@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"time"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -79,25 +78,6 @@ func withInferenceErrorDiagnostics(base *workerexecution.WorkDiagnostics, err er
 	diagnostics.Provider.ResponseMetadata["error"] = err.Error()
 	diagnostics.Provider.ResponseMetadata["retry_count"] = fmt.Sprintf("%d", retryCount)
 	return diagnostics
-}
-
-func commandDiagnostics(req CommandRequest, result CommandResult, duration time.Duration, timedOut bool) *workerexecution.WorkDiagnostics {
-	envProjection := projectCommandEnvForDiagnostics(req.Env)
-	return &workerexecution.WorkDiagnostics{
-		Command: &workerexecution.CommandDiagnostic{
-			Command:    req.Command,
-			Args:       append([]string(nil), req.Args...),
-			Stdin:      string(req.Stdin),
-			Env:        envProjection.Values,
-			Stdout:     string(result.Stdout),
-			Stderr:     string(result.Stderr),
-			ExitCode:   result.ExitCode,
-			TimedOut:   timedOut,
-			Duration:   duration,
-			WorkingDir: req.WorkDir,
-		},
-		Metadata: commandEnvDiagnosticMetadata(envProjection),
-	}
 }
 
 func mergeWorkDiagnostics(base, overlay *workerexecution.WorkDiagnostics) *workerexecution.WorkDiagnostics {

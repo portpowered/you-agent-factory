@@ -28,6 +28,12 @@ func (f *fakeCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequ
 	return platformprocess.CommandResult{Stdout: []byte(f.stdout), Stderr: []byte(f.stderr), ExitCode: f.exitCode}, nil
 }
 
+type canceledCommandRunner struct{}
+
+func (canceledCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, context.Canceled
+}
+
 type captureCommandRunner struct {
 	mu       sync.Mutex
 	workDirs []string
@@ -62,6 +68,12 @@ func (r *captureCommandRunner) LastEnv() []string {
 	copied := make([]string, len(r.envs[len(r.envs)-1]))
 	copy(copied, r.envs[len(r.envs)-1])
 	return copied
+}
+
+func (r *captureCommandRunner) CallCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.workDirs)
 }
 
 type timeoutThenSuccessCommandRunner struct {

@@ -2594,11 +2594,6 @@
     },
     {
       "rule": "service-root-interface-count",
-      "filePath": "pkg/services/workers/services/scripts",
-      "target": "<none>"
-    },
-    {
-      "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/testing",
       "target": "<none>"
     },
@@ -2616,11 +2611,6 @@
       "rule": "service-root-missing-internal",
       "filePath": "pkg/services/workers/services/inference/internal",
       "target": "pkg/services/workers/services/inference"
-    },
-    {
-      "rule": "service-root-missing-internal",
-      "filePath": "pkg/services/workers/services/scripts/internal",
-      "target": "pkg/services/workers/services/scripts"
     },
     {
       "rule": "service-root-missing-internal",

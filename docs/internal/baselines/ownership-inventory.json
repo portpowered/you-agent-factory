@@ -3628,6 +3628,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/script",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/services/runners/internal/service",
       "disposition": "retain",
       "destination": "workers",
@@ -3919,12 +3925,6 @@
     },
     {
       "packagePath": "pkg/services/workers/services/inference",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/services/scripts",
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"

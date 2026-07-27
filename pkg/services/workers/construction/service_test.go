@@ -86,7 +86,7 @@ func TestServiceBuildScriptExposesDispatchAndDirectBoundaries(t *testing.T) {
 		t.Fatalf("NewScriptFactory() error = %v", err)
 	}
 	runtimeConfig := runtimefixtures.RuntimeConfigLookupFixture{Workers: map[string]*interfaces.FactoryWorkerConfig{
-		"script": {Name: "script", Type: interfaces.WorkerTypeScript},
+		"script": {Name: "script", Type: interfaces.WorkerTypeScript, Command: "script-tool"},
 	}}
 	result, err := New(nil, scriptFactory, nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
 		runtimeConfig, "script", "", nil, logging.NoopLogger{}, nil,

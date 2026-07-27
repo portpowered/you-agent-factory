@@ -33,8 +33,9 @@ CI jobs.
 - Performance budgets currently run inside default unit/component and covered
   passes, making timing-sensitive stress fixtures part of normal correctness
   feedback.
-- Coverage uses ten count-based shards. Shard execution is imbalanced and CI
-  runner setup/queueing consumes much of the parallelism benefit.
+- Coverage historically used count-based shards whose setup, artifact transfer,
+  and merge work consumed much of the parallelism benefit. The current pipeline
+  deliberately uses one Node unit-coverage job.
 
 ## Behavioral contracts
 
@@ -243,8 +244,8 @@ The command surface becomes:
 | `bun run check:test-lanes` | Static classification and boundary audit |
 
 The CI workflow calls these commands rather than reconstructing glob rules in
-YAML. This leaves one authoritative classification mechanism for local runs,
-coverage shards, and CI.
+YAML. This leaves one authoritative classification mechanism for local runs and
+CI.
 
 ## App composition-root end state
 
@@ -285,17 +286,13 @@ The removal rule for an App case is evidence-based:
 
 ## Coverage design
 
-Coverage will eventually be split into two non-browser projects:
-
-1. Unit coverage in Node.
-2. Component coverage in jsdom.
-
-The merge step owns the aggregate threshold. Browser sources, browser harnesses,
+Coverage is one browserless Node unit project. Component and browser correctness
+run in their named lanes and do not participate in the coverage denominator.
+The monolithic unit pass owns the aggregate threshold directly; there is no
+shard artifact or report-merge phase. Browser sources, browser harnesses,
 performance tests, stories, generated API code, and test-support-only modules
-remain outside the threshold denominator. Initial thresholds will be set from a
-green measurement of the curated unit/component corpus. The existing 92.97%
-line/statement floor is not a rollout constraint; any reduction must be visible
-in the change and accompanied by a retained critical-contract manifest.
+remain outside the threshold denominator. The reduced floor is intentional and
+must stay visible alongside the retained critical-contract inventory.
 
 Critical contracts that must remain represented include:
 
@@ -312,7 +309,7 @@ Critical contracts that must remain represented include:
 | --- | ---: |
 | Unit tests | 90 seconds p95 |
 | Component tests | 150 seconds p95 |
-| Merged unit + component coverage | 180 seconds p95 including setup |
+| Node unit coverage | 180 seconds p95 including setup |
 | Browser critical subset | 180 seconds p95 when ownership-routed |
 | Default UI pull-request critical path | 5 minutes p95 |
 
@@ -330,7 +327,7 @@ Acceptance criteria:
 
 - Timing data comes from structured Vitest output rather than parsing arbitrary
   stdout lines.
-- Shard timing artifacts are uploaded, downloaded, and merged.
+- One monolithic coverage job emits the slow-file summary directly.
 - Synthetic reporter fixture strings cannot appear as executed test files.
 - CI summaries group costs as `unit`, `component`, `browser`, or `performance`.
 
@@ -401,21 +398,23 @@ Acceptance criteria:
 - The full browser corpus remains available on main/nightly and through a named
   local command.
 
-### UI-COV-007 — Right-size coverage parallelism
+### UI-COV-007 — Simplify coverage parallelism
 
-As a maintainer, coverage uses the smallest runner count that satisfies the
-latency target.
+As a maintainer, coverage uses one understandable job with bounded internal
+workers and no artifact choreography.
 
 Acceptance criteria:
 
-- Shards are balanced by measured duration rather than file count.
-- One-, two-, four-, and current ten-shard costs include setup and queue time.
+- The required CI workflow contains one Frontend Coverage job.
+- Local and CI entrypoints use the same `make test-ui-coverage` command.
+- No shard environment variables, blob uploads/downloads, or merge-only targets
+  remain.
 - The selected configuration meets the p95 target without reducing reliability.
 
 ## Task breakdown
 
 1. Complete UI-COV-002 first to remove known performance work from coverage.
-2. Fix structured timing and shard artifact transport in UI-COV-001.
+2. Keep stable slow-file reporting in UI-COV-001.
 3. Add the unit/component classification manifest and audit in UI-COV-003.
 4. Measure and adopt the curated non-browser coverage contract in UI-COV-004.
 5. Reconcile `App.*` suites incrementally under UI-COV-005, starting with
@@ -423,7 +422,7 @@ Acceptance criteria:
    workstation-request replay.
 6. Add browser ownership routing in UI-COV-006 after the non-browser required
    lane is stable.
-7. Re-measure and simplify sharding in UI-COV-007.
+7. Keep the unsharded pipeline within its duration budget in UI-COV-007.
 
 ## Implementation progress — 2026-07-26
 
@@ -481,8 +480,8 @@ Local pinned-Node evidence after decomposition:
 | Node-only coverage baseline | 54.58% statements / 46.22% branches / 52.42% functions / 54.87% lines |
 
 These local values are implementation evidence, not the final CI latency
-baseline. UI-COV-001 and UI-COV-007 still own structured CI timing and shard
-right-sizing. The full-corpus run reported 706.02 aggregate worker-seconds of
+baseline. UI-COV-001 and UI-COV-007 own structured CI timing and the monolithic
+coverage budget. The full-corpus run reported 706.02 aggregate worker-seconds of
 imports and 195.98 aggregate worker-seconds of environment setup, making
 legacy unit/component classification the next dominant latency opportunity.
 The migration reduces the canonical short UI lane to the 44.80-second Node
@@ -701,8 +700,12 @@ request behavior, or full dashboard composition until they are decomposed.
 
 ### Current component latency inventory
 
-The post-PR #1316 local profile groups the remaining dominant component cost by
-cause rather than runner alone:
+The post-PR #1331 local profile groups the remaining dominant component cost by
+cause rather than runner alone. The largest feature clusters in that profile
+were factory-session detail (3,586ms across 19 files), current selection
+(3,567ms across 32 files), workflow activity (3,511ms across 18 files),
+dashboard (1,163ms across 8 files), trace drill-down (1,032ms across 5 files),
+and header (899ms across 4 files).
 
 | Category | Representative file | Profiled source time | Reconciliation |
 | --- | --- | ---: | --- |
@@ -711,12 +714,19 @@ cause rather than runner alone:
 | Module-mocked async hook | `use-dashboard-checkpoint-preflight.test.tsx` | 778ms | Replaced four Vitest files (884 lines) with one feature-owned Bun core contract using explicit resolver and mutation effects; focused execution is about 635ms and no longer constructs mocked application providers. |
 | Omnibus widget rendering | `current-selection-widget.provider-session-selection.test.tsx` | 720ms | Removed the redundant 500-line widget suite; inference-history selection state now runs in the feature-owned `useSelectedProviderSessionState` Bun contract (about 164ms), while selection controls remain covered by WorkItemCard and workstation-attempt contracts. |
 | Graph/editor host composition | `react-flow-current-activity-card-host-contract.test.tsx` | 700ms | Retain the small host boundary; continue replacing aggregate imports with owner modules. |
+| Workflow-activity bento aggregation | `workflow-activity-bento-card.test.tsx` | 385ms | Replaced the six-case, module-mocked graph omnibus with a two-case Bun contract around the extracted bento shell. Shared card chrome, editor controls, graph layout, and accessibility behavior stay with their existing feature owners. |
+| Trace-grid aggregation | `trace-grid-card.test.tsx` plus three scroll suites | 401ms for the Vitest omnibus, plus duplicate Bun work | Replaced the mocked graph-wide suite with a three-case Bun owner contract for states, table/selection behavior, and localization. Consolidated seven overlapping scroll cases into one long-table ownership invariant under `components/trace-grid-card/`. |
+| Resource-detail query harness | `resource-detail-card.test.tsx` | 397ms | Replaced twelve cases that mocked the current-factory query with five direct Bun card contracts under `components/resource-detail-card/`. The card now receives feature-owned resource and editable state fixtures directly; save-button behavior remains in `resource-save-controls`. |
+| Export dialog module effects | `export-factory-dialog.test.tsx` | 394ms | Replaced fourteen module-mocked Vitest cases with seven feature-owned Bun contracts under `components/export-factory-dialog/`. PNG writing and browser download are explicit dialog effects; validation, preparation, pending/success/failure, refresh, close-race, and localization behavior remain covered without process-global mocks. Focused execution is about 301ms. |
+| Dashboard-header aggregation | `dashboard-header.test.tsx` | 375ms | Replaced the 607-line mocked-session-tabs suite with four Bun contracts under `components/dashboard-header/` for the actual locale, palette, and export-control owners. Focused execution is about 202ms. The dedicated responsive Storybook browser verification retains shell geometry and breakpoint ownership, so duplicate CSS-class assertions no longer run in the component lane. |
+| Current-selection localization aggregation | `current-selection-widget.localization.test.tsx` | 348ms | Removed three mocked whole-widget mounts after reconciling localized shell, WorkItem dispatch/provider-session, and Workstation behavior with their existing owner contracts. Added the one missing zh-CN resource-field case to the existing ResourceDetailCard Bun contract; its complete six-case owner file runs in about 323ms. |
 | Cross-owner dashboard wiring | `dashboard-replay-wiring.component.test.tsx` | 697ms | Removed the app-shell duplicate: stream append and fixed-tick behavior are owned by the Bun snapshot hook, timeline store, slider, and bento snapshot contracts. |
 | Graph validation and charts | workflow editor validation and work chart tests | 675–691ms | WorkChart's 18 rendered contracts run under Bun. The duplicate workflow-activity editor validation suite is removed, and the seven feature-owned `useFactoryValidation` contracts now run under Bun in about 654ms with an injected validator rather than a process-global module mock. |
 | Chart wrapper duplication | `d3-information-card.test.tsx` | 540ms | Replaced the 600-line, ten-case Vitest suite with a three-case Bun owner contract for frame composition, localization/series wiring, and state forwarding. Legend, geometry, zoom, and state behavior remain with the dedicated WorkChart contracts. |
 | Aggregate selection switching | `current-selection-widget.selection-switch.test.tsx` | 483ms | Removed the four-case Vitest suite. Workstation, worker, resource, work-item, and work-state dispatch plus cross-selection resets already run in the isolated Bun widget and save contracts and in each detail-card owner. |
 | Public barrel self-tests | five feature `public/index.ts` files and three smoke tests | 93ms in the profiled Vitest smoke plus Bun import work | Removed the unused aggregate barrels and the tests whose only consumer was the barrel itself. Focused public subpaths remain available where a stable single-capability contract is useful. |
 | Stream recovery hook | `useFactoryEventStream.stale-cursor.test.tsx` | 405ms | The six stale-cursor recovery contracts now run under Bun using the shared global-stub and spy compatibility seam; the hook remains beside its event-stream owner. |
+| Cross-feature import workflow | `react-flow-current-activity-card-import-flows.test.tsx` | 457ms | Removed the eight-case current-activity omnibus after reconciling PNG parsing/drop errors, preview dialogs, activation errors, and messages with import owners. A three-case Bun controller contract now owns preview readiness, successful close/refresh, and failed activation retention. |
 | Current-selection editing | prompt-edit and header save/discard integration tests | 443–670ms | Removed both duplicate widget suites. Invalid-to-valid prompt recovery and save submission run in the Bun save contract; exact header-only workstation and worker actions run in their feature-owned detail-card contracts. |
 | Cross-owner trace wiring | `dashboard-trace-wiring.component.test.tsx` | 616ms | Removed the app-shell duplicate after reconciling event lineage, trace merging, trace rendering, and selection callbacks with their timeline, trace, and current-selection owners. |
 
@@ -725,11 +735,13 @@ widget mounts, and process-global module mocks. Assertion execution is not the
 primary cost. Migration therefore starts by narrowing ownership and dependency
 seams; changing only the runner for an app-sized test preserves most latency.
 
-After the stale-cursor and current-selection header reconciliation, the complete
-component command owns 232 Bun files and 117 remaining Vitest files and
-completes locally in 76.71s: 36.85s in Bun and 39.86s in Vitest. The last
-measured unit lane is 18.05s, so the combined non-browser correctness feedback
-is approximately 94.76s.
+After the current-selection localization reconciliation, the complete component
+command owns 236 Bun files and 109 remaining Vitest files and completes locally
+in 74.06s: 38.31s in Bun and 35.75s in Vitest. The last measured unit lane is
+18.05s, so the combined non-browser correctness feedback is approximately
+92.11s. The 0.25-second movement from the prior 73.81-second sample is within
+process-level variance; the structural gain is one fewer Vitest worker file and
+two fewer duplicated aggregate cases.
 
 The same reconciliation removed the canonical-section omnibus widget loop.
 Every detail owner structurally composes `SelectionDetailLayout`; the base
@@ -777,6 +789,114 @@ execution sublane of component tests, not a fourth test type:
 7. Record full component-lane latency after the first two migrations. Expand
    the Bun sublane only when a representative file is at least 30% faster and
    shows no environment-specific request or DOM behavior.
+
+## Handoff inventory — 2026-07-26
+
+### Completed architecture and pipeline work
+
+- Test taxonomy is `unit`, `component`, and `browser`; native Bun is an
+  execution sublane of component tests rather than a fourth test type.
+- Coverage is browserless and selects only the Node `dashboard-unit` project.
+- The component command owns 236 Bun files and 109 Vitest compatibility files.
+- Whole-application `App.*` tests are gone. The broad import, bento, trace-grid,
+  resource-detail, export-dialog, dashboard-header, and current-selection
+  localization suites were reconciled with their feature owners.
+- Aggregate feature public barrels are gone and `check:test-lanes` prohibits
+  their return. Focused capability subpaths remain permitted.
+- The component command has a 150-second local duration gate and a 300-second
+  CI allowance.
+- Coverage no longer shards. GitHub Actions now has one `Frontend Coverage`
+  job, local and CI both call `make test-ui-coverage`, thresholds are enforced
+  in the main pass, and no shard variables, coordinator, blob artifacts,
+  download/merge job, or merge-only Make target remains.
+- The unsharded coverage command passes locally in roughly 22–24 seconds,
+  including replay coverage. Its resulting report is 80.42% statements, 71.12%
+  branches, 81.03% functions, and 80.68% lines, above the configured aggregate
+  floors. The final measured component command is 74.06 seconds and the last
+  measured unit lane is 18.05 seconds, for approximately 92.11 seconds of
+  combined non-browser correctness feedback.
+
+### Remaining Vitest compatibility causes
+
+Every remaining component file is represented in the following mutually
+exclusive classification. These are handoff items, not work started in the
+coverage-simplification change.
+
+| Compatibility cause | Files | Recommended treatment |
+| --- | ---: | --- |
+| Module mocking, including `importActual` or hoisted variants | 67 | Decompose aggregate mounts or inject feature-owned effects before moving to Bun. |
+| Global stubs and restore behavior without module mocking | 21 | Lowest-risk migration pool: use the existing Bun `vi` compatibility seam and verify DOM/global cleanup. |
+| Spy/restore behavior without module mocking | 12 | Usually direct Bun candidates after importing the compatibility seam and checking spy restoration. |
+| Explicit documented Vitest exceptions | 6 | Retain until the named package or DOM incompatibility changes; do not mechanically migrate. |
+| Explicit Vitest environment declarations | 2 | Retain as CSS/environment contracts unless rewritten as pure unit evidence. |
+| Hoisted fixture without module mocking | 1 | Replace the hoisted fixture with an explicit per-test harness, then migrate. |
+| **Total** | **109** | |
+
+The six explicit exceptions are:
+
+- `src/components/prompt-editor/monaco-guard-selector-editor.test.tsx`
+- `src/features/current-selection/base/components/layout/current-selection-detail-layout.test.tsx`
+- `src/features/dashboard/components/topology-replay/hosted-topology-replay.test.tsx`
+- `src/features/factory-emulator/components/factory-emulator-submission.test.tsx`
+- `src/features/factory-graph-editor/components/flow/factory-graph-editor-flow.test.tsx`
+- `src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-host-contract.test.tsx`
+
+The two explicit environment contracts are
+`src/styles.page-shell-background.component.test.ts` and
+`src/styles/theme-role-regression.component.test.ts`.
+
+### Remaining inventory by owner and expected ROI
+
+The final structured profile covers all 109 Vitest files and 662 tests. Its
+aggregate per-file source time is 14.83 seconds; the complete Vitest
+compatibility process takes about 35–36 seconds because transform, environment,
+and worker startup dominate. ROI ranges below are directional wall-time
+estimates for eliminating Vitest worker files, not guaranteed single-run gains.
+
+| Feature owner | Files | Profiled source time | Expected lane ROI | Next recommendation |
+| --- | ---: | ---: | ---: | --- |
+| `factory-session-detail` | 19 | 3,550ms | High, 4–8s | Consolidate lifecycle, dispatch, and replay panel matrices around injected query/mutation states. |
+| `workflow-activity` | 17 | 3,130ms | High, 4–8s | Split viewport/layout/editor seams; retain the explicit host contract until package compatibility improves. |
+| `current-selection` | 30 | 2,800ms | High, 4–7s | Continue owner-by-owner migration; prioritize global-stub/spy files before further widget aggregation work. |
+| `dashboard` | 8 | 1,148ms | Medium, 1–3s | Reconcile hosted topology separately; migrate simple stream/global-stub hooks through the Bun seam. |
+| `factory-graph-editor` | 3 | 616ms | Low-medium, 0–1s | Keep the explicit broad flow exception; migrate only focused non-ELK contracts. |
+| `trace-drilldown` | 4 | 609ms | Medium, 0.5–1.5s | Inject graph-layout effects and keep relation/path rendering at the trace owner. |
+| `header` | 3 | 551ms | Medium, 0.5–1.5s | Migrate export-dialog wiring and session launch-target tests independently. |
+| `import` | 4 | 388ms | Low, 0.3–1s | Replace remaining module mocks with the established import-controller effects. |
+| `submit-work` | 1 | 320ms | Medium, 0.3–0.8s | Split `factory-invocation-widget.extra` into validation and submission owners. |
+| `flowchart` | 4 | 307ms | Low, 0.3–0.8s | Use explicit layout functions; avoid mounting feature consumers. |
+| `export` | 3 | 300ms | Low, 0.3–0.8s | Reuse the export-dialog effect seam in `use-current-factory-export`. |
+| `current-factory-definition` | 3 | 217ms | Low, 0.2–0.6s | Inject request functions into the remaining query hooks. |
+| `work-outcome` | 1 | 208ms | Low, 0.1–0.4s | Move the warning regression beside WorkChart state contracts. |
+| `bento` | 1 | 175ms | Low, 0.1–0.4s | Reconcile with existing bento shell ownership before adding coverage. |
+| Shared/root | 3 | 165ms | Low, 0.1–0.4s | Retain the two CSS environment contracts; inspect the remaining shared file separately. |
+| `workflow-preview` | 2 | 131ms | Low, 0.1–0.3s | Inject preview effects and migrate together. |
+| `factory-emulator` | 1 | 110ms | Negligible near-term | Retain the explicit compatibility exception. |
+| `graphs` | 1 | 92ms | Negligible, <0.2s | Migrate only if its mock seam becomes explicit during feature work. |
+| `notifications` | 1 | 16ms | Negligible | Leave until touched for product work. |
+
+### Highest individual files still untouched
+
+| File | Profiled source time | Disposition |
+| --- | ---: | --- |
+| `react-flow-current-activity-card-host-contract.test.tsx` | 662ms | Explicit Vitest exception; retain. |
+| `factory-graph-editor-flow.test.tsx` | 541ms | Explicit ELK/graph compatibility exception; retain. |
+| `react-flow-current-activity-card-viewport.test.tsx` | 362ms | Decompose viewport effects, then migrate. |
+| `factory-session-detail-panel.adjacent-surfaces-regression.test.tsx` | 345ms | Split by adjacent feature owner. |
+| `react-flow-current-activity-card-graph-layout.test.tsx` | 344ms | Inject the layout builder instead of hoisted module replacement. |
+| `react-flow-current-activity-card.coverage.test.tsx` | 338ms | Reconcile duplicated graph states with existing focused contracts. |
+| `hosted-topology-replay.test.tsx` | 326ms | Explicit Vitest exception; retain. |
+| `factory-invocation-widget.extra.test.tsx` | 320ms | Split into submission/validation owners. |
+| `factory-session-detail-panel.lifecycle-controls.mutation.test.tsx` | 286ms | Inject mutation effects and merge lifecycle cases. |
+| `use-current-factory-export.test.tsx` | 284ms | Reuse explicit export effects and move to Bun. |
+| `useCurrentWorkstationPromptTemplateValidation.test.tsx` | 284ms | Replace request-module mock with injected validator. |
+| `factory-session-detail-panel.dispatch-drilldown.test.tsx` | 283ms | Move drill-down assertions to dispatch-detail ownership. |
+
+Recommended next pass: migrate the 33 global-stub/spy-only files as a bounded
+compatibility batch, then reprofile. After that, take workflow viewport/layout
+and Factory Session detail as separate decomposition projects. Do not spend a
+batch on the eight explicit environment/compatibility exceptions unless their
+underlying runtime limitation has changed.
 
 ## Quality gates
 

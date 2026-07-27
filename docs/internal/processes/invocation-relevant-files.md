@@ -3,6 +3,19 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+- Parent-private Runner implementations that expose subprocess progress should
+  consume an injected streaming command capability, serialize publication only
+  within each invocation, and build terminal diagnostics from the command
+  edge's complete stdout/stderr result. Use
+  `workers.ProjectCommandEnvForDiagnostics` for the shared allowlist,
+  metadata-only, and sensitive-value redaction policy; never publish effective
+  environment values directly.
+- Compose a parent-private Runner and its detached capability metadata in the
+  private Runners wire package, then publish only its common `workers.Runner`
+  binding through the immutable registry. Run the shared conformance kit
+  against the registry-resolved implementation; when the implementation
+  translates the common request into a narrower effect request, use the kit's
+  boundary-specific captured-request assertion to prove caller-owned isolation.
 - Selection-aware `you run` schema resolution belongs at the CLI read boundary:
   resolve an already-selected named Factory config path or explicit Factory
   source through the read-only Factory Definitions loader, check cancellation
@@ -1796,3 +1809,22 @@ response-stream output.
   expose Workers `RunStreaming` only when the injected Platform runner actually
   implements streaming, so buffered functional overrides continue through the
   same registry route without a false streaming capability.
+- A Runner that starts an injected command must retain partial stdout/stderr in
+  detached result and failure diagnostics, then emit exactly one terminal event
+  after all progress fragments. Normal non-zero exits keep their exact exit code
+  and use the failed-exit outcome; process-start failures omit an exit code and
+  use the process-error outcome. Validation failures occur before request-event
+  recording or command invocation.
+- Script interruption remains split across boundaries: the injected platform
+  process edge terminates the complete process tree and waits for command and
+  cleanup completion before returning, while the Script Runner classifies
+  cancellation separately from deadline timeout, retains partial streams, marks
+  timeout diagnostics, and records one matching terminal response. Pre-start
+  cancellation returns without command or event effects.
+- Script-worker cutovers keep the generic workstation request/result adapter
+  thin: construct and resolve the configured implementation through the private
+  immutable Runners registry, invoke only the common `workers.Runner`, and map
+  its detached result and normalized failure metadata back to `WorkResult`.
+  Compatibility command edges that expose only `Run` may publish one complete
+  stdout chunk followed by one complete stderr chunk; real process edges retain
+  live mixed-stream ordering through `RunStreaming`.

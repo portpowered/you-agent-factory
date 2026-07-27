@@ -25,6 +25,7 @@ type Subject struct {
 	FailureRequest     workers.RunnerExecutionRequest
 	ExpectedResult     workers.RunnerExecutionResult
 	CapturedRequest    func() (workers.RunnerExecutionRequest, bool)
+	AssertCaptured     func(*testing.T)
 }
 
 // Run proves success, caller-mutation isolation, normalized failures, and
@@ -42,9 +43,13 @@ func Run(t *testing.T, subject Subject) {
 		}
 
 		mutateRequest(&request)
-		captured, ok := subject.CapturedRequest()
-		if !ok || !reflect.DeepEqual(captured, subject.ValidRequest) {
-			t.Fatalf("captured request = %#v, want detached %#v", captured, subject.ValidRequest)
+		if subject.AssertCaptured != nil {
+			subject.AssertCaptured(t)
+		} else {
+			captured, ok := subject.CapturedRequest()
+			if !ok || !reflect.DeepEqual(captured, subject.ValidRequest) {
+				t.Fatalf("captured request = %#v, want detached %#v", captured, subject.ValidRequest)
+			}
 		}
 
 		mutateResult(&result)
@@ -107,9 +112,25 @@ func mutateRequest(request *workers.RunnerExecutionRequest) {
 
 func mutateResult(result *workers.RunnerExecutionResult) {
 	result.Content = "mutated"
-	result.ProviderSession.ID = "mutated"
-	result.Diagnostics.Metadata["fixture"] = "mutated"
-	result.Diagnostics.Provider.ResponseMetadata["status"] = "mutated"
+	if result.ProviderSession != nil {
+		result.ProviderSession.ID = "mutated"
+	}
+	if result.Diagnostics == nil {
+		return
+	}
+	if result.Diagnostics.Metadata != nil {
+		result.Diagnostics.Metadata["fixture"] = "mutated"
+	}
+	if result.Diagnostics.Provider != nil &&
+		result.Diagnostics.Provider.ResponseMetadata != nil {
+		result.Diagnostics.Provider.ResponseMetadata["status"] = "mutated"
+	}
+	if result.Diagnostics.Command != nil {
+		result.Diagnostics.Command.Args = append(
+			result.Diagnostics.Command.Args,
+			"mutated",
+		)
+	}
 }
 
 // InMemoryRunner is a deterministic common-contract implementation used by

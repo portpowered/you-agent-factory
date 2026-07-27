@@ -57,8 +57,10 @@ const (
 
 	ScriptExecutionOutcomeSucceeded      = workers.ScriptExecutionOutcomeSucceeded
 	ScriptExecutionOutcomeFailedExitCode = workers.ScriptExecutionOutcomeFailedExitCode
+	ScriptExecutionOutcomeCanceled       = workers.ScriptExecutionOutcomeCanceled
 	ScriptExecutionOutcomeTimedOut       = workers.ScriptExecutionOutcomeTimedOut
 	ScriptExecutionOutcomeProcessError   = workers.ScriptExecutionOutcomeProcessError
+	ScriptFailureTypeCanceled            = workers.ScriptFailureTypeCanceled
 	ScriptFailureTypeTimeout             = workers.ScriptFailureTypeTimeout
 	ScriptFailureTypeProcessError        = workers.ScriptFailureTypeProcessError
 

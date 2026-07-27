@@ -985,6 +985,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/script",
+      "minimum": 84.61
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/service",
       "minimum": 90.36
     },
