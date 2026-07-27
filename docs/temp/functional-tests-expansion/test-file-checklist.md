@@ -280,7 +280,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestClaudeGoldenFullStreamTextSuccess` covers deltas and final snapshot.
   - `TestClaudeGoldenToolLifecycleAndSessionIdentity` covers tools/session.
 
-- [ ] `tests/functional/workers/inference/claude/golden_failure_test.go`
+- [x] `tests/functional/workers/inference/claude/golden_failure_test.go`
   - `TestClaudeGoldenStructuredFailure` covers normalized error metadata.
   - `TestClaudeGoldenTimeoutClosesResponseStream` covers terminal closure.
 
@@ -341,7 +341,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestInlineJavaScriptFactoryRunsFromCLI` covers an inline definition.
   - `TestInlineJavaScriptSyntaxErrorReturnsSourceLocation` covers load failure.
 
-- [ ] `tests/functional/orchestration/javascript/loading/file_javascript_test.go`
+- [x] `tests/functional/orchestration/javascript/loading/file_javascript_test.go`
   - `TestJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot` covers path
     resolution.
   - `TestJavaScriptFactoryMissingImportFailsActionably` covers load failure.

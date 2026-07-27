@@ -140,6 +140,22 @@
   `functional-boundary-check` stays unavoidable through the nested
   `test-functional-coverage` call, and the lane uploads Markdown, coverage
   JSON, profile, and command log on success and failure.
+  JavaScript file-backed loading functional coverage belongs in
+  `tests/functional/orchestration/javascript/loading/file_javascript_test.go`:
+  drive sync Factory Session execution through `support.BuildProcess` +
+  `support.FakeInputs` with `you --json run`, `--factory`, and
+  `--with-mock-workers`; scaffold file-backed factories with
+  `orchestrator.javascript.sourceRef` and workflow modules beside
+  `factory.json`; prove factory-relative ES module imports resolve under the
+  Factory root with a terminal `COMPLETED` primary result that reflects the
+  imported module contribution and zero provider dispatch; prove missing
+  factory-relative imports fail before work starts with customer-stable
+  `workflow.source.notFound` diagnostics that name the missing path without
+  private VM stack frames or live provider execution. Substitute external
+  effects only through `edges.Edges`. Catalog metadata infers domain
+  `orchestration` and subsection `javascript/loading` from the path; every
+  top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
+  stays viz-compatible.
   JavaScript agent composition functional coverage belongs in
   `tests/functional/orchestration/javascript/composition/agent_test.go`:
   drive sync Factory Session execution through

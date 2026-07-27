@@ -1047,14 +1047,6 @@
       "name": "TestNormalizers_RejectEveryMissingRequiredScalarFact"
     },
     {
-      "file": "sessions/cli/resolved_session_family_test.go",
-      "name": "TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch"
-    },
-    {
-      "file": "sessions/cli/resolved_session_family_test.go",
-      "name": "TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition"
-    },
-    {
       "file": "smoke/cli_docs_smoke_test.go",
       "name": "TestDocsCommandSmoke_AuthoringFactoriesDescribesMinimalGoalRepeater"
     },

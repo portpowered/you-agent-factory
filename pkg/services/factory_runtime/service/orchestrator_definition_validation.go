@@ -135,10 +135,7 @@ func javascriptWorkflowSourceTargets(
 			},
 		)}
 	}
-	loaded, loadIssues := workflows.LoadSource(factoryruntime.WorkflowValidationLoadRequest{
-		SourceRef: sourceRef,
-		Content:   content,
-	})
+	loaded, loadIssues := workflows.LoadSource(workflowValidationLoadRequestFromReader(sourceRef, content, reader))
 	if len(loadIssues) > 0 {
 		return workflowIssuesToDefinitionTargets(loadIssues)
 	}
@@ -195,6 +192,26 @@ func workflowIssueToDefinitionTarget(
 			Location: factorydefinitions.ValidationSubjectLocationDefinition,
 		},
 	}
+}
+
+type factoryRootWorkflowSourceReader interface {
+	FactoryRoot() string
+}
+
+func workflowValidationLoadRequestFromReader(
+	sourceRef string,
+	content string,
+	reader factorydefinitions.WorkflowSourceReader,
+) factoryruntime.WorkflowValidationLoadRequest {
+	request := factoryruntime.WorkflowValidationLoadRequest{
+		SourceRef: sourceRef,
+		Content:   content,
+	}
+	if rootReader, ok := reader.(factoryRootWorkflowSourceReader); ok {
+		request.FactoryRoot = rootReader.FactoryRoot()
+		request.BundleReader = reader
+	}
+	return request
 }
 
 var _ factorydefinitions.OrchestratorDefinitionValidator = OrchestratorDefinitionValidation{}
