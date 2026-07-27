@@ -4,6 +4,8 @@ package watcher
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -280,5 +282,151 @@ func TestWatcherMixedOutcomesLeaveNoNonTerminalWorkLeak(t *testing.T) {
 		default:
 			t.Fatalf("Work[%d] state type = %q, want TERMINAL or FAILED; %#v", i, work.State.Type, work)
 		}
+	}
+}
+
+// TestWatcherDefaultChannelSubmission proves that a watched seed file dropped
+// through the default channel path admits exactly one Work and completes it in
+// the Factory-configured success state with no Work left in non-terminal states.
+func TestWatcherDefaultChannelSubmission(t *testing.T) {
+	support.SkipLongFunctional(t, "slow file-watcher default-channel submission sweep")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "filewatcher_flow"))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "default item"}`))
+
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+		"processor": {
+			{Content: "Done. COMPLETE"},
+		},
+	})
+
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		10*time.Second,
+	)
+
+	if provider.CallCount("processor") != 1 {
+		t.Fatalf("provider call count = %d, want 1 for default-channel watched file", provider.CallCount("processor"))
+	}
+	if session.Runtime.Progress.Categories.Terminal != 1 || session.Runtime.Progress.Categories.Failed != 0 {
+		t.Fatalf(
+			"session progress categories = %+v, want one terminal and zero failed",
+			session.Runtime.Progress.Categories,
+		)
+	}
+	if got := len(listed.Results); got != 1 {
+		t.Fatalf("listed Work count = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "complete")); got != 1 {
+		t.Fatalf("CountWorkAtCustomerState(task:complete) = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "init")); got != 0 {
+		t.Fatalf("CountWorkAtCustomerState(task:init) = %d, want 0 after completion", got)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "processing")); got != 0 {
+		t.Fatalf("CountWorkAtCustomerState(task:processing) = %d, want 0 after completion", got)
+	}
+}
+
+// TestWatcherExecutionIDDirectorySubmission proves that a watched seed file
+// placed under an execution-id directory admits exactly one Work and completes
+// it in the Factory-configured success state.
+func TestWatcherExecutionIDDirectorySubmission(t *testing.T) {
+	support.SkipLongFunctional(t, "slow file-watcher execution-id directory submission sweep")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "filewatcher_flow"))
+
+	execDir := filepath.Join(dir, "inputs", "task", "exec-123")
+	if err := os.MkdirAll(execDir, 0o755); err != nil {
+		t.Fatalf("create exec dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(execDir, "work-1.json"), []byte(`{"title": "executor work"}`), 0o644); err != nil {
+		t.Fatalf("write work file: %v", err)
+	}
+
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+		"processor": {
+			{Content: "Done. COMPLETE"},
+		},
+	})
+
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		10*time.Second,
+	)
+
+	if provider.CallCount("processor") != 1 {
+		t.Fatalf("provider call count = %d, want 1 for execution-id directory watched file", provider.CallCount("processor"))
+	}
+	if session.Runtime.Progress.Categories.Terminal != 1 || session.Runtime.Progress.Categories.Failed != 0 {
+		t.Fatalf(
+			"session progress categories = %+v, want one terminal and zero failed",
+			session.Runtime.Progress.Categories,
+		)
+	}
+	if got := len(listed.Results); got != 1 {
+		t.Fatalf("listed Work count = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "complete")); got != 1 {
+		t.Fatalf("CountWorkAtCustomerState(task:complete) = %d, want 1; listed=%#v", got, listed)
+	}
+}
+
+// TestWatcherCombinedDefaultAndDynamicExecDirectory proves that watched seed
+// files submitted through both the default channel and a dynamic execution-id
+// directory admit two Work items, each completing in the Factory-configured
+// success state with no Work left in non-terminal states.
+func TestWatcherCombinedDefaultAndDynamicExecDirectory(t *testing.T) {
+	support.SkipLongFunctional(t, "slow file-watcher combined default and dynamic-exec-dir submission sweep")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "filewatcher_flow"))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "default work"}`))
+
+	execDir := filepath.Join(dir, "inputs", "task", "exec-dynamic")
+	if err := os.MkdirAll(execDir, 0o755); err != nil {
+		t.Fatalf("create exec dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(execDir, "work.json"), []byte(`{"title": "exec work"}`), 0o644); err != nil {
+		t.Fatalf("write work file: %v", err)
+	}
+
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+		"processor": {
+			{Content: "Done. COMPLETE"},
+			{Content: "Done. COMPLETE"},
+		},
+	})
+
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		10*time.Second,
+	)
+
+	if provider.CallCount("processor") != 2 {
+		t.Fatalf("provider call count = %d, want 2 for combined default and exec-dir watched files", provider.CallCount("processor"))
+	}
+	if session.Runtime.Progress.Categories.Terminal != 2 || session.Runtime.Progress.Categories.Failed != 0 {
+		t.Fatalf(
+			"session progress categories = %+v, want two terminal and zero failed",
+			session.Runtime.Progress.Categories,
+		)
+	}
+	if got := len(listed.Results); got != 2 {
+		t.Fatalf("listed Work count = %d, want 2; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "complete")); got != 2 {
+		t.Fatalf("CountWorkAtCustomerState(task:complete) = %d, want 2; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "init")); got != 0 {
+		t.Fatalf("CountWorkAtCustomerState(task:init) = %d, want 0 after completion", got)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "processing")); got != 0 {
+		t.Fatalf("CountWorkAtCustomerState(task:processing) = %d, want 0 after completion", got)
 	}
 }
