@@ -67,7 +67,7 @@ func loadDetails(ctx context.Context, files providersessions.FileSystem, walkDir
 		return providersessions.Detail{}, err
 	}
 
-	parsed, err := parseCodexSessionDetails(file)
+	parsed, err := parseCodexSessionDetails(ctx, file)
 	if err != nil {
 		return providersessions.Detail{}, err
 	}
@@ -187,6 +187,9 @@ func collectCodexSessionMatches(ctx context.Context, walkDirectory providersessi
 			return walkErr
 		}
 		if path != cleanRoot && matchesCodexSessionBaseName(filepath.Base(path), id, targetName) {
+			if len(matches) >= maxCodexWalkCandidates {
+				return errCodexWalkCandidateLimit
+			}
 			matches = append(matches, path)
 			if entry.IsDir() {
 				return fs.SkipDir
@@ -204,11 +207,16 @@ func collectCodexSessionMatches(ctx context.Context, walkDirectory providersessi
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, ctxErr
 	}
+	if errors.Is(err, errCodexWalkCandidateLimit) {
+		return nil, providersessions.ErrSessionStorageUnavailable
+	}
 	if err != nil {
 		return nil, providersessions.ErrSessionStorageUnavailable
 	}
 	return matches, nil
 }
+
+var errCodexWalkCandidateLimit = errors.New("codex session walk candidate limit reached")
 
 func buildResolvedCodexSessionCandidates(ctx context.Context, files providersessions.FileSystem, resolveSymlinks providersessions.CodexResolveSymlinks, cleanRoot, resolvedRoot string, matches []string, targetName string) (resolvedCodexSessionFile, error) {
 	candidates := make([]resolvedCodexSessionFile, 0, len(matches))
@@ -333,7 +341,7 @@ type ParsedDetails struct {
 
 // ParseSummary parses a Codex JSONL stream into its inspection summary.
 func ParseSummary(reader io.Reader) (providersessions.ParseSummary, error) {
-	parsed, err := parseCodexSessionDetails(reader)
+	parsed, err := parseCodexSessionDetails(context.Background(), reader)
 	if err != nil {
 		return providersessions.ParseSummary{}, err
 	}
@@ -342,7 +350,7 @@ func ParseSummary(reader io.Reader) (providersessions.ParseSummary, error) {
 
 // ParseDetails parses a Codex JSONL stream into summary and transcript data.
 func ParseDetails(reader io.Reader) (ParsedDetails, error) {
-	parsed, err := parseCodexSessionDetails(reader)
+	parsed, err := parseCodexSessionDetails(context.Background(), reader)
 	if err != nil {
 		return ParsedDetails{}, err
 	}
@@ -356,7 +364,7 @@ func ParseDetails(reader io.Reader) (ParsedDetails, error) {
 // Mirrored user/assistant messages emitted as both event_msg and response_item
 // message records are deduplicated. Function outputs attach to the earliest
 // matching call_id within the reconstructed stream.
-func parseCodexSessionDetails(reader io.Reader) (ParsedDetails, error) {
+func parseCodexSessionDetails(ctx context.Context, reader io.Reader) (ParsedDetails, error) {
 	parser := codexSessionParser{
 		summary: providersessions.ParseSummary{
 			Turns:         []providersessions.TurnSummary{},
@@ -370,35 +378,53 @@ func parseCodexSessionDetails(reader io.Reader) (ParsedDetails, error) {
 	bufferedReader := bufio.NewReader(reader)
 	lineNumber := 0
 	for {
-		lineBytes, err := bufferedReader.ReadBytes('\n')
-		if errors.Is(err, io.EOF) && len(lineBytes) == 0 {
+		if err := ctx.Err(); err != nil {
+			return ParsedDetails{}, err
+		}
+		lineBytes, readErr := bufferedReader.ReadBytes('\n')
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			return ParsedDetails{}, providersessions.ErrSessionStorageUnavailable
+		}
+		if !parser.budget.recordBytes(int64(len(lineBytes))) {
+			parser.recordInspectionLimit(lineNumber, diagnosticInspectionByteLimit)
 			break
 		}
-		if err != nil && !errors.Is(err, io.EOF) {
-			return ParsedDetails{}, fmt.Errorf("read provider session stream: %w", err)
+		atEOF := errors.Is(readErr, io.EOF)
+		if atEOF && len(lineBytes) == 0 {
+			break
 		}
 
 		lineNumber++
+		if !parser.budget.beginLine() {
+			parser.recordInspectionLimit(lineNumber, diagnosticInspectionLineLimit)
+			break
+		}
 		line := strings.TrimSpace(string(lineBytes))
 		if line == "" {
-			if errors.Is(err, io.EOF) {
+			if atEOF {
 				break
 			}
 			continue
 		}
 		parser.summary.LineCount++
 		var event map[string]any
-		if err := json.Unmarshal([]byte(line), &event); err != nil {
-			parser.summary.MalformedLineCount++
-			parser.summary.ParseErrors = append(parser.summary.ParseErrors, providersessions.LineError{
-				LineNumber: lineNumber,
-				Message:    "invalid JSON event record",
-			})
+		if jsonErr := json.Unmarshal([]byte(line), &event); jsonErr != nil {
+			message := diagnosticInvalidJSONEvent
+			if atEOF {
+				message = diagnosticTruncatedJSONEvent
+			}
+			parser.recordMalformedLine(lineNumber, message)
+			if atEOF {
+				break
+			}
 			continue
 		}
 		parser.summary.EventCount++
 		parser.recordEvent(lineNumber, event)
-		if errors.Is(err, io.EOF) {
+		if parser.budget.stopParsing {
+			break
+		}
+		if atEOF {
 			break
 		}
 	}
@@ -412,6 +438,46 @@ type codexSessionParser struct {
 	summary          providersessions.ParseSummary
 	transcript       []providersessions.TranscriptEntry
 	currentTurnIndex int
+	budget           parseBudget
+}
+
+func (p *codexSessionParser) recordMalformedLine(lineNumber int, message string) {
+	p.summary.MalformedLineCount++
+	p.appendDiagnostic(lineNumber, message)
+}
+
+func (p *codexSessionParser) recordTranscriptLimit(lineNumber int) {
+	if p.budget.transcriptLimitReported {
+		return
+	}
+	if lineNumber <= 0 {
+		lineNumber = max(1, p.summary.LineCount)
+	}
+	p.budget.transcriptLimitReported = true
+	p.recordMalformedLine(lineNumber, diagnosticInspectionTranscriptLimit)
+}
+
+func (p *codexSessionParser) recordInspectionLimit(lineNumber int, message string) {
+	if lineNumber <= 0 {
+		if p.summary.LineCount > 0 {
+			lineNumber = p.summary.LineCount
+		} else {
+			lineNumber = 1
+		}
+	}
+	p.budget.stopParsing = true
+	p.recordMalformedLine(lineNumber, message)
+}
+
+func (p *codexSessionParser) appendDiagnostic(lineNumber int, message string) {
+	if p.budget.diagnosticsFull {
+		return
+	}
+	p.summary.ParseErrors = append(p.summary.ParseErrors, providersessions.LineError{
+		LineNumber: lineNumber,
+		Message:    sanitizeDiagnosticMessage(message),
+	})
+	p.budget.recordedDiagnostic()
 }
 
 func (p *codexSessionParser) recordEvent(lineNumber int, event map[string]any) {
@@ -660,11 +726,16 @@ func (p *codexSessionParser) appendToolOutputTranscript(
 }
 
 func (p *codexSessionParser) appendTranscriptEntry(entry providersessions.TranscriptEntry) {
+	if !p.budget.canRetainTranscript() {
+		p.recordTranscriptLimit(intValue(entry.LineNumber))
+		return
+	}
 	if len(p.transcript) > 0 && isDuplicateTranscriptMessage(p.transcript[len(p.transcript)-1], entry) {
 		return
 	}
 	entry.Order = len(p.transcript) + 1
 	p.transcript = append(p.transcript, entry)
+	p.budget.retainedTranscript()
 }
 
 func isDuplicateTranscriptMessage(previous, next providersessions.TranscriptEntry) bool {
@@ -712,11 +783,17 @@ func (p *codexSessionParser) recordTokenUsage(payload map[string]any) {
 
 func (p *codexSessionParser) recordUnknownEvent(lineNumber int, eventType string, payloadType string) {
 	p.summary.UnknownEventCount++
+	if p.budget.diagnosticsFull {
+		return
+	}
+	sanitizedEventType := sanitizeUnknownEventLabel(eventType)
+	sanitizedPayloadType := sanitizeUnknownEventLabel(payloadType)
 	p.summary.UnknownEvents = append(p.summary.UnknownEvents, providersessions.UnknownEvent{
 		LineNumber:  lineNumber,
-		Type:        stringPtrIfNotEmpty(eventType),
-		PayloadType: stringPtrIfNotEmpty(payloadType),
+		Type:        stringPtrIfNotEmpty(sanitizedEventType),
+		PayloadType: stringPtrIfNotEmpty(sanitizedPayloadType),
 	})
+	p.budget.recordedDiagnostic()
 }
 
 func nestedPayloadType(event map[string]any) string {
