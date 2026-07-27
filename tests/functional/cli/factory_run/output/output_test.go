@@ -1,15 +1,12 @@
 package output
 
 import (
-	"encoding/json"
-	"io"
 	"os"
 	"strings"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -44,25 +41,6 @@ func TestSuccessfulInvocationOutputModes(t *testing.T) {
 
 		if stdout != primaryResult {
 			t.Fatalf("stdout = %q, want only raw final result %q", stdout, primaryResult)
-		}
-	})
-
-	t.Run("single JSON invocation response", func(t *testing.T) {
-		stdout := runGoalInvocation(t, []string{"--json"}, nil)
-
-		decoder := json.NewDecoder(strings.NewReader(stdout))
-		var response factoryapi.InvocationResponse
-		if err := decoder.Decode(&response); err != nil {
-			t.Fatalf("decode InvocationResponse: %v\nstdout:\n%s", err, stdout)
-		}
-		if err := decoder.Decode(&struct{}{}); err != io.EOF {
-			t.Fatalf("stdout contains data after InvocationResponse: %v\nstdout:\n%s", err, stdout)
-		}
-		if response.Status != factoryapi.InvocationTerminalStatusCompleted {
-			t.Fatalf("status = %q, want %q", response.Status, factoryapi.InvocationTerminalStatusCompleted)
-		}
-		if got := invocationPrimaryResultText(t, response); got != primaryResult {
-			t.Fatalf("primaryResult = %q, want %q", got, primaryResult)
 		}
 	})
 }
@@ -133,14 +111,3 @@ func isFactoryLifecycleLine(line string) bool {
 	return false
 }
 
-func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationResponse) string {
-	t.Helper()
-	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
-		t.Fatalf("primaryResult = %#v, want one text content part", response.PrimaryResult)
-	}
-	part, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
-	if err != nil {
-		t.Fatalf("primaryResult[0] as text content: %v", err)
-	}
-	return part.Text
-}

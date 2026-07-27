@@ -111,11 +111,13 @@ intentionally small enough to distribute across many agents.
 
 ### CLI output modes and streaming
 
-- [ ] `tests/functional/transport/cli/output/json_result_test.go`
+- [x] `tests/functional/transport/cli/output/json_result_test.go`
   - `TestCLIJSONSuccessDecodesToPublicInvocationResult` verifies schema and
     terminal status.
   - `TestCLIJSONFailureRemainsValidJSON` verifies structured failure output.
   - `TestCLIJSONContainsNoPrivateRuntimeFields` guards the public boundary.
+  - `TestCLIJSONOutputSelectionFailsBeforeProductActivation` verifies invalid
+    output selectors fail before product activation.
 
 - [x] `tests/functional/transport/cli/output/ndjson_stream_test.go`
   - `TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult` verifies
