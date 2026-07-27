@@ -37,6 +37,8 @@ type FactoryEngine struct {
 	submissionHooks       []factory.SubmissionHook
 	submissionState       map[string]map[string]string
 	workRequests          map[string]workdomain.WorkRequestSubmitResult
+	projectionWaiters     map[string]chan struct{}
+	runLoopActive         bool
 	recordSubmission      func(work.FactorySubmissionRecord)
 	recordWorkRequest     func(int, work.WorkRequestRecord)
 	recordWorkInput       func(int, workdomain.SubmitRequest, factorytoken.Token)
@@ -114,6 +116,7 @@ func NewFactoryEngine(
 		submissionHooks:       append([]factory.SubmissionHook(nil), submissionHooks...),
 		submissionState:       make(map[string]map[string]string),
 		workRequests:          make(map[string]workdomain.WorkRequestSubmitResult),
+		projectionWaiters:     make(map[string]chan struct{}),
 		recordSubmission:      recordSubmission,
 		recordWorkRequest:     recordWorkRequest,
 		recordWorkInput:       recordWorkInput,
@@ -330,8 +333,19 @@ func (e *FactoryEngine) submitNormalizedWorkRequest(context context.Context, req
 		existing.Accepted = false
 		return existing, nil
 	}
+	if e.conflictingMaterializedWorkID(work) != "" {
+		e.mu.Unlock()
+		return workdomain.WorkRequestSubmitResultFromNormalized(requestID, work, false), nil
+	}
 	e.workRequests[requestID] = result
 	e.submissionHook.enqueue(work)
+	awaitProjection := e.shouldAwaitObservableProjection()
+	var projectionWait <-chan struct{}
+	if awaitProjection {
+		waitCh := make(chan struct{}, 1)
+		e.projectionWaiters[requestID] = waitCh
+		projectionWait = waitCh
+	}
 	e.mu.Unlock()
 
 	select {
@@ -339,7 +353,76 @@ func (e *FactoryEngine) submitNormalizedWorkRequest(context context.Context, req
 	default:
 	}
 
+	if awaitProjection {
+		if err := e.awaitObservableProjection(context, requestID, projectionWait); err != nil {
+			return workdomain.WorkRequestSubmitResult{}, err
+		}
+	}
+
 	return result, nil
+}
+
+func (e *FactoryEngine) conflictingMaterializedWorkID(work []workdomain.SubmitRequest) string {
+	for _, req := range work {
+		if req.WorkID == "" {
+			continue
+		}
+		if e.visibleWorkIDAlreadyMaterialized(req.WorkID) {
+			return req.WorkID
+		}
+	}
+	return ""
+}
+
+func (e *FactoryEngine) visibleWorkIDAlreadyMaterialized(workID string) bool {
+	if workID == "" {
+		return false
+	}
+	if _, ok := findWorkTokenByID(e.runtimeState.Marking.Tokens, workID); ok {
+		return true
+	}
+	return workIDInActiveDispatches(e.runtimeState.Dispatches, workID)
+}
+
+func (e *FactoryEngine) shouldAwaitObservableProjection() bool {
+	if !e.runLoopActive {
+		return false
+	}
+	if e.automaticTicksPaused != nil && e.automaticTicksPaused() {
+		return false
+	}
+	return true
+}
+
+func (e *FactoryEngine) awaitObservableProjection(
+	ctx context.Context,
+	requestID string,
+	waitCh <-chan struct{},
+) error {
+	select {
+	case <-waitCh:
+		return nil
+	case <-ctx.Done():
+		e.mu.Lock()
+		delete(e.projectionWaiters, requestID)
+		e.mu.Unlock()
+		return ctx.Err()
+	}
+}
+
+func (e *FactoryEngine) signalObservableProjection(requestID string) {
+	if requestID == "" {
+		return
+	}
+	waitCh, ok := e.projectionWaiters[requestID]
+	if !ok {
+		return
+	}
+	delete(e.projectionWaiters, requestID)
+	select {
+	case waitCh <- struct{}{}:
+	default:
+	}
 }
 
 func (e *FactoryEngine) validWorkTypes() map[string]bool {
@@ -354,8 +437,12 @@ func (e *FactoryEngine) validWorkTypes() map[string]bool {
 // ctx is cancelled or the marking has no more actionable tokens.
 func (e *FactoryEngine) Run(ctx context.Context) error {
 	e.logger.Info("engine started")
+	e.mu.Lock()
+	e.runLoopActive = true
+	e.mu.Unlock()
 	defer func() {
 		e.mu.Lock()
+		e.runLoopActive = false
 		e.acceptingSubmits = false
 		e.mu.Unlock()
 	}()
@@ -421,6 +508,11 @@ func (e *FactoryEngine) waitForEngineSignal(ctx context.Context, dispatchWait <-
 
 func (e *FactoryEngine) runUntilQuiescent(ctx context.Context) (bool, error) {
 	for {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		default:
+		}
 		mutated, shouldTerminate, err := e.tickOnce(ctx)
 		if err != nil {
 			return false, err
@@ -429,6 +521,16 @@ func (e *FactoryEngine) runUntilQuiescent(ctx context.Context) (bool, error) {
 			return e.finishTerminationDrain()
 		}
 		if !mutated {
+			e.mu.Lock()
+			stillBuffered := e.hasBufferedInputs()
+			paused := e.automaticTicksPaused != nil && e.automaticTicksPaused()
+			if stillBuffered && !paused {
+				e.wakeForPendingProcessing()
+			}
+			e.mu.Unlock()
+			if stillBuffered && !paused {
+				continue
+			}
 			return false, nil
 		}
 	}
@@ -858,6 +960,9 @@ func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []work.Generat
 		}
 		e.recordGeneratedSubmissionRequest(requestID, source, batch, normalized)
 		e.recordGeneratedSubmissionTokens(source, normalized, tokens)
+		if source == externalSubmissionHookName {
+			e.signalObservableProjection(requestID)
+		}
 		total += len(tokens)
 	}
 	return total, nil

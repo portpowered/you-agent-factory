@@ -221,8 +221,10 @@
   `pkg/services/automations/internal/services/script_pollers` and is reached
   only through `pkg/services/automations/service`. Unit evidence covers submit,
   timeout/restart, malformed rejection, and cursor persistence in the packaged
-  owner tests; `ownership_test.go` proves peer packages do not import the
-  private owner. Root `BuildProcess` functional evidence belongs in
+  owner tests; Automations-root composition evidence belongs in
+  `pkg/services/automations/service/service_internal_test.go`
+  (`TestProductionRootScriptPollerCursorThroughCompositionPath`). Root
+  `BuildProcess` functional evidence belongs in
   `tests/functional/workstations/poller/poller_test.go` and
   `tests/functional/workstations/poller/build_process_test.go`: drive POLLER
   workstation supervision through `tests/functional/internal/support.BuildProcess`

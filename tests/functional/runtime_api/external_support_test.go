@@ -1,5 +1,33 @@
 package runtime_api_test
 
+func simplePipelineConfig() map[string]any {
+	return map[string]any{
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]string{{
+			"name":          "worker-a",
+			"type":          "MODEL_WORKER",
+			"model":         "functional-model",
+			"modelProvider": "CODEX",
+		}},
+		"workstations": []map[string]any{{
+			"name":      "process",
+			"worker":    "worker-a",
+			"type":      "MODEL_WORKSTATION",
+			"behavior":  "STANDARD",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+		}},
+	}
+}
+
 func twoStagePipelineConfig() map[string]any {
 	return map[string]any{
 		"name": "factory",
