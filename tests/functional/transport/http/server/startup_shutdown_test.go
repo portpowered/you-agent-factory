@@ -2,15 +2,19 @@ package server_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -103,6 +107,93 @@ func TestAPIServerShutdownClosesListenerAndActiveStreams(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		activeRequest.cancel()
 		t.Fatal("timed out waiting for API server shutdown to complete")
+	}
+}
+
+// TestAPIServerBindFailureUnwindsStartedLifecycleRoles proves bind failure through
+// the public API server lifecycle reports a documented failure and leaves no
+// leaked listeners or readiness side effects.
+func TestAPIServerBindFailureUnwindsStartedLifecycleRoles(t *testing.T) {
+	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
+	requestedURL := "http://127.0.0.1:65534"
+
+	var attempts []string
+	starter, err := platformhttpserver.NewStarter(func(_ string, address string) (net.Listener, error) {
+		attempts = append(attempts, address)
+		return nil, errors.New("address unavailable")
+	})
+	if err != nil {
+		t.Fatalf("NewStarter() error = %v", err)
+	}
+
+	var browserCalls, readinessCalls atomic.Int32
+	edges := serviceedges.Edges{
+		APIServerStarter: starter,
+		BrowserOpener: func(context.Context, string) error {
+			browserCalls.Add(1)
+			return nil
+		},
+		RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
+			readinessCalls.Add(1)
+		},
+	}
+	process := support.BuildProcess(t, edges)
+
+	home := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--server", requestedURL,
+		"run", "--dir", dir,
+		"--continuously", "--with-server", "--quiet", "--no-record",
+	})
+	inputs.Input.WorkingDirectory = dir
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+
+	if err := process.Execute(inputs.Input); err == nil {
+		t.Fatalf(
+			"Process.Execute(run with bind failure) error = nil; stdout=%q stderr=%q",
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	for _, forbidden := range []string{"Factory initiated:", "Dashboard URL:"} {
+		if strings.Contains(inputs.Stdout(), forbidden) {
+			t.Fatalf("run stdout exposed readiness %q before bind failure:\n%s", forbidden, inputs.Stdout())
+		}
+	}
+
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(inputs.Stderr()), &response); err != nil {
+		t.Fatalf("run stderr is not exactly one ErrorResponse: %v\n%s", err, inputs.Stderr())
+	}
+	if response.Code != factoryapi.ErrorResponseCode("SERVER_BIND_FAILED") {
+		t.Fatalf("ErrorResponse = %#v, want SERVER_BIND_FAILED", response)
+	}
+	if got, want := strings.Join(attempts, ","), "127.0.0.1:65534,127.0.0.1:65535"; got != want {
+		t.Fatalf("listener attempts = %q, want %q", got, want)
+	}
+	if browserCalls.Load() != 0 || readinessCalls.Load() != 0 {
+		t.Fatalf(
+			"post-failure effects = browser:%d readiness:%d, want none",
+			browserCalls.Load(),
+			readinessCalls.Load(),
+		)
+	}
+
+	parsed, err := url.Parse(requestedURL)
+	if err != nil {
+		t.Fatalf("parse requested listener URL %q: %v", requestedURL, err)
+	}
+	rebound, err := net.Listen("tcp4", parsed.Host)
+	if err != nil {
+		t.Fatalf("requested listener address %s remained unavailable after bind failure: %v", parsed.Host, err)
+	}
+	_ = rebound.Close()
+
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	statusResponse, err := client.Get(requestedURL + "/status")
+	if err == nil {
+		_ = statusResponse.Body.Close()
+		t.Fatalf("GET %s/status succeeded after bind failure", requestedURL)
 	}
 }
 
