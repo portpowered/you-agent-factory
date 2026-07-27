@@ -16,6 +16,10 @@ const DefaultLeaseTTL = time.Minute
 type SlotFacts struct {
 	Readiness models.ReadinessState
 	Capacity  int
+	// ContendedHolder names the holder currently contending for otherwise
+	// available capacity. Acquisition by a different holder fails with
+	// ErrHostCapacityContended until the contention clears.
+	ContendedHolder string
 }
 
 // SlotFactsProvider supplies host-owned readiness and capacity facts for lease

@@ -162,14 +162,226 @@ func TestAcquireModelLeaseRejectsRuntimeNotReady(t *testing.T) {
 	}
 }
 
-func TestGetModelLeaseRemainsContractOnlyUntilExpiryPacket(t *testing.T) {
+func TestGetModelLeaseReportsExpiredLeaseAndFreesCapacity(t *testing.T) {
 	t.Parallel()
 
-	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 1})
-	ctx := context.Background()
-	_, err := service.GetModelLease(ctx, models.GetModelLeaseRequest{})
-	if !errors.Is(err, models.ErrUnsupportedOperation) {
-		t.Fatalf("GetModelLease error = %v, want ErrUnsupportedOperation", err)
+	start := time.Date(2026, time.July, 27, 12, 0, 0, 0, time.UTC)
+	clock := &advanceableHostClock{now: start}
+	scope := mustRuntimeScopeRef(t, "leases-get-expired")
+	service := internalservice.New(clock, readySlotFacts{capacity: 1})
+	request := models.AcquireModelLeaseRequest{
+		Scope:  scope,
+		Name:   "local-model",
+		Holder: "worker-a",
+	}
+
+	acquired, err := service.AcquireModelLease(context.Background(), request)
+	if err != nil {
+		t.Fatalf("AcquireModelLease: %v", err)
+	}
+	_, err = service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope:  request.Scope,
+		Name:   request.Name,
+		Holder: "worker-b",
+	})
+	if !errors.Is(err, models.ErrHostCapacityExhausted) {
+		t.Fatalf("AcquireModelLease before expiry = %v, want ErrHostCapacityExhausted", err)
+	}
+
+	clock.now = start.Add(hostleases.DefaultLeaseTTL)
+	expired, err := service.GetModelLease(context.Background(), models.GetModelLeaseRequest{
+		Scope: scope,
+		Lease: acquired.Lease.Lease,
+	})
+	if !errors.Is(err, models.ErrHostLeaseExpired) {
+		t.Fatalf("GetModelLease expired = %v, want ErrHostLeaseExpired", err)
+	}
+	if expired.Lease.Status != models.ModelLeaseStatusExpired {
+		t.Fatalf("expired lease status = %q, want EXPIRED", expired.Lease.Status)
+	}
+
+	afterExpiry, err := service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope:  request.Scope,
+		Name:   request.Name,
+		Holder: "worker-c",
+	})
+	if err != nil {
+		t.Fatalf("AcquireModelLease after expiry freed capacity: %v", err)
+	}
+	if afterExpiry.Lease.Lease.IsZero() {
+		t.Fatal("expected lease after expiry freed capacity")
+	}
+}
+
+func TestReleaseModelLeaseRejectsExpiredWithoutDoubleFree(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, time.July, 27, 12, 0, 0, 0, time.UTC)
+	clock := &advanceableHostClock{now: start}
+	scope := mustRuntimeScopeRef(t, "leases-release-expired")
+	service := internalservice.New(clock, readySlotFacts{capacity: 1})
+
+	acquired, err := service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope:  scope,
+		Name:   "local-model",
+		Holder: "worker-a",
+	})
+	if err != nil {
+		t.Fatalf("AcquireModelLease: %v", err)
+	}
+
+	clock.now = start.Add(hostleases.DefaultLeaseTTL)
+	_, err = service.ReleaseModelLease(context.Background(), models.ReleaseModelLeaseRequest{
+		Scope: scope,
+		Lease: acquired.Lease.Lease,
+	})
+	if !errors.Is(err, models.ErrHostLeaseExpired) {
+		t.Fatalf("ReleaseModelLease expired = %v, want ErrHostLeaseExpired", err)
+	}
+
+	_, err = service.ReleaseModelLease(context.Background(), models.ReleaseModelLeaseRequest{
+		Scope: scope,
+		Lease: acquired.Lease.Lease,
+	})
+	if !errors.Is(err, models.ErrHostLeaseExpired) {
+		t.Fatalf("ReleaseModelLease already expired = %v, want ErrHostLeaseExpired", err)
+	}
+
+	reacquired, err := service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope:  scope,
+		Name:   "local-model",
+		Holder: "worker-b",
+	})
+	if err != nil {
+		t.Fatalf("AcquireModelLease after expired release did not double-free: %v", err)
+	}
+	if reacquired.Lease.Lease.IsZero() {
+		t.Fatal("capacity should remain available exactly once after expiry")
+	}
+}
+
+func TestAcquireModelLeaseRejectsContendedCapacity(t *testing.T) {
+	t.Parallel()
+
+	scope := mustRuntimeScopeRef(t, "leases-acquire-contended")
+	service := internalservice.New(
+		fixedHostClock{},
+		readySlotFacts{capacity: 2, contendedHolder: "worker-a"},
+	)
+
+	_, err := service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope:  scope,
+		Name:   "local-model",
+		Holder: "worker-b",
+	})
+	if !errors.Is(err, models.ErrHostCapacityContended) {
+		t.Fatalf("AcquireModelLease contended = %v, want ErrHostCapacityContended", err)
+	}
+
+	acquired, err := service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope:  scope,
+		Name:   "local-model",
+		Holder: "worker-a",
+	})
+	if err != nil {
+		t.Fatalf("AcquireModelLease contending holder = %v, want success", err)
+	}
+	if acquired.Lease.Lease.IsZero() {
+		t.Fatal("contending holder should acquire when capacity is available")
+	}
+}
+
+func TestHostLeaseFailureClassificationsRemainDistinct(t *testing.T) {
+	t.Parallel()
+
+	scope := mustRuntimeScopeRef(t, "leases-failure-distinct")
+	start := time.Date(2026, time.July, 27, 12, 0, 0, 0, time.UTC)
+	clock := &advanceableHostClock{now: start}
+	service := internalservice.New(clock, readySlotFacts{capacity: 1})
+
+	assertHostLeaseFailureIsOnly(t, "invalid holder", mustAcquireErr(service, models.AcquireModelLeaseRequest{
+		Scope: scope, Name: "local-model", Holder: "",
+	}), models.ErrHostInvalidHolder)
+	assertHostLeaseFailureIsOnly(t, "runtime not ready", mustAcquireErr(service, models.AcquireModelLeaseRequest{
+		Scope: scope, Name: "not-ready", Holder: "worker",
+	}), models.ErrHostRuntimeNotReady)
+
+	exhaustedService := internalservice.New(
+		fixedHostClock{},
+		readySlotFacts{capacity: 1},
+	)
+	_, err := exhaustedService.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope: scope, Name: "local-model", Holder: "worker-a",
+	})
+	if err != nil {
+		t.Fatalf("seed exhausted capacity: %v", err)
+	}
+	assertHostLeaseFailureIsOnly(t, "capacity exhausted", mustAcquireErr(exhaustedService, models.AcquireModelLeaseRequest{
+		Scope: scope, Name: "local-model", Holder: "worker-b",
+	}), models.ErrHostCapacityExhausted)
+
+	contendedService := internalservice.New(
+		fixedHostClock{},
+		readySlotFacts{capacity: 2, contendedHolder: "holder-a"},
+	)
+	assertHostLeaseFailureIsOnly(t, "capacity contended", mustAcquireErr(contendedService, models.AcquireModelLeaseRequest{
+		Scope: scope, Name: "local-model", Holder: "holder-b",
+	}), models.ErrHostCapacityContended)
+
+	unknown, parseErr := (models.ModelLeaseRef{}).Parse("model-lease-unknown")
+	if parseErr != nil {
+		t.Fatalf("parse unknown lease: %v", parseErr)
+	}
+	_, err = service.GetModelLease(context.Background(), models.GetModelLeaseRequest{
+		Scope: scope, Lease: unknown,
+	})
+	assertHostLeaseFailureIsOnly(t, "lease not found", err, models.ErrHostLeaseNotFound)
+
+	acquired, err := service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope: scope, Name: "expiring", Holder: "worker",
+	})
+	if err != nil {
+		t.Fatalf("AcquireModelLease expiring: %v", err)
+	}
+	clock.now = start.Add(hostleases.DefaultLeaseTTL)
+	_, err = service.GetModelLease(context.Background(), models.GetModelLeaseRequest{
+		Scope: scope, Lease: acquired.Lease.Lease,
+	})
+	assertHostLeaseFailureIsOnly(t, "lease expired", err, models.ErrHostLeaseExpired)
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = service.AcquireModelLease(cancelled, models.AcquireModelLeaseRequest{
+		Scope: scope, Name: "local-model", Holder: "worker",
+	})
+	assertHostLeaseFailureIsOnly(t, "cancelled acquire", err, models.ErrHostCancelled)
+}
+
+func mustAcquireErr(
+	service hostleases.Service,
+	request models.AcquireModelLeaseRequest,
+) error {
+	_, err := service.AcquireModelLease(context.Background(), request)
+	return err
+}
+
+func assertHostLeaseFailureIsOnly(t *testing.T, label string, err, want error) {
+	t.Helper()
+	if !errors.Is(err, want) {
+		t.Fatalf("%s = %v, want %v", label, err, want)
+	}
+	for _, other := range []error{
+		models.ErrHostCapacityExhausted,
+		models.ErrHostCapacityContended,
+		models.ErrHostLeaseExpired,
+		models.ErrHostLeaseNotFound,
+		models.ErrHostInvalidHolder,
+		models.ErrHostRuntimeNotReady,
+		models.ErrHostCancelled,
+	} {
+		if other != want && errors.Is(err, other) {
+			t.Fatalf("%s must keep %v distinct from %v: %v", label, want, other, err)
+		}
 	}
 }
 
@@ -400,23 +612,43 @@ func (clock fixedHostClock) NewTimer(time.Duration) models.HostTimer {
 	panic("host timer created during leases acquire tests")
 }
 
+type advanceableHostClock struct {
+	now time.Time
+}
+
+func (clock *advanceableHostClock) Now() time.Time {
+	return clock.now
+}
+
+func (clock *advanceableHostClock) NewTimer(time.Duration) models.HostTimer {
+	panic("host timer created during leases expiry tests")
+}
+
 type readySlotFacts struct {
-	readiness models.ReadinessState
-	capacity  int
+	readiness       models.ReadinessState
+	capacity        int
+	contendedHolder string
 }
 
 func (facts readySlotFacts) SlotFacts(
-	context.Context,
-	models.RuntimeScopeRef,
-	string,
+	ctx context.Context,
+	scope models.RuntimeScopeRef,
+	name string,
 ) (hostleases.SlotFacts, error) {
+	if name == "not-ready" {
+		return hostleases.SlotFacts{
+			Readiness: models.ReadinessStateLoading,
+			Capacity:  facts.capacity,
+		}, nil
+	}
 	readiness := facts.readiness
 	if readiness == "" {
 		readiness = models.ReadinessStateReady
 	}
 	return hostleases.SlotFacts{
-		Readiness: readiness,
-		Capacity:  facts.capacity,
+		Readiness:       readiness,
+		Capacity:        facts.capacity,
+		ContendedHolder: facts.contendedHolder,
 	}, nil
 }
 

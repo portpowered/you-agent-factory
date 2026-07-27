@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
@@ -68,9 +69,19 @@ func (s *service) AcquireModelLease(
 
 	slotKey := leaseSlotKey(request.Scope, request.Name)
 	s.mu.Lock()
+	now := s.hostClock.Now()
+	expiredReleases := s.expireStaleLeasesLocked(slotKey, now)
 	if leaseCapacityExhausted(s.capacityHolders[slotKey], facts.Capacity) {
 		s.mu.Unlock()
+		s.notifyCapacityReleased(expiredReleases)
 		return models.AcquireModelLeaseResult{}, models.ErrHostCapacityExhausted
+	}
+	requestHolder := strings.TrimSpace(request.Holder)
+	if contended := strings.TrimSpace(facts.ContendedHolder); contended != "" &&
+		!strings.EqualFold(contended, requestHolder) {
+		s.mu.Unlock()
+		s.notifyCapacityReleased(expiredReleases)
+		return models.AcquireModelLeaseResult{}, models.ErrHostCapacityContended
 	}
 
 	s.nextLease++
@@ -79,7 +90,6 @@ func (s *service) AcquireModelLease(
 		s.mu.Unlock()
 		return models.AcquireModelLeaseResult{}, err
 	}
-	now := s.hostClock.Now()
 	lease := models.ModelLease{
 		Lease:         ref,
 		Scope:         request.Scope,
@@ -93,6 +103,7 @@ func (s *service) AcquireModelLease(
 	s.capacityHolders[slotKey]++
 	s.mu.Unlock()
 
+	s.notifyCapacityReleased(expiredReleases)
 	if s.coordinator != nil {
 		s.coordinator.OnLeaseCapacityAcquired(request.Scope, request.Name)
 	}
@@ -101,10 +112,44 @@ func (s *service) AcquireModelLease(
 }
 
 func (s *service) GetModelLease(
-	context.Context,
-	models.GetModelLeaseRequest,
+	ctx context.Context,
+	request models.GetModelLeaseRequest,
 ) (models.GetModelLeaseResult, error) {
-	return models.GetModelLeaseResult{}, models.ErrUnsupportedOperation
+	if err := request.Validate(); err != nil {
+		return models.GetModelLeaseResult{}, err
+	}
+	if err := hostContextError(ctx); err != nil {
+		return models.GetModelLeaseResult{}, err
+	}
+
+	leaseKey := request.Lease.String()
+	s.mu.Lock()
+	record, ok := s.leases[leaseKey]
+	if !ok || record.lease.Scope != request.Scope {
+		s.mu.Unlock()
+		return models.GetModelLeaseResult{}, models.ErrHostLeaseNotFound
+	}
+	slotKey := leaseSlotKey(request.Scope, record.lease.ModelName)
+	now := s.hostClock.Now()
+	expiredReleases := s.expireStaleLeasesLocked(slotKey, now)
+	record = s.leases[leaseKey]
+	if record.lease.Status == models.ModelLeaseStatusActive && leaseExpired(record.lease, now) {
+		record = s.expireLeaseRecordLocked(leaseKey, record, slotKey)
+		s.mu.Unlock()
+		s.notifyCapacityReleased(append(expiredReleases, capacityRelease{
+			scope:     request.Scope,
+			modelName: record.lease.ModelName,
+		}))
+		return models.GetModelLeaseResult{Lease: record.lease}, models.ErrHostLeaseExpired
+	}
+	if record.lease.Status == models.ModelLeaseStatusExpired {
+		s.mu.Unlock()
+		s.notifyCapacityReleased(expiredReleases)
+		return models.GetModelLeaseResult{Lease: record.lease}, models.ErrHostLeaseExpired
+	}
+	s.mu.Unlock()
+	s.notifyCapacityReleased(expiredReleases)
+	return models.GetModelLeaseResult{Lease: record.lease}, nil
 }
 
 func (s *service) ReleaseModelLease(
@@ -125,18 +170,37 @@ func (s *service) ReleaseModelLease(
 		s.mu.Unlock()
 		return models.ReleaseModelLeaseResult{}, models.ErrHostLeaseNotFound
 	}
+	slotKey := leaseSlotKey(request.Scope, record.lease.ModelName)
+	now := s.hostClock.Now()
+	expiredReleases := s.expireStaleLeasesLocked(slotKey, now)
+	record = s.leases[leaseKey]
+	if record.lease.Status == models.ModelLeaseStatusActive && leaseExpired(record.lease, now) {
+		record = s.expireLeaseRecordLocked(leaseKey, record, slotKey)
+		s.mu.Unlock()
+		s.notifyCapacityReleased(append(expiredReleases, capacityRelease{
+			scope:     request.Scope,
+			modelName: record.lease.ModelName,
+		}))
+		return models.ReleaseModelLeaseResult{Lease: record.lease}, models.ErrHostLeaseExpired
+	}
+	if record.lease.Status == models.ModelLeaseStatusExpired {
+		s.mu.Unlock()
+		s.notifyCapacityReleased(expiredReleases)
+		return models.ReleaseModelLeaseResult{Lease: record.lease}, models.ErrHostLeaseExpired
+	}
 	if record.lease.Status != models.ModelLeaseStatusActive {
 		s.mu.Unlock()
+		s.notifyCapacityReleased(expiredReleases)
 		return models.ReleaseModelLeaseResult{}, models.ErrHostLeaseNotFound
 	}
 
 	record.lease.Status = models.ModelLeaseStatusReleased
 	s.leases[leaseKey] = record
-	slotKey := leaseSlotKey(request.Scope, record.lease.ModelName)
 	modelName := record.lease.ModelName
 	s.releaseCapacityCountLocked(slotKey)
 	s.mu.Unlock()
 
+	s.notifyCapacityReleased(expiredReleases)
 	if s.coordinator != nil {
 		s.coordinator.OnLeaseCapacityReleased(request.Scope, modelName)
 	}
@@ -165,6 +229,56 @@ func leaseCapacityExhausted(activeCount int, capacity int) bool {
 		return false
 	}
 	return activeCount >= capacity
+}
+
+type capacityRelease struct {
+	scope     models.RuntimeScopeRef
+	modelName string
+}
+
+func (s *service) notifyCapacityReleased(releases []capacityRelease) {
+	if s.coordinator == nil {
+		return
+	}
+	for _, release := range releases {
+		s.coordinator.OnLeaseCapacityReleased(release.scope, release.modelName)
+	}
+}
+
+func leaseExpired(lease models.ModelLease, now time.Time) bool {
+	return lease.Status == models.ModelLeaseStatusActive && !now.Before(lease.ExpiresAt)
+}
+
+func (s *service) expireStaleLeasesLocked(
+	slotKey string,
+	now time.Time,
+) []capacityRelease {
+	releases := make([]capacityRelease, 0)
+	for leaseKey, record := range s.leases {
+		if leaseSlotKey(record.lease.Scope, record.lease.ModelName) != slotKey {
+			continue
+		}
+		if record.lease.Status != models.ModelLeaseStatusActive || !leaseExpired(record.lease, now) {
+			continue
+		}
+		record = s.expireLeaseRecordLocked(leaseKey, record, slotKey)
+		releases = append(releases, capacityRelease{
+			scope:     record.lease.Scope,
+			modelName: record.lease.ModelName,
+		})
+	}
+	return releases
+}
+
+func (s *service) expireLeaseRecordLocked(
+	leaseKey string,
+	record leaseRecord,
+	slotKey string,
+) leaseRecord {
+	record.lease.Status = models.ModelLeaseStatusExpired
+	s.leases[leaseKey] = record
+	s.releaseCapacityCountLocked(slotKey)
+	return record
 }
 
 func hostContextError(ctx context.Context) error {
