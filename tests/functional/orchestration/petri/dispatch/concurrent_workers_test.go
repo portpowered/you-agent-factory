@@ -1,7 +1,9 @@
 package dispatch
 
 import (
+	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -9,6 +11,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -175,6 +178,90 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 	})
 }
 
+// TestPetriConcurrentFailureDoesNotDuplicateDispatch proves one concurrent Work
+// item can fail at the external-effect edge while siblings succeed, projecting
+// the failing identity to the Factory-configured failed location without a
+// second successful dispatch or completion path for that same Work.
+func TestPetriConcurrentFailureDoesNotDuplicateDispatch(t *testing.T) {
+	const (
+		failTraceID = "trace-will-fail"
+		passTraceID = "trace-will-pass"
+	)
+	successTerminal := support.WorkCustomerLocation("story", "complete")
+	failedTerminal := support.WorkCustomerLocation("story", "failed")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "batch_ideation_pipeline"))
+	seedIdeas(t, dir, []seedIdea{
+		{traceID: failTraceID, title: "will-fail"},
+		{traceID: passTraceID, title: "will-pass"},
+	})
+
+	provider := &traceAwareReviewInferenceProvider{
+		rejectTraceID: failTraceID,
+		reviewCounts:  make(map[string]int),
+	}
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+		ProviderOverride: provider,
+	}, 15*time.Second)
+
+	assertWorkAtCustomerStates(t, listed, map[string]int{
+		successTerminal: 1,
+		failedTerminal:  1,
+		support.WorkCustomerLocation("idea", "init"):         0,
+		support.WorkCustomerLocation("story", "init"):        0,
+		support.WorkCustomerLocation("story", "in-review"):   0,
+		support.WorkCustomerLocation("story", "executing"):   0,
+	})
+	assertTerminalWorkCorrelatesToTraceIDs(t, listed, successTerminal, []string{passTraceID})
+	assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{failTraceID})
+	assertTraceAbsentAtCustomerState(t, listed, successTerminal, failTraceID)
+
+	failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, failTraceID)
+	if !ok {
+		t.Fatalf("missing failed Work for trace %q at %s", failTraceID, failedTerminal)
+	}
+	assertNoAcceptedDispatchMovesWorkToCustomerState(t, events, failedWorkID, successTerminal)
+	assertDispatchEventsReferenceTerminalWork(t, events, listed, successTerminal, []string{passTraceID})
+
+	provider.mu.Lock()
+	failReviewCalls := provider.reviewCounts[failTraceID]
+	passReviewCalls := provider.reviewCounts[passTraceID]
+	provider.mu.Unlock()
+	if failReviewCalls != 3 {
+		t.Errorf("review calls for failing trace = %d, want 3", failReviewCalls)
+	}
+	if passReviewCalls != 1 {
+		t.Errorf("review calls for passing trace = %d, want 1", passReviewCalls)
+	}
+}
+
+type traceAwareReviewInferenceProvider struct {
+	rejectTraceID string
+	mu            sync.Mutex
+	reviewCounts  map[string]int
+}
+
+func (p *traceAwareReviewInferenceProvider) Infer(
+	_ context.Context,
+	req workerexecution.ProviderInferenceRequest,
+) (workerexecution.InferenceResponse, error) {
+	traceID := req.Dispatch.Execution.TraceID
+	if traceID == "" {
+		traceID = req.Dispatch.CurrentChainingTraceID
+	}
+	if req.WorkerType == "reviewer" {
+		p.mu.Lock()
+		p.reviewCounts[traceID]++
+		p.mu.Unlock()
+		if traceID == p.rejectTraceID {
+			return workerexecution.InferenceResponse{Content: "needs revision"}, nil
+		}
+	}
+	return workerexecution.InferenceResponse{Content: "Done. COMPLETE ACCEPTED"}, nil
+}
+
+var _ workerprovider.Provider = (*traceAwareReviewInferenceProvider)(nil)
+
 type seedIdea struct {
 	traceID string
 	title   string
@@ -323,6 +410,75 @@ func assertDispatchEventsReferenceTerminalWork(
 		}
 		if !referenced {
 			t.Errorf("dispatch events missing public Work ID %q for trace %q", workID, traceID)
+		}
+	}
+}
+
+func assertTraceAbsentAtCustomerState(
+	t *testing.T,
+	listed factoryapi.ListWorkResponse,
+	location string,
+	traceID string,
+) {
+	t.Helper()
+	for _, item := range listed.Results {
+		if support.WorkItemCustomerLocation(item) != location {
+			continue
+		}
+		if item.TraceId != nil && *item.TraceId == traceID {
+			t.Errorf("trace %q should not be at %s", traceID, location)
+		}
+	}
+}
+
+func workIDAtCustomerState(
+	t *testing.T,
+	listed factoryapi.ListWorkResponse,
+	location string,
+	traceID string,
+) (string, bool) {
+	t.Helper()
+	for _, item := range listed.Results {
+		if support.WorkItemCustomerLocation(item) != location {
+			continue
+		}
+		if item.TraceId == nil || *item.TraceId != traceID {
+			continue
+		}
+		if item.WorkId == nil || *item.WorkId == "" {
+			t.Fatalf("work at %s for trace %q missing workId", location, traceID)
+		}
+		return *item.WorkId, true
+	}
+	return "", false
+}
+
+func assertNoAcceptedDispatchMovesWorkToCustomerState(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	workID string,
+	terminalLocation string,
+) {
+	t.Helper()
+	for _, dispatch := range support.ObserveDispatchEvents(t, events) {
+		if dispatch.Response == nil || dispatch.Response.Outcome != factoryapi.WorkOutcomeAccepted {
+			continue
+		}
+		if !support.DispatchObservationIncludesWork(dispatch, workID) {
+			continue
+		}
+		if dispatch.Response.OutputWork == nil {
+			continue
+		}
+		for _, item := range *dispatch.Response.OutputWork {
+			if support.WorkItemCustomerLocation(item) == terminalLocation {
+				t.Errorf(
+					"accepted dispatch %s moved work %s to success terminal %s",
+					dispatch.DispatchID,
+					workID,
+					terminalLocation,
+				)
+			}
 		}
 	}
 }
