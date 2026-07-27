@@ -116,17 +116,44 @@ func (initializer *Initializer) Initialize(
 	settings := initializer.operatorSettings
 	if _, err := initializer.inspectPath(configPath); err == nil {
 		if _, err := settings.LoadFileConfig(configPath); err != nil {
-			return systeminitialization.Result{}, fmt.Errorf("read existing operator config %q: %w", configPath, err)
+			return systeminitialization.Result{}, partialInitializeFailure(
+				"read existing operator config failed",
+				rollbackFactsAfterLegacyMigration(
+					systeminitialization.RollbackFact{
+						Step:    systeminitialization.InitializeStepSystemConfig,
+						Outcome: systeminitialization.RollbackStepUnresolved,
+					},
+				),
+				fmt.Errorf("read existing operator config %q: %w", configPath, err),
+			)
 		}
 		systemConfigOutcome = systeminitialization.SystemConfigSkipped
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return systeminitialization.Result{}, fmt.Errorf("stat operator config %q: %w", configPath, err)
 	} else {
 		if _, err := settings.EnsureLocalBackendScope(configPath); err != nil {
-			return systeminitialization.Result{}, fmt.Errorf("create system config at %q: %w", configPath, err)
+			return systeminitialization.Result{}, partialInitializeFailure(
+				"create system config failed",
+				rollbackFactsAfterLegacyMigration(
+					systeminitialization.RollbackFact{
+						Step:    systeminitialization.InitializeStepSystemConfig,
+						Outcome: systeminitialization.RollbackStepUnresolved,
+					},
+				),
+				fmt.Errorf("create system config at %q: %w", configPath, err),
+			)
 		}
 		if _, err := settings.LoadFileConfig(configPath); err != nil {
-			return systeminitialization.Result{}, fmt.Errorf("validate created operator config %q: %w", configPath, err)
+			return systeminitialization.Result{}, partialInitializeFailure(
+				"validate created operator config failed",
+				rollbackFactsAfterLegacyMigration(
+					systeminitialization.RollbackFact{
+						Step:    systeminitialization.InitializeStepSystemConfig,
+						Outcome: systeminitialization.RollbackStepUnresolved,
+					},
+				),
+				fmt.Errorf("validate created operator config %q: %w", configPath, err),
+			)
 		}
 	}
 
@@ -137,7 +164,14 @@ func (initializer *Initializer) Initialize(
 	)
 	packagedFactories := projectPackagedFactoryResults(installed)
 	if err != nil {
-		return systeminitialization.Result{}, err
+		return systeminitialization.Result{}, partialInitializeFailure(
+			"packaged factory install failed",
+			rollbackFactsAfterSystemConfig(systemConfigOutcome, systeminitialization.RollbackFact{
+				Step:    systeminitialization.InitializeStepPackagedFactories,
+				Outcome: systeminitialization.RollbackStepUnresolved,
+			}),
+			err,
+		)
 	}
 
 	return systeminitialization.Result{
@@ -186,6 +220,48 @@ func projectPackagedFactoryResults(installed []factorydefinitions.PackagedFactor
 		})
 	}
 	return results
+}
+
+func partialInitializeFailure(
+	message string,
+	facts []systeminitialization.RollbackFact,
+	cause error,
+) error {
+	return systeminitialization.InitializePartialFailure{
+		Message: message,
+		Facts:   facts,
+		Cause:   cause,
+	}
+}
+
+func rollbackFactsAfterLegacyMigration(extra ...systeminitialization.RollbackFact) []systeminitialization.RollbackFact {
+	facts := []systeminitialization.RollbackFact{{
+		Step:    systeminitialization.InitializeStepLegacyMigration,
+		Outcome: systeminitialization.RollbackStepCompleted,
+	}}
+	return append(facts, extra...)
+}
+
+func rollbackFactsAfterSystemConfig(
+	systemConfigOutcome systeminitialization.SystemConfigOutcome,
+	extra ...systeminitialization.RollbackFact,
+) []systeminitialization.RollbackFact {
+	facts := rollbackFactsAfterLegacyMigration(systeminitialization.RollbackFact{
+		Step:    systeminitialization.InitializeStepSystemConfig,
+		Outcome: systemConfigRollbackOutcome(systemConfigOutcome),
+	})
+	return append(facts, extra...)
+}
+
+func systemConfigRollbackOutcome(
+	systemConfigOutcome systeminitialization.SystemConfigOutcome,
+) systeminitialization.RollbackStepOutcome {
+	switch systemConfigOutcome {
+	case systeminitialization.SystemConfigCreated, systeminitialization.SystemConfigSkipped:
+		return systeminitialization.RollbackStepRolledBackOrPreserved
+	default:
+		return systeminitialization.RollbackStepUnresolved
+	}
 }
 
 func ensureSystemConfigParentIsDirectory(configPath string, inspectPath systeminitialization.InspectPath) error {

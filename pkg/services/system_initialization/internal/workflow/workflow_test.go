@@ -444,6 +444,10 @@ func TestInit_RejectsEmptyHomeDir(t *testing.T) {
 	if !errors.Is(err, systeminitialization.ErrMissingHomeDir) {
 		t.Fatalf("Initialize(empty home) error = %v, want ErrMissingHomeDir", err)
 	}
+	var partialFailure systeminitialization.InitializePartialFailure
+	if errors.As(err, &partialFailure) {
+		t.Fatalf("Initialize(empty home) error = %v, want no rollback facts", err)
+	}
 }
 
 func TestInit_FreshHomeMaterializesPackagedDefaultFactories(t *testing.T) {
@@ -488,16 +492,116 @@ func TestInit_DoubleRunIsSuccessfulNoOp(t *testing.T) {
 func TestInit_ConfigCreationFailureReportsActionableError(t *testing.T) {
 	settings := &fakeOperatorSettings{ensureErr: errors.New("write denied")}
 	_, err := newTestInitializer(t, settings, &fakePackagedInstaller{}, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: t.TempDir()})
-	if err == nil || !strings.Contains(err.Error(), "create system config") || !strings.Contains(err.Error(), "write denied") {
-		t.Fatalf("Initialize() error = %v", err)
+	if err == nil {
+		t.Fatalf("Initialize() error = nil")
+	}
+	if !errors.Is(err, systeminitialization.ErrInitializePartialFailure) {
+		t.Fatalf("Initialize() error = %v, want ErrInitializePartialFailure", err)
+	}
+	var partialFailure systeminitialization.InitializePartialFailure
+	if !errors.As(err, &partialFailure) {
+		t.Fatalf("Initialize() error = %T(%v), want InitializePartialFailure", err, err)
+	}
+	if !strings.Contains(partialFailure.Cause.Error(), "create system config") ||
+		!strings.Contains(partialFailure.Cause.Error(), "write denied") {
+		t.Fatalf("Initialize() cause = %v, want actionable create-system-config failure", partialFailure.Cause)
+	}
+	if len(partialFailure.Facts) != 2 ||
+		partialFailure.Facts[0].Step != systeminitialization.InitializeStepLegacyMigration ||
+		partialFailure.Facts[0].Outcome != systeminitialization.RollbackStepCompleted ||
+		partialFailure.Facts[1].Step != systeminitialization.InitializeStepSystemConfig ||
+		partialFailure.Facts[1].Outcome != systeminitialization.RollbackStepUnresolved {
+		t.Fatalf("Initialize() rollback facts = %#v", partialFailure.Facts)
 	}
 }
 
 func TestInit_FactoryMaterializationFailureReportsActionableError(t *testing.T) {
-	installer := &fakePackagedInstaller{err: errors.New("invalid packaged layout")}
+	installErr := errors.New("invalid packaged layout")
+	installer := &fakePackagedInstaller{err: installErr}
 	_, err := newTestInitializer(t, &fakeOperatorSettings{}, installer, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: t.TempDir()})
-	if err == nil || !strings.Contains(err.Error(), "invalid packaged layout") {
-		t.Fatalf("Initialize() error = %v", err)
+	if err == nil {
+		t.Fatalf("Initialize() error = nil")
+	}
+	if !errors.Is(err, systeminitialization.ErrInitializePartialFailure) {
+		t.Fatalf("Initialize() error = %v, want ErrInitializePartialFailure", err)
+	}
+	if !errors.Is(err, installErr) {
+		t.Fatalf("Initialize() error = %v, want wrapped install cause", err)
+	}
+	var partialFailure systeminitialization.InitializePartialFailure
+	if !errors.As(err, &partialFailure) {
+		t.Fatalf("Initialize() error = %T(%v), want InitializePartialFailure", err, err)
+	}
+	if len(partialFailure.Facts) != 3 ||
+		partialFailure.Facts[0].Step != systeminitialization.InitializeStepLegacyMigration ||
+		partialFailure.Facts[0].Outcome != systeminitialization.RollbackStepCompleted ||
+		partialFailure.Facts[1].Step != systeminitialization.InitializeStepSystemConfig ||
+		partialFailure.Facts[1].Outcome != systeminitialization.RollbackStepRolledBackOrPreserved ||
+		partialFailure.Facts[2].Step != systeminitialization.InitializeStepPackagedFactories ||
+		partialFailure.Facts[2].Outcome != systeminitialization.RollbackStepUnresolved {
+		t.Fatalf("Initialize() rollback facts = %#v", partialFailure.Facts)
+	}
+}
+
+func TestInitializePackagedFactoryFailureAfterSkippedSystemConfigReportsRollbackFacts(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := operatorsettings.DefaultConfigPath(homeDir)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{"customer":"owned"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	installErr := errors.New("packaged factory install failed")
+	_, err := newTestInitializer(
+		t,
+		&fakeOperatorSettings{},
+		&fakePackagedInstaller{err: installErr},
+		nil,
+	).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
+	if !errors.Is(err, systeminitialization.ErrInitializePartialFailure) {
+		t.Fatalf("Initialize() error = %v, want ErrInitializePartialFailure", err)
+	}
+	if !errors.Is(err, installErr) {
+		t.Fatalf("Initialize() error = %v, want wrapped install cause", err)
+	}
+	var partialFailure systeminitialization.InitializePartialFailure
+	if !errors.As(err, &partialFailure) {
+		t.Fatalf("Initialize() error = %T(%v), want InitializePartialFailure", err, err)
+	}
+	if len(partialFailure.Facts) != 3 ||
+		partialFailure.Facts[1].Step != systeminitialization.InitializeStepSystemConfig ||
+		partialFailure.Facts[1].Outcome != systeminitialization.RollbackStepRolledBackOrPreserved {
+		t.Fatalf("Initialize() rollback facts = %#v", partialFailure.Facts)
+	}
+}
+
+func TestInitializeValidationAndCancellationFailuresDoNotInventRollbackFacts(t *testing.T) {
+	t.Parallel()
+
+	_, validationErr := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).
+		Initialize(t.Context(), systeminitialization.Request{HomeDir: "  "})
+	if !errors.Is(validationErr, systeminitialization.ErrMissingHomeDir) {
+		t.Fatalf("validation error = %v, want ErrMissingHomeDir", validationErr)
+	}
+	var validationPartialFailure systeminitialization.InitializePartialFailure
+	if errors.As(validationErr, &validationPartialFailure) {
+		t.Fatalf("validation error = %v, want no rollback facts", validationErr)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, cancellationErr := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).
+		Initialize(ctx, systeminitialization.Request{HomeDir: t.TempDir()})
+	if !errors.Is(cancellationErr, systeminitialization.ErrInitializeCancelled) {
+		t.Fatalf("cancellation error = %v, want ErrInitializeCancelled", cancellationErr)
+	}
+	var cancellationPartialFailure systeminitialization.InitializePartialFailure
+	if errors.As(cancellationErr, &cancellationPartialFailure) {
+		t.Fatalf("cancellation error = %v, want no rollback facts", cancellationErr)
 	}
 }
 

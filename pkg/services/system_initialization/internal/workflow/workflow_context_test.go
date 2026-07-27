@@ -39,4 +39,8 @@ func TestInitializePreservesCanceledContext(t *testing.T) {
 	if !reflect.DeepEqual(result, systeminitialization.Result{}) {
 		t.Fatalf("Initialize(canceled) result = %#v, want zero result", result)
 	}
+	var partialFailure systeminitialization.InitializePartialFailure
+	if errors.As(err, &partialFailure) {
+		t.Fatalf("Initialize(canceled) error = %v, want no rollback facts", err)
+	}
 }
