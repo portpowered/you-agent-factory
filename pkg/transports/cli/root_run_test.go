@@ -274,6 +274,12 @@ var resumeSession = sessioncli.NewResume(rootTestHTTPProtocol())
 var listSessionDispatches = sessioncli.NewDispatches(rootTestHTTPProtocol())
 var createSession = sessioncli.NewCreate(rootTestHTTPProtocol())
 var deleteSession = sessioncli.NewDelete(rootTestHTTPProtocol())
+var rootTestSessionsCLI = func() sessioncli.Service {
+	return sessioncli.Bind(sessioncli.Operations{
+		List: listSessions, Show: showSession, Pause: pauseSession, Resume: resumeSession,
+		ListDispatches: listSessionDispatches, Create: createSession, Delete: deleteSession,
+	})
+}
 var queryFactory = factorycli.NewQuery(rootTestHTTPProtocol())
 
 type rootTestBatchPreparation struct{}
@@ -732,11 +738,8 @@ func newLegacyTestRootCommandWithCatalogDefaultsAndInvocation(
 	factory := withTestInjectedPlatformRoles(CommandFactory{
 		namedFactoryCatalog: catalog,
 		SubmitWork:          submitWork, SubmitBatch: submitBatch,
-		ListSessions: listSessions, ShowSession: showSession,
-		PauseSession: pauseSession, ResumeSession: resumeSession,
-		ListSessionDispatches: listSessionDispatches,
-		CreateSession:         createSession, DeleteSession: deleteSession,
-		ModelsCLI:            legacyModelsCLIService{},
+		SessionsCLI: rootTestSessionsCLI(),
+		ModelsCLI:   legacyModelsCLIService{},
 		FlattenFactoryConfig: flattenFactoryConfig,
 		ExpandFactoryConfig:  expandFactoryConfig, InitFactory: initFactory,
 		QueryFactory: queryFactory, ListFactories: listFactories,

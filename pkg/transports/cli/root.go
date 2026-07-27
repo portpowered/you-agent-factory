@@ -164,13 +164,7 @@ type CommandFactory struct {
 
 	SubmitWork            func(submitcli.SubmitConfig) error
 	SubmitBatch           func(submitcli.BatchConfig) error
-	ListSessions          func(sessioncli.ListConfig) error
-	ShowSession           func(sessioncli.ShowConfig) error
-	PauseSession          func(sessioncli.LifecycleControlConfig) error
-	ResumeSession         func(sessioncli.LifecycleControlConfig) error
-	ListSessionDispatches func(sessioncli.DispatchesConfig) error
-	CreateSession         func(sessioncli.CreateConfig) error
-	DeleteSession         func(sessioncli.DeleteConfig) error
+	SessionsCLI           sessioncli.Service
 	BuildExecution        ExecutionServiceBuilder
 	ModelsCLI             modelscli.Service
 	FlattenFactoryConfig  func(configcli.FactoryConfigFlattenConfig) error
@@ -214,13 +208,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		loadOperatorConfig:                operations.LoadOperatorConfig,
 		SubmitWork:                        operations.SubmitWork,
 		SubmitBatch:                       operations.SubmitBatch,
-		ListSessions:                      operations.ListSessions,
-		ShowSession:                       operations.ShowSession,
-		PauseSession:                      operations.PauseSession,
-		ResumeSession:                     operations.ResumeSession,
-		ListSessionDispatches:             operations.ListSessionDispatches,
-		CreateSession:                     operations.CreateSession,
-		DeleteSession:                     operations.DeleteSession,
+		SessionsCLI:                       assembleSessionsCLI(operations),
 		BuildExecution:                    operations.BuildExecution,
 		ModelsCLI:                         operations.ModelsCLI,
 		FlattenFactoryConfig:              operations.FlattenFactoryConfig,
@@ -240,6 +228,27 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		VisualizeWork:                     operations.VisualizeWork,
 		openRunSelection:                  operations.OpenRunSelection,
 	}
+}
+
+func assembleSessionsCLI(operations CommandOperations) sessioncli.Service {
+	if operations.ListSessions == nil &&
+		operations.ShowSession == nil &&
+		operations.PauseSession == nil &&
+		operations.ResumeSession == nil &&
+		operations.ListSessionDispatches == nil &&
+		operations.CreateSession == nil &&
+		operations.DeleteSession == nil {
+		return nil
+	}
+	return sessioncli.Bind(sessioncli.Operations{
+		List:           operations.ListSessions,
+		Show:           operations.ShowSession,
+		Pause:          operations.PauseSession,
+		Resume:         operations.ResumeSession,
+		ListDispatches: operations.ListSessionDispatches,
+		Create:         operations.CreateSession,
+		Delete:         operations.DeleteSession,
+	})
 }
 
 // NewCommand constructs one fresh command tree from invocation-local process

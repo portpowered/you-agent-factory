@@ -863,14 +863,45 @@ func TestProductionRootUsesGeneratedSessionFamilyCutover(t *testing.T) {
 	}
 }
 
+func TestSessionCommandCompositionUsesTypedSessionsCLIAdapter(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	factory := NewCommandFactory(CommandOperations{
+		ShowSession: func(cfg session.ShowConfig) error {
+			called = true
+			if cfg.SessionID != "session-beta" {
+				t.Fatalf("SessionID = %q, want session-beta", cfg.SessionID)
+			}
+			return nil
+		},
+	})
+	if factory.SessionsCLI == nil {
+		t.Fatal("SessionsCLI adapter is missing from composed factory")
+	}
+
+	root := factory.NewCommand(nil, nil, nil)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"session", "show", "session-beta"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session show: %v", err)
+	}
+	if !called {
+		t.Fatal("typed Sessions adapter was not invoked through production composition")
+	}
+}
+
 func TestShowSessionUsesInjectedService(t *testing.T) {
 	called := false
 	root := (CommandFactory{
 		ModelsCLI: legacyModelsCLIService{},
-		ShowSession: func(cfg session.ShowConfig) error {
-			called = true
-			return nil
-		},
+		SessionsCLI: session.Bind(session.Operations{
+			Show: func(cfg session.ShowConfig) error {
+				called = true
+				return nil
+			},
+		}),
 	}).NewCommand(nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)

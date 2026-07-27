@@ -142,21 +142,20 @@ func TestSessionResolvedHandlersMapDefaultsChangedValuesAndStableArguments(t *te
 		deletes []sessioncli.DeleteConfig
 		diag    bytes.Buffer
 	)
-	services := commandregistry.SessionResolvedServices{
-		CreateSession: func(cfg sessioncli.CreateConfig) error {
+	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+		Create: func(cfg sessioncli.CreateConfig) error {
 			creates = append(creates, cfg)
 			return nil
 		},
-		ListSessions: func(cfg sessioncli.ListConfig) error {
+		List: func(cfg sessioncli.ListConfig) error {
 			lists = append(lists, cfg)
 			return nil
 		},
-		DeleteSession: func(cfg sessioncli.DeleteConfig) error {
+		Delete: func(cfg sessioncli.DeleteConfig) error {
 			deletes = append(deletes, cfg)
 			return nil
 		},
-		Diagnostics: func(*cobra.Command) io.Writer { return &diag },
-	}
+	}, nil, func(*cobra.Command) io.Writer { return &diag })
 
 	if err := executeResolvedSession(t, services, "session", "create", "--dir", "fleet"); err != nil {
 		t.Fatalf("default create Execute() error = %v", err)
@@ -197,16 +196,16 @@ func TestSessionResolvedHandlersMapDefaultsChangedValuesAndStableArguments(t *te
 
 func TestSessionResolvedHandlersRejectInvalidInputsBeforeOperation(t *testing.T) {
 	calls := 0
-	services := commandregistry.SessionResolvedServices{
-		CreateSession: func(sessioncli.CreateConfig) error {
+	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+		Create: func(sessioncli.CreateConfig) error {
 			calls++
 			return nil
 		},
-		DeleteSession: func(sessioncli.DeleteConfig) error {
+		Delete: func(sessioncli.DeleteConfig) error {
 			calls++
 			return nil
 		},
-	}
+	}, nil, nil)
 	if err := executeResolvedSession(
 		t, services, "session", "create", "--dir", "fleet", "--port", "not-an-int",
 	); err == nil {
@@ -223,10 +222,9 @@ func TestSessionResolvedHandlersRejectInvalidInputsBeforeOperation(t *testing.T)
 func TestSessionResolvedCreatePreservesHumanOutputAndDebugDiagnostics(t *testing.T) {
 	var requests []factoryapi.OpenFactorySessionRequest
 	protocol := newSessionCreateTestProtocol(t, &requests)
-	services := commandregistry.SessionResolvedServices{
-		CreateSession: sessioncli.NewCreate(protocol),
-		Diagnostics:   func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() },
-	}
+	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+		Create: sessioncli.NewCreate(protocol),
+	}, nil, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 
 	stdout, stderr, err := executeResolvedSessionWithOutput(
 		t, services,
@@ -250,10 +248,9 @@ func TestSessionResolvedCreatePreservesHumanOutputAndDebugDiagnostics(t *testing
 func TestSessionResolvedCreatePreservesJSONAndValidationOnly(t *testing.T) {
 	var requests []factoryapi.OpenFactorySessionRequest
 	protocol := newSessionCreateTestProtocol(t, &requests)
-	services := commandregistry.SessionResolvedServices{
-		CreateSession: sessioncli.NewCreate(protocol),
-		Diagnostics:   func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() },
-	}
+	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+		Create: sessioncli.NewCreate(protocol),
+	}, nil, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 
 	stdout, stderr, err := executeResolvedSessionWithOutput(
 		t, services,
@@ -280,12 +277,12 @@ func TestSessionResolvedCreatePreservesJSONAndValidationOnly(t *testing.T) {
 
 func TestSessionResolvedCreateRejectsConflictBeforeOperation(t *testing.T) {
 	calls := 0
-	services := commandregistry.SessionResolvedServices{
-		CreateSession: func(sessioncli.CreateConfig) error {
+	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+		Create: func(sessioncli.CreateConfig) error {
 			calls++
 			return nil
 		},
-	}
+	}, nil, nil)
 	stdout, _, err := executeResolvedSessionWithOutput(
 		t, services,
 		"session", "create", "--dir", "/workspace/fleet",
@@ -311,10 +308,9 @@ func TestSessionResolvedDeletePreservesExecutableBehavior(t *testing.T) {
 		deletedPaths = append(deletedPaths, request.URL.Path)
 		return sessionTestResponse(http.StatusNoContent, ""), nil
 	})
-	services := commandregistry.SessionResolvedServices{
-		DeleteSession: sessioncli.NewDelete(protocol),
-		Diagnostics:   func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() },
-	}
+	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+		Delete: sessioncli.NewDelete(protocol),
+	}, nil, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 
 	stdout, stderr, err := executeResolvedSessionWithOutput(
 		t, services, "--verbose", "session", "delete", "session/beta",
@@ -364,17 +360,17 @@ func TestSessionResolvedCreateDeletePreserveOperationFailures(t *testing.T) {
 		{
 			name: "create failure",
 			args: []string{"session", "create", "--dir", "/workspace/fleet"},
-			services: commandregistry.SessionResolvedServices{
-				CreateSession: func(sessioncli.CreateConfig) error { return operationFailure },
-			},
+			services: commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+				Create: func(sessioncli.CreateConfig) error { return operationFailure },
+			}, nil, nil),
 			want: operationFailure,
 		},
 		{
 			name: "delete cancellation",
 			args: []string{"session", "delete", "session-beta"},
-			services: commandregistry.SessionResolvedServices{
-				DeleteSession: func(sessioncli.DeleteConfig) error { return context.Canceled },
-			},
+			services: commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+				Delete: func(sessioncli.DeleteConfig) error { return context.Canceled },
+			}, nil, nil),
 			want: context.Canceled,
 		},
 	}
@@ -391,12 +387,12 @@ func TestSessionResolvedCreateDeletePreserveOperationFailures(t *testing.T) {
 	}
 
 	calls := 0
-	services := commandregistry.SessionResolvedServices{
-		DeleteSession: func(sessioncli.DeleteConfig) error {
+	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+		Delete: func(sessioncli.DeleteConfig) error {
 			calls++
 			return nil
 		},
-	}
+	}, nil, nil)
 	for _, args := range [][]string{
 		{"session", "delete"},
 		{"session", "delete", "one", "two"},
@@ -436,8 +432,8 @@ func TestSessionResolvedInspectionPreservesLiveAndPersistedListing(t *testing.T)
 		}`), nil
 	})
 	list := sessioncli.NewList(protocol, sessionListPreparation(prepareSessionListRequest))
-	services := commandregistry.SessionResolvedServices{
-		ListSessions: func(cfg sessioncli.ListConfig) error {
+	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+		List: func(cfg sessioncli.ListConfig) error {
 			cfg.DurableLister = func(
 				_ context.Context,
 				request fse.ListSessionsRequest,
@@ -454,7 +450,7 @@ func TestSessionResolvedInspectionPreservesLiveAndPersistedListing(t *testing.T)
 			}
 			return list(cfg)
 		},
-	}
+	}, nil, nil)
 
 	stdout, _, err := executeResolvedSessionWithOutput(t, services, "--json", "session", "list")
 	if err != nil {
@@ -520,13 +516,12 @@ func TestSessionResolvedInspectionPreservesShowAndDispatches(t *testing.T) {
 			return nil, nil
 		}
 	})
-	services := commandregistry.SessionResolvedServices{
-		ShowSession:    sessioncli.NewShow(protocol),
+	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+		Show:           sessioncli.NewShow(protocol),
 		ListDispatches: sessioncli.NewDispatches(protocol),
-		Diagnostics: func(cmd *cobra.Command) io.Writer {
-			return cmd.ErrOrStderr()
-		},
-	}
+	}, nil, func(cmd *cobra.Command) io.Writer {
+		return cmd.ErrOrStderr()
+	})
 
 	stdout, stderr, err := executeResolvedSessionWithOutput(
 		t, services, "--verbose", "--json", "session", "show", "session-alpha",
@@ -577,9 +572,9 @@ func TestSessionResolvedShowPreservesDurableProjection(t *testing.T) {
 			"resolvedSource": {"kind": "WORKFLOW_FILE", "sourceRef": "workflows/review.js"}
 		}`), nil
 	})
-	services := commandregistry.SessionResolvedServices{
-		ShowSession: sessioncli.NewShow(protocol),
-	}
+	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+		Show: sessioncli.NewShow(protocol),
+	}, nil, nil)
 
 	stdout, _, err := executeResolvedSessionWithOutput(
 		t, services, "--json", "session", "show", "dur-sess-review-001",
@@ -603,21 +598,23 @@ func TestSessionResolvedInspectionRejectsInvalidInputsBeforeSideEffects(t *testi
 		PrepareList: func(context.Context, *sessioncli.ListConfig) error {
 			return errors.New("scope must be live, persisted, or all")
 		},
-		ListSessions: func(sessioncli.ListConfig) error {
-			listCalls++
-			return nil
-		},
-		ShowSession: func(cfg sessioncli.ShowConfig) error {
-			showCalls++
-			if cfg.SessionID != "" {
-				t.Fatalf("default show SessionID = %q, want empty compatibility target", cfg.SessionID)
-			}
-			return errors.New("default session unavailable")
-		},
-		ListDispatches: func(sessioncli.DispatchesConfig) error {
-			dispatchCalls++
-			return nil
-		},
+		Sessions: sessioncli.Bind(sessioncli.Operations{
+			List: func(sessioncli.ListConfig) error {
+				listCalls++
+				return nil
+			},
+			Show: func(cfg sessioncli.ShowConfig) error {
+				showCalls++
+				if cfg.SessionID != "" {
+					t.Fatalf("default show SessionID = %q, want empty compatibility target", cfg.SessionID)
+				}
+				return errors.New("default session unavailable")
+			},
+			ListDispatches: func(sessioncli.DispatchesConfig) error {
+				dispatchCalls++
+				return nil
+			},
+		}),
 	}
 	stdout, _, err := executeResolvedSessionWithOutput(t, services, "session", "show")
 	if err == nil || stdout != "" {
@@ -645,24 +642,12 @@ func TestSessionResolvedInspectionRejectsInvalidInputsBeforeSideEffects(t *testi
 
 func TestSessionResolvedHandlersRejectDeprecatedPortBeforeSideEffects(t *testing.T) {
 	var operationCalls int
-	services := commandregistry.SessionResolvedServices{
-		ShowSession: func(sessioncli.ShowConfig) error {
-			operationCalls++
-			return nil
-		},
-		ListDispatches: func(sessioncli.DispatchesConfig) error {
-			operationCalls++
-			return nil
-		},
-		PauseSession: func(sessioncli.LifecycleControlConfig) error {
-			operationCalls++
-			return nil
-		},
-		ResumeSession: func(sessioncli.LifecycleControlConfig) error {
-			operationCalls++
-			return nil
-		},
-	}
+	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+		Show:           func(sessioncli.ShowConfig) error { operationCalls++; return nil },
+		ListDispatches: func(sessioncli.DispatchesConfig) error { operationCalls++; return nil },
+		Pause:          func(sessioncli.LifecycleControlConfig) error { operationCalls++; return nil },
+		Resume:         func(sessioncli.LifecycleControlConfig) error { operationCalls++; return nil },
+	}, nil, nil)
 	for _, args := range [][]string{
 		{"session", "show", "session-alpha", "--port", "7444"},
 		{"session", "dispatches", "dur-sess-review-001", "--port", "7444"},
@@ -692,23 +677,23 @@ func TestSessionResolvedInspectionPreservesFailuresAndCancellation(t *testing.T)
 	}{
 		{
 			name: "list failure", args: []string{"session", "list"},
-			services: commandregistry.SessionResolvedServices{
-				ListSessions: func(sessioncli.ListConfig) error { return operationFailure },
-			},
+			services: commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+				List: func(sessioncli.ListConfig) error { return operationFailure },
+			}, nil, nil),
 			want: operationFailure,
 		},
 		{
 			name: "show cancellation", args: []string{"session", "show", "session-alpha"},
-			services: commandregistry.SessionResolvedServices{
-				ShowSession: func(sessioncli.ShowConfig) error { return context.Canceled },
-			},
+			services: commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+				Show: func(sessioncli.ShowConfig) error { return context.Canceled },
+			}, nil, nil),
 			want: context.Canceled,
 		},
 		{
 			name: "dispatch failure", args: []string{"session", "dispatches", "dur-sess-review-001"},
-			services: commandregistry.SessionResolvedServices{
+			services: commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
 				ListDispatches: func(sessioncli.DispatchesConfig) error { return operationFailure },
-			},
+			}, nil, nil),
 			want: operationFailure,
 		},
 	}
