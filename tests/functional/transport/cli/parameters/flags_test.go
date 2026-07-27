@@ -87,6 +87,43 @@ func TestCLIUnknownFlagFailsBeforeLifecycleStart(t *testing.T) {
 	}
 }
 
+// TestCLIFlagAfterPositionalValueUsesDocumentedParsing proves known flags that
+// follow a positional value are still parsed at the external observation edge,
+// matching the documented public CLI interspersed-flag behavior for manifest
+// commands such as session dispatches.
+func TestCLIFlagAfterPositionalValueUsesDocumentedParsing(t *testing.T) {
+	var observation cliobservation.Result
+	process := support.BuildProcess(t, serviceedges.Edges{
+		CLIObserver: cliobservation.Capture(&observation),
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you",
+		"session", "dispatches", "session-customer",
+		"--json",
+		"--phase", "queued",
+	})
+	inputs.WorkingDirectory = t.TempDir()
+
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(session dispatches after-positional flags) error = %v", err)
+	}
+	if observation.Parse.CommandPath != "you session dispatches" {
+		t.Fatalf("observed command path = %q, want you session dispatches", observation.Parse.CommandPath)
+	}
+	if len(observation.Parse.Positionals) != 1 || observation.Parse.Positionals[0] != "session-customer" {
+		t.Fatalf("observed positional parse = %#v", observation.Parse.Positionals)
+	}
+
+	jsonOutput, found := cliobservation.Flag(observation.Parse, "json")
+	if !found || !jsonOutput.Changed || jsonOutput.Value != "true" {
+		t.Fatalf("observed --json after positional = %#v found=%v", jsonOutput, found)
+	}
+	phase, found := cliobservation.Flag(observation.Parse, "phase")
+	if !found || !phase.Changed || phase.Value != "queued" {
+		t.Fatalf("observed --phase after positional = %#v found=%v", phase, found)
+	}
+}
+
 type mutationTrackingOperatorSettingsFileSystem struct {
 	mutations *atomic.Int32
 }
