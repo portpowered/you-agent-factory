@@ -110,6 +110,13 @@ func newLifecycleEventStream() *factorydefinitions.FactoryEventStream {
 	}
 }
 
+func newClosableLifecycleEventStream() (*factorydefinitions.FactoryEventStream, chan<- factorydefinitions.FactoryEvent) {
+	events := make(chan factorydefinitions.FactoryEvent)
+	return &factorydefinitions.FactoryEventStream{
+		Events: events,
+	}, events
+}
+
 type lifecycleProjectionStub struct{}
 
 func (lifecycleProjectionStub) ReconstructFactoryWorldState(

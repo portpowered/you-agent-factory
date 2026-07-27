@@ -145,6 +145,59 @@ func TestNewServiceExplicitRequestActivation(t *testing.T) {
 	}
 }
 
+func TestNewServiceStopWaitCleanup(t *testing.T) {
+	t.Parallel()
+
+	subscribeCalls := 0
+	source := wireSourceStub{subscribeHook: func() { subscribeCalls++ }}
+	service, err := activationlifecyclewire.NewService(
+		source,
+		wireProjectionStub{},
+		wireClock{},
+		wireSinkFunc(func(activationlifecycle.View) {}),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	if err := service.Wait(context.Background()); err == nil {
+		t.Fatal("Wait before Activate: error = nil, want not-started failure")
+	}
+
+	ctx := context.Background()
+	if _, err := service.Activate(ctx, activationlifecycle.ActivateRequest{
+		Mode: activationlifecycle.ActivateModeRetainedThenLive,
+	}); err != nil {
+		t.Fatalf("Activate: error = %v", err)
+	}
+	if subscribeCalls != 1 {
+		t.Fatalf("subscribe calls = %d, want 1", subscribeCalls)
+	}
+
+	stopResult, err := service.StopDrain(context.Background(), activationlifecycle.StopDrainRequest{})
+	if err != nil {
+		t.Fatalf("StopDrain: error = %v", err)
+	}
+	if stopResult.State != activationlifecycle.LifecycleStateStopped {
+		t.Fatalf("StopDrain state = %q, want %q", stopResult.State, activationlifecycle.LifecycleStateStopped)
+	}
+	if err := service.Wait(ctx); err != nil {
+		t.Fatalf("Wait after StopDrain: error = %v", err)
+	}
+
+	stopResult, err = service.StopDrain(context.Background(), activationlifecycle.StopDrainRequest{})
+	if err != nil {
+		t.Fatalf("repeat StopDrain: error = %v", err)
+	}
+	if stopResult.State != activationlifecycle.LifecycleStateStopped {
+		t.Fatalf("repeat StopDrain state = %q, want %q", stopResult.State, activationlifecycle.LifecycleStateStopped)
+	}
+	if subscribeCalls != 1 {
+		t.Fatalf("subscribe calls after repeated StopDrain = %d, want no reopened subscription", subscribeCalls)
+	}
+}
+
 type wireSinkFunc func(activationlifecycle.View)
 
 func (f wireSinkFunc) PresentFactoryView(view activationlifecycle.View) { f(view) }
