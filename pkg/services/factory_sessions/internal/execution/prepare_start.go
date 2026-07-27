@@ -271,6 +271,9 @@ func validationErrorFromSourceIssues(issues []factory.WorkflowValidationIssue) e
 		message = "workflow source validation failed"
 	}
 	message += issue.LocationSuffix()
+	if code := strings.TrimSpace(issue.Code); code != "" {
+		message = fmt.Sprintf("[%s] %s", code, message)
+	}
 	return NewValidationError("source", message)
 }
 
