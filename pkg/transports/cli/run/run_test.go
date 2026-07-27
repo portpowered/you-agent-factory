@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -474,6 +475,27 @@ func (adapter stubRecordingsCLIAdapter) ResolveRecordPath(
 	request recordingscli.InvocationRequest,
 ) (recordingscli.ResolvedRecordPath, error) {
 	return adapter.resolve(request)
+}
+
+func (adapter stubRecordingsCLIAdapter) ResolveRecordPathWithContext(
+	ctx context.Context,
+	request recordingscli.InvocationRequest,
+) (recordingscli.ResolvedRecordPath, error) {
+	return recordingscli.New().ResolveRecordPathWithContext(ctx, request)
+}
+
+func (adapter stubRecordingsCLIAdapter) ReportRecordingPathOnShutdown(
+	output io.Writer,
+	resolved recordingscli.ResolvedRecordPath,
+) {
+	recordingscli.New().ReportRecordingPathOnShutdown(output, resolved)
+}
+
+func (adapter stubRecordingsCLIAdapter) RecordingDiagnosticsLabel(
+	resolved recordingscli.ResolvedRecordPath,
+	replayPath string,
+) string {
+	return recordingscli.New().RecordingDiagnosticsLabel(resolved, replayPath)
 }
 
 func TestResolveRecordPathForRunRequiresInjectedRecordingsCLIAdapter(t *testing.T) {
