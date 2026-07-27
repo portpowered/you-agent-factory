@@ -532,10 +532,6 @@ func provideRecordingsProjectionFactory() factorysessionwire.RecordingsProjectio
 	return recordingsservice.NewProjectionService
 }
 
-func provideRecordingsFactory() factorysessionwire.RecordingsFactory {
-	return recordingsservice.NewService
-}
-
 func provideRuntimeLedgerFactory() factorysessionwire.RuntimeLedgerFactory {
 	return func() factoryruntime.RuntimeLedgerFactory {
 		return func(topology recordings.InitialStructureSource, now func() time.Time, definitions factorydefinitions.RuntimeDefinitionLookup) recordings.RuntimeEventLedger {

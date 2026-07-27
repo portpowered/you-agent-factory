@@ -2,6 +2,7 @@ package replay
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -33,6 +34,9 @@ type Recorder struct {
 	done     chan struct{}
 	version  int64
 	flushed  int64
+
+	finalizeOnce sync.Once
+	finalizeErr  error
 }
 
 // NewRecorder constructs a recorder for an existing artifact shell.
@@ -188,6 +192,20 @@ func (r *Recorder) Err() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.flushErr
+}
+
+// Finalize owns the terminal recording sequence so runtime callers cannot
+// accidentally reorder stop, terminal metadata, and the final flush.
+func (r *Recorder) Finalize(finishedAt time.Time) error {
+	if r == nil {
+		return nil
+	}
+	r.finalizeOnce.Do(func() {
+		r.Stop()
+		r.Finish(finishedAt)
+		r.finalizeErr = errors.Join(r.Flush(), r.Err())
+	})
+	return r.finalizeErr
 }
 
 func (r *Recorder) flushLoop(ctx context.Context, interval time.Duration) {

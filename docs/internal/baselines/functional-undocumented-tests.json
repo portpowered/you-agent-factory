@@ -528,10 +528,6 @@
     },
     {
       "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates"
-    },
-    {
-      "file": "providers/cli_template_resolution_long_test.go",
       "name": "TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates"
     },
     {

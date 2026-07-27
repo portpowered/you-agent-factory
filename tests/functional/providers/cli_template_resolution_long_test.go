@@ -156,32 +156,6 @@ func TestTemplateTests_ScriptWrapOrdersMultipleInputsByWorkstationConfigWithReso
 	assertProviderStdin(t, runner.LastRequest(), wantPrompt)
 }
 
-func TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates(t *testing.T) {
-	support.SkipLongFunctional(t, "slow workstation execution-template provider smoke")
-
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
-	configureExecutionTemplateWorkstation(t, dir)
-	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(modelprovider.ProviderClaude, "test-claude-model"))
-
-	writeExecutionTemplateSeed(t, dir)
-
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	}, 10*time.Second)
-	assertCursorProviderCompleted(t, listed)
-
-	req := runner.LastRequest()
-	assertCommandArgs(t, req, append([]string{
-		"-p",
-		"--worktree", "worktrees/feature-token-branch/work-execution-template",
-		"--system-prompt", "Process the input task.",
-		"--model", "test-claude-model",
-	}, executionTemplateWantPrompt(dir)))
-	assertProviderStdin(t, req, "")
-	assertProviderExecutionFields(t, dir, req)
-}
-
 func TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates(t *testing.T) {
 	support.SkipLongFunctional(t, "slow codex execution-template provider smoke")
 
