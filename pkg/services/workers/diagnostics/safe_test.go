@@ -65,11 +65,11 @@ func TestSafeWorkDiagnosticsAllowlistAndCloneIsolation(t *testing.T) {
 	if _, ok := safe.Provider.RequestMetadata["authorization"]; ok {
 		t.Fatal("secret provider metadata leaked")
 	}
-	if _, ok := safe.Provider.RequestMetadata["working_directory"]; ok {
-		t.Fatal("host working directory leaked")
+	if got := safe.Provider.RequestMetadata["working_directory"]; got != workerexecution.MetadataOnlyCommandEnvValue {
+		t.Fatalf("host working directory = %q, want metadata-only marker", got)
 	}
-	if _, ok := safe.Provider.RequestMetadata["worktree"]; ok {
-		t.Fatal("host worktree leaked")
+	if got := safe.Provider.RequestMetadata["worktree"]; got != workerexecution.MetadataOnlyCommandEnvValue {
+		t.Fatalf("host worktree = %q, want metadata-only marker", got)
 	}
 	if _, ok := safe.RenderedPrompt.Variables["api_key"]; ok {
 		t.Fatal("secret prompt variable leaked")

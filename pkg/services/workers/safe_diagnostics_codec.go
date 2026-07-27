@@ -298,7 +298,7 @@ func safeDiagnosticMetadata(input map[string]string) map[string]string {
 
 func safeDiagnosticMetadataValue(key, value string) string {
 	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "working_directory":
+	case "working_directory", "worktree":
 		if isHostSpecificDiagnosticPath(value) {
 			return MetadataOnlyCommandEnvValue
 		}
@@ -340,6 +340,8 @@ func isSafeProviderMetadataKey(key string) bool {
 		"source",
 		"stderr_excerpt",
 		"stdout_excerpt",
+		"worktree",
+		"working_directory",
 		"worker_type",
 		"workstation_type":
 		return true
