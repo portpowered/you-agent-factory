@@ -111,18 +111,6 @@
       "name": "TestExportImportSmoke_PreservesNestedFactoryDocsThroughExportImport"
     },
     {
-      "file": "bootstrap_portability/factory_config_portability_long_test.go",
-      "name": "TestFactoryConfigPortability_FlattenInlineScriptBackedFactoryExecutesStandalone"
-    },
-    {
-      "file": "bootstrap_portability/factory_config_portability_long_test.go",
-      "name": "TestFatFactory_LoadOnlyStandaloneFileUsesSharedMappingPath"
-    },
-    {
-      "file": "bootstrap_portability/factory_config_portability_long_test.go",
-      "name": "TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions"
-    },
-    {
       "file": "bootstrap_portability/metadata_contract/factory_metadata_contract_test.go",
       "name": "TestFactoryMetadataContractLoadsLegacyExamplesAndRendersCanonicalHelp"
     },

@@ -163,7 +163,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLISessionPauseBuffersAndResumeDispatches` covers lifecycle control.
   - `TestCLISessionMissingIDReturnsNotFound` covers show/delete failure.
 
-- [ ] `tests/functional/transport/cli/commands/factory_wiring_test.go`
+- [x] `tests/functional/transport/cli/commands/factory_wiring_test.go`
   - `TestCLIFactoryInitValidateAndQuery` covers generated configuration.
   - `TestCLIFactoryFlattenExpandPreservesMeaning` covers portability.
   - `TestCLIFactoryReplaceCurrentChangesSessionFactory` covers current Factory.
