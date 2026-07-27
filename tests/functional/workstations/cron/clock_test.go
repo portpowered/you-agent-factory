@@ -102,3 +102,47 @@ func TestCronFiresAtInjectedTimeWithoutWallClockSleep(t *testing.T) {
 	assertRequiredInputCronHistory(t, fs, requiredInputDispatch.DispatchID, signalWorkID)
 	assertCronTimeWorkHiddenFromNormalViews(t, fs, support.StringPointerValue(requiredInputTimeWork.WorkId))
 }
+
+// TestCronDoesNotDoubleFireForOneScheduleBoundary proves each injected cron schedule
+// boundary emits at most one time-work submission for that nominal time, including when
+// a stale trigger expires without dispatch and the next boundary replaces it with a new
+// time-work ID rather than re-firing the same nominal boundary.
+func TestCronDoesNotDoubleFireForOneScheduleBoundary(t *testing.T) {
+	start := time.Date(2026, time.April, 18, 13, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	dir := support.ScaffoldFactory(t, cronDefaultExpiryTerminalOutputConfig("* * * * *"))
+
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 32)
+	fs := startCronServer(t, dir, withSubmissionRecorder(func(record work.FactorySubmissionRecord) {
+		observedSubmissions <- record
+	}), withClock(fakeClock))
+
+	firstRecord := waitForCronSubmissionFromWorkstation(t, observedSubmissions, "poll-terminal-output", start, time.Second)
+	assertCronSubmissionRecord(t, firstRecord, "poll-terminal-output", start)
+	firstToken := waitForCronToken(t, fs, "poll-terminal-output", firstRecord.Request.WorkID, time.Second)
+	assertCronPublicMetadata(t, firstToken, "poll-terminal-output")
+	assertCronDefaultExpiryWindow(t, firstToken, time.Minute)
+
+	assertNoCronDispatchForWorkstation(t, fs, "poll-terminal-output")
+	assertNoTokensInPlace(t, fs, "task:complete")
+	assertNoAdditionalCronSubmissionForNominalAt(t, observedSubmissions, "poll-terminal-output", start, 200*time.Millisecond)
+
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	retryFire := start.Add(time.Minute)
+	fakeClock.Advance(time.Minute)
+	retryRecord := waitForCronSubmissionFromWorkstation(t, observedSubmissions, "poll-terminal-output", retryFire, time.Second)
+	if retryRecord.Request.WorkID == firstRecord.Request.WorkID {
+		t.Fatal("terminal-output cron retry reused the stale cron time work ID")
+	}
+	assertNoAdditionalCronSubmissionForNominalAt(t, observedSubmissions, "poll-terminal-output", retryFire, 200*time.Millisecond)
+
+	waitForCronTimeWorkGone(t, fs, firstRecord.Request.WorkID, time.Second)
+	retryToken := waitForCronToken(t, fs, "poll-terminal-output", retryRecord.Request.WorkID, time.Second)
+	if support.StringPointerValue(retryToken.WorkId) == "" {
+		t.Fatal("expected retry cron time work ID after stale tick expiry")
+	}
+
+	assertNoCronDispatchForWorkstation(t, fs, "poll-terminal-output")
+	assertNoTokensInPlace(t, fs, "task:complete")
+	assertCronTimeWorkRetainedInCanonicalHistory(t, fs, firstRecord.Request.WorkID, "poll-terminal-output")
+}

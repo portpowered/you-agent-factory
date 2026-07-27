@@ -81,6 +81,41 @@ func waitForFakeClockWaiters(t *testing.T, fakeClock *clockwork.FakeClock, waite
 	}
 }
 
+func cronDefaultExpiryTerminalOutputConfig(schedule string) map[string]any {
+	return map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{
+			{
+				"name": "signal",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]string{{"name": "cron-worker"}},
+		"workstations": []map[string]any{
+			{
+				"name":     "poll-terminal-output",
+				"behavior": "CRON",
+				"worker":   "cron-worker",
+				"cron":     map[string]any{"schedule": schedule, "triggerAtStart": true},
+				"inputs":   []map[string]string{{"workType": "signal", "state": "init"}},
+				"outputs":  []map[string]string{{"workType": "task", "state": "complete"}},
+			},
+		},
+	}
+}
+
 func cronSmokeFactoryConfig(schedule string) map[string]any {
 	return map[string]any{
 		"name": "factory",
@@ -443,6 +478,67 @@ func waitForTokenInPlaceByParent(
 
 	t.Fatalf("timed out waiting for token in %s with parent %q", placeID, parentID)
 	return publicWorkObservation{}
+}
+
+func assertNoAdditionalCronSubmissionForNominalAt(
+	t *testing.T,
+	submissions <-chan work.FactorySubmissionRecord,
+	workstation string,
+	nominalAt time.Time,
+	stableFor time.Duration,
+) {
+	t.Helper()
+
+	wantNominalAt := nominalAt.UTC().Format(time.RFC3339Nano)
+	deadline := time.After(stableFor)
+	for {
+		select {
+		case record := <-submissions:
+			ws := record.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation]
+			nominal := record.Request.Tags[interfaces.TimeWorkTagKeyNominalAt]
+			if ws == workstation && nominal == wantNominalAt {
+				t.Fatalf("duplicate cron submission for workstation %q at nominal_at %s: %#v", workstation, wantNominalAt, record)
+			}
+		case <-deadline:
+			return
+		}
+	}
+}
+
+func assertCronDefaultExpiryWindow(t *testing.T, item factoryapi.Work, expected time.Duration) {
+	t.Helper()
+
+	dueAt := parseCronTimeTag(t, item, interfaces.TimeWorkTagKeyDueAt)
+	expiresAt := parseCronTimeTag(t, item, interfaces.TimeWorkTagKeyExpiresAt)
+	if got := expiresAt.Sub(dueAt); got != expected {
+		t.Fatalf("cron default expiry window = %s, want %s", got, expected)
+	}
+}
+
+func parseCronTimeTag(t *testing.T, item factoryapi.Work, key string) time.Time {
+	t.Helper()
+
+	tags := cronFactoryEventTags(item.Tags)
+	value := tags[key]
+	if value == "" {
+		t.Fatalf("cron Work %q missing %s tag: %#v", support.StringPointerValue(item.WorkId), key, tags)
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		t.Fatalf("cron Work %q has invalid %s tag %q: %v", support.StringPointerValue(item.WorkId), key, value, err)
+	}
+	return parsed.UTC()
+}
+
+func assertNoTokensInPlace(t *testing.T, fs *cronServer, placeID string) {
+	t.Helper()
+
+	for _, item := range fs.listWork(t).Results {
+		itemPlace := support.StringPointerValue(item.WorkTypeName) + ":" + generatedWorkStateName(item.State)
+		if itemPlace == placeID {
+			t.Fatalf("expected no public Work in %s, got %#v", placeID, item)
+		}
+	}
 }
 
 func assertExpiredCronTimeWorkHandled(t *testing.T, fs *cronServer, expiredTimeWorkID string, workstation string) {
