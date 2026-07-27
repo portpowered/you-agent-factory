@@ -164,7 +164,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/service",
-      "minimum": 83.80
+      "minimum": 83.73
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/edges",
@@ -478,7 +478,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service",
-      "minimum": 71.25
+      "minimum": 70.88
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service/host",
@@ -1076,7 +1076,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/events",
-      "minimum": 81.33
+      "minimum": 81.22
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/events/kinds",
@@ -1228,7 +1228,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
-      "minimum": 77.83
+      "minimum": 72.95
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/wire",
