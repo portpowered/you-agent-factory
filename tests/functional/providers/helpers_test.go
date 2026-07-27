@@ -70,6 +70,12 @@ func (r *captureCommandRunner) LastEnv() []string {
 	return copied
 }
 
+func (r *captureCommandRunner) CallCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.workDirs)
+}
+
 type timeoutThenSuccessCommandRunner struct {
 	mu        sync.Mutex
 	callCount int
