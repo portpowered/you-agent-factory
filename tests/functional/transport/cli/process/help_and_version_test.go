@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +24,8 @@ var expectedPublicRootCommandFamilies = []string{
 	"init",
 	"server",
 }
+
+var machineReadableVersionLinePattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.+-]+)*$|^dev$`)
 
 var forbiddenRootDiscoveryCommands = []string{
 	"batch",
@@ -173,6 +176,62 @@ func TestCLISubcommandHelpUsesStableUsageAndExitZero(t *testing.T) {
 				if !strings.Contains(result.Stdout, marker) {
 					t.Fatalf("nested docs help omitted %q:\n%s", marker, result.Stdout)
 				}
+			}
+
+			assertRootHelpDiscoveryHasNoProductFilesystemEffects(t, session)
+		})
+	}
+}
+
+// TestCLIVersionWritesOneMachineReadableVersion proves version discovery through
+// the public built you CLI writes exactly one machine-readable version token to
+// stdout, keeps stderr free of startup or operator lifecycle noise, and exits
+// successfully without activating product runtime side effects.
+func TestCLIVersionWritesOneMachineReadableVersion(t *testing.T) {
+	t.Parallel()
+
+	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	session := harness.NewSession(t)
+
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{name: "version_flag", args: []string{"--version"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+
+			result, err := session.Run(ctx, tc.args...)
+			session.RequireSuccess(t, tc.name, result, err)
+
+			if strings.TrimSpace(result.Stderr) != "" {
+				t.Fatalf("version stderr = %q, want empty", result.Stderr)
+			}
+			for _, forbidden := range []string{
+				"Factory initiated:",
+				"Dashboard URL:",
+				"Dashboard server disabled",
+				"Available Commands:",
+				"How to use:",
+			} {
+				if strings.Contains(result.Stdout, forbidden) {
+					t.Fatalf("version stdout contains startup or help noise %q:\n%s", forbidden, result.Stdout)
+				}
+			}
+
+			versionLine := strings.TrimSpace(result.Stdout)
+			if versionLine == "" {
+				t.Fatal("version stdout was empty")
+			}
+			if strings.Contains(versionLine, "\n") {
+				t.Fatalf("version stdout = %q, want one machine-readable line", result.Stdout)
+			}
+			if !machineReadableVersionLinePattern.MatchString(versionLine) {
+				t.Fatalf("version stdout = %q, want one machine-readable version token", versionLine)
 			}
 
 			assertRootHelpDiscoveryHasNoProductFilesystemEffects(t, session)
