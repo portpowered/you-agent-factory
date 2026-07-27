@@ -3,6 +3,7 @@ package commands_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -18,6 +19,10 @@ const (
 	submitWiringInlineRequestID = "cli-submit-wiring-inline"
 	submitWiringInlineWorkName  = "inline-task"
 	submitWiringInlineWorkType  = "task"
+
+	submitWiringFileRequestID = "cli-submit-wiring-file"
+	submitWiringFileWorkName  = "file-task"
+	submitWiringFileWorkType  = "task"
 )
 
 // TestCLISubmitBatchInlineJSON proves you submit batch accepts inline canonical
@@ -66,6 +71,64 @@ func TestCLISubmitBatchInlineJSON(t *testing.T) {
 		"traceId:",
 		"work count: 1",
 		submitWiringInlineWorkName + " (" + submitWiringInlineWorkType + ")",
+	} {
+		if !strings.Contains(output, marker) {
+			t.Fatalf("submit batch output missing %q:\n%s", marker, output)
+		}
+	}
+}
+
+// TestCLISubmitBatchFile proves you submit batch accepts a filesystem path to
+// canonical FACTORY_REQUEST_BATCH JSON against a running Factory Session server
+// and prints transport acknowledgment markers for the staged batch.
+func TestCLISubmitBatchFile(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI submit wiring")
+	}
+
+	factoryDir := support.ScaffoldFactory(t, submitWiringFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	batchPath := filepath.Join(t.TempDir(), "submit-wiring-batch.json")
+	batchJSON := fmt.Sprintf(
+		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":%q,"payload":{"title":"File submit wiring"}}]}`,
+		submitWiringFileRequestID,
+		submitWiringFileWorkName,
+		submitWiringFileWorkType,
+	)
+	if err := os.WriteFile(batchPath, []byte(batchJSON), 0o600); err != nil {
+		t.Fatalf("write batch file: %v", err)
+	}
+
+	binaryPath := buildYouCLIBinary(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	submitCmd := exec.CommandContext(
+		ctx,
+		binaryPath,
+		"--server", server.URL(),
+		"submit", "batch",
+		batchPath,
+	)
+	submitCmd.Dir = factoryDir
+
+	submitOut, err := submitCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("you submit batch: %v\noutput:\n%s", err, submitOut)
+	}
+
+	output := string(submitOut)
+	for _, marker := range []string{
+		"requestId: " + submitWiringFileRequestID,
+		"traceId:",
+		"work count: 1",
+		submitWiringFileWorkName + " (" + submitWiringFileWorkType + ")",
 	} {
 		if !strings.Contains(output, marker) {
 			t.Fatalf("submit batch output missing %q:\n%s", marker, output)
