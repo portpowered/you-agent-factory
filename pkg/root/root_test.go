@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	models "github.com/portpowered/infinite-you/pkg/services/models"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
@@ -64,6 +65,36 @@ func TestBuildProcessConstructionFailureDoesNotStartExternalLifecycle(t *testing
 	if apiStarts != 0 {
 		t.Fatalf("construction failure started API lifecycle %d times, want zero", apiStarts)
 	}
+}
+
+func TestBuildProcessComposesInertModelsRuntimeHost(t *testing.T) {
+	t.Parallel()
+
+	launcher := &rootRecordingModelHostLauncher{}
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{
+		ModelHostProcessLauncher: launcher,
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	if process == nil {
+		t.Fatal("BuildProcess() returned nil process")
+	}
+	if launcher.starts != 0 {
+		t.Fatalf("model host process starts during construction = %d, want 0", launcher.starts)
+	}
+}
+
+type rootRecordingModelHostLauncher struct {
+	starts int
+}
+
+func (launcher *rootRecordingModelHostLauncher) Start(
+	context.Context,
+	models.HostProcessStartSpec,
+) (models.HostManagedProcess, error) {
+	launcher.starts++
+	panic("model host process launcher called during inert construction")
 }
 
 func TestBuildProcessComposesDetachedExternalProviderWithBuiltInsInertly(t *testing.T) {
