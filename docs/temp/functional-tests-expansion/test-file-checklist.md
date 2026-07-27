@@ -408,7 +408,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPetriWorkerErrorReturnsFailedTerminalOutcome`.
   - `TestPetriInvocationInputAndOutputMapping`.
 
-- [ ] `tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go`
+- [x] `tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go`
   - `TestPetriIndependentWorkDispatchesConcurrently`.
   - `TestPetriConcurrentResultsCorrelateToOriginalWork`.
   - `TestPetriConcurrentFailureDoesNotDuplicateDispatch`.

@@ -1543,26 +1543,6 @@
       "name": "TestConflictResolution_ReviewFailResolveReReview"
     },
     {
-      "file": "workflow/dispatcher_workflow_long_test.go",
-      "name": "TestDispatcherWorkflow_ExecutionPoolIsolation"
-    },
-    {
-      "file": "workflow/dispatcher_workflow_long_test.go",
-      "name": "TestDispatcherWorkflow_MultipleSeedFiles"
-    },
-    {
-      "file": "workflow/dispatcher_workflow_long_test.go",
-      "name": "TestDispatcherWorkflow_ReviewFailurePerItem"
-    },
-    {
-      "file": "workflow/dispatcher_workflow_long_test.go",
-      "name": "TestDispatcherWorkflow_SingleSeedFile"
-    },
-    {
-      "file": "workflow/dispatcher_workflow_long_test.go",
-      "name": "TestDispatcherWorkflow_TwoSeedFiles"
-    },
-    {
       "file": "workflow/idea_plan_review_execute_with_limits_long_test.go",
       "name": "TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorFullPass"
     },
