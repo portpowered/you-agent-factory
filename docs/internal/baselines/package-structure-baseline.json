@@ -1374,11 +1374,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/stateless_collector_long_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/stateless_execution_long_test.go",
       "target": "smoke"
     },

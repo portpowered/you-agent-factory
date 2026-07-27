@@ -231,6 +231,11 @@
     "pkg/services/provider_sessions/cursor",
     "pkg/services/provider_sessions/service",
     "pkg/services/providers",
+    "pkg/services/providers/internal/service",
+    "pkg/services/providers/internal/services/catalog",
+    "pkg/services/providers/internal/services/catalog/internal/service",
+    "pkg/services/providers/internal/services/catalog/wire",
+    "pkg/services/providers/wire",
     "pkg/services/recordings",
     "pkg/services/recordings/artifacts",
     "pkg/services/recordings/events",
@@ -1323,6 +1328,31 @@
     },
     {
       "packagePath": "pkg/services/providers",
+      "disposition": "retain",
+      "destination": "providers"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/service",
+      "disposition": "retain",
+      "destination": "providers"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/catalog",
+      "disposition": "retain",
+      "destination": "providers/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/catalog/internal/service",
+      "disposition": "retain",
+      "destination": "providers/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/catalog/wire",
+      "disposition": "retain",
+      "destination": "providers/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/providers/wire",
       "disposition": "retain",
       "destination": "providers"
     },

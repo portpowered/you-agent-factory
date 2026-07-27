@@ -419,7 +419,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ## Wave 1 — workstations
 
-- [ ] `tests/functional/workstations/execution/basic_test.go`
+- [x] `tests/functional/workstations/execution/basic_test.go`
   - `TestExecutionWorkstationDispatchesEligibleWorkOnce`.
   - `TestExecutionWorkstationFailureProjectsPublicFailedState`.
 
