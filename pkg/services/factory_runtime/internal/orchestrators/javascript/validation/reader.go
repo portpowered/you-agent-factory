@@ -34,6 +34,11 @@ type fileSourceReader struct {
 	files   SourceFileSystem
 }
 
+// FactoryRoot returns the factory-relative workflow source root for this reader.
+func (r fileSourceReader) FactoryRoot() string {
+	return r.rootDir
+}
+
 func (r fileSourceReader) ReadWorkflowSource(sourceRef string) (string, error) {
 	ref := strings.TrimSpace(sourceRef)
 	if ref == "" {
