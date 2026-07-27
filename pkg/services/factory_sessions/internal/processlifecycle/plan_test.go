@@ -277,6 +277,40 @@ func TestBuildLifecyclePlanFailsClosedWithoutRuntimeOrTransport(t *testing.T) {
 	}
 }
 
+func TestDirectJavaScriptLifecycleRunsCompletionAndClosesExecution(t *testing.T) {
+	var events []string
+	plan, err := BuildDirectJavaScriptLifecyclePlan(
+		nil,
+		func(context.Context) error {
+			events = append(events, "completion")
+			return nil
+		},
+		func() error {
+			events = append(events, "close")
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildDirectJavaScriptLifecyclePlan: %v", err)
+	}
+	if err := lifecycle.NewManager().Run(t.Context(), plan); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if want := []string{"completion", "close"}; !reflect.DeepEqual(events, want) {
+		t.Fatalf("events = %v, want %v", events, want)
+	}
+}
+
+func TestDirectJavaScriptLifecycleRejectsMissingCompletion(t *testing.T) {
+	if _, err := BuildDirectJavaScriptLifecyclePlan(nil, nil, nil); err == nil ||
+		!strings.Contains(err.Error(), "completion is required") {
+		t.Fatalf("BuildDirectJavaScriptLifecyclePlan error = %v", err)
+	}
+	if operation := NewLifecyclePlanOperation(); operation == nil {
+		t.Fatal("NewLifecyclePlanOperation returned nil")
+	}
+}
+
 func requiredPlan(t *testing.T, runtime *planRuntime) lifecycle.Plan {
 	t.Helper()
 	plan, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{

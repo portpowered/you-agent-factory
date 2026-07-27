@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -208,6 +209,60 @@ func TestServeValidatesRequiredInputs(t *testing.T) {
 				t.Fatalf("Serve error = %v, want %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestStarterWithListenerReportsBindingServesAndRejectsReuse(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	starter := StarterWithListener(listener)
+	ctx, cancel := context.WithCancel(t.Context())
+	exit := make(chan error, 1)
+	var bound Binding
+	go func() {
+		exit <- starter(ctx, StartRequest{
+			Handler: http.NotFoundHandler(),
+			OnBound: func(value Binding) { bound = value },
+		})
+	}()
+	address := listener.Addr().(*net.TCPAddr)
+	for bound.Port == 0 {
+		select {
+		case err := <-exit:
+			t.Fatalf("starter exited before binding: %v", err)
+		case <-time.After(time.Millisecond):
+		}
+	}
+	if bound.Host != address.IP.String() || bound.Port != address.Port {
+		t.Fatalf("binding = %+v, want %s:%d", bound, address.IP, address.Port)
+	}
+	cancel()
+	if err := receiveBefore(t, exit); err != nil {
+		t.Fatalf("starter cancellation: %v", err)
+	}
+	if err := starter(t.Context(), StartRequest{Handler: http.NotFoundHandler()}); err == nil ||
+		err.Error() != "process-owned API server listener was already used" {
+		t.Fatalf("second starter call error = %v, want reuse rejection", err)
+	}
+}
+
+func TestStarterWithListenerRejectsNilListenerAndBindErrorFormatsCause(t *testing.T) {
+	starter := StarterWithListener(nil)
+	err := starter(t.Context(), StartRequest{Handler: http.NotFoundHandler()})
+	if err == nil || err.Error() != "process-owned API server listener is required" {
+		t.Fatalf("nil listener error = %v", err)
+	}
+
+	cause := errors.New("ports exhausted")
+	bindErr := &BindError{Host: "localhost", PreferredPort: 65535, Cause: cause}
+	if !strings.Contains(bindErr.Error(), "localhost") || !errors.Is(bindErr, cause) {
+		t.Fatalf("BindError = %q, unwrap=%v", bindErr.Error(), bindErr.Unwrap())
+	}
+	var nilBindErr *BindError
+	if nilBindErr.Error() != "" || nilBindErr.Unwrap() != nil {
+		t.Fatalf("nil BindError = (%q, %v), want empty and nil", nilBindErr.Error(), nilBindErr.Unwrap())
 	}
 }
 
