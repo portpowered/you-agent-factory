@@ -1,0 +1,5 @@
+{
+  "failureReason": "auth_failure",
+  "message": "Codex authentication failed.",
+  "ok": false
+}
