@@ -191,9 +191,13 @@ Wave 0 functional-tests-expansion planning authority lives under
   consume its rows and deletion-only batch ids). The Inventory companion
   `migration-ledger-inventory.json` mirrors the same required row fields for
   tooling. Destination topology remains `test-file-checklist.md`; ownership
-  rules remain `plan.md`. `cmd/migrationledgercheck` validates live
+  rules remain `plan.md`.   `cmd/migrationledgercheck` validates live
   `tests/functional` inventory coverage, checklist destination validity, and
-  lane preservation against the companion JSON.
+  lane preservation against the companion JSON. When a deletion-only batch is
+  fully consumed (all scenarios owned by destination cells with
+  `deletion_only_batch: n/a`), remove its id from
+  `internal/migrationledgercheck.ExpectedDeletionOnlyBatches` and mark the
+  batch `released` in `migration-ledger.md`.
   `make pkg-structure` enforces the domain-mirrored functional layout
   `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
   unclassified scenario packages are blocking, while existing nonconforming

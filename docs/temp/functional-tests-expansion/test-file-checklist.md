@@ -426,7 +426,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestExecutionWorkstationDispatchesEligibleWorkOnce`.
   - `TestExecutionWorkstationFailureProjectsPublicFailedState`.
 
-- [ ] `tests/functional/workstations/execution/contention_test.go`
+- [x] `tests/functional/workstations/execution/contention_test.go`
   - `TestEligibleWorkstationContentionChoosesOneDispatchOnly`.
   - `TestContentionMakesProgressAcrossRepeatedWork`.
 
