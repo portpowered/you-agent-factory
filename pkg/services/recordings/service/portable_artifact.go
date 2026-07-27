@@ -14,17 +14,14 @@ import (
 func (service *combinedService) BuildPortableArtifact(
 	request recordings.BuildPortableArtifactRequest,
 ) (recordings.BuildPortableArtifactResult, error) {
-	service.lifecycleMu.Lock()
-	defer service.lifecycleMu.Unlock()
-
-	session, err := service.lifecycleSessionLocked(request.RecordingID)
-	if err != nil || session.finalizedAt == nil {
+	snapshot, err := service.Snapshot(request.RecordingID)
+	if err != nil || snapshot.Status.FinalizedAt == nil {
 		return recordings.BuildPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
 	}
 	artifact := recordings.PortableArtifact{
 		SchemaVersion: recordings.PortableArtifactSchemaV1,
-		Summary:       portableArtifactSummary(request.RecordingID, session),
-		Events:        cloneCanonicalEvents(session.events),
+		Summary:       portableArtifactSummary(snapshot.Status, snapshot.Events),
+		Events:        cloneCanonicalEvents(snapshot.Events),
 		Integrity: recordings.PortableArtifactIntegrity{
 			Algorithm: recordings.PortableArtifactIntegritySHA256,
 		},
@@ -97,22 +94,21 @@ func (service *combinedService) SummarizePortableArtifact(
 }
 
 func portableArtifactSummary(
-	id recordings.RecordingID,
-	session *lifecycleRecordingSession,
+	status recordings.RecordingStatusFacts,
+	events []recordings.CanonicalEvent,
 ) recordings.PortableArtifactSummary {
-	status := recordingStatus(id, session)
 	summary := recordings.PortableArtifactSummary{
 		RecordingID: status.RecordingID,
 		Reference:   status.Artifact,
 		Scope:       status.Scope,
 		State:       status.State,
-		EventCount:  len(session.events),
+		EventCount:  len(events),
 		Failures:    append([]recordings.RecordingFailure{}, status.Failures...),
 		Available:   true,
 	}
-	if len(session.events) > 0 {
-		first := session.events[0].Cursor
-		last := session.events[len(session.events)-1].Cursor
+	if len(events) > 0 {
+		first := events[0].Cursor
+		last := events[len(events)-1].Cursor
 		summary.FirstCursor = &first
 		summary.LastCursor = &last
 	}
