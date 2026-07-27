@@ -168,6 +168,23 @@
   `POST /factory-sessions/async` plus matching CLI `session pause|resume` with
   `--server`, asserting durable `status` and `resolvedSource.sourceRef` on the
   named identity. Substitute external effects only through `edges.Edges`.
+  JavaScript output mapping functional coverage belongs in
+  `tests/functional/orchestration/javascript/contracts/output_mapping_test.go`:
+  drive sync Factory Session execution through
+  `tests/functional/internal/support.StartFunctionalAPIServer` with
+  `WaitForServiceModeRuntime: true`, `UseMockWorkers: true`, and a recording
+  `edges.Edges.ProviderCommandRunner`; prove script `return` values map to
+  `result.primaryResult`, final results, durable `resultSummary`, and
+  `SESSION_RESULT_UPDATED` Factory Events; prove `workflow.artifact()`
+  structured artifacts appear on artifact list/detail, final result
+  `artifactIds`, session `artifactRefs`, and result/completion Factory Events;
+  prove unsupported root return values (for example function values) yield
+  `FAILED` session status with actionable `failureDetail` containing
+  `workflow.result.unsupportedType` without private VM stack frames or live
+  provider execution. Substitute external effects only through `edges.Edges`.
+  Catalog metadata infers domain `orchestration` and subsection
+  `javascript/contracts` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
   JavaScript agent composition functional coverage belongs in
   `tests/functional/orchestration/javascript/composition/agent_test.go`:
   drive sync Factory Session execution through
@@ -635,6 +652,10 @@ Wave 0 functional-tests-expansion planning authority lives under
   customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
 
 - `tests/functional/automations/` owns root.BuildProcess evidence for packaged
-  Automations cron scheduling. Keep cron workstation factories explicit with
-  `"behavior": "CRON"` and observe submissions through `serviceedges.Edges.SubmissionRecorder`
-  on `support.StartFunctionalAPIServer`, matching the runtime_api cron smoke helpers.
+  Automations cron scheduling and filesystem watcher preseed. Keep cron workstation
+  factories explicit with `"behavior": "CRON"` and observe submissions through
+  `serviceedges.Edges.SubmissionRecorder` on `support.StartFunctionalAPIServer`,
+  matching the runtime_api cron smoke helpers. For filesystem watchers, scaffold
+  factories with workstation `inputs`, seed `inputs/<workType>/default/` before
+  `StartFunctionalAPIServer`, and assert preseed submissions through the same
+  recorder seam rather than importing parent-private `filesystem_watchers` packages.

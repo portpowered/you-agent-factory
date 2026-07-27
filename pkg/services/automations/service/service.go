@@ -11,6 +11,8 @@ import (
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
 	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
+	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
+	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -38,6 +40,7 @@ type Service struct {
 	reconciler        reconciliation.Service
 	scriptPollers     scriptpollers.Service
 	cron              cron.Service
+	filesystemWatchers filesystemwatchers.Service
 	schedulerMu       sync.Mutex
 	schedulerSources  map[automations.SourceIdentity]*schedulerSource
 }
@@ -68,6 +71,7 @@ func New(
 	service.reconciler = service.newSchedulerReconciler()
 	service.scriptPollers = service.newScriptPollers()
 	service.cron = cronwire.NewService()
+	service.filesystemWatchers = fswire.NewService()
 	return service
 }
 

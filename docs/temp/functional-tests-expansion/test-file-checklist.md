@@ -394,7 +394,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     covers typed request mapping.
   - `TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch` covers error.
 
-- [ ] `tests/functional/orchestration/javascript/contracts/output_mapping_test.go`
+- [x] `tests/functional/orchestration/javascript/contracts/output_mapping_test.go`
   - `TestJavaScriptReturnValueMapsToPrimaryInvocationResult` covers output.
   - `TestJavaScriptStructuredArtifactsMapToPublicResult` covers artifacts.
   - `TestJavaScriptUnsupportedReturnValueFailsWithoutPrivateVMDetails` covers
@@ -447,6 +447,9 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAutomationsCronActivatesThroughRuntimeLifecycle`.
   - `TestAutomationsCronJitterProducesStableSubmissionTiming`.
   - `TestAutomationsCronSkipsMalformedWorkstationAndFiresValid`.
+- [x] `tests/functional/automations/filesystem_watcher_root_composition_test.go`
+  - `TestBuildProcessRemainsFilesystemWatcherInertBeforeRuntimeLifecycle`.
+  - `TestAutomationsFilesystemWatcherPreseedsThroughRuntimeLifecycle`.
 
 ## Wave 1 — workstations
 
