@@ -7,10 +7,18 @@ import (
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	"go.uber.org/zap"
 )
 
@@ -269,9 +277,6 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 	if opened.application.HTTP.ModelsScope != scope {
 		t.Fatalf("opened HTTP Models scope = %q, want %q", opened.application.HTTP.ModelsScope, scope)
 	}
-	if opened.modelsScope != scope {
-		t.Fatalf("opened Models scope = %q, want %q", opened.modelsScope.String(), scope.String())
-	}
 	if root.forRuntimeCalls != 0 {
 		t.Fatalf("ForRuntime calls = %d, want 0", root.forRuntimeCalls)
 	}
@@ -315,6 +320,203 @@ func TestRuntimeOpeningCleanupClosesModelsScopeAfterLaterResourceOnFailure(t *te
 	if len(root.closeRequests) != 1 {
 		t.Fatalf("CloseRuntimeScope requests after second close = %d, want 1", len(root.closeRequests))
 	}
+}
+
+func TestOpenRuntimeClosesModelsScopeExactlyOnceAfterLaterStepFails(t *testing.T) {
+	t.Parallel()
+
+	var events []string
+	modelRoot := &recordingModelsService{events: &events}
+	laterErr := errors.New("worker runtime opening failed")
+	failure := &openingCoordinatorFailure{events: &events, err: laterErr}
+	factory := &Factory{
+		durableExecutionFactory:     openingCoordinatorDurableExecution,
+		workerExecutionFactory:      failure.openWorkerExecution,
+		modelService:                modelRoot,
+		factorySessionsService:      openingCoordinatorSessionsRoot{},
+		recordingsProjectionFactory: openingCoordinatorProjections,
+		runtimeLedgerFactory:        openingCoordinatorLedgerFactory,
+		runtimeRecorderFactory:      openingCoordinatorRecorder,
+		workerHostedPollersFactory:  openingCoordinatorHostedPollers,
+		factoryScaffoldInitializer:  openingCoordinatorInitializeScaffold,
+		editableFactoryValidator:    openingCoordinatorValidateEditable,
+		contentMaterializer:         openingCoordinatorContentMaterializer{},
+		factoryDefinitionValidator:  openingCoordinatorValidator{},
+		namedPaths:                  openingCoordinatorNamedPaths{},
+		loadFactory:                 openingCoordinatorLoadFactory,
+		resolveClock:                openingCoordinatorResolveClock,
+		newSessionLogger:            openingCoordinatorSessionLogger,
+		adaptWorkerCommandRunner:    openingCoordinatorAdaptCommandRunner,
+		generateRuntimeInstanceID:   func() string { return "runtime-opening-cleanup-test" },
+		resolveHome:                 func() (string, error) { return t.TempDir(), nil },
+		providerIdentities:          func(identity string) (string, error) { return identity, nil },
+	}
+	_, err := factory.openRuntime(
+		context.Background(),
+		&factorysessions.RuntimeOpeningRequest{
+			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
+			FactorySession:    factorysessions.SessionRuntimeOpeningRequest{BackendScopeID: "test-scope"},
+		},
+		ExternalEffects{},
+		zap.NewNop(),
+	)
+	if !errors.Is(err, laterErr) {
+		t.Fatalf("openRuntime() error = %v, want later-step failure", err)
+	}
+	if !slices.Equal(events, []string{"models-open", "later-step-failed", "models-close"}) {
+		t.Fatalf("opening events = %v, want scope cleanup after later-step failure", events)
+	}
+	if len(modelRoot.closeRequests) != 1 {
+		t.Fatalf("CloseRuntimeScope requests = %d, want exactly 1", len(modelRoot.closeRequests))
+	}
+}
+
+type openingCoordinatorFailure struct {
+	events *[]string
+	err    error
+}
+
+func (failure *openingCoordinatorFailure) openWorkerExecution(
+	factoryruntime.RuntimeOpeningRequest,
+	workers.RuntimeOpeningRequest,
+	factoryruntime.Clock,
+	*zap.Logger,
+	workers.CommandRunner,
+	workers.CommandRunner,
+	agypty.PTYAllocator,
+	workerprovider.Provider,
+	roles.CurrentRuntimeResolver,
+	models.Service,
+	models.RuntimeScopeRef,
+	work.ContentMaterializer,
+	WorkersRuntimeFactory,
+) (workers.RuntimeService, error) {
+	*failure.events = append(*failure.events, "later-step-failed")
+	return nil, failure.err
+}
+
+func openingCoordinatorDurableExecution(
+	factorydefinitions.RuntimeOpeningRequest,
+	factorysessions.SessionRuntimeOpeningRequest,
+	RuntimeRoot,
+	factoryruntime.Clock,
+	workerprovider.Provider,
+	FactorySessionExecutionFactory,
+	factorysessions.ProviderIdentityResolver,
+) (factorysessions.ExecutionService, error) {
+	return nil, nil
+}
+
+func openingCoordinatorProjections() recordings.ProjectionService {
+	return openingCoordinatorProjection{}
+}
+
+func openingCoordinatorLedgerFactory() factoryruntime.RuntimeLedgerFactory {
+	return func(
+		recordings.InitialStructureSource,
+		func() time.Time,
+		factorydefinitions.RuntimeDefinitionLookup,
+	) recordings.RuntimeEventLedger {
+		return nil
+	}
+}
+
+func openingCoordinatorRecorder(
+	time.Duration,
+	factorydefinitions.LoadedFactorySource,
+	func() time.Time,
+	string,
+) (recordings.RuntimeRecorder, error) {
+	return nil, nil
+}
+
+func openingCoordinatorHostedPollers(
+	*zap.Logger,
+	workers.HostedPollerClock,
+	workers.HostedPollerHTTPDoer,
+	workers.HostedPollerSecretResolver,
+	string,
+) automations.HostedPollers {
+	return nil
+}
+
+func openingCoordinatorInitializeScaffold(string) error {
+	return nil
+}
+
+func openingCoordinatorValidateEditable(
+	context.Context,
+	*factorydefinitions.FactorySnapshot,
+	factorydefinitions.WorkstationLoader,
+) error {
+	return nil
+}
+
+func openingCoordinatorLoadFactory(
+	string,
+	factorydefinitions.WorkstationLoader,
+) (factorydefinitions.MutableLoadedFactorySource, error) {
+	return nil, nil
+}
+
+func openingCoordinatorResolveClock(clock factoryruntime.Clock) factoryruntime.Clock {
+	if clock != nil {
+		return clock
+	}
+	return openingCoordinatorClock{}
+}
+
+func openingCoordinatorSessionLogger(*zap.Logger, string, string, string) *zap.Logger {
+	return zap.NewNop()
+}
+
+func openingCoordinatorAdaptCommandRunner(platformprocess.CommandRunner) workers.CommandRunner {
+	return nil
+}
+
+type openingCoordinatorSessionsRoot struct {
+	factorysessions.Service
+}
+
+func (openingCoordinatorSessionsRoot) ForRuntime(
+	factorysessions.OpeningBindingRequest,
+) (factorysessions.Service, error) {
+	return openingCoordinatorBoundSessions{}, nil
+}
+
+type openingCoordinatorBoundSessions struct {
+	factorysessions.Service
+	roles.RuntimeAssembly
+}
+
+func (openingCoordinatorBoundSessions) CurrentRuntime() *factorysessions.LiveRuntime {
+	return nil
+}
+
+type openingCoordinatorProjection struct {
+	recordings.ProjectionService
+}
+
+type openingCoordinatorContentMaterializer struct {
+	work.ContentMaterializer
+}
+
+type openingCoordinatorValidator struct {
+	factorydefinitions.Validator
+}
+
+type openingCoordinatorNamedPaths struct {
+	factorydefinitions.NamedPathResolver
+}
+
+func (openingCoordinatorNamedPaths) ResolveCurrentDir(rootDir string) (string, error) {
+	return rootDir, nil
+}
+
+type openingCoordinatorClock struct{}
+
+func (openingCoordinatorClock) Now() time.Time {
+	return time.Unix(1, 0)
 }
 
 type inertHostedInstance struct{}

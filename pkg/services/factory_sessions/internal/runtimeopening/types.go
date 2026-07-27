@@ -5,7 +5,6 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	"github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -16,7 +15,6 @@ type runtimeProducts struct {
 	application roles.OpenedApplicationRuntime
 	invocation  roles.OpenedInvocationRuntime
 	execution   roles.OpenedExecutionRuntime
-	modelsScope models.RuntimeScopeRef
 }
 
 func assembleRuntimeProducts(
@@ -76,6 +74,5 @@ func assembleRuntimeProducts(
 			Execution: factorySessionGateway, WorkflowPreview: workflowPreview,
 			Resources: resources,
 		},
-		modelsScope: modelsBind.Scope,
 	}
 }

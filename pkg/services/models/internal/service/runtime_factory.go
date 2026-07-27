@@ -402,6 +402,13 @@ func (o *Root) InvokeLocal(
 }
 
 func (o *Root) scopedRuntime(scope models.RuntimeScopeRef) (models.Service, error) {
+	return o.scopedRuntimeWithBuilder(scope, o.runtimeForBinding)
+}
+
+func (o *Root) scopedRuntimeWithBuilder(
+	scope models.RuntimeScopeRef,
+	builder func(models.RuntimeBinding) (models.Service, error),
+) (models.Service, error) {
 	if o == nil || o.runtimeScopes == nil {
 		return nil, models.ErrUnsupportedOperation
 	}
@@ -418,11 +425,15 @@ func (o *Root) scopedRuntime(scope models.RuntimeScopeRef) (models.Service, erro
 	if runtime != nil {
 		return runtime, nil
 	}
-	runtime, err = o.runtimeForBinding(binding)
+	runtime, err = builder(binding)
 	if err != nil {
 		return nil, err
 	}
 	o.runtimeMu.Lock()
+	if _, err := o.runtimeScopes.Resolve(runtimescopes.Reference(scope.String())); err != nil {
+		o.runtimeMu.Unlock()
+		return nil, runtimeScopeError(err)
+	}
 	if existing := o.runtimeByScope[scope]; existing != nil {
 		runtime = existing
 	} else {

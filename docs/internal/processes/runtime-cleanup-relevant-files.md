@@ -39,6 +39,10 @@ bindings, and attach it to typed Models requests at the final consumer. When
 live session state is not installed yet, snapshot Models scope configuration
 from the already-loaded Factory definition so startup-time catalog and
 invocation consumers observe the selected Factory without a lazy service view.
+When a scope lazily materializes owner-internal runtime capability, revalidate
+the scope while serializing cache insertion so a concurrent close cannot let a
+stale resolution reinsert capability after cleanup reports success. Prove that
+boundary with a deterministic concurrent operation-versus-close test.
 Use a cleanup context detached from request cancellation when closing an
 already-acquired owner scope. Do not introduce a Wire-owned binder, return a
 private peer runtime-assembly contract, or inject a callback that lets the
