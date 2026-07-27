@@ -179,6 +179,86 @@ func TestGeneratedClientDecodesRepresentativeStructuredError(t *testing.T) {
 	}
 }
 
+// TestGeneratedClientAndServerSchemaStayAligned proves the published generated HTTP
+// client and live functional server stay aligned with the published OpenAPI contract,
+// demonstrating typed success decoding for status and session-visible observations
+// after a representative work submission against the live runtime.
+func TestGeneratedClientAndServerSchemaStayAligned(t *testing.T) {
+	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+
+	generatedClient, err := generatedclient.NewClientWithResponses(
+		server.URL(),
+		generatedclient.WithHTTPClient(http.DefaultClient),
+	)
+	if err != nil {
+		t.Fatalf("construct published generated HTTP client: %v", err)
+	}
+
+	traceID := submitGeneratedClientWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		Name:         stringPtr("generated-client-schema-alignment"),
+		WorkTypeName: "task",
+		Payload:      map[string]string{"title": "generated client schema alignment"},
+	})
+	if traceID == "" {
+		t.Fatal("POST /work returned an empty trace_id")
+	}
+	waitForGeneratedClientWorkComplete(t, server.URL(), traceID, generatedClientTestTimeout)
+
+	status, err := generatedClient.GetStatusWithResponse(context.Background())
+	if err != nil {
+		t.Fatalf("request status through generated HTTP client: %v", err)
+	}
+	if status.StatusCode() != http.StatusOK || status.JSON200 == nil {
+		t.Fatalf("generated status response = %#v, want typed 200", status)
+	}
+	if status.JSON200.FactoryState == "" || status.JSON200.RuntimeStatus == "" {
+		t.Fatalf("generated status = %#v, want populated factoryState and runtimeStatus", status.JSON200)
+	}
+	if status.JSON200.TotalTokens < 1 {
+		t.Fatalf("generated status total_tokens = %d, want at least 1 after completed work", status.JSON200.TotalTokens)
+	}
+	if status.JSON200.Categories.Terminal < 1 {
+		t.Fatalf("generated status terminal count = %d, want at least 1 after completed work", status.JSON200.Categories.Terminal)
+	}
+
+	staleCursor := generatedclient.AfterEventId("generated-client-schema-stale-cursor")
+	sessionEvents, err := generatedClient.GetEventsBySessionIdWithResponse(
+		context.Background(),
+		factorysessions.DefaultSessionID,
+		&generatedclient.GetEventsBySessionIdParams{AfterEventId: &staleCursor},
+		setGeneratedClientAcceptJSON,
+	)
+	if err != nil {
+		t.Fatalf("request session events reconnect probe through generated HTTP client: %v", err)
+	}
+	if sessionEvents.StatusCode() != http.StatusOK || sessionEvents.JSON200 == nil {
+		t.Fatalf("generated session events response = %#v, want typed 200 reconnect probe", sessionEvents)
+	}
+	if sessionEvents.JSON200.Outcome != generatedclient.FactorySessionEventStreamRecoveryOutcomeCURSORSTALE {
+		t.Fatalf(
+			"generated session events outcome = %q, want %q",
+			sessionEvents.JSON200.Outcome,
+			generatedclient.FactorySessionEventStreamRecoveryOutcomeCURSORSTALE,
+		)
+	}
+	if sessionEvents.JSON200.FactorySessionId != factorysessions.DefaultSessionID {
+		t.Fatalf(
+			"generated session events factorySessionId = %q, want %q",
+			sessionEvents.JSON200.FactorySessionId,
+			factorysessions.DefaultSessionID,
+		)
+	}
+	if !sessionEvents.JSON200.Retry.OmitAfterEventId {
+		t.Fatalf("generated session events retry = %#v, want omitAfterEventId true for stale cursor", sessionEvents.JSON200.Retry)
+	}
+}
+
 func setGeneratedClientAcceptJSON(_ context.Context, req *http.Request) error {
 	req.Header.Set("Accept", "application/json")
 	return nil
