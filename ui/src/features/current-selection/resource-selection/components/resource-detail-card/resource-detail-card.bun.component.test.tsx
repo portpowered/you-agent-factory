@@ -105,6 +105,27 @@ describe("ResourceDetailCard owner contract", () => {
     );
     expect(within(card).getByLabelText("Name")).toBeTruthy();
   });
+
+  it("localizes editable resource fields while preserving canonical values", () => {
+    render(
+      <ResourceDetailCard
+        editableConfigurationState={createReadyState(invocationSlot)}
+        locale="zh-CN"
+        resource={invocationSlot}
+        resourceName={invocationSlot.name}
+      />,
+    );
+
+    const card = screen.getByRole("article", { name: "Current selection" });
+    expect(
+      within(card).getByRole("heading", { name: "资源配置" }),
+    ).toBeTruthy();
+    expect(within(card).getByLabelText("容量").getAttribute("value")).toBe(
+      "2",
+    );
+    expect(within(card).getByDisplayValue("agent-slot")).toBeTruthy();
+    expect(within(card).getAllByText("调用槽位").length).toBeGreaterThan(0);
+  });
 });
 
 describe("ResourceDetailCard resource-type contracts", () => {
