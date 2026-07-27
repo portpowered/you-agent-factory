@@ -64,6 +64,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	factoryNamesOperation := provideFactoryNameCompletionOperation(effectiveCatalogService)
+	packagedFactoryCatalogOperations, err := providePackagedFactoryCatalog(v2)
+	if err != nil {
+		return nil, err
+	}
+	packagedFactoryNamesOperation := providePackagedFactoryNameCompletionOperation(packagedFactoryCatalogOperations)
 	selectedFactorySignatureOperation, err := provideSelectedFactorySignatureCompletionOperation(effectiveCatalogService)
 	if err != nil {
 		return nil, err
@@ -214,10 +219,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	clock := provideFactoryDefinitionClock(edges2)
 	versionFileSystem := provideFactoryDefinitionVersionFileSystem(edges2)
-	packagedFactoryCatalogOperations, err := providePackagedFactoryCatalog(v2)
-	if err != nil {
-		return nil, err
-	}
 	packagedInstallationFileSystem := provideFactoryDefinitionPackagedInstallationFileSystem(edges2)
 	packagedFactoryInstallationOperations := providePackagedFactoryInstallation(v39, packagedInstallationFileSystem)
 	v40 := provideFactoryDefinitionsFactory(v39, loader, v5, v6, namedPathResolver, namedFactoryCatalogFileSystem, clock, versionFileSystem, effectiveFactoryCatalogOperation, packagedFactoryCatalogOperations, packagedFactoryInstallationOperations)
@@ -383,6 +384,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	providerCatalog := provideOperatorSettingsProviderCatalog(registry)
 	configDocumentService := provideOperatorConfigDocumentService(fileSystem, createTemporaryFile, providerCatalog, configDecoder, configEncoder)
 	configureInitOperation := provideConfigureInitOperation(configDocumentService)
+	installPackagedFactoryOperation := provideInstallPackagedFactoryOperation(packagedFactoryCatalogOperations, packagedFactoryInstallationOperations)
+	cliInstallPackagedFactoryOperation := provideInstallPackagedFactoryCLI(installPackagedFactoryOperation)
 	queryFactoryOperation := provideQueryFactoryOperation(wireStandardCLIHTTPProtocol)
 	v57 := provideCurrentFactoryPointerReader(namedPathResolver)
 	listFactoriesOperation := provideListFactoriesOperation(effectiveCatalogService, v57)
@@ -462,6 +465,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ObserveCLI:                        cliObserver,
 		NamedFactoryCatalog:               v,
 		CompleteFactoryNames:              factoryNamesOperation,
+		CompletePackagedFactoryNames:      packagedFactoryNamesOperation,
 		CompleteSelectedFactorySignature:  selectedFactorySignatureOperation,
 		ResolveNamedFactoryRoots:          namedFactoryRootsResolver,
 		ResolveNamedFactoryCandidatePaths: namedFactoryCandidatePathsResolver,
@@ -492,6 +496,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ExpandFactoryConfig:               expandFactoryConfigOperation,
 		InitFactory:                       v41,
 		ConfigureInit:                     configureInitOperation,
+		InstallPackagedFactory:            cliInstallPackagedFactoryOperation,
 		QueryFactory:                      queryFactoryOperation,
 		ListFactories:                     listFactoriesOperation,
 		ValidateFactory:                   validateFactoryOperation,
@@ -740,10 +745,13 @@ var cliCommandOperationsSet = wire2.NewSet(
 	provideFlattenFactoryConfigOperation,
 	provideExpandFactoryConfigOperation,
 	provideConfigureInitOperation,
+	provideInstallPackagedFactoryOperation,
+	provideInstallPackagedFactoryCLI,
 	provideQueryFactoryOperation,
 	provideCurrentFactoryPointerReader,
 	provideListFactoriesOperation,
 	provideFactoryNameCompletionOperation,
+	providePackagedFactoryNameCompletionOperation,
 	provideSelectedFactorySignatureCompletionOperation,
 	provideValidateFactoryOperation,
 	provideCreateFactoryFromFileOperation,

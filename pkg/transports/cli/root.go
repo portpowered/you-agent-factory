@@ -19,6 +19,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
@@ -75,6 +76,7 @@ type ExecutionServiceBuilder func(context.Context, string, string, string, strin
 type FlattenFactoryConfigOperation func(configcli.FactoryConfigFlattenConfig) error
 type ExpandFactoryConfigOperation func(configcli.FactoryConfigExpandConfig) error
 type ConfigureInitOperation func(initsetup.Config) error
+type InstallPackagedFactoryOperation func(factorydefinitionscli.InstallPackagedFactoryConfig) error
 type QueryFactoryOperation func(factorycli.QueryConfig) error
 type ListFactoriesOperation func(factorycli.ListConfig) error
 type ValidateFactoryOperation func(factorycli.ValidateConfig) error
@@ -93,6 +95,7 @@ type CommandOperations struct {
 	ObserveCLI                        platformprocess.CLIObserver
 	NamedFactoryCatalog               interfaces.NamedFactoryCatalog
 	CompleteFactoryNames              cobracompletion.FactoryNamesOperation
+	CompletePackagedFactoryNames      cobracompletion.PackagedFactoryNamesOperation
 	CompleteSelectedFactorySignature  cobracompletion.SelectedFactorySignatureOperation
 	ResolveNamedFactoryRoots          NamedFactoryRootsResolver
 	ResolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver
@@ -123,6 +126,7 @@ type CommandOperations struct {
 	ExpandFactoryConfig               ExpandFactoryConfigOperation
 	InitFactory                       interfaces.ScaffoldInitializer
 	ConfigureInit                     ConfigureInitOperation
+	InstallPackagedFactory            InstallPackagedFactoryOperation
 	QueryFactory                      QueryFactoryOperation
 	ListFactories                     ListFactoriesOperation
 	ValidateFactory                   ValidateFactoryOperation
@@ -146,6 +150,7 @@ type CommandFactory struct {
 	initializer                       startupcli.Initializer
 	namedFactoryCatalog               interfaces.NamedFactoryCatalog
 	completeFactoryNames              cobracompletion.FactoryNamesOperation
+	completePackagedFactoryNames      cobracompletion.PackagedFactoryNamesOperation
 	completeSelectedFactorySignature  cobracompletion.SelectedFactorySignatureOperation
 	resolveNamedFactoryRoots          NamedFactoryRootsResolver
 	resolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver
@@ -171,6 +176,7 @@ type CommandFactory struct {
 	ExpandFactoryConfig   func(configcli.FactoryConfigExpandConfig) error
 	InitFactory           interfaces.ScaffoldInitializer
 	ConfigureInit         func(initsetup.Config) error
+	InstallPackagedFactory func(factorydefinitionscli.InstallPackagedFactoryConfig) error
 	QueryFactory          func(factorycli.QueryConfig) error
 	ListFactories         func(factorycli.ListConfig) error
 	ValidateFactory       func(factorycli.ValidateConfig) error
@@ -191,6 +197,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		observeCLI:                        operations.ObserveCLI,
 		namedFactoryCatalog:               operations.NamedFactoryCatalog,
 		completeFactoryNames:              operations.CompleteFactoryNames,
+		completePackagedFactoryNames:      operations.CompletePackagedFactoryNames,
 		completeSelectedFactorySignature:  operations.CompleteSelectedFactorySignature,
 		resolveNamedFactoryRoots:          operations.ResolveNamedFactoryRoots,
 		resolveNamedFactoryCandidatePaths: operations.ResolveNamedFactoryCandidatePaths,
@@ -215,6 +222,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		ExpandFactoryConfig:               operations.ExpandFactoryConfig,
 		InitFactory:                       operations.InitFactory,
 		ConfigureInit:                     operations.ConfigureInit,
+		InstallPackagedFactory:            operations.InstallPackagedFactory,
 		QueryFactory:                      operations.QueryFactory,
 		ListFactories:                     operations.ListFactories,
 		ValidateFactory:                   operations.ValidateFactory,

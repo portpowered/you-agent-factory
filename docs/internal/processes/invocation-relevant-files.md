@@ -768,7 +768,10 @@ response-stream output.
 - Public provider/model setup enters through the manifest-derived `you init`
   handler in `pkg/transports/cli/commandregistry`, which translates stable
   `you.init.flag.provider` and `you.init.flag.model` inputs into the narrow
-  `pkg/transports/cli/initsetup.Config` request. The initsetup adapter owns
+  `pkg/transports/cli/initsetup.Config` request. Packaged Factory installation
+  enters through the same handler when `you.init.flag.package` is supplied,
+  delegating to `pkg/services/factory_definitions/transports/cli` and the shared
+  `InstallPackagedFactory` operation. The initsetup adapter owns
   home-to-config-path translation, prompt rendering, and human output. Enable
   prompts only from the invocation-local stdin/stdout TTY classifications on
   the process context, pass Cobra's invocation-local input/output streams, and
@@ -793,7 +796,8 @@ response-stream output.
 - Root-built functional fixtures that execute initializer-owned commands must
   use an invocation-local HOME/USERPROFILE and explicit Factory test data.
   Environment overrides follow last-value-wins process semantics. Do not
-  bootstrap fixtures through the retired `you init --dir` scaffold path or let
+  bootstrap fixtures through the retired `you init --type`/`--executor` scaffold
+  path or let
   parallel packages share one mutable customer home.
 - JavaScript packaged factories keep authored workflow files in the package
   definition's `scripts/` assets and assemble them through

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
@@ -97,6 +98,7 @@ func productionFactoryConfigInitCommands(
 			FlattenFactoryConfig:  options.FlattenFactoryConfig,
 			ExpandFactoryConfig:   options.ExpandFactoryConfig,
 			ConfigureInit:         options.ConfigureInit,
+			InstallPackagedFactory: options.InstallPackagedFactory,
 			HomeDir:               options.homeDir,
 			ResolveFactoryRoots:   options.resolveNamedFactoryRoots,
 			DiagnosticsWriter:     diagnostics.writer,
@@ -105,6 +107,12 @@ func productionFactoryConfigInitCommands(
 	components, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(handler)
 	if err != nil {
 		panic(fmt.Sprintf("build factory/config/init family commands: %v", err))
+	}
+	if err := cobracompletion.RegisterPackagedFactoryNames(
+		components.Init,
+		options.completePackagedFactoryNames,
+	); err != nil {
+		panic(fmt.Sprintf("register packaged factory init completion: %v", err))
 	}
 	return factoryConfigInitProductionCommands{
 		Factory: components.Factory,

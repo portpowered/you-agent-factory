@@ -8,6 +8,7 @@ import (
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
@@ -32,6 +33,10 @@ const (
 	factoryValidatePathInputID       = "you.factory.config.validate.arg.0"
 	factoryFlattenPathInputID        = "you.factory.config.flatten.arg.0"
 	factoryExpandPathInputID         = "you.factory.config.expand.arg.0"
+	initPackageInputID               = "you.init.flag.package"
+	initDirInputID                   = "you.init.flag.dir"
+	initFormatInputID                = "you.init.flag.format"
+	initReplaceInputID               = "you.init.flag.replace"
 	initProviderInputID              = "you.init.flag.provider"
 	initModelInputID                 = "you.init.flag.model"
 	factoryConfigInitServerInputID   = "you.flag.server"
@@ -69,6 +74,7 @@ type FactoryConfigInitServices struct {
 	FlattenFactoryConfig  func(configcli.FactoryConfigFlattenConfig) error
 	ExpandFactoryConfig   func(configcli.FactoryConfigExpandConfig) error
 	ConfigureInit         func(initsetup.Config) error
+	InstallPackagedFactory func(factorydefinitionscli.InstallPackagedFactoryConfig) error
 	HomeDir               func() (string, error)
 	ResolveFactoryRoots   func(string, string) (factorydefinitions.NamedFactoryRoots, error)
 	DiagnosticsWriter     func(*cobra.Command) io.Writer
@@ -383,7 +389,14 @@ func (h *FactoryConfigInitCommandHandler) Init(
 	if h == nil {
 		return fmt.Errorf("init handler is required")
 	}
-	if state, ok := inherited.State(factoryConfigInitJSONInputID); ok && state.Changed {
+	globals, err := readFactoryConfigInitGlobals(inherited)
+	if err != nil {
+		return fmt.Errorf("resolve init inputs: %w", err)
+	}
+	if resolvedInputChanged(inputs, initPackageInputID) {
+		return h.initPackagedFactory(cmd, inputs, globals)
+	}
+	if globals.json {
 		return fmt.Errorf("--json is not supported by you init")
 	}
 	if h.services.ConfigureInit == nil {
@@ -416,5 +429,69 @@ func (h *FactoryConfigInitCommandHandler) Init(
 		Context: ctx, HomeDir: homeDir, Provider: provider,
 		Model: model, Input: cmd.InOrStdin(), Output: cmd.OutOrStdout(),
 		Interactive: interactive,
+	})
+}
+
+func resolvedInputChanged(inputs resolvedinput.Inputs, inputIDs ...string) bool {
+	for _, inputID := range inputIDs {
+		if state, ok := inputs.State(inputID); ok && state.Changed {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *FactoryConfigInitCommandHandler) initPackagedFactory(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	globals factoryConfigInitGlobals,
+) error {
+	if h.services.InstallPackagedFactory == nil {
+		return fmt.Errorf("packaged factory installation service is required")
+	}
+	if h.services.HomeDir == nil {
+		return fmt.Errorf("init home directory resolver is required")
+	}
+	packageName, err := inputs.String(initPackageInputID)
+	if err != nil {
+		return fmt.Errorf("resolve init inputs: %w", err)
+	}
+	dir, err := inputs.String(initDirInputID)
+	if err != nil {
+		return fmt.Errorf("resolve init inputs: %w", err)
+	}
+	format, err := inputs.String(initFormatInputID)
+	if err != nil {
+		return fmt.Errorf("resolve init inputs: %w", err)
+	}
+	replace, err := inputs.Bool(initReplaceInputID)
+	if err != nil {
+		return fmt.Errorf("resolve init inputs: %w", err)
+	}
+	homeDir, err := h.services.HomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve init home directory: %w", err)
+	}
+	dirChanged := false
+	if state, ok := inputs.State(initDirInputID); ok {
+		dirChanged = state.Changed
+	}
+	formatChanged := false
+	if state, ok := inputs.State(initFormatInputID); ok {
+		formatChanged = state.Changed
+	}
+	return h.services.InstallPackagedFactory(factorydefinitionscli.InstallPackagedFactoryConfig{
+		Context:       cmd.Context(),
+		HomeDir:       homeDir,
+		Package:       packageName,
+		Dir:           dir,
+		DirChanged:    dirChanged,
+		Format:        format,
+		FormatChanged: formatChanged,
+		Replace:       replace,
+		JSON:          globals.json,
+		Output:        cmd.OutOrStdout(),
+		Diagnostics:   h.diagnostics(cmd),
+		Verbose:       globals.verbose,
 	})
 }
