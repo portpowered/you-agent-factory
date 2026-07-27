@@ -8,6 +8,13 @@ Use this map when changing the public REST contract.
   `pkg/transports/http` server only composes that injected adapter with other
   service-owned handlers and registers the generated routes; runtime binding
   occurs in `pkg/transports/http/application`.
+- Recordings HTTP decoding, generated-contract mapping, Recordings root
+  invocation, error mapping, and streaming policy live in
+  `pkg/services/recordings/transports/http`. The adapter consumes the accepted
+  `recordings.Service` root only; fake-root tests inject a focused root fake
+  without constructing ledger, lifecycle, replay, or artifact-export graphs.
+  Package-boundary tests must prove the adapter does not import
+  `pkg/services/recordings/internal/**`.
 - Factory Session CLI request construction, rendering, diagnostics, and
   operation handlers live under
   `pkg/services/factory_sessions/transports/cli`; Factory Session MCP tool
