@@ -105,6 +105,25 @@ func (fs *SessionRuntime) GetEngineStateSnapshotForSession(ctx context.Context, 
 	return legacyObservation.GetEngineStateSnapshot(ctx)
 }
 
+func (fs *SessionRuntime) ObserveForSession(
+	ctx context.Context,
+	sessionID string,
+	req factory.ObserveRequest,
+) (factory.ObserveResult, error) {
+	if fs == nil {
+		return factory.ObserveResult{}, fmt.Errorf("factory session service is required")
+	}
+	session, err := runtimebinding.RequireLiveSession(fs.sessionState, sessionID)
+	if err != nil {
+		return factory.ObserveResult{}, err
+	}
+	runtime, ok := session.Runtime.Factory.(factory.Service)
+	if !ok {
+		return factory.ObserveResult{}, fmt.Errorf("Factory Runtime observation is required")
+	}
+	return runtime.Observe(ctx, req)
+}
+
 func (fs *SessionRuntime) CloseFactorySession(ctx context.Context, sessionID string) error {
 	return fs.requireSessionGateway().CloseFactorySession(ctx, sessionID)
 }

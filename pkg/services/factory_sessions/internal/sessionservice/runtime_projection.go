@@ -85,6 +85,12 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err
 	}
+	observationResult, err := fs.ObserveForSession(ctx, session.ID, factoryruntime.ObserveRequest{
+		Scope: factoryruntime.ObservationScopeFull,
+	})
+	if err != nil {
+		return factorysessions.ProjectionContext{}, err
+	}
 	bundle := runtimebinding.BundleFromSession(session)
 	var checkpointStore factoryruntime.JavaScriptCheckpointStore
 	if interfaces.IsJavaScriptOrchestratorFactory(runtimeCfg.FactoryConfig()) {
@@ -104,6 +110,7 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 	}
 	return sessionprojection.BuildProjectionContext(sessionprojection.ProjectionBuildInput{
 		Session: session, RuntimeConfig: runtimeCfg, Snapshot: snapshot,
+		Observation: observationResult.Observation,
 		BackendScopeID: backendScopeID, LogicalSessionKey: resolvedIdentity.LogicalSessionKeyID,
 		NormalizedTarget: &resolvedIdentity.RuntimeTarget, RuntimeStartedAt: startedAt,
 		CheckpointStore: checkpointStore, Events: runtimebinding.CanonicalEventsFromSession(session),
