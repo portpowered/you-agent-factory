@@ -115,6 +115,39 @@ func TestPetriAndJavaScriptSessionsShareLifecycleControls(t *testing.T) {
 	)
 }
 
+// TestPetriAndJavaScriptSessionsExposeCompatibleStatusFacts proves public session
+// status reads for a live Petri Factory Session and a live JavaScript Factory
+// Session expose compatible identity, orchestrator-kind, lifecycle, and shared
+// runtime progress facts through the public session inspection contract without
+// relying on orchestrator-private projections.
+func TestPetriAndJavaScriptSessionsExposeCompatibleStatusFacts(t *testing.T) {
+	dir := scaffoldSessionCompatibilityFactory(t)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	baseURL := strings.TrimSuffix(server.URL(), "/")
+
+	petriSession := support.GetDefaultSession(t, baseURL)
+	assertCompatibleLiveSessionStatusFacts(t, baseURL, petriSession, factoryapi.PETRI)
+
+	javaSessionID := startBusyLoopJavaScriptSession(t, baseURL)
+	waitForDurableSessionStatus(
+		t,
+		baseURL,
+		javaSessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		sessionCompatTimeout,
+	)
+	javaSession := readDurableSession(t, baseURL, javaSessionID)
+	assertCompatibleDurableSessionStatusFacts(t, javaSession, factoryapi.JAVASCRIPT)
+
+	if petriSession.Id == javaSession.SessionId {
+		t.Fatalf("session ids must differ: petri=%q javascript=%q", petriSession.Id, javaSession.SessionId)
+	}
+}
+
 func scaffoldSessionCompatibilityFactory(t *testing.T) string {
 	t.Helper()
 
@@ -240,6 +273,150 @@ func assertDurableSessionOrchestratorKind(
 	if got != want {
 		t.Fatalf("durable session %s orchestratorKind = %q, want %q", sessionID, got, want)
 	}
+}
+
+func assertCompatibleLiveSessionStatusFacts(
+	t *testing.T,
+	baseURL string,
+	session factoryapi.FactorySession,
+	wantOrchestrator factoryapi.FactoryOrchestratorKind,
+) {
+	t.Helper()
+
+	if session.Id == "" {
+		t.Fatal("live session id is empty")
+	}
+	assertLiveSessionOrchestratorKind(t, session.Id, session.Runtime.OrchestratorKind, wantOrchestrator)
+	if session.Runtime.Status == "" {
+		t.Fatalf("live session %s runtime.status is empty", session.Id)
+	}
+	if session.Runtime.Progress.FactoryState == "" {
+		t.Fatalf("live session %s runtime.progress.factoryState is empty", session.Id)
+	}
+	assertReadableStatusCategories(t, session.Id, session.Runtime.Progress.Categories)
+
+	status := readLiveSessionStatus(t, baseURL, session.Id)
+	if status.FactoryState != session.Runtime.Progress.FactoryState {
+		t.Fatalf(
+			"GET /status factoryState = %q, session show = %q",
+			status.FactoryState,
+			session.Runtime.Progress.FactoryState,
+		)
+	}
+	if status.RuntimeStatus != string(session.Runtime.Status) {
+		t.Fatalf(
+			"GET /status runtimeStatus = %q, session show = %q",
+			status.RuntimeStatus,
+			session.Runtime.Status,
+		)
+	}
+	if status.Categories != session.Runtime.Progress.Categories {
+		t.Fatalf(
+			"GET /status categories = %#v, session show = %#v",
+			status.Categories,
+			session.Runtime.Progress.Categories,
+		)
+	}
+	if status.TotalTokens != session.Runtime.Progress.TotalTokens {
+		t.Fatalf(
+			"GET /status totalTokens = %d, session show = %d",
+			status.TotalTokens,
+			session.Runtime.Progress.TotalTokens,
+		)
+	}
+}
+
+func assertCompatibleDurableSessionStatusFacts(
+	t *testing.T,
+	session factoryapi.FactorySessionDurableReadModel,
+	wantOrchestrator factoryapi.FactoryOrchestratorKind,
+) {
+	t.Helper()
+
+	if session.SessionId == "" {
+		t.Fatal("durable session id is empty")
+	}
+	assertDurableSessionOrchestratorKind(
+		t,
+		session.SessionId,
+		session.OrchestratorKind,
+		wantOrchestrator,
+	)
+	if session.Status == "" {
+		t.Fatalf("durable session %s status is empty", session.SessionId)
+	}
+	if session.ResolvedSource.Kind == "" {
+		t.Fatalf("durable session %s resolvedSource.kind is empty", session.SessionId)
+	}
+	if session.Progress != nil {
+		assertReadableDurableProgressCounts(t, session.SessionId, *session.Progress)
+	}
+}
+
+func assertReadableStatusCategories(
+	t *testing.T,
+	sessionID string,
+	categories factoryapi.StatusCategories,
+) {
+	t.Helper()
+
+	for _, field := range []struct {
+		name  string
+		value int
+	}{
+		{"failed", categories.Failed},
+		{"initial", categories.Initial},
+		{"processing", categories.Processing},
+		{"terminal", categories.Terminal},
+	} {
+		if field.value < 0 {
+			t.Fatalf("live session %s categories.%s = %d, want >= 0", sessionID, field.name, field.value)
+		}
+	}
+}
+
+func assertReadableDurableProgressCounts(
+	t *testing.T,
+	sessionID string,
+	progress factoryapi.FactorySessionDurableProgressCounts,
+) {
+	t.Helper()
+
+	for _, field := range []struct {
+		name  string
+		value *int
+	}{
+		{"totalDispatches", progress.TotalDispatches},
+		{"completedDispatches", progress.CompletedDispatches},
+		{"failedDispatches", progress.FailedDispatches},
+		{"inFlightDispatches", progress.InFlightDispatches},
+		{"queuedDispatches", progress.QueuedDispatches},
+		{"runningDispatches", progress.RunningDispatches},
+		{"canceledDispatches", progress.CanceledDispatches},
+		{"timedOutDispatches", progress.TimedOutDispatches},
+		{"skippedDispatches", progress.SkippedDispatches},
+		{"interruptedDispatches", progress.InterruptedDispatches},
+		{"phaseCount", progress.PhaseCount},
+	} {
+		if field.value == nil {
+			continue
+		}
+		if *field.value < 0 {
+			t.Fatalf("durable session %s progress.%s = %d, want >= 0", sessionID, field.name, *field.value)
+		}
+	}
+}
+
+func readLiveSessionStatus(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+) factoryapi.StatusResponse {
+	t.Helper()
+	return support.GetJSON[factoryapi.StatusResponse](
+		t,
+		baseURL+"/factory-sessions/"+sessionID+"/status",
+	)
 }
 
 func assertLiveSessionLifecycleControlStatus(
