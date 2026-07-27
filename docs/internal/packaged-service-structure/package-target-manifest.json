@@ -1473,14 +1473,19 @@
       "destination": "provider_sessions"
     },
     {
-      "packagePath": "pkg/services/provider_sessions/codex",
-      "disposition": "move",
+      "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader",
+      "disposition": "retain",
       "destination": "provider_sessions/internal/services/codex_reader"
     },
     {
-      "packagePath": "pkg/services/provider_sessions/cursor",
-      "disposition": "move",
-      "destination": "provider_sessions/internal/services/cursor_reader"
+      "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader/internal/service",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/codex_reader"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader/wire",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/codex_reader"
     },
     {
       "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader",
@@ -1501,21 +1506,6 @@
       "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/wire",
       "disposition": "retain",
       "destination": "provider_sessions/internal/services/cursor_reader"
-    },
-    {
-      "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader",
-      "disposition": "retain",
-      "destination": "provider_sessions/internal/services/codex_reader"
-    },
-    {
-      "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader/internal/service",
-      "disposition": "retain",
-      "destination": "provider_sessions/internal/services/codex_reader"
-    },
-    {
-      "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader/wire",
-      "disposition": "retain",
-      "destination": "provider_sessions/internal/services/codex_reader"
     },
     {
       "packagePath": "pkg/services/provider_sessions/service",
