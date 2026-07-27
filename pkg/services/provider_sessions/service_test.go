@@ -12,7 +12,6 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	providercursor "github.com/portpowered/infinite-you/pkg/services/provider_sessions/cursor"
 	providersessionsservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
@@ -201,7 +200,7 @@ func TestProjectRejectsInvalidIdentifierAndPropagatesTypedFailures(t *testing.T)
 }
 
 func TestDetailsNormalizesCursorAliasesAndWrapsLookupContext(t *testing.T) {
-	root := providercursor.AgentStorageRoot(t.TempDir())
+	root := t.TempDir()
 	for _, provider := range []string{"cursor", "agent", "cursor-agent"} {
 		t.Run(provider, func(t *testing.T) {
 			_, err := newServiceForRoots(t, t.TempDir(), string(root)).Details(provider, "session_id", "missing-session")

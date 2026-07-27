@@ -1,5 +1,6 @@
-// Package cursor discovers, parses, and maps Cursor provider sessions from
-// cursor-agent CLI storage without shelling out to an external parser.
+// Package cursor is the parent-private Cursor Reader implementation that
+// discovers, parses, and maps cursor-agent CLI storage without shelling out to
+// an external parser.
 package cursor
 
 import (

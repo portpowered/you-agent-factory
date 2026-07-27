@@ -40,7 +40,7 @@ func TestRunRejectsRetiredCursorImports(t *testing.T) {
 		"prohibited retired package import: github.com/portpowered/infinite-you/pkg/sessionpersistence",
 		"prohibited retired package import: github.com/portpowered/infinite-you/pkg/internal/cursorstorage",
 		"canonical owner: pkg/services/factory_sessions/internal/cursors/persistence",
-		"canonical owner: pkg/services/provider_sessions/cursor",
+		"canonical owner: pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
 	} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
@@ -55,7 +55,7 @@ func TestRunRejectsRecreatedCursorRoots(t *testing.T) {
 		owner       string
 	}{
 		{retiredRoot: "pkg/sessionpersistence", owner: "pkg/services/factory_sessions/internal/cursors/persistence"},
-		{retiredRoot: "pkg/internal/cursorstorage", owner: "pkg/services/provider_sessions/cursor"},
+		{retiredRoot: "pkg/internal/cursorstorage", owner: "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor"},
 	} {
 		tc := tc
 		t.Run(tc.retiredRoot, func(t *testing.T) {

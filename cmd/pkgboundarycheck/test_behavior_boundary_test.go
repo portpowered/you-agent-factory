@@ -269,12 +269,11 @@ func TestScanTestBehaviorBoundariesRejectsProviderSessionPolicyInTransportSuppor
 import (
   sessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
   codex "github.com/portpowered/infinite-you/pkg/services/provider_sessions/codex"
-  cursor "github.com/portpowered/infinite-you/pkg/services/provider_sessions/cursor"
   service "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service"
   workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 type testProviderSessionService struct{}
-func newTestProviderSessionService() { sessions.CanonicalProvider("agent"); service.NewForRoots(); codex.LoadDetails(); cursor.LoadDetails(); workers.CanonicalProviderSessionProvider("agent") }
+func newTestProviderSessionService() { sessions.CanonicalProvider("agent"); service.NewForRoots(); codex.LoadDetails(); workers.CanonicalProviderSessionProvider("agent") }
 func scriptedProviderSessionDetail() {}
 `)
 

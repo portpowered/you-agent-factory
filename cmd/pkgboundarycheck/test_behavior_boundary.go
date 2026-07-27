@@ -45,7 +45,6 @@ const (
 	providerSessionsImportPath   = repositoryImportPrefix + "pkg/services/provider_sessions"
 	providerSessionServicePath   = repositoryImportPrefix + "pkg/services/provider_sessions/service"
 	providerSessionCodexPath     = repositoryImportPrefix + "pkg/services/provider_sessions/codex"
-	providerSessionCursorPath    = repositoryImportPrefix + "pkg/services/provider_sessions/cursor"
 	modelsImportPath             = repositoryImportPrefix + "pkg/services/models"
 	workImportPath               = repositoryImportPrefix + "pkg/services/work"
 	factoryRuntimeRootImportPath = repositoryImportPrefix + "pkg/services/factory_runtime"
@@ -116,11 +115,6 @@ var prohibitedTransportTestPolicyOperations = map[string]map[string]string{
 	providerSessionCodexPath: {
 		"DefaultSessionsRoot": "provider_sessions",
 		"LoadDetails":         "provider_sessions",
-	},
-	providerSessionCursorPath: {
-		"DefaultAgentStorageRoot":   "provider_sessions",
-		"LoadDetails":               "provider_sessions",
-		"NormalizeAgentStorageRoot": "provider_sessions",
 	},
 	factoryRuntimeRootImportPath: {
 		"CategoryForState":        "factory_runtime",

@@ -3438,10 +3438,10 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/provider_sessions/cursor",
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
       "disposition": "retain",
-      "destination": "provider_sessions",
-      "destinationKind": "owner"
+      "destination": "provider_sessions/internal/services/cursor_reader",
+      "destinationKind": "nested"
     },
     {
       "packagePath": "pkg/services/provider_sessions/service",

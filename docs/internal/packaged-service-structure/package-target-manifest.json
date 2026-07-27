@@ -228,7 +228,10 @@
     "pkg/services/operator_settings/identityinventory",
     "pkg/services/provider_sessions",
     "pkg/services/provider_sessions/codex",
-    "pkg/services/provider_sessions/cursor",
+    "pkg/services/provider_sessions/internal/services/cursor_reader",
+    "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
+    "pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
+    "pkg/services/provider_sessions/internal/services/cursor_reader/wire",
     "pkg/services/provider_sessions/service",
     "pkg/services/providers",
     "pkg/services/providers/internal/service",
@@ -1325,8 +1328,23 @@
       "destination": "provider_sessions/internal/services/codex_reader"
     },
     {
-      "packagePath": "pkg/services/provider_sessions/cursor",
-      "disposition": "move",
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/cursor_reader"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/cursor_reader"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/cursor_reader"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/wire",
+      "disposition": "retain",
       "destination": "provider_sessions/internal/services/cursor_reader"
     },
     {
