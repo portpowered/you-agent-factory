@@ -1909,6 +1909,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/orchestration/javascript/loading/file_javascript_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/loading",
+      "scenario": "TestJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/loading/file_javascript_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/javascript/loading/file_javascript_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/javascript/loading",
+      "scenario": "TestJavaScriptFactoryMissingImportFailsActionably",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/javascript/loading/file_javascript_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/orchestration/javascript/loading/named_factory_test.go",
       "package": "you-agent-factory/tests/functional/orchestration/javascript/loading",
       "scenario": "TestNamedJavaScriptFactoryRunsThroughStandardCLI",
@@ -6734,7 +6754,7 @@
     "by_catch_all": {
       "bootstrap_portability": 21,
       "guards_batch": 27,
-      "none": 346,
+      "none": 348,
       "replay_contracts": 23,
       "runtime_api": 106,
       "smoke": 84,
@@ -6750,7 +6770,7 @@
       "models": 5,
       "observability": 9,
       "operator_settings": 1,
-      "orchestration": 37,
+      "orchestration": 39,
       "product": 10,
       "providers": 53,
       "replay_contracts": 24,
@@ -6797,7 +6817,7 @@
       "you-agent-factory/tests/functional/orchestration/javascript/composition": 14,
       "you-agent-factory/tests/functional/orchestration/javascript/contracts": 5,
       "you-agent-factory/tests/functional/orchestration/javascript/durability": 3,
-      "you-agent-factory/tests/functional/orchestration/javascript/loading": 5,
+      "you-agent-factory/tests/functional/orchestration/javascript/loading": 7,
       "you-agent-factory/tests/functional/orchestration/petri/cross": 2,
       "you-agent-factory/tests/functional/orchestration/petri/dispatch": 3,
       "you-agent-factory/tests/functional/product/init_setup": 11,
