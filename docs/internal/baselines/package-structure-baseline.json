@@ -2664,6 +2664,11 @@
     },
     {
       "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/provider_sessions/codex",
+      "target": "pkg/services/provider_sessions"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/provider_sessions/cursor",
       "target": "pkg/services/provider_sessions"
     },
@@ -2801,6 +2806,36 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/worktree",
       "target": "pkg/services/workers"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/recordings/internal/services/artifacts_export",
+      "target": "pkg/services/recordings/internal/services/artifacts_export/service.go:PortableArtifactPublication,pkg/services/recordings/internal/services/artifacts_export/service.go:Service,pkg/services/recordings/internal/services/artifacts_export/service.go:SnapshotSource"
+    },
+    {
+      "rule": "deprecated-runtime-api-file",
+      "filePath": "tests/functional/runtime_api/api_batch_ingress_starvation_regression_test.go",
+      "target": "tests/functional/runtime_api"
+    },
+    {
+      "rule": "deprecated-runtime-api-test",
+      "filePath": "tests/functional/runtime_api/api_batch_ingress_starvation_regression_test.go",
+      "target": "TestBlockedDispatchConcurrentBatchIngressRegression"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/sessions/live_runtime_build_process_test.go",
+      "target": "sessions"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_definitions/distribute_validation.go",
+      "target": "ValidateInstallPackagedFactoryRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_definitions/install_packaged_factory_operation.go",
+      "target": "NewInstallPackagedFactoryOperation"
     }
   ],
   "violations": [

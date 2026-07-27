@@ -12,26 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-// SnapshotHasActiveWork reports whether a runtime snapshot contains an active
-// dispatch or a non-terminal, non-resource Work token.
-func SnapshotHasActiveWork(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
-	return state.SnapshotHasActiveWork(snapshot)
-}
-
-// RequireIdleRuntime validates the shared definition-activation precondition.
-func RequireIdleRuntime(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) error {
-	if snapshot == nil {
-		return fmt.Errorf("%w: runtime snapshot is unavailable", interfaces.ErrFactoryActivationRequiresIdle)
-	}
-	if snapshot.RuntimeStatus != interfaces.RuntimeStatusIdle {
-		return fmt.Errorf("%w: current runtime status is %s", interfaces.ErrFactoryActivationRequiresIdle, snapshot.RuntimeStatus)
-	}
-	if SnapshotHasActiveWork(snapshot) {
-		return fmt.Errorf("%w: current runtime has active work", interfaces.ErrFactoryActivationRequiresIdle)
-	}
-	return nil
-}
-
 // ReplacementFactoryChangePayload extracts the canonical definition payload
 // emitted by a newly built replacement runtime.
 func ReplacementFactoryChangePayload(events []interfaces.FactoryEvent) (interfaces.FactoryChangeEventPayload, bool) {
@@ -85,27 +65,11 @@ func PublishFactoryChange(
 // ErrRuntimeNotAvailable reports that no hosted runtime bundle is available for an operation.
 var ErrRuntimeNotAvailable = fmt.Errorf("factory service runtime is not available")
 
-// RuntimeModeOrDefault normalizes an omitted process mode to batch execution.
-func RuntimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
-	if mode == "" {
-		return interfaces.RuntimeModeBatch
-	}
-	return mode
-}
-
 func hostedFactory(bundle *Bundle) (factory.Factory, error) {
 	if bundle == nil || bundle.Factory == nil {
 		return nil, ErrRuntimeNotAvailable
 	}
 	return bundle.Factory, nil
-}
-
-// FactoryFromBundle returns the active engine when a runtime bundle is available.
-func FactoryFromBundle(bundle *Bundle) factory.Factory {
-	if bundle == nil {
-		return nil
-	}
-	return bundle.Factory
 }
 
 // SubmitWorkRequest submits a canonical work request batch to the hosted runtime.
@@ -115,43 +79,6 @@ func SubmitWorkRequest(ctx context.Context, bundle *Bundle, request work.WorkReq
 		return work.WorkRequestSubmitResult{}, err
 	}
 	return activeFactory.SubmitWorkRequest(ctx, request)
-}
-
-// Pause pauses the hosted Factory Runtime.
-func Pause(ctx context.Context, bundle *Bundle) error {
-	activeFactory, err := hostedFactory(bundle)
-	if err != nil {
-		return err
-	}
-	if err := activeFactory.Pause(ctx); err != nil {
-		return fmt.Errorf("pause factory: %w", err)
-	}
-	return nil
-}
-
-// Resume resumes the hosted Factory Runtime and releases buffered Work.
-func Resume(ctx context.Context, bundle *Bundle) error {
-	activeFactory, err := hostedFactory(bundle)
-	if err != nil {
-		return err
-	}
-	if err := activeFactory.Resume(ctx); err != nil {
-		return fmt.Errorf("resume factory: %w", err)
-	}
-	return nil
-}
-
-// GetFactoryEvents returns the hosted runtime's canonical event history.
-func GetFactoryEvents(ctx context.Context, bundle *Bundle) ([]interfaces.FactoryEvent, error) {
-	activeFactory, err := hostedFactory(bundle)
-	if err != nil {
-		return nil, err
-	}
-	events, err := activeFactory.GetFactoryEvents(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get factory events: %w", err)
-	}
-	return events, nil
 }
 
 // MoveWork applies a synchronous operator relocation on the hosted runtime.

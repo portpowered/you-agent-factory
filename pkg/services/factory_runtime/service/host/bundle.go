@@ -60,14 +60,6 @@ func NewBundle(
 	}
 }
 
-// FormatRuntimeStartTime returns the canonical runtime artifact timestamp.
-func FormatRuntimeStartTime(value time.Time) string {
-	if value.IsZero() {
-		return ""
-	}
-	return value.UTC().Format(time.RFC3339Nano)
-}
-
 // RuntimeLogger returns the bundle logger or a nop logger when unset.
 func (r *Bundle) RuntimeLogger() *zap.Logger {
 	if r == nil || r.Logger == nil {

@@ -345,7 +345,7 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/provider_sessions/cursor/store_blob_decode.go#decodeBlobEntryValue",
+      "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_blob_decode.go#decodeBlobEntryValue",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-function threshold. Current rationale: MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor."
     },
@@ -753,49 +753,49 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/provider_sessions/cursor/protobuf_decoder.go#extractProtobufFields",
+      "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/protobuf_decoder.go#extractProtobufFields",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session protobuf decoding stays grouped until extraction refactor."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/provider_sessions/cursor/redacted_reasoning_decoder.go#decodeRedactedReasoning",
+      "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/redacted_reasoning_decoder.go#decodeRedactedReasoning",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session redacted reasoning decoding stays grouped until extraction refactor."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/provider_sessions/cursor/store_blob_decode.go#decodeBlobEntryValue",
+      "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_blob_decode.go#decodeBlobEntryValue",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/provider_sessions/cursor/store_parse.go#messageUnknownContentText",
+      "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_parse.go#messageUnknownContentText",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session message content formatting stays grouped until extraction refactor."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/provider_sessions/cursor/store_parse.go#parseComposerFromData",
+      "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_parse.go#parseComposerFromData",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session composer parsing stays grouped until extraction refactor."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/provider_sessions/cursor/store_parse.go#parseTextMessageFormat",
+      "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_parse.go#parseTextMessageFormat",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session text bubble parsing stays grouped until extraction refactor."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/provider_sessions/cursor/store_query.go#QueryBlobsTable",
+      "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_query.go#QueryBlobsTable",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session store schema probing stays grouped until extraction refactor."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/provider_sessions/cursor/store_query.go#QueryMetaTable",
+      "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_query.go#QueryMetaTable",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session store schema probing stays grouped until extraction refactor."
     },
@@ -1491,7 +1491,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/provider_sessions/cursor/store_blob_decode.go#decodeBlobEntryValue",
+      "target": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_blob_decode.go#decodeBlobEntryValue",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-function-lines threshold. Current rationale: MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor."
     },

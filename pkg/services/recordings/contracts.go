@@ -553,6 +553,18 @@ var (
 	// ErrInvalidPortableArtifact reports malformed detached summary or decode
 	// input that is not a schema, integrity, or ordering failure.
 	ErrInvalidPortableArtifact = errors.New("invalid portable recording artifact")
+
+	// ErrPortableArtifactExportFailed reports persistence failure while
+	// publishing a completed portable artifact to its public destination.
+	ErrPortableArtifactExportFailed = errors.New("portable recording artifact export failed")
+
+	// ErrForeignPortableArtifact reports a public artifact handle that is not
+	// owned by the selected recording export scope.
+	ErrForeignPortableArtifact = errors.New("foreign portable recording artifact handle")
+
+	// ErrPortableArtifactCancelled reports cancellation of an in-flight portable
+	// artifact close, export, or read before publication or decode completes.
+	ErrPortableArtifactCancelled = errors.New("portable recording artifact operation cancelled")
 )
 
 // PortableArtifactIntegrity contains the completed artifact digest. Digest is
@@ -634,6 +646,32 @@ type SummarizePortableArtifactRequest struct {
 // SummarizePortableArtifactResult contains a detached summary copy.
 type SummarizePortableArtifactResult struct {
 	Summary PortableArtifactSummary
+}
+
+// ExportPortableArtifactRequest closes one finalized recording and publishes
+// its completed portable artifact to the recording's public reference.
+type ExportPortableArtifactRequest struct {
+	RecordingID RecordingID
+}
+
+// ExportPortableArtifactResult reports the published public reference and the
+// detached artifact that was exported.
+type ExportPortableArtifactResult struct {
+	Reference RecordingArtifactReference
+	Artifact  PortableArtifact
+}
+
+// ReadPortableArtifactRequest reads one published portable artifact for the
+// selected recording export scope.
+type ReadPortableArtifactRequest struct {
+	RecordingID RecordingID
+	Reference   RecordingArtifactReference
+}
+
+// ReadPortableArtifactResult contains the validated detached artifact read from
+// the public destination.
+type ReadPortableArtifactResult struct {
+	Artifact PortableArtifact
 }
 
 // Ledger is the legacy runtime append/subscribe composition capability.
@@ -725,6 +763,12 @@ type Service interface {
 	// SummarizePortableArtifact returns detached summary/availability outcomes
 	// for one portable recording through the plain artifact-export slice.
 	SummarizePortableArtifact(SummarizePortableArtifactRequest) (SummarizePortableArtifactResult, error)
+	// ExportPortableArtifact closes one finalized recording and atomically
+	// publishes its completed portable artifact to the public reference.
+	ExportPortableArtifact(context.Context, ExportPortableArtifactRequest) (ExportPortableArtifactResult, error)
+	// ReadPortableArtifact reads and validates one published portable artifact
+	// from its public reference.
+	ReadPortableArtifact(context.Context, ReadPortableArtifactRequest) (ReadPortableArtifactResult, error)
 }
 
 // ProjectionService is the legacy runtime projection composition capability.
