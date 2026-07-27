@@ -34,6 +34,7 @@ type service struct {
 }
 
 var _ runtimehost.Service = (*service)(nil)
+var _ hostleases.SlotCapacityCoordinator = (*service)(nil)
 
 // New constructs an inert Runtime Host that validates and retains injected
 // supervision effects without launching subprocesses or starting lifecycle.
@@ -58,7 +59,7 @@ func New(
 		ServerStartBuilder:  defaultServerStartBuilder,
 		Diagnostics:         diagnostics,
 	}
-	return &service{
+	s := &service{
 		scopes:            scopes,
 		assets:            assets,
 		leases:            leases,
@@ -74,6 +75,8 @@ func New(
 		idleUnloadAfter:   0,
 		maxLoadedRuntimes: 0,
 	}
+	hostleases.BindCoordinator(leases, s)
+	return s
 }
 
 func (s *service) InspectModelHost(
@@ -301,6 +304,29 @@ func (s *service) cancelIdleUnload(slotKey string) {
 	s.mu.Lock()
 	s.cancelIdleUnloadLocked(slotKey)
 	s.mu.Unlock()
+}
+
+// OnLeaseCapacityAcquired records one active holder for idle-unload policy.
+func (s *service) OnLeaseCapacityAcquired(
+	scope models.RuntimeScopeRef,
+	modelName string,
+) {
+	slotKey := runtimeSlotKey(scope, modelName)
+	s.mu.Lock()
+	s.acquireSlotCapacityLocked(slotKey)
+	s.mu.Unlock()
+}
+
+// OnLeaseCapacityReleased frees one holder and may schedule idle unload.
+func (s *service) OnLeaseCapacityReleased(
+	scope models.RuntimeScopeRef,
+	modelName string,
+) {
+	binding, err := s.scopes.Resolve(runtimescopes.Reference(scope.String()))
+	if err != nil {
+		return
+	}
+	s.releaseSlotCapacity(scope, modelName, binding.RuntimeConfig())
 }
 
 func (s *service) releaseSlotCapacity(

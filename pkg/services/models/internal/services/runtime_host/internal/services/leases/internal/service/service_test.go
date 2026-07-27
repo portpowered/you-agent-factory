@@ -162,7 +162,7 @@ func TestAcquireModelLeaseRejectsRuntimeNotReady(t *testing.T) {
 	}
 }
 
-func TestGetAndReleaseModelLeaseRemainContractOnlyUntilReleasePacket(t *testing.T) {
+func TestGetModelLeaseRemainsContractOnlyUntilExpiryPacket(t *testing.T) {
 	t.Parallel()
 
 	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 1})
@@ -171,10 +171,179 @@ func TestGetAndReleaseModelLeaseRemainContractOnlyUntilReleasePacket(t *testing.
 	if !errors.Is(err, models.ErrUnsupportedOperation) {
 		t.Fatalf("GetModelLease error = %v, want ErrUnsupportedOperation", err)
 	}
-	_, err = service.ReleaseModelLease(ctx, models.ReleaseModelLeaseRequest{})
-	if !errors.Is(err, models.ErrUnsupportedOperation) {
-		t.Fatalf("ReleaseModelLease error = %v, want ErrUnsupportedOperation", err)
+}
+
+func TestReleaseModelLeaseFreesCapacityForSubsequentAcquire(t *testing.T) {
+	t.Parallel()
+
+	scope := mustRuntimeScopeRef(t, "leases-release-free")
+	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 1})
+	request := models.AcquireModelLeaseRequest{
+		Scope:  scope,
+		Name:   "local-model",
+		Holder: "worker-a",
 	}
+
+	first, err := service.AcquireModelLease(context.Background(), request)
+	if err != nil {
+		t.Fatalf("first AcquireModelLease: %v", err)
+	}
+	_, err = service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope:  request.Scope,
+		Name:   request.Name,
+		Holder: "worker-b",
+	})
+	if !errors.Is(err, models.ErrHostCapacityExhausted) {
+		t.Fatalf("second AcquireModelLease = %v, want ErrHostCapacityExhausted", err)
+	}
+
+	released, err := service.ReleaseModelLease(context.Background(), models.ReleaseModelLeaseRequest{
+		Scope: scope,
+		Lease: first.Lease.Lease,
+	})
+	if err != nil {
+		t.Fatalf("ReleaseModelLease: %v", err)
+	}
+	if released.Outcome != models.ModelLeaseReleased ||
+		released.Lease.Status != models.ModelLeaseStatusReleased {
+		t.Fatalf("ReleaseModelLease = %#v, want released lease", released)
+	}
+
+	third, err := service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope:  request.Scope,
+		Name:   request.Name,
+		Holder: "worker-c",
+	})
+	if err != nil {
+		t.Fatalf("AcquireModelLease after release: %v", err)
+	}
+	if third.Lease.Lease.IsZero() {
+		t.Fatal("expected lease after release freed capacity")
+	}
+}
+
+func TestReleaseModelLeaseRejectsUnknownAndAlreadyReleased(t *testing.T) {
+	t.Parallel()
+
+	scope := mustRuntimeScopeRef(t, "leases-release-not-found")
+	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 2})
+	unknown, err := (models.ModelLeaseRef{}).Parse("model-lease-unknown")
+	if err != nil {
+		t.Fatalf("parse lease ref: %v", err)
+	}
+	_, err = service.ReleaseModelLease(context.Background(), models.ReleaseModelLeaseRequest{
+		Scope: scope,
+		Lease: unknown,
+	})
+	if !errors.Is(err, models.ErrHostLeaseNotFound) {
+		t.Fatalf("ReleaseModelLease unknown = %v, want ErrHostLeaseNotFound", err)
+	}
+
+	acquired, err := service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope:  scope,
+		Name:   "local-model",
+		Holder: "worker-a",
+	})
+	if err != nil {
+		t.Fatalf("AcquireModelLease: %v", err)
+	}
+	_, err = service.ReleaseModelLease(context.Background(), models.ReleaseModelLeaseRequest{
+		Scope: scope,
+		Lease: acquired.Lease.Lease,
+	})
+	if err != nil {
+		t.Fatalf("first ReleaseModelLease: %v", err)
+	}
+	_, err = service.ReleaseModelLease(context.Background(), models.ReleaseModelLeaseRequest{
+		Scope: scope,
+		Lease: acquired.Lease.Lease,
+	})
+	if !errors.Is(err, models.ErrHostLeaseNotFound) {
+		t.Fatalf("ReleaseModelLease already released = %v, want ErrHostLeaseNotFound", err)
+	}
+}
+
+func TestAcquireModelLeaseHonoursCancelledContextWithoutConsumingCapacity(t *testing.T) {
+	t.Parallel()
+
+	scope := mustRuntimeScopeRef(t, "leases-acquire-cancel")
+	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 1})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := service.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{
+		Scope:  scope,
+		Name:   "local-model",
+		Holder: "worker-a",
+	})
+	if !errors.Is(err, models.ErrHostCancelled) {
+		t.Fatalf("AcquireModelLease cancelled = %v, want ErrHostCancelled", err)
+	}
+
+	acquired, err := service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope:  scope,
+		Name:   "local-model",
+		Holder: "worker-b",
+	})
+	if err != nil {
+		t.Fatalf("AcquireModelLease after cancel = %v, want success", err)
+	}
+	if acquired.Lease.Lease.IsZero() {
+		t.Fatal("cancelled acquire should not consume capacity")
+	}
+}
+
+func TestReleaseModelLeaseNotifiesCapacityCoordinator(t *testing.T) {
+	t.Parallel()
+
+	scope := mustRuntimeScopeRef(t, "leases-coordinator")
+	coordinator := &recordingSlotCapacityCoordinator{}
+	leasesSvc := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 1})
+	hostleases.BindCoordinator(leasesSvc, coordinator)
+
+	acquired, err := leasesSvc.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope:  scope,
+		Name:   "local-model",
+		Holder: "worker-a",
+	})
+	if err != nil {
+		t.Fatalf("AcquireModelLease: %v", err)
+	}
+	if coordinator.acquired != 1 || coordinator.released != 0 {
+		t.Fatalf("coordinator after acquire = (%d, %d), want (1, 0)",
+			coordinator.acquired, coordinator.released)
+	}
+
+	_, err = leasesSvc.ReleaseModelLease(context.Background(), models.ReleaseModelLeaseRequest{
+		Scope: scope,
+		Lease: acquired.Lease.Lease,
+	})
+	if err != nil {
+		t.Fatalf("ReleaseModelLease: %v", err)
+	}
+	if coordinator.acquired != 1 || coordinator.released != 1 {
+		t.Fatalf("coordinator after release = (%d, %d), want (1, 1)",
+			coordinator.acquired, coordinator.released)
+	}
+}
+
+type recordingSlotCapacityCoordinator struct {
+	acquired int
+	released int
+}
+
+func (coordinator *recordingSlotCapacityCoordinator) OnLeaseCapacityAcquired(
+	models.RuntimeScopeRef,
+	string,
+) {
+	coordinator.acquired++
+}
+
+func (coordinator *recordingSlotCapacityCoordinator) OnLeaseCapacityReleased(
+	models.RuntimeScopeRef,
+	string,
+) {
+	coordinator.released++
 }
 
 func TestOpenRuntimeScopeDoesNotConstructAnotherLeasesOwner(t *testing.T) {

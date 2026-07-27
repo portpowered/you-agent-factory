@@ -25,6 +25,26 @@ type SlotFactsProvider interface {
 	SlotFacts(context.Context, models.RuntimeScopeRef, string) (SlotFacts, error)
 }
 
+// SlotCapacityCoordinator notifies Runtime Host when nested lease capacity
+// holders change so idle-unload and holder-aware eviction stay coherent.
+type SlotCapacityCoordinator interface {
+	OnLeaseCapacityAcquired(models.RuntimeScopeRef, string)
+	OnLeaseCapacityReleased(models.RuntimeScopeRef, string)
+}
+
+// CoordinatorBindable leases owners accept a Runtime Host coordinator after
+// construction so wire can bind holder-aware cleanup without circular imports.
+type CoordinatorBindable interface {
+	BindSlotCapacityCoordinator(SlotCapacityCoordinator)
+}
+
+// BindCoordinator attaches holder-aware Runtime Host cleanup when supported.
+func BindCoordinator(leases Service, coordinator SlotCapacityCoordinator) {
+	if bindable, ok := leases.(CoordinatorBindable); ok {
+		bindable.BindSlotCapacityCoordinator(coordinator)
+	}
+}
+
 // UnconfiguredSlotFacts reports runtime-not-ready for every slot until Runtime
 // Host wires a live facts adapter during lease call-site cutover.
 type UnconfiguredSlotFacts struct{}

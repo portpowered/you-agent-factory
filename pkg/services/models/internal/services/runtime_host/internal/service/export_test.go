@@ -87,6 +87,45 @@ func NewWithHostTestConfig(
 	return s
 }
 
+// LeasesService returns the nested leases owner for focused integration tests.
+func LeasesService(s runtimehost.Service) hostleases.Service {
+	return s.(*service).leases
+}
+
+// NewWithLeasesFacts constructs a Runtime Host whose nested leases owner uses
+// the supplied slot facts and binds holder-aware cleanup to the host.
+func NewWithLeasesFacts(
+	scopes runtimescopes.Service,
+	assets scopedassets.Service,
+	processLauncher models.HostProcessLauncher,
+	hostHTTP models.HostHTTPDoer,
+	hostClock models.HostClock,
+	hostLogger models.HostDiagnosticLogger,
+	hostMetrics models.HostMetricsRecorder,
+	slotFacts hostleases.SlotFactsProvider,
+	policyCfg HostPolicyTestConfig,
+) runtimehost.Service {
+	leases, err := leaseswire.NewService(hostClock, slotFacts)
+	if err != nil {
+		panic(err)
+	}
+	s := New(
+		scopes,
+		assets,
+		leases,
+		processLauncher,
+		hostHTTP,
+		hostClock,
+		hostLogger,
+		hostMetrics,
+	).(*service)
+	s.idleUnloadAfter, s.maxLoadedRuntimes = normalizeHostPolicy(
+		policyCfg.IdleUnloadAfter,
+		policyCfg.MaxLoadedRuntimes,
+	)
+	return s
+}
+
 // AcquireSlotCapacity simulates one active capacity holder for idle-unload tests.
 func AcquireSlotCapacity(s runtimehost.Service, scope models.RuntimeScopeRef, modelName string) {
 	host := s.(*service)

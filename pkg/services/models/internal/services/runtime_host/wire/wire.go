@@ -45,7 +45,7 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
-	return internalservice.New(
+	host := internalservice.New(
 		scopes,
 		assets,
 		leases,
@@ -54,7 +54,8 @@ func NewService(
 		hostClock,
 		hostLogger,
 		hostMetrics,
-	), nil
+	)
+	return host, nil
 }
 
 func isNilDependency(value any) bool {
