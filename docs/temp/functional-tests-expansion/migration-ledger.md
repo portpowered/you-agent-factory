@@ -642,7 +642,10 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/transport/cli/commands/submit_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISubmitUnavailableServer | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
 | tests/functional/transport/submit/submit_test.go | you-agent-factory/tests/functional/transport/submit | TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
 | tests/functional/transport/submit/submit_test.go | you-agent-factory/tests/functional/transport/submit | TestSubmitFamilyExecutesThroughRootBuiltProcess | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
-| tests/functional/smoke/cli_work_move_smoke_test.go | you-agent-factory/tests/functional/smoke | TestWorkMove_RealCLIMovesSubmittedWork | short | tests/functional/transport/cli/commands/work_wiring_test.go | smoke | none | smoke-delete-04-transport-cli |
+| tests/functional/transport/cli/commands/work_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIWorkListAndShowReflectSubmittedWork | short | tests/functional/transport/cli/commands/work_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/work_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIWorkMoveChangesState | short | tests/functional/transport/cli/commands/work_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/work_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIWorkShowMissingReturnsNotFound | short | tests/functional/transport/cli/commands/work_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/work_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIWorkVisualizeProducesDeterministicGraph | short | tests/functional/transport/cli/commands/work_wiring_test.go | none | none | n/a |
 | tests/functional/smoke/config_driven_execution_test.go | you-agent-factory/tests/functional/smoke | TestConfigDrivenExecution_AddWorkType | short | tests/functional/factory/definitions/validation_test.go | smoke | none | smoke-delete-03-factory-definitions |
 | tests/functional/smoke/config_driven_execution_test.go | you-agent-factory/tests/functional/smoke | TestConfigDrivenExecution_GlobalConfigDrivesDefaultsAndWorkerPreset | short | tests/functional/factory/definitions/defaults_test.go | smoke | none | smoke-delete-03-factory-definitions |
 | tests/functional/smoke/guarded_loop_breaker_long_test.go | you-agent-factory/tests/functional/smoke | TestIntegrationSmoke_GuardedLoopBreakerRoutesOverLimitExampleWorkToFailed | functionallong | tests/functional/guards/global_test.go | smoke | none | smoke-delete-09-guards |
@@ -983,7 +986,7 @@ can execute independently until package ownership reaches zero.
 | --- | --- | ---: | --- | --- |
 | `smoke-delete-02-workstations-execution` | smoke | 4 | workstations/execution | released |
 | `smoke-delete-03-factory-definitions` | smoke | 3 | factory/definitions | none |
-| `smoke-delete-04-transport-cli` | smoke | 14 | transport/cli | none |
+| `smoke-delete-04-transport-cli` | smoke | 13 | transport/cli | none |
 | `smoke-delete-05-factory-packaged` | smoke | 12 | factory/packaged, work/routing | none |
 | `smoke-delete-06-factory-packaged-cross` | smoke | 6 | factory/packaged/cross | none |
 | `smoke-delete-07-sessions-controls` | smoke | 4 | sessions/controls | none |
@@ -1107,7 +1110,10 @@ Batch execution guidance for later move work:
 | tests/functional/transport/cli/commands/submit_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISubmitUnavailableServer | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
 | tests/functional/transport/submit/submit_test.go | you-agent-factory/tests/functional/transport/submit | TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
 | tests/functional/transport/submit/submit_test.go | you-agent-factory/tests/functional/transport/submit | TestSubmitFamilyExecutesThroughRootBuiltProcess | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
-| tests/functional/smoke/cli_work_move_smoke_test.go | you-agent-factory/tests/functional/smoke | TestWorkMove_RealCLIMovesSubmittedWork | short | tests/functional/transport/cli/commands/work_wiring_test.go | smoke | none | smoke-delete-04-transport-cli |
+| tests/functional/transport/cli/commands/work_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIWorkListAndShowReflectSubmittedWork | short | tests/functional/transport/cli/commands/work_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/work_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIWorkMoveChangesState | short | tests/functional/transport/cli/commands/work_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/work_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIWorkShowMissingReturnsNotFound | short | tests/functional/transport/cli/commands/work_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/work_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIWorkVisualizeProducesDeterministicGraph | short | tests/functional/transport/cli/commands/work_wiring_test.go | none | none | n/a |
 | tests/functional/smoke/config_driven_execution_test.go | you-agent-factory/tests/functional/smoke | TestConfigDrivenExecution_AddWorkType | short | tests/functional/factory/definitions/validation_test.go | smoke | none | smoke-delete-03-factory-definitions |
 | tests/functional/smoke/config_driven_execution_test.go | you-agent-factory/tests/functional/smoke | TestConfigDrivenExecution_GlobalConfigDrivesDefaultsAndWorkerPreset | short | tests/functional/factory/definitions/defaults_test.go | smoke | none | smoke-delete-03-factory-definitions |
 | tests/functional/smoke/guarded_loop_breaker_long_test.go | you-agent-factory/tests/functional/smoke | TestIntegrationSmoke_GuardedLoopBreakerRoutesOverLimitExampleWorkToFailed | functionallong | tests/functional/guards/global_test.go | smoke | none | smoke-delete-09-guards |
@@ -1686,7 +1692,7 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `runtime_api-delete-11-wrong-layer` | runtime_api | 2 | approved wrong-layer (unit / contract-smoke-outside-functional) | planned |
 | `smoke-delete-02-workstations-execution` | smoke | 4 | workstations/execution | released |
 | `smoke-delete-03-factory-definitions` | smoke | 3 | factory/definitions | planned |
-| `smoke-delete-04-transport-cli` | smoke | 14 | transport/cli | planned |
+| `smoke-delete-04-transport-cli` | smoke | 13 | transport/cli | planned |
 | `smoke-delete-05-factory-packaged` | smoke | 12 | factory/packaged, work/routing | planned |
 | `smoke-delete-06-factory-packaged-cross` | smoke | 6 | factory/packaged/cross | planned |
 | `smoke-delete-07-sessions-controls` | smoke | 4 | sessions/controls | planned |

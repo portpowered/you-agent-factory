@@ -126,6 +126,7 @@ func NewDurableExecution(
 	syncWaits factorysessionexecution.SyncWaitScheduler,
 	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
 	workflows factoryruntime.JavaScriptWorkflows,
+	orchestration factoryruntime.OrchestrationJavaScriptExecution,
 	workerPresetIDs map[string]struct{},
 	workerSettings factoryruntime.JavaScriptWorkerSettings,
 	recordingWriter recordings.PortableRecordingWriter,
@@ -139,7 +140,8 @@ func NewDurableExecution(
 	}
 	return durableexecutionwire.NewDurable(
 		projectRoot, persistencePolicy, stores, executor, clock, syncWaits,
-		checkpointSummaries, workflows, workerPresetIDs, workerSettings,
+		checkpointSummaries, workflows, orchestration, workflows,
+		workerPresetIDs, workerSettings,
 		recordingWriter, generateSessionID, liveChildInvocation, generateResponseEventID, responseStreams,
 	)
 }
@@ -157,13 +159,14 @@ func NewStandaloneExecution(
 	syncWaits factorysessionexecution.SyncWaitScheduler,
 	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
 	workflows factoryruntime.JavaScriptWorkflows,
+	orchestration factoryruntime.OrchestrationJavaScriptExecution,
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
 	fixtureFiles fileeffects.ContractFixtureReader,
 ) (factorysessions.ExecutionService, error) {
 	return durableexecutionwire.NewStandalone(
 		provider, projectRoot, stores, fixtureCatalogPath, childExecutorMode,
-		executor, clock, syncWaits, checkpointSummaries, workflows,
+		executor, clock, syncWaits, checkpointSummaries, workflows, orchestration, workflows,
 		recordingWriter, generateSessionID, fixtureFiles,
 	)
 }

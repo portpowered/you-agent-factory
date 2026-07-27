@@ -337,7 +337,7 @@ func NewJavaScriptExecutionService(
 	syncWaits SyncWaitScheduler,
 	checkpointSummaries factory.JavaScriptCheckpointSummaries,
 	workflowDefinitions factory.JavaScriptWorkflowDefinitions,
-	workflowRuntime factory.JavaScriptWorkflowRuntime,
+	orchestration factory.OrchestrationJavaScriptExecution,
 	childValues factory.JavaScriptChildValues,
 	workerPresetIDs map[string]struct{},
 	workerSettings factory.JavaScriptWorkerSettings,
@@ -363,8 +363,8 @@ func NewJavaScriptExecutionService(
 	if workflowDefinitions == nil {
 		return nil, NewValidationError("workflowDefinitions", "Factory Runtime JavaScript workflow definitions are required")
 	}
-	if workflowRuntime == nil {
-		return nil, NewValidationError("workflowRuntime", "Factory Runtime JavaScript workflow runtime is required")
+	if orchestration == nil {
+		return nil, NewValidationError("orchestration", "Factory Runtime orchestration JavaScript execution is required")
 	}
 	if childValues == nil {
 		return nil, NewValidationError("childValues", "Factory Runtime JavaScript child values are required")
@@ -386,7 +386,7 @@ func NewJavaScriptExecutionService(
 	return NewJavaScriptRuntimeService(
 		projectRoot, childExecutorMode, executor, persistence, clock, syncWaits,
 		checkpointSummaries,
-		workflowDefinitions, workflowRuntime, childValues,
+		workflowDefinitions, orchestration, childValues,
 		workerPresetIDs, workerSettings, recordingWriter,
 		generateSessionID,
 		liveChildInvocation,
