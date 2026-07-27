@@ -1024,12 +1024,7 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/providers/codex_content_test.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/providers/codex_worktree_workstation_test.go",
+      "filePath": "tests/functional/providers/doc.go",
       "target": "providers"
     },
     {

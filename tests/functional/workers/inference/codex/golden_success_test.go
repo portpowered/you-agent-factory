@@ -50,7 +50,6 @@ func TestCodexGoldenTextAndToolSuccess(t *testing.T) {
 		t,
 		replay.ResponseEvents,
 		replay.FactoryEvents,
-		replay.Loaded,
 		"Codex fixture answer COMPLETE",
 		"tool_fixture_1",
 	)
@@ -369,7 +368,6 @@ func assertCodexGoldenTextAndToolSuccess(
 	t *testing.T,
 	responseEvents []factoryapi.FactoryResponseEvent,
 	factoryEvents []factoryapi.FactoryEvent,
-	loaded support.ProviderSessionCase,
 	wantFinalText string,
 	wantToolCallID string,
 ) {
@@ -445,8 +443,31 @@ func assertCodexGoldenTextAndToolSuccess(
 	if !messageSuccess {
 		t.Fatalf("missing terminal text %q in public inference observation", wantFinalText)
 	}
-	if !goldenStdoutContainsToolLifecycle(loaded, wantToolCallID) {
-		t.Fatalf("replayed golden stdout missing tool lifecycle for %q", wantToolCallID)
+
+	var inferenceTranscript string
+	for _, event := range factoryEvents {
+		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+			continue
+		}
+		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		if err != nil {
+			continue
+		}
+		if payload.Outcome != factoryapi.InferenceOutcomeSucceeded || payload.Response == nil {
+			continue
+		}
+		inferenceTranscript = *payload.Response
+		break
+	}
+	if inferenceTranscript == "" {
+		t.Fatal("missing succeeded inference response transcript for tool lifecycle observation")
+	}
+	if !codexTranscriptContainsToolLifecycle(inferenceTranscript, wantToolCallID) {
+		t.Fatalf(
+			"public inference transcript missing tool lifecycle for %q; transcript=%q",
+			wantToolCallID,
+			inferenceTranscript,
+		)
 	}
 
 	dispatches := support.ObserveDispatchEvents(t, factoryEvents)
@@ -463,28 +484,53 @@ func goldenStdoutContainsToolLifecycle(loaded support.ProviderSessionCase, wantT
 	var started bool
 	var completed bool
 	for _, record := range loaded.Stdout.Records {
-		var envelope struct {
-			Type string `json:"type"`
-			Item struct {
-				ID     string `json:"id"`
-				Type   string `json:"type"`
-				Status string `json:"status"`
-			} `json:"item"`
-		}
-		if err := json.Unmarshal(record, &envelope); err != nil {
-			continue
-		}
-		if envelope.Item.ID != wantToolCallID || envelope.Item.Type != "mcp_tool_call" {
-			continue
-		}
-		switch envelope.Type {
-		case "item.started":
+		lineStarted, lineCompleted := codexTranscriptLineToolLifecycleState(record, wantToolCallID)
+		if lineStarted {
 			started = true
-		case "item.completed":
-			if envelope.Item.Status == "completed" {
-				completed = true
-			}
+		}
+		if lineCompleted {
+			completed = true
 		}
 	}
 	return started && completed
+}
+
+func codexTranscriptContainsToolLifecycle(transcript string, wantToolCallID string) bool {
+	var started bool
+	var completed bool
+	for _, line := range strings.Split(transcript, "\n") {
+		lineStarted, lineCompleted := codexTranscriptLineToolLifecycleState([]byte(line), wantToolCallID)
+		if lineStarted {
+			started = true
+		}
+		if lineCompleted {
+			completed = true
+		}
+	}
+	return started && completed
+}
+
+func codexTranscriptLineToolLifecycleState(line []byte, wantToolCallID string) (started bool, completed bool) {
+	var envelope struct {
+		Type string `json:"type"`
+		Item struct {
+			ID     string `json:"id"`
+			Type   string `json:"type"`
+			Status string `json:"status"`
+		} `json:"item"`
+	}
+	if err := json.Unmarshal(line, &envelope); err != nil {
+		return false, false
+	}
+	if envelope.Item.ID != wantToolCallID || envelope.Item.Type != "mcp_tool_call" {
+		return false, false
+	}
+	switch envelope.Type {
+	case "item.started":
+		return true, false
+	case "item.completed":
+		return false, envelope.Item.Status == "completed"
+	default:
+		return false, false
+	}
 }

@@ -260,7 +260,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Inference workers — golden-backed provider variants
 
-- [ ] `tests/functional/workers/inference/codex/golden_success_test.go`
+- [x] `tests/functional/workers/inference/codex/golden_success_test.go`
   - `TestCodexGoldenTextAndToolSuccess` replays `codex/message-tool-success`.
   - `TestCodexGoldenDerivesProviderSessionAndResponseEvents` compares all public
     metadata goldens.

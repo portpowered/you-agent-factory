@@ -532,7 +532,7 @@
     },
     {
       "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates"
+      "name": "TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates"
     },
     {
       "file": "providers/cli_template_resolution_long_test.go",
@@ -553,22 +553,6 @@
     {
       "file": "providers/cli_timeout_cleanup_smoke_test.go",
       "name": "TestIntegrationSmoke_TimeoutRequeuesWorkAndSucceedsOnLaterAttempt"
-    },
-    {
-      "file": "providers/codex/process_harness_test.go",
-      "name": "TestRootBuiltProcessExecutesThroughSharedSupport"
-    },
-    {
-      "file": "providers/codex_content_test.go",
-      "name": "TestCodexContentDispatch_MixedContentEmitsOrderedImageArgs"
-    },
-    {
-      "file": "providers/codex_content_test.go",
-      "name": "TestCodexContentDispatch_TextOnlyContentDoesNotEmitImageArgs"
-    },
-    {
-      "file": "providers/codex_worktree_workstation_test.go",
-      "name": "TestCodexWorktreeWorkstationDispatch_MaterializesCheckoutAndOmitsCLIWorktreeFlag"
     },
     {
       "file": "providers/mock_workers_agent_test.go",
@@ -1143,6 +1127,14 @@
       "name": "TestNormalizers_RejectEveryMissingRequiredScalarFact"
     },
     {
+      "file": "sessions/cli/resolved_session_family_test.go",
+      "name": "TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch"
+    },
+    {
+      "file": "sessions/cli/resolved_session_family_test.go",
+      "name": "TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition"
+    },
+    {
       "file": "smoke/archive_terminal_test.go",
       "name": "TestArchiveTerminal_MultipleTokensAllTerminate"
     },
@@ -1493,6 +1485,18 @@
     {
       "file": "smoke/verify_fast_command_smoke_test.go",
       "name": "TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers"
+    },
+    {
+      "file": "transport/submit/submit_test.go",
+      "name": "TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure"
+    },
+    {
+      "file": "transport/submit/submit_test.go",
+      "name": "TestSubmitFamilyExecutesThroughRootBuiltProcess"
+    },
+    {
+      "file": "work/cli/resolved_work_family_test.go",
+      "name": "TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs"
     },
     {
       "file": "work/visualization/dependency_graph_test.go",
