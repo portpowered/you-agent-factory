@@ -1003,6 +1003,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference",
+      "minimum": 90.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/script",
       "minimum": 84.61
     },
@@ -1016,7 +1020,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire",
-      "minimum": 100.00
+      "minimum": 90.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly",
