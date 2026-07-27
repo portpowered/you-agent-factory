@@ -15,8 +15,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// WorkFamilyComponents holds detached work-family commands before production
-// wiring attaches the generated work parent to the root.
+// WorkFamilyComponents holds detached work-family commands for the leased
+// production compatibility path.
+//
+// Deprecated: use NewResolvedWorkCommand. This shape remains only until the
+// root_work.go lease permits the production composition swap.
 type WorkFamilyComponents struct {
 	Work      *cobra.Command
 	List      *cobra.Command
@@ -25,8 +28,12 @@ type WorkFamilyComponents struct {
 	Visualize *cobra.Command
 }
 
-// WorkFamilyBindings supplies live variables for work-family local flags declared
-// in generated metadata.
+// WorkFamilyBindings supplies live variables for the leased production
+// compatibility path.
+//
+// Deprecated: use ResolvedWorkHandlers with NewResolvedWorkCommand. This live
+// pointer shape remains only until the root_work.go lease permits the
+// production composition swap.
 type WorkFamilyBindings struct {
 	ListConfig      *workcli.ListConfig
 	ShowConfig      *workcli.ShowConfig
@@ -37,9 +44,10 @@ type WorkFamilyBindings struct {
 	FlagUsages map[string]string
 }
 
-// NewWorkFamilyCommand builds the work you.work → list/show/move/visualize tree
-// from generated metadata and attaches handwritten handlers by stable command ID.
-// Only contracted work-family commands are constructed.
+// NewWorkFamilyCommand builds the leased production compatibility tree.
+//
+// Deprecated: use NewResolvedWorkCommand. The compatibility constructor
+// remains only for production root composition in root_work.go.
 func NewWorkFamilyCommand(registry *commandregistry.Registry, bindings WorkFamilyBindings) (*cobra.Command, error) {
 	components, err := NewWorkFamilyComponents(registry, bindings)
 	if err != nil {
@@ -49,8 +57,10 @@ func NewWorkFamilyCommand(registry *commandregistry.Registry, bindings WorkFamil
 	return components.Work, nil
 }
 
-// NewWorkFamilyComponents builds detached work-family commands so production
-// wiring can attach the generated work parent without rewriting unrelated roots.
+// NewWorkFamilyComponents builds detached commands for the leased production
+// compatibility path.
+//
+// Deprecated: use NewResolvedWorkCommand.
 func NewWorkFamilyComponents(registry *commandregistry.Registry, bindings WorkFamilyBindings) (WorkFamilyComponents, error) {
 	manifest, err := generated.WorkFamilyManifest()
 	if err != nil {
@@ -59,8 +69,10 @@ func NewWorkFamilyComponents(registry *commandregistry.Registry, bindings WorkFa
 	return NewWorkFamilyComponentsFromManifest(manifest, registry, bindings)
 }
 
-// NewWorkFamilyCommandFromManifest builds the work tree from one generated
-// manifest snapshot. Manifest command IDs must stay within the work family.
+// NewWorkFamilyCommandFromManifest builds the leased compatibility tree from
+// one generated manifest snapshot.
+//
+// Deprecated: use NewResolvedWorkCommandTreeFromManifest.
 func NewWorkFamilyCommandFromManifest(
 	manifest climanifest.Manifest,
 	registry *commandregistry.Registry,
@@ -74,8 +86,10 @@ func NewWorkFamilyCommandFromManifest(
 	return components.Work, nil
 }
 
-// NewWorkFamilyComponentsFromManifest builds detached work-family commands from
-// one generated manifest snapshot.
+// NewWorkFamilyComponentsFromManifest builds detached leased compatibility
+// commands from one generated manifest snapshot.
+//
+// Deprecated: use NewResolvedWorkCommandTreeFromManifest.
 func NewWorkFamilyComponentsFromManifest(
 	manifest climanifest.Manifest,
 	registry *commandregistry.Registry,
@@ -340,9 +354,9 @@ func workFlagUsage(bindings WorkFamilyBindings, longName string) string {
 	return bindings.FlagUsages[longName]
 }
 
-// NewResolvedWorkCommandTree builds an independently executable `you work`
-// tree through the generic manifest constructor. The tree contains no command
-// families besides Work.
+// NewResolvedWorkCommandTree is the canonical independently executable
+// `you work` constructor. It uses the generic manifest constructor and contains
+// no command families besides Work.
 func NewResolvedWorkCommandTree(
 	handlers commandregistry.ResolvedWorkHandlers,
 ) (*cobra.Command, error) {

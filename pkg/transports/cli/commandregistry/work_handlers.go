@@ -357,8 +357,10 @@ func (r *Registry) VerifyWorkRunnableCoverage(manifest climanifest.Manifest) err
 	return nil
 }
 
-// WorkHandlers carries handwritten RunE handlers for contracted runnable
-// work-family command IDs.
+// WorkHandlers carries handlers for the leased live-binding Work constructor.
+//
+// Deprecated: use ResolvedWorkHandlers. This compatibility shape remains only
+// until production root composition adopts NewResolvedWorkCommand.
 type WorkHandlers struct {
 	ListRunE      RunE
 	ShowRunE      RunE
@@ -366,8 +368,11 @@ type WorkHandlers struct {
 	VisualizeRunE RunE
 }
 
-// NewWorkRegistry registers handwritten handlers for the work family and
-// verifies contracted runnable command coverage.
+// NewWorkRegistry registers handlers for the leased live-binding Work
+// constructor and verifies contracted runnable command coverage.
+//
+// Deprecated: construct ResolvedWorkHandlers from ResolvedListRunE,
+// ResolvedShowRunE, ResolvedMoveRunE, and ResolvedVisualizeRunE.
 func NewWorkRegistry(handlers WorkHandlers) (*Registry, error) {
 	if handlers.ListRunE == nil {
 		return nil, fmt.Errorf("build work handler registry: list handler is required")

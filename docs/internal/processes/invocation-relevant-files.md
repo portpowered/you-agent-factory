@@ -989,22 +989,41 @@ response-stream output.
   `WorkFamilyCommandIDs` in `command_ids_gen.go`). Handwritten representative-family handlers are
   registered by stable command ID in `pkg/transports/cli/commandregistry`
   (`NewRepresentativeRegistry`, `SessionShowRunE`, `AttachRunE`,
-  `VerifyRepresentativeRunnableCoverage`; work-family:
-  `NewWorkRegistry`, `ListRunE`, `ShowRunE`, `MoveRunE`, `VisualizeRunE`,
-  `VerifyWorkRunnableCoverage`) and production wiring helpers
-  `newRepresentativeHandlerRegistry` and `newWorkHandlerRegistry` in
+  `VerifyRepresentativeRunnableCoverage`) and production wiring uses
+  `newRepresentativeHandlerRegistry` in
   `pkg/transports/cli/root_work.go`. The generated representative-family constructor
   lives in `pkg/transports/cli/climanifestcobra` (`NewRepresentativeFamilyCommand`,
   `NewRepresentativeFamilyComponents`, `NewRepresentativeFamilyCommandFromManifest`)
   and builds only `you` → `you session` → `you session show` from embedded generated
-  metadata plus registry-attached handwritten handlers. The generated work-family
-  constructor lives in the same package (`NewWorkFamilyCommand`,
-  `NewWorkFamilyComponents`, `NewWorkFamilyCommandFromManifest`) and builds
-  `you work` → `you work list|show|move|visualize` from embedded generated metadata
-  plus registry-attached handwritten handlers. Production root construction is
-  generated-only through `newRootCommandWithGeneratedRepresentativeFamily`;
-  deprecated handwritten command trees and constructor-parity interfaces have
-  been removed. `WorkFamilyBindings.FlagUsages` supplies local flag help text.
+  metadata plus registry-attached handwritten handlers.
+- The canonical detached Work-family seam is
+  `climanifestcobra.NewResolvedWorkCommand`; focused execution can use
+  `NewResolvedWorkCommandTree` or
+  `NewResolvedWorkCommandTreeFromManifest`. The generic manifest-to-Cobra
+  constructor owns public flags, positional arguments, aliases, defaults,
+  cardinality, and stable handler attachment. `commandregistry.ResolvedWorkHandlers`
+  supplies `ResolvedListRunE`, `ResolvedShowRunE`, `ResolvedMoveRunE`, and
+  `ResolvedVisualizeRunE`; each adapter reads invocation-local
+  `resolvedinput.Inputs` and creates one fresh `work.ListConfig`,
+  `work.ShowConfig`, `work.MoveConfig`, or `work.VisualizeConfig`. Do not add
+  Work-specific flag registration, argument validation, live config pointers,
+  or RunE binding structs to this canonical path.
+- `pkg/transports/cli/root_work.go` remains on the explicitly deprecated
+  `NewWorkFamilyCommand` / `NewWorkRegistry` compatibility path while its
+  composition lease is active. The exact post-lease integration is: replace
+  `productionWorkCommand` and `newWorkHandlerRegistry` composition with
+  `climanifestcobra.NewResolvedWorkCommand` plus a
+  `commandregistry.ResolvedWorkHandlers` value built from the four resolved
+  adapters; run root-level CLI parity and `root.BuildProcess` tests; then delete
+  `newWorkFamilyBindings`, `workFamilyFlagUsages`, the legacy Work registry and
+  live-binding constructor path (`WorkFamilyBindings`, `WorkFamilyComponents`,
+  `NewWorkFamilyCommand*`, and `NewWorkFamilyComponents*`), and any superseded
+  handwritten Work constructors. Do not perform only part of this deletion
+  before the root swap because the current production command still consumes
+  those compatibility symbols.
+- Production root construction is generated-only through
+  `newRootCommandWithGeneratedRepresentativeFamily`; deprecated handwritten
+  command trees and constructor-parity interfaces have been removed.
 - Whole-production CLI closure is checked by `pkg/transports/cli/clicontract`
   and exposed through `cmd/clicontractsmoke` / `make cli-contract-smoke`.
   The same behavioral smoke is part of `make cli-manifest-check` and compares
