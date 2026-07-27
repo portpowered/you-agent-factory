@@ -303,14 +303,6 @@
       "name": "TestBareRootPrintsConciseHelpWithoutProductEffects"
     },
     {
-      "file": "cli/session/session_enumeration_test.go",
-      "name": "TestSessionEnumeration"
-    },
-    {
-      "file": "cli/session/session_enumeration_test.go",
-      "name": "TestSessionEnumerationJSON"
-    },
-    {
       "file": "cli/session_resume/resume_non_regression_test.go",
       "name": "TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadSemantics"
     },

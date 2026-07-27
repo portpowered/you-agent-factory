@@ -274,8 +274,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/cli/named_invocation/named_invocation_test.go | you-agent-factory/tests/functional/cli/named_invocation | TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer | short | tests/functional/factory/packaged/goal/invocation_test.go | none | none | n/a |
 | tests/functional/cli/named_invocation/named_invocation_test.go | you-agent-factory/tests/functional/cli/named_invocation | TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer | short | tests/functional/factory/packaged/subagent/invocation_test.go | none | none | n/a |
 | tests/functional/cli/root_discovery/root_discovery_test.go | you-agent-factory/tests/functional/cli/root_discovery | TestBareRootPrintsConciseHelpWithoutProductEffects | short | tests/functional/transport/cli/process/help_and_version_test.go | none | none | n/a |
-| tests/functional/cli/session/session_enumeration_test.go | you-agent-factory/tests/functional/cli/session | TestSessionEnumeration | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
-| tests/functional/cli/session/session_enumeration_test.go | you-agent-factory/tests/functional/cli/session | TestSessionEnumerationJSON | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
 | tests/functional/sessions/cli/resolved_session_family_test.go | you-agent-factory/tests/functional/sessions/cli | TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
 | tests/functional/sessions/cli/resolved_session_family_test.go | you-agent-factory/tests/functional/sessions/cli | TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
 | tests/functional/cli/session_resume/resume_non_regression_test.go | you-agent-factory/tests/functional/cli/session_resume | TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadSemantics | short | tests/functional/sessions/restart/logical_identity_test.go | none | none | n/a |
@@ -627,6 +625,9 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryInitValidateAndQuery | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryFlattenExpandPreservesMeaning | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryReplaceCurrentChangesSessionFactory | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/session_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISessionCreateListShowDelete | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/session_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISessionMissingIDReturnsNotFound | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/session_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISessionPauseBuffersAndResumeDispatches | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/submit_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISubmitBackendErrorPreservesPublicMessage | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/submit_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISubmitBatchFile | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/submit_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISubmitBatchInlineJSON | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
@@ -1106,6 +1107,9 @@ Batch execution guidance for later move work:
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryInitValidateAndQuery | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryFlattenExpandPreservesMeaning | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/factory_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIFactoryReplaceCurrentChangesSessionFactory | short | tests/functional/transport/cli/commands/factory_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/session_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISessionCreateListShowDelete | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/session_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISessionMissingIDReturnsNotFound | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
+| tests/functional/transport/cli/commands/session_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISessionPauseBuffersAndResumeDispatches | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/submit_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISubmitBackendErrorPreservesPublicMessage | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/submit_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISubmitBatchFile | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/submit_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLISubmitBatchInlineJSON | short | tests/functional/transport/cli/commands/submit_wiring_test.go | none | none | n/a |
@@ -1438,14 +1442,14 @@ exceptions; they do not use deletion-only batch ids (`deletion_only_batch` = `n/
 | package | scenarios | checklist destinations | wrong-layer | specialty Make bindings |
 | --- | ---: | ---: | ---: | --- |
 | `acceptance` | 16 | 13 | 3 | `test-built-cli-acceptance` (13 customer scenarios; harness rows wrong-layer) |
-| `cli` | 56 | 31 | 25 | none |
+| `cli` | 53 | 31 | 25 | none |
 | `config_init` | 8 | 8 | 0 | none |
 | `models` | 1 | 1 | 0 | none |
 | `operator_settings` | 1 | 0 | 1 | none |
 | `providers` | 46 | 46 | 0 | `script-timeout-companion-smoke-100` (1 scenario) |
 | `sessionparity` | 13 | 0 | 13 | none |
 | `work` | 1 | 0 | 1 | none |
-| **Total** | **142** | **99** | **43** | |
+| **Total** | **139** | **99** | **43** | |
 
 ### Domain move plan
 
@@ -1538,8 +1542,6 @@ exceptions; they do not use deletion-only batch ids (`deletion_only_batch` = `n/
 | tests/functional/cli/named_invocation/named_invocation_test.go | you-agent-factory/tests/functional/cli/named_invocation | TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer | short | tests/functional/factory/packaged/goal/invocation_test.go | none | none | n/a |
 | tests/functional/cli/named_invocation/named_invocation_test.go | you-agent-factory/tests/functional/cli/named_invocation | TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer | short | tests/functional/factory/packaged/subagent/invocation_test.go | none | none | n/a |
 | tests/functional/cli/root_discovery/root_discovery_test.go | you-agent-factory/tests/functional/cli/root_discovery | TestBareRootPrintsConciseHelpWithoutProductEffects | short | tests/functional/transport/cli/process/help_and_version_test.go | none | none | n/a |
-| tests/functional/cli/session/session_enumeration_test.go | you-agent-factory/tests/functional/cli/session | TestSessionEnumeration | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
-| tests/functional/cli/session/session_enumeration_test.go | you-agent-factory/tests/functional/cli/session | TestSessionEnumerationJSON | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
 | tests/functional/sessions/cli/resolved_session_family_test.go | you-agent-factory/tests/functional/sessions/cli | TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
 | tests/functional/sessions/cli/resolved_session_family_test.go | you-agent-factory/tests/functional/sessions/cli | TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition | short | tests/functional/transport/cli/commands/session_wiring_test.go | none | none | n/a |
 | tests/functional/cli/session_resume/resume_non_regression_test.go | you-agent-factory/tests/functional/cli/session_resume | TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadSemantics | short | tests/functional/sessions/restart/logical_identity_test.go | none | none | n/a |
