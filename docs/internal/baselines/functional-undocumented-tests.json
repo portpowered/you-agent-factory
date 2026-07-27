@@ -1075,14 +1075,6 @@
       "name": "TestNormalizers_RejectEveryMissingRequiredScalarFact"
     },
     {
-      "file": "sessions/cli/resolved_session_family_test.go",
-      "name": "TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch"
-    },
-    {
-      "file": "sessions/cli/resolved_session_family_test.go",
-      "name": "TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition"
-    },
-    {
       "file": "smoke/archive_terminal_test.go",
       "name": "TestArchiveTerminal_MultipleTokensAllTerminate"
     },
@@ -1415,18 +1407,6 @@
       "name": "TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers"
     },
     {
-      "file": "transport/submit/submit_test.go",
-      "name": "TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure"
-    },
-    {
-      "file": "transport/submit/submit_test.go",
-      "name": "TestSubmitFamilyExecutesThroughRootBuiltProcess"
-    },
-    {
-      "file": "work/cli/resolved_work_family_test.go",
-      "name": "TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs"
-    },
-    {
       "file": "work/visualization/dependency_graph_test.go",
       "name": "TestDependencyGraphVisualization_RendersCompleteEscapedFlowchart"
     },
@@ -1529,7 +1509,6 @@
     {
       "file": "workflow/review_retry_exhaustion_long_test.go",
       "name": "TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries"
-    },
     }
   ]
 }
