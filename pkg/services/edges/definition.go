@@ -26,11 +26,10 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
-	hostedworkers "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic"
-	hostedlinear "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear"
 )
 
 // Edges aggregates replaceable external-effect ports for process construction
@@ -44,11 +43,11 @@ type Edges struct {
 	ProviderCommandRunner                           platformprocess.CommandRunner
 	AgyPTYHost                                      platformpty.Host
 	AgyPTYClock                                     platformclock.Source
-	HostedHTTPClient                                hostedlinear.HTTPDoer
+	HostedHTTPClient                                automations.HostedLinearHTTPDoer
 	HostedLinearEndpoint                            string
-	HostedSecretResolver                            hostedlinear.SecretResolver
-	HostedLinearCheckpointStore                     hostedlinear.CheckpointStore
-	HostedClock                                     hostedworkers.Clock
+	HostedSecretResolver                            automations.HostedLinearSecretResolver
+	HostedLinearCheckpointStore                     automations.HostedLinearCheckpointStore
+	HostedClock                                     automations.HostedLinearClock
 	ModelAssetHTTPClient                            models.AssetHTTPDoer
 	ModelAssetEndpoints                             models.RuntimeAssetEndpoints
 	ModelAssetHostPlatform                          models.AssetHostPlatform

@@ -1,4 +1,4 @@
-package hostedworkers
+package service
 
 import (
 	"context"
@@ -6,14 +6,11 @@ import (
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
+	hostedlinear "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
-	hostedlinear "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear"
 	"go.uber.org/zap"
 )
-
-// Clock is the exact time effect used by hosted poller supervision.
-type Clock = workers.HostedPollerClock
 
 // Submitter submits normalized hosted-poller work requests into factory ingress.
 type Submitter func(context.Context, work.WorkRequest) error
@@ -21,7 +18,7 @@ type Submitter func(context.Context, work.WorkRequest) error
 // LinearPoller is a validated hosted Linear component ready for supervision.
 type LinearPoller struct {
 	logger         *zap.Logger
-	clock          Clock
+	clock          hostedsources.Clock
 	httpClient     hostedlinear.HTTPDoer
 	secretResolver hostedlinear.SecretResolver
 	checkpoints    hostedlinear.CheckpointStore
@@ -36,7 +33,7 @@ type LinearPoller struct {
 // defaults before any poller goroutine is started.
 func NewLinearPoller(
 	logger *zap.Logger,
-	clock Clock,
+	clock hostedsources.Clock,
 	httpClient hostedlinear.HTTPDoer,
 	secretResolver hostedlinear.SecretResolver,
 	checkpoints hostedlinear.CheckpointStore,

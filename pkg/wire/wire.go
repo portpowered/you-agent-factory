@@ -178,7 +178,7 @@ var servicesSet = wire.NewSet(
 	provideWorkersRuntimeFactory,
 	provideWorkersRuntimeExecutorsFactory,
 	provideWorkersMockCommandRunnerFactory,
-	provideWorkerHostedPollersFactory,
+	provideAutomationHostedSourcesFactory,
 	provideWorkersLocalRuntimeHooksFactory,
 	provideWorkerCommandRunnerAdapter,
 	provideFactoryDefinitionsFactory,

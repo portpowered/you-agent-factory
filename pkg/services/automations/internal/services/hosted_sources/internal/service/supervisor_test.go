@@ -1,4 +1,4 @@
-package hostedworkers
+package service
 
 import (
 	"context"
@@ -17,9 +17,9 @@ import (
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	hostedlinear "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	hostedlinear "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -303,7 +303,7 @@ func TestNewLinearPoller_RequiresExternalEffects(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name        string
-		clock       Clock
+		clock       clockwork.Clock
 		client      hostedlinear.HTTPDoer
 		resolver    hostedlinear.SecretResolver
 		checkpoints hostedlinear.CheckpointStore

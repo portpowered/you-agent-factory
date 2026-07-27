@@ -67,6 +67,10 @@
     "pkg/services/automations/internal/services/cron",
     "pkg/services/automations/internal/services/cron/internal/service",
     "pkg/services/automations/internal/services/cron/wire",
+    "pkg/services/automations/internal/services/hosted_sources",
+    "pkg/services/automations/internal/services/hosted_sources/internal/linear",
+    "pkg/services/automations/internal/services/hosted_sources/internal/service",
+    "pkg/services/automations/internal/services/hosted_sources/wire",
     "pkg/services/automations/internal/services/reconciliation",
     "pkg/services/automations/internal/services/reconciliation/internal/service",
     "pkg/services/automations/internal/services/reconciliation/wire",
@@ -106,8 +110,8 @@
     "pkg/services/factory_definitions/runtimeconfig",
     "pkg/services/factory_definitions/service",
     "pkg/services/factory_definitions/snapshotcapture",
-    "pkg/services/factory_definitions/ttsobservability",
     "pkg/services/factory_definitions/transports/cli",
+    "pkg/services/factory_definitions/ttsobservability",
     "pkg/services/factory_definitions/validation",
     "pkg/services/factory_definitions/wire/defaultscaffold",
     "pkg/services/factory_definitions/workers",
@@ -258,12 +262,16 @@
     "pkg/services/recordings/events",
     "pkg/services/recordings/events/kinds",
     "pkg/services/recordings/events/snapshot",
+    "pkg/services/recordings/internal/canonical",
     "pkg/services/recordings/internal/services/projection_query",
     "pkg/services/recordings/internal/services/projection_query/internal/service",
     "pkg/services/recordings/internal/services/projection_query/wire",
     "pkg/services/recordings/internal/services/recording_lifecycle",
     "pkg/services/recordings/internal/services/recording_lifecycle/internal/service",
     "pkg/services/recordings/internal/services/recording_lifecycle/wire",
+    "pkg/services/recordings/internal/services/replay",
+    "pkg/services/recordings/internal/services/replay/internal/service",
+    "pkg/services/recordings/internal/services/replay/wire",
     "pkg/services/recordings/projections",
     "pkg/services/recordings/projections/dashboard",
     "pkg/services/recordings/replay",
@@ -320,8 +328,6 @@
     "pkg/services/workers/provider/structured",
     "pkg/services/workers/runner",
     "pkg/services/workers/service",
-    "pkg/services/workers/services/hosted_logic",
-    "pkg/services/workers/services/hosted_logic/linear",
     "pkg/services/workers/services/inference",
     "pkg/services/workers/services/testing",
     "pkg/services/workers/skippermissions",
@@ -533,6 +539,26 @@
       "destination": "automations/internal/services/cron"
     },
     {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources",
+      "disposition": "retain",
+      "destination": "automations/internal/services/hosted_sources"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources/internal/linear",
+      "disposition": "retain",
+      "destination": "automations/internal/services/hosted_sources"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources/internal/service",
+      "disposition": "retain",
+      "destination": "automations/internal/services/hosted_sources"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/hosted_sources/wire",
+      "disposition": "retain",
+      "destination": "automations/internal/services/hosted_sources"
+    },
+    {
       "packagePath": "pkg/services/automations/internal/services/reconciliation",
       "disposition": "retain",
       "destination": "automations/internal/services/reconciliation"
@@ -728,12 +754,12 @@
       "destination": "factory_definitions"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/ttsobservability",
+      "packagePath": "pkg/services/factory_definitions/transports/cli",
       "disposition": "retain",
       "destination": "factory_definitions"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/transports/cli",
+      "packagePath": "pkg/services/factory_definitions/ttsobservability",
       "disposition": "retain",
       "destination": "factory_definitions"
     },
@@ -1455,7 +1481,7 @@
     {
       "packagePath": "pkg/services/providers/internal/testutil/execution",
       "disposition": "retain",
-      "destination": "providers/internal/services/execution"
+      "destination": "providers"
     },
     {
       "packagePath": "pkg/services/providers/wire",
@@ -1488,6 +1514,11 @@
       "destination": "recordings/internal/services/canonical_ledger"
     },
     {
+      "packagePath": "pkg/services/recordings/internal/canonical",
+      "disposition": "retain",
+      "destination": "recordings"
+    },
+    {
       "packagePath": "pkg/services/recordings/internal/services/projection_query",
       "disposition": "retain",
       "destination": "recordings/internal/services/projection_query"
@@ -1516,6 +1547,21 @@
       "packagePath": "pkg/services/recordings/internal/services/recording_lifecycle/wire",
       "disposition": "retain",
       "destination": "recordings/internal/services/recording_lifecycle"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/replay",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/replay"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/replay/internal/service",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/replay"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/replay/wire",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/replay"
     },
     {
       "packagePath": "pkg/services/recordings/projections",
@@ -1796,16 +1842,6 @@
       "packagePath": "pkg/services/workers/service",
       "disposition": "retain",
       "destination": "workers"
-    },
-    {
-      "packagePath": "pkg/services/workers/services/hosted_logic",
-      "disposition": "move",
-      "destination": "workers/internal/services/runners"
-    },
-    {
-      "packagePath": "pkg/services/workers/services/hosted_logic/linear",
-      "disposition": "move",
-      "destination": "workers/internal/services/runners"
     },
     {
       "packagePath": "pkg/services/workers/services/inference",

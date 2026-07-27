@@ -1,4 +1,4 @@
-package hostedlinear
+package linear
 
 import (
 	"context"

@@ -51,9 +51,9 @@ func canonicalProviderIdentifier(value string) bool {
 }
 
 // HostedPollerClock, HostedPollerHTTPDoer, and HostedPollerSecretResolver are
-// the Workers-owned external-effect contracts used to construct hosted worker
+// the external-effect contracts used to construct Automation Hosted Sources
 // pollers. Cross-service consumers name these root contracts instead of
-// importing Workers implementation packages.
+// importing Automations hosted_sources implementation packages.
 type HostedPollerClock interface {
 	After(time.Duration) <-chan time.Time
 }

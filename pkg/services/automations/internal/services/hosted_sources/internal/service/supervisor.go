@@ -1,4 +1,4 @@
-package hostedworkers
+package service
 
 import (
 	"context"
@@ -9,7 +9,8 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	hostedlinear "github.com/portpowered/infinite-you/pkg/services/workers/services/hosted_logic/linear"
+	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
+	hostedlinear "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear"
 	"go.uber.org/zap"
 )
 
@@ -24,7 +25,7 @@ func StartLinearPoller(
 	ctx context.Context,
 	sidecars *sync.WaitGroup,
 	logger *zap.Logger,
-	clock Clock,
+	clock hostedsources.Clock,
 	httpClient hostedlinear.HTTPDoer,
 	secretResolver hostedlinear.SecretResolver,
 	checkpoints hostedlinear.CheckpointStore,
