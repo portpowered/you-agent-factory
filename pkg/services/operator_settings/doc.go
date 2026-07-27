@@ -5,6 +5,8 @@
 //     effective-resolution slices publish additively on this interface)
 //   - Document, DocumentDefaults, and related values — Operator-Settings-owned
 //     document vocabulary
+//   - EffectiveSelection, EffectiveOverrideFacts, and related values —
+//     Operator-Settings-owned effective-resolution vocabulary
 //   - detached request, result, value, and typed-error contracts
 //
 // Construction/process-edge ports (FileSystem, ConfigDecoder, ConfigEncoder, and
