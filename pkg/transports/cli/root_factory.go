@@ -108,11 +108,13 @@ func productionFactoryConfigInitCommands(
 	if err != nil {
 		panic(fmt.Sprintf("build factory/config/init family commands: %v", err))
 	}
-	if err := cobracompletion.RegisterPackagedFactoryNames(
-		components.Init,
-		options.completePackagedFactoryNames,
-	); err != nil {
-		panic(fmt.Sprintf("register packaged factory init completion: %v", err))
+	if options.completePackagedFactoryNames != nil {
+		if err := cobracompletion.RegisterPackagedFactoryNames(
+			components.Init,
+			options.completePackagedFactoryNames,
+		); err != nil {
+			panic(fmt.Sprintf("register packaged factory init completion: %v", err))
+		}
 	}
 	return factoryConfigInitProductionCommands{
 		Factory: components.Factory,

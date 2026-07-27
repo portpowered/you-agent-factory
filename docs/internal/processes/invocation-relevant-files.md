@@ -772,7 +772,15 @@ response-stream output.
   enters through the same handler when `you.init.flag.package` is supplied,
   delegating to `pkg/services/factory_definitions/transports/cli` and the shared
   `InstallPackagedFactory` operation. The initsetup adapter owns
-  home-to-config-path translation, prompt rendering, and human output. Enable
+  home-to-config-path translation, prompt rendering, and human output. Product
+  portability evidence for init-materialized packaged Factories belongs in
+  `tests/functional/product/packaged_factory_portability`: initialize through
+  `you init --package`, assert restored split-layout assets and portable paths,
+  then invoke from an unrelated working directory outside the repository.
+  Functional API-server fixtures that materialize YAML/YML authored roots must
+  set `support.FunctionalAPIServerConfig.FactoryConfigPath` instead of relying
+  on `--dir`, because `--factory` and `--dir` are mutually exclusive at the CLI
+  boundary. Enable
   prompts only from the invocation-local stdin/stdout TTY classifications on
   the process context, pass Cobra's invocation-local input/output streams, and
   preserve cancellation from that same context; do not inspect host streams in

@@ -26,6 +26,7 @@ import (
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	modelcontract "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
@@ -424,6 +425,16 @@ func withTestInjectedPlatformRoles(factory CommandFactory) CommandFactory {
 	}
 	factory.runDirectoryCreator = testRunDirectoryCreator{}
 	factory.browserOpener = func(context.Context, string) error { return nil }
+	if factory.completePackagedFactoryNames == nil {
+		factory.completePackagedFactoryNames = func(context.Context, string) ([]cobra.Completion, cobra.ShellCompDirective) {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+	}
+	if factory.InstallPackagedFactory == nil {
+		factory.InstallPackagedFactory = func(factorydefinitionscli.InstallPackagedFactoryConfig) error {
+			return errors.New("install packaged factory test operation is not configured")
+		}
+	}
 	return factory
 }
 
