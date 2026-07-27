@@ -286,6 +286,55 @@ async function verifyJSONArtifactSemantics({
 		await requireManifest(document, packageRoot, specifier);
 		return;
 	}
+	if (specifier.endsWith("/cli")) {
+		const manifest = requireObject(
+			document,
+			`[api-package-consumer] export is not a CLI command manifest: ${specifier}`,
+		);
+		const root = manifest.commands?.you;
+		const run = manifest.commands?.["you.run"];
+		if (
+			manifest.formatVersion !== "1.0.0" ||
+			manifest.rootPath !== "you" ||
+			typeof run?.handler?.id !== "string" ||
+			typeof run?.flags !== "object" ||
+			!Object.values(root?.flags ?? {}).some(
+				(input) =>
+					typeof input?.handlerBindingId === "string" &&
+					typeof input?.completion === "string",
+			) ||
+			!Object.values(run.flags).some(
+				(input) =>
+					typeof input?.id === "string" &&
+					typeof input?.completion === "string" &&
+					(Object.hasOwn(input, "defaultValue") ||
+						Object.hasOwn(input, "default")),
+			)
+		) {
+			throw new Error(
+				`[api-package-consumer] CLI command manifest is incomplete: ${specifier}`,
+			);
+		}
+		return;
+	}
+	if (specifier.endsWith("/schemas/cli-command-manifest")) {
+		const schema = requireObject(
+			document,
+			`[api-package-consumer] export is not a CLI command JSON Schema: ${specifier}`,
+		);
+		if (
+			schema.$schema !== "https://json-schema.org/draft/2020-12/schema" ||
+			schema.$id !==
+				"https://schemas.portpowered.com/you/contracts/cli/command-manifest.schema.json" ||
+			schema.properties?.formatVersion?.const !== "1.0.0" ||
+			typeof schema.$defs?.command !== "object"
+		) {
+			throw new Error(
+				`[api-package-consumer] CLI command JSON Schema is incomplete: ${specifier}`,
+			);
+		}
+		return;
+	}
 	if (specifier.endsWith("/schemas/you-config")) {
 		const schema = requireConfigurationSchema(
 			document,
@@ -307,7 +356,9 @@ async function verifyJSONArtifactSemantics({
 		);
 		if (
 			!schema.required?.includes("name") ||
-			Object.keys(schema.$defs ?? {}).length === 0
+			Object.keys(schema.$defs ?? {}).length === 0 ||
+			typeof schema.properties?.invocationSignature !== "object" ||
+			typeof schema.$defs?.FactoryInvocationSignature !== "object"
 		) {
 			throw new Error(
 				`[api-package-consumer] Factory schema is incomplete: ${specifier}`,

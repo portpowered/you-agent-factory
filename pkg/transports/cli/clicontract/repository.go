@@ -14,6 +14,7 @@ import (
 )
 
 const CompatibilityInventoryPath = "contracts/cli/deprecated.json"
+const PublishedManifestPath = "packages/api/generated/cli/commands.json"
 
 // DeliberateViolation identifies a smoke-only corruption applied to immutable
 // contract snapshots. It proves diagnostics without executing commands or
@@ -91,11 +92,19 @@ func loadProductionInput(
 	if err != nil {
 		return Input{}, err
 	}
+	published, err := climanifest.LoadProduction(
+		store,
+		filepath.Join(repositoryRoot, filepath.FromSlash(PublishedManifestPath)),
+	)
+	if err != nil {
+		return Input{}, fmt.Errorf("load published CLI command manifest: %w", err)
+	}
 	return Input{
 		Production: production, ProductionInputs: productionInputs,
 		Canonical: canonical, Compatibility: compatibility,
 		ApprovedCompatibility: approved, GeneratedCanonical: canonicalGenerated,
 		GeneratedCompatibility: compatibilityGenerated,
+		PublishedCanonical:     published,
 	}, nil
 }
 

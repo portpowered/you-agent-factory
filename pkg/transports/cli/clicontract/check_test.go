@@ -282,6 +282,35 @@ func TestValidateRejectsStaleGeneratedMetadataFields(t *testing.T) {
 	}
 }
 
+func TestValidatePublishedSemanticParityToleratesUnpromisedSetOrdering(t *testing.T) {
+	input := productionInput(t)
+	command := input.PublishedCanonical.Commands["you"]
+	reverseStrings(command.Documentation.Examples)
+	reverseStrings(command.Channels.Input)
+	reverseStrings(command.Constraints.Platforms)
+	command.Flags = cloneFlags(command.Flags)
+	debug := command.Flags["you.flag.debug"]
+	reverseStrings(debug.AcceptedSources)
+	command.Flags[debug.ID] = debug
+	input.PublishedCanonical.Commands["you"] = command
+
+	if findings := Validate(input); len(findings) != 0 {
+		t.Fatalf("presentation-only ordering produced findings:\n%s", formatFindings(findings))
+	}
+}
+
+func TestValidateRejectsPublishedBehaviorDrift(t *testing.T) {
+	input := productionInput(t)
+	command := input.PublishedCanonical.Commands["you.run"]
+	handler := *command.Handler
+	handler.ID = "you.run.stale-handler"
+	command.Handler = &handler
+	input.PublishedCanonical.Commands["you.run"] = command
+
+	findings := Validate(input)
+	assertFinding(t, findings, KindPublishedDrift, "you.run", "you run", "handler")
+}
+
 func TestValidateRejectsMissingRunnableHandlerDeterministically(t *testing.T) {
 	input := productionInput(t)
 	for index := range input.Production.Commands {
@@ -296,6 +325,12 @@ func TestValidateRejectsMissingRunnableHandlerDeterministically(t *testing.T) {
 		t.Fatalf("repeated findings differ:\nfirst:  %#v\nsecond: %#v", first, second)
 	}
 	assertFinding(t, first, KindMissingHandler, "you.run", "you run", "handler")
+}
+
+func reverseStrings(values []string) {
+	for left, right := 0, len(values)-1; left < right; left, right = left+1, right-1 {
+		values[left], values[right] = values[right], values[left]
+	}
 }
 
 func productionInput(t *testing.T) Input {
@@ -319,11 +354,16 @@ func productionInput(t *testing.T) Input {
 	if err != nil {
 		t.Fatalf("loadGeneratedManifests() error = %v", err)
 	}
+	published, err := climanifest.LoadProduction(testSourceStore(), filepath.Join(root, filepath.FromSlash(PublishedManifestPath)))
+	if err != nil {
+		t.Fatalf("load published CLI manifest error = %v", err)
+	}
 	return Input{
 		Production: production, ProductionInputs: productionInputs,
 		Canonical: cloneManifest(canonical), Compatibility: cloneManifest(compatibility),
 		ApprovedCompatibility: approved, GeneratedCanonical: cloneManifests(canonicalGenerated),
 		GeneratedCompatibility: cloneManifests(compatibilityGenerated),
+		PublishedCanonical:     cloneManifest(published),
 	}
 }
 

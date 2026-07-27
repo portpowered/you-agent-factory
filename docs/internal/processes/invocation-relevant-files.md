@@ -1816,11 +1816,14 @@ response-stream output.
   (Examples, Long text, or related inventory fields), refresh
   `contracts/testdata/baseline/cli-commands.json` with
   `UPDATE_CLI_BASELINES=1 go test ./pkg/transports/cli/commandidentity -run TestWriteProductionInventoryBaseline`,
-  then restage the packaged projection with `make contracts-generate` /
-  `make contracts-check` so `packages/api/generated/cli/commands.json` and the
-  package manifest stay byte-aligned. Prove with
-  `TestWalk_ProductionInventoryMatchesCommittedBaseline`. Do not hand-edit the
-  staged package copy out of band.
+  and prove it with `TestWalk_ProductionInventoryMatchesCommittedBaseline`.
+  That executable observation is evidence, not a publication source. The
+  package-facing CLI contract and its schema are byte-identical generated
+  projections of `contracts/cli/commands.json` and
+  `contracts/cli/command-manifest.schema.json`; refresh them with
+  `make contracts-generate` / `make contracts-check` and keep semantic parity
+  against generated families plus the `root.BuildProcess` observation in
+  `pkg/transports/cli/clicontract`. Do not hand-edit staged package copies.
 - After residual baseline/coverage fixes on a completed docs/models/mcp
   cutover, re-prove preserved public behavior with
   `make cli-manifest-check`, `make cli-contract-smoke`, focused

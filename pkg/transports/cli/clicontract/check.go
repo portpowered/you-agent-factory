@@ -22,6 +22,7 @@ const (
 	KindUncontractedGlobal  = "uncontracted-root-global"
 	KindMissingGlobal       = "missing-root-global"
 	KindRootGlobalDrift     = "root-global-metadata-drift"
+	KindPublishedDrift      = "published-metadata-drift"
 )
 
 // CompatibilityRecord identifies one approved compatibility-only CLI path.
@@ -41,6 +42,7 @@ type Input struct {
 	ApprovedCompatibility  []CompatibilityRecord
 	GeneratedCanonical     []climanifest.Manifest
 	GeneratedCompatibility []climanifest.Manifest
+	PublishedCanonical     climanifest.Manifest
 }
 
 // Finding is one deterministic whole-tree contract violation.
@@ -132,6 +134,7 @@ func Validate(input Input) []Finding {
 
 	findings = append(findings, validateGeneratedCanonical(input.Canonical, approved, input.GeneratedCanonical)...)
 	findings = append(findings, validateGeneratedCompatibility(input.Compatibility, approved, input.GeneratedCompatibility)...)
+	findings = append(findings, validatePublishedCanonical(input.Canonical, input.PublishedCanonical)...)
 	findings = append(findings, validateRootGlobals(input.Canonical, input.ProductionInputs)...)
 	findings = append(findings, validateMigratedInputs(input.Canonical, input.ProductionInputs)...)
 	sortFindings(findings)
@@ -346,7 +349,53 @@ func validateGeneratedCompatibility(compatibility climanifest.Manifest, approved
 	return findings
 }
 
+func validatePublishedCanonical(canonical, published climanifest.Manifest) []Finding {
+	if published.RootPath == "" && len(published.Commands) == 0 {
+		return nil
+	}
+	findings := make([]Finding, 0)
+	if published.FormatVersion != canonical.FormatVersion {
+		findings = append(findings, newFinding(
+			KindPublishedDrift, canonical.RootPath, canonical.RootPath, "formatVersion",
+			"published CLI format version differs from the authored contract",
+		))
+	}
+	if published.RootPath != canonical.RootPath {
+		findings = append(findings, newFinding(
+			KindPublishedDrift, canonical.RootPath, canonical.RootPath, "rootPath",
+			"published CLI root differs from the authored contract",
+		))
+	}
+	for id, command := range published.Commands {
+		want, ok := canonical.Commands[id]
+		if !ok {
+			findings = append(findings, newFinding(
+				KindPublishedDrift, id, command.Path, "published",
+				"published CLI contains an uncontracted command",
+			))
+			continue
+		}
+		if field := firstCommandMismatch(want, command); field != "" {
+			findings = append(findings, newFinding(
+				KindPublishedDrift, id, want.Path, field,
+				"published CLI metadata differs from the authored contract",
+			))
+		}
+	}
+	for id, command := range canonical.Commands {
+		if _, ok := published.Commands[id]; !ok {
+			findings = append(findings, newFinding(
+				KindPublishedDrift, id, command.Path, "published",
+				"authored command is missing from the published CLI contract",
+			))
+		}
+	}
+	return findings
+}
+
 func firstCommandMismatch(want, got climanifest.Command) string {
+	want = normalizeCommandSets(want)
+	got = normalizeCommandSets(got)
 	fields := []struct {
 		name string
 		want any
@@ -358,10 +407,14 @@ func firstCommandMismatch(want, got climanifest.Command) string {
 		{"lifecycle", want.Lifecycle, got.Lifecycle}, {"visibility", want.Visibility, got.Visibility},
 		{"runnable", want.Runnable, got.Runnable}, {"usage", want.Usage, got.Usage},
 		{"arguments", want.Arguments, got.Arguments}, {"flags", want.Flags, got.Flags},
+		{"sourceBindings", want.SourceBindings, got.SourceBindings},
+		{"handlerBindings", want.HandlerBindings, got.HandlerBindings},
 		{"relationships", want.Relationships, got.Relationships}, {"precedence", want.Precedence, got.Precedence},
 		{"channels", want.Channels, got.Channels}, {"outputs", want.Outputs, got.Outputs},
-		{"exits", want.Exits, got.Exits}, {"sideEffects", want.SideEffects, got.SideEffects},
+		{"errors", want.Errors, got.Errors}, {"exits", want.Exits, got.Exits},
+		{"sideEffects", want.SideEffects, got.SideEffects},
 		{"constraints", want.Constraints, got.Constraints}, {"handler", want.Handler, got.Handler},
+		{"rootLifecycle", want.RootLifecycle, got.RootLifecycle},
 	}
 	for _, field := range fields {
 		if !reflect.DeepEqual(field.want, field.got) {
@@ -369,6 +422,65 @@ func firstCommandMismatch(want, got climanifest.Command) string {
 		}
 	}
 	return ""
+}
+
+func normalizeCommandSets(command climanifest.Command) climanifest.Command {
+	command.Aliases = normalizedStrings(command.Aliases)
+	command.Documentation.Examples = normalizedStrings(command.Documentation.Examples)
+	command.Channels.Input = normalizedStrings(command.Channels.Input)
+	command.Channels.Output = normalizedStrings(command.Channels.Output)
+	command.Constraints.Platforms = normalizedStrings(command.Constraints.Platforms)
+	command.Constraints.Runtime = normalizedStrings(command.Constraints.Runtime)
+	command.Arguments = cloneArgumentsWithNormalizedSets(command.Arguments)
+	command.Flags = cloneFlagsWithNormalizedSets(command.Flags)
+	command.Relationships = cloneRelationshipsWithNormalizedSets(command.Relationships)
+	return command
+}
+
+func cloneArgumentsWithNormalizedSets(source map[string]climanifest.Argument) map[string]climanifest.Argument {
+	if source == nil {
+		return nil
+	}
+	result := make(map[string]climanifest.Argument, len(source))
+	for id, argument := range source {
+		argument.Enum = normalizedStrings(argument.Enum)
+		argument.Channels = normalizedStrings(argument.Channels)
+		argument.AcceptedSources = normalizedStrings(argument.AcceptedSources)
+		result[id] = argument
+	}
+	return result
+}
+
+func cloneFlagsWithNormalizedSets(source map[string]climanifest.Flag) map[string]climanifest.Flag {
+	if source == nil {
+		return nil
+	}
+	result := make(map[string]climanifest.Flag, len(source))
+	for id, flag := range source {
+		flag.Aliases = normalizedStrings(flag.Aliases)
+		flag.Enum = normalizedStrings(flag.Enum)
+		flag.AcceptedSources = normalizedStrings(flag.AcceptedSources)
+		result[id] = flag
+	}
+	return result
+}
+
+func cloneRelationshipsWithNormalizedSets(source map[string]climanifest.Relationship) map[string]climanifest.Relationship {
+	if source == nil {
+		return nil
+	}
+	result := make(map[string]climanifest.Relationship, len(source))
+	for id, relationship := range source {
+		relationship.Participants = append([]climanifest.ParticipantRef(nil), relationship.Participants...)
+		sort.Slice(relationship.Participants, func(left, right int) bool {
+			if relationship.Participants[left].Type != relationship.Participants[right].Type {
+				return relationship.Participants[left].Type < relationship.Participants[right].Type
+			}
+			return relationship.Participants[left].ID < relationship.Participants[right].ID
+		})
+		result[id] = relationship
+	}
+	return result
 }
 
 func approvedIndex(records []CompatibilityRecord) map[string]CompatibilityRecord {
