@@ -346,7 +346,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     resolution.
   - `TestJavaScriptFactoryMissingImportFailsActionably` covers load failure.
 
-- [ ] `tests/functional/orchestration/javascript/loading/named_factory_test.go`
+- [x] `tests/functional/orchestration/javascript/loading/named_factory_test.go`
   - `TestNamedJavaScriptFactoryRunsThroughStandardCLI` covers named resolution.
   - `TestNamedJavaScriptFactoryRunsThroughAPIInvocation` covers HTTP entry.
   - `TestNamedJavaScriptFactoryUsesSameFactorySessionControls` covers pause.
