@@ -52,19 +52,6 @@ func TestNewServiceConstructsInertDocumentOwner(t *testing.T) {
 	if providers.calls != 0 {
 		t.Fatalf("construction invoked provider catalog %d times, want inert construction", providers.calls)
 	}
-
-	_, err := service.LoadDocument(operatorsettings.LoadDocumentRequest{
-		Path: "/home/operator/.you-agent-factory/config.json",
-	})
-	if err == nil {
-		t.Fatal("LoadDocument() = nil, want error before document load is implemented")
-	}
-	if files.readCalls != 0 {
-		t.Fatalf("LoadDocument() invoked ReadFile during unavailable load, want no filesystem read yet")
-	}
-	if decoder.calls != 0 {
-		t.Fatalf("LoadDocument() invoked decoder during unavailable load, want no codec decode yet")
-	}
 }
 
 func TestNewServiceRejectsMalformedLoadWithoutFilesystemOrCodecEffects(t *testing.T) {

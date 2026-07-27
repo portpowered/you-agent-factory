@@ -49,7 +49,7 @@ func (service *Service) LoadDocument(
 	if err := request.Validate(); err != nil {
 		return operatorsettings.LoadDocumentResult{}, err
 	}
-	return operatorsettings.LoadDocumentResult{}, errDocumentOwnerUnavailable
+	return service.loadDocument(request)
 }
 
 func (service *Service) ApplyDocumentUpdate(
