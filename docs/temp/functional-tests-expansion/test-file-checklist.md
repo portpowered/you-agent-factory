@@ -456,6 +456,8 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/automations/filesystem_watcher_root_composition_test.go`
   - `TestBuildProcessRemainsFilesystemWatcherInertBeforeRuntimeLifecycle`.
   - `TestAutomationsFilesystemWatcherPreseedsThroughRuntimeLifecycle`.
+- [x] `tests/functional/automations/hosted_sources_root_composition_test.go`
+  - `TestBuildProcessRemainsHostedSourcesInertBeforeRuntimeLifecycle`.
 
 ## Wave 1 — workstations
 

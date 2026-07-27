@@ -389,6 +389,16 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/automations/hosted_sources_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestBuildProcessRemainsHostedSourcesInertBeforeRuntimeLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/automations/hosted_sources_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/bootstrap_portability/agent_factory_export_import_fixture_test.go",
       "package": "you-agent-factory/tests/functional/bootstrap_portability",
       "scenario": "TestAgentFactoryExportImportFixture_AuthoredLayoutInterpolatesProjectSpecificPromptContent",
@@ -7054,7 +7064,7 @@
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 422,
+      "none": 423,
       "replay_contracts": 23,
       "runtime_api": 102,
       "smoke": 62,
@@ -7062,7 +7072,7 @@
     },
     "by_top_level_package": {
       "acceptance": 13,
-      "automations": 6,
+      "automations": 7,
       "bootstrap_portability": 21,
       "cli": 63,
       "factory": 4,
@@ -7084,9 +7094,9 @@
       "workflow": 30,
       "workstations": 33
     },
-    "customer_top_level_Test_scenarios": 685,
+    "customer_top_level_Test_scenarios": 686,
     "lane_functionallong": 95,
-    "lane_short": 590,
+    "lane_short": 591,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 13,
       "you-agent-factory/tests/functional/automations": 6,
