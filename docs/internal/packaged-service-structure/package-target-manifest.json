@@ -321,6 +321,8 @@
     "pkg/services/recordings/service",
     "pkg/services/recordings/wire",
     "pkg/services/system_initialization",
+    "pkg/services/system_initialization/internal/workflow",
+    "pkg/services/system_initialization/wire",
     "pkg/services/work",
     "pkg/services/work/internal/services/state_access",
     "pkg/services/work/internal/services/state_access/internal/service",
@@ -1852,6 +1854,16 @@
     },
     {
       "packagePath": "pkg/services/system_initialization",
+      "disposition": "retain",
+      "destination": "system_initialization"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization/internal/workflow",
+      "disposition": "retain",
+      "destination": "system_initialization"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization/wire",
       "disposition": "retain",
       "destination": "system_initialization"
     },

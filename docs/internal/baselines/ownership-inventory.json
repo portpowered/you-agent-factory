@@ -4038,6 +4038,18 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/system_initialization/internal/workflow",
+      "disposition": "retain",
+      "destination": "system_initialization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization/wire",
+      "disposition": "retain",
+      "destination": "system_initialization",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/work",
       "disposition": "retain",
       "destination": "work",
