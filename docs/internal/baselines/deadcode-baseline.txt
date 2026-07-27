@@ -235,11 +235,6 @@ pkg/transports/cli/root_test_validator_test.go: unreachable func: uncheckedPersi
 pkg/transports/cli/root_test_validator_test.go: unreachable func: uncheckedPersistenceValidator.WorkerWorkstationBehaviorCompatibility
 pkg/transports/cli/root_test_validator_test.go: unreachable func: validPersistenceValidator.Validate
 pkg/transports/cli/root_test_validator_test.go: unreachable func: validPersistenceValidator.ValidateBlockingLoad
-pkg/transports/cli/root_work.go: unreachable func: newWorkCommand
-pkg/transports/cli/root_work.go: unreachable func: newWorkListCommand
-pkg/transports/cli/root_work.go: unreachable func: newWorkMoveCommand
-pkg/transports/cli/root_work.go: unreachable func: newWorkShowCommand
-pkg/transports/cli/root_work.go: unreachable func: newWorkVisualizeCommand
 pkg/transports/cli/run/factory_invocation_input.go: unreachable func: wrapInvocationInputError
 pkg/transports/cli/run/failure_baseline_quiet_leak_test.go: unreachable func: collectQuietRuntimeLogFiles
 pkg/transports/cli/run/failure_baseline_quiet_leak_test.go: unreachable func: requireQuietRuntimeLogPath

@@ -82,7 +82,6 @@ type factoryConfigInitProductionCommands struct {
 }
 
 func productionFactoryConfigInitCommands(
-	_ *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	options CommandFactory,
 ) factoryConfigInitProductionCommands {

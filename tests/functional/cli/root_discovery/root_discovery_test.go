@@ -60,6 +60,38 @@ func TestBareRootPrintsConciseHelpWithoutProductEffects(t *testing.T) {
 	}
 }
 
+func TestRemovedInitInputFailsBeforeConfigurationMutation(t *testing.T) {
+	var mutations atomic.Int32
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		OperatorSettingsFileSystem: mutationTrackingOperatorSettingsFileSystem{
+			mutations: &mutations,
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+
+	stdout, stderr, executeErr := executeFactoryArgs(
+		t,
+		process,
+		t.TempDir(),
+		[]string{"you", "init", "--dir", "legacy-factory"},
+		false,
+		t.Context(),
+	)
+	if executeErr == nil || !strings.Contains(executeErr.Error(), "unknown flag: --dir") {
+		t.Fatalf(
+			"removed init input error = %v, want unknown flag; stdout=%q stderr=%q",
+			executeErr,
+			stdout,
+			stderr,
+		)
+	}
+	if mutations.Load() != 0 {
+		t.Fatalf("removed init input configuration mutations = %d, want 0", mutations.Load())
+	}
+}
+
 // TestCurrentFactoryFailsBeforeProductActivation proves invalid Current Factory selection is side-effect free.
 func TestCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
 	tests := []struct {
@@ -757,4 +789,32 @@ func (fileSystem failingOperatorSettingsFileSystem) Chmod(string, fs.FileMode) e
 func (fileSystem failingOperatorSettingsFileSystem) Rename(string, string) error {
 	fileSystem.calls.Add(1)
 	return fs.ErrPermission
+}
+
+type mutationTrackingOperatorSettingsFileSystem struct {
+	mutations *atomic.Int32
+}
+
+func (mutationTrackingOperatorSettingsFileSystem) ReadFile(string) ([]byte, error) {
+	return nil, fs.ErrNotExist
+}
+
+func (fileSystem mutationTrackingOperatorSettingsFileSystem) MkdirAll(string, fs.FileMode) error {
+	fileSystem.mutations.Add(1)
+	return nil
+}
+
+func (fileSystem mutationTrackingOperatorSettingsFileSystem) Remove(string) error {
+	fileSystem.mutations.Add(1)
+	return nil
+}
+
+func (fileSystem mutationTrackingOperatorSettingsFileSystem) Chmod(string, fs.FileMode) error {
+	fileSystem.mutations.Add(1)
+	return nil
+}
+
+func (fileSystem mutationTrackingOperatorSettingsFileSystem) Rename(string, string) error {
+	fileSystem.mutations.Add(1)
+	return nil
 }

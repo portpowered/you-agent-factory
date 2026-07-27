@@ -717,7 +717,7 @@ func TestFactoryQueryCommand_PortFlagRejected(t *testing.T) {
 }
 
 func TestProductionFactoryConfigInitCommandsUsesGeneratedFamily(t *testing.T) {
-	commands := productionFactoryConfigInitCommands(&cliGlobalOptions{}, &cliDiagnosticsOptions{}, CommandFactory{})
+	commands := productionFactoryConfigInitCommands(&cliDiagnosticsOptions{}, CommandFactory{})
 	if commands.Factory == nil || commands.Config == nil || commands.Init == nil {
 		t.Fatalf("production commands = %#v, want factory/config/init", commands)
 	}

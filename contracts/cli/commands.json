@@ -1013,7 +1013,7 @@
           }
         },
         "examples": [
-          "you factory config expand"
+          "you factory config expand ./factory.json"
         ],
         "formatVersion": "1.0.0",
         "itemId": "you.factory.config.expand",
@@ -1302,7 +1302,7 @@
           }
         },
         "examples": [
-          "you factory config flatten"
+          "you factory config flatten ./factory"
         ],
         "formatVersion": "1.0.0",
         "itemId": "you.factory.config.flatten",
