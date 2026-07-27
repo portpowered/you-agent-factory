@@ -6,28 +6,8 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
 )
-
-func nextScopedSequence(
-	events []factorydefinitions.FactoryEvent,
-	scope recordings.CanonicalEventScope,
-) recordings.CanonicalEventSequence {
-	next := recordings.CanonicalEventSequence(0)
-	for _, event := range events {
-		if !factoryEventBelongsToScope(event, scope) {
-			continue
-		}
-		if event.Context.SessionSequence == nil {
-			next++
-			continue
-		}
-		sequence := recordings.CanonicalEventSequence(*event.Context.SessionSequence)
-		if sequence >= next {
-			next = sequence + 1
-		}
-	}
-	return next
-}
 
 type eventSubscription struct {
 	history      []factorydefinitions.FactoryEvent
@@ -136,11 +116,11 @@ func (subscription *eventSubscription) Next(ctx context.Context) recordings.Subs
 			}
 		}
 		subscription.nextDelivery++
-		canonical := canonicalEventFromFactory(event, subscription.generationID)
-		subscription.lastCursor = canonical.Cursor
+		canonicalEvent := canonical.CanonicalEventFromFactory(event, subscription.generationID)
+		subscription.lastCursor = canonicalEvent.Cursor
 		return recordings.SubscriptionOutcome{
 			Kind:  recordings.SubscriptionEvent,
-			Event: canonical,
+			Event: canonicalEvent,
 		}
 	}
 }
