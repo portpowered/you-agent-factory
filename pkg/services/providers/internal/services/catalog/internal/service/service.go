@@ -79,7 +79,28 @@ func (s *service) GetProvider(
 	if !ok {
 		return providers.GetProviderResult{}, providers.ErrUnknownProvider
 	}
+	if !isProviderSelectable(descriptor) {
+		return providers.GetProviderResult{}, providers.ErrProviderUnavailable
+	}
 	return providers.GetProviderResult{Provider: descriptor.Clone()}, nil
+}
+
+func isProviderSelectable(descriptor providers.Descriptor) bool {
+	if descriptor.Availability != providers.AvailabilitySelectable ||
+		descriptor.Readiness != providers.ReadinessReady ||
+		hasMissingPrerequisite(descriptor.Prerequisites) {
+		return false
+	}
+	return true
+}
+
+func hasMissingPrerequisite(prerequisites []providers.Prerequisite) bool {
+	for _, prerequisite := range prerequisites {
+		if prerequisite.Status == providers.PrerequisiteMissing {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *service) resolveID(id providers.ID) (providers.ID, bool) {

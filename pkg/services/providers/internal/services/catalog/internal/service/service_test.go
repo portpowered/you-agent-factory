@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"slices"
 	"testing"
@@ -307,6 +308,72 @@ func TestGetProviderReturnsDetachedValues(t *testing.T) {
 		third.Provider.Capabilities[0] == providers.CapabilityUsage &&
 		first.Provider.Capabilities[0] == providers.CapabilityUsage {
 		t.Fatal("third get capabilities share mutation from first result")
+	}
+}
+
+func TestGetProviderTypedFailures(t *testing.T) {
+	t.Parallel()
+
+	service, err := internalservice.New()
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	assertGetErrorIs(t, service, providers.GetProviderRequest{}, providers.ErrInvalidID)
+	assertGetErrorIs(
+		t,
+		service,
+		providers.GetProviderRequest{ID: providers.ID("unknown-provider")},
+		providers.ErrUnknownProvider,
+	)
+	assertGetErrorIs(
+		t,
+		service,
+		providers.GetProviderRequest{ID: providers.IDCodex + "-stale"},
+		providers.ErrUnknownProvider,
+	)
+	assertGetErrorIs(
+		t,
+		service,
+		providers.GetProviderRequest{ID: providers.IDAgy},
+		providers.ErrProviderUnavailable,
+	)
+
+	list, err := service.ListProviders(context.Background(), providers.ListProvidersRequest{})
+	if err != nil {
+		t.Fatalf("ListProviders() = %v", err)
+	}
+	agy, ok := indexProviders(list.Providers)[providers.IDAgy]
+	if !ok {
+		t.Fatal("ListProviders() missing unavailable agy provider")
+	}
+	if agy.Availability != providers.AvailabilityNotSupported {
+		t.Fatalf("agy availability = %q, want %q", agy.Availability, providers.AvailabilityNotSupported)
+	}
+}
+
+func assertGetErrorIs(
+	t *testing.T,
+	service interface {
+		GetProvider(
+			context.Context,
+			providers.GetProviderRequest,
+		) (providers.GetProviderResult, error)
+	},
+	request providers.GetProviderRequest,
+	want error,
+) {
+	t.Helper()
+
+	result, err := service.GetProvider(context.Background(), request)
+	if err == nil {
+		t.Fatalf("GetProvider(%#v) = %#v, want error %v", request, result, want)
+	}
+	if !errors.Is(err, want) {
+		t.Fatalf("GetProvider(%#v) error = %v, want %v", request, err, want)
+	}
+	if !reflect.DeepEqual(result.Provider, providers.Descriptor{}) {
+		t.Fatalf("GetProvider(%#v) provider = %#v, want zero descriptor on failure", request, result.Provider)
 	}
 }
 
