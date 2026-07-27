@@ -388,6 +388,7 @@ const (
 	ErrorCodeNotFound  ErrorCode = "not_found"
 	ErrorCodeConflict  ErrorCode = "conflict"
 	ErrorCodeCancelled ErrorCode = "cancelled"
+	ErrorCodeFailed    ErrorCode = "failed"
 )
 
 var (
@@ -400,6 +401,8 @@ var (
 	ErrNotFound = errors.New("automations: not found")
 	// ErrConflict reports that an Automations operation conflicted with observed state.
 	ErrConflict = errors.New("automations: conflict")
+	// ErrSupervisionFailed reports that an Automation source effect failed.
+	ErrSupervisionFailed = errors.New("automations: source supervision failed")
 )
 
 // Error is the typed Automations root failure peers distinguish without parsing

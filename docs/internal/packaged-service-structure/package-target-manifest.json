@@ -64,6 +64,9 @@
     "pkg/platform/stdio",
     "pkg/root",
     "pkg/services/automations",
+    "pkg/services/automations/internal/services/reconciliation",
+    "pkg/services/automations/internal/services/reconciliation/internal/service",
+    "pkg/services/automations/internal/services/reconciliation/wire",
     "pkg/services/automations/service",
     "pkg/services/automations/timework",
     "pkg/services/edges",
@@ -505,6 +508,21 @@
       "packagePath": "pkg/services/automations",
       "disposition": "retain",
       "destination": "automations"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/reconciliation",
+      "disposition": "retain",
+      "destination": "automations/internal/services/reconciliation"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/reconciliation/internal/service",
+      "disposition": "retain",
+      "destination": "automations/internal/services/reconciliation"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/reconciliation/wire",
+      "disposition": "retain",
+      "destination": "automations/internal/services/reconciliation"
     },
     {
       "packagePath": "pkg/services/automations/service",
