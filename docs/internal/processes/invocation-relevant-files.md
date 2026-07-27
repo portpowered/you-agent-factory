@@ -10,7 +10,10 @@ primary-result behavior.
   canonical ID. Keep retry, fallback/default selection, scheduling, throttle,
   and Work-outcome policy above this boundary; recording fakes should prove
   validation-before-I/O, full detached request delivery, and exactly one
-  adapter call.
+  adapter call. On success, clone before publishing, validate any returned
+  SessionRef against the resolved provider, bound ordered progress and metadata
+  deterministically, redact request-derived and sensitive native diagnostics,
+  and suppress the entire result whenever the adapter returns an error.
 - Parent-private Runner implementations that expose subprocess progress should
   consume an injected streaming command capability, serialize publication only
   within each invocation, and build terminal diagnostics from the command

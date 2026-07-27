@@ -68,5 +68,8 @@ func (s *service) Execute(
 	}
 	detached.Provider = resolved.Provider.ID
 	result, err := attempt(ctx, detached)
-	return result.Clone(), err
+	if err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	return normalizeSuccess(result, resolved.Provider.ID, detached)
 }
