@@ -854,16 +854,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/bootstrap_portability/cli_relative_working_directory_functionallong_helpers_test.go",
-      "target": "bootstrap_portability"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/bootstrap_portability/cli_relative_working_directory_long_test.go",
-      "target": "bootstrap_portability"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/bootstrap_portability/export_import_fixture_test.go",
       "target": "bootstrap_portability"
     },
@@ -1214,11 +1204,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_javascript_factory_run_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/cli_named_deep_research_smoke_test.go",
       "target": "smoke"
     },
@@ -1419,32 +1404,12 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/multi_output_long_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/name_propagation_long_test.go",
       "target": "workflow"
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/ralph_loop_long_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/ralph_loop_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/rejection_path_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/repeater_parameterized_long_test.go",
       "target": "workflow"
     },
     {
@@ -1473,18 +1438,13 @@
       "target": "workflow"
     },
     {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/workstation_stopwords_long_test.go",
-      "target": "workflow"
-    },
-    {
       "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/bootstrap_portability/metadata_contract/factory_metadata_contract_test.go",
       "target": "bootstrap_portability"
     },
     {
       "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/cli/dynamic_workflows/dynamic_workflow_run_test.go",
+      "filePath": "tests/functional/cli/factory_run/events/events_test.go",
       "target": "cli"
     },
     {

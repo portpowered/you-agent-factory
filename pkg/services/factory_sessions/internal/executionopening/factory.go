@@ -35,6 +35,12 @@ type WorkerInvocationFactory = func(
 	agypty.PTYAllocator,
 ) (workers.InvocationExecutor, error)
 
+type WorkerInvocationWithProgressFactory = func(
+	workers.CommandRunner,
+	agypty.PTYAllocator,
+	workers.ProgressPublisher,
+) (workers.InvocationExecutor, error)
+
 // Factory owns provider selection and lazy runtime-backed execution scopes.
 type Factory struct {
 	runtimes       *runtimeopening.Factory

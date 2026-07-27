@@ -463,6 +463,12 @@ func provideFactorySessionExecutionFactory(
 	stores factorysessionwire.RuntimePersistenceStoreFactory,
 	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
+	responseEventIDs factorysessions.ResponseEventIDGenerator,
+	invocation factorysessionwire.WorkerInvocationFactory,
+	invocationWithProgress factorysessionwire.WorkerInvocationWithProgressFactory,
+	allocator agypty.PTYAllocator,
+	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
+	edges serviceedges.Edges,
 ) factorysessionwire.FactorySessionExecutionFactory {
 	return func(
 		projectRoot string,
@@ -471,12 +477,25 @@ func provideFactorySessionExecutionFactory(
 		clock factoryruntime.Clock,
 		workerPresetIDs map[string]struct{},
 		workerSettings factoryruntime.JavaScriptWorkerSettings,
+		mockWorkersEnabled bool,
 	) (factorysessions.ExecutionService, error) {
+		executor := workerinvocation.NewExecutor(provider)
+		var liveChildInvocation factorysessionwire.LiveChildInvocationFactory
+		if !mockWorkersEnabled &&
+			invocationWithProgress != nil &&
+			adaptRunner != nil &&
+			allocator != nil &&
+			edges.ProviderCommandRunner != nil {
+			runner := adaptRunner(edges.ProviderCommandRunner)
+			liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
+				return invocationWithProgress(runner, allocator, publisher)
+			}
+		}
 		return factorysessionwire.NewDurableExecution(
 			projectRoot,
 			persistencePolicy,
 			stores,
-			workerinvocation.NewExecutor(provider),
+			executor,
 			clock,
 			syncWaits,
 			factorycheckpointsummary.New(),
@@ -485,6 +504,8 @@ func provideFactorySessionExecutionFactory(
 			workerSettings,
 			recordingWriter,
 			sessionIDs,
+			liveChildInvocation,
+			responseEventIDs,
 		)
 	}
 }
@@ -819,6 +840,37 @@ func provideWorkersLocalRuntimeHooksFactory() factorysessionwire.WorkersLocalRun
 	return workersservice.LocalRuntimeHooks
 }
 
+func provideWorkerInvocationWithProgressFactory(edges serviceedges.Edges) factorysessionwire.WorkerInvocationWithProgressFactory {
+	commandClock := edges.Clock
+	if commandClock == nil {
+		commandClock = platformclock.Real{}
+	}
+	resolveSymlinks := edges.WorkersResolveSymlinks
+	if resolveSymlinks == nil {
+		resolveSymlinks = filepath.EvalSymlinks
+	}
+	executableLocator := edges.WorkersExecutableLocator
+	if executableLocator == nil {
+		executableLocator = platformprocess.HostExecutableLocator{}
+	}
+	executableInspector := edges.WorkersExecutablePathInspector
+	if executableInspector == nil {
+		executableInspector = platformfilesystem.Local{}
+	}
+	executableFiles := edges.WorkersExecutableFileReader
+	if executableFiles == nil {
+		executableFiles = platformfilesystem.Local{}
+	}
+	operatingSystem := resolveWorkersOperatingSystem(edges)
+	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
+	return func(runner workers.CommandRunner, allocator agypty.PTYAllocator, publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
+		return workersservice.NewInvocationWithProgress(
+			runner, commandClock, allocator, resolveSymlinks,
+			executableLocator, executableInspector, executableFiles, operatingSystem, publisher, temporaryFiles,
+		)
+	}
+}
+
 func provideWorkerInvocationFactory(edges serviceedges.Edges) factorysessionwire.WorkerInvocationFactory {
 	commandClock := edges.Clock
 	if commandClock == nil {
@@ -844,6 +896,40 @@ func provideWorkerInvocationFactory(edges serviceedges.Edges) factorysessionwire
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
 	return func(runner workers.CommandRunner, allocator agypty.PTYAllocator) (workers.InvocationExecutor, error) {
 		return workersservice.NewInvocation(
+			runner, commandClock, allocator, resolveSymlinks,
+			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,
+		)
+	}
+}
+
+func provideProviderFromCommandRunnerFactory(
+	edges serviceedges.Edges,
+	allocator agypty.PTYAllocator,
+) factorysessionwire.ProviderFromCommandRunnerFactory {
+	commandClock := edges.Clock
+	if commandClock == nil {
+		commandClock = platformclock.Real{}
+	}
+	resolveSymlinks := edges.WorkersResolveSymlinks
+	if resolveSymlinks == nil {
+		resolveSymlinks = filepath.EvalSymlinks
+	}
+	executableLocator := edges.WorkersExecutableLocator
+	if executableLocator == nil {
+		executableLocator = platformprocess.HostExecutableLocator{}
+	}
+	executableInspector := edges.WorkersExecutablePathInspector
+	if executableInspector == nil {
+		executableInspector = platformfilesystem.Local{}
+	}
+	executableFiles := edges.WorkersExecutableFileReader
+	if executableFiles == nil {
+		executableFiles = platformfilesystem.Local{}
+	}
+	operatingSystem := resolveWorkersOperatingSystem(edges)
+	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
+	return func(runner workers.CommandRunner) (workerprovider.Provider, error) {
+		return workersservice.NewProviderFromCommandRunner(
 			runner, commandClock, allocator, resolveSymlinks,
 			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,
 		)

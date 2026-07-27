@@ -20,6 +20,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -66,6 +67,7 @@ func newConfiguredJavaScriptRuntimeService(config javaScriptRuntimeServiceConfig
 		workflows, workflows, workflows,
 		nil, factory.JavaScriptWorkerSettings{}, mustTestRecordingWriter(),
 		testSessionIDGenerator,
+		nil, nil, nil,
 	)
 }
 
@@ -1407,11 +1409,16 @@ func testApplicationPersistencePolicies(t *testing.T, projectRoot string) {
 func testExecutionServiceChildExecutorHelpers(t *testing.T) {
 	t.Helper()
 
-	if err := validateLiveChildProviderExecutor(ChildExecutorModeLive, nil); err == nil {
-		t.Fatal("validateLiveChildProviderExecutor(live,nil) error = nil, want validation error")
+	if err := validateLiveChildProviderExecutor(ChildExecutorModeLive, nil, nil); err == nil {
+		t.Fatal("validateLiveChildProviderExecutor(live,nil,nil) error = nil, want validation error")
 	}
-	if err := validateLiveChildProviderExecutor(ChildExecutorModeFake, nil); err != nil {
-		t.Fatalf("validateLiveChildProviderExecutor(fake,nil) error = %v", err)
+	if err := validateLiveChildProviderExecutor(ChildExecutorModeLive, nil, func(workerexecution.ProgressPublisher) (workerexecution.InvocationExecutor, error) {
+		return nil, nil
+	}); err != nil {
+		t.Fatalf("validateLiveChildProviderExecutor(live,nil,liveChildInvocation) error = %v", err)
+	}
+	if err := validateLiveChildProviderExecutor(ChildExecutorModeFake, nil, nil); err != nil {
+		t.Fatalf("validateLiveChildProviderExecutor(fake,nil,nil) error = %v", err)
 	}
 
 	smoke := SmokeLiveChildProvider()
@@ -3772,4 +3779,94 @@ func TestJavaScriptRuntimeServiceWriteRecordingUsesCanonicalSnapshotAndCorrelate
 	if readErr != nil || read.Status != LifecycleStatusSucceeded {
 		t.Fatalf("live session changed after recording failure: read=%#v err=%v", read, readErr)
 	}
+}
+
+func TestJavaScriptRuntimeService_StartSync_WorkflowFilePolicyDeniesDisallowedModel(t *testing.T) {
+	t.Parallel()
+
+	projectRoot := t.TempDir()
+	workflowPath := filepath.Join(projectRoot, "workflow.js")
+	workflowSource := `agent.run({
+  prompt: "summarize workflows",
+  label: "denied-model",
+  model: "gpt-denied",
+});
+return { ok: true };`
+	if err := os.WriteFile(workflowPath, []byte(workflowSource), 0o600); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+
+	defaultPolicy := json.RawMessage(`{
+  "mode":"READ_ONLY",
+  "maxAgents":4,
+  "concurrency":2,
+  "allowedModels":["gpt-allowed"],
+  "allowedReasoningEfforts":["low"]
+}`)
+	var requestedPolicy map[string]any
+	if err := json.Unmarshal(defaultPolicy, &requestedPolicy); err != nil {
+		t.Fatalf("unmarshal default policy: %v", err)
+	}
+
+	workflows := realJavaScriptWorkflowsForExecutionTest(t)
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot:       projectRoot,
+		ChildExecutorMode: ChildExecutorModeFake,
+		Workflows:         workflows,
+	})
+
+	started, err := service.StartSync(context.Background(), StartRequest{
+		RequestID: "req-policy-denied-model",
+		Source: Source{
+			Kind:         factory.WorkflowSourceKindWorkflowFile,
+			WorkflowFile: workflowPath,
+			InlineWorkflow: &InlineWorkflowSource{
+				DefaultPolicy: defaultPolicy,
+			},
+		},
+		Args:            map[string]any{"prompt": "hello"},
+		RequestedPolicy: requestedPolicy,
+		Runtime:         &RuntimeOptions{ChildExecutorMode: ChildExecutorModeFake},
+	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+	if started.Status != string(LifecycleStatusFailed) {
+		t.Fatalf("status = %q, want FAILED; outcome = %#v", started.Status, started)
+	}
+
+	session, err := service.GetSession(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	result, err := service.GetResult(context.Background(), started.SessionID, ResultRequest{Mode: ResultModeFinal})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	failureMessage := ""
+	if result.Failure != nil {
+		failureMessage = result.Failure.Message
+	} else if session.Failure != nil {
+		failureMessage = session.Failure.Message
+	}
+	if !strings.Contains(failureMessage, `policy denied: model "gpt-denied" is not listed in allowedModels`) {
+		t.Fatalf("session failure = %#v result failure = %#v, want stable policy diagnostic", session.Failure, result.Failure)
+	}
+}
+
+func realJavaScriptWorkflowsForExecutionTest(t *testing.T) factory.JavaScriptWorkflows {
+	t.Helper()
+	return factoryruntimejavascript.New(localWorkflowSourceFilesForExecutionTest{}, os.UserHomeDir, filepath.EvalSymlinks)
+}
+
+type localWorkflowSourceFilesForExecutionTest struct{}
+
+func (localWorkflowSourceFilesForExecutionTest) ReadDir(path string) ([]os.DirEntry, error) {
+	return os.ReadDir(path)
+}
+func (localWorkflowSourceFilesForExecutionTest) ReadFile(path string) ([]byte, error) {
+	return os.ReadFile(path)
+}
+func (localWorkflowSourceFilesForExecutionTest) Stat(path string) (os.FileInfo, error) {
+	return os.Stat(path)
 }

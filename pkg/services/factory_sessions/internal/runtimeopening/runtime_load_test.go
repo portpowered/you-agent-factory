@@ -172,6 +172,7 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 		_ factoryruntime.Clock,
 		_ map[string]struct{},
 		settings factoryruntime.JavaScriptWorkerSettings,
+		_ bool,
 	) (factorysessions.ExecutionService, error) {
 		got = settings
 		return nil, nil

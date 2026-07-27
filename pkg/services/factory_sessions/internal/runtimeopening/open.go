@@ -65,6 +65,7 @@ func openRuntime(
 	resolveClock factoryruntime.ClockResolver,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
 	adaptWorkerCommandRunner WorkerCommandRunnerAdapter,
+	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
 	processRuntimeFactory roles.ProcessRuntimeFactory,
 	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
@@ -152,12 +153,24 @@ func openRuntime(
 	if durableExecutionFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: durable execution operation is required")
 	}
+	providerForDurable, err := resolveDurableExecutionProvider(
+		edges.ProviderOverride,
+		configured.Workers.MockWorkers,
+		load.LoadedFactoryCfg,
+		edges.ProviderCommandRunner,
+		adaptWorkerCommandRunner,
+		workersMockCommandRunnerFactory,
+		providerFromCommandRunnerFactory,
+	)
+	if err != nil {
+		return runtimeProducts{}, err
+	}
 	factorysessionexecutionService, err := durableExecutionFactory(
 		configured.Definition,
 		configured.Session,
 		root,
 		clock,
-		edges.ProviderOverride,
+		providerForDurable,
 		factorySessionExecutionFactory,
 		providerIdentities,
 	)

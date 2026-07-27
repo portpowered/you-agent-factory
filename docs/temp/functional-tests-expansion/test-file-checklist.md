@@ -103,7 +103,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIEnvironmentOverridesGlobalConfig` verifies documented precedence.
   - `TestCLIUnsetEnvironmentFallsBackWithoutFabricatingValue` covers absence.
 
-- [ ] `tests/functional/transport/cli/parameters/working_directory_test.go`
+- [x] `tests/functional/transport/cli/parameters/working_directory_test.go`
   - `TestCLIRelativeFactoryPathResolvesFromInvocationDirectory` verifies
     customer working-directory behavior.
   - `TestCLIWorkingDirectoryDoesNotLeakIntoOutput` verifies portable output.
@@ -111,11 +111,13 @@ intentionally small enough to distribute across many agents.
 
 ### CLI output modes and streaming
 
-- [ ] `tests/functional/transport/cli/output/json_result_test.go`
+- [x] `tests/functional/transport/cli/output/json_result_test.go`
   - `TestCLIJSONSuccessDecodesToPublicInvocationResult` verifies schema and
     terminal status.
   - `TestCLIJSONFailureRemainsValidJSON` verifies structured failure output.
   - `TestCLIJSONContainsNoPrivateRuntimeFields` guards the public boundary.
+  - `TestCLIJSONOutputSelectionFailsBeforeProductActivation` verifies invalid
+    output selectors fail before product activation.
 
 - [x] `tests/functional/transport/cli/output/ndjson_stream_test.go`
   - `TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult` verifies
@@ -166,7 +168,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIFactoryFlattenExpandPreservesMeaning` covers portability.
   - `TestCLIFactoryReplaceCurrentChangesSessionFactory` covers current Factory.
 
-- [ ] `tests/functional/transport/cli/commands/docs_wiring_test.go`
+- [x] `tests/functional/transport/cli/commands/docs_wiring_test.go`
   - `TestCLIDocsListsPackagedTopics` covers discovery.
   - `TestCLIDocsEveryTopicRendersNonEmptyContent` iterates the packaged index.
   - `TestCLIDocsUnknownTopicReturnsActionableFailure` covers errors.
@@ -335,7 +337,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### JavaScript / TypeScript loading and invocation
 
-- [ ] `tests/functional/orchestration/javascript/loading/inline_javascript_test.go`
+- [x] `tests/functional/orchestration/javascript/loading/inline_javascript_test.go`
   - `TestInlineJavaScriptFactoryRunsFromCLI` covers an inline definition.
   - `TestInlineJavaScriptSyntaxErrorReturnsSourceLocation` covers load failure.
 
@@ -398,18 +400,18 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestJavaScriptUnsupportedReturnValueFailsWithoutPrivateVMDetails` covers
     error safety.
 
-- [ ] `tests/functional/orchestration/javascript/contracts/response_events_test.go`
+- [x] `tests/functional/orchestration/javascript/contracts/response_events_test.go`
   - `TestJavaScriptChildProgressPublishesCanonicalResponseEvents` covers
     message/tool progress.
   - `TestJavaScriptTerminalResultFollowsFinalResponseEvent` covers ordering.
 
-- [ ] `tests/functional/orchestration/javascript/workers/overrides_test.go`
+- [x] `tests/functional/orchestration/javascript/workers/overrides_test.go`
   - `TestJavaScriptChildrenSelectDifferentProvidersAndModels` covers per-child
     overrides.
   - `TestJavaScriptMockWorkersReplaceOnlyNamedChildren` covers partial mocks.
   - `TestJavaScriptUnknownWorkerOverrideFailsActionably` covers error.
 
-- [ ] `tests/functional/orchestration/javascript/policy/denied_operations_test.go`
+- [x] `tests/functional/orchestration/javascript/policy/denied_operations_test.go`
   - `TestJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic` covers
     policy failure.
   - `TestJavaScriptPolicyFailureDoesNotDispatchExternalWork` covers safety.
@@ -451,10 +453,21 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCronDoesNotDoubleFireForOneScheduleBoundary`.
   - `TestCronShutdownPreventsLaterSubmission`.
 
-- [ ] `tests/functional/workstations/repeater/reject_accept_test.go`
-  - `TestRepeaterRejectsThenAcceptsAndStops`.
-  - `TestRepeaterHonorsEachConfiguredStopWord`.
-  - `TestRepeaterLoopBreakerTerminatesNonConvergingWork`.
+- [x] `tests/functional/workstations/repeater/reject_accept_test.go`
+  - `TestRepeater_YieldsBetweenIterations`.
+  - `TestRepeater_ResourceReleaseBetweenIterations`.
+  - `TestRalphLoop_ConvergesOnReviewerAccept`.
+- [x] `tests/functional/workstations/repeater/reject_accept_long_test.go`
+  - `TestRepeater_RefiresOnRejectedStopsOnAccepted`.
+  - `TestRepeater_GuardedLoopBreakerTerminatesRejectedRepeater`.
+  - `TestRepeater_ResourceReleaseBetweenIterations_ServiceHarness`.
+  - `TestWorkstationStopWords_ThroughCustomerProcess`.
+  - `TestMultiOutput_WithStopWord`.
+  - `TestMultiOutput_WithoutStopWord`.
+  - `TestMultiOutput_NoStopWordsConfigured`.
+  - `TestMultiOutput_SecondStopWord`.
+  - `TestMultiOutput_OutputTokensInheritInputLineage`.
+  - `TestRalphLoop_TemplateFieldsResolvePerIteration`.
 
 - [x] `tests/functional/workstations/poller/poller_test.go`
   - `TestPollerCreatesWorkFromExternalItems`.

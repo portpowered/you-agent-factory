@@ -163,8 +163,49 @@
   blocking `Provider.Infer` until public `inFlightDispatches` reaches the fan-out
   size, release children to assert declared input-order results and documented
   partial-failure shaping on `/factory-sessions/{id}/results?mode=final` and
-  `/dispatches` without wall-clock sleeps. Mock-worker replacement functional
-  coverage belongs in
+  `/dispatches` without wall-clock sleeps. JavaScript staged composition
+  functional coverage belongs in
+  `tests/functional/orchestration/javascript/composition/stages_test.go`:
+  drive sync Factory Session execution through
+  `tests/functional/internal/support.StartFunctionalAPIServer` with
+  `UseMockWorkers: true` and a recording `edges.Edges.ProviderCommandRunner`,
+  prove named `pipeline` stage labels and `phase(name)` ordered progress on
+  public dispatch listings, `result.primaryResult`, and
+  `GET /factory-sessions/{id}/events` `ORCHESTRATOR_PHASE_CHANGED` events, and
+  prove `pipeline([], worker, next?)` completes with the documented empty
+  ordered per-item public result and zero child dispatches without live provider
+  execution. Catalog metadata infers domain `orchestration` and subsection
+  `javascript/composition` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  JavaScript nested composition functional coverage belongs in
+  `tests/functional/orchestration/javascript/composition/nested_test.go`:
+  drive sync Factory Session execution through
+  `tests/functional/internal/support.StartFunctionalAPIServer` with
+  `WaitForServiceModeRuntime: true`, `UseMockWorkers: true`, and a recording
+  `edges.Edges.ProviderCommandRunner`; nest `parallel([...])` inside a
+  `pipeline(items, worker, next?)` stage by returning the `parallel()` promise
+  from a sync stage worker (not `async function`), assert nested child labels
+  and dispatch ids on `result.primaryResult` and `/factory-sessions/{id}/dispatches`,
+  and prove nested failure naming via `fail:` mock-child prompts on dispatch
+  `failureDetail` plus stage-indexed parallel child diagnostics without live
+  provider execution or private VM stack frames. Catalog metadata infers domain
+  `orchestration` and subsection `javascript/composition` from the path; every
+  top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
+  stays viz-compatible.
+  JavaScript per-child worker override functional coverage belongs in
+  `tests/functional/orchestration/javascript/workers/overrides_test.go`:
+  drive sync or async Factory Session execution through
+  `tests/functional/internal/support.StartFunctionalAPIServer` with
+  `WaitForServiceModeRuntime: true`, assert per-child `modelProvider`/`model`
+  selections on `/factory-sessions/{id}/dispatches` and injected
+  `edges.Edges.ProviderOverride` inference requests, prove partial
+  `workers.MockWorkersConfig` behavior with `UseMockWorkers: true` via
+  `javascript.executionMode` and public child results, and surface invalid
+  per-child overrides on durable session `failureDetail` with synchronous
+  inline workflows when override validation fails before dispatch. Catalog
+  metadata infers domain `orchestration` and subsection `javascript/workers`
+  from the path.
+  Mock-worker replacement functional coverage belongs in
   `tests/functional/workers/mock/replacement_test.go`: prove named-only
   `--with-mock-workers` replacement through
   `tests/functional/internal/support.StartFunctionalAPIServer` with
@@ -177,6 +218,28 @@
   Catalog metadata infers domain `workers` and subsection `mock` from the path;
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+  CLI single-JSON result functional coverage belongs in
+  `tests/functional/transport/cli/output/json_result_test.go`: invoke
+  `support.BuildProcess(t, serviceedges.Edges{}).Execute` with global `--json`
+  and without `--output response-stream`, decode stdout through generated
+  `factoryapi.InvocationResponse`, prove stderr `factoryapi.ErrorResponse` on
+  failures, and assert private-runtime key exclusion at the public CLI boundary.
+  Output-selection conflicts use instrumented `edges.Edges` to prove zero
+  product side effects before activation. Catalog metadata infers domain
+  `transport` and subsection `cli/output` from the path. Every top-level `Test*`
+  needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
+  CLI docs command wiring functional coverage belongs in
+  `tests/functional/transport/cli/commands/docs_wiring_test.go`: prove packaged
+  topic discovery, index-driven non-empty topic rendering, and actionable
+  unknown-topic failure through `support.BuildProcess` + `support.FakeInputs`
+  from an isolated temp working directory without a local `docs/` tree; derive
+  topics from the customer-visible packaged docs index stdout rather than
+  scanning repository files or embedded registries; assert only transport
+  discovery, render-wiring, and failure diagnostics without product/docs content
+  contracts. Catalog metadata infers domain `transport` and subsection
+  `cli/commands` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
   Prove default
   `functional-test-viz` wiring (boundary first, single coverage with profile
   + JSON under `.artifacts/functional-test-viz/`, Markdown generator) with

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -473,5 +474,132 @@ func TestExecutionErrorResponse_MapsRequestValidationError(t *testing.T) {
 func TestExecutionErrorResponse_ReturnsFalseForUnknownErrors(t *testing.T) {
 	if _, _, ok := factorysession.ExecutionErrorResponse(errors.New("other")); ok {
 		t.Fatal("ExecutionErrorResponse = true, want false")
+	}
+}
+
+type durableResponseEventsExecutionFake struct {
+	factorysessionexecution.ExecutionService
+	subscribeDurable func(context.Context, factorysessionexecution.ResponseEventSubscriptionRequest) (*factorysessionexecution.ResponseEventCursor, error)
+	subscribeDirect  func(context.Context, string, factorysessionexecution.ResponseEventSubscriptionRequest) (*factorysessionexecution.ResponseEventCursor, error)
+}
+
+func (fake durableResponseEventsExecutionFake) SubscribeDurableFactoryResponseEvents(
+	ctx context.Context,
+	request factorysessionexecution.ResponseEventSubscriptionRequest,
+) (*factorysessionexecution.ResponseEventCursor, error) {
+	if fake.subscribeDurable == nil {
+		panic("unexpected SubscribeDurableFactoryResponseEvents call")
+	}
+	return fake.subscribeDurable(ctx, request)
+}
+
+func (fake durableResponseEventsExecutionFake) SubscribeResponseEvents(
+	ctx context.Context,
+	sessionID string,
+	request factorysessionexecution.ResponseEventSubscriptionRequest,
+) (*factorysessionexecution.ResponseEventCursor, error) {
+	if fake.subscribeDirect == nil {
+		panic("unexpected SubscribeResponseEvents call")
+	}
+	return fake.subscribeDirect(ctx, sessionID, request)
+}
+
+func TestDurableAPIResponseEvents_SubscriberDelegatesToExecution(t *testing.T) {
+	t.Parallel()
+
+	wantCursor := &factorysessionexecution.ResponseEventCursor{
+		NextEvents: func(context.Context) ([]factorysessionexecution.FactoryResponseEvent, error) {
+			return []factorysessionexecution.FactoryResponseEvent{{Sequence: 3, Kind: factorysessionexecution.ResponseEventKindMessage}}, nil
+		},
+		DetachCursor: func() {},
+	}
+	api := factorysession.NewDurableAPI(durableResponseEventsExecutionFake{
+		subscribeDurable: func(_ context.Context, request factorysessionexecution.ResponseEventSubscriptionRequest) (*factorysessionexecution.ResponseEventCursor, error) {
+			if request.SessionID != "dur-sess-1" || request.DispatchID != "dispatch-1" {
+				t.Fatalf("subscribe request = %#v", request)
+			}
+			return wantCursor, nil
+		},
+	}, nil)
+
+	subscription, err := api.SubscribeDurableFactoryResponseEvents(context.Background(), factorysessionexecution.ResponseEventSubscriptionRequest{
+		SessionID:  "dur-sess-1",
+		DispatchID: "dispatch-1",
+	})
+	if err != nil {
+		t.Fatalf("SubscribeDurableFactoryResponseEvents: %v", err)
+	}
+	defer subscription.Detach()
+
+	records, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+	if len(records) != 1 || records[0].Sequence != 3 || records[0].Kind != string(factorysessionexecution.ResponseEventKindMessage) {
+		t.Fatalf("records = %#v, want mapped MESSAGE sequence 3", records)
+	}
+}
+
+type directResponseEventsExecutionFake struct {
+	factorysessionexecution.ExecutionService
+	subscribeDirect func(context.Context, string, factorysessionexecution.ResponseEventSubscriptionRequest) (*factorysessionexecution.ResponseEventCursor, error)
+}
+
+func (fake directResponseEventsExecutionFake) SubscribeResponseEvents(
+	ctx context.Context,
+	sessionID string,
+	request factorysessionexecution.ResponseEventSubscriptionRequest,
+) (*factorysessionexecution.ResponseEventCursor, error) {
+	if fake.subscribeDirect == nil {
+		panic("unexpected SubscribeResponseEvents call")
+	}
+	return fake.subscribeDirect(ctx, sessionID, request)
+}
+
+func TestDurableAPIResponseEvents_DirectExecutionPathMapsSessionNotFound(t *testing.T) {
+	t.Parallel()
+
+	api := factorysession.NewDurableAPI(directResponseEventsExecutionFake{
+		subscribeDirect: func(_ context.Context, sessionID string, request factorysessionexecution.ResponseEventSubscriptionRequest) (*factorysessionexecution.ResponseEventCursor, error) {
+			if sessionID != "dur-sess-2" || request.SessionID != "dur-sess-2" {
+				t.Fatalf("direct subscribe = session %q request %#v", sessionID, request)
+			}
+			return nil, factorysessionexecution.ErrSessionNotFound
+		},
+	}, nil)
+
+	_, err := api.SubscribeDurableFactoryResponseEvents(context.Background(), factorysessionexecution.ResponseEventSubscriptionRequest{
+		SessionID: "dur-sess-2",
+	})
+	if !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+		t.Fatalf("SubscribeDurableFactoryResponseEvents error = %v, want ErrFactorySessionNotFound", err)
+	}
+}
+
+func TestNewResponseEventSubscription_SerializesPublishedEvents(t *testing.T) {
+	t.Parallel()
+
+	cursor := &factorysessionexecution.ResponseEventCursor{
+		NextEvents: func(context.Context) ([]factorysessionexecution.FactoryResponseEvent, error) {
+			return []factorysessionexecution.FactoryResponseEvent{{
+				Sequence:   7,
+				Kind:       factorysessionexecution.ResponseEventKindTool,
+				DispatchID: "dispatch-7",
+				Phase:      factorysessionexecution.ResponseEventPhaseStarted,
+				Payload:    json.RawMessage(`{"toolCallId":"call-7","toolName":"read","status":"started"}`),
+			}}, nil
+		},
+		DetachCursor: func() {},
+	}
+	subscription := factorysession.NewResponseEventSubscription(cursor)
+	records, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+	if len(records) != 1 || records[0].Sequence != 7 || records[0].Kind != string(factorysessionexecution.ResponseEventKindTool) {
+		t.Fatalf("records = %#v, want TOOL sequence 7", records)
+	}
+	if !strings.Contains(string(records[0].Data), `"toolCallId":"call-7"`) {
+		t.Fatalf("record data = %s, want serialized tool payload", records[0].Data)
 	}
 }

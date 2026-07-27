@@ -333,7 +333,19 @@ func invokeJavaScriptFactory(
 	if err != nil {
 		return factorydefinitions.FactoryInvocationResult{}, err
 	}
-	return javaScriptInvocationResult(startRequest.RequestID, result), nil
+	var sessionFailure *factorysessions.FailureSummary
+	if result.Failure == nil && !javaScriptInvocationSucceeded(result) {
+		session, sessionErr := opened.Execution.GetSession(ctx, started.SessionID)
+		if sessionErr == nil {
+			sessionFailure = session.Failure
+		}
+	}
+	return javaScriptInvocationResult(startRequest.RequestID, result, sessionFailure), nil
+}
+
+func javaScriptInvocationSucceeded(result factorysessions.ResultReadResult) bool {
+	return result.SessionStatus == factorysessions.LifecycleStatusSucceeded &&
+		result.ResultStatus == factorysessions.ResultStatusFinal
 }
 
 func javaScriptStartRequest(
@@ -369,6 +381,13 @@ func javaScriptStartRequest(
 			}
 			source.WorkflowFile = filepath.Join(factoryDir, source.WorkflowFile)
 		}
+		if len(js.DefaultPolicy) > 0 || len(js.ArgsSchema) > 0 || len(js.Agents) > 0 {
+			source.InlineWorkflow = &factorysessions.InlineWorkflowSource{
+				Agents:        cloneJavaScriptAgents(js.Agents),
+				ArgsSchema:    append(json.RawMessage(nil), js.ArgsSchema...),
+				DefaultPolicy: append(json.RawMessage(nil), js.DefaultPolicy...),
+			}
+		}
 	}
 	args, err := javaScriptInvocationArgs(projection.FactoryCfg, request, js.ArgsSchema, resolver)
 	if err != nil {
@@ -389,12 +408,24 @@ func javaScriptStartRequest(
 		childMode = factorysessions.ChildExecutorModeFake
 	}
 	return factorysessions.StartRequest{
-		RequestID: requestID,
-		Source:    source,
-		Args:      args,
-		Runtime:   &factorysessions.RuntimeOptions{ChildExecutorMode: childMode},
-		Wait:      &factorysessions.WaitOptions{TimeoutMillis: request.TimeoutMillis},
+		RequestID:       requestID,
+		Source:          source,
+		Args:            args,
+		RequestedPolicy: factoryDefaultPolicyMap(js.DefaultPolicy),
+		Runtime:         &factorysessions.RuntimeOptions{ChildExecutorMode: childMode},
+		Wait:            &factorysessions.WaitOptions{TimeoutMillis: request.TimeoutMillis},
 	}, nil
+}
+
+func factoryDefaultPolicyMap(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var policy map[string]any
+	if err := json.Unmarshal(raw, &policy); err != nil || len(policy) == 0 {
+		return nil
+	}
+	return policy
 }
 
 func javaScriptInvocationArgs(
@@ -466,6 +497,7 @@ func coerceJavaScriptArgument(value, valueType string) any {
 func javaScriptInvocationResult(
 	requestID string,
 	result factorysessions.ResultReadResult,
+	sessionFailure *factorysessions.FailureSummary,
 ) factorydefinitions.FactoryInvocationResult {
 	out := factorydefinitions.FactoryInvocationResult{
 		RequestID: requestID,
@@ -473,7 +505,7 @@ func javaScriptInvocationResult(
 		Status:    factorydefinitions.InvocationTerminalStatusFailed,
 		ErrorCode: string(factorydefinitions.InvocationErrorCodeRuntimeFailure),
 	}
-	if result.SessionStatus == factorysessions.LifecycleStatusSucceeded && result.ResultStatus == factorysessions.ResultStatusFinal {
+	if javaScriptInvocationSucceeded(result) {
 		out.Status = factorydefinitions.InvocationTerminalStatusCompleted
 		out.ErrorCode = ""
 		if len(result.PrimaryResult) > 0 {
@@ -485,10 +517,14 @@ func javaScriptInvocationResult(
 		}
 		return out
 	}
-	if result.Failure != nil {
-		out.Message = strings.TrimSpace(result.Failure.Message)
+	failure := result.Failure
+	if failure == nil {
+		failure = sessionFailure
+	}
+	if failure != nil {
+		out.Message = strings.TrimSpace(failure.Message)
 		if out.Message == "" {
-			out.Message = strings.TrimSpace(result.Failure.Reason)
+			out.Message = strings.TrimSpace(failure.Reason)
 		}
 	}
 	if out.Message == "" && result.Availability != nil {
