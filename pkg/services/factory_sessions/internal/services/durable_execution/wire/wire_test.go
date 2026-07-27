@@ -2,6 +2,7 @@ package wire_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -97,6 +98,39 @@ func TestNewServiceRoutesControlThroughOwner(t *testing.T) {
 	}
 }
 
+func TestNewServiceRoutesRestartReadsThroughOwner(t *testing.T) {
+	t.Parallel()
+
+	stub := &restartReadSpy{}
+	service, err := durableexecutionwire.NewService(stub)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	ctx := context.Background()
+	sessionID := "sess-restart"
+
+	inspect, err := service.GetSession(ctx, sessionID)
+	if err != nil || inspect.SessionID != sessionID || inspect.Status != factorysessions.LifecycleStatusSucceeded {
+		t.Fatalf("GetSession = (%#v, %v), want reconstructed durable inspect projection", inspect, err)
+	}
+	result, err := service.GetResult(ctx, sessionID, factorysessions.ResultRequest{Mode: factorysessions.ResultModeFinal})
+	if err != nil || result.SessionID != sessionID || result.ResultStatus != factorysessions.ResultStatusFinal {
+		t.Fatalf("GetResult = (%#v, %v), want reconstructed durable result projection", result, err)
+	}
+	dispatches, err := service.ListDispatches(ctx, sessionID)
+	if err != nil || dispatches.SessionID != sessionID || len(dispatches.Dispatches) != 1 {
+		t.Fatalf("ListDispatches = (%#v, %v), want reconstructed durable dispatch projection", dispatches, err)
+	}
+	events, err := service.ReadEvents(ctx, sessionID, factorysessions.EventReconnectRequest{})
+	if err != nil || events.SessionID != sessionID || len(events.Events) != 1 {
+		t.Fatalf("ReadEvents = (%#v, %v), want reconstructed durable event projection", events, err)
+	}
+	if stub.inspectCalls != 1 || stub.resultCalls != 1 || stub.dispatchCalls != 1 || stub.eventCalls != 1 {
+		t.Fatalf("restart read calls = inspect %d result %d dispatches %d events %d, want 1 each",
+			stub.inspectCalls, stub.resultCalls, stub.dispatchCalls, stub.eventCalls)
+	}
+}
+
 func TestNewServiceRoutesInspectThroughOwner(t *testing.T) {
 	t.Parallel()
 
@@ -187,6 +221,49 @@ func (s *controlSpy) Pause(_ context.Context, sessionID string, _ factorysession
 		Operation: factorysessions.LifecycleControlPause,
 		Outcome:   factorysessions.LifecycleControlOutcomeAccepted,
 		Status:    factorysessions.LifecycleStatusPaused,
+	}, nil
+}
+
+type restartReadSpy struct {
+	factorysessions.ExecutionService
+	inspectCalls   int
+	resultCalls    int
+	dispatchCalls  int
+	eventCalls     int
+}
+
+func (s *restartReadSpy) GetSession(_ context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
+	s.inspectCalls++
+	return factorysessions.SessionReadResult{
+		SessionID: sessionID,
+		Status:    factorysessions.LifecycleStatusSucceeded,
+	}, nil
+}
+
+func (s *restartReadSpy) GetResult(_ context.Context, sessionID string, _ factorysessions.ResultRequest) (factorysessions.ResultReadResult, error) {
+	s.resultCalls++
+	return factorysessions.ResultReadResult{
+		SessionID:    sessionID,
+		ResultStatus: factorysessions.ResultStatusFinal,
+	}, nil
+}
+
+func (s *restartReadSpy) ListDispatches(_ context.Context, sessionID string) (factorysessions.ListDispatchesResult, error) {
+	s.dispatchCalls++
+	return factorysessions.ListDispatchesResult{
+		SessionID: sessionID,
+		Dispatches: []factorysessions.DispatchSummary{{
+			ID:     "dispatch-restart-1",
+			Status: "COMPLETED",
+		}},
+	}, nil
+}
+
+func (s *restartReadSpy) ReadEvents(_ context.Context, sessionID string, _ factorysessions.EventReconnectRequest) (factorysessions.EventReadResult, error) {
+	s.eventCalls++
+	return factorysessions.EventReadResult{
+		SessionID: sessionID,
+		Events:    []json.RawMessage{json.RawMessage(`{"type":"SESSION_STARTED"}`)},
 	}, nil
 }
 
