@@ -53,6 +53,30 @@ const (
     orderedStageLabels: stageLabels,
   };
 })();`
+
+	emptyStagesWorkerLabel = "empty-stage-worker"
+	emptyStagesNextLabel   = "empty-stage-next"
+	emptyStagesWorkflow    = `return (async function () {
+  const results = await pipeline(
+    [],
+    function (item, index) {
+      return agent.run({
+        prompt: "should-not-run",
+        label: "` + emptyStagesWorkerLabel + `",
+      });
+    },
+    function (workerResult, item, index) {
+      return agent.run({
+        prompt: "should-not-run-next",
+        label: "` + emptyStagesNextLabel + `",
+      });
+    }
+  );
+  return {
+    pipelineResults: results,
+    resultKind: results.length === 0 ? "empty-ordered-per-item" : "unexpected",
+  };
+})();`
 )
 
 // TestJavaScriptNamedStagesExposeOrderedProgress proves a JavaScript Factory
@@ -94,12 +118,52 @@ func TestJavaScriptNamedStagesExposeOrderedProgress(t *testing.T) {
 	assertNamedStagesOrderedPhaseProgress(t, events)
 }
 
+// TestJavaScriptEmptyStageProducesDocumentedResult proves an empty JavaScript
+// pipeline stage path completes with the documented empty ordered per-item
+// public result and does not invent child Dispatches when external effects are
+// substituted only through edges.Edges.
+func TestJavaScriptEmptyStageProducesDocumentedResult(t *testing.T) {
+	t.Parallel()
+
+	dir := scaffoldEmptyStagesWorkflow(t)
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		UseMockWorkers:            true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	started := startEmptyStagesWorkflow(t, server.URL(), dir)
+	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0 for empty stage path", runner.CallCount())
+	}
+
+	dispatches := listEmptyStagesDispatches(t, server.URL(), started.SessionId)
+	assertEmptyStageNoChildDispatches(t, dispatches.Dispatches)
+	assertEmptyStageDocumentedPrimaryResult(t, started.Result)
+}
+
 func scaffoldNamedStagesWorkflow(t *testing.T) string {
 	t.Helper()
 
 	dir := support.ScaffoldFactory(t, map[string]any{"name": "javascript-named-stages-composition"})
 	if err := os.WriteFile(filepath.Join(dir, "workflow.js"), []byte(namedStagesWorkflow), 0o600); err != nil {
 		t.Fatalf("write named stages workflow: %v", err)
+	}
+	return dir
+}
+
+func scaffoldEmptyStagesWorkflow(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{"name": "javascript-empty-stages-composition"})
+	if err := os.WriteFile(filepath.Join(dir, "workflow.js"), []byte(emptyStagesWorkflow), 0o600); err != nil {
+		t.Fatalf("write empty stages workflow: %v", err)
 	}
 	return dir
 }
@@ -144,7 +208,60 @@ func startNamedStagesWorkflow(
 	return started
 }
 
+func startEmptyStagesWorkflow(
+	t *testing.T,
+	serverURL, dir string,
+) factoryapi.FactorySessionSyncExecutionResponse {
+	t.Helper()
+
+	workflowPath := filepath.Join(dir, "workflow.js")
+	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
+		RequestId: "javascript-empty-stages-composition",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
+			WorkflowFile: &workflowPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal empty stages workflow request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build empty stages workflow request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("start empty stages workflow: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		var body bytes.Buffer
+		_, _ = body.ReadFrom(response.Body)
+		t.Fatalf("start empty stages workflow status = %d: %s", response.StatusCode, body.String())
+	}
+	var started factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
+		t.Fatalf("decode empty stages workflow response: %v", err)
+	}
+	return started
+}
+
 func listNamedStagesDispatches(
+	t *testing.T,
+	serverURL string,
+	sessionID string,
+) factoryapi.ListFactorySessionDispatchesResponse {
+	t.Helper()
+
+	return support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
+		t,
+		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/dispatches",
+	)
+}
+
+func listEmptyStagesDispatches(
 	t *testing.T,
 	serverURL string,
 	sessionID string,
@@ -371,6 +488,56 @@ func assertNamedStagesOrderedPrimaryResult(
 			reviewDispatchID,
 			stageDraftDispatchID,
 			stageReviewDispatchID,
+		)
+	}
+}
+
+func assertEmptyStageNoChildDispatches(t *testing.T, dispatches []factoryapi.FactorySessionDispatchSummary) {
+	t.Helper()
+
+	if len(dispatches) != 0 {
+		t.Fatalf(
+			"dispatch count = %d labels = %#v, want no child dispatches for empty pipeline stage path",
+			len(dispatches),
+			dispatchLabels(dispatches),
+		)
+	}
+}
+
+func assertEmptyStageDocumentedPrimaryResult(t *testing.T, result *factoryapi.FactorySessionResult) {
+	t.Helper()
+
+	if result == nil || result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("result = %#v, want FINAL Factory Session result", result)
+	}
+	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
+		t.Fatalf("primary result = %#v, want exactly one content part", result.PrimaryResult)
+	}
+	part, err := (*result.PrimaryResult)[0].AsWorkJsonContentPart()
+	if err != nil {
+		t.Fatalf("decode primary result content part: %v", err)
+	}
+	encoded, err := json.Marshal(part.Json)
+	if err != nil {
+		t.Fatalf("encode primary result JSON: %v", err)
+	}
+	var evidence struct {
+		ResultKind      string `json:"resultKind"`
+		PipelineResults []any  `json:"pipelineResults"`
+	}
+	if err := json.Unmarshal(encoded, &evidence); err != nil {
+		t.Fatalf("decode empty stage primary result: %v", err)
+	}
+	if evidence.ResultKind != "empty-ordered-per-item" {
+		t.Fatalf(
+			"resultKind = %q, want documented empty ordered per-item pipeline result",
+			evidence.ResultKind,
+		)
+	}
+	if len(evidence.PipelineResults) != 0 {
+		t.Fatalf(
+			"pipelineResults = %#v, want empty ordered per-item stage results for pipeline([])",
+			evidence.PipelineResults,
 		)
 	}
 }
