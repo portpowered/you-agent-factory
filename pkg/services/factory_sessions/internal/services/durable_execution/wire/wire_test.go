@@ -77,6 +77,24 @@ func TestNewServiceRoutesStartIdempotencyThroughOwner(t *testing.T) {
 	}
 }
 
+func TestNewServiceRoutesInspectThroughOwner(t *testing.T) {
+	t.Parallel()
+
+	stub := &inspectSpy{}
+	service, err := durableexecutionwire.NewService(stub)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	inspect, err := service.GetSession(context.Background(), "sess-inspect")
+	if err != nil || inspect.SessionID != "sess-inspect" || inspect.Status != factorysessions.LifecycleStatusRunning {
+		t.Fatalf("GetSession = (%#v, %v), want published durable inspect result", inspect, err)
+	}
+	if stub.inspectCalls != 1 {
+		t.Fatalf("inspect calls = %d, want 1", stub.inspectCalls)
+	}
+}
+
 func TestNewServiceRoutesDurableStartThroughOwner(t *testing.T) {
 	t.Parallel()
 
@@ -135,6 +153,19 @@ func (s *executionSpy) StartSync(context.Context, factorysessions.StartRequest) 
 func (s *executionSpy) GetSession(context.Context, string) (factorysessions.SessionReadResult, error) {
 	s.calls++
 	return factorysessions.SessionReadResult{SessionID: "sess-1"}, nil
+}
+
+type inspectSpy struct {
+	factorysessions.ExecutionService
+	inspectCalls int
+}
+
+func (s *inspectSpy) GetSession(_ context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
+	s.inspectCalls++
+	return factorysessions.SessionReadResult{
+		SessionID: sessionID,
+		Status:    factorysessions.LifecycleStatusRunning,
+	}, nil
 }
 
 type idempotencySpy struct {
