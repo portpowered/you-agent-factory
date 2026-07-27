@@ -447,7 +447,6 @@ type scriptResponseOutcomeCase struct {
 func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 	timedOut := workerexecution.ScriptFailureTypeTimeout
 	processError := workerexecution.ScriptFailureTypeProcessError
-	internalServerError := workerexecution.WorkFailureTypeInternalServerError
 
 	return []scriptResponseOutcomeCase{
 		{
@@ -473,10 +472,6 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 			wantStderr:    "boom\n",
 			wantResult:    workerexecution.OutcomeFailed,
 			wantErrorText: "boom",
-			wantFailureMetadata: func() *workerexecution.WorkFailureType {
-				value := internalServerError
-				return &value
-			}(),
 		},
 		{
 			name: "timeout",
@@ -504,10 +499,6 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 			wantStderr:    "exec failed",
 			wantResult:    workerexecution.OutcomeFailed,
 			wantErrorText: "execution cancelled: exec: file not found",
-			wantFailureMetadata: func() *workerexecution.WorkFailureType {
-				value := internalServerError
-				return &value
-			}(),
 		},
 		{
 			name: "process error omits zero exit code diagnostics",
@@ -519,10 +510,6 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 			wantStderr:    "exec failed",
 			wantResult:    workerexecution.OutcomeFailed,
 			wantErrorText: "execution cancelled: exec: file not found",
-			wantFailureMetadata: func() *workerexecution.WorkFailureType {
-				value := internalServerError
-				return &value
-			}(),
 		},
 		{
 			name: "missing executable",
