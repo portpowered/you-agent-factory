@@ -11,4 +11,5 @@ import (
 // projected from the accepted standardized provider catalog.
 type Service interface {
 	ListProviders(context.Context, providers.ListProvidersRequest) (providers.ListProvidersResult, error)
+	GetProvider(context.Context, providers.GetProviderRequest) (providers.GetProviderResult, error)
 }

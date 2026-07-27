@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -172,6 +173,140 @@ func TestListProvidersProjectsIdentityMetadataAndCapabilities(t *testing.T) {
 	kiro := indexProviders(list.Providers)[providers.IDKiro]
 	if !slices.Contains(kiro.Aliases, "kiro") {
 		t.Fatalf("kiro aliases = %#v, want kiro manifest id alias", kiro.Aliases)
+	}
+}
+
+func TestGetProviderResolvesCanonicalID(t *testing.T) {
+	t.Parallel()
+
+	service, err := internalservice.New()
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	got, err := service.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.IDCodex})
+	if err != nil {
+		t.Fatalf("GetProvider(codex) = %v", err)
+	}
+	if got.Provider.ID != providers.IDCodex {
+		t.Fatalf("provider id = %q, want %q", got.Provider.ID, providers.IDCodex)
+	}
+	if got.Provider.DisplayName != "Codex" {
+		t.Fatalf("display name = %q, want Codex", got.Provider.DisplayName)
+	}
+	if got.Provider.Availability != providers.AvailabilitySelectable {
+		t.Fatalf("availability = %q, want selectable", got.Provider.Availability)
+	}
+	if got.Provider.Readiness != providers.ReadinessReady {
+		t.Fatalf("readiness = %q, want ready", got.Provider.Readiness)
+	}
+	if !slices.Contains(got.Provider.Capabilities, providers.CapabilityPromptSubmission) {
+		t.Fatalf("capabilities = %#v, want prompt_submission", got.Provider.Capabilities)
+	}
+}
+
+func TestGetProviderResolvesAcceptedAliases(t *testing.T) {
+	t.Parallel()
+
+	service, err := internalservice.New()
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	cases := []struct {
+		name      string
+		requestID providers.ID
+		wantID    providers.ID
+		wantName  string
+		wantAlias string
+	}{
+		{
+			name:      "cursor manifest id alias",
+			requestID: providers.ID("cursor"),
+			wantID:    providers.IDCursor,
+			wantName:  "Cursor CLI",
+			wantAlias: "cursor",
+		},
+		{
+			name:      "kiro manifest id alias",
+			requestID: providers.ID("kiro"),
+			wantID:    providers.IDKiro,
+			wantName:  "Kiro CLI",
+			wantAlias: "kiro",
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			byAlias, err := service.GetProvider(context.Background(), providers.GetProviderRequest{ID: testCase.requestID})
+			if err != nil {
+				t.Fatalf("GetProvider(%q) = %v", testCase.requestID, err)
+			}
+			byCanonical, err := service.GetProvider(context.Background(), providers.GetProviderRequest{ID: testCase.wantID})
+			if err != nil {
+				t.Fatalf("GetProvider(%q) = %v", testCase.wantID, err)
+			}
+
+			if byAlias.Provider.ID != testCase.wantID {
+				t.Fatalf("alias lookup id = %q, want %q", byAlias.Provider.ID, testCase.wantID)
+			}
+			if byAlias.Provider.DisplayName != testCase.wantName {
+				t.Fatalf("alias lookup display name = %q, want %q", byAlias.Provider.DisplayName, testCase.wantName)
+			}
+			if !slices.Contains(byAlias.Provider.Aliases, testCase.wantAlias) {
+				t.Fatalf("alias lookup aliases = %#v, want %q", byAlias.Provider.Aliases, testCase.wantAlias)
+			}
+			if !reflect.DeepEqual(byAlias.Provider, byCanonical.Provider) {
+				t.Fatalf("alias lookup = %#v, want canonical lookup %#v", byAlias.Provider, byCanonical.Provider)
+			}
+		})
+	}
+}
+
+func TestGetProviderReturnsDetachedValues(t *testing.T) {
+	t.Parallel()
+
+	service, err := internalservice.New()
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	first, err := service.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.IDCodex})
+	if err != nil {
+		t.Fatalf("first GetProvider() = %v", err)
+	}
+	second, err := service.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.IDCodex})
+	if err != nil {
+		t.Fatalf("second GetProvider() = %v", err)
+	}
+	if !reflect.DeepEqual(first.Provider, second.Provider) {
+		t.Fatalf("repeated get = %#v, want %#v", first.Provider, second.Provider)
+	}
+
+	first.Provider.DisplayName = "mutated"
+	if len(first.Provider.Aliases) > 0 {
+		first.Provider.Aliases[0] = "mutated"
+	}
+	if len(first.Provider.Capabilities) > 0 {
+		first.Provider.Capabilities[0] = providers.CapabilityUsage
+	}
+
+	third, err := service.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.IDCodex})
+	if err != nil {
+		t.Fatalf("third GetProvider() = %v", err)
+	}
+	if third.Provider.DisplayName == "mutated" {
+		t.Fatalf("third get display name = %q, want detached copy", third.Provider.DisplayName)
+	}
+	if len(third.Provider.Aliases) > 0 && third.Provider.Aliases[0] == "mutated" {
+		t.Fatal("third get aliases share mutation from first result")
+	}
+	if len(third.Provider.Capabilities) > 0 &&
+		third.Provider.Capabilities[0] == providers.CapabilityUsage &&
+		first.Provider.Capabilities[0] == providers.CapabilityUsage {
+		t.Fatal("third get capabilities share mutation from first result")
 	}
 }
 
