@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","session_id":"session_fixture_cursor_success"}
+{"type":"assistant","timestamp_ms":1,"message":{"role":"assistant","content":[{"type":"text","text":"working"}]},"session_id":"session_fixture_cursor_success"}
+{"type":"tool_call","subtype":"started","call_id":"call_fixture_1","tool_call":{"readToolCall":{"args":{"path":"README.md"}}},"session_id":"session_fixture_cursor_success"}
+{"type":"tool_call","subtype":"completed","call_id":"call_fixture_1","tool_call":{"readToolCall":{"result":{"success":{}}}},"session_id":"session_fixture_cursor_success"}
+{"type":"result","subtype":"success","is_error":false,"result":"Cursor fixture answer COMPLETE","session_id":"session_fixture_cursor_success"}

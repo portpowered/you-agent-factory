@@ -1,0 +1,2 @@
+{"type":"step_start","timestamp":1783962000000,"sessionID":"ses_fixture_opencode_failure","part":{"id":"step_error","sessionID":"ses_fixture_opencode_failure","messageID":"msg_error","type":"step-start"}}
+{"type":"error","timestamp":1783962000001,"sessionID":"ses_fixture_opencode_failure","error":{"name":"ProviderAuthError","data":{"message":"private prompt and sk-opencode-secret must not escape","statusCode":401,"responseBody":"private provider body"}}}
