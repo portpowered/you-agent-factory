@@ -2,6 +2,7 @@ package wire_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -47,6 +48,32 @@ func TestNewServiceDefersRuntimeEffectsUntilInvocation(t *testing.T) {
 	}
 	if stub.calls != 2 {
 		t.Fatalf("runtime calls = %d, want 2 after start and inspect", stub.calls)
+	}
+}
+
+func TestNewServiceRoutesStartIdempotencyThroughOwner(t *testing.T) {
+	t.Parallel()
+
+	stub := &idempotencySpy{}
+	service, err := durableexecutionwire.NewService(stub)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	request := factorysessions.DurableStartRequest{RequestID: "req-idempotent"}
+	first, err := service.StartAsync(context.Background(), request)
+	if err != nil || first.SessionID != "sess-idempotent" {
+		t.Fatalf("first StartAsync = (%#v, %v), want stable durable async start", first, err)
+	}
+	second, err := service.StartAsync(context.Background(), request)
+	if err != nil || second.SessionID != first.SessionID {
+		t.Fatalf("replay StartAsync = (%#v, %v), want same session identity", second, err)
+	}
+
+	conflict := request
+	conflict.Args = map[string]any{"changed": true}
+	if _, err := service.StartAsync(context.Background(), conflict); !errors.Is(err, factorysessions.ErrExecutionRequestIDConflict) {
+		t.Fatalf("conflicting StartAsync error = %v, want ErrExecutionRequestIDConflict", err)
 	}
 }
 
@@ -108,4 +135,38 @@ func (s *executionSpy) StartSync(context.Context, factorysessions.StartRequest) 
 func (s *executionSpy) GetSession(context.Context, string) (factorysessions.SessionReadResult, error) {
 	s.calls++
 	return factorysessions.SessionReadResult{SessionID: "sess-1"}, nil
+}
+
+type idempotencySpy struct {
+	factorysessions.ExecutionService
+	recorded map[string]factorysessions.StartRequest
+}
+
+func (s *idempotencySpy) StartAsync(_ context.Context, req factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+	if s.recorded == nil {
+		s.recorded = make(map[string]factorysessions.StartRequest)
+	}
+	if prior, ok := s.recorded[req.RequestID]; ok {
+		if len(prior.Args) != len(req.Args) {
+			return factorysessions.AsyncStartResult{}, factorysessions.ErrExecutionRequestIDConflict
+		}
+		for key, value := range req.Args {
+			if prior.Args[key] != value {
+				return factorysessions.AsyncStartResult{}, factorysessions.ErrExecutionRequestIDConflict
+			}
+		}
+		return factorysessions.AsyncStartResult{
+			SessionID: "sess-idempotent",
+			Status:    string(factorysessions.LifecycleStatusRunning),
+		}, nil
+	}
+	s.recorded[req.RequestID] = req
+	return factorysessions.AsyncStartResult{
+		SessionID: "sess-idempotent",
+		Status:    string(factorysessions.LifecycleStatusRunning),
+	}, nil
+}
+
+func (s *idempotencySpy) StartSync(context.Context, factorysessions.StartRequest) (factorysessions.SyncStartResult, error) {
+	return factorysessions.SyncStartResult{}, errors.New("unexpected StartSync")
 }
