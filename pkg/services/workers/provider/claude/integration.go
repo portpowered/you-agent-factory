@@ -63,25 +63,35 @@ func (i *Integration) Invoke(
 	writer inference.ResponseWriter,
 ) error {
 	if err := unsupportedImageContentError(request.Execution().InputTokens); err != nil {
-		return writer.Close(ctx, inference.FailedCompletion(inference.NewFailure(inference.FailureInput{
+		failure := inference.NewFailure(inference.FailureInput{
 			Kind:    inference.FailureInvalidRequest,
 			Message: err.Error(),
-		})))
+		})
+		if writeErr := writeFailureProgress(ctx, writer, request.InvocationID(), failure); writeErr != nil {
+			return writeErr
+		}
+		return writer.Close(ctx, inference.FailedCompletion(failure))
 	}
 	if i == nil || i.providers == nil {
-		return writer.Close(ctx, inference.FailedCompletion(inference.NewFailure(inference.FailureInput{
+		failure := inference.NewFailure(inference.FailureInput{
 			Kind:    inference.FailureDependency,
 			Message: "Claude Providers service is unavailable",
-		})))
+		})
+		if err := writeFailureProgress(ctx, writer, request.InvocationID(), failure); err != nil {
+			return err
+		}
+		return writer.Close(ctx, inference.FailedCompletion(failure))
 	}
 	result, err := i.providers.Execute(ctx, executeRequestFromInvocation(request))
 	if errors.Is(ctx.Err(), context.Canceled) && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return ctx.Err()
 	}
 	if err != nil {
-		return writer.Close(ctx, inference.FailedCompletion(
-			failureFromExecuteError(err, sessionRefFromResult(result.SessionRef)),
-		))
+		failure := failureFromExecuteError(err, sessionRefFromResult(result.SessionRef))
+		if writeErr := writeFailureProgress(ctx, writer, request.InvocationID(), failure); writeErr != nil {
+			return writeErr
+		}
+		return writer.Close(ctx, inference.FailedCompletion(failure))
 	}
 	if err := writeProgressEvents(
 		ctx,

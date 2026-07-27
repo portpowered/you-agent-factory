@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 
@@ -202,6 +203,39 @@ func authoritativeMessageCompletedEvent(
 		return inference.EventDraft{}, false
 	}
 	return event, true
+}
+
+func writeFailureProgress(
+	ctx context.Context,
+	writer inference.ResponseWriter,
+	runID string,
+	failure inference.Failure,
+) error {
+	payload, err := json.Marshal(workerexecution.ErrorPayload{
+		Code:      "stream_failed",
+		Message:   failure.Message(),
+		Retryable: failure.Retryable(),
+	})
+	if err != nil {
+		return err
+	}
+	event, err := inference.NewEventDraft(inference.EventDraftInput{
+		RunID:   runID,
+		Kind:    workerexecution.KindError,
+		Phase:   workerexecution.PhaseFailed,
+		Payload: payload,
+		Provenance: workerexecution.Provenance{
+			Provider:        string(providers.IDCodex),
+			Delivery:        workerexecution.DeliverySynthesized,
+			Representation:  workerexecution.RepresentationNotification,
+			Fidelity:        workerexecution.FidelityLifecycleOnly,
+			NativeEventType: "provider_failure",
+		},
+	})
+	if err != nil {
+		return err
+	}
+	return writer.WriteEvent(ctx, event)
 }
 
 func toolResultSummary(detail string) json.RawMessage {

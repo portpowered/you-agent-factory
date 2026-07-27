@@ -329,13 +329,13 @@ func classifyDeclaredFailure(record errorRecord) providers.ExecuteFailure {
 func declaredFailureMessage(kind providers.ExecuteFailureKind) string {
 	switch kind {
 	case providers.ExecuteFailureKindAuthentication:
-		return "Codex authentication failed"
+		return "Codex authentication failed."
 	case providers.ExecuteFailureKindInvalidRequest:
 		return "Codex rejected the request as invalid"
 	case providers.ExecuteFailureKindThrottled:
 		return "Codex is temporarily unavailable due to usage or capacity limits"
 	case providers.ExecuteFailureKindTimeout:
-		return "Codex request timed out"
+		return "Codex request timed out."
 	case providers.ExecuteFailureKindDependency:
 		return "Codex encountered a temporary server error"
 	default:
