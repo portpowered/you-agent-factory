@@ -901,11 +901,17 @@ stay off the public Runtime package surface enforced by `make pkg-boundary`.
 Adding that new production package (any non-test `.go` under a new
 `pkg/services/...` directory) also requires regenerating
 `docs/internal/packaged-service-structure/package-target-manifest.json` with
-`go run ./cmd/packagetargetmanifestcheck -write-inventory` then
-`-write-owner-packages`, and adding the matching retain row to
+`go run ./cmd/packagetargetmanifestcheck -write-inventory -write-owner-packages`
+then adding matching retain rows to
 `docs/internal/baselines/ownership-inventory.json` (sorted by `packagePath`)
-so `ownershipinventorycheck` / Dev Package Prerequisites / `make lint` stay
-green.
+and registering measured packages in both
+`docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+`docs/internal/baselines/go-functional-coverage-package-minimums.json` so
+`ownershipinventorycheck` / Dev Package Prerequisites / `make lint` stay
+green. When rebasing orchestration ownership onto main that already landed a
+sibling Runtime owner such as `instance_host`, keep both destination package
+rows in the shared manifest, ownership inventory, and coverage minimum files
+instead of choosing one side of the conflict.
 Migration adapter fakes that explicitly implement `APIFactory` should return
 `LegacyEngineObservation` (alias of `StateSnapshot`) rather than naming
 prohibited Petri public-surface symbols in non-internal packages.

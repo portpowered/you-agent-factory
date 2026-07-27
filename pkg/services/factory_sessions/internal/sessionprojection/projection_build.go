@@ -20,12 +20,14 @@ func BuildProjectionContext(input ProjectionBuildInput) (ProjectionContext, erro
 	}
 	result := ProjectionContext{
 		Session: projectLiveSession(input.Session), FactorySessionID: livesession.CanonicalID(input.Session),
-		FactoryCfg: factoryCfg, Snapshot: input.Snapshot,
+		FactoryCfg: factoryCfg, Snapshot: input.Snapshot, Observation: input.Observation,
 		BackendScopeID: input.BackendScopeID, LogicalSessionKeyID: input.LogicalSessionKey,
 		NormalizedTarget: input.NormalizedTarget, RuntimeStartedAt: input.RuntimeStartedAt,
 		Now: input.Now,
 	}
-	if input.Snapshot != nil {
+	if input.Observation.Health.LifecycleControlStatus != "" {
+		result.LifecycleControlStatus = input.Observation.Health.LifecycleControlStatus
+	} else if input.Snapshot != nil {
 		result.LifecycleControlStatus = input.Snapshot.LifecycleControlStatus
 	}
 	if interfaces.IsJavaScriptOrchestratorFactory(factoryCfg) && input.CheckpointStore != nil {
