@@ -41,6 +41,28 @@ func initializeOperatorConfig(
 	return operatorConfigOutcome{ConfigPath: configPath}
 }
 
+func writeAcceptingGoalMockWorkers(t *testing.T) string {
+	t.Helper()
+
+	data, err := json.Marshal(workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{
+			{WorkerName: "goal-planner", WorkstationName: "plan-goal", RunType: workers.MockWorkerRunTypeAccept},
+			{WorkerName: "goal-executor", WorkstationName: "execute-goal", RunType: workers.MockWorkerRunTypeAccept},
+			{WorkerName: "goal-checker", WorkstationName: "check-goal", RunType: workers.MockWorkerRunTypeAccept},
+			{WorkerName: "goal-reviewer", WorkstationName: "review-goal", RunType: workers.MockWorkerRunTypeAccept},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal accepting mock workers: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "accepting-mock-workers.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write accepting mock workers: %v", err)
+	}
+	return path
+}
+
 func writeRejectingGoalMockWorkers(t *testing.T) string {
 	t.Helper()
 

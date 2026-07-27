@@ -115,3 +115,45 @@ func TestCLIInterruptedExitCode(t *testing.T) {
 	interruptAndAssertCancellationExit(t, command, 10*time.Second)
 	stopped = true
 }
+
+// TestCLISuccessExitCode proves a successful one-shot run that reaches normal
+// quiescence exits the documented success code through the public built you CLI process.
+func TestCLISuccessExitCode(t *testing.T) {
+	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	session := harness.NewSession(t).WithNoExternalServer(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	initOutcome := initializeOperatorConfig(t, ctx, session, "success-exit-config-init")
+	configBody := []byte(`{
+  "defaults": {
+    "workerModelProvider": "codex",
+    "workerModel": "gpt-5-codex"
+  }
+}`)
+	if err := os.WriteFile(initOutcome.ConfigPath, configBody, 0o600); err != nil {
+		t.Fatalf("WriteFile(%q): %v", initOutcome.ConfigPath, err)
+	}
+
+	mockWorkersPath := writeAcceptingGoalMockWorkers(t)
+	args := append([]string{}, session.RuntimeLogDirFlags()...)
+	args = append(args, session.ServerFlags()...)
+	args = append(args,
+		"run",
+		"--named", "@you/goal",
+		"--with-mock-workers",
+		"--no-record",
+		"--quiet",
+		mockWorkersPath,
+		fmt.Sprintf("success-exit-%d", time.Now().UnixNano()),
+	)
+
+	result, err := session.Run(ctx, args...)
+	if err != nil {
+		t.Fatalf("successful quiescence run failed: %v; stdout=%q stderr=%q", err, result.Stdout, result.Stderr)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want documented success exit 0", result.ExitCode)
+	}
+}
