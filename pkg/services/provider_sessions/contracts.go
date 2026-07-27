@@ -1,6 +1,7 @@
 package providersessions
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -56,17 +57,24 @@ type Service interface {
 	Project(ProjectRequest) (ProjectResult, error)
 }
 
+// SessionRef is an alias for the Providers-owned canonical provider-session
+// identity. Provider Sessions does not publish a second identity type.
+type SessionRef = providers.SessionRef
+
 // InspectRequest asks the root Service to validate and inspect one detached
 // SessionRef without requiring filesystem/SQL/OS effect ports from the caller.
 type InspectRequest struct {
-	Session providers.SessionRef
+	Session SessionRef
+	// Context carries cancellation for the inspection operation. When nil,
+	// context.Background is used.
+	Context context.Context
 }
 
 // InspectResult is the detached success outcome for typed SessionRef
 // validation/inspection. Normalized transcript/detail projection is published
 // as the additive Project companion slice on the same root Service.
 type InspectResult struct {
-	Session providers.SessionRef
+	Session SessionRef
 	Source  SourceMetadata
 }
 
@@ -74,20 +82,19 @@ type InspectResult struct {
 // projection for one detached SessionRef without requiring filesystem/SQL/OS
 // effect ports from the caller.
 type ProjectRequest struct {
-	Session providers.SessionRef
+	Session SessionRef
+	// Context carries cancellation for the inspection operation. When nil,
+	// context.Background is used.
+	Context context.Context
 }
 
 // ProjectResult is the detached Detail-shaped projection peers consume for
 // transcript, reasoning, tool/function-call, parse, and usage facts through
 // Provider Sessions root contracts only.
 type ProjectResult struct {
-	Session providers.SessionRef
+	Session SessionRef
 	Detail  Detail
 }
-
-// SessionRef remains as a source-compatible alias while Providers owns the
-// canonical identity and all root request/result fields use that exact type.
-type SessionRef = providers.SessionRef
 
 type Provider string
 
@@ -242,6 +249,8 @@ type UnknownEvent struct {
 var (
 	ErrAmbiguousSessionFile        = errors.New("ambiguous provider session file")
 	ErrInvalidIdentifier           = errors.New("invalid provider session identifier")
+	ErrOperationCanceled           = fmt.Errorf("provider session inspection canceled: %w", context.Canceled)
+	ErrResourceLimitExceeded       = errors.New("provider session inspection resource limit exceeded")
 	ErrSessionNotFound             = errors.New("provider session not found")
 	ErrSessionOutsideRoot          = errors.New("provider session resolves outside configured storage")
 	ErrSessionSourceNotRegularFile = errors.New("provider session source is not a regular file")

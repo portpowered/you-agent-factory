@@ -131,6 +131,9 @@
     "pkg/services/factory_runtime/internal/services/dispatch_planning",
     "pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
     "pkg/services/factory_runtime/internal/services/dispatch_planning/wire",
+    "pkg/services/factory_runtime/internal/services/instance_host",
+    "pkg/services/factory_runtime/internal/services/instance_host/internal/service",
+    "pkg/services/factory_runtime/internal/services/instance_host/wire",
     "pkg/services/factory_runtime/internal/services/orchestration",
     "pkg/services/factory_runtime/internal/services/orchestration/internal/service",
     "pkg/services/factory_runtime/internal/services/orchestration/wire",
@@ -245,10 +248,13 @@
     "pkg/services/operator_settings",
     "pkg/services/operator_settings/identityinventory",
     "pkg/services/provider_sessions",
-    "pkg/services/provider_sessions/cursor",
     "pkg/services/provider_sessions/internal/services/codex_reader",
     "pkg/services/provider_sessions/internal/services/codex_reader/internal/service",
     "pkg/services/provider_sessions/internal/services/codex_reader/wire",
+    "pkg/services/provider_sessions/internal/services/cursor_reader",
+    "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
+    "pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
+    "pkg/services/provider_sessions/internal/services/cursor_reader/wire",
     "pkg/services/provider_sessions/service",
     "pkg/services/providers",
     "pkg/services/providers/internal/service",
@@ -266,6 +272,9 @@
     "pkg/services/recordings/events/kinds",
     "pkg/services/recordings/events/snapshot",
     "pkg/services/recordings/internal/canonical",
+    "pkg/services/recordings/internal/services/artifacts_export",
+    "pkg/services/recordings/internal/services/artifacts_export/internal/service",
+    "pkg/services/recordings/internal/services/artifacts_export/wire",
     "pkg/services/recordings/internal/services/projection_query",
     "pkg/services/recordings/internal/services/projection_query/internal/service",
     "pkg/services/recordings/internal/services/projection_query/wire",
@@ -864,6 +873,21 @@
       "destination": "factory_runtime/internal/services/dispatch_planning"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/services/instance_host",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/instance_host"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/instance_host/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/instance_host"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/instance_host/wire",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/instance_host"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration",
       "disposition": "retain",
       "destination": "factory_runtime/internal/services/orchestration"
@@ -1434,11 +1458,6 @@
       "destination": "provider_sessions"
     },
     {
-      "packagePath": "pkg/services/provider_sessions/cursor",
-      "disposition": "move",
-      "destination": "provider_sessions/internal/services/cursor_reader"
-    },
-    {
       "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader",
       "disposition": "retain",
       "destination": "provider_sessions/internal/services/codex_reader"
@@ -1452,6 +1471,26 @@
       "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader/wire",
       "disposition": "retain",
       "destination": "provider_sessions/internal/services/codex_reader"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/cursor_reader"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/cursor_reader"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/cursor_reader"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/wire",
+      "disposition": "retain",
+      "destination": "provider_sessions/internal/services/cursor_reader"
     },
     {
       "packagePath": "pkg/services/provider_sessions/service",
@@ -1537,6 +1576,21 @@
       "packagePath": "pkg/services/recordings/internal/canonical",
       "disposition": "retain",
       "destination": "recordings"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/artifacts_export",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/artifacts_export"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/artifacts_export/internal/service",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/artifacts_export"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/artifacts_export/wire",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/artifacts_export"
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/projection_query",
