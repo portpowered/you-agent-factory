@@ -9,6 +9,7 @@ import (
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/requiredtools"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/structural"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/topology"
 )
@@ -16,9 +17,10 @@ import (
 // Service is the private nested validation implementation behind the CTR-DEF
 // root validate slice.
 type Service struct {
-	operations    factorycontracts.DefinitionValidationOperation
-	effective     factorycontracts.EffectiveDefinitionValidationOperation
-	loadCanonical factorycontracts.CanonicalFactoryJSONLoader
+	operations        factorycontracts.DefinitionValidationOperation
+	effective         factorycontracts.EffectiveDefinitionValidationOperation
+	loadCanonical     factorycontracts.CanonicalFactoryJSONLoader
+	requiredToolChecker factorycontracts.RequiredToolChecker
 }
 
 var _ validationservice.Service = (*Service)(nil)
@@ -28,14 +30,16 @@ func New(
 	operations factorycontracts.DefinitionValidationOperation,
 	effective factorycontracts.EffectiveDefinitionValidationOperation,
 	loadCanonical factorycontracts.CanonicalFactoryJSONLoader,
+	requiredToolChecker factorycontracts.RequiredToolChecker,
 ) *Service {
 	if operations == nil || effective == nil || loadCanonical == nil {
 		return nil
 	}
 	return &Service{
-		operations:    operations,
-		effective:     effective,
-		loadCanonical: loadCanonical,
+		operations:          operations,
+		effective:           effective,
+		loadCanonical:       loadCanonical,
+		requiredToolChecker: requiredToolChecker,
 	}
 }
 
@@ -66,7 +70,12 @@ func (s *Service) ValidateStructuralFactoryDefinition(
 	if err != nil {
 		return factoryroot.ValidateStructuralFactoryDefinitionResult{}, err
 	}
-	result := mergeValidationResults(structural.Validate(cfg), topology.Validate(cfg), profileResult)
+	result := mergeValidationResults(
+		structural.Validate(cfg),
+		topology.Validate(cfg),
+		requiredtools.Validate(cfg, s.requiredToolChecker),
+		profileResult,
+	)
 	return finishStructuralResult(result)
 }
 

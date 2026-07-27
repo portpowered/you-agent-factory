@@ -84,6 +84,7 @@
     "pkg/services/factory_definitions/internal/services/catalog/internal/service",
     "pkg/services/factory_definitions/internal/services/catalog/wire",
     "pkg/services/factory_definitions/internal/services/validation",
+    "pkg/services/factory_definitions/internal/services/validation/internal/requiredtools",
     "pkg/services/factory_definitions/internal/services/validation/internal/service",
     "pkg/services/factory_definitions/internal/services/validation/internal/structural",
     "pkg/services/factory_definitions/internal/services/validation/internal/topology",
@@ -623,6 +624,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/validation",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/requiredtools",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/validation"
     },

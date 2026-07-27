@@ -78,6 +78,11 @@ const (
 	CodeOrchestratorJavaScriptInvalidAgent                       = "factory.orchestrator.javascriptInvalidAgent"
 	CodeWorkerWorkstationBehaviorCompatibility                   = "workstation-worker-behavior-compatibility"
 	CodePollerRunWorkstationKindMismatch                         = "workstation-poller-run-kind-mismatch"
+	CodeRequiredToolName                                         = "factory.requiredTool.name"
+	CodeRequiredToolCommand                                      = "factory.requiredTool.command"
+	CodeRequiredToolVersionArgs                                  = "factory.requiredTool.versionArgs"
+	CodeRequiredToolMissing                                      = "factory.requiredTool.missing"
+	CodeRequiredToolVersionProbe                                 = "factory.requiredTool.versionProbe"
 )
 
 var invocationSignatureReferencePattern = regexp.MustCompile(`\$\{([A-Za-z0-9_.-]+)\}`)

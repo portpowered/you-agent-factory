@@ -87,13 +87,15 @@ func newValidationService(t *testing.T, operations stubOperations) validationser
 func newValidationServiceWithConfig(
 	t *testing.T,
 	cfg *factorycontracts.FactoryConfig,
+	checker factorycontracts.RequiredToolChecker,
 ) validationservice.Service {
 	t.Helper()
 	validator := factoryvalidation.New(nil)
 	svc, err := validationwire.NewService(validationservice.Dependencies{
-		Operations:    validator,
-		Effective:     validator,
-		LoadCanonical: stubLoadCanonicalForConfig(cfg),
+		Operations:          validator,
+		Effective:           validator,
+		LoadCanonical:       stubLoadCanonicalForConfig(cfg),
+		RequiredToolChecker: checker,
 	})
 	if err != nil {
 		t.Fatalf("validationwire.NewService: %v", err)
@@ -133,7 +135,7 @@ func validPetriFactoryConfig() *factorycontracts.FactoryConfig {
 
 func TestValidationService_RejectsMissingDependencies(t *testing.T) {
 	t.Parallel()
-	if svc := validationserviceimpl.New(nil, nil, nil); svc != nil {
+	if svc := validationserviceimpl.New(nil, nil, nil, nil); svc != nil {
 		t.Fatal("expected nil service when dependencies are missing")
 	}
 	if _, err := validationwire.NewService(validationservice.Dependencies{}); err == nil {
@@ -227,7 +229,7 @@ func TestValidationService_ValidEffectiveDefinitionSucceeds(t *testing.T) {
 func TestValidationService_WiredStructuralValidationSucceedsForValidPetriFactory(t *testing.T) {
 	t.Parallel()
 
-	svc := newValidationServiceWithConfig(t, validPetriFactoryConfig())
+	svc := newValidationServiceWithConfig(t, validPetriFactoryConfig(), nil)
 	result, err := svc.ValidateStructuralFactoryDefinition(
 		context.Background(),
 		factoryroot.ValidateStructuralFactoryDefinitionRequest{
@@ -248,7 +250,7 @@ func TestValidationService_WiredStructuralValidationReturnsTypedDuplicateWorkerT
 
 	cfg := validPetriFactoryConfig()
 	cfg.Workers = append(cfg.Workers, workerconfig.Config{Name: "worker-a"})
-	svc := newValidationServiceWithConfig(t, cfg)
+	svc := newValidationServiceWithConfig(t, cfg, nil)
 
 	_, err := svc.ValidateStructuralFactoryDefinition(
 		context.Background(),
@@ -285,7 +287,7 @@ func TestValidationService_WiredTopologyValidationReturnsTypedDanglingPlaceTarge
 		WorkTypeName: "task",
 		StateName:    "bogus",
 	}}
-	svc := newValidationServiceWithConfig(t, cfg)
+	svc := newValidationServiceWithConfig(t, cfg, nil)
 
 	_, err := svc.ValidateStructuralFactoryDefinition(
 		context.Background(),
@@ -311,5 +313,91 @@ func TestValidationService_WiredTopologyValidationReturnsTypedDanglingPlaceTarge
 	}
 	if !found {
 		t.Fatalf("validation targets = %#v, want dangling place topology target", validationFailure.Validation.Targets)
+	}
+}
+
+type wiredStubRequiredToolChecker map[string]factorycontracts.RequiredToolCheckResult
+
+func (s wiredStubRequiredToolChecker) Check(tool factorycontracts.RequiredToolConfig) factorycontracts.RequiredToolCheckResult {
+	if result, ok := s[tool.Command]; ok {
+		return result
+	}
+	return factorycontracts.RequiredToolCheckResult{}
+}
+
+func TestValidationService_WiredRequiredToolValidationSucceedsWhenCheckerReportsPresent(t *testing.T) {
+	t.Parallel()
+
+	cfg := validPetriFactoryConfig()
+	cfg.ResourceManifest = &factorycontracts.PortableResourceManifestConfig{
+		RequiredTools: []factorycontracts.RequiredToolConfig{{
+			Name:    "Portable helper",
+			Command: "present-tool",
+		}},
+	}
+	svc := newValidationServiceWithConfig(t, cfg, wiredStubRequiredToolChecker{
+		"present-tool": {},
+	})
+
+	result, err := svc.ValidateStructuralFactoryDefinition(
+		context.Background(),
+		factoryroot.ValidateStructuralFactoryDefinitionRequest{
+			Canonical: []byte(`{"name":"structural-validation"}`),
+			Profile:   factoryroot.ValidationProfileTopology,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ValidateStructuralFactoryDefinition: %v", err)
+	}
+	for _, target := range result.Validation.Targets {
+		if target.Code == factoryvalidation.CodeRequiredToolMissing ||
+			target.Code == factoryvalidation.CodeRequiredToolVersionProbe {
+			t.Fatalf("validation findings = %#v, want no required-tool failures", result.Validation.Targets)
+		}
+	}
+}
+
+func TestValidationService_WiredRequiredToolValidationReturnsTypedMissingToolTarget(t *testing.T) {
+	t.Parallel()
+
+	cfg := validPetriFactoryConfig()
+	cfg.ResourceManifest = &factorycontracts.PortableResourceManifestConfig{
+		RequiredTools: []factorycontracts.RequiredToolConfig{{
+			Name:    "Missing helper",
+			Command: "missing-tool",
+		}},
+	}
+	svc := newValidationServiceWithConfig(t, cfg, wiredStubRequiredToolChecker{
+		"missing-tool": {
+			FailureKind: factorycontracts.RequiredToolFailureKindMissing,
+			Err:         errors.New(`required tool "Missing helper" command "missing-tool" was not found on PATH`),
+		},
+	})
+
+	_, err := svc.ValidateStructuralFactoryDefinition(
+		context.Background(),
+		factoryroot.ValidateStructuralFactoryDefinitionRequest{
+			Canonical: []byte(`{"name":"structural-validation"}`),
+			Profile:   factoryroot.ValidationProfileTopology,
+		},
+	)
+	var validationFailure *factoryroot.FactoryDefinitionValidationFailure
+	if !errors.As(err, &validationFailure) {
+		t.Fatalf("error = %v, want FactoryDefinitionValidationFailure", err)
+	}
+	if !errors.Is(err, factoryroot.ErrFactoryDefinitionValidationFailed) {
+		t.Fatalf("error = %v, want %v", err, factoryroot.ErrFactoryDefinitionValidationFailed)
+	}
+	found := false
+	for _, target := range validationFailure.Validation.Targets {
+		if target.Code == factoryvalidation.CodeRequiredToolMissing &&
+			target.Severity == factorycontracts.ValidationSeverityError &&
+			target.Subject.Type == factorycontracts.ValidationSubjectTypeFactory &&
+			target.Subject.ID == "Missing helper" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("validation targets = %#v, want typed missing required-tool target", validationFailure.Validation.Targets)
 	}
 }

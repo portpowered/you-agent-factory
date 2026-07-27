@@ -23,7 +23,12 @@ func NewService(deps validationservice.Dependencies) (validationservice.Service,
 	if deps.LoadCanonical == nil {
 		return nil, fmt.Errorf("construct Factory Definitions validation: canonical Factory loader is required")
 	}
-	service := validationserviceimpl.New(deps.Operations, deps.Effective, deps.LoadCanonical)
+	service := validationserviceimpl.New(
+		deps.Operations,
+		deps.Effective,
+		deps.LoadCanonical,
+		deps.RequiredToolChecker,
+	)
 	if service == nil {
 		return nil, fmt.Errorf("construct Factory Definitions validation: implementation rejected its dependencies")
 	}
