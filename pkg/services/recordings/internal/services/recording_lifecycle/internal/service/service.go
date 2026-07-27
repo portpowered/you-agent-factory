@@ -11,6 +11,8 @@ import (
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 )
 
+const finalFlushFailureCode = "final_flush_failed"
+
 type recordingSession struct {
 	artifact       recordings.RecordingArtifactReference
 	serviceTarget  string
@@ -27,6 +29,10 @@ type recordingSession struct {
 	periodicStop chan struct{}
 	periodicDone chan struct{}
 	stopOnce     sync.Once
+
+	finalizing   bool
+	finalizeDone chan struct{}
+	finalizeErr  error
 }
 
 // Service serializes target binding and lifecycle state for Recordings.
@@ -272,14 +278,7 @@ func (service *Service) StopRecording(
 	if err != nil {
 		return recordings.StopRecordingResult{}, err
 	}
-	session.stopOnce.Do(func() {
-		if session.periodicStop != nil {
-			close(session.periodicStop)
-		}
-	})
-	if session.periodicDone != nil {
-		<-session.periodicDone
-	}
+	stopPeriodic(session)
 	service.mu.Lock()
 	defer service.mu.Unlock()
 	return recordings.StopRecordingResult{
@@ -290,19 +289,61 @@ func (service *Service) StopRecording(
 func (service *Service) FinishRecording(
 	request recordings.FinishRecordingRequest,
 ) (recordings.FinishRecordingResult, error) {
-	service.mu.Lock()
-	defer service.mu.Unlock()
-	session, err := service.sessionLocked(request.RecordingID)
+	session, err := service.session(request.RecordingID)
 	if err != nil {
 		return recordings.FinishRecordingResult{}, err
 	}
-	if session.finalizedAt == nil {
-		finishedAt := request.FinishedAt.UTC()
-		session.finalizedAt = &finishedAt
+	service.mu.Lock()
+	if session.finalizing {
+		done := session.finalizeDone
+		service.mu.Unlock()
+		<-done
+		service.mu.Lock()
+		defer service.mu.Unlock()
+		return recordings.FinishRecordingResult{
+			Status: recordingStatus(request.RecordingID, session),
+		}, session.finalizeErr
 	}
+	session.finalizing = true
+	session.finalizeDone = make(chan struct{})
+	service.mu.Unlock()
+
+	stopPeriodic(session)
+
+	finishedAt := request.FinishedAt.UTC()
+	service.mu.Lock()
+	session.finalizedAt = &finishedAt
+	session.version++
+	service.mu.Unlock()
+
+	finalErr := service.flush(request.RecordingID, session)
+	service.mu.Lock()
+	if finalErr != nil {
+		session.failures = append(session.failures, recordings.RecordingFailure{
+			Code:       finalFlushFailureCode,
+			Message:    finalErr.Error(),
+			RecordedAt: finishedAt,
+		})
+	}
+	session.finalizeErr = finalErr
+	close(session.finalizeDone)
+	status := recordingStatus(request.RecordingID, session)
+	service.mu.Unlock()
+
 	return recordings.FinishRecordingResult{
-		Status: recordingStatus(request.RecordingID, session),
-	}, nil
+		Status: status,
+	}, finalErr
+}
+
+func stopPeriodic(session *recordingSession) {
+	session.stopOnce.Do(func() {
+		if session.periodicStop != nil {
+			close(session.periodicStop)
+		}
+	})
+	if session.periodicDone != nil {
+		<-session.periodicDone
+	}
 }
 
 func (service *Service) QueryRecordingStatus(

@@ -832,6 +832,9 @@ type RuntimeRecorder interface {
 	Finish(time.Time)
 	Flush() error
 	Err() error
+	// Finalize stops periodic work, applies terminal metadata, and attempts one
+	// final synchronous flush. Repeated calls return the first terminal result.
+	Finalize(time.Time) error
 }
 
 // RuntimeRecorderFactory constructs one session-scoped replay recorder from
