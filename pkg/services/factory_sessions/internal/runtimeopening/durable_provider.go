@@ -26,7 +26,10 @@ func resolveDurableExecutionProvider(
 	if providerOverride != nil {
 		return providerOverride, nil
 	}
-	if mockWorkers == nil || platformRunner == nil || buildProvider == nil {
+	if mockWorkers == nil ||
+		!mockWorkers.UnmatchedDispatchPolicy.PassthroughUnmatched() ||
+		platformRunner == nil ||
+		buildProvider == nil {
 		return nil, nil
 	}
 	runner := adaptRunner(platformRunner)

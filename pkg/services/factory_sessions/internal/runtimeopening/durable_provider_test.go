@@ -82,6 +82,29 @@ func TestResolveDurableExecutionProvider_BuildsFromMockWrappedRunner(t *testing.
 	}
 }
 
+func TestResolveDurableExecutionProvider_ReturnsNilWithoutPassthroughPolicy(t *testing.T) {
+	t.Parallel()
+
+	provider, err := resolveDurableExecutionProvider(
+		nil,
+		workers.NewEmptyMockWorkersConfig(),
+		nil,
+		testutil.NewProviderCommandRunner(),
+		func(platformprocess.CommandRunner) workers.CommandRunner { return stubWorkersCommandRunner{} },
+		workersservice.NewMockCommandRunner,
+		func(workers.CommandRunner) (workerprovider.Provider, error) {
+			t.Fatal("build provider should not run without passthrough unmatched policy")
+			return nil, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("resolveDurableExecutionProvider: %v", err)
+	}
+	if provider != nil {
+		t.Fatalf("provider = %#v, want nil", provider)
+	}
+}
+
 func TestResolveDurableExecutionProvider_ReturnsNilWithoutMockWorkers(t *testing.T) {
 	t.Parallel()
 
