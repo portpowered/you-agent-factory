@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -16,6 +17,16 @@ func (h *Handler) writeProviderSessionError(
 ) {
 	var lookupErr *providersessions.LookupError
 	switch {
+	case errors.Is(err, providersessions.ErrOperationCanceled),
+		errors.Is(err, context.Canceled):
+		h.writeError(w, http.StatusInternalServerError, "provider session inspection canceled", "INTERNAL_ERROR")
+	case errors.Is(err, context.DeadlineExceeded):
+		h.writeError(
+			w,
+			http.StatusGatewayTimeout,
+			"provider session inspection timed out",
+			"PROVIDER_SESSION_INSPECTION_TIMEOUT",
+		)
 	case errors.Is(err, providersessions.ErrUnsupportedProvider),
 		errors.Is(err, providersessions.ErrUnsupportedKind):
 		h.writeError(w, http.StatusBadRequest, "invalid request parameter", "BAD_REQUEST")

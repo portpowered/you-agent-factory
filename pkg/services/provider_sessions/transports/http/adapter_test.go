@@ -42,6 +42,28 @@ func (f *rootServiceFake) Project(providersessions.ProjectRequest) (providersess
 	panic("unexpected Project call in HTTP adapter root seam test")
 }
 
+type blockingRootServiceFake struct {
+	rootServiceFake
+	started chan struct{}
+	release chan struct{}
+}
+
+func newBlockingRootServiceFake() *blockingRootServiceFake {
+	return &blockingRootServiceFake{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+}
+
+func (f *blockingRootServiceFake) Details(provider, kind, id string) (providersessions.Detail, error) {
+	f.lastProvider = provider
+	f.lastKind = kind
+	f.lastID = id
+	close(f.started)
+	<-f.release
+	return f.rootServiceFake.Details(provider, kind, id)
+}
+
 func TestNewAdapterRequiresInjectedRoot(t *testing.T) {
 	if adapter := NewAdapter(nil); adapter != nil {
 		t.Fatalf("NewAdapter(nil) = %#v, want nil", adapter)

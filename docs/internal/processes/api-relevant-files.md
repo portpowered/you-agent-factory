@@ -18,8 +18,8 @@ Use this map when changing the public REST contract.
   adapters consume Factory Sessions root contracts and do not import or
   construct its implementation packages or private subservices.
 - Provider Session HTTP decoding, generated-contract mapping, service
-  invocation, typed root error mapping (`error_mapping.go`), and response
-  encoding for owned Provider Sessions operations live in
+  invocation, typed root error mapping (`error_mapping.go`), cancel/timeout edge
+  mapping, and response encoding for owned Provider Sessions operations live in
   `pkg/services/provider_sessions/transports/http`. The
   top-level `pkg/transports/http` server still hosts the generated route until
   PSS-I02 fan-in; the owner-local adapter consumes `providersessions.Service`
@@ -28,6 +28,11 @@ Use this map when changing the public REST contract.
   `getProviderSessionDetails` only (`OwnedHTTPOperationIDs`); root Inspect and
   Project slices remain peer APIs without adapter-owned HTTP mapping in this
   packet, so do not author new shared OpenAPI Provider Sessions routes here.
+  Request-context cancellation and deadline-exceeded conditions map to
+  `INTERNAL_ERROR` / `provider session inspection canceled` and
+  `504` / `PROVIDER_SESSION_INSPECTION_TIMEOUT` / `provider session inspection timed out`
+  respectively; thread `r.Context()` through the adapter and use a goroutine/select
+  seam because the root `Details` slice does not accept request context.
 - Shared filesystem documents represented in OpenAPI should decode and encode
   through the generated model in a focused `pkg/transports/mapping` package,
   then map into domain-owned values. Inject that codec into the service

@@ -9,6 +9,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -43,15 +44,52 @@ func (a *Adapter) Details(provider, kind, id string) (providersessions.Detail, e
 // GetProviderSessionDetails decodes owned detail HTTP inputs, invokes the root
 // Details slice, and encodes the success response shape.
 func (a *Adapter) GetProviderSessionDetails(
+	ctx context.Context,
 	params factoryapi.GetProviderSessionDetailsParams,
 ) (factoryapi.ProviderSessionDetailResponse, error) {
 	provider, kind, id, err := decodeDetailsParams(params)
 	if err != nil {
 		return factoryapi.ProviderSessionDetailResponse{}, err
 	}
-	detail, err := a.Details(provider, kind, id)
+	detail, err := a.detailsWithContext(ctx, provider, kind, id)
 	if err != nil {
 		return factoryapi.ProviderSessionDetailResponse{}, err
 	}
 	return providerSessionDetailToAPI(detail), nil
+}
+
+func (a *Adapter) detailsWithContext(
+	ctx context.Context,
+	provider, kind, id string,
+) (providersessions.Detail, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return providersessions.Detail{}, normalizeContextFailure(err)
+	}
+
+	type detailsResult struct {
+		detail providersessions.Detail
+		err    error
+	}
+	resultCh := make(chan detailsResult, 1)
+	go func() {
+		detail, err := a.Details(provider, kind, id)
+		resultCh <- detailsResult{detail: detail, err: err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return providersessions.Detail{}, normalizeContextFailure(ctx.Err())
+	case result := <-resultCh:
+		return result.detail, result.err
+	}
+}
+
+func normalizeContextFailure(err error) error {
+	if errors.Is(err, context.Canceled) {
+		return providersessions.ErrOperationCanceled
+	}
+	return err
 }

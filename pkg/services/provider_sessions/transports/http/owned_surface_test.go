@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -112,7 +113,7 @@ func TestOwnedDetailHTTPMappingUsesDetailsRootSliceOnly(t *testing.T) {
 	}
 	adapter := NewAdapter(fake)
 
-	_, err := adapter.GetProviderSessionDetails(factoryapi.GetProviderSessionDetailsParams{
+	_, err := adapter.GetProviderSessionDetails(context.Background(), factoryapi.GetProviderSessionDetailsParams{
 		Provider: factoryapi.Codex,
 		Kind:     factoryapi.LoadableProviderSessionKindSessionID,
 		Id:       "sess-owned-surface",

@@ -27,10 +27,10 @@ func NewHandler(adapter *Adapter, logger *zap.Logger) *Handler {
 
 func (h *Handler) GetProviderSessionDetails(
 	w http.ResponseWriter,
-	_ *http.Request,
+	r *http.Request,
 	params factoryapi.GetProviderSessionDetailsParams,
 ) {
-	response, err := h.adapter.GetProviderSessionDetails(params)
+	response, err := h.adapter.GetProviderSessionDetails(r.Context(), params)
 	if err != nil {
 		var validationErr requestValidationError
 		if errors.As(err, &validationErr) {

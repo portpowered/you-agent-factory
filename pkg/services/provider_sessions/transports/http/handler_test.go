@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -114,7 +115,7 @@ func TestAdapterGetProviderSessionDetailsDecodesAndMapsSuccess(t *testing.T) {
 	}
 	adapter := NewAdapter(fake)
 
-	response, err := adapter.GetProviderSessionDetails(factoryapi.GetProviderSessionDetailsParams{
+	response, err := adapter.GetProviderSessionDetails(context.Background(), factoryapi.GetProviderSessionDetailsParams{
 		Provider: factoryapi.Cursor,
 		Kind:     factoryapi.LoadableProviderSessionKindSessionID,
 		Id:       "  cursor_sess_01  ",
@@ -138,7 +139,7 @@ func TestAdapterGetProviderSessionDetailsRejectsBlankIdentifierBeforeRoot(t *tes
 	}
 	adapter := NewAdapter(fake)
 
-	_, err := adapter.GetProviderSessionDetails(factoryapi.GetProviderSessionDetailsParams{
+	_, err := adapter.GetProviderSessionDetails(context.Background(), factoryapi.GetProviderSessionDetailsParams{
 		Provider: factoryapi.Codex,
 		Kind:     factoryapi.LoadableProviderSessionKindSessionID,
 		Id:       "   ",
@@ -395,6 +396,117 @@ func TestHandlerGetProviderSessionDetailsCursorNotFoundLogsDiagnostic(t *testing
 	if fields["root_configured"] != true {
 		t.Fatalf("root_configured field = %#v, want true", fields["root_configured"])
 	}
+}
+
+func TestHandlerGetProviderSessionDetailsMapsCanceledRequestContextBeforeRoot(t *testing.T) {
+	fake := &rootServiceFake{
+		detailErr: errors.New("root must not be called"),
+	}
+	handler := NewHandler(NewAdapter(fake), zap.NewNop())
+	recorder := httptest.NewRecorder()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequest(http.MethodGet, "/provider-sessions/detail", nil).WithContext(ctx)
+
+	handler.GetProviderSessionDetails(recorder, req, factoryapi.GetProviderSessionDetailsParams{
+		Provider: factoryapi.Codex,
+		Kind:     factoryapi.LoadableProviderSessionKindSessionID,
+		Id:       "sess-123",
+	})
+
+	assertHandlerJSONError(t, recorder, http.StatusInternalServerError, "INTERNAL_ERROR", "provider session inspection canceled")
+	if fake.lastID != "" {
+		t.Fatalf("fake.lastID = %q, want root not invoked", fake.lastID)
+	}
+}
+
+func TestHandlerGetProviderSessionDetailsMapsCanceledRequestContextDuringRoot(t *testing.T) {
+	fake := newBlockingRootServiceFake()
+	handler := NewHandler(NewAdapter(fake), zap.NewNop())
+	recorder := httptest.NewRecorder()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodGet, "/provider-sessions/detail", nil).WithContext(ctx)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.GetProviderSessionDetails(recorder, req, factoryapi.GetProviderSessionDetailsParams{
+			Provider: factoryapi.Codex,
+			Kind:     factoryapi.LoadableProviderSessionKindSessionID,
+			Id:       "sess-123",
+		})
+	}()
+
+	select {
+	case <-fake.started:
+		cancel()
+	case <-time.After(time.Second):
+		t.Fatal("root call did not start before cancellation")
+	}
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("handler hung after request cancellation")
+	}
+
+	assertHandlerJSONError(t, recorder, http.StatusInternalServerError, "INTERNAL_ERROR", "provider session inspection canceled")
+}
+
+func TestHandlerGetProviderSessionDetailsMapsDeadlineExceededRequestContextDuringRoot(t *testing.T) {
+	fake := newBlockingRootServiceFake()
+	handler := NewHandler(NewAdapter(fake), zap.NewNop())
+	recorder := httptest.NewRecorder()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/provider-sessions/detail", nil).WithContext(ctx)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.GetProviderSessionDetails(recorder, req, factoryapi.GetProviderSessionDetailsParams{
+			Provider: factoryapi.Codex,
+			Kind:     factoryapi.LoadableProviderSessionKindSessionID,
+			Id:       "sess-123",
+		})
+	}()
+
+	select {
+	case <-fake.started:
+	case <-time.After(time.Second):
+		t.Fatal("root call did not start before deadline")
+	}
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("handler hung after request deadline")
+	}
+
+	assertHandlerJSONError(
+		t,
+		recorder,
+		http.StatusGatewayTimeout,
+		"PROVIDER_SESSION_INSPECTION_TIMEOUT",
+		"provider session inspection timed out",
+	)
+}
+
+func TestHandlerGetProviderSessionDetailsMapsRootOperationCanceled(t *testing.T) {
+	fake := &rootServiceFake{detailErr: providersessions.ErrOperationCanceled}
+	handler := NewHandler(NewAdapter(fake), zap.NewNop())
+	recorder := httptest.NewRecorder()
+
+	handler.GetProviderSessionDetails(recorder, httptest.NewRequest(http.MethodGet, "/provider-sessions/detail", nil), factoryapi.GetProviderSessionDetailsParams{
+		Provider: factoryapi.Codex,
+		Kind:     factoryapi.LoadableProviderSessionKindSessionID,
+		Id:       "sess-123",
+	})
+
+	assertHandlerJSONError(t, recorder, http.StatusInternalServerError, "INTERNAL_ERROR", "provider session inspection canceled")
 }
 
 func assertHandlerJSONError(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int, wantCode string, wantMessage string) {
