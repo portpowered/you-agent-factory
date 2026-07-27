@@ -437,7 +437,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestRepeaterHonorsEachConfiguredStopWord`.
   - `TestRepeaterLoopBreakerTerminatesNonConvergingWork`.
 
-- [ ] `tests/functional/workstations/poller/poller_test.go`
+- [x] `tests/functional/workstations/poller/poller_test.go`
   - `TestPollerCreatesWorkFromExternalItems`.
   - `TestPollerEmptyResultCreatesNoWork`.
   - `TestPollerRecoverableFailureRetriesWithoutDuplicates`.
