@@ -527,10 +527,6 @@
       "name": "TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates"
     },
     {
-      "file": "providers/cli_template_resolution_long_test.go",
-      "name": "TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates"
-    },
-    {
       "file": "providers/cli_timeout_cleanup_smoke_test.go",
       "name": "TestIntegrationSmoke_ProcessTreeHelper"
     },
