@@ -124,6 +124,62 @@ func TestCLIHelpListsPublicCommandFamilies(t *testing.T) {
 	}
 }
 
+// TestCLISubcommandHelpUsesStableUsageAndExitZero proves representative nested
+// help through the public built you CLI prints stable usage for the subcommand
+// family, exposes flag guidance, and exits successfully without activating
+// product runtime, server, or filesystem side effects.
+func TestCLISubcommandHelpUsesStableUsageAndExitZero(t *testing.T) {
+	t.Parallel()
+
+	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	session := harness.NewSession(t)
+
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{name: "docs_help_flag", args: []string{"docs", "--help"}},
+		{name: "docs_short_help", args: []string{"docs", "-h"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+
+			result, err := session.Run(ctx, tc.args...)
+			session.RequireSuccess(t, tc.name, result, err)
+
+			if strings.TrimSpace(result.Stderr) != "" {
+				t.Fatalf("nested help stderr = %q, want empty", result.Stderr)
+			}
+			for _, forbidden := range []string{
+				"Factory initiated:",
+				"Dashboard URL:",
+				"Dashboard server disabled",
+			} {
+				if strings.Contains(result.Stdout, forbidden) {
+					t.Fatalf("nested help stdout contains product activation marker %q:\n%s", forbidden, result.Stdout)
+				}
+			}
+
+			for _, marker := range []string{
+				"Usage:\n  you docs [topic] [flags]",
+				"Print packaged markdown reference topics from the installed binary.",
+				"Flags:",
+				"-h, --help",
+				"help for docs",
+			} {
+				if !strings.Contains(result.Stdout, marker) {
+					t.Fatalf("nested docs help omitted %q:\n%s", marker, result.Stdout)
+				}
+			}
+
+			assertRootHelpDiscoveryHasNoProductFilesystemEffects(t, session)
+		})
+	}
+}
+
 func runRootHelpListedCommands(
 	t *testing.T,
 	session *builtcliacceptance.Session,
