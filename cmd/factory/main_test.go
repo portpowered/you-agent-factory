@@ -39,29 +39,52 @@ func TestProcessExitCodePreservesDeclaredLifecycleContract(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		err  error
-		args []string
-		want int
+		name       string
+		err        error
+		contextErr error
+		args       []string
+		want       int
 	}{
 		{name: "success", want: exitSuccess},
 		{name: "failure", err: errors.New("failed"), want: exitFailure},
-		{name: "run cancellation", err: context.Canceled, args: []string{"you", "run"}, want: 130},
-		{name: "server cancellation", err: context.Canceled, args: []string{"you", "server"}, want: 130},
+		{
+			name:       "run cancellation normalized by lifecycle",
+			contextErr: context.Canceled,
+			args:       []string{"you", "run"},
+			want:       130,
+		},
+		{
+			name:       "server cancellation normalized by lifecycle",
+			contextErr: context.Canceled,
+			args:       []string{"you", "server"},
+			want:       130,
+		},
 		{
 			name: "wrapped cancellation",
 			err:  fmt.Errorf("stop continuous run: %w", context.Canceled),
 			args: []string{"you", "--server", "http://localhost:7437", "run", "--continuously"},
 			want: 130,
 		},
-		{name: "other command cancellation", err: context.Canceled, args: []string{"you", "mcp", "serve"}, want: exitFailure},
+		{
+			name:       "other command cancellation",
+			contextErr: context.Canceled,
+			args:       []string{"you", "mcp", "serve"},
+			want:       exitFailure,
+		},
 	}
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			if got := processExitCode(test.err, test.args); got != test.want {
-				t.Fatalf("processExitCode(%v, %v) = %d, want %d", test.err, test.args, got, test.want)
+			if got := processExitCode(test.err, test.contextErr, test.args); got != test.want {
+				t.Fatalf(
+					"processExitCode(%v, %v, %v) = %d, want %d",
+					test.err,
+					test.contextErr,
+					test.args,
+					got,
+					test.want,
+				)
 			}
 		})
 	}

@@ -24,6 +24,7 @@ const rootRunFunctionalHostCleanupTimeout = 5 * time.Second
 const rootRunFunctionalHostReadinessAttemptTimeout = 250 * time.Millisecond
 const rootRunExitSuccess = 0
 const rootRunExitFailure = 1
+const rootRunExitCanceled = 130
 
 // RootRunFunctionalHostConfig contains only explicit process inputs and the
 // approved deterministic edges used by production-shaped functional tests.
@@ -200,7 +201,9 @@ func (host *RootRunFunctionalHost) run(
 		StdoutIsTTY:      &stdoutIsTTY,
 	})
 	exitCode := rootRunExitSuccess
-	if err != nil {
+	if ctx.Err() != nil {
+		exitCode = rootRunExitCanceled
+	} else if err != nil {
 		exitCode = rootRunExitFailure
 		_, _ = fmt.Fprint(diagnostics, err)
 		captureRequestedListenerFailure(diagnostics, cfg.ListenAddress)
@@ -230,11 +233,11 @@ func captureRequestedListenerFailure(diagnostics *bytes.Buffer, requestedAddress
 }
 
 func rootRunProcessOutcome(exitCode int, processErr error) RootRunProcessOutcome {
-	if exitCode != rootRunExitSuccess {
-		return RootRunProcessFailed
-	}
 	if processErr != nil {
 		return RootRunProcessStopped
+	}
+	if exitCode != rootRunExitSuccess {
+		return RootRunProcessFailed
 	}
 	return RootRunProcessCompleted
 }

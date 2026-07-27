@@ -56,8 +56,8 @@ func TestRootRunFunctionalHostStartsThroughCustomerRESTAndSSE(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Shutdown() error = %v", err)
 	}
-	if result.ExitCode != 0 {
-		t.Fatalf("canceled process exit code = %d, want 0", result.ExitCode)
+	if result.ExitCode != 130 {
+		t.Fatalf("canceled process exit code = %d, want 130", result.ExitCode)
 	}
 	if result.Outcome != support.RootRunProcessStopped {
 		t.Fatalf("canceled root.Run outcome = %q, want %q", result.Outcome, support.RootRunProcessStopped)
@@ -92,8 +92,8 @@ func TestRootRunFunctionalHostContextCancellationCompletesAndReleasesListener(t 
 	if !finished {
 		t.Fatal("Result() reports unfinished after Done() closed")
 	}
-	if result.ExitCode != 0 || result.Outcome != support.RootRunProcessStopped {
-		t.Fatalf("Result() = %#v, want clean stopped outcome", result)
+	if result.ExitCode != 130 || result.Outcome != support.RootRunProcessStopped {
+		t.Fatalf("Result() = %#v, want canceled stopped outcome", result)
 	}
 
 	listener, err := net.Listen("tcp", endpoint.Host)
@@ -148,8 +148,8 @@ func TestRootRunFunctionalHostShutdownIsBoundedAndIdempotent(t *testing.T) {
 	if first != second {
 		t.Fatalf("repeated Shutdown() result = %#v, want %#v", second, first)
 	}
-	if first.ExitCode != 0 || first.Outcome != support.RootRunProcessStopped {
-		t.Fatalf("Shutdown() result = %#v, want clean stopped outcome", first)
+	if first.ExitCode != 130 || first.Outcome != support.RootRunProcessStopped {
+		t.Fatalf("Shutdown() result = %#v, want canceled stopped outcome", first)
 	}
 }
 

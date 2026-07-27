@@ -95,9 +95,13 @@ func TestBuiltExecutableFallsBackFromOccupiedLoopbackPortAndReportsActualURL(t *
 		t.Fatalf("GET reported dashboard status = %d, want 200", response.StatusCode)
 	}
 
-	_ = command.Process.Kill()
-	if err := command.Wait(); err == nil {
-		t.Fatal("killed continuous CLI unexpectedly exited successfully")
+	if runtime.GOOS == "windows" {
+		_ = command.Process.Kill()
+		if err := command.Wait(); err == nil {
+			t.Fatal("killed continuous CLI unexpectedly exited successfully")
+		}
+	} else {
+		interruptAndAssertCancellationExit(t, command)
 	}
 	stopped = true
 
@@ -106,6 +110,115 @@ func TestBuiltExecutableFallsBackFromOccupiedLoopbackPortAndReportsActualURL(t *
 		t.Fatalf("listener remained bound after built CLI exit: %v", err)
 	}
 	_ = rebound.Close()
+}
+
+// TestBuiltExecutableServerInterruptExits130AndReleasesListener proves the
+// shipped server command preserves its declared cancellation exit after joining
+// the owned listener.
+func TestBuiltExecutableServerInterruptExits130AndReleasesListener(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Interrupt is not supported for child processes on Windows")
+	}
+
+	binaryPath := buildYouBinary(t)
+	workingDirectory := t.TempDir()
+	writeCurrentFactory(t, workingDirectory)
+	homeDirectory := t.TempDir()
+	requestedPort := reserveAvailablePort(t)
+	requestedURL := "http://127.0.0.1:" + strconv.Itoa(requestedPort)
+
+	command := exec.Command(binaryPath, "--server", requestedURL, "server")
+	command.Dir = workingDirectory
+	command.Env = append(
+		os.Environ(),
+		"HOME="+homeDirectory,
+		"USERPROFILE="+homeDirectory,
+		"PATH=",
+	)
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		t.Fatalf("open stdout pipe: %v", err)
+	}
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	if err := command.Start(); err != nil {
+		t.Fatalf("start built server CLI: %v", err)
+	}
+	stopped := false
+	defer func() {
+		if !stopped {
+			_ = command.Process.Kill()
+			_ = command.Wait()
+		}
+	}()
+
+	lines := make(chan string, 128)
+	scanErr := make(chan error, 1)
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			lines <- scanner.Text()
+		}
+		scanErr <- scanner.Err()
+	}()
+
+	actualURL := waitForDashboardURL(t, lines, scanErr)
+	response, err := (&http.Client{Timeout: 5 * time.Second}).Get(actualURL)
+	if err != nil {
+		t.Fatalf("GET reported dashboard URL %q: %v", actualURL, err)
+	}
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("GET reported dashboard status = %d, want 200", response.StatusCode)
+	}
+
+	interruptAndAssertCancellationExit(t, command)
+	stopped = true
+
+	parsed, err := url.Parse(actualURL)
+	if err != nil {
+		t.Fatalf("parse reported dashboard URL %q: %v", actualURL, err)
+	}
+	rebound, err := net.Listen("tcp4", parsed.Host)
+	if err != nil {
+		t.Fatalf("server listener remained bound after interrupt: %v", err)
+	}
+	_ = rebound.Close()
+}
+
+func reserveAvailablePort(t *testing.T) int {
+	t.Helper()
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve available loopback port: %v", err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	if err := listener.Close(); err != nil {
+		t.Fatalf("release available loopback port: %v", err)
+	}
+	return port
+}
+
+func interruptAndAssertCancellationExit(t *testing.T, command *exec.Cmd) {
+	t.Helper()
+	if err := command.Process.Signal(os.Interrupt); err != nil {
+		t.Fatalf("interrupt built CLI: %v", err)
+	}
+	waitResult := make(chan error, 1)
+	go func() {
+		waitResult <- command.Wait()
+	}()
+	select {
+	case err := <-waitResult:
+		exitErr, ok := err.(*exec.ExitError)
+		if !ok || exitErr.ExitCode() != 130 {
+			t.Fatalf("interrupted built CLI exit = %v, want exit code 130", err)
+		}
+	case <-time.After(10 * time.Second):
+		_ = command.Process.Kill()
+		<-waitResult
+		t.Fatal("interrupted built CLI did not exit within 10s")
+	}
 }
 
 func waitForDashboardURL(

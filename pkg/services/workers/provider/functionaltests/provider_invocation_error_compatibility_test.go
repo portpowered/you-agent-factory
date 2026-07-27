@@ -7,7 +7,6 @@ import (
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider"
-	geminipkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 )
 
 func providerErrorCorpusEntryLabel(entry provider.ProviderErrorCorpusEntry) string {
@@ -28,16 +27,7 @@ func TestInvocationErrorCompatibility_SupportedCorpusEntriesPreserveStableWorkFa
 			continue
 		}
 		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
-			result := entry.CommandResult()
-			providerErr := provider.NormalizeProviderExitFailure(string(entry.Provider), result, nil, nil)
-			if entry.Provider == modelprovider.ProviderGemini {
-				failure := geminipkg.ParseProviderFailure(geminipkg.FailureInput{
-					Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-				})
-				providerErr = provider.NewProviderErrorFromResult(provider.ProviderFailureResult{
-					Reason: failure.Reason, Message: failure.Message,
-				}, nil)
-			}
+			providerErr := provider.NormalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
 			if providerErr.Type != entry.ExpectedType {
 				t.Fatalf("ProviderError.Type = %q, want stable %q", providerErr.Type, entry.ExpectedType)
 			}

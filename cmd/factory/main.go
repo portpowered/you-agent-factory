@@ -36,10 +36,13 @@ var runProcess = func() int {
 			})
 		}
 	}
-	return processExitCode(err, os.Args)
+	return processExitCode(err, ctx.Err(), os.Args)
 }
 
-func processExitCode(err error, args []string) int {
+func processExitCode(err, contextErr error, args []string) int {
+	if err == nil {
+		err = contextErr
+	}
 	switch {
 	case err == nil:
 		return exitSuccess
