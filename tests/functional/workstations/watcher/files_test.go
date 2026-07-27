@@ -3,8 +3,12 @@
 package watcher
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,7 +17,9 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -482,6 +488,216 @@ func TestWatcherParentChildBatchFanIn(t *testing.T) {
 
 	assertWatchedParentChildRequestRecorded(t, events)
 	assertParentFailedOnlyAfterChildFailure(t, events)
+}
+
+// TestWatcherExecutionFollowsCurrentFactorySwitch proves that after activating
+// a second Current Factory, a watched file under the activated Factory admits
+// and completes Work on the active run while a watched file under the
+// deactivated Factory watch path does not create additional Work.
+func TestWatcherExecutionFollowsCurrentFactorySwitch(t *testing.T) {
+	support.SkipLongFunctional(t, "slow current-factory watcher switch sweep")
+
+	rootDir := t.TempDir()
+	srcDir := support.LegacyFixtureDir(t, "filewatcher_flow")
+	sourcePath := filepath.Join(srcDir, interfaces.FactoryConfigFile)
+
+	_ = support.CreateAndActivateNamedFactoryAtRoot(t, srcDir, rootDir, "alpha", sourcePath)
+	betaDir := support.CreateNamedFactoryAtRoot(t, srcDir, rootDir, "beta", sourcePath)
+
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+		"processor": {
+			{Content: "Done. COMPLETE"},
+			{Content: "Done. COMPLETE"},
+		},
+	})
+
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                rootDir,
+		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
+	baseURL := server.URL()
+	support.WaitForRuntimeIdle(t, baseURL, 10*time.Second)
+
+	activateNamedFilewatcherFactoryOverHTTP(t, baseURL, namedFilewatcherFactoryPayload(t, "beta"))
+	assertCurrentFactoryReadback(t, baseURL, "beta", betaDir)
+
+	testutil.WriteSeedFile(t, betaDir, "task", []byte(`{"title":"beta watched work"}`))
+	waitForWatcherWorkSettlement(t, baseURL, provider, 1, 10*time.Second)
+
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "complete")); got != 1 {
+		t.Fatalf("CountWorkAtCustomerState(task:complete) = %d, want 1 after beta watched file; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "init")); got != 0 {
+		t.Fatalf("CountWorkAtCustomerState(task:init) = %d, want 0 after beta completion", got)
+	}
+	if provider.CallCount("processor") != 1 {
+		t.Fatalf("provider call count = %d, want 1 after beta watched file", provider.CallCount("processor"))
+	}
+
+	alphaDir := filepath.Join(rootDir, "alpha")
+	testutil.WriteSeedFile(t, alphaDir, "task", []byte(`{"title":"alpha watched work"}`))
+	assertNoAdditionalWatcherWork(t, baseURL, provider, 10*time.Second)
+
+	listed = support.ListDefaultSessionWork(t, baseURL)
+	if got := len(listed.Results); got != 1 {
+		t.Fatalf("listed Work count = %d, want 1 after deactivated-factory write; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "complete")); got != 1 {
+		t.Fatalf("CountWorkAtCustomerState(task:complete) = %d, want 1 after deactivated-factory write; listed=%#v", got, listed)
+	}
+	if provider.CallCount("processor") != 1 {
+		t.Fatalf("provider call count = %d, want 1 after deactivated-factory write", provider.CallCount("processor"))
+	}
+}
+
+func namedFilewatcherFactoryPayload(t *testing.T, name string) []byte {
+	t.Helper()
+
+	sourcePath := filepath.Join(support.LegacyFixtureDir(t, "filewatcher_flow"), interfaces.FactoryConfigFile)
+	factory, err := support.LoadedFactory(t, sourcePath)
+	if err != nil {
+		t.Fatalf("LoadedFactory: %v", err)
+	}
+	factory.Name = factoryapi.FactoryName(name)
+	id := name
+	factory.Id = &id
+	payload, err := json.Marshal(factory)
+	if err != nil {
+		t.Fatalf("marshal named filewatcher factory payload: %v", err)
+	}
+	return payload
+}
+
+func activateNamedFilewatcherFactoryOverHTTP(t *testing.T, baseURL string, payload []byte) {
+	t.Helper()
+
+	var factory factoryapi.Factory
+	if err := json.Unmarshal(payload, &factory); err != nil {
+		t.Fatalf("decode named factory API payload: %v", err)
+	}
+	factory.Version = &factoryapi.HybridLogicalTimestamp{
+		Logical:  apitypes.Int64String(1<<62 - 1),
+		Physical: time.Now().UTC().Add(time.Hour),
+	}
+	mode := factoryapi.FactorySaveModeUpsertNamedAndActivate
+	body, err := json.Marshal(factoryapi.SaveFactoryForSessionRequest{
+		Factory: factory,
+		Mode:    &mode,
+	})
+	if err != nil {
+		t.Fatalf("encode named factory activation: %v", err)
+	}
+	request, err := http.NewRequest(
+		http.MethodPut,
+		baseURL+"/factory-sessions/~default/factory",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("build named factory activation request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("activate named factory over HTTP: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		responseBody, _ := io.ReadAll(response.Body)
+		t.Fatalf(
+			"activate named factory status = %d, want 200: %s",
+			response.StatusCode,
+			string(responseBody),
+		)
+	}
+}
+
+func assertCurrentFactoryReadback(t *testing.T, baseURL, wantName, wantDir string) {
+	t.Helper()
+
+	current := support.GetJSON[factoryapi.Factory](t, baseURL+"/factory-sessions/~default/factory")
+	if current.Name != factoryapi.FactoryName(wantName) {
+		t.Fatalf("current factory name = %q, want %q", current.Name, wantName)
+	}
+	if current.FactoryDirectory == nil || *current.FactoryDirectory != wantDir {
+		t.Fatalf("current factory directory = %#v, want %q", current.FactoryDirectory, wantDir)
+	}
+}
+
+func waitForWatcherWorkSettlement(
+	t *testing.T,
+	baseURL string,
+	provider *testutil.MockWorkerMapProvider,
+	wantCalls int,
+	timeout time.Duration,
+) {
+	t.Helper()
+
+	support.WaitForStatus(t, baseURL, timeout, func(status factoryapi.StatusResponse) bool {
+		if status.RuntimeStatus != string(interfaces.RuntimeStatusIdle) {
+			return false
+		}
+		if provider.CallCount("processor") != wantCalls {
+			return false
+		}
+		listed := support.ListDefaultSessionWork(t, baseURL)
+		return len(listed.Results) == wantCalls &&
+			support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "complete")) == wantCalls &&
+			support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "init")) == 0 &&
+			support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "processing")) == 0
+	})
+}
+
+func assertNoAdditionalWatcherWork(
+	t *testing.T,
+	baseURL string,
+	provider *testutil.MockWorkerMapProvider,
+	timeout time.Duration,
+) {
+	t.Helper()
+
+	const stableWindow = 300 * time.Millisecond
+	deadline := time.Now().Add(timeout)
+	var stableSince time.Time
+
+	for time.Now().Before(deadline) {
+		if provider.CallCount("processor") > 1 {
+			t.Fatalf(
+				"deactivated factory watch path triggered additional work: provider calls = %d, want 1",
+				provider.CallCount("processor"),
+			)
+		}
+
+		listed := support.ListDefaultSessionWork(t, baseURL)
+		status := support.GetJSON[factoryapi.StatusResponse](t, baseURL+"/status")
+		stable := provider.CallCount("processor") == 1 &&
+			len(listed.Results) == 1 &&
+			support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "complete")) == 1 &&
+			support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "init")) == 0 &&
+			support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "processing")) == 0 &&
+			status.RuntimeStatus == string(interfaces.RuntimeStatusIdle)
+
+		if stable {
+			if stableSince.IsZero() {
+				stableSince = time.Now()
+			} else if time.Since(stableSince) >= stableWindow {
+				return
+			}
+		} else {
+			stableSince = time.Time{}
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	t.Fatalf(
+		"timed out waiting for stable no-additional-work observation: provider_calls=%d listed=%#v",
+		provider.CallCount("processor"),
+		listed.Results,
+	)
 }
 
 func writeSubmittedParentChildBatch(t *testing.T, dir string) {
