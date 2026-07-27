@@ -11,14 +11,19 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
-	childCodexLabel  = "child-codex"
-	childClaudeLabel = "child-claude"
+	childCodexLabel    = "child-codex"
+	childClaudeLabel   = "child-claude"
+	childMockedLabel   = "child-mocked"
+	childPassthroughLabel = "child-passthrough"
+
+	mockedChildPrompt      = "mocked child prompt"
+	passthroughChildPrompt = "passthrough child prompt"
 
 	perChildProviderModelWorkflow = `return (async function () {
   const codexChild = await agent.run({
@@ -35,6 +40,21 @@ const (
   });
   return { codexChild, claudeChild };
 })();`
+
+	partialMockWorkersWorkflow = `return (async function () {
+  const mocked = await agent.run({
+    prompt: "` + mockedChildPrompt + `",
+    label: "` + childMockedLabel + `",
+  });
+  const passthrough = await agent.run({
+    prompt: "` + passthroughChildPrompt + `",
+    label: "` + childPassthroughLabel + `",
+  });
+  return { mocked, passthrough };
+})();`
+
+	mockWorkerAcceptedOutput = "mock worker accepted"
+	livePassthroughChildText = "passthrough child provider output"
 )
 
 // TestJavaScriptChildrenSelectDifferentProvidersAndModels proves a JavaScript
@@ -48,8 +68,8 @@ func TestJavaScriptChildrenSelectDifferentProvidersAndModels(t *testing.T) {
 	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
 
 	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: `{"text":"codex child complete"}`},
-		workerexecution.InferenceResponse{Content: `{"text":"claude child complete"}`},
+		workers.InferenceResponse{Content: `{"text":"codex child complete"}`},
+		workers.InferenceResponse{Content: `{"text":"claude child complete"}`},
 	)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -69,6 +89,310 @@ func TestJavaScriptChildrenSelectDifferentProvidersAndModels(t *testing.T) {
 	)
 	assertPerChildProviderModelDispatches(t, dispatches.Dispatches)
 	assertPerChildProviderModelRequests(t, provider.Calls())
+}
+
+// TestJavaScriptMockWorkersReplaceOnlyNamedChildren proves a partial
+// --with-mock-workers configuration serves named workstation workers through
+// the mock-worker accept path while unmatched JavaScript child dispatches keep
+// the live-provider path when unmatchedDispatchPolicy is passthrough and a
+// provider edge is injected at the public process boundary.
+func TestJavaScriptMockWorkersReplaceOnlyNamedChildren(t *testing.T) {
+	t.Parallel()
+
+	t.Run("namedMockWorkerAcceptsConfiguredWorker", func(t *testing.T) {
+		t.Parallel()
+
+		dir := support.ScaffoldFactory(t, overridesFactoryConfig())
+		support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
+
+		runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+			FactoryDir:                dir,
+			WaitForServiceModeRuntime: true,
+			UseMockWorkers:            true,
+			MockWorkersConfig:         partialNamedJavaScriptMockWorkersConfig(),
+			Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+		})
+		t.Cleanup(func() { server.Stop(t) })
+
+		started := startOverridesWorkflow(
+			t,
+			server.URL(),
+			"javascript-partial-mock-workers-fake",
+			partialMockWorkersWorkflow,
+		)
+		if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+			t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
+		}
+		if runner.CallCount() != 0 {
+			t.Fatalf("provider command runner call count = %d, want 0 for fake child execution", runner.CallCount())
+		}
+
+		dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
+			t,
+			strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
+		)
+		assertPartialMockFakeChildDispatches(t, dispatches.Dispatches)
+		assertPartialMockFakeChildPrimaryResult(t, started.Result)
+	})
+
+	t.Run("passthroughChildUsesLiveProvider", func(t *testing.T) {
+		t.Parallel()
+
+		dir := support.ScaffoldFactory(t, overridesFactoryConfig())
+		support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
+
+		provider := testutil.NewMockProvider(
+			workers.InferenceResponse{Content: `{"text":"` + livePassthroughChildText + `"}`},
+			workers.InferenceResponse{Content: `{"text":"` + livePassthroughChildText + `"}`},
+		)
+		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+			FactoryDir:                dir,
+			WaitForServiceModeRuntime: true,
+			UseMockWorkers:            true,
+			MockWorkersConfig:         partialNamedJavaScriptMockWorkersConfig(),
+			Edges:                     serviceedges.Edges{ProviderOverride: provider},
+		})
+		t.Cleanup(func() { server.Stop(t) })
+
+		started := startOverridesWorkflow(
+			t,
+			server.URL(),
+			"javascript-partial-mock-workers-passthrough",
+			partialMockWorkersWorkflow,
+		)
+		if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+			t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
+		}
+
+		dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
+			t,
+			strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
+		)
+		assertPartialMockPassthroughChildDispatches(t, dispatches.Dispatches)
+		assertPartialMockPassthroughProviderRequests(t, provider.Calls())
+		assertPartialMockPassthroughPrimaryResult(t, started.Result)
+	})
+}
+
+func partialNamedJavaScriptMockWorkersConfig() *workers.MockWorkersConfig {
+	return &workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName:      "worker-a",
+			WorkstationName: "process",
+			RunType:         workers.MockWorkerRunTypeAccept,
+		}},
+	}
+}
+
+func assertPartialMockFakeChildDispatches(
+	t *testing.T,
+	dispatches []factoryapi.FactorySessionDispatchSummary,
+) {
+	t.Helper()
+
+	if len(dispatches) != 2 {
+		t.Fatalf("dispatch count = %d, want 2 child dispatches", len(dispatches))
+	}
+	byLabel := make(map[string]factoryapi.FactorySessionDispatchSummary, len(dispatches))
+	for _, dispatch := range dispatches {
+		if dispatch.Label == nil || strings.TrimSpace(*dispatch.Label) == "" {
+			t.Fatalf("dispatch %s missing label, want labeled child dispatches", dispatch.Id)
+		}
+		if dispatch.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
+			t.Fatalf("dispatch %s status = %q, want COMPLETED", dispatch.Id, dispatch.Status)
+		}
+		byLabel[*dispatch.Label] = dispatch
+	}
+	assertPartialMockFakeChildDispatch(t, byLabel[childMockedLabel], childMockedLabel, mockedChildPrompt)
+	assertPartialMockFakeChildDispatch(t, byLabel[childPassthroughLabel], childPassthroughLabel, passthroughChildPrompt)
+}
+
+func assertPartialMockFakeChildDispatch(
+	t *testing.T,
+	dispatch factoryapi.FactorySessionDispatchSummary,
+	wantLabel, wantPrompt string,
+) {
+	t.Helper()
+
+	if dispatch.Label == nil || *dispatch.Label != wantLabel {
+		t.Fatalf("dispatch label = %#v, want %q", dispatch.Label, wantLabel)
+	}
+	if dispatch.Javascript == nil || dispatch.Javascript.ExecutionMode == nil ||
+		*dispatch.Javascript.ExecutionMode != "fake" {
+		t.Fatalf("dispatch %s javascript projection = %#v, want fake execution mode", dispatch.Id, dispatch.Javascript)
+	}
+}
+
+func assertPartialMockFakeChildPrimaryResult(t *testing.T, result *factoryapi.FactorySessionResult) {
+	t.Helper()
+
+	if result == nil || result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("result = %#v, want FINAL Factory Session result", result)
+	}
+	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
+		t.Fatalf("primary result = %#v, want exactly one content part", result.PrimaryResult)
+	}
+	part, err := (*result.PrimaryResult)[0].AsWorkJsonContentPart()
+	if err != nil {
+		t.Fatalf("decode primary result content part: %v", err)
+	}
+	encoded, err := json.Marshal(part.Json)
+	if err != nil {
+		t.Fatalf("encode primary result JSON: %v", err)
+	}
+	var evidence struct {
+		Mocked      map[string]any `json:"mocked"`
+		Passthrough map[string]any `json:"passthrough"`
+	}
+	if err := json.Unmarshal(encoded, &evidence); err != nil {
+		t.Fatalf("decode partial mock primary result: %v", err)
+	}
+	assertPartialMockFakeChildResult(t, evidence.Mocked, childMockedLabel, mockedChildPrompt)
+	assertPartialMockFakeChildResult(t, evidence.Passthrough, childPassthroughLabel, passthroughChildPrompt)
+}
+
+func assertPartialMockFakeChildResult(
+	t *testing.T,
+	child map[string]any,
+	wantLabel, wantPrompt string,
+) {
+	t.Helper()
+
+	if child == nil {
+		t.Fatalf("child result = nil, want structured child object")
+	}
+	if label, _ := child["label"].(string); label != wantLabel {
+		t.Fatalf("child label = %#v, want %q", child["label"], wantLabel)
+	}
+	if mode, _ := child["executionMode"].(string); mode != "fake" {
+		t.Fatalf("child executionMode = %#v, want fake", child["executionMode"])
+	}
+	output, ok := child["output"].(map[string]any)
+	if !ok || output == nil {
+		t.Fatalf("child output = %#v, want structured output object", child["output"])
+	}
+	text, _ := output["text"].(string)
+	if !strings.Contains(text, wantPrompt) {
+		t.Fatalf("child output text = %#v, want deterministic fake output containing prompt %q", output["text"], wantPrompt)
+	}
+}
+
+func assertPartialMockPassthroughChildDispatches(
+	t *testing.T,
+	dispatches []factoryapi.FactorySessionDispatchSummary,
+) {
+	t.Helper()
+
+	if len(dispatches) != 2 {
+		t.Fatalf("dispatch count = %d, want 2 child dispatches", len(dispatches))
+	}
+	byLabel := make(map[string]factoryapi.FactorySessionDispatchSummary, len(dispatches))
+	for _, dispatch := range dispatches {
+		if dispatch.Label == nil || strings.TrimSpace(*dispatch.Label) == "" {
+			t.Fatalf("dispatch %s missing label, want labeled child dispatches", dispatch.Id)
+		}
+		if dispatch.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
+			t.Fatalf("dispatch %s status = %q, want COMPLETED", dispatch.Id, dispatch.Status)
+		}
+		byLabel[*dispatch.Label] = dispatch
+	}
+	assertPartialMockPassthroughChildDispatch(t, byLabel[childMockedLabel], childMockedLabel)
+	assertPartialMockPassthroughChildDispatch(t, byLabel[childPassthroughLabel], childPassthroughLabel)
+}
+
+func assertPartialMockPassthroughChildDispatch(
+	t *testing.T,
+	dispatch factoryapi.FactorySessionDispatchSummary,
+	wantLabel string,
+) {
+	t.Helper()
+
+	if dispatch.Label == nil || *dispatch.Label != wantLabel {
+		t.Fatalf("dispatch label = %#v, want %q", dispatch.Label, wantLabel)
+	}
+	if dispatch.Javascript == nil || dispatch.Javascript.ExecutionMode == nil ||
+		*dispatch.Javascript.ExecutionMode != "live-provider" {
+		t.Fatalf(
+			"dispatch %s javascript projection = %#v, want live-provider execution mode",
+			dispatch.Id,
+			dispatch.Javascript,
+		)
+	}
+}
+
+func assertPartialMockPassthroughProviderRequests(
+	t *testing.T,
+	calls []workers.ProviderInferenceRequest,
+) {
+	t.Helper()
+
+	if len(calls) != 2 {
+		t.Fatalf("provider call count = %d, want 2 passthrough child dispatches", len(calls))
+	}
+	for index, call := range calls {
+		if !strings.Contains(call.UserMessage, "child prompt") {
+			t.Fatalf("provider call[%d] prompt = %q, want child prompt text", index, call.UserMessage)
+		}
+	}
+}
+
+func assertPartialMockPassthroughPrimaryResult(t *testing.T, result *factoryapi.FactorySessionResult) {
+	t.Helper()
+
+	if result == nil || result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("result = %#v, want FINAL Factory Session result", result)
+	}
+	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
+		t.Fatalf("primary result = %#v, want exactly one content part", result.PrimaryResult)
+	}
+	part, err := (*result.PrimaryResult)[0].AsWorkJsonContentPart()
+	if err != nil {
+		t.Fatalf("decode primary result content part: %v", err)
+	}
+	encoded, err := json.Marshal(part.Json)
+	if err != nil {
+		t.Fatalf("encode primary result JSON: %v", err)
+	}
+	var evidence struct {
+		Mocked      map[string]any `json:"mocked"`
+		Passthrough map[string]any `json:"passthrough"`
+	}
+	if err := json.Unmarshal(encoded, &evidence); err != nil {
+		t.Fatalf("decode partial mock passthrough primary result: %v", err)
+	}
+	assertPartialMockPassthroughChildResult(t, evidence.Mocked, childMockedLabel)
+	assertPartialMockPassthroughChildResult(t, evidence.Passthrough, childPassthroughLabel)
+}
+
+func assertPartialMockPassthroughChildResult(
+	t *testing.T,
+	child map[string]any,
+	wantLabel string,
+) {
+	t.Helper()
+
+	if child == nil {
+		t.Fatalf("child result = nil, want structured child object")
+	}
+	if label, _ := child["label"].(string); label != wantLabel {
+		t.Fatalf("child label = %#v, want %q", child["label"], wantLabel)
+	}
+	if mode, _ := child["executionMode"].(string); mode != "live-provider" {
+		t.Fatalf("child executionMode = %#v, want live-provider", child["executionMode"])
+	}
+	output, ok := child["output"].(map[string]any)
+	if !ok || output == nil {
+		t.Fatalf("child output = %#v, want structured output object", child["output"])
+	}
+	text, _ := output["text"].(string)
+	if !strings.Contains(text, livePassthroughChildText) {
+		t.Fatalf("child output text = %#v, want injected provider output %q", output["text"], livePassthroughChildText)
+	}
+	if strings.Contains(text, mockWorkerAcceptedOutput) {
+		t.Fatalf("child output text = %#v, want provider output not mock-worker accept text", output["text"])
+	}
 }
 
 func overridesFactoryConfig() map[string]any {
@@ -205,7 +529,7 @@ func assertOverridesDispatchSelection(
 
 func assertPerChildProviderModelRequests(
 	t *testing.T,
-	calls []workerexecution.ProviderInferenceRequest,
+	calls []workers.ProviderInferenceRequest,
 ) {
 	t.Helper()
 
