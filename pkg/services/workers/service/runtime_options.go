@@ -140,7 +140,7 @@ func (s *Service) runtimeRunnerDecorators(
 	}
 	return append(decorators,
 		func(inner workers.Runner, definition *interfaces.FactoryWorkerConfig) workers.Runner {
-			return wrapLocalModelRunner(
+			return resolveInferenceRunner(
 				inner, s.models, factoryCfg, definition,
 			)
 		},

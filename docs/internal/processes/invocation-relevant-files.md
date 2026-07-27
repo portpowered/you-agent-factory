@@ -12,10 +12,19 @@ primary-result behavior.
   environment values directly.
 - Compose a parent-private Runner and its detached capability metadata in the
   private Runners wire package, then publish only its common `workers.Runner`
-  binding through the immutable registry. Run the shared conformance kit
-  against the registry-resolved implementation; when the implementation
-  translates the common request into a narrower effect request, use the kit's
-  boundary-specific captured-request assertion to prove caller-owned isolation.
+  binding through the immutable registry. Mirror Script with
+  `NewInferenceRegistry` for the inference identity, snapshot worker/resources
+  at construction, and declare supported working-directory/worktree optional
+  capabilities. Run the shared conformance kit against the registry-resolved
+  implementation; when the implementation translates the common request into a
+  narrower effect request, use the kit's boundary-specific captured-request
+  assertion to prove caller-owned isolation. For inference execution-failure
+  conformance, route fixture failures through Models not-handled plus an
+  injected delegate that returns the normalized `ProviderError`. Cut existing
+  model-inference composition over through
+  `runnerswire.NewInferenceCompositionRunner` in
+  `pkg/services/workers/service/runtime_options.go` instead of decorator-only
+  local-model wrappers.
 - Selection-aware `you run` schema resolution belongs at the CLI read boundary:
   resolve an already-selected named Factory config path or explicit Factory
   source through the read-only Factory Definitions loader, check cancellation

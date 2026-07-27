@@ -3646,6 +3646,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/inference",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/services/runners/internal/script",
       "disposition": "retain",
       "destination": "workers",

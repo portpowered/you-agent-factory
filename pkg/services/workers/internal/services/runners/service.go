@@ -3,12 +3,17 @@
 package runners
 
 import (
+	"context"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-const ScriptIdentity = "script"
+const (
+	ScriptIdentity     = "script"
+	InferenceIdentity  = "inference"
+)
 
 // Registration explicitly associates one canonical identity and metadata
 // snapshot with its common Workers Runner implementation.
@@ -48,6 +53,25 @@ type ScriptDependencies struct {
 	Now           func() time.Time
 	Publish       workers.ProgressPublisher
 	Record        workers.ScriptEventRecorder
+}
+
+// InferenceLocalInvoker is the Models-root local invocation edge required by
+// one Inference Runner registration.
+type InferenceLocalInvoker interface {
+	InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error)
+}
+
+// InferenceConfig is the private registry construction input for one configured
+// Inference Runner. The implementation translates it into its own immutable state.
+type InferenceConfig struct {
+	Worker    models.LocalWorker
+	Resources []models.LocalResource
+}
+
+// InferenceDependencies are the exact effects projected into one Inference Runner.
+type InferenceDependencies struct {
+	Models   InferenceLocalInvoker
+	Delegate workers.Runner
 }
 
 // Service resolves immutable runner registrations without executing or
