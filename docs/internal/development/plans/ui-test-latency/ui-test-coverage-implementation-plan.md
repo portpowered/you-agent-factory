@@ -718,6 +718,7 @@ and header (899ms across 4 files).
 | Workflow-activity bento aggregation | `workflow-activity-bento-card.test.tsx` | 385ms | Replaced the six-case, module-mocked graph omnibus with a two-case Bun contract around the extracted bento shell. Shared card chrome, editor controls, graph layout, and accessibility behavior stay with their existing feature owners. |
 | Trace-grid aggregation | `trace-grid-card.test.tsx` plus three scroll suites | 401ms for the Vitest omnibus, plus duplicate Bun work | Replaced the mocked graph-wide suite with a three-case Bun owner contract for states, table/selection behavior, and localization. Consolidated seven overlapping scroll cases into one long-table ownership invariant under `components/trace-grid-card/`. |
 | Resource-detail query harness | `resource-detail-card.test.tsx` | 397ms | Replaced twelve cases that mocked the current-factory query with five direct Bun card contracts under `components/resource-detail-card/`. The card now receives feature-owned resource and editable state fixtures directly; save-button behavior remains in `resource-save-controls`. |
+| Export dialog module effects | `export-factory-dialog.test.tsx` | 394ms | Replaced fourteen module-mocked Vitest cases with seven feature-owned Bun contracts under `components/export-factory-dialog/`. PNG writing and browser download are explicit dialog effects; validation, preparation, pending/success/failure, refresh, close-race, and localization behavior remain covered without process-global mocks. Focused execution is about 301ms. |
 | Cross-owner dashboard wiring | `dashboard-replay-wiring.component.test.tsx` | 697ms | Removed the app-shell duplicate: stream append and fixed-tick behavior are owned by the Bun snapshot hook, timeline store, slider, and bento snapshot contracts. |
 | Graph validation and charts | workflow editor validation and work chart tests | 675–691ms | WorkChart's 18 rendered contracts run under Bun. The duplicate workflow-activity editor validation suite is removed, and the seven feature-owned `useFactoryValidation` contracts now run under Bun in about 654ms with an injected validator rather than a process-global module mock. |
 | Chart wrapper duplication | `d3-information-card.test.tsx` | 540ms | Replaced the 600-line, ten-case Vitest suite with a three-case Bun owner contract for frame composition, localization/series wiring, and state forwarding. Legend, geometry, zoom, and state behavior remain with the dedicated WorkChart contracts. |
@@ -733,10 +734,13 @@ widget mounts, and process-global module mocks. Assertion execution is not the
 primary cost. Migration therefore starts by narrowing ownership and dependency
 seams; changing only the runner for an app-sized test preserves most latency.
 
-After the resource-detail reconciliation, the complete component command owns
-234 Bun files and 112 remaining Vitest files and completes locally in 75.36s:
-37.88s in Bun and 37.47s in Vitest. The last measured unit lane is 18.05s, so
-the combined non-browser correctness feedback is approximately 93.41s.
+After the export-dialog reconciliation, the complete component command owns
+235 Bun files and 111 remaining Vitest files and completes locally in 76.00s:
+39.35s in Bun and 36.64s in Vitest. The last measured unit lane is 18.05s, so
+the combined non-browser correctness feedback is approximately 94.05s. The
+0.64-second movement from the prior 75.36-second sample is within process-level
+variance; the structural gain is one fewer Vitest worker file and seven fewer
+duplicated behavior cases.
 
 The same reconciliation removed the canonical-section omnibus widget loop.
 Every detail owner structurally composes `SelectionDetailLayout`; the base
