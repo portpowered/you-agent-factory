@@ -580,6 +580,17 @@ Wave 0 functional-tests-expansion planning authority lives under
   metadata infers domain `workers` and subsection `inference` from the path;
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+- Workers inference provider command-flag functional coverage belongs in
+  `tests/functional/workers/inference/flags_test.go`: prove skip-permissions
+  policy, resolved worktree names, and explicit model values map onto the
+  selected provider-process command args, and prove unsupported provider flags
+  (for example workstation `outputSchema` on Gemini) fail with a capability
+  error before any `ProviderCommandRunner` call. Drive proofs through
+  `support.RunFactoryToCompletionWithEdgesAndObservations` with
+  `serviceedges.Edges{ProviderCommandRunner: ...}` and assert on command args
+  plus public Work outcomes only. Catalog metadata infers domain `workers` and
+  subsection `inference` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
 
 - `tests/functional/automations/` owns root.BuildProcess evidence for packaged
   Automations cron scheduling. Keep cron workstation factories explicit with

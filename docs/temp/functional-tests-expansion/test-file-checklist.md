@@ -239,7 +239,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestWorkerProviderOverridesGlobalDefault` covers precedence.
   - `TestUnknownProviderFailsBeforeProcessStart` covers validation.
 
-- [ ] `tests/functional/workers/inference/flags_test.go`
+- [x] `tests/functional/workers/inference/flags_test.go`
   - `TestProviderPermissionWorktreeAndModelFlagsMapToCommand` covers shared
     command metadata.
   - `TestUnsupportedProviderFlagReturnsCapabilityError` covers mismatch.
