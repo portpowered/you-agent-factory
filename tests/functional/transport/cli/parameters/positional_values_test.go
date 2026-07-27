@@ -1,12 +1,16 @@
 package parameters_test
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
@@ -106,6 +110,88 @@ func TestRunRejectsExtraPositionalValues(t *testing.T) {
 	}
 	if providerRunner.CallCount() != 0 {
 		t.Fatalf("provider dispatch calls = %d, want 0", providerRunner.CallCount())
+	}
+}
+
+// TestOptionalSessionIDUsesDefaultWhenOmitted proves optional session identity on
+// you session pause targets the documented default session when the session
+// positional is omitted and routes to an explicit override positional when one
+// is supplied.
+func TestOptionalSessionIDUsesDefaultWhenOmitted(t *testing.T) {
+	t.Run("omitted session positional targets default session", func(t *testing.T) {
+		var gotPath string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotPath = r.URL.Path
+			_, _ = io.Copy(io.Discard, r.Body)
+			writeSessionPauseResponse(t, w, factorysessions.DefaultSessionID)
+		}))
+		t.Cleanup(server.Close)
+
+		process := support.BuildProcess(t, serviceedges.Edges{})
+		inputs := support.FakeInputs(t.Context(), []string{
+			"you", "--server", server.URL,
+			"session", "pause",
+		})
+		inputs.WorkingDirectory = t.TempDir()
+
+		if err := process.Execute(inputs.Input); err != nil {
+			t.Fatalf(
+				"Process.Execute(session pause default targeting) error = %v\nstdout:\n%s\nstderr:\n%s",
+				err,
+				inputs.Stdout(),
+				inputs.Stderr(),
+			)
+		}
+		wantPath := "/factory-sessions/" + factorysessions.DefaultSessionID + "/pause"
+		if gotPath != wantPath {
+			t.Fatalf("observed request path = %q, want %q", gotPath, wantPath)
+		}
+	})
+
+	t.Run("explicit session positional overrides default targeting", func(t *testing.T) {
+		overrideSessionID := "session-customer-override"
+		var gotPath string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotPath = r.URL.Path
+			_, _ = io.Copy(io.Discard, r.Body)
+			writeSessionPauseResponse(t, w, overrideSessionID)
+		}))
+		t.Cleanup(server.Close)
+
+		process := support.BuildProcess(t, serviceedges.Edges{})
+		inputs := support.FakeInputs(t.Context(), []string{
+			"you", "--server", server.URL,
+			"session", "pause", overrideSessionID,
+		})
+		inputs.WorkingDirectory = t.TempDir()
+
+		if err := process.Execute(inputs.Input); err != nil {
+			t.Fatalf(
+				"Process.Execute(session pause override targeting) error = %v\nstdout:\n%s\nstderr:\n%s",
+				err,
+				inputs.Stdout(),
+				inputs.Stderr(),
+			)
+		}
+		wantPath := "/factory-sessions/" + overrideSessionID + "/pause"
+		if gotPath != wantPath {
+			t.Fatalf("observed request path = %q, want %q", gotPath, wantPath)
+		}
+	})
+}
+
+func writeSessionPauseResponse(t *testing.T, w http.ResponseWriter, sessionID string) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, err := io.WriteString(w, `{
+		"sessionId":"`+sessionID+`",
+		"operation":"PAUSE",
+		"outcome":"ACCEPTED",
+		"status":"PAUSED"
+	}`)
+	if err != nil {
+		t.Fatalf("write session pause response: %v", err)
 	}
 }
 
