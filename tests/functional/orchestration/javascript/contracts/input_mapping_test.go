@@ -1,0 +1,428 @@
+package contracts
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+const (
+	typedInputWorkflowFileName = "typed-input.workflow.js"
+	typedInputWorkflowSource   = `return {
+  label: args.label,
+  count: args.count,
+  enabled: args.enabled,
+  metadata: args.metadata,
+  tags: args.tags,
+};`
+
+	typedInputLabelValue    = "hello"
+	typedInputRegionValue   = "us-west"
+	typedInputTagAlphaValue = "alpha"
+	typedInputTagBetaValue  = "beta"
+
+	missingRequiredInputWorkflowSource = `return (async function () {
+  const child = await agent.run({
+    prompt: "typed-input-child",
+    label: "missing-required-child",
+    model: "gpt-allowed",
+  });
+  return {
+    label: args.label,
+    count: args.count,
+    enabled: args.enabled,
+    metadata: args.metadata,
+    tags: args.tags,
+    child: child,
+  };
+})();`
+
+	stableMissingRequiredInputDiagnostic = `required invocation parameter "label" is missing`
+)
+
+var privateJavaScriptVMDiagnosticMarkers = []string{
+	"goja",
+	"goja.",
+	"stack frame",
+	"heap dump",
+}
+
+// TestJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs proves
+// string, number, boolean, object, and array Work Request inputs reach a
+// JavaScript Factory invocation with preserved types on the public primary
+// Factory Session result surface after a root-built process run.
+func TestJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs(t *testing.T) {
+	t.Parallel()
+
+	dir := scaffoldTypedInputMappingWorkflow(t)
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		UseMockWorkers:            true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	started := startTypedInputMappingWorkflow(t, server.URL(), dir)
+	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0 for typed-input echo workflow", runner.CallCount())
+	}
+
+	assertTypedInputMappingPrimaryResult(t, started.Result)
+	assertNoPrivateJavaScriptVMDiagnostics(t, marshalPrimaryResultForDiagnostics(t, started.Result))
+}
+
+// TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch proves omitting a
+// required JavaScript Factory request input fails with an actionable customer
+// diagnostic before any child worker or provider dispatch when invoked through
+// the public you run customer process boundary after a root-built process run.
+func TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch(t *testing.T) {
+	t.Parallel()
+
+	dir := scaffoldMissingRequiredInputMappingFactory(t)
+	run := runMissingRequiredInputJavaScriptInvocation(t, dir)
+
+	assertMissingRequiredInputInvocationOutcome(t, run.outcome)
+	if run.providerRunner.CallCount() != 0 {
+		t.Fatalf(
+			"provider command runner call count = %d, want 0 before missing-required-input validation",
+			run.providerRunner.CallCount(),
+		)
+	}
+	assertNoPrivateJavaScriptVMDiagnostics(t, run.outcome.diagnostic)
+}
+
+type missingRequiredInputInvocationRun struct {
+	providerRunner *support.RecordingCommandRunner
+	outcome        missingRequiredInputInvocationOutcome
+}
+
+type missingRequiredInputInvocationOutcome struct {
+	response      factoryapi.InvocationResponse
+	errorResponse factoryapi.ErrorResponse
+	diagnostic    string
+}
+
+func scaffoldMissingRequiredInputMappingFactory(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "javascript-input-mapping-missing-required",
+		"invocationSignature": map[string]any{
+			"parameters": []any{map[string]any{
+				"name": "label", "required": true,
+				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+			}},
+		},
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"sourceRef": typedInputWorkflowFileName,
+				"argsSchema": map[string]any{
+					"type":     "object",
+					"required": []any{"label", "count", "enabled", "metadata", "tags"},
+					"properties": map[string]any{
+						"label":    map[string]any{"type": "string"},
+						"count":    map[string]any{"type": "number"},
+						"enabled":  map[string]any{"type": "boolean"},
+						"metadata": map[string]any{"type": "object"},
+						"tags": map[string]any{
+							"type":  "array",
+							"items": map[string]any{"type": "string"},
+						},
+					},
+					"additionalProperties": false,
+				},
+				"defaultPolicy": map[string]any{
+					"mode":          "READ_ONLY",
+					"maxAgents":     4,
+					"concurrency":   2,
+					"allowNetwork":  false,
+					"allowedModels": []any{"gpt-allowed"},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(
+		filepath.Join(dir, typedInputWorkflowFileName),
+		[]byte(missingRequiredInputWorkflowSource),
+		0o600,
+	); err != nil {
+		t.Fatalf("write missing required input workflow: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "mock-workers.json"),
+		[]byte(`{"mockWorkers":[]}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write mock-workers config: %v", err)
+	}
+	return dir
+}
+
+func runMissingRequiredInputJavaScriptInvocation(
+	t *testing.T,
+	dir string,
+) missingRequiredInputInvocationRun {
+	t.Helper()
+
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run",
+		"--factory", filepath.Join(dir, "factory.json"),
+		"--no-record",
+		"--with-mock-workers", filepath.Join(dir, "mock-workers.json"),
+		"--output", "primary",
+	})
+	homeDir := t.TempDir()
+	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = dir
+
+	err := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}).Execute(inputs.Input)
+	if err == nil {
+		t.Fatalf(
+			"Process.Execute() error = nil, want missing required input failure before child dispatch\nstdout:\n%s\nstderr:\n%s",
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	outcome := missingRequiredInputInvocationOutcome{
+		diagnostic: extractMissingRequiredInputDiagnostic(t, inputs.Stdout(), inputs.Stderr(), err.Error()),
+	}
+	if stdout := strings.TrimSpace(inputs.Stdout()); stdout != "" {
+		if decodeErr := json.Unmarshal([]byte(stdout), &outcome.response); decodeErr != nil {
+			t.Fatalf("decode InvocationResponse: %v\nstdout:\n%s", decodeErr, stdout)
+		}
+	}
+	if stderr := strings.TrimSpace(inputs.Stderr()); stderr != "" {
+		if decodeErr := json.Unmarshal([]byte(stderr), &outcome.errorResponse); decodeErr != nil {
+			t.Fatalf("decode ErrorResponse: %v\nstderr:\n%s", decodeErr, stderr)
+		}
+	}
+	return missingRequiredInputInvocationRun{
+		providerRunner: runner,
+		outcome:        outcome,
+	}
+}
+
+func assertMissingRequiredInputInvocationOutcome(
+	t *testing.T,
+	outcome missingRequiredInputInvocationOutcome,
+) {
+	t.Helper()
+
+	if outcome.response.Status != "" &&
+		outcome.response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED or empty before terminal invocation", outcome.response.Status)
+	}
+	if outcome.response.PrimaryResult != nil {
+		t.Fatalf("primaryResult = %#v, want nil before missing-required-input validation", outcome.response.PrimaryResult)
+	}
+	if outcome.errorResponse.Code != factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_MISSING_REQUIRED_INPUT") {
+		t.Fatalf(
+			"ErrorResponse code = %q, want INVOCATION_ARGUMENT_MISSING_REQUIRED_INPUT",
+			outcome.errorResponse.Code,
+		)
+	}
+	if !strings.Contains(outcome.errorResponse.Message, stableMissingRequiredInputDiagnostic) {
+		t.Fatalf(
+			"ErrorResponse message = %q, want missing required input diagnostic %q",
+			outcome.errorResponse.Message,
+			stableMissingRequiredInputDiagnostic,
+		)
+	}
+	if !strings.Contains(outcome.diagnostic, `"label"`) {
+		t.Fatalf(
+			"failure diagnostic = %q, want actionable missing required input field name %q",
+			outcome.diagnostic,
+			"label",
+		)
+	}
+}
+
+func extractMissingRequiredInputDiagnostic(t *testing.T, stdout, stderr, executeError string) string {
+	t.Helper()
+
+	diagnostic := strings.Join([]string{executeError, stdout, stderr}, "\n")
+	if strings.Contains(diagnostic, stableMissingRequiredInputDiagnostic) {
+		return diagnostic
+	}
+	t.Fatalf("diagnostic %q does not contain missing required input detail %q", diagnostic, stableMissingRequiredInputDiagnostic)
+	return ""
+}
+
+func scaffoldTypedInputMappingWorkflow(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "javascript-input-mapping",
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"sourceRef": typedInputWorkflowFileName,
+				"argsSchema": map[string]any{
+					"type":     "object",
+					"required": []any{"label", "count", "enabled", "metadata", "tags"},
+					"properties": map[string]any{
+						"label":    map[string]any{"type": "string"},
+						"count":    map[string]any{"type": "number"},
+						"enabled":  map[string]any{"type": "boolean"},
+						"metadata": map[string]any{"type": "object"},
+						"tags": map[string]any{
+							"type":  "array",
+							"items": map[string]any{"type": "string"},
+						},
+					},
+					"additionalProperties": false,
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(
+		filepath.Join(dir, typedInputWorkflowFileName),
+		[]byte(typedInputWorkflowSource),
+		0o600,
+	); err != nil {
+		t.Fatalf("write typed input workflow: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "mock-workers.json"),
+		[]byte(`{"mockWorkers":[]}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write mock-workers config: %v", err)
+	}
+	return dir
+}
+
+func startTypedInputMappingWorkflow(
+	t *testing.T,
+	serverURL, dir string,
+) factoryapi.FactorySessionSyncExecutionResponse {
+	t.Helper()
+
+	workflowPath := filepath.Join(dir, typedInputWorkflowFileName)
+	args := map[string]any{
+		"label":    typedInputLabelValue,
+		"count":    42,
+		"enabled":  true,
+		"metadata": map[string]any{"region": typedInputRegionValue},
+		"tags":     []any{typedInputTagAlphaValue, typedInputTagBetaValue},
+	}
+	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
+		RequestId: "javascript-typed-input-mapping",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
+			WorkflowFile: &workflowPath,
+		},
+		Args: &args,
+	})
+	if err != nil {
+		t.Fatalf("marshal typed input workflow request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build typed input workflow request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("start typed input workflow: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		var body bytes.Buffer
+		_, _ = body.ReadFrom(response.Body)
+		t.Fatalf("start typed input workflow status = %d: %s", response.StatusCode, body.String())
+	}
+	var started factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
+		t.Fatalf("decode typed input workflow response: %v", err)
+	}
+	return started
+}
+
+func assertTypedInputMappingPrimaryResult(t *testing.T, result *factoryapi.FactorySessionResult) {
+	t.Helper()
+
+	if result == nil || result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("result = %#v, want FINAL Factory Session result", result)
+	}
+	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
+		t.Fatalf("primary result = %#v, want exactly one content part", result.PrimaryResult)
+	}
+	part, err := (*result.PrimaryResult)[0].AsWorkJsonContentPart()
+	if err != nil {
+		t.Fatalf("decode primary result content part: %v", err)
+	}
+	encoded, err := json.Marshal(part.Json)
+	if err != nil {
+		t.Fatalf("encode primary result JSON: %v", err)
+	}
+	var evidence struct {
+		Label    string         `json:"label"`
+		Count    float64        `json:"count"`
+		Enabled  bool           `json:"enabled"`
+		Metadata map[string]any `json:"metadata"`
+		Tags     []string       `json:"tags"`
+	}
+	if err := json.Unmarshal(encoded, &evidence); err != nil {
+		t.Fatalf("decode typed input primary result: %v", err)
+	}
+	if evidence.Label != typedInputLabelValue {
+		t.Fatalf("mapped label = %q, want %q", evidence.Label, typedInputLabelValue)
+	}
+	if evidence.Count != 42 {
+		t.Fatalf("mapped count = %v, want 42", evidence.Count)
+	}
+	if !evidence.Enabled {
+		t.Fatalf("mapped enabled = %v, want true", evidence.Enabled)
+	}
+	if evidence.Metadata == nil || evidence.Metadata["region"] != typedInputRegionValue {
+		t.Fatalf("mapped metadata = %#v, want region %q", evidence.Metadata, typedInputRegionValue)
+	}
+	if len(evidence.Tags) != 2 ||
+		evidence.Tags[0] != typedInputTagAlphaValue ||
+		evidence.Tags[1] != typedInputTagBetaValue {
+		t.Fatalf("mapped tags = %#v, want [%q, %q]", evidence.Tags, typedInputTagAlphaValue, typedInputTagBetaValue)
+	}
+}
+
+func marshalPrimaryResultForDiagnostics(t *testing.T, result *factoryapi.FactorySessionResult) string {
+	t.Helper()
+
+	if result == nil || result.PrimaryResult == nil {
+		return ""
+	}
+	encoded, err := json.Marshal(result.PrimaryResult)
+	if err != nil {
+		t.Fatalf("marshal primary result for diagnostics: %v", err)
+	}
+	return string(encoded)
+}
+
+func assertNoPrivateJavaScriptVMDiagnostics(t *testing.T, outputs ...string) {
+	t.Helper()
+
+	combined := strings.ToLower(strings.Join(outputs, "\n"))
+	for _, marker := range privateJavaScriptVMDiagnosticMarkers {
+		if strings.Contains(combined, strings.ToLower(marker)) {
+			t.Fatalf("diagnostics exposed private VM detail %q in %q", marker, strings.Join(outputs, "\n---\n"))
+		}
+	}
+}

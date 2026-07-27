@@ -24,4 +24,5 @@ const (
 	WorkflowValidationCodeSourceUnreadable     = workflowvalidation.CodeSourceUnreadable
 	WorkflowValidationCodeUnsupportedLoader    = workflowvalidation.CodeUnsupportedLoader
 	WorkflowValidationCodeSourceHashMismatch   = workflowvalidation.CodeSourceHashMismatch
+	WorkflowValidationCodeImportNotFound       = workflowvalidation.CodeImportNotFound
 )

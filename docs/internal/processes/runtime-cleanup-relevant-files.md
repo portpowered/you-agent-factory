@@ -692,7 +692,14 @@ behind that private contract, and expose execution to HTTP, invocation, and MCP
 runtime views through the outer Factory Sessions `Service`. Runtime composition
 may retain an exact mutation-recording callback while assembling the Factory
 Runtime, but consumers must not receive the raw durable engine as a parallel
-service boundary.
+service boundary. The nested durable_execution public surface (`durable_execution`
+package root + `durable_execution/wire`) exposes only the named `Service`,
+`wire.NewService`, and approved `NewDurable`/`NewStandalone` composition owners;
+it must not declare identity, live-runtime, invocation, response-stream, or
+runtime-opening constructors. Focused Sessions durable start/resume/control/
+inspect call sites route through the bound owner capability (`sessionservice`
+`s.durable` and `durableLifecycleHost`) rather than re-reading the host
+`DurableExecution()` accessor after construction.
 
 Canonical root Wire imports only the Factory Sessions root, its service-local
 `wire` package, and service-owned transport adapters. When Wire must compose a
