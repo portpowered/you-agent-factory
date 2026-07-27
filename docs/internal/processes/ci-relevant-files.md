@@ -177,6 +177,21 @@
   execution. Catalog metadata infers domain `orchestration` and subsection
   `javascript/composition` from the path; every top-level `Test*` needs a
   customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  JavaScript nested composition functional coverage belongs in
+  `tests/functional/orchestration/javascript/composition/nested_test.go`:
+  drive sync Factory Session execution through
+  `tests/functional/internal/support.StartFunctionalAPIServer` with
+  `WaitForServiceModeRuntime: true`, `UseMockWorkers: true`, and a recording
+  `edges.Edges.ProviderCommandRunner`; nest `parallel([...])` inside a
+  `pipeline(items, worker, next?)` stage by returning the `parallel()` promise
+  from a sync stage worker (not `async function`), assert nested child labels
+  and dispatch ids on `result.primaryResult` and `/factory-sessions/{id}/dispatches`,
+  and prove nested failure naming via `fail:` mock-child prompts on dispatch
+  `failureDetail` plus stage-indexed parallel child diagnostics without live
+  provider execution or private VM stack frames. Catalog metadata infers domain
+  `orchestration` and subsection `javascript/composition` from the path; every
+  top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
+  stays viz-compatible.
   JavaScript per-child worker override functional coverage belongs in
   `tests/functional/orchestration/javascript/workers/overrides_test.go`:
   drive sync or async Factory Session execution through
