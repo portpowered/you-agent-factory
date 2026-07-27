@@ -17,7 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
 )
@@ -334,8 +333,10 @@ func selectedFactoryCompletionRootsResolver(options CommandFactory) cobracomplet
 	}
 }
 
-func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig, globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions CommandFactory) error {
-	promptArgs, resolvedConfig, err := resolveRunCommandInvocationInput(cmd, args, cfg)
+func executeRunCommand(cmd *cobra.Command, args []string, globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions CommandFactory) error {
+	promptArgs, resolvedConfig, err := resolveRunCommandInvocationInput(
+		cmd, args, defaultcmd.ExplicitRunConfig(rootOptions.runDefaults),
+	)
 	if err != nil {
 		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
 		return err
@@ -344,10 +345,14 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
 		return err
 	}
+	outputExplicit, changedErr := climanifestcobra.InputChanged(cmd, "you.run.flag.output")
+	if changedErr != nil {
+		return changedErr
+	}
 	if err := runcli.ValidateInvocationOutputSelection(
 		resolvedConfig.SuppressDashboardRendering,
 		globals.json,
-		cmd.Flags().Changed("output"),
+		outputExplicit,
 	); err != nil {
 		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
 		return err
@@ -420,10 +425,14 @@ func selectCurrentFactoryFromWorkingDirectory(cmd *cobra.Command, cfg *runcli.Ru
 }
 
 func applyRunCommandInvocationOutputMode(cmd *cobra.Command, cfg *runcli.RunConfig) error {
-	if !cmd.Flags().Changed("output") {
+	changed, err := climanifestcobra.InputChanged(cmd, "you.run.flag.output")
+	if err != nil {
+		return err
+	}
+	if !changed {
 		return nil
 	}
-	normalized, err := runcli.NormalizeInvocationOutputMode(cmd.Flag("output").Value.String())
+	normalized, err := runcli.NormalizeInvocationOutputMode(cfg.InvocationOutputMode)
 	if err != nil {
 		return err
 	}
@@ -431,32 +440,48 @@ func applyRunCommandInvocationOutputMode(cmd *cobra.Command, cfg *runcli.RunConf
 	return nil
 }
 
-func resolveRunCommandInvocationInput(cmd *cobra.Command, args []string, cfg *runcli.RunConfig) ([]string, runcli.RunConfig, error) {
+func resolveRunCommandInvocationInput(cmd *cobra.Command, args []string, base runcli.RunConfig) ([]string, runcli.RunConfig, error) {
 	args, err := parseRunCommandArgs(cmd, args)
 	if err != nil {
-		return nil, *cfg, err
+		return nil, base, err
 	}
 	if err := climanifestcobra.RefreshResolvedPersistentInputs(cmd); err != nil {
-		return nil, *cfg, err
+		return nil, base, err
 	}
 	if err := rejectDeprecatedPortFlag(cmd, nil); err != nil {
-		return nil, *cfg, err
+		return nil, base, err
 	}
-	cfg.MockWorkersEnabled = cmd.Flags().Changed("with-mock-workers")
-	if cmd.Flags().Changed("skip-permissions") {
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return nil, base, err
+	}
+	cfg, err := applyRunResolvedInputs(base, values)
+	if err != nil {
+		return nil, base, err
+	}
+	mockWorkersExplicit, err := climanifestcobra.InputChanged(cmd, "you.run.flag.with-mock-workers")
+	if err != nil {
+		return nil, base, err
+	}
+	cfg.MockWorkersEnabled = mockWorkersExplicit
+	skipPermissionsExplicit, err := climanifestcobra.InputChanged(cmd, "you.run.flag.skip-permissions")
+	if err != nil {
+		return nil, base, err
+	}
+	if skipPermissionsExplicit {
 		override := true
 		cfg.InvocationSkipPermissionsOverride = &override
 	}
 	promptArgs := args
 	if cfg.MockWorkersConfigPath != defaultMockWorkersConfigPathSentinel {
-		return promptArgs, *cfg, nil
+		return promptArgs, cfg, nil
 	}
 	if len(args) == 0 {
 		cfg.MockWorkersConfigPath = ""
-		return promptArgs, *cfg, nil
+		return promptArgs, cfg, nil
 	}
 	cfg.MockWorkersConfigPath = args[0]
-	return args[1:], *cfg, nil
+	return args[1:], cfg, nil
 }
 
 func helpRequested(cmd *cobra.Command) bool {
@@ -499,18 +524,12 @@ func newRunSubmitHandlerRegistry(
 	operatorDefaults *cliOperatorDefaultsOptions,
 	rootOptions CommandFactory,
 ) (*commandregistry.Registry, climanifestcobra.RunSubmitFlagBindings, error) {
-	runCfg := defaultcmd.ExplicitRunConfig(rootOptions.runDefaults)
-	var invocationOutputMode string
-	submitCfg := submitcli.SubmitConfig{Server: globals.server}
-	batchCfg := submitcli.BatchConfig{
-		Server: globals.server, FileSystem: rootOptions.batchInputFileSystem,
-	}
 	registry, err := commandregistry.NewRunSubmitRegistry(commandregistry.RunSubmitHandlers{
 		Run: commandregistry.CommandHandlers{
 			PreRunE: rejectDeprecatedPortFlag,
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return executeRunCommand(
-					cmd, args, &runCfg, globals, diagnostics, operatorDefaults, rootOptions,
+					cmd, args, globals, diagnostics, operatorDefaults, rootOptions,
 				)
 			},
 		},
@@ -525,49 +544,23 @@ func newRunSubmitHandlerRegistry(
 		Submit: commandregistry.CommandHandlers{
 			PreRunE: rejectDeprecatedPortFlag,
 			RunE: func(cmd *cobra.Command, _ []string) error {
-				return executeSubmitCommand(cmd, &submitCfg, globals, diagnostics, rootOptions.SubmitWork)
+				return executeSubmitCommand(cmd, globals, diagnostics, rootOptions.SubmitWork)
 			},
 		},
 		SubmitBatch: commandregistry.CommandHandlers{
 			PreRunE: rejectDeprecatedPortFlag,
 			RunE: func(cmd *cobra.Command, args []string) error {
-				return executeSubmitBatchCommand(cmd, args, &batchCfg, globals, diagnostics, rootOptions.SubmitBatch)
+				return executeSubmitBatchCommand(
+					cmd, args, globals, diagnostics,
+					rootOptions.batchInputFileSystem, rootOptions.SubmitBatch,
+				)
 			},
 		},
 	})
 	if err != nil {
 		return nil, climanifestcobra.RunSubmitFlagBindings{}, err
 	}
-	return registry, climanifestcobra.RunSubmitFlagBindings{
-		Run:                 &runCfg,
-		RunInvocationOutput: &invocationOutputMode,
-		RunLocalTargets:     runLocalTargets(&runCfg, &invocationOutputMode),
-		Submit:              &submitCfg,
-		SubmitBatch:         &batchCfg,
-	}, nil
-}
-
-func runLocalTargets(cfg *runcli.RunConfig, invocationOutput *string) map[string]any {
-	var skipPermissions bool
-	return map[string]any{
-		"continuously": &cfg.Continuously, "work": &cfg.WorkFile, "dir": &cfg.Dir,
-		"named": &cfg.NamedFactoryName, "factory": &cfg.FactoryConfigPath,
-		"record": &cfg.RecordPath, "no-record": &cfg.DisableDefaultRecording,
-		"replay": &cfg.ReplayPath, "runtime-log-dir": &cfg.RuntimeLogDir,
-		"runtime-log-max-size-mb":      &cfg.RuntimeLogConfig.MaxSize,
-		"runtime-log-max-backups":      &cfg.RuntimeLogConfig.MaxBackups,
-		"runtime-log-max-age-days":     &cfg.RuntimeLogConfig.MaxAge,
-		"runtime-log-compress":         &cfg.RuntimeLogConfig.Compress,
-		"runtime-metrics-dir":          &cfg.RuntimeMetricsDir,
-		"runtime-metrics-max-size-mb":  &cfg.RuntimeMetricsConfig.MaxSize,
-		"runtime-metrics-max-backups":  &cfg.RuntimeMetricsConfig.MaxBackups,
-		"runtime-metrics-max-age-days": &cfg.RuntimeMetricsConfig.MaxAge,
-		"runtime-metrics-compress":     &cfg.RuntimeMetricsConfig.Compress,
-		"with-mock-workers":            &cfg.MockWorkersConfigPath,
-		"with-server":                  &cfg.WithServer, "with-site": &cfg.WithSite,
-		"quiet": &cfg.SuppressDashboardRendering, "output": invocationOutput,
-		"skip-permissions": &skipPermissions,
-	}
+	return registry, newRunSubmitFlagBindings(), nil
 }
 
 func productionWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, injected ...CommandFactory) *cobra.Command {
@@ -764,17 +757,23 @@ func newWorkMoveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 	return cmd
 }
 
-func newWorkFamilyBindings(globals *cliGlobalOptions) (climanifestcobra.WorkFamilyBindings, *string) {
-	listCfg := workcli.ListConfig{Server: globals.server}
-	showCfg := workcli.ShowConfig{Server: globals.server}
-	moveCfg := workcli.MoveConfig{Server: globals.server}
-	var visualizeFormat string
-	return climanifestcobra.WorkFamilyBindings{
-		ListConfig:      &listCfg,
-		ShowConfig:      &showCfg,
-		MoveConfig:      &moveCfg,
-		VisualizeFormat: &visualizeFormat,
-	}, &visualizeFormat
+func newWorkFamilyBindings() climanifestcobra.WorkFamilyBindings {
+	format := scalarTarget("mermaid")
+	return climanifestcobra.WorkFamilyBindings{LocalTargets: map[string]any{
+		"you.work.list.flag.state-name":     scalarTarget(""),
+		"you.work.list.flag.state-type":     scalarTarget(""),
+		"you.work.list.flag.name":           scalarTarget(""),
+		"you.work.list.flag.work-type-name": scalarTarget(""),
+		"you.work.list.flag.trace-id":       scalarTarget(""),
+		"you.work.list.flag.sort-by":        scalarTarget(""),
+		"you.work.list.flag.max-results":    scalarTarget(0),
+		"you.work.list.flag.next-token":     scalarTarget(""),
+		"you.work.list.flag.session":        scalarTarget(""),
+		"you.work.show.flag.session":        scalarTarget(""),
+		"you.work.move.flag.session":        scalarTarget(""),
+		"you.work.move.flag.request-id":     scalarTarget(""),
+		"you.work.visualize.flag.format":    format,
+	}}
 }
 
 func newWorkHandlerRegistry(
@@ -782,47 +781,172 @@ func newWorkHandlerRegistry(
 	diagnostics *cliDiagnosticsOptions,
 	dependencies CommandFactory,
 ) (*commandregistry.Registry, climanifestcobra.WorkFamilyBindings, error) {
-	bindings, visualizeFormatPtr := newWorkFamilyBindings(globals)
-	listCfg := bindings.ListConfig
-	showCfg := bindings.ShowConfig
-	moveCfg := bindings.MoveConfig
+	bindings := newWorkFamilyBindings()
 	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
-		ListRunE: commandregistry.ListRunE(commandregistry.ListBinding{
-			Config:            listCfg,
-			Server:            &globals.server,
-			JSON:              &globals.json,
-			Verbose:           diagnostics.verboseEnabled,
-			Debug:             &diagnostics.debug,
-			DiagnosticsWriter: diagnostics.writer,
-			ListWork:          dependencies.ListWork,
-		}),
-		ShowRunE: commandregistry.ShowRunE(commandregistry.ShowBinding{
-			Config:            showCfg,
-			Server:            &globals.server,
-			JSON:              &globals.json,
-			Verbose:           diagnostics.verboseEnabled,
-			Debug:             &diagnostics.debug,
-			DiagnosticsWriter: diagnostics.writer,
-			ShowWork:          dependencies.ShowWork,
-		}),
-		MoveRunE: commandregistry.MoveRunE(commandregistry.MoveBinding{
-			Config:            moveCfg,
-			Server:            &globals.server,
-			JSON:              &globals.json,
-			Verbose:           diagnostics.verboseEnabled,
-			Debug:             &diagnostics.debug,
-			DiagnosticsWriter: diagnostics.writer,
-			MoveWork:          dependencies.MoveWork,
-		}),
-		VisualizeRunE: commandregistry.VisualizeRunE(commandregistry.VisualizeBinding{
-			Format:    visualizeFormatPtr,
-			Visualize: dependencies.VisualizeWork,
-		}),
+		ListRunE: func(cmd *cobra.Command, _ []string) error {
+			return executeGeneratedWorkList(cmd, globals, diagnostics, dependencies.ListWork)
+		},
+		ShowRunE: func(cmd *cobra.Command, args []string) error {
+			return executeGeneratedWorkShow(cmd, args, globals, diagnostics, dependencies.ShowWork)
+		},
+		MoveRunE: func(cmd *cobra.Command, args []string) error {
+			return executeGeneratedWorkMove(cmd, args, globals, diagnostics, dependencies.MoveWork)
+		},
+		VisualizeRunE: func(cmd *cobra.Command, args []string) error {
+			return executeGeneratedWorkVisualize(cmd, args, dependencies.VisualizeWork)
+		},
 	})
 	if err != nil {
 		return nil, climanifestcobra.WorkFamilyBindings{}, err
 	}
 	return registry, bindings, nil
+}
+
+func scalarTarget[T bool | string | int](value T) *T {
+	return &value
+}
+
+func commandInputValue[T any](values map[string]any, inputID string) (T, error) {
+	var zero T
+	value, ok := values[inputID]
+	if !ok {
+		return zero, fmt.Errorf("resolved CLI input %q is unavailable", inputID)
+	}
+	typed, ok := value.(T)
+	if !ok {
+		return zero, fmt.Errorf("resolved CLI input %q has incompatible type %T", inputID, value)
+	}
+	return typed, nil
+}
+
+func generatedCommandInputs(cmd *cobra.Command) (map[string]any, error) {
+	values, err := climanifestcobra.InputValues(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("resolve generated command inputs: %w", err)
+	}
+	return values, nil
+}
+
+func executeGeneratedWorkList(
+	cmd *cobra.Command,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	list func(workcli.ListConfig) error,
+) error {
+	if list == nil {
+		return fmt.Errorf("work list service is required")
+	}
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	cfg := workcli.ListConfig{
+		Context: cmd.Context(), Server: globals.server, JSON: globals.json,
+		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
+		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
+	}
+	fields := []struct {
+		id     string
+		target *string
+	}{
+		{"you.work.list.flag.state-name", &cfg.StateName},
+		{"you.work.list.flag.state-type", &cfg.StateType},
+		{"you.work.list.flag.name", &cfg.Name},
+		{"you.work.list.flag.work-type-name", &cfg.WorkTypeName},
+		{"you.work.list.flag.trace-id", &cfg.TraceID},
+		{"you.work.list.flag.sort-by", &cfg.SortBy},
+		{"you.work.list.flag.next-token", &cfg.NextToken},
+		{"you.work.list.flag.session", &cfg.SessionID},
+	}
+	for _, field := range fields {
+		*field.target, err = commandInputValue[string](values, field.id)
+		if err != nil {
+			return err
+		}
+	}
+	cfg.MaxResults, err = commandInputValue[int](values, "you.work.list.flag.max-results")
+	if err != nil {
+		return err
+	}
+	return list(cfg)
+}
+
+func executeGeneratedWorkShow(
+	cmd *cobra.Command,
+	args []string,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	show func(workcli.ShowConfig) error,
+) error {
+	if show == nil {
+		return fmt.Errorf("work show service is required")
+	}
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	sessionID, err := commandInputValue[string](values, "you.work.show.flag.session")
+	if err != nil {
+		return err
+	}
+	return show(workcli.ShowConfig{
+		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
+		WorkID: args[0], JSON: globals.json, Output: cmd.OutOrStdout(),
+		Diagnostics: diagnostics.writer(cmd), Verbose: diagnostics.verboseEnabled(),
+		Debug: diagnostics.debug,
+	})
+}
+
+func executeGeneratedWorkMove(
+	cmd *cobra.Command,
+	args []string,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	move func(workcli.MoveConfig) error,
+) error {
+	if move == nil {
+		return fmt.Errorf("work move service is required")
+	}
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	sessionID, err := commandInputValue[string](values, "you.work.move.flag.session")
+	if err != nil {
+		return err
+	}
+	requestID, err := commandInputValue[string](values, "you.work.move.flag.request-id")
+	if err != nil {
+		return err
+	}
+	return move(workcli.MoveConfig{
+		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
+		WorkID: args[0], StateName: args[1], RequestID: requestID,
+		JSON: globals.json, Output: cmd.OutOrStdout(),
+		Diagnostics: diagnostics.writer(cmd), Verbose: diagnostics.verboseEnabled(),
+		Debug: diagnostics.debug,
+	})
+}
+
+func executeGeneratedWorkVisualize(
+	cmd *cobra.Command,
+	args []string,
+	visualize func(workcli.VisualizeConfig) error,
+) error {
+	if visualize == nil {
+		return fmt.Errorf("work visualize service is required")
+	}
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	format, err := commandInputValue[string](values, "you.work.visualize.flag.format")
+	if err != nil {
+		return err
+	}
+	return visualize(workcli.VisualizeConfig{
+		BatchFile: args[0], Format: format, Output: cmd.OutOrStdout(),
+	})
 }
 
 func newRepresentativeHandlerRegistry(

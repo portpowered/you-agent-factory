@@ -7,8 +7,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
-	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/spf13/cobra"
 )
 
@@ -21,14 +19,10 @@ type RunSubmitFamilyComponents struct {
 	SubmitBatch *cobra.Command
 }
 
-// RunSubmitFlagBindings supplies explicit storage for generated local flags.
-// Inherited flags remain owned by the shared root command.
+// RunSubmitFlagBindings supplies parser-only scalar storage keyed by stable
+// manifest input ID. Handlers build typed transport configs per invocation.
 type RunSubmitFlagBindings struct {
-	Run                 *runcli.RunConfig
-	RunInvocationOutput *string
-	RunLocalTargets     map[string]any
-	Submit              *submitcli.SubmitConfig
-	SubmitBatch         *submitcli.BatchConfig
+	LocalTargets map[string]any
 }
 
 // NewRunSubmitFamilyComponents builds the detached family from generated
@@ -161,18 +155,20 @@ func registerRunSubmitLocalFlags(
 		}
 		if flag.Long == "port" {
 			registerDeprecatedPortFlag(cmd, &deprecatedPort)
+			annotateStableInput(cmd, flag)
 			if err := applyFlagContract(cmd.Flags().Lookup(flag.Long), flag); err != nil {
 				return err
 			}
 			continue
 		}
-		target, err := runSubmitLocalBindingTarget(record.ID, flag.Long, bindings)
+		target, err := flagBindingTarget(flag.ID, bindings.LocalTargets)
 		if err != nil {
 			return err
 		}
 		if err := registerFlag(cmd.Flags(), flag, target, flag.Usage); err != nil {
 			return fmt.Errorf("register local flag %q: %w", flag.Long, err)
 		}
+		annotateStableInput(cmd, flag)
 		if err := applyFlagContract(cmd.Flags().Lookup(flag.Long), flag); err != nil {
 			return fmt.Errorf("apply local flag %q contract: %w", flag.Long, err)
 		}
@@ -182,72 +178,6 @@ func registerRunSubmitLocalFlags(
 		// validation ordering. Do not add Cobra required annotations here.
 	}
 	return nil
-}
-
-func runSubmitLocalBindingTarget(
-	commandID, flagName string,
-	bindings RunSubmitFlagBindings,
-) (flagTarget, error) {
-	switch commandID {
-	case "you.run":
-		return runLocalBindingTarget(flagName, bindings.RunLocalTargets)
-	case "you.server":
-		return flagTarget{}, fmt.Errorf("unsupported server local flag %q", flagName)
-	case "you.submit":
-		return submitLocalBindingTarget(flagName, bindings.Submit)
-	case "you.submit.batch":
-		return submitBatchLocalBindingTarget(flagName, bindings.SubmitBatch)
-	default:
-		return flagTarget{}, fmt.Errorf("unsupported run/submit command %q", commandID)
-	}
-}
-
-func runLocalBindingTarget(
-	flagName string,
-	targets map[string]any,
-) (flagTarget, error) {
-	target, ok := targets[flagName]
-	if !ok {
-		return flagTarget{}, fmt.Errorf("unsupported run local flag %q", flagName)
-	}
-	switch typed := target.(type) {
-	case *bool:
-		return flagTarget{boolValue: typed}, nil
-	case *string:
-		return flagTarget{stringValue: typed}, nil
-	case *int:
-		return flagTarget{intValue: typed}, nil
-	default:
-		return flagTarget{}, fmt.Errorf("run local flag %q has unsupported binding target", flagName)
-	}
-}
-
-func submitLocalBindingTarget(flagName string, cfg *submitcli.SubmitConfig) (flagTarget, error) {
-	switch flagName {
-	case "name":
-		return flagTarget{stringValue: &cfg.Name}, nil
-	case "work-type-name":
-		return flagTarget{stringValue: &cfg.WorkTypeName}, nil
-	case "payload":
-		return flagTarget{stringValue: &cfg.Payload}, nil
-	case "session":
-		return flagTarget{stringValue: &cfg.SessionID}, nil
-	default:
-		return flagTarget{}, fmt.Errorf("unsupported submit local flag %q", flagName)
-	}
-}
-
-func submitBatchLocalBindingTarget(flagName string, cfg *submitcli.BatchConfig) (flagTarget, error) {
-	switch flagName {
-	case "file":
-		return flagTarget{stringValue: &cfg.FileFlag}, nil
-	case "dry-run":
-		return flagTarget{boolValue: &cfg.DryRun}, nil
-	case "session":
-		return flagTarget{stringValue: &cfg.SessionID}, nil
-	default:
-		return flagTarget{}, fmt.Errorf("unsupported submit batch local flag %q", flagName)
-	}
 }
 
 func runSubmitManifestRecords(manifest climanifest.Manifest) (run, server, submit, batch climanifest.Command, err error) {
@@ -292,20 +222,8 @@ func validateRunSubmitManifest(manifest climanifest.Manifest) error {
 }
 
 func validateRunSubmitBindings(bindings RunSubmitFlagBindings) error {
-	required := []struct {
-		name string
-		set  bool
-	}{
-		{name: "Run", set: bindings.Run != nil},
-		{name: "RunInvocationOutput", set: bindings.RunInvocationOutput != nil},
-		{name: "RunLocalTargets", set: bindings.RunLocalTargets != nil},
-		{name: "Submit", set: bindings.Submit != nil},
-		{name: "SubmitBatch", set: bindings.SubmitBatch != nil},
-	}
-	for _, binding := range required {
-		if !binding.set {
-			return fmt.Errorf("build run/submit family command: bindings.%s is required", binding.name)
-		}
+	if len(bindings.LocalTargets) == 0 {
+		return fmt.Errorf("build run/submit family command: bindings.LocalTargets is required")
 	}
 	return nil
 }

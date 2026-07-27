@@ -49,7 +49,12 @@ func InputValues(cmd *cobra.Command) (map[string]any, error) {
 		}
 		getter, ok := flag.Value.(interface{ Get() any })
 		if !ok {
-			return nil, fmt.Errorf("read generic command input %q: flag %q has no typed value", inputID, longName)
+			value, err := parseGenericFlagString(flag.Value.Type(), flag.Value.String())
+			if err != nil {
+				return nil, fmt.Errorf("read generic command input %q: parse flag %q value: %w", inputID, longName, err)
+			}
+			values[inputID] = cloneGenericInputValue(value)
+			continue
 		}
 		values[inputID] = cloneGenericInputValue(getter.Get())
 	}

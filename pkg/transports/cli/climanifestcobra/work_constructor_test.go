@@ -1,7 +1,6 @@
 package climanifestcobra_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
@@ -9,7 +8,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
 )
 
@@ -351,17 +349,24 @@ func mustWorkFamilyTree(t *testing.T) (*cobra.Command, *commandregistry.Registry
 }
 
 func testWorkBindings() climanifestcobra.WorkFamilyBindings {
-	listCfg := workcli.ListConfig{Context: context.Background()}
-	showCfg := workcli.ShowConfig{Context: context.Background()}
-	moveCfg := workcli.MoveConfig{Context: context.Background()}
-	format := "mermaid"
-	return climanifestcobra.WorkFamilyBindings{
-		ListConfig:      &listCfg,
-		ShowConfig:      &showCfg,
-		MoveConfig:      &moveCfg,
-		VisualizeFormat: &format,
-	}
+	return climanifestcobra.WorkFamilyBindings{LocalTargets: map[string]any{
+		"you.work.list.flag.state-name":     testScalarTarget(""),
+		"you.work.list.flag.state-type":     testScalarTarget(""),
+		"you.work.list.flag.name":           testScalarTarget(""),
+		"you.work.list.flag.work-type-name": testScalarTarget(""),
+		"you.work.list.flag.trace-id":       testScalarTarget(""),
+		"you.work.list.flag.sort-by":        testScalarTarget(""),
+		"you.work.list.flag.max-results":    testScalarTarget(0),
+		"you.work.list.flag.next-token":     testScalarTarget(""),
+		"you.work.list.flag.session":        testScalarTarget(""),
+		"you.work.show.flag.session":        testScalarTarget(""),
+		"you.work.move.flag.session":        testScalarTarget(""),
+		"you.work.move.flag.request-id":     testScalarTarget(""),
+		"you.work.visualize.flag.format":    testScalarTarget("mermaid"),
+	}}
 }
+
+func testScalarTarget[T bool | string | int](value T) *T { return &value }
 
 func workPathForID(commandID string) string {
 	switch commandID {

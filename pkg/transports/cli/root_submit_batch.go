@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/spf13/cobra"
@@ -14,39 +15,171 @@ import (
 
 func executeSubmitCommand(
 	cmd *cobra.Command,
-	cfg *submitcli.SubmitConfig,
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	submitHandler func(submitcli.SubmitConfig) error,
 ) error {
-	cfg.Context = cmd.Context()
-	cfg.Server = globals.server
-	cfg.JSON = globals.json
-	cfg.Output = cmd.OutOrStdout()
-	cfg.Diagnostics = diagnostics.writer(cmd)
-	cfg.Verbose = diagnostics.verboseEnabled()
-	cfg.Debug = diagnostics.debug
-	return submitHandler(*cfg)
+	if submitHandler == nil {
+		return fmt.Errorf("submit service is required")
+	}
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	name, err := commandInputValue[string](values, "you.submit.flag.name")
+	if err != nil {
+		return err
+	}
+	workTypeName, err := commandInputValue[string](values, "you.submit.flag.work-type-name")
+	if err != nil {
+		return err
+	}
+	payload, err := commandInputValue[string](values, "you.submit.flag.payload")
+	if err != nil {
+		return err
+	}
+	sessionID, err := commandInputValue[string](values, "you.submit.flag.session")
+	if err != nil {
+		return err
+	}
+	return submitHandler(submitcli.SubmitConfig{
+		Context: cmd.Context(), Server: globals.server, JSON: globals.json,
+		Name: name, WorkTypeName: workTypeName, Payload: payload, SessionID: sessionID,
+		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
+		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
+	})
 }
 
 func executeSubmitBatchCommand(
 	cmd *cobra.Command,
 	args []string,
-	cfg *submitcli.BatchConfig,
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
+	fileSystem submitcli.BatchInputFileSystem,
 	batchHandler func(submitcli.BatchConfig) error,
 ) error {
-	cfg.Context = cmd.Context()
-	cfg.Server = globals.server
-	cfg.JSON = globals.json
-	cfg.Args = args
-	cfg.Stdin = cmd.InOrStdin()
-	cfg.StdinIsTTY = func() bool { return startupcli.StdinIsTTY(cmd.Context()) }
-	cfg.Output = cmd.OutOrStdout()
-	cfg.Verbose = diagnostics.verboseEnabled()
-	cfg.Debug = diagnostics.debug
-	return batchHandler(*cfg)
+	if batchHandler == nil {
+		return fmt.Errorf("submit batch service is required")
+	}
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	fileFlag, err := commandInputValue[string](values, "you.submit.batch.flag.file")
+	if err != nil {
+		return err
+	}
+	dryRun, err := commandInputValue[bool](values, "you.submit.batch.flag.dry-run")
+	if err != nil {
+		return err
+	}
+	sessionID, err := commandInputValue[string](values, "you.submit.batch.flag.session")
+	if err != nil {
+		return err
+	}
+	return batchHandler(submitcli.BatchConfig{
+		Context: cmd.Context(), Server: globals.server, JSON: globals.json,
+		FileFlag: fileFlag, DryRun: dryRun, SessionID: sessionID,
+		Args: args, Stdin: cmd.InOrStdin(), FileSystem: fileSystem,
+		StdinIsTTY: func() bool { return startupcli.StdinIsTTY(cmd.Context()) },
+		Output:     cmd.OutOrStdout(), Verbose: diagnostics.verboseEnabled(),
+		Debug: diagnostics.debug,
+	})
+}
+
+func newRunSubmitFlagBindings() climanifestcobra.RunSubmitFlagBindings {
+	targets := map[string]any{}
+	stringInputs := []string{
+		"you.run.flag.work", "you.run.flag.dir", "you.run.flag.named",
+		"you.run.flag.factory", "you.run.flag.record", "you.run.flag.replay",
+		"you.run.flag.runtime-log-dir", "you.run.flag.runtime-metrics-dir",
+		"you.run.flag.with-mock-workers", "you.run.flag.output",
+		"you.submit.flag.name", "you.submit.flag.work-type-name",
+		"you.submit.flag.payload", "you.submit.flag.session",
+		"you.submit.batch.flag.file", "you.submit.batch.flag.session",
+	}
+	boolInputs := []string{
+		"you.run.flag.continuously", "you.run.flag.no-record",
+		"you.run.flag.runtime-log-compress", "you.run.flag.runtime-metrics-compress",
+		"you.run.flag.with-server", "you.run.flag.with-site", "you.run.flag.quiet",
+		"you.run.flag.skip-permissions", "you.submit.batch.flag.dry-run",
+	}
+	intInputs := []string{
+		"you.run.flag.runtime-log-max-size-mb", "you.run.flag.runtime-log-max-backups",
+		"you.run.flag.runtime-log-max-age-days", "you.run.flag.runtime-metrics-max-size-mb",
+		"you.run.flag.runtime-metrics-max-backups", "you.run.flag.runtime-metrics-max-age-days",
+	}
+	for _, inputID := range stringInputs {
+		targets[inputID] = scalarTarget("")
+	}
+	for _, inputID := range boolInputs {
+		targets[inputID] = scalarTarget(false)
+	}
+	for _, inputID := range intInputs {
+		targets[inputID] = scalarTarget(0)
+	}
+	return climanifestcobra.RunSubmitFlagBindings{LocalTargets: targets}
+}
+
+func applyRunResolvedInputs(cfg runcli.RunConfig, values map[string]any) (runcli.RunConfig, error) {
+	stringFields := []struct {
+		id     string
+		target *string
+	}{
+		{"you.run.flag.work", &cfg.WorkFile},
+		{"you.run.flag.dir", &cfg.Dir},
+		{"you.run.flag.named", &cfg.NamedFactoryName},
+		{"you.run.flag.factory", &cfg.FactoryConfigPath},
+		{"you.run.flag.record", &cfg.RecordPath},
+		{"you.run.flag.replay", &cfg.ReplayPath},
+		{"you.run.flag.runtime-log-dir", &cfg.RuntimeLogDir},
+		{"you.run.flag.runtime-metrics-dir", &cfg.RuntimeMetricsDir},
+		{"you.run.flag.with-mock-workers", &cfg.MockWorkersConfigPath},
+		{"you.run.flag.output", &cfg.InvocationOutputMode},
+	}
+	boolFields := []struct {
+		id     string
+		target *bool
+	}{
+		{"you.run.flag.continuously", &cfg.Continuously},
+		{"you.run.flag.no-record", &cfg.DisableDefaultRecording},
+		{"you.run.flag.runtime-log-compress", &cfg.RuntimeLogConfig.Compress},
+		{"you.run.flag.runtime-metrics-compress", &cfg.RuntimeMetricsConfig.Compress},
+		{"you.run.flag.with-server", &cfg.WithServer},
+		{"you.run.flag.with-site", &cfg.WithSite},
+		{"you.run.flag.quiet", &cfg.SuppressDashboardRendering},
+	}
+	intFields := []struct {
+		id     string
+		target *int
+	}{
+		{"you.run.flag.runtime-log-max-size-mb", &cfg.RuntimeLogConfig.MaxSize},
+		{"you.run.flag.runtime-log-max-backups", &cfg.RuntimeLogConfig.MaxBackups},
+		{"you.run.flag.runtime-log-max-age-days", &cfg.RuntimeLogConfig.MaxAge},
+		{"you.run.flag.runtime-metrics-max-size-mb", &cfg.RuntimeMetricsConfig.MaxSize},
+		{"you.run.flag.runtime-metrics-max-backups", &cfg.RuntimeMetricsConfig.MaxBackups},
+		{"you.run.flag.runtime-metrics-max-age-days", &cfg.RuntimeMetricsConfig.MaxAge},
+	}
+	var err error
+	for _, field := range stringFields {
+		*field.target, err = commandInputValue[string](values, field.id)
+		if err != nil {
+			return cfg, err
+		}
+	}
+	for _, field := range boolFields {
+		*field.target, err = commandInputValue[bool](values, field.id)
+		if err != nil {
+			return cfg, err
+		}
+	}
+	for _, field := range intFields {
+		*field.target, err = commandInputValue[int](values, field.id)
+		if err != nil {
+			return cfg, err
+		}
+	}
+	return cfg, nil
 }
 
 func parseRunCommandArgs(cmd *cobra.Command, args []string) ([]string, error) {

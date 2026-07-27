@@ -7,7 +7,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
 )
 
@@ -21,13 +20,10 @@ type WorkFamilyComponents struct {
 	Visualize *cobra.Command
 }
 
-// WorkFamilyBindings supplies live variables for work-family local flags declared
-// in generated metadata.
+// WorkFamilyBindings supplies parser-only scalar storage keyed by stable
+// manifest input ID. Handlers build typed Work requests per invocation.
 type WorkFamilyBindings struct {
-	ListConfig      *workcli.ListConfig
-	ShowConfig      *workcli.ShowConfig
-	MoveConfig      *workcli.MoveConfig
-	VisualizeFormat *string
+	LocalTargets map[string]any
 }
 
 // NewWorkFamilyCommand builds the work you.work → list/show/move/visualize tree
@@ -195,19 +191,8 @@ func validateWorkManifest(manifest climanifest.Manifest) error {
 }
 
 func validateWorkBindings(bindings WorkFamilyBindings) error {
-	required := []struct {
-		name string
-		ok   bool
-	}{
-		{"ListConfig", bindings.ListConfig != nil},
-		{"ShowConfig", bindings.ShowConfig != nil},
-		{"MoveConfig", bindings.MoveConfig != nil},
-		{"VisualizeFormat", bindings.VisualizeFormat != nil},
-	}
-	for _, field := range required {
-		if !field.ok {
-			return fmt.Errorf("build work family command: bindings.%s is required", field.name)
-		}
+	if len(bindings.LocalTargets) == 0 {
+		return fmt.Errorf("build work family command: bindings.LocalTargets is required")
 	}
 	return nil
 }
@@ -238,90 +223,23 @@ func registerWorkLocalFlags(cmd *cobra.Command, record climanifest.Command, bind
 		}
 		if flag.Long == "port" {
 			registerDeprecatedPortFlag(cmd, &deprecatedPort)
+			annotateStableInput(cmd, flag)
 			if err := applyFlagContract(cmd.Flags().Lookup("port"), flag); err != nil {
 				return fmt.Errorf("apply port flag contract: %w", err)
 			}
 			continue
 		}
-		target, err := workLocalBindingTarget(record.ID, flag, bindings)
+		target, err := flagBindingTarget(flag.ID, bindings.LocalTargets)
 		if err != nil {
 			return err
 		}
 		if err := registerFlag(cmd.Flags(), flag, target, flag.Usage); err != nil {
 			return fmt.Errorf("register local flag %q: %w", flag.Long, err)
 		}
+		annotateStableInput(cmd, flag)
 		if err := applyFlagContract(cmd.Flags().Lookup(flag.Long), flag); err != nil {
 			return fmt.Errorf("apply local flag %q contract: %w", flag.Long, err)
 		}
 	}
 	return nil
-}
-
-func workLocalBindingTarget(commandID string, flag climanifest.Flag, bindings WorkFamilyBindings) (flagTarget, error) {
-	switch commandID {
-	case "you.work.list":
-		return listLocalBindingTarget(flag, bindings.ListConfig)
-	case "you.work.show":
-		return showLocalBindingTarget(flag, bindings.ShowConfig)
-	case "you.work.move":
-		return moveLocalBindingTarget(flag, bindings.MoveConfig)
-	case "you.work.visualize":
-		return visualizeLocalBindingTarget(flag, bindings.VisualizeFormat)
-	default:
-		return flagTarget{}, fmt.Errorf("unsupported work command %q for local flag %q", commandID, flag.Long)
-	}
-}
-
-func listLocalBindingTarget(flag climanifest.Flag, cfg *workcli.ListConfig) (flagTarget, error) {
-	switch flag.Long {
-	case "state-name":
-		return flagTarget{stringValue: &cfg.StateName}, nil
-	case "state-type":
-		return flagTarget{stringValue: &cfg.StateType}, nil
-	case "name":
-		return flagTarget{stringValue: &cfg.Name}, nil
-	case "work-type-name":
-		return flagTarget{stringValue: &cfg.WorkTypeName}, nil
-	case "trace-id":
-		return flagTarget{stringValue: &cfg.TraceID}, nil
-	case "sort-by":
-		return flagTarget{stringValue: &cfg.SortBy}, nil
-	case "max-results":
-		return flagTarget{intValue: &cfg.MaxResults}, nil
-	case "next-token":
-		return flagTarget{stringValue: &cfg.NextToken}, nil
-	case "session":
-		return flagTarget{stringValue: &cfg.SessionID}, nil
-	default:
-		return flagTarget{}, fmt.Errorf("unsupported list local flag %q", flag.Long)
-	}
-}
-
-func showLocalBindingTarget(flag climanifest.Flag, cfg *workcli.ShowConfig) (flagTarget, error) {
-	switch flag.Long {
-	case "session":
-		return flagTarget{stringValue: &cfg.SessionID}, nil
-	default:
-		return flagTarget{}, fmt.Errorf("unsupported show local flag %q", flag.Long)
-	}
-}
-
-func moveLocalBindingTarget(flag climanifest.Flag, cfg *workcli.MoveConfig) (flagTarget, error) {
-	switch flag.Long {
-	case "session":
-		return flagTarget{stringValue: &cfg.SessionID}, nil
-	case "request-id":
-		return flagTarget{stringValue: &cfg.RequestID}, nil
-	default:
-		return flagTarget{}, fmt.Errorf("unsupported move local flag %q", flag.Long)
-	}
-}
-
-func visualizeLocalBindingTarget(flag climanifest.Flag, format *string) (flagTarget, error) {
-	switch flag.Long {
-	case "format":
-		return flagTarget{stringValue: format}, nil
-	default:
-		return flagTarget{}, fmt.Errorf("unsupported visualize local flag %q", flag.Long)
-	}
 }

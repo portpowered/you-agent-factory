@@ -1794,6 +1794,11 @@ response-stream output.
   `climanifestcobra.InputChanged` with the stable input ID so public spellings
   remain private to the generated Cobra projection. Prove omitted and explicit
   values on repeated executions through `root.BuildProcess`.
+- Retained family constructors that cannot yet use the generic command-tree
+  projector should bind Cobra only to scalar parser storage keyed by stable
+  input ID. Annotate those flags for `climanifestcobra.InputValues`, then map
+  the typed snapshot into a fresh domain-facing transport config in the handler;
+  never bind generated flags directly into a reusable request/config struct.
 - Raw JavaScript `you run --factory workflow.js` owns a standalone durable
   execution service rather than a Factory Runtime. When hosting that run, bind
   the same execution service to the generated HTTP/dashboard transport, gate
