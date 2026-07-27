@@ -1,0 +1,118 @@
+package commands_test
+
+import (
+	"context"
+	"fmt"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+const (
+	submitWiringInlineRequestID = "cli-submit-wiring-inline"
+	submitWiringInlineWorkName  = "inline-task"
+	submitWiringInlineWorkType  = "task"
+)
+
+// TestCLISubmitBatchInlineJSON proves you submit batch accepts inline canonical
+// FACTORY_REQUEST_BATCH JSON against a running Factory Session server and prints
+// transport acknowledgment markers without staging a file.
+func TestCLISubmitBatchInlineJSON(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI submit wiring")
+	}
+
+	factoryDir := support.ScaffoldFactory(t, submitWiringFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	binaryPath := buildYouCLIBinary(t)
+	inlineBatch := fmt.Sprintf(
+		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":%q,"payload":{"title":"Inline submit wiring"}}]}`,
+		submitWiringInlineRequestID,
+		submitWiringInlineWorkName,
+		submitWiringInlineWorkType,
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	submitCmd := exec.CommandContext(
+		ctx,
+		binaryPath,
+		"--server", server.URL(),
+		"submit", "batch",
+		inlineBatch,
+	)
+	submitCmd.Dir = factoryDir
+
+	submitOut, err := submitCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("you submit batch: %v\noutput:\n%s", err, submitOut)
+	}
+
+	output := string(submitOut)
+	for _, marker := range []string{
+		"requestId: " + submitWiringInlineRequestID,
+		"traceId:",
+		"work count: 1",
+		submitWiringInlineWorkName + " (" + submitWiringInlineWorkType + ")",
+	} {
+		if !strings.Contains(output, marker) {
+			t.Fatalf("submit batch output missing %q:\n%s", marker, output)
+		}
+	}
+}
+
+func submitWiringFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "cli-submit-wiring",
+		"workTypes": []map[string]any{
+			{
+				"name": submitWiringInlineWorkType,
+				"states": []map[string]any{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]string{
+			{"name": "mock-worker"},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":      "process-task",
+				"worker":    "mock-worker",
+				"inputs":    []map[string]string{{"workType": submitWiringInlineWorkType, "state": "init"}},
+				"outputs":   []map[string]string{{"workType": submitWiringInlineWorkType, "state": "complete"}},
+				"onFailure": []map[string]string{{"workType": submitWiringInlineWorkType, "state": "failed"}},
+			},
+		},
+	}
+}
+
+func buildYouCLIBinary(t *testing.T) string {
+	t.Helper()
+
+	binaryName := "you"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	binaryPath := filepath.Join(t.TempDir(), binaryName)
+	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/factory")
+	build.Dir = testutil.MustRepoRoot(t)
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build you CLI: %v\n%s", err, string(output))
+	}
+	return binaryPath
+}
