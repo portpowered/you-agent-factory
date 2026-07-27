@@ -1211,9 +1211,29 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/cli/root_discovery/root_discovery_test.go",
-      "package": "you-agent-factory/tests/functional/cli/root_discovery",
-      "scenario": "TestRemovedInitInputFailsBeforeConfigurationMutation",
+      "source_path": "tests/functional/transport/cli/parameters/flags_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIFlagAfterPositionalValueUsesDocumentedParsing",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/flags_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/flags_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIStringBooleanAndRepeatedFlagsReachRequest",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/parameters/flags_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/flags_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIUnknownFlagFailsBeforeLifecycleStart",
       "lane": "short",
       "destination": "tests/functional/transport/cli/parameters/flags_test.go",
       "catch_all": "none",
@@ -5915,14 +5935,14 @@
       "workstations": 5,
       "orchestration": 3
     },
-    "customer_top_level_Test_scenarios": 569,
+    "customer_top_level_Test_scenarios": 571,
     "files_with_customer_Test": 200,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 46,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 117,
-    "lane_short": 452
+    "lane_short": 454
   },
   "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. Non-catch-all rows mapped by FND-007-006; catch-all rows mapped by FND-007-003\u2026005.",
   "runtime_api_mapping": {

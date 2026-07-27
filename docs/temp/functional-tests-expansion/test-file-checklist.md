@@ -78,7 +78,7 @@ intentionally small enough to distribute across many agents.
   - `TestOptionalSessionIDUsesDefaultWhenOmitted` verifies default session
     targeting and explicit override.
 
-- [ ] `tests/functional/transport/cli/parameters/flags_test.go`
+- [x] `tests/functional/transport/cli/parameters/flags_test.go`
   - `TestCLIStringBooleanAndRepeatedFlagsReachRequest` verifies flag mapping at
     the external observation edge.
   - `TestCLIUnknownFlagFailsBeforeLifecycleStart` verifies stable diagnostics.
