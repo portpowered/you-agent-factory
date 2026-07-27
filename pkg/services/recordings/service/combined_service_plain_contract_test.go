@@ -896,6 +896,54 @@ func assertServicePortableFailures(
 	}
 }
 
+func TestCombinedServicePortableExportAndReadDelegates(t *testing.T) {
+	t.Parallel()
+
+	ledger := &stubLedger{}
+	svc := NewService(ledger, NewProjectionService())
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-export-delegate"}
+	bound, err := svc.BindRecording(recordings.BindRecordingRequest{
+		RecordingID: "recording-export-delegate",
+		Artifact:    "artifact:export-delegate",
+		Scope:       scope,
+	})
+	if err != nil {
+		t.Fatalf("BindRecording: %v", err)
+	}
+	event := recordings.CanonicalEvent{
+		ID: "export-delegate-event", Kind: "WORK_REQUEST",
+		Scope:      scope,
+		RecordedAt: time.Unix(1_700_000_000, 0).UTC(),
+		Payload:    "{}",
+		Cursor: recordings.CanonicalEventCursor{
+			StreamGenerationID: "generation-export-delegate",
+		},
+	}
+	if _, err := svc.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
+		RecordingID: bound.Status.RecordingID,
+		Event:       event,
+	}); err != nil {
+		t.Fatalf("RecordRecordingEvent: %v", err)
+	}
+	if _, err := svc.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: bound.Status.RecordingID,
+		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
+	}); err != nil {
+		t.Fatalf("FinishRecording: %v", err)
+	}
+	if _, err := svc.ExportPortableArtifact(context.Background(), recordings.ExportPortableArtifactRequest{
+		RecordingID: bound.Status.RecordingID,
+	}); !errors.Is(err, recordings.ErrPortableArtifactExportFailed) {
+		t.Fatalf("ExportPortableArtifact = %v, want ErrPortableArtifactExportFailed", err)
+	}
+	if _, err := svc.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
+		RecordingID: bound.Status.RecordingID,
+		Reference:   bound.Status.Artifact,
+	}); !errors.Is(err, recordings.ErrPortableArtifactUnavailable) {
+		t.Fatalf("ReadPortableArtifact = %v, want ErrPortableArtifactUnavailable", err)
+	}
+}
+
 func TestProjectionServiceDelegates(t *testing.T) {
 	t.Parallel()
 	projection := NewProjectionService()
