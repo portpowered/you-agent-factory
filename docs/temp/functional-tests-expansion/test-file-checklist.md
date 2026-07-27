@@ -239,7 +239,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     command metadata.
   - `TestUnsupportedProviderFlagReturnsCapabilityError` covers mismatch.
 
-- [ ] `tests/functional/workers/inference/failure_normalization_test.go`
+- [x] `tests/functional/workers/inference/failure_normalization_test.go`
   - `TestProviderNonZeroExitMapsToPublicFailure` covers generic process failure.
   - `TestProviderAuthRateLimitAndTimeoutRemainDistinct` covers error classes.
   - `TestProviderFailureRedactsPromptEnvironmentAndCredentials` covers safety.

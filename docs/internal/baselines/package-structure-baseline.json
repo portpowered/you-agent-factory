@@ -169,11 +169,6 @@
     },
     {
       "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_throttle_failure_regression_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_unified_event_log_smoke_test.go",
       "target": "tests/functional/runtime_api"
     },
@@ -606,11 +601,6 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_submit_runtime_work_trace_shaping_smoke_test.go",
       "target": "TestSubmitRuntimeWork_EmitsCanonicalTraceAwareBatchEvent"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_throttle_failure_regression_test.go",
-      "target": "TestRetryableThrottleFailureWithoutGuardUsesDefaultRetryLimitAndFailsWork"
     },
     {
       "rule": "deprecated-runtime-api-test",
