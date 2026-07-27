@@ -4377,14 +4377,44 @@
       "deletion_only_batch": "smoke-delete-04-transport-cli"
     },
     {
-      "source_path": "tests/functional/smoke/cli_submit_batch_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/smoke",
-      "scenario": "TestSubmitBatch_RealCLIUpsertsToRunningFactory",
+      "source_path": "tests/functional/transport/cli/commands/submit_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLISubmitBackendErrorPreservesPublicMessage",
       "lane": "short",
       "destination": "tests/functional/transport/cli/commands/submit_wiring_test.go",
-      "catch_all": "smoke",
+      "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "smoke-delete-04-transport-cli"
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/commands/submit_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLISubmitBatchFile",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/submit_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/commands/submit_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLISubmitBatchInlineJSON",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/submit_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/commands/submit_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/commands",
+      "scenario": "TestCLISubmitUnavailableServer",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/commands/submit_wiring_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/smoke/cli_work_move_smoke_test.go",
@@ -5767,7 +5797,7 @@
       "deletion_only_batch": "workflow-delete-05-workstations-repeater"
     }
   ],
-  "scanned_at_utc": "2026-07-27T05:22:30Z",
+  "scanned_at_utc": "2026-07-27T13:30:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 27,
@@ -5792,20 +5822,20 @@
       "replay_contracts": 24,
       "runtime_api": 108,
       "sessionparity": 13,
-      "smoke": 91,
-      "transport": 15,
+      "smoke": 90,
+      "transport": 19,
       "work": 1,
       "workers": 2,
       "workflow": 71
     },
-    "customer_top_level_Test_scenarios": 558,
+    "customer_top_level_Test_scenarios": 561,
     "files_with_customer_Test": 186,
     "functional_test_go_files": 225,
     "helper_only_non_customer_files": 34,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
     "lane_functionallong": 122,
-    "lane_short": 436
+    "lane_short": 439
   },
   "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. Non-catch-all rows mapped by FND-007-006; catch-all rows mapped by FND-007-003…005.",
   "runtime_api_mapping": {
@@ -5829,7 +5859,7 @@
   },
   "smoke_workflow_mapping": {
     "mapped_at_utc": "2026-07-24T02:26:56Z",
-    "smoke_scenarios": 94,
+    "smoke_scenarios": 93,
     "workflow_scenarios": 73
   },
   "guards_bootstrap_replay_mapping": {

@@ -1294,11 +1294,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_submit_batch_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/cli_work_move_smoke_test.go",
       "target": "smoke"
     },
