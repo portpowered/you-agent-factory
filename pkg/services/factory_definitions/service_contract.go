@@ -595,9 +595,11 @@ func (operations PackagedFactoryCatalogOperations) ResolveBuiltInPackagedFactory
 // identity under a named-Factory root. Callers do not supply PackagedDefinition
 // payload bytes or installer collaborators as request fields.
 type InstallPackagedFactoryRequest struct {
-	RootDir string
-	Name    string
-	Format  PackagedFactoryFormat
+	RootDir  string
+	Name     string
+	Format   PackagedFactoryFormat
+	Replace  bool
+	Scaffold CreateFactoryScaffoldRequest
 }
 
 // InstallPackagedFactoryResult carries Definitions-owned distribute success
@@ -613,24 +615,20 @@ type InstallPackagedFactoryResult struct {
 type PackagedFactoryInstallationOperations struct {
 	Install func(
 		context.Context,
-		string,
-		PackagedDefinition,
-		PackagedFactoryFormat,
+		PackagedFactoryInstallParams,
 	) (PackagedFactoryInstallResult, error)
 }
 
 func (operations PackagedFactoryInstallationOperations) InstallPackagedFactory(
 	ctx context.Context,
-	rootDir string,
-	definition PackagedDefinition,
-	format PackagedFactoryFormat,
+	params PackagedFactoryInstallParams,
 ) (PackagedFactoryInstallResult, error) {
 	if operations.Install == nil {
 		return PackagedFactoryInstallResult{}, fmt.Errorf(
 			"packaged Factory installation collaborator is required",
 		)
 	}
-	return operations.Install(ctx, rootDir, definition, format)
+	return operations.Install(ctx, params)
 }
 
 // CreateFactoryScaffoldRequest creates one Factory scaffold under a target

@@ -110,20 +110,18 @@ func TestServiceResolvesThenInstallsBuiltInPackage(t *testing.T) {
 		factoryroot.PackagedFactoryInstallationOperations{
 			Install: func(
 				_ context.Context,
-				rootDir string,
-				definition factoryroot.PackagedDefinition,
-				format factoryroot.PackagedFactoryFormat,
+				params factoryroot.PackagedFactoryInstallParams,
 			) (factoryroot.PackagedFactoryInstallResult, error) {
-				if rootDir != "/customer/factories" {
-					t.Fatalf("rootDir = %q", rootDir)
+				if params.NamedFactoriesRoot != "/customer/factories" {
+					t.Fatalf("rootDir = %q", params.NamedFactoriesRoot)
 				}
-				installed = definition
-				installedFormat = format
+				installed = params.Definition
+				installedFormat = params.Format
 				return factoryroot.PackagedFactoryInstallResult{
-					Name:       definition.Name,
+					Name:       params.Definition.Name,
 					FactoryDir: "/customer/factories/@you/goal",
 					Outcome:    factoryroot.PackagedFactoryInstallCreated,
-					Format:     format,
+					Format:     params.Format,
 				}, nil
 			},
 		},
@@ -150,5 +148,43 @@ func TestServiceResolvesThenInstallsBuiltInPackage(t *testing.T) {
 		result.Outcome != factoryroot.PackagedFactoryInstallCreated ||
 		result.Format != factoryroot.PackagedFactoryFormatYML {
 		t.Fatalf("InstallPackagedFactory() = %#v", result)
+	}
+}
+
+func TestInstallPackagedFactory_RejectsIncompatibleScaffoldOptionsBeforeCatalogLookup(t *testing.T) {
+	t.Parallel()
+	svc := NewWithCatalogPackagesAndInstallation(
+		stubDefinitionHost{},
+		nil,
+		factoryroot.PackagedFactoryCatalogOperations{
+			List: func(
+				context.Context,
+				factoryroot.ListBuiltInPackagedFactoriesRequest,
+			) (factoryroot.ListBuiltInPackagedFactoriesResult, error) {
+				t.Fatal("catalog lookup should not run for incompatible distribute request")
+				return factoryroot.ListBuiltInPackagedFactoriesResult{}, nil
+			},
+			Resolve: func(
+				context.Context,
+				factoryroot.ResolveBuiltInPackagedFactoryRequest,
+			) (factoryroot.ResolveBuiltInPackagedFactoryResult, error) {
+				t.Fatal("catalog resolve should not run for incompatible distribute request")
+				return factoryroot.ResolveBuiltInPackagedFactoryResult{}, nil
+			},
+		},
+		factoryroot.PackagedFactoryInstallationOperations{},
+	)
+	_, err := svc.InstallPackagedFactory(
+		t.Context(),
+		factoryroot.InstallPackagedFactoryRequest{
+			RootDir: "/customer/factories",
+			Name:    "@you/goal",
+			Scaffold: factoryroot.CreateFactoryScaffoldRequest{
+				Executor: "claude",
+			},
+		},
+	)
+	if err != factoryroot.ErrIncompatibleFactoryDistributeOptions {
+		t.Fatalf("InstallPackagedFactory() error = %v, want %v", err, factoryroot.ErrIncompatibleFactoryDistributeOptions)
 	}
 }

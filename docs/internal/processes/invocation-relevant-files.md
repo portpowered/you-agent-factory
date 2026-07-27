@@ -1564,8 +1564,14 @@ response-stream output.
   `0755`, writes only thin UTF-8 bundled-file metadata to the selected root
   definition, and validates the staged runtime before publishing the
   named-factory directory. Existing valid package directories are loaded
-  read-only and skipped as a whole, so later init runs do not normalize
-  permissions or replace operator-edited scripts. At runtime,
+  read-only and skipped as a whole when the requested authored-root format
+  matches the committed layout, so later init runs do not normalize
+  permissions or replace operator-edited scripts. Alternate format selection
+  without explicit replacement returns `ErrNamedFactoryAlreadyExists`, while
+  accepted replacement uses the same atomic `ReplaceNamedFactory` path and
+  reports a `replaced` outcome. Package selection combined with scaffold-specific
+  inputs is rejected by `ValidateInstallPackagedFactoryRequest` before catalog
+  lookup or filesystem effects begin.
   `pkg/workers/executor.ScriptExecutor` resolves portable `scripts/**` commands
   (and legacy `factory/scripts/**` references) against the active runtime
   configuration's factory directory before using the generic subprocess path;

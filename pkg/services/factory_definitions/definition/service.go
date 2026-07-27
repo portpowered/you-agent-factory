@@ -137,6 +137,12 @@ func (s *Service) InstallPackagedFactory(
 	ctx context.Context,
 	request factoryroot.InstallPackagedFactoryRequest,
 ) (factoryroot.InstallPackagedFactoryResult, error) {
+	if err := ctx.Err(); err != nil {
+		return factoryroot.InstallPackagedFactoryResult{}, err
+	}
+	if err := factoryroot.ValidateInstallPackagedFactoryRequest(request); err != nil {
+		return factoryroot.InstallPackagedFactoryResult{}, err
+	}
 	resolved, err := s.ResolveBuiltInPackagedFactory(
 		ctx,
 		factoryroot.ResolveBuiltInPackagedFactoryRequest{Name: request.Name},
@@ -151,9 +157,12 @@ func (s *Service) InstallPackagedFactory(
 	}
 	installed, err := s.packagedInstaller.InstallPackagedFactory(
 		ctx,
-		request.RootDir,
-		resolved.Definition,
-		request.Format,
+		factoryroot.PackagedFactoryInstallParams{
+			NamedFactoriesRoot: request.RootDir,
+			Definition:         resolved.Definition,
+			Format:             request.Format,
+			Replace:            request.Replace,
+		},
 	)
 	if err != nil {
 		return factoryroot.InstallPackagedFactoryResult{},
