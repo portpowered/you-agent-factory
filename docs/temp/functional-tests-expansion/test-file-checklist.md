@@ -141,7 +141,7 @@ intentionally small enough to distribute across many agents.
 These files prove command wiring and exit behavior only. Domain depth lives
 under `work/`, `sessions/`, `factory/`, and `product/`.
 
-- [ ] `tests/functional/transport/cli/commands/run_wiring_test.go`
+- [x] `tests/functional/transport/cli/commands/run_wiring_test.go`
   - `TestCLIRunFactoryByPath` covers an authored Factory path.
   - `TestCLIRunNamedFactory` covers packaged/named Factory resolution.
   - `TestCLIRunInvalidFactoryReturnsValidationFailure` covers load failure.
