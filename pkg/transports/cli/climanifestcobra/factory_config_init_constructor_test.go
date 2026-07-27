@@ -11,191 +11,17 @@ import (
 	"testing"
 	"time"
 
+	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/spf13/cobra"
 )
 
 type factoryConfigInitHandlerStub struct{}
-
-func TestSessionFamilyCommandExecutesManifestBoundLeaf(t *testing.T) {
-	manifest := mustSessionManifest(t)
-	calls := 0
-	registry := sessionHandlerIDRegistry(t, manifest, func(cmd *cobra.Command, args []string) error {
-		calls++
-		if cmd.Name() != "show" {
-			t.Fatalf("executed command = %q, want show", cmd.Name())
-		}
-		if len(args) != 1 || args[0] != "session-alpha" {
-			t.Fatalf("handler args = %#v, want [session-alpha]", args)
-		}
-		return nil
-	})
-
-	root, err := climanifestcobra.NewSessionFamilyCommandFromManifest(manifest, registry)
-	if err != nil {
-		t.Fatalf("NewSessionFamilyCommandFromManifest() error = %v", err)
-	}
-	for _, leaf := range []string{
-		"create", "delete", "list", "show", "dispatches", "pause", "resume",
-	} {
-		command, _, findErr := root.Find([]string{"session", leaf})
-		if findErr != nil {
-			t.Fatalf("Find(session %s) error = %v", leaf, findErr)
-		}
-		if command == nil || command.RunE == nil {
-			t.Fatalf("session %s is not executable", leaf)
-		}
-	}
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"session", "show", "session-alpha"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if calls != 1 {
-		t.Fatalf("operation calls = %d, want 1", calls)
-	}
-}
-
-func TestSessionFamilyCommandRejectsInvalidBindingsBeforeExecution(t *testing.T) {
-	tests := []struct {
-		name        string
-		build       func(*testing.T, climanifest.Manifest, commandregistry.RunE) (*commandregistry.Registry, climanifest.Manifest)
-		want        string
-		nilRegistry bool
-	}{
-		{name: "nil registry", nilRegistry: true, want: "registry is required"},
-		{
-			name: "missing handler",
-			build: func(t *testing.T, manifest climanifest.Manifest, operation commandregistry.RunE) (*commandregistry.Registry, climanifest.Manifest) {
-				return sessionHandlerIDRegistryExcept(t, manifest, "you.session.create.handler", operation), manifest
-			},
-			want: "you.session.create.handler",
-		},
-		{
-			name: "cross-family handler",
-			build: func(t *testing.T, manifest climanifest.Manifest, operation commandregistry.RunE) (*commandregistry.Registry, climanifest.Manifest) {
-				registry := sessionHandlerIDRegistry(t, manifest, operation)
-				if err := registry.Register("you.work.list.handler", noOpSessionHandler); err != nil {
-					t.Fatalf("Register(cross-family) error = %v", err)
-				}
-				return registry, manifest
-			},
-			want: "you.work.list.handler",
-		},
-		{
-			name: "duplicate manifest handler",
-			build: func(t *testing.T, manifest climanifest.Manifest, operation commandregistry.RunE) (*commandregistry.Registry, climanifest.Manifest) {
-				registry := sessionHandlerIDRegistry(t, manifest, operation)
-				create := manifest.Commands["you.session.create"]
-				deleteCommand := manifest.Commands["you.session.delete"]
-				deleteCommand.Handler.ID = create.Handler.ID
-				manifest.Commands[deleteCommand.ID] = deleteCommand
-				return registry, manifest
-			},
-			want: "duplicated",
-		},
-		{
-			name: "unbound manifest handler",
-			build: func(t *testing.T, manifest climanifest.Manifest, operation commandregistry.RunE) (*commandregistry.Registry, climanifest.Manifest) {
-				registry := sessionHandlerIDRegistry(t, manifest, operation)
-				show := manifest.Commands["you.session.show"]
-				show.Handler.ID = "you.session.show.replacement-handler"
-				manifest.Commands[show.ID] = show
-				return registry, manifest
-			},
-			want: "replacement-handler",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			manifest := mustSessionManifest(t)
-			calls := 0
-			var registry *commandregistry.Registry
-			if !test.nilRegistry {
-				operation := func(*cobra.Command, []string) error {
-					calls++
-					return nil
-				}
-				registry, manifest = test.build(t, manifest, operation)
-			}
-			_, err := climanifestcobra.NewSessionFamilyCommandFromManifest(manifest, registry)
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("NewSessionFamilyCommandFromManifest() error = %v, want %q", err, test.want)
-			}
-			if calls != 0 {
-				t.Fatalf("operation calls = %d, want 0", calls)
-			}
-		})
-	}
-}
-
-func mustSessionManifest(t *testing.T) climanifest.Manifest {
-	t.Helper()
-	manifest, err := generated.SessionFamilyManifest()
-	if err != nil {
-		t.Fatalf("SessionFamilyManifest() error = %v", err)
-	}
-	return manifest
-}
-
-func mustSessionHandlerIDs(t *testing.T, manifest climanifest.Manifest) []string {
-	t.Helper()
-	handlerIDs, err := commandregistry.RunnableSessionHandlerIDs(manifest)
-	if err != nil {
-		t.Fatalf("RunnableSessionHandlerIDs() error = %v", err)
-	}
-	return handlerIDs
-}
-
-func sessionHandlerIDRegistry(
-	t *testing.T,
-	manifest climanifest.Manifest,
-	handler commandregistry.RunE,
-) *commandregistry.Registry {
-	t.Helper()
-	registry := commandregistry.NewRegistry()
-	for _, handlerID := range mustSessionHandlerIDs(t, manifest) {
-		if handler == nil {
-			handler = noOpSessionHandler
-		}
-		if err := registry.Register(handlerID, handler); err != nil {
-			t.Fatalf("Register(%q) error = %v", handlerID, err)
-		}
-	}
-	return registry
-}
-
-func sessionHandlerIDRegistryExcept(
-	t *testing.T,
-	manifest climanifest.Manifest,
-	excluded string,
-	handler commandregistry.RunE,
-) *commandregistry.Registry {
-	t.Helper()
-	registry := commandregistry.NewRegistry()
-	for _, handlerID := range mustSessionHandlerIDs(t, manifest) {
-		if handlerID == excluded {
-			continue
-		}
-		if err := registry.Register(handlerID, handler); err != nil {
-			t.Fatalf("Register(%q) error = %v", handlerID, err)
-		}
-	}
-	return registry
-}
-
-func noOpSessionHandler(*cobra.Command, []string) error {
-	return nil
-}
 
 func (factoryConfigInitHandlerStub) FactoryQuery(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
 	return nil
@@ -586,6 +412,293 @@ func TestSessionResolvedCreateDeletePreserveOperationFailures(t *testing.T) {
 	if calls != 0 {
 		t.Fatalf("invalid delete operation calls = %d, want 0", calls)
 	}
+}
+
+func TestSessionResolvedInspectionPreservesLiveAndPersistedListing(t *testing.T) {
+	var requestCount int
+	protocol := newSessionTestHTTPProtocol(t, func(request *http.Request) (*http.Response, error) {
+		requestCount++
+		if request.Method != http.MethodGet || request.URL.Path != "/factory-sessions" {
+			t.Fatalf("request = %s %s", request.Method, request.URL.Path)
+		}
+		if requestCount == 2 {
+			return sessionTestResponse(http.StatusOK, `{"sessions":[]}`), nil
+		}
+		return sessionTestResponse(http.StatusOK, `{
+			"sessions": [{
+				"id": "session-alpha",
+				"project": "alpha",
+				"factoryDir": "/workspace/fleet/alpha",
+				"folderPath": "/workspace/fleet",
+				"isDefault": false,
+				"target": {"kind": "named", "name": "alpha"}
+			}]
+		}`), nil
+	})
+	list := sessioncli.NewList(protocol, sessionListPreparation(prepareSessionListRequest))
+	services := commandregistry.SessionResolvedServices{
+		ListSessions: func(cfg sessioncli.ListConfig) error {
+			cfg.DurableLister = func(
+				_ context.Context,
+				request fse.ListSessionsRequest,
+			) (fse.ListSessionsResult, error) {
+				return fse.ListSessionsResult{
+					Scope: request.Scope,
+					DurableSessions: []fse.DurableSessionListSummary{{
+						SessionID:        "dur-sess-review-001",
+						Status:           fse.LifecycleStatusSucceeded,
+						OrchestratorKind: "JAVASCRIPT",
+						ResolvedSource:   fse.ResolvedSource{Kind: "WORKFLOW_FILE", SourceRef: "workflows/review.js"},
+					}},
+				}, nil
+			}
+			return list(cfg)
+		},
+	}
+
+	stdout, _, err := executeResolvedSessionWithOutput(t, services, "--json", "session", "list")
+	if err != nil {
+		t.Fatalf("live list Execute() error = %v", err)
+	}
+	var live factoryapi.ListFactorySessionsResponse
+	if err := json.Unmarshal([]byte(stdout), &live); err != nil {
+		t.Fatalf("decode live list JSON: %v\n%s", err, stdout)
+	}
+	if len(live.Sessions) != 1 || live.Sessions[0].Id != "session-alpha" {
+		t.Fatalf("live sessions = %#v", live.Sessions)
+	}
+
+	stdout, _, err = executeResolvedSessionWithOutput(t, services, "session", "list", "--scope", "persisted")
+	if err != nil {
+		t.Fatalf("persisted list Execute() error = %v", err)
+	}
+	if !strings.Contains(stdout, "dur-sess-review-001") || !strings.Contains(stdout, "Factory Sessions (durable):") {
+		t.Fatalf("persisted list output = %q", stdout)
+	}
+	stdout, _, err = executeResolvedSessionWithOutput(t, services, "session", "list")
+	if err != nil {
+		t.Fatalf("empty live list Execute() error = %v", err)
+	}
+	if stdout != "No live factory sessions were found.\n" {
+		t.Fatalf("empty live list output = %q", stdout)
+	}
+	if requestCount != 2 {
+		t.Fatalf("live HTTP request count = %d, want 2", requestCount)
+	}
+}
+
+func TestSessionResolvedInspectionPreservesShowAndDispatches(t *testing.T) {
+	var dispatchQuery string
+	protocol := newSessionTestHTTPProtocol(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/factory-sessions/session-alpha":
+			return sessionTestResponse(http.StatusOK, `{
+				"id": "session-alpha",
+				"project": "alpha",
+				"factoryDir": "/workspace/fleet/alpha",
+				"folderPath": "/workspace/fleet",
+				"isDefault": false,
+				"target": {"kind": "named", "name": "alpha"},
+				"runtime": {"orchestratorKind": "PETRI", "status": "IDLE", "lifecycle": {
+					"startedAt": "2026-07-27T00:00:00Z",
+					"updatedAt": "2026-07-27T00:00:00Z"
+				}}
+			}`), nil
+		case "/factory-sessions/dur-sess-review-001/dispatches":
+			dispatchQuery = request.URL.RawQuery
+			return sessionTestResponse(http.StatusOK, `{
+				"sessionId": "dur-sess-review-001",
+				"dispatches": [{
+					"id": "dispatch-review",
+					"status": "COMPLETED",
+					"dispatchKind": "JAVASCRIPT_AGENT",
+					"phase": "review"
+				}]
+			}`), nil
+		default:
+			t.Fatalf("unexpected request path %q", request.URL.Path)
+			return nil, nil
+		}
+	})
+	services := commandregistry.SessionResolvedServices{
+		ShowSession:    sessioncli.NewShow(protocol),
+		ListDispatches: sessioncli.NewDispatches(protocol),
+		Diagnostics: func(cmd *cobra.Command) io.Writer {
+			return cmd.ErrOrStderr()
+		},
+	}
+
+	stdout, stderr, err := executeResolvedSessionWithOutput(
+		t, services, "--verbose", "--json", "session", "show", "session-alpha",
+	)
+	if err != nil {
+		t.Fatalf("show Execute() error = %v", err)
+	}
+	var shown factoryapi.FactorySession
+	if err := json.Unmarshal([]byte(stdout), &shown); err != nil {
+		t.Fatalf("decode show JSON: %v\n%s", err, stdout)
+	}
+	if shown.Id != "session-alpha" || !strings.Contains(stderr, "session show request") {
+		t.Fatalf("show result = %#v, stderr = %q", shown, stderr)
+	}
+
+	stdout, _, err = executeResolvedSessionWithOutput(
+		t, services, "session", "dispatches", "dur-sess-review-001",
+		"--phase", "review", "--status", "COMPLETED",
+	)
+	if err != nil {
+		t.Fatalf("dispatches Execute() error = %v", err)
+	}
+	if !strings.Contains(stdout, "dispatch-review") ||
+		dispatchQuery != "phase=review&status=COMPLETED" {
+		t.Fatalf("dispatches output = %q, query = %q", stdout, dispatchQuery)
+	}
+
+	stdout, _, err = executeResolvedSessionWithOutput(
+		t, services, "session", "dispatches", "session-alpha",
+	)
+	if err == nil || !strings.Contains(err.Error(), "not a durable Factory Session id") {
+		t.Fatalf("live dispatches error = %v", err)
+	}
+	if stdout != "" {
+		t.Fatalf("live dispatches stdout = %q, want empty", stdout)
+	}
+}
+
+func TestSessionResolvedShowPreservesDurableProjection(t *testing.T) {
+	protocol := newSessionTestHTTPProtocol(t, func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path != "/factory-sessions/dur-sess-review-001" {
+			t.Fatalf("request path = %q", request.URL.Path)
+		}
+		return sessionTestResponse(http.StatusOK, `{
+			"sessionId": "dur-sess-review-001",
+			"status": "SUCCEEDED",
+			"orchestratorKind": "JAVASCRIPT",
+			"resolvedSource": {"kind": "WORKFLOW_FILE", "sourceRef": "workflows/review.js"}
+		}`), nil
+	})
+	services := commandregistry.SessionResolvedServices{
+		ShowSession: sessioncli.NewShow(protocol),
+	}
+
+	stdout, _, err := executeResolvedSessionWithOutput(
+		t, services, "--json", "session", "show", "dur-sess-review-001",
+	)
+	if err != nil {
+		t.Fatalf("durable show Execute() error = %v", err)
+	}
+	var shown factoryapi.FactorySessionDurableReadModel
+	if err := json.Unmarshal([]byte(stdout), &shown); err != nil {
+		t.Fatalf("decode durable show JSON: %v\n%s", err, stdout)
+	}
+	if shown.SessionId != "dur-sess-review-001" ||
+		shown.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("durable show result = %#v", shown)
+	}
+}
+
+func TestSessionResolvedInspectionRejectsInvalidInputsBeforeSideEffects(t *testing.T) {
+	var listCalls, showCalls, dispatchCalls int
+	services := commandregistry.SessionResolvedServices{
+		PrepareList: func(context.Context, *sessioncli.ListConfig) error {
+			return errors.New("scope must be live, persisted, or all")
+		},
+		ListSessions: func(sessioncli.ListConfig) error {
+			listCalls++
+			return nil
+		},
+		ShowSession: func(sessioncli.ShowConfig) error {
+			showCalls++
+			return nil
+		},
+		ListDispatches: func(sessioncli.DispatchesConfig) error {
+			dispatchCalls++
+			return nil
+		},
+	}
+	for _, args := range [][]string{
+		{"session", "list", "--scope", "workspace"},
+		{"session", "show"},
+		{"session", "show", "one", "two"},
+		{"session", "dispatches"},
+		{"session", "dispatches", "one", "two"},
+	} {
+		stdout, _, err := executeResolvedSessionWithOutput(t, services, args...)
+		if err == nil {
+			t.Fatalf("Execute(%v) error = nil", args)
+		}
+		if stdout != "" {
+			t.Fatalf("Execute(%v) stdout = %q, want empty", args, stdout)
+		}
+	}
+	if listCalls != 0 || showCalls != 0 || dispatchCalls != 0 {
+		t.Fatalf("operation calls = list:%d show:%d dispatches:%d", listCalls, showCalls, dispatchCalls)
+	}
+}
+
+func TestSessionResolvedInspectionPreservesFailuresAndCancellation(t *testing.T) {
+	operationFailure := errors.New("inspection unavailable")
+	tests := []struct {
+		name     string
+		args     []string
+		services commandregistry.SessionResolvedServices
+		want     error
+	}{
+		{
+			name: "list failure", args: []string{"session", "list"},
+			services: commandregistry.SessionResolvedServices{
+				ListSessions: func(sessioncli.ListConfig) error { return operationFailure },
+			},
+			want: operationFailure,
+		},
+		{
+			name: "show cancellation", args: []string{"session", "show", "session-alpha"},
+			services: commandregistry.SessionResolvedServices{
+				ShowSession: func(sessioncli.ShowConfig) error { return context.Canceled },
+			},
+			want: context.Canceled,
+		},
+		{
+			name: "dispatch failure", args: []string{"session", "dispatches", "dur-sess-review-001"},
+			services: commandregistry.SessionResolvedServices{
+				ListDispatches: func(sessioncli.DispatchesConfig) error { return operationFailure },
+			},
+			want: operationFailure,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stdout, _, err := executeResolvedSessionWithOutput(t, test.services, test.args...)
+			if !errors.Is(err, test.want) {
+				t.Fatalf("Execute() error = %v, want %v", err, test.want)
+			}
+			if stdout != "" {
+				t.Fatalf("stdout = %q, want empty", stdout)
+			}
+		})
+	}
+}
+
+type sessionListPreparation func(fse.ListSessionsRequest) (fse.ListSessionsRequest, error)
+
+func prepareSessionListRequest(
+	request fse.ListSessionsRequest,
+) (fse.ListSessionsRequest, error) {
+	if request.Scope == "" {
+		request.Scope = fse.SessionListScopeLive
+	}
+	switch request.Scope {
+	case fse.SessionListScopeLive, fse.SessionListScopePersisted, fse.SessionListScopeAll:
+		return request, nil
+	default:
+		return fse.ListSessionsRequest{}, errors.New("scope must be live, persisted, or all")
+	}
+}
+
+func (prepare sessionListPreparation) PrepareListSessions(
+	request fse.ListSessionsRequest,
+) (fse.ListSessionsRequest, error) {
+	return prepare(request)
 }
 
 func TestSessionCompatibilityInputsRetainResolvedProvenance(t *testing.T) {

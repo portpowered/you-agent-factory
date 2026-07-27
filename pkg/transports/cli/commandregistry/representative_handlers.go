@@ -450,7 +450,7 @@ func (h *SessionResolvedHandler) Show(
 	if h == nil || h.services.ShowSession == nil {
 		return fmt.Errorf("session show service is required")
 	}
-	sessionID, err := optionalSessionID(inputs, sessionShowIDInputID)
+	sessionID, err := inputs.String(sessionShowIDInputID)
 	if err != nil {
 		return fmt.Errorf("resolve session show inputs: %w", err)
 	}
