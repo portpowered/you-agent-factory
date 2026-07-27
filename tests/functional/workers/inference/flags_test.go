@@ -72,6 +72,51 @@ func TestProviderPermissionWorktreeAndModelFlagsMapToCommand(t *testing.T) {
 	support.AssertArgsContainSequence(t, call.Args, []string{"--model", flagsTestModel})
 }
 
+// TestUnsupportedProviderFlagReturnsCapabilityError proves that when a
+// worker/workstation configuration requests a provider flag the selected
+// provider does not support, root.BuildProcess rejects the dispatch with a
+// capability error before starting a provider command instead of launching a
+// live provider-process edge for that work.
+func TestUnsupportedProviderFlagReturnsCapabilityError(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
+		modelprovider.ProviderGemini,
+		"gemini-2.5-flash",
+	))
+	support.WriteWorkstationConfig(t, dir, "process", `---
+type: MODEL_WORKSTATION
+outputSchema: '{}'
+---
+Test workstation.
+`)
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"unsupported provider flag"}`))
+
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("provider must not run"),
+	})
+
+	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		20*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed work tokens = %d, want 1 unsupported-capability failure; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
+		t.Fatalf("completed work tokens = %d, want 0", got)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf(
+			"provider command runner calls = %d, want no provider-process edge before capability rejection",
+			runner.CallCount(),
+		)
+	}
+}
+
 const claudeFlagsSuccessStdout = `{"type":"stream_event","session_id":"session-flags-map","event":{"type":"message_start","message":{"id":"msg-flags-map","role":"assistant","content":[]}}}` + "\n" +
 	`{"type":"stream_event","session_id":"session-flags-map","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}` + "\n" +
 	`{"type":"stream_event","session_id":"session-flags-map","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Done. COMPLETE"}}}` + "\n" +
