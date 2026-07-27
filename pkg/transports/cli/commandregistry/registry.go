@@ -1,6 +1,7 @@
 package commandregistry
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -115,6 +116,10 @@ const (
 	submitWorkTypeInputID = "you.submit.flag.work-type-name"
 	submitPayloadInputID  = "you.submit.flag.payload"
 	submitSessionInputID  = "you.submit.flag.session"
+	batchArgumentInputID  = "you.submit.batch.arg.0"
+	batchFileInputID      = "you.submit.batch.flag.file"
+	batchDryRunInputID    = "you.submit.batch.flag.dry-run"
+	batchSessionInputID   = "you.submit.batch.flag.session"
 	rootServerInputID     = "you.flag.server"
 	rootJSONInputID       = "you.flag.json"
 	rootVerboseInputID    = "you.flag.verbose"
@@ -133,6 +138,13 @@ type SubmitHandlers struct {
 // SubmitRegistry contains exactly the stable handlers accepted by the submit family.
 type SubmitRegistry struct {
 	handlers map[string]SubmitHandler
+}
+
+// BatchSubmitEffects supplies invocation-independent process effects at the
+// CLI composition boundary.
+type BatchSubmitEffects struct {
+	FileSystem submitcli.BatchInputFileSystem
+	StdinIsTTY func(context.Context) bool
 }
 
 // UnarySubmitHandler adapts one invocation's typed stable-ID inputs to the
@@ -178,16 +190,9 @@ func unarySubmitConfig(
 	if err != nil {
 		return submitcli.SubmitConfig{}, err
 	}
-	server, err := submitString(inherited, rootServerInputID)
+	server, err := submitServer(inherited)
 	if err != nil {
 		return submitcli.SubmitConfig{}, err
-	}
-	base, err := cliserver.ResolveBase(server)
-	if err != nil {
-		return submitcli.SubmitConfig{}, fmt.Errorf(
-			"resolved submit input %q is not a valid server URI",
-			rootServerInputID,
-		)
 	}
 	jsonOutput, err := submitBool(inherited, rootJSONInputID)
 	if err != nil {
@@ -206,7 +211,7 @@ func unarySubmitConfig(
 		Name:         name,
 		WorkTypeName: workType,
 		Payload:      payload,
-		Server:       base.String(),
+		Server:       server,
 		SessionID:    sessionID,
 		JSON:         jsonOutput,
 		Output:       cmd.OutOrStdout(),
@@ -214,6 +219,112 @@ func unarySubmitConfig(
 		Debug:        debug,
 		Diagnostics:  cmd.ErrOrStderr(),
 	}, nil
+}
+
+// BatchSubmitHandler adapts one invocation's typed stable-ID inputs and
+// streams to the existing batch operation without retaining mutable state.
+func BatchSubmitHandler(
+	operation func(submitcli.BatchConfig) error,
+	effects BatchSubmitEffects,
+) SubmitHandler {
+	return func(
+		cmd *cobra.Command,
+		local resolvedinput.Inputs,
+		inherited resolvedinput.Inputs,
+	) error {
+		if operation == nil {
+			return fmt.Errorf("execute batch submit: operation is required")
+		}
+		cfg, err := batchSubmitConfig(cmd, local, inherited, effects)
+		if err != nil {
+			return fmt.Errorf("execute batch submit: %w", err)
+		}
+		return operation(cfg)
+	}
+}
+
+func batchSubmitConfig(
+	cmd *cobra.Command,
+	local resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+	effects BatchSubmitEffects,
+) (submitcli.BatchConfig, error) {
+	if cmd == nil {
+		return submitcli.BatchConfig{}, fmt.Errorf("command is required")
+	}
+	argument, err := submitString(local, batchArgumentInputID)
+	if err != nil {
+		return submitcli.BatchConfig{}, err
+	}
+	file, err := submitString(local, batchFileInputID)
+	if err != nil {
+		return submitcli.BatchConfig{}, err
+	}
+	dryRun, err := submitBool(local, batchDryRunInputID)
+	if err != nil {
+		return submitcli.BatchConfig{}, err
+	}
+	sessionID, err := submitString(local, batchSessionInputID)
+	if err != nil {
+		return submitcli.BatchConfig{}, err
+	}
+	server, err := submitServer(inherited)
+	if err != nil {
+		return submitcli.BatchConfig{}, err
+	}
+	jsonOutput, err := submitBool(inherited, rootJSONInputID)
+	if err != nil {
+		return submitcli.BatchConfig{}, err
+	}
+	verbose, err := submitBool(inherited, rootVerboseInputID)
+	if err != nil {
+		return submitcli.BatchConfig{}, err
+	}
+	debug, err := submitBool(inherited, rootDebugInputID)
+	if err != nil {
+		return submitcli.BatchConfig{}, err
+	}
+	if effects.FileSystem == nil {
+		return submitcli.BatchConfig{}, fmt.Errorf("batch input file system is required")
+	}
+	if effects.StdinIsTTY == nil {
+		return submitcli.BatchConfig{}, fmt.Errorf("batch stdin TTY detector is required")
+	}
+	args := []string{}
+	if argument != "" {
+		args = append(args, argument)
+	}
+	return submitcli.BatchConfig{
+		Context:     cmd.Context(),
+		FileFlag:    file,
+		DryRun:      dryRun,
+		Server:      server,
+		SessionID:   sessionID,
+		JSON:        jsonOutput,
+		Verbose:     verbose || debug,
+		Debug:       debug,
+		Args:        args,
+		Stdin:       cmd.InOrStdin(),
+		StdinIsTTY:  func() bool { return effects.StdinIsTTY(cmd.Context()) },
+		Output:      cmd.OutOrStdout(),
+		Diagnostics: cmd.ErrOrStderr(),
+		FileSystem:  effects.FileSystem,
+	}, nil
+}
+
+func submitServer(inputs resolvedinput.Inputs) (string, error) {
+	server, err := submitString(inputs, rootServerInputID)
+	if err != nil {
+		return "", err
+	}
+	base, err := cliserver.ResolveBase(server)
+	if err != nil {
+		return "", fmt.Errorf(
+			"resolved submit input %q is not a valid server URI",
+			rootServerInputID,
+		)
+	}
+	return base.String(), nil
 }
 
 func requiredSubmitString(inputs resolvedinput.Inputs, inputID string) (string, error) {

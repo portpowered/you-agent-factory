@@ -18,6 +18,7 @@ type SubmissionHTTPError struct {
 	Code       factoryapi.ErrorResponseCode
 	Family     factoryapi.ErrorFamily
 	WorkID     string
+	operation  string
 }
 
 func (e *SubmissionHTTPError) Error() string {
@@ -31,13 +32,21 @@ func (e *SubmissionHTTPError) Error() string {
 	if e.WorkID != "" {
 		details = append(details, "workId="+e.WorkID)
 	}
-	if len(details) == 0 {
-		return fmt.Sprintf("submission failed (%d)", e.StatusCode)
+	operation := e.operation
+	if operation == "" {
+		operation = "submission"
 	}
-	return fmt.Sprintf("submission failed (%d): %s", e.StatusCode, strings.Join(details, " "))
+	if len(details) == 0 {
+		return fmt.Sprintf("%s failed (%d)", operation, e.StatusCode)
+	}
+	return fmt.Sprintf("%s failed (%d): %s", operation, e.StatusCode, strings.Join(details, " "))
 }
 
 func submitFailureError(statusCode int, body []byte) error {
+	return submissionFailureError("submission", statusCode, body)
+}
+
+func submissionFailureError(operation string, statusCode int, body []byte) error {
 	var response struct {
 		Code   factoryapi.ErrorResponseCode `json:"code"`
 		Family factoryapi.ErrorFamily       `json:"family"`
@@ -49,6 +58,7 @@ func submitFailureError(statusCode int, body []byte) error {
 		Code:       safeSubmitErrorCode(response.Code),
 		Family:     safeSubmitErrorFamily(response.Family),
 		WorkID:     safeSubmitWorkID(response.WorkID),
+		operation:  operation,
 	}
 }
 
