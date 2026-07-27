@@ -1,6 +1,7 @@
 package providersessions
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -58,6 +59,9 @@ type SessionRef = providers.SessionRef
 // SessionRef without requiring filesystem/SQL/OS effect ports from the caller.
 type InspectRequest struct {
 	Session SessionRef
+	// Context carries cancellation for the inspection operation. When nil,
+	// context.Background is used.
+	Context context.Context
 }
 
 // InspectResult is the detached success outcome for typed SessionRef
@@ -73,6 +77,9 @@ type InspectResult struct {
 // effect ports from the caller.
 type ProjectRequest struct {
 	Session SessionRef
+	// Context carries cancellation for the inspection operation. When nil,
+	// context.Background is used.
+	Context context.Context
 }
 
 // ProjectResult is the detached Detail-shaped projection peers consume for
@@ -234,11 +241,13 @@ type UnknownEvent struct {
 }
 
 var (
-	ErrAmbiguousSessionFile = errors.New("ambiguous provider session file")
-	ErrInvalidIdentifier    = errors.New("invalid provider session identifier")
-	ErrSessionNotFound      = errors.New("provider session not found")
-	ErrUnsupportedKind      = errors.New("unsupported provider session kind")
-	ErrUnsupportedProvider  = errors.New("unsupported provider session provider")
+	ErrAmbiguousSessionFile  = errors.New("ambiguous provider session file")
+	ErrInvalidIdentifier     = errors.New("invalid provider session identifier")
+	ErrOperationCanceled     = fmt.Errorf("provider session inspection canceled: %w", context.Canceled)
+	ErrResourceLimitExceeded = errors.New("provider session inspection resource limit exceeded")
+	ErrSessionNotFound       = errors.New("provider session not found")
+	ErrUnsupportedKind       = errors.New("unsupported provider session kind")
+	ErrUnsupportedProvider   = errors.New("unsupported provider session provider")
 )
 
 // LookupError retains normalized provider and root context without exposing

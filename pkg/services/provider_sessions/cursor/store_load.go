@@ -2,43 +2,53 @@ package cursor
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"strings"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 )
 
 // LoadSessionFromStoreDB loads session data from a single store.db file.
-func LoadSessionFromStoreDB(files providersessions.FileSystem, openSQLDatabase providersessions.CursorOpenSQLDatabase, dbPath string) (map[string]*RawBubble, []*RawComposer, map[string][]*MessageContext, SessionTokenUsage, error) {
+func LoadSessionFromStoreDB(ins *inspection, files providersessions.FileSystem, openSQLDatabase providersessions.CursorOpenSQLDatabase, dbPath string) (map[string]*RawBubble, []*RawComposer, map[string][]*MessageContext, SessionTokenUsage, error) {
 	db, err := OpenDatabase(files, openSQLDatabase, dbPath)
 	if err != nil {
-		return nil, nil, nil, SessionTokenUsage{}, fmt.Errorf("failed to open store.db: %w", err)
+		return nil, nil, nil, SessionTokenUsage{}, err
 	}
 	defer func() { _ = db.Close() }()
 
-	blobs, err := QueryBlobsTable(db)
+	blobs, err := QueryBlobsTable(ins, db)
 	if err != nil {
-		return nil, nil, nil, SessionTokenUsage{}, fmt.Errorf("failed to query blobs table: %w", err)
+		return nil, nil, nil, SessionTokenUsage{}, err
 	}
 
-	meta, err := QueryMetaTable(db)
+	meta, err := QueryMetaTable(ins, db)
 	if err != nil {
-		return nil, nil, nil, SessionTokenUsage{}, fmt.Errorf("failed to query meta table: %w", err)
+		return nil, nil, nil, SessionTokenUsage{}, err
 	}
 
+	return parseSessionRecords(ins, blobs, meta, dbPath)
+}
+
+func parseSessionRecords(ins *inspection, blobs []BlobEntry, meta []MetaEntry, dbPath string) (map[string]*RawBubble, []*RawComposer, map[string][]*MessageContext, SessionTokenUsage, error) {
 	sessionID := extractSessionIDFromPath(dbPath)
 	bubbles := make(map[string]*RawBubble)
 	var composers []*RawComposer
 	contexts := make(map[string][]*MessageContext)
 	var sessionTokenUsage SessionTokenUsage
 
-	jsonParseFailures := loadSessionBlobs(blobs, sessionID, bubbles, &composers, &sessionTokenUsage)
+	jsonParseFailures := loadSessionBlobs(ins, blobs, sessionID, bubbles, &composers, &sessionTokenUsage)
+	if err := ins.checkCanceled(); err != nil {
+		return bubbles, composers, contexts, sessionTokenUsage, providersessions.ErrOperationCanceled
+	}
 	if jsonParseFailures > 0 {
 		LogWarn("Failed to parse %d/%d blobs as JSON", jsonParseFailures, len(blobs))
 	}
 
 	var sessionMeta sessionMetaFields
-	metaParseFailures := loadSessionMeta(meta, contexts, &sessionTokenUsage, &sessionMeta)
+	metaParseFailures := loadSessionMeta(ins, meta, contexts, &sessionTokenUsage, &sessionMeta)
+	if err := ins.checkCanceled(); err != nil {
+		return bubbles, composers, contexts, sessionTokenUsage, providersessions.ErrOperationCanceled
+	}
 	if metaParseFailures > 0 {
 		LogWarn("Failed to parse %d/%d meta entries as JSON", metaParseFailures, len(meta))
 	}
@@ -52,6 +62,7 @@ func LoadSessionFromStoreDB(files providersessions.FileSystem, openSQLDatabase p
 }
 
 func loadSessionBlobs(
+	ins *inspection,
 	blobs []BlobEntry,
 	sessionID string,
 	bubbles map[string]*RawBubble,
@@ -60,8 +71,17 @@ func loadSessionBlobs(
 ) int {
 	jsonParseFailures := 0
 	for i, blob := range blobs {
-		data, earlyBubble, ok := decodeBlobEntryValue(blob, i, sessionID, &jsonParseFailures)
+		if err := ins.consumeBytes(len(blob.Value)); err != nil {
+			if errors.Is(err, providersessions.ErrResourceLimitExceeded) {
+				ins.recordMalformedBlob(i + 1)
+				jsonParseFailures++
+				continue
+			}
+			return jsonParseFailures
+		}
+		data, earlyBubble, ok := decodeBlobEntryValue(ins, blob, i, sessionID, &jsonParseFailures)
 		if !ok {
+			ins.recordMalformedBlob(i + 1)
 			continue
 		}
 		if earlyBubble != nil {
@@ -74,6 +94,7 @@ func loadSessionBlobs(
 }
 
 func loadSessionMeta(
+	ins *inspection,
 	meta []MetaEntry,
 	contexts map[string][]*MessageContext,
 	tokenUsage *SessionTokenUsage,
@@ -81,7 +102,15 @@ func loadSessionMeta(
 ) int {
 	metaJSONParseFailures := 0
 	for i, entry := range meta {
-		data, ok := decodeMetaEntryValue(entry, i, &metaJSONParseFailures)
+		if err := ins.consumeBytes(len(entry.Value)); err != nil {
+			if errors.Is(err, providersessions.ErrResourceLimitExceeded) {
+				ins.recordMalformedMeta(i + 1)
+				metaJSONParseFailures++
+				continue
+			}
+			return metaJSONParseFailures
+		}
+		data, ok := decodeMetaEntryValue(ins, entry, i, &metaJSONParseFailures)
 		if !ok {
 			continue
 		}
@@ -230,7 +259,7 @@ type sessionMetaFields struct {
 	name      string
 }
 
-func decodeMetaEntryValue(entry MetaEntry, index int, jsonParseFailures *int) (map[string]interface{}, bool) {
+func decodeMetaEntryValue(ins *inspection, entry MetaEntry, index int, jsonParseFailures *int) (map[string]interface{}, bool) {
 	var data map[string]interface{}
 	valueBytes := []byte(entry.Value)
 
@@ -251,6 +280,9 @@ func decodeMetaEntryValue(entry MetaEntry, index int, jsonParseFailures *int) (m
 					}
 				} else {
 					(*jsonParseFailures)++
+					if ins != nil {
+						ins.recordMalformedMeta(index + 1)
+					}
 					logMetaDecodeFailure(index, entry, jsonErr)
 					return nil, false
 				}

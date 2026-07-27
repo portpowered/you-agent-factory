@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"database/sql"
 	"encoding/binary"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -28,7 +30,7 @@ func TestReadDiscoversOnlyCanonicalContainedSession(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	detail, err := reader.Read(providers.SessionRef{
+	detail, err := reader.Read(context.Background(),providers.SessionRef{
 		Provider: providers.IDCursor,
 		Kind:     providers.SessionIDKind,
 		ID:       sessionID,
@@ -69,11 +71,11 @@ func TestReadReconstructsDeterministicDetachedNormalizedDetail(t *testing.T) {
 		ID:       sessionID,
 	}
 
-	first, err := reader.Read(ref)
+	first, err := reader.Read(context.Background(),ref)
 	if err != nil {
 		t.Fatalf("first Read: %v", err)
 	}
-	second, err := reader.Read(ref)
+	second, err := reader.Read(context.Background(),ref)
 	if err != nil {
 		t.Fatalf("second Read: %v", err)
 	}
@@ -87,7 +89,7 @@ func TestReadReconstructsDeterministicDetachedNormalizedDetail(t *testing.T) {
 	*first.Parse.TokenUsage.InputTokens = 999
 	first.Transcript = append(first.Transcript, providersessions.TranscriptEntry{})
 
-	third, err := reader.Read(ref)
+	third, err := reader.Read(context.Background(),ref)
 	if err != nil {
 		t.Fatalf("third Read: %v", err)
 	}
@@ -237,7 +239,7 @@ func TestReadRejectsInvalidReferencesBeforeStorageIO(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := reader.Read(test.ref); !errors.Is(err, test.want) {
+			if _, err := reader.Read(context.Background(),test.ref); !errors.Is(err, test.want) {
 				t.Fatalf("Read error = %v, want %v", err, test.want)
 			}
 		})
@@ -291,7 +293,7 @@ func TestReadMissingAndAmbiguousSessionsNeverOpenDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatalf("New: %v", err)
 			}
-			_, err = reader.Read(providers.SessionRef{
+			_, err = reader.Read(context.Background(),providers.SessionRef{
 				Provider: providers.IDCursor,
 				Kind:     providers.SessionIDKind,
 				ID:       "same-session",
@@ -342,7 +344,7 @@ func TestReadRejectsCandidateResolvedOutsideRootBeforeDatabaseOpen(t *testing.T)
 		t.Fatalf("New: %v", err)
 	}
 
-	_, err = reader.Read(providers.SessionRef{
+	_, err = reader.Read(context.Background(),providers.SessionRef{
 		Provider: providers.IDCursor,
 		Kind:     providers.SessionIDKind,
 		ID:       sessionID,
@@ -426,4 +428,44 @@ func protobufJSON(value string) string {
 	encoded = binary.AppendUvarint(encoded, uint64(len(value)))
 	encoded = append(encoded, value...)
 	return string(encoded)
+}
+
+func TestReadHonorsCancellationAndRedactsLookupFailures(t *testing.T) {
+	root, sessionID := writeSessionFixture(t)
+	reader, err := New(
+		platformfilesystem.Local{},
+		filepath.WalkDir,
+		filepath.EvalSymlinks,
+		sql.Open,
+		root,
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ref := providers.SessionRef{
+		Provider: providers.IDCursor,
+		Kind:     providers.SessionIDKind,
+		ID:       sessionID,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := reader.Read(ctx, ref); !errors.Is(err, providersessions.ErrOperationCanceled) {
+		t.Fatalf("canceled Read error = %v, want ErrOperationCanceled", err)
+	}
+
+	_, err = reader.Read(context.Background(), providers.SessionRef{
+		Provider: providers.IDCursor,
+		Kind:     providers.SessionIDKind,
+		ID:       "missing-session",
+	})
+	if !errors.Is(err, providersessions.ErrSessionNotFound) {
+		t.Fatalf("missing session error = %v, want ErrSessionNotFound", err)
+	}
+	var lookupErr *providersessions.LookupError
+	if !errors.As(err, &lookupErr) {
+		t.Fatalf("error = %T, want LookupError", err)
+	}
+	if strings.Contains(lookupErr.Error(), string(filepath.Separator)) && strings.Contains(lookupErr.Error(), "store.db") {
+		t.Fatalf("lookup error leaked absolute storage path: %v", lookupErr)
+	}
 }

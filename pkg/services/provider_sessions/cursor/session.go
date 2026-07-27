@@ -1,6 +1,7 @@
 package cursor
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -30,7 +31,7 @@ type SessionParseStats struct {
 }
 
 // LoadSessionData opens a resolved store.db and parses bubbles, composers, and contexts in-process.
-func LoadSessionData(files providersessions.FileSystem, openSQLDatabase providersessions.CursorOpenSQLDatabase, resolved ResolvedStoreDB) (*SessionData, error) {
+func LoadSessionData(ins *inspection, files providersessions.FileSystem, openSQLDatabase providersessions.CursorOpenSQLDatabase, resolved ResolvedStoreDB) (*SessionData, error) {
 	if resolved.AbsolutePath == "" {
 		return nil, fmt.Errorf("cursor session path is empty")
 	}
@@ -40,8 +41,19 @@ func LoadSessionData(files providersessions.FileSystem, openSQLDatabase provider
 	}
 	_ = info
 
-	bubbles, composers, contexts, stats, tokenUsage, err := loadSessionFromStoreDBWithStats(files, openSQLDatabase, resolved.AbsolutePath)
+	bubbles, composers, contexts, stats, tokenUsage, err := loadSessionFromStoreDBWithStats(ins, files, openSQLDatabase, resolved.AbsolutePath)
 	if err != nil {
+		if errors.Is(err, providersessions.ErrResourceLimitExceeded) && len(bubbles) > 0 {
+			return &SessionData{
+				SessionID:   resolved.SessionID,
+				StoreDBPath: resolved.AbsolutePath,
+				Bubbles:     bubbles,
+				Composers:   composers,
+				Contexts:    contexts,
+				ParseStats:  stats,
+				TokenUsage:  tokenUsage,
+			}, err
+		}
 		return nil, err
 	}
 	return &SessionData{
@@ -101,25 +113,25 @@ func (s *SessionData) OrderedBubbles() []*RawBubble {
 	return ordered
 }
 
-func loadSessionFromStoreDBWithStats(files providersessions.FileSystem, openSQLDatabase providersessions.CursorOpenSQLDatabase, dbPath string) (map[string]*RawBubble, []*RawComposer, map[string][]*MessageContext, SessionParseStats, SessionTokenUsage, error) {
+func loadSessionFromStoreDBWithStats(ins *inspection, files providersessions.FileSystem, openSQLDatabase providersessions.CursorOpenSQLDatabase, dbPath string) (map[string]*RawBubble, []*RawComposer, map[string][]*MessageContext, SessionParseStats, SessionTokenUsage, error) {
 	db, err := OpenDatabase(files, openSQLDatabase, dbPath)
 	if err != nil {
 		return nil, nil, nil, SessionParseStats{}, SessionTokenUsage{}, err
 	}
 	defer func() { _ = db.Close() }()
 
-	blobs, err := QueryBlobsTable(db)
+	blobs, err := QueryBlobsTable(ins, db)
 	if err != nil {
 		return nil, nil, nil, SessionParseStats{}, SessionTokenUsage{}, err
 	}
-	meta, err := QueryMetaTable(db)
+	meta, err := QueryMetaTable(ins, db)
 	if err != nil {
 		return nil, nil, nil, SessionParseStats{}, SessionTokenUsage{}, err
 	}
 
-	bubbles, composers, contexts, tokenUsage, err := LoadSessionFromStoreDB(files, openSQLDatabase, dbPath)
+	bubbles, composers, contexts, tokenUsage, err := parseSessionRecords(ins, blobs, meta, dbPath)
 	if err != nil {
-		return nil, nil, nil, SessionParseStats{}, SessionTokenUsage{}, err
+		return bubbles, composers, contexts, SessionParseStats{}, tokenUsage, err
 	}
 
 	stats := SessionParseStats{
@@ -148,7 +160,7 @@ type normalizedSessionFacts struct {
 	callByID      map[string]int
 }
 
-func reconstructSessionFacts(session *SessionData) normalizedSessionFacts {
+func reconstructSessionFacts(ins *inspection, session *SessionData) normalizedSessionFacts {
 	facts := normalizedSessionFacts{
 		transcript:    []providersessions.TranscriptEntry{},
 		functionCalls: []providersessions.FunctionCallSummary{},
@@ -162,6 +174,14 @@ func reconstructSessionFacts(session *SessionData) normalizedSessionFacts {
 	}
 	turnIndex := -1
 	for _, bubble := range session.OrderedBubbles() {
+		if ins != nil && ins.stopReconstruct {
+			break
+		}
+		if ins != nil {
+			if err := ins.checkCanceled(); err != nil {
+				break
+			}
+		}
 		if bubble.Type == 1 {
 			turnIndex++
 		}
@@ -169,17 +189,17 @@ func reconstructSessionFacts(session *SessionData) normalizedSessionFacts {
 			turnIndex = 0
 		}
 		if len(bubble.content) == 0 {
-			facts.addBubble(bubble, turnIndex)
+			facts.addBubble(ins, bubble, turnIndex)
 			continue
 		}
 		for _, item := range bubble.content {
-			facts.addContentItem(bubble, item, turnIndex)
+			facts.addContentItem(ins, bubble, item, turnIndex)
 		}
 	}
 	return facts
 }
 
-func (f *normalizedSessionFacts) addBubble(bubble *RawBubble, turnIndex int) {
+func (f *normalizedSessionFacts) addBubble(ins *inspection, bubble *RawBubble, turnIndex int) {
 	text := truncateSessionText(bubble.DisplayText())
 	if text == "" {
 		return
@@ -191,27 +211,30 @@ func (f *normalizedSessionFacts) addBubble(bubble *RawBubble, turnIndex int) {
 		TurnIndex:  intPtr(turnIndex),
 		Type:       providersessions.TranscriptEntryType(bubble.TranscriptEntryType()),
 	}
-	if f.appendEntry(&entry) {
+	if f.appendEntry(ins, &entry) {
 		f.recordTurn(entry, false, false)
 	}
 }
 
-func (f *normalizedSessionFacts) addContentItem(bubble *RawBubble, item rawContentItem, turnIndex int) {
+func (f *normalizedSessionFacts) addContentItem(ins *inspection, bubble *RawBubble, item rawContentItem, turnIndex int) {
 	switch {
 	case isTextKind(item.kind):
-		f.addTextItem(bubble, item, turnIndex)
+		f.addTextItem(ins, bubble, item, turnIndex)
 	case isReasoningKind(item.kind):
-		f.addReasoningItem(bubble, item, turnIndex)
+		f.addReasoningItem(ins, bubble, item, turnIndex)
 	case item.kind == "tool_call" || item.kind == "function_call":
-		f.addToolCall(bubble, item, turnIndex)
+		f.addToolCall(ins, bubble, item, turnIndex)
 	case item.kind == "tool" || item.kind == "tool_result" || item.kind == "function_call_output":
-		f.addToolOutput(bubble, item, turnIndex)
+		f.addToolOutput(ins, bubble, item, turnIndex)
 	default:
 		f.unknownCount++
+		if ins != nil {
+			ins.recordUnknownRecord(0)
+		}
 	}
 }
 
-func (f *normalizedSessionFacts) addTextItem(bubble *RawBubble, item rawContentItem, turnIndex int) {
+func (f *normalizedSessionFacts) addTextItem(ins *inspection, bubble *RawBubble, item rawContentItem, turnIndex int) {
 	text := truncateSessionText(item.text)
 	if text == "" {
 		return
@@ -223,12 +246,12 @@ func (f *normalizedSessionFacts) addTextItem(bubble *RawBubble, item rawContentI
 		TurnIndex:  intPtr(turnIndex),
 		Type:       providersessions.TranscriptEntryType(bubble.TranscriptEntryType()),
 	}
-	if f.appendEntry(&entry) {
+	if f.appendEntry(ins, &entry) {
 		f.recordTurn(entry, false, false)
 	}
 }
 
-func (f *normalizedSessionFacts) addReasoningItem(bubble *RawBubble, item rawContentItem, turnIndex int) {
+func (f *normalizedSessionFacts) addReasoningItem(ins *inspection, bubble *RawBubble, item rawContentItem, turnIndex int) {
 	entry := providersessions.TranscriptEntry{
 		Encrypted:  boolPtrIfTrue(item.encrypted),
 		SourceType: stringPtrIfNotEmpty("cursor_reasoning"),
@@ -238,7 +261,7 @@ func (f *normalizedSessionFacts) addReasoningItem(bubble *RawBubble, item rawCon
 		TurnIndex:  intPtr(turnIndex),
 		Type:       providersessions.TranscriptReasoning,
 	}
-	if !f.appendEntry(&entry) {
+	if !f.appendEntry(ins, &entry) {
 		return
 	}
 	f.reasoning = append(f.reasoning, providersessions.ReasoningSummary{
@@ -252,7 +275,7 @@ func (f *normalizedSessionFacts) addReasoningItem(bubble *RawBubble, item rawCon
 	f.recordTurn(entry, false, true)
 }
 
-func (f *normalizedSessionFacts) addToolCall(bubble *RawBubble, item rawContentItem, turnIndex int) {
+func (f *normalizedSessionFacts) addToolCall(ins *inspection, bubble *RawBubble, item rawContentItem, turnIndex int) {
 	entry := providersessions.TranscriptEntry{
 		Arguments:  stringPtrIfNotEmpty(truncateSessionText(item.arguments)),
 		CallID:     stringPtrIfNotEmpty(item.callID),
@@ -263,7 +286,7 @@ func (f *normalizedSessionFacts) addToolCall(bubble *RawBubble, item rawContentI
 		TurnIndex:  intPtr(turnIndex),
 		Type:       providersessions.TranscriptToolCall,
 	}
-	if !f.appendEntry(&entry) {
+	if !f.appendEntry(ins, &entry) {
 		return
 	}
 	call := providersessions.FunctionCallSummary{
@@ -282,7 +305,7 @@ func (f *normalizedSessionFacts) addToolCall(bubble *RawBubble, item rawContentI
 	f.recordTurn(entry, true, false)
 }
 
-func (f *normalizedSessionFacts) addToolOutput(bubble *RawBubble, item rawContentItem, turnIndex int) {
+func (f *normalizedSessionFacts) addToolOutput(ins *inspection, bubble *RawBubble, item rawContentItem, turnIndex int) {
 	entry := providersessions.TranscriptEntry{
 		CallID:     stringPtrIfNotEmpty(item.callID),
 		Name:       stringPtrIfNotEmpty(item.name),
@@ -293,7 +316,7 @@ func (f *normalizedSessionFacts) addToolOutput(bubble *RawBubble, item rawConten
 		TurnIndex:  intPtr(turnIndex),
 		Type:       providersessions.TranscriptToolOutput,
 	}
-	if !f.appendEntry(&entry) {
+	if !f.appendEntry(ins, &entry) {
 		return
 	}
 	if index, ok := f.callByID[item.callID]; ok {
@@ -305,10 +328,15 @@ func (f *normalizedSessionFacts) addToolOutput(bubble *RawBubble, item rawConten
 	f.recordTurn(entry, false, false)
 }
 
-func (f *normalizedSessionFacts) appendEntry(entry *providersessions.TranscriptEntry) bool {
+func (f *normalizedSessionFacts) appendEntry(ins *inspection, entry *providersessions.TranscriptEntry) bool {
 	key := transcriptEntryKey(*entry)
 	if _, exists := f.seen[key]; exists {
 		return false
+	}
+	if ins != nil {
+		if err := ins.recordTranscriptFact(); err != nil {
+			return false
+		}
 	}
 	f.seen[key] = struct{}{}
 	entry.Order = len(f.transcript) + 1

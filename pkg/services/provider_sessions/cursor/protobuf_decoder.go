@@ -32,7 +32,15 @@ func decodeVarint(data []byte) (uint64, int) {
 // extractProtobufFields extracts all fields from protobuf data and returns them as a map
 // pkgmaintcheck:ignore-cyclomatic-complexity MIT-ported cursor-session protobuf decoding stays grouped until extraction refactor.
 // This is a simplified decoder that focuses on extracting readable content
-func extractProtobufFields(data []byte) (map[string]interface{}, error) {
+func extractProtobufFields(ins *inspection, data []byte, depth int) (map[string]interface{}, error) {
+	if depth > effectiveLimit(testLimitOverrides.protobufNesting, maxProtobufNesting) {
+		return nil, fmt.Errorf("protobuf nesting limit exceeded")
+	}
+	if ins != nil {
+		if err := ins.recordProtobufWork(); err != nil {
+			return nil, err
+		}
+	}
 	result := make(map[string]interface{})
 	offset := 0
 	fieldCount := 0
@@ -92,7 +100,7 @@ func extractProtobufFields(data []byte) (map[string]interface{}, error) {
 					result[fieldKey] = string(jsonBytes)
 				} else {
 					// Try to decode nested protobuf
-					if nestedFields, err := extractProtobufFields(fieldData); err == nil && len(nestedFields) > 0 {
+					if nestedFields, err := extractProtobufFields(ins, fieldData, depth+1); err == nil && len(nestedFields) > 0 {
 						result[fieldKey] = nestedFields
 					} else {
 						// Store as hex for debugging
@@ -122,7 +130,7 @@ func extractProtobufFields(data []byte) (map[string]interface{}, error) {
 	return result, nil
 }
 
-func tryProtobufDecode(data []byte) (map[string]interface{}, bool) {
+func tryProtobufDecode(ins *inspection, data []byte) (map[string]interface{}, bool) {
 	// Check if it looks like protobuf (starts with valid tag bytes)
 	if len(data) == 0 {
 		return nil, false
@@ -138,7 +146,7 @@ func tryProtobufDecode(data []byte) (map[string]interface{}, bool) {
 	}
 
 	// Try to decode
-	fields, err := extractProtobufFields(data)
+	fields, err := extractProtobufFields(ins, data, 0)
 	if err != nil {
 		return nil, false
 	}

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -61,7 +62,10 @@ func DefaultStorageRoot(
 
 // Read validates the canonical Providers reference before performing storage
 // discovery, then returns only normalized Provider Sessions detail.
-func (r *reader) Read(ref providers.SessionRef) (providersessions.Detail, error) {
+func (r *reader) Read(ctx context.Context, ref providers.SessionRef) (providersessions.Detail, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if ref.Provider != providers.IDCursor {
 		return providersessions.Detail{}, providersessions.ErrUnsupportedProvider
 	}
@@ -73,6 +77,7 @@ func (r *reader) Read(ref providers.SessionRef) (providersessions.Detail, error)
 	}
 
 	detail, err := cursor.LoadDetails(
+		ctx,
 		r.files,
 		r.walkDirectory,
 		r.resolveSymlinks,
@@ -82,6 +87,16 @@ func (r *reader) Read(ref providers.SessionRef) (providersessions.Detail, error)
 	)
 	if err == nil {
 		return detail, nil
+	}
+	switch {
+	case errors.Is(err, providersessions.ErrOperationCanceled):
+		return providersessions.Detail{}, providersessions.ErrOperationCanceled
+	case errors.Is(err, providersessions.ErrResourceLimitExceeded):
+		return providersessions.Detail{}, &providersessions.LookupError{
+			Provider: providersessions.ProviderCursor,
+			Root:     string(r.root),
+			Err:      err,
+		}
 	}
 	return providersessions.Detail{}, &providersessions.LookupError{
 		Provider: providersessions.ProviderCursor,

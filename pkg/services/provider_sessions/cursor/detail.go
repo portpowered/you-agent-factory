@@ -3,6 +3,7 @@
 package cursor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -11,14 +12,22 @@ import (
 )
 
 // LoadDetails resolves a Cursor session_id from server-configured cursor-agent storage.
-func LoadDetails(files providersessions.FileSystem, walkDirectory providersessions.CursorWalkDirectory, resolveSymlinks providersessions.CursorResolveSymlinks, openSQLDatabase providersessions.CursorOpenSQLDatabase, root AgentStorageRoot, id string) (providersessions.Detail, error) {
+func LoadDetails(ctx context.Context, files providersessions.FileSystem, walkDirectory providersessions.CursorWalkDirectory, resolveSymlinks providersessions.CursorResolveSymlinks, openSQLDatabase providersessions.CursorOpenSQLDatabase, root AgentStorageRoot, id string) (providersessions.Detail, error) {
+	ins := newInspection(ctx)
+	if err := ins.checkCanceled(); err != nil {
+		return providersessions.Detail{}, providersessions.ErrOperationCanceled
+	}
 	if err := ValidateSessionID(id); err != nil {
 		return providersessions.Detail{}, providersessions.ErrInvalidIdentifier
 	}
 
-	resolved, err := ResolveStoreDB(files, walkDirectory, resolveSymlinks, root, id)
+	resolved, err := ResolveStoreDB(ins, files, walkDirectory, resolveSymlinks, root, id)
 	if err != nil {
 		switch {
+		case errors.Is(err, providersessions.ErrOperationCanceled), errors.Is(err, context.Canceled):
+			return providersessions.Detail{}, providersessions.ErrOperationCanceled
+		case errors.Is(err, providersessions.ErrResourceLimitExceeded):
+			return providersessions.Detail{}, limitLookupError(root, err)
 		case errors.Is(err, ErrInvalidSessionID):
 			return providersessions.Detail{}, providersessions.ErrInvalidIdentifier
 		case errors.Is(err, ErrSessionNotFound):
@@ -26,25 +35,49 @@ func LoadDetails(files providersessions.FileSystem, walkDirectory providersessio
 		case errors.Is(err, ErrAmbiguousSession):
 			return providersessions.Detail{}, providersessions.ErrAmbiguousSessionFile
 		default:
-			return providersessions.Detail{}, fmt.Errorf("resolve cursor session store: %w", err)
+			return providersessions.Detail{}, fmt.Errorf("resolve cursor session store: %s", sanitizeStructuralError(err.Error()))
 		}
 	}
 
-	session, err := LoadSessionData(files, openSQLDatabase, resolved)
+	session, err := LoadSessionData(ins, files, openSQLDatabase, resolved)
 	if err != nil {
-		return providersessions.Detail{}, fmt.Errorf("load cursor session data: %w", err)
+		switch {
+		case errors.Is(err, providersessions.ErrOperationCanceled), errors.Is(err, context.Canceled):
+			return providersessions.Detail{}, providersessions.ErrOperationCanceled
+		case errors.Is(err, providersessions.ErrResourceLimitExceeded):
+			if session != nil {
+				info, statErr := files.Stat(resolved.AbsolutePath)
+				if statErr == nil {
+					modifiedAt := info.ModTime().UTC()
+					return mapSessionToProviderSessionDetail(ins, id, resolved.RelativePath, info.Size(), &modifiedAt, session), nil
+				}
+				return mapSessionToProviderSessionDetail(ins, id, resolved.RelativePath, 0, nil, session), nil
+			}
+			return providersessions.Detail{}, limitLookupError(root, err)
+		default:
+			return providersessions.Detail{}, fmt.Errorf("load cursor session data: %s", sanitizeStructuralError(err.Error()))
+		}
 	}
 
 	info, err := files.Stat(resolved.AbsolutePath)
 	if err != nil {
-		return providersessions.Detail{}, fmt.Errorf("stat cursor session store: %w", err)
+		return providersessions.Detail{}, fmt.Errorf("stat cursor session store: %s", sanitizeStructuralError(err.Error()))
 	}
 	modifiedAt := info.ModTime().UTC()
 
-	return mapSessionToProviderSessionDetail(id, resolved.RelativePath, info.Size(), &modifiedAt, session), nil
+	return mapSessionToProviderSessionDetail(ins, id, resolved.RelativePath, info.Size(), &modifiedAt, session), nil
+}
+
+func limitLookupError(root AgentStorageRoot, err error) error {
+	return &providersessions.LookupError{
+		Provider: providersessions.ProviderCursor,
+		Root:     string(root),
+		Err:      err,
+	}
 }
 
 func mapSessionToProviderSessionDetail(
+	ins *inspection,
 	id string,
 	relativePath string,
 	sizeBytes int64,
@@ -52,8 +85,9 @@ func mapSessionToProviderSessionDetail(
 	session *SessionData,
 ) providersessions.Detail {
 	stats := session.ParseStats
-	facts := reconstructSessionFacts(session)
-	unknownCount := stats.UnavailableBlobCount + facts.unknownCount
+	ins.mergeStats(&stats)
+	facts := reconstructSessionFacts(ins, session)
+	unknownCount := stats.UnavailableBlobCount + facts.unknownCount + ins.unknownRecords
 	summary := providersessions.ParseSummary{
 		LineCount:          stats.BlobCount + stats.MetaCount,
 		EventCount:         len(facts.transcript),
@@ -62,7 +96,7 @@ func mapSessionToProviderSessionDetail(
 		Turns:              facts.turns,
 		FunctionCalls:      facts.functionCalls,
 		Reasoning:          facts.reasoning,
-		ParseErrors:        parseErrorsFromStats(stats),
+		ParseErrors:        ins.parseErrors(parseErrorsFromStats(stats)),
 		UnknownEvents:      unknownEvents(unknownCount),
 		TokenUsage:         mapTokenUsage(session.TokenUsage),
 	}

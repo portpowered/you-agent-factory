@@ -2,6 +2,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -122,13 +123,13 @@ func (s *inspectionService) Details(provider, kind, id string) (providersessions
 	if err != nil {
 		return providersessions.Detail{}, err
 	}
-	return s.detailsForRef(providers.SessionRef{Provider: providerID, Kind: kind, ID: id})
+	return s.detailsForRef(context.Background(), providers.SessionRef{Provider: providerID, Kind: kind, ID: id})
 }
 
 // Inspect validates and inspects a detached typed SessionRef through the same
 // storage-backed lookup path as Details, returning a plain InspectResult.
 func (s *inspectionService) Inspect(req providersessions.InspectRequest) (providersessions.InspectResult, error) {
-	detail, err := s.detailsForRef(req.Session)
+	detail, err := s.detailsForRef(req.Context, req.Session)
 	if err != nil {
 		return providersessions.InspectResult{}, err
 	}
@@ -141,7 +142,7 @@ func (s *inspectionService) Inspect(req providersessions.InspectRequest) (provid
 // Project projects provider-independent transcript/detail facts for a detached
 // typed SessionRef through the same storage-backed lookup path as Details.
 func (s *inspectionService) Project(req providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
-	detail, err := s.detailsForRef(req.Session)
+	detail, err := s.detailsForRef(req.Context, req.Session)
 	if err != nil {
 		return providersessions.ProjectResult{}, err
 	}
@@ -151,7 +152,10 @@ func (s *inspectionService) Project(req providersessions.ProjectRequest) (provid
 	}, nil
 }
 
-func (s *inspectionService) detailsForRef(ref providers.SessionRef) (providersessions.Detail, error) {
+func (s *inspectionService) detailsForRef(ctx context.Context, ref providers.SessionRef) (providersessions.Detail, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if ref.Provider != providers.IDCodex && ref.Provider != providers.IDCursor {
 		return providersessions.Detail{}, providersessions.ErrUnsupportedProvider
 	}
@@ -162,7 +166,7 @@ func (s *inspectionService) detailsForRef(ref providers.SessionRef) (providerses
 		return providersessions.Detail{}, providersessions.ErrInvalidIdentifier
 	}
 	if ref.Provider == providers.IDCursor {
-		return s.cursorReader.Read(ref)
+		return s.cursorReader.Read(ctx, ref)
 	}
 
 	detail, err := codex.LoadDetails(s.files, s.codexWalkDirectory, s.codexResolveSymlinks, s.codexRoot, ref.ID)

@@ -15,7 +15,7 @@ import (
 // backendsizecheck:ignore-function MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor.
 // pkgmaintcheck:ignore-function-lines MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor.
 // pkgmaintcheck:ignore-cyclomatic-complexity MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor.
-func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParseFailures *int) (map[string]interface{}, *RawBubble, bool) {
+func decodeBlobEntryValue(ins *inspection, blob BlobEntry, index int, sessionID string, jsonParseFailures *int) (map[string]interface{}, *RawBubble, bool) {
 	var data map[string]interface{}
 	valueBytes := []byte(blob.Value)
 
@@ -118,7 +118,7 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 					}
 				} else {
 					// Not base64 and no JSON in binary - try protobuf decode
-					if protobufFields, found := tryProtobufDecode(valueBytes); found {
+					if protobufFields, found := tryProtobufDecode(ins, valueBytes); found {
 						// Initialize data map if it's nil
 						if data == nil {
 							data = make(map[string]interface{})
@@ -175,8 +175,11 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 									LogInfo("Blob %d parsed as text message format (user message): bubbleId='%s', text='%s', chatId='%s'", index+1, bubble.BubbleID, bubble.Text, bubble.ChatID)
 									return nil, nil, false
 								}
-								(*jsonParseFailures)++
-								return nil, nil, false
+							(*jsonParseFailures)++
+							if ins != nil {
+								ins.recordMalformedBlob(index + 1)
+							}
+							return nil, nil, false
 							}
 						} else {
 							// Protobuf decoded but no readable strings found

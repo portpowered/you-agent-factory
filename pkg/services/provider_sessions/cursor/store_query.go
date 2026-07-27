@@ -2,12 +2,15 @@ package cursor
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 )
 
 // pkgmaintcheck:ignore-cyclomatic-complexity MIT-ported cursor-session store schema probing stays grouped until extraction refactor.
 // QueryBlobsTable queries the blobs table from a store.db file
-func QueryBlobsTable(db *sql.DB) ([]BlobEntry, error) {
+func QueryBlobsTable(ins *inspection, db *sql.DB) ([]BlobEntry, error) {
 	// Check if blobs table exists
 	var tableExists bool
 	err := db.QueryRow(`
@@ -74,6 +77,12 @@ func QueryBlobsTable(db *sql.DB) ([]BlobEntry, error) {
 	var entries []BlobEntry
 	rowCount := 0
 	for rows.Next() {
+		if err := ins.recordRow(); err != nil {
+			if errors.Is(err, providersessions.ErrResourceLimitExceeded) {
+				break
+			}
+			return entries, err
+		}
 		rowCount++
 		var entry BlobEntry
 		var value sql.NullString
@@ -108,7 +117,7 @@ func QueryBlobsTable(db *sql.DB) ([]BlobEntry, error) {
 
 // pkgmaintcheck:ignore-cyclomatic-complexity MIT-ported cursor-session store schema probing stays grouped until extraction refactor.
 // QueryMetaTable queries the meta table from a store.db file
-func QueryMetaTable(db *sql.DB) ([]MetaEntry, error) {
+func QueryMetaTable(ins *inspection, db *sql.DB) ([]MetaEntry, error) {
 	// Check if meta table exists
 	var tableExists bool
 	err := db.QueryRow(`
@@ -170,6 +179,12 @@ func QueryMetaTable(db *sql.DB) ([]MetaEntry, error) {
 	var entries []MetaEntry
 	rowCount := 0
 	for rows.Next() {
+		if err := ins.recordRow(); err != nil {
+			if errors.Is(err, providersessions.ErrResourceLimitExceeded) {
+				break
+			}
+			return entries, err
+		}
 		rowCount++
 		var entry MetaEntry
 		var value sql.NullString

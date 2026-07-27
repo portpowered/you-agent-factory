@@ -16,18 +16,18 @@ func OpenDatabase(files providersessions.FileSystem, openSQLDatabase providerses
 	}
 	// Check if file exists when opening in read-only mode
 	if _, err := files.Stat(path); err != nil {
-		return nil, fmt.Errorf("database file does not exist: %w", err)
+		return nil, fmt.Errorf("cursor session store could not be opened: %w", err)
 	}
 
 	db, err := openSQLDatabase("sqlite", path+"?mode=ro")
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
+		return nil, fmt.Errorf("cursor session store could not be opened")
 	}
 
 	// Test connection
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("database ping failed: %w", err)
+		return nil, fmt.Errorf("cursor session store could not be opened")
 	}
 
 	return db, nil

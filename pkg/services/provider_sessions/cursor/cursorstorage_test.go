@@ -1,6 +1,7 @@
 package cursor
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"os"
@@ -37,7 +38,7 @@ func TestValidateSessionID_RejectsPathLikeIdentifiers(t *testing.T) {
 func TestResolveStoreDB_ReturnsNotFoundForEmptyRoot(t *testing.T) {
 	t.Parallel()
 
-	_, err := ResolveStoreDB(testFiles, testWalkDirectory, testResolveSymlinks, AgentStorageRoot(""), "missing-session")
+	_, err := ResolveStoreDB(newInspection(context.Background()), testFiles, testWalkDirectory, testResolveSymlinks, AgentStorageRoot(""), "missing-session")
 	if !errors.Is(err, ErrSessionNotFound) {
 		t.Fatalf("err = %v, want ErrSessionNotFound", err)
 	}
@@ -47,7 +48,7 @@ func TestResolveStoreDB_ReturnsNotFoundForMissingRootDirectory(t *testing.T) {
 	t.Parallel()
 
 	missingRoot := filepath.Join(t.TempDir(), "does-not-exist")
-	_, err := ResolveStoreDB(testFiles, testWalkDirectory, testResolveSymlinks, AgentStorageRoot(missingRoot), "missing-session")
+	_, err := ResolveStoreDB(newInspection(context.Background()), testFiles, testWalkDirectory, testResolveSymlinks, AgentStorageRoot(missingRoot), "missing-session")
 	if !errors.Is(err, ErrSessionNotFound) {
 		t.Fatalf("err = %v, want ErrSessionNotFound", err)
 	}
@@ -56,7 +57,7 @@ func TestResolveStoreDB_ReturnsNotFoundForMissingRootDirectory(t *testing.T) {
 func TestResolveAndLoadReadableSessionFixture(t *testing.T) {
 	root, sessionID := writeReadableAgentStorageFixture(t)
 
-	resolved, err := ResolveStoreDB(testFiles, testWalkDirectory, testResolveSymlinks, AgentStorageRoot(root), sessionID)
+	resolved, err := ResolveStoreDB(newInspection(context.Background()), testFiles, testWalkDirectory, testResolveSymlinks, AgentStorageRoot(root), sessionID)
 	if err != nil {
 		t.Fatalf("ResolveStoreDB() = %v", err)
 	}
@@ -64,7 +65,7 @@ func TestResolveAndLoadReadableSessionFixture(t *testing.T) {
 		t.Fatal("expected non-empty relative path")
 	}
 
-	session, err := LoadSessionData(testFiles, testOpenSQLDatabase, resolved)
+	session, err := LoadSessionData(newInspection(context.Background()), testFiles, testOpenSQLDatabase, resolved)
 	if err != nil {
 		t.Fatalf("LoadSessionData() = %v", err)
 	}
@@ -83,7 +84,7 @@ func TestResolveAndLoadReadableSessionFixture(t *testing.T) {
 func TestResolveAndLoadUUIDShapedSessionFixture(t *testing.T) {
 	root, sessionID := writeUUIDShapedAgentStorageFixture(t)
 
-	resolved, err := ResolveStoreDB(testFiles, testWalkDirectory, testResolveSymlinks, AgentStorageRoot(root), sessionID)
+	resolved, err := ResolveStoreDB(newInspection(context.Background()), testFiles, testWalkDirectory, testResolveSymlinks, AgentStorageRoot(root), sessionID)
 	if err != nil {
 		t.Fatalf("ResolveStoreDB() = %v", err)
 	}
@@ -92,7 +93,7 @@ func TestResolveAndLoadUUIDShapedSessionFixture(t *testing.T) {
 		t.Fatalf("relative path = %q, want %q", resolved.RelativePath, wantRelativePath)
 	}
 
-	session, err := LoadSessionData(testFiles, testOpenSQLDatabase, resolved)
+	session, err := LoadSessionData(newInspection(context.Background()), testFiles, testOpenSQLDatabase, resolved)
 	if err != nil {
 		t.Fatalf("LoadSessionData() = %v", err)
 	}
@@ -104,11 +105,11 @@ func TestResolveAndLoadUUIDShapedSessionFixture(t *testing.T) {
 func TestLoadEncryptedOrUnavailableContentFixture(t *testing.T) {
 	root, sessionID := writeUnavailableAgentStorageFixture(t)
 
-	resolved, err := ResolveStoreDB(testFiles, testWalkDirectory, testResolveSymlinks, AgentStorageRoot(root), sessionID)
+	resolved, err := ResolveStoreDB(newInspection(context.Background()), testFiles, testWalkDirectory, testResolveSymlinks, AgentStorageRoot(root), sessionID)
 	if err != nil {
 		t.Fatalf("ResolveStoreDB() = %v", err)
 	}
-	session, err := LoadSessionData(testFiles, testOpenSQLDatabase, resolved)
+	session, err := LoadSessionData(newInspection(context.Background()), testFiles, testOpenSQLDatabase, resolved)
 	if err != nil {
 		t.Fatalf("LoadSessionData() = %v", err)
 	}
