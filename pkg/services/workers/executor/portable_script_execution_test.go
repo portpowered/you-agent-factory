@@ -297,6 +297,24 @@ func TestScriptFactoryConstructsRegistryBackedExecutor(t *testing.T) {
 	if err != nil || replaced == factory {
 		t.Fatalf("WithCommandRunner(replacement) = (%p, %v), want detached factory", replaced, err)
 	}
+	unchanged, err := factory.WithCommandRunner(nil)
+	if err != nil || unchanged != factory {
+		t.Fatalf("WithCommandRunner(nil) = (%p, %v), want original factory", unchanged, err)
+	}
+}
+
+func TestScriptFactoryMethodsRejectNilReceiver(t *testing.T) {
+	t.Parallel()
+
+	var factory *ScriptFactory
+	if _, err := factory.New(nil, nil, "", nil, nil, nil); err == nil ||
+		!strings.Contains(err.Error(), "factory is required") {
+		t.Fatalf("nil factory New() error = %v, want factory-required error", err)
+	}
+	if _, err := factory.WithCommandRunner(nil); err == nil ||
+		!strings.Contains(err.Error(), "base factory is required") {
+		t.Fatalf("nil factory WithCommandRunner() error = %v, want base-factory-required error", err)
+	}
 }
 
 func TestScriptFactoryRejectsIncompleteDependencies(t *testing.T) {

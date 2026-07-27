@@ -76,6 +76,9 @@ func (f *ScriptFactory) New(
 	record workers.ScriptEventRecorder,
 	now func() time.Time,
 ) (*ScriptExecutor, error) {
+	if f == nil {
+		return nil, errors.New("construct script worker: factory is required")
+	}
 	commandRunner := workerprocess.CommandRunnerWithLogging(
 		f.commandRunner,
 		logger,
@@ -95,6 +98,12 @@ func (f *ScriptFactory) New(
 
 // WithCommandRunner returns a validated copy with a per-runtime wrapper edge.
 func (f *ScriptFactory) WithCommandRunner(runner CommandRunner) (*ScriptFactory, error) {
+	if f == nil {
+		return nil, errors.New("construct script worker factory: base factory is required")
+	}
+	if runner == nil {
+		return f, nil
+	}
 	return NewScriptFactory(runner, f.commandClock, f.factoryDocs)
 }
 

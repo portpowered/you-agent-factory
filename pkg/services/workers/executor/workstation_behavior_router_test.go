@@ -114,6 +114,40 @@ func TestWorkstationBehaviorRouter_RoutesInferenceRunToInferenceExecutor(t *test
 	}
 }
 
+func TestWorkstationBehaviorRouter_ReturnsFailureWhenInferenceExecutorUnavailable(t *testing.T) {
+	t.Parallel()
+
+	request := workerexecution.WorkstationExecutionRequest{
+		Dispatch: work.WorkDispatch{
+			DispatchID:   "dispatch-unavailable",
+			TransitionID: "transition-unavailable",
+		},
+	}
+	tests := []struct {
+		name   string
+		router *WorkstationBehaviorRouter
+	}{
+		{name: "nil router"},
+		{name: "missing inference executor", router: &WorkstationBehaviorRouter{}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := tc.router.Execute(context.Background(), request)
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if result.DispatchID != request.Dispatch.DispatchID ||
+				result.TransitionID != request.Dispatch.TransitionID ||
+				result.Outcome != workerexecution.OutcomeFailed ||
+				result.Error != "inference executor unavailable" {
+				t.Fatalf("Execute() result = %#v, want unavailable-inference failure with dispatch lineage", result)
+			}
+		})
+	}
+}
+
 func TestWorkstationBehaviorRouter_InvalidAgentRunClassificationRoutesInference(t *testing.T) {
 	t.Parallel()
 
