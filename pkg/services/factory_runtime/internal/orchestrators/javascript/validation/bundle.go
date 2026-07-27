@@ -265,6 +265,7 @@ func transformExportStatement(stmt *js.ExportStmt) (string, *Issue) {
 	}
 	switch decl := stmt.Decl.(type) {
 	case *js.VarDecl:
+		keyword := varDeclKeyword(decl)
 		lines := make([]string, 0, len(decl.List))
 		for _, binding := range decl.List {
 			name := bindingName(binding.Binding)
@@ -272,10 +273,17 @@ func transformExportStatement(stmt *js.ExportStmt) (string, *Issue) {
 				continue
 			}
 			if binding.Default != nil {
-				lines = append(lines, fmt.Sprintf("exports.%s = %s;", name, exprString(binding.Default)))
+				lines = append(lines, fmt.Sprintf(
+					"%s %s = %s; exports.%s = %s;",
+					keyword,
+					name,
+					exprString(binding.Default),
+					name,
+					name,
+				))
 				continue
 			}
-			lines = append(lines, fmt.Sprintf("var %s; exports.%s = %s;", name, name, name))
+			lines = append(lines, fmt.Sprintf("%s %s; exports.%s = %s;", keyword, name, name, name))
 		}
 		return strings.Join(lines, "\n"), nil
 	case *js.FuncDecl:
@@ -289,7 +297,7 @@ func transformExportStatement(stmt *js.ExportStmt) (string, *Issue) {
 				Message: "anonymous export functions are not supported in factory-relative workflow modules",
 			}
 		}
-		return fmt.Sprintf("exports.%s = %s;", name, declString(decl)), nil
+		return fmt.Sprintf("%s; exports.%s = %s;", declString(decl), name, name), nil
 	default:
 		return "", &Issue{
 			Code:    CodeUnsupportedLoader,
@@ -368,6 +376,17 @@ func declExpressionString(decl js.IExpr) string {
 		return declString(node)
 	default:
 		return exprString(decl)
+	}
+}
+
+func varDeclKeyword(decl *js.VarDecl) string {
+	switch decl.TokenType {
+	case js.ConstToken:
+		return "const"
+	case js.LetToken:
+		return "let"
+	default:
+		return "var"
 	}
 }
 

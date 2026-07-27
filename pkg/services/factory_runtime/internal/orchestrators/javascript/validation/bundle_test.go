@@ -416,6 +416,82 @@ workflow.final(mid);`
 	}
 }
 
+func TestBundleFactoryRelativeImportsSameModuleExportReferencesExecute(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "helpers.js"),
+		[]byte(`export const leaf = "LEAF";
+export const doubled = leaf + "-X";
+export function suffix(value) { return value + "-FN"; }`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write helpers module: %v", err)
+	}
+	entry := `import { doubled, suffix } from "./lib/helpers.js";
+workflow.final(suffix(doubled));`
+	reader := FileSourceReader(dir, bundleTestFileSystem{})
+
+	bundled, issues := BundleFactoryRelativeImports("workflow.js", entry, reader)
+	if len(issues) > 0 {
+		t.Fatalf("bundle issues = %#v, want none", issues)
+	}
+	if !strings.Contains(bundled, `const leaf = "LEAF"; exports.leaf = leaf;`) {
+		t.Fatalf("bundled source = %q, want local binding for same-module export const", bundled)
+	}
+	if !strings.Contains(bundled, `exports.doubled = doubled;`) {
+		t.Fatalf("bundled source = %q, want local binding for export referencing prior export", bundled)
+	}
+	finalValue, err := executeBundledWorkflowFinalForTest(t, bundled)
+	if err != nil {
+		t.Fatalf("execute bundled source: %v", err)
+	}
+	if finalValue != "LEAF-X-FN" {
+		t.Fatalf("workflow.final value = %q, want LEAF-X-FN", finalValue)
+	}
+}
+
+func TestLoadBundlesSameModuleExportReferencesExecute(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "helpers.js"),
+		[]byte(`export const leaf = "LEAF";
+export const doubled = leaf + "-X";`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write helpers module: %v", err)
+	}
+	entry := `import { doubled } from "./lib/helpers.js";
+workflow.final(doubled);`
+	reader := FileSourceReader(dir, bundleTestFileSystem{})
+
+	loaded, issues := Load(LoadRequest{
+		SourceRef:    "workflow.js",
+		Content:      entry,
+		FactoryRoot:  dir,
+		BundleReader: reader,
+	})
+	if len(issues) > 0 {
+		t.Fatalf("load issues = %#v, want none", issues)
+	}
+	finalValue, err := executeBundledWorkflowFinalForTest(t, loaded.ExecutableSource)
+	if err != nil {
+		t.Fatalf("execute bundled source: %v", err)
+	}
+	if finalValue != "LEAF-X" {
+		t.Fatalf("workflow.final value = %q, want LEAF-X", finalValue)
+	}
+}
+
 func TestBundleFactoryRelativeImportsCircularImportReturnsUnsupportedLoader(t *testing.T) {
 	t.Parallel()
 

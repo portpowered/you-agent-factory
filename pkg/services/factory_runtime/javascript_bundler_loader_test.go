@@ -167,6 +167,54 @@ workflow.final(mid);`
 	}
 }
 
+func TestLoad_BundlesSameModuleExportReferencesExecute(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o700); err != nil {
+		t.Fatalf("mkdir lib: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, "lib", "helpers.js"),
+		[]byte(`export const leaf = "LEAF";
+export const doubled = leaf + "-X";
+export function suffix(value) { return value + "-FN"; }`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write helpers module: %v", err)
+	}
+	entry := `import { doubled, suffix } from "./lib/helpers.js";
+workflow.final(suffix(doubled));`
+	reader := factory.NewWorkflowSourceReader(dir, localWorkflowSourceFiles{})
+
+	loaded, issues := validationLoaderWorkflows.LoadSource(factory.WorkflowValidationLoadRequest{
+		SourceRef:    "workflow.js",
+		Content:      entry,
+		FactoryRoot:  dir,
+		BundleReader: reader,
+	})
+	if len(issues) > 0 {
+		t.Fatalf("load issues = %#v, want none", issues)
+	}
+
+	outcome, err := validationLoaderWorkflows.Run(t.Context(), factory.JavaScriptRuntimeRequest{
+		Source:    loaded.ExecutableSource,
+		SourceRef: "workflow.js",
+		SessionID: "session-same-module-export-refs",
+		Args:      json.RawMessage(`{}`),
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}, factory.JavaScriptRuntimeHooks{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !outcome.OK {
+		t.Fatalf("Run() failure = %#v", outcome.Failure)
+	}
+	if string(outcome.Value.JSON) != `"LEAF-X-FN"` {
+		t.Fatalf("primary result = %s, want \"LEAF-X-FN\"", outcome.Value.JSON)
+	}
+}
+
 func TestLoad_BundlesDefaultExportRelativeImportExecutes(t *testing.T) {
 	t.Parallel()
 
