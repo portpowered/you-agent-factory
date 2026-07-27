@@ -18,7 +18,7 @@ type Host struct {
 	lifecycle *factoryhost.LifecycleService
 
 	mu      sync.Mutex
-	handles map[string]struct{}
+	handles map[string]*factoryhost.Handle
 }
 
 var _ instancehost.Service = (*Host)(nil)
@@ -37,23 +37,18 @@ func New(dependencies instancehost.Dependencies) (instancehost.Service, error) {
 	return &Host{
 		clock:     dependencies.Clock,
 		lifecycle: lifecycle,
-		handles:   make(map[string]struct{}),
+		handles:   make(map[string]*factoryhost.Handle),
 	}, nil
 }
 
-func (h *Host) Start(
-	ctx context.Context,
-	instance factoryruntime.HostedInstance,
-) (factoryruntime.HostedHandle, error) {
-	return h.lifecycle.Start(ctx, instance)
-}
-
-func (h *Host) WaitForStart(ctx context.Context, handle factoryruntime.HostedHandle) error {
-	return h.lifecycle.WaitForStart(ctx, handle)
-}
-
 func (h *Host) Stop(handle factoryruntime.HostedHandle) error {
-	return h.lifecycle.Stop(handle)
+	concrete, ok := handle.(*factoryhost.Handle)
+	if !ok || concrete == nil {
+		return h.lifecycle.Stop(handle)
+	}
+	err := h.lifecycle.Stop(concrete)
+	h.removeHandle(concrete)
+	return err
 }
 
 func (h *Host) StopSidecars(handle factoryruntime.HostedHandle) {
