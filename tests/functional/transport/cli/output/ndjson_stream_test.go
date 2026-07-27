@@ -70,6 +70,46 @@ func TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult(t *testing.T)
 	}
 }
 
+// TestCLINDJSONSequenceIsMonotonic proves CLI NDJSON response-stream Factory Event
+// records expose strictly increasing context.sequence values and, when present,
+// strictly increasing Factory Session sequence values, with no records after the
+// terminal InvocationResult.
+func TestCLINDJSONSequenceIsMonotonic(t *testing.T) {
+	stdout := runGoalResponseStream(t)
+	records := decodeNDJSONRecords(t, stdout)
+
+	previousSequence := -1
+	previousSessionSequence := -1
+	factoryEventCount := 0
+	invocationResultSeen := false
+	for index, record := range records {
+		switch record.RecordType {
+		case factoryEventRecordType:
+			if invocationResultSeen {
+				t.Fatalf("Factory Event record %d follows terminal invocation result", index)
+			}
+			assertFactoryEventSequenceMonotonic(t, record, index, &previousSequence, &previousSessionSequence)
+			factoryEventCount++
+		case invocationResultType:
+			if invocationResultSeen {
+				t.Fatalf("second invocation_result at record %d", index)
+			}
+			invocationResultSeen = true
+			if index != len(records)-1 {
+				t.Fatalf("invocation_result record index = %d, want terminal index %d", index, len(records)-1)
+			}
+		default:
+			t.Fatalf("record %d has unsupported recordType %q", index, record.RecordType)
+		}
+	}
+	if factoryEventCount == 0 {
+		t.Fatal("response stream contains no Factory Event records to order")
+	}
+	if !invocationResultSeen {
+		t.Fatal("response stream missing terminal invocation_result")
+	}
+}
+
 type ndjsonRecord struct {
 	RecordType string
 	Payload    json.RawMessage
@@ -120,6 +160,30 @@ func assertFactoryEventRecord(t *testing.T, record ndjsonRecord, index int) {
 	}
 	if key := privatePayloadKey(payload); key != "" {
 		t.Fatalf("Factory Event record %d exposes provider-only field %q: %s", index, key, record.Raw)
+	}
+}
+
+func assertFactoryEventSequenceMonotonic(
+	t *testing.T,
+	record ndjsonRecord,
+	index int,
+	previousSequence *int,
+	previousSessionSequence *int,
+) {
+	t.Helper()
+	var event factorydefinitions.FactoryEvent
+	if err := json.Unmarshal(record.Payload, &event); err != nil {
+		t.Fatalf("decode Factory Event record %d: %v\nline: %s", index, err, record.Raw)
+	}
+	if event.Context.Sequence <= *previousSequence {
+		t.Fatalf("Factory Event sequence %d follows %d", event.Context.Sequence, *previousSequence)
+	}
+	*previousSequence = event.Context.Sequence
+	if event.Context.SessionSequence != nil {
+		if *event.Context.SessionSequence <= *previousSessionSequence {
+			t.Fatalf("Factory Session sequence %d follows %d", *event.Context.SessionSequence, *previousSessionSequence)
+		}
+		*previousSessionSequence = *event.Context.SessionSequence
 	}
 }
 
