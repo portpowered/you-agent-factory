@@ -62,7 +62,15 @@ func NewService(
 			models.ErrInvalidInferenceDependencies,
 		)
 	}
-	return internalservice.New(scopes, assets, catalog, runtimeHost, invocationRuntime, clock), nil
+	return internalservice.New(
+		scopes,
+		assets,
+		catalog,
+		runtimeHost,
+		invocationRuntime,
+		clock,
+		nil,
+	), nil
 }
 
 func isNilDependency(value any) bool {

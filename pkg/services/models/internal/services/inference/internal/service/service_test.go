@@ -93,6 +93,7 @@ func TestInvokeModelWithLeaseRejectsUnknownAndExpiredLeases(t *testing.T) {
 		host,
 		&recordingInvocationRuntime{},
 		func() time.Time { return now },
+		nil,
 	)
 
 	_, err := service.InvokeModelWithLease(context.Background(), invokeRequest(scope, activeLease, "worker-2", "scoped-model", "generate"))
@@ -129,6 +130,7 @@ func TestInvokeModelWithLeaseRejectsUnknownModelAndUnsupportedOperation(t *testi
 		host,
 		&recordingInvocationRuntime{},
 		fixedClock(),
+		nil,
 	)
 
 	_, err := service.InvokeModelWithLease(context.Background(), invokeRequest(scope, lease, "worker-1", "missing-model", "generate"))
@@ -161,7 +163,7 @@ func TestInvokeModelWithLeaseReturnsDetachedCompletedResult(t *testing.T) {
 			Content:     "models-owned-output",
 		}},
 	}
-	service := internalservice.New(scopes, availableInferenceAssets{}, catalog, host, runtime, fixedClock())
+	service := internalservice.New(scopes, availableInferenceAssets{}, catalog, host, runtime, fixedClock(), nil)
 
 	result, err := service.InvokeModelWithLease(context.Background(), models.InvokeModelRequest{
 		Scope:     scope,
@@ -218,6 +220,7 @@ func TestInvokeModelWithLeaseRejectsUnavailableAssets(t *testing.T) {
 		host,
 		&recordingInvocationRuntime{},
 		fixedClock(),
+		nil,
 	)
 
 	_, err := service.InvokeModelWithLease(context.Background(), invokeRequest(scope, lease, "worker-1", "scoped-model", "generate"))
@@ -235,6 +238,7 @@ func TestInvokeModelWithLeaseRejectsUnavailableAssets(t *testing.T) {
 		host,
 		&recordingInvocationRuntime{},
 		fixedClock(),
+		nil,
 	)
 	_, err = service.InvokeModelWithLease(context.Background(), invokeRequest(scope, lease, "worker-1", "scoped-model", "generate"))
 	if !errors.Is(err, models.ErrAssetUnavailable) {
@@ -260,6 +264,7 @@ func TestInvokeModelWithLeaseRejectsUnsupportedResponseMode(t *testing.T) {
 		host,
 		&recordingInvocationRuntime{},
 		fixedClock(),
+		nil,
 	)
 	request := invokeRequest(scope, lease, "worker-1", "scoped-model", "generate")
 	request.ResponseMode = models.ResponseMode("JSON")
@@ -289,6 +294,7 @@ func TestInvokeModelWithLeaseNormalizesRuntimeFailure(t *testing.T) {
 		host,
 		runtime,
 		fixedClock(),
+		nil,
 	)
 
 	result, err := service.InvokeModelWithLease(context.Background(), invokeRequest(scope, lease, "worker-1", "scoped-model", "generate"))
@@ -340,6 +346,7 @@ func TestInvokeModelFailureOutcomesRemainDistinct(t *testing.T) {
 		host,
 		&recordingInvocationRuntime{invokeErr: models.ErrInferenceFailed},
 		fixedClock(),
+		nil,
 	)
 	result, err := service.InvokeModelWithLease(context.Background(), invokeRequest(scope, lease, "worker-1", "scoped-model", "generate"))
 	if !errors.Is(err, models.ErrInferenceFailed) {
@@ -352,6 +359,210 @@ func TestInvokeModelFailureOutcomesRemainDistinct(t *testing.T) {
 	}
 	if result.Status != models.ModelInvocationStatusFailed {
 		t.Fatalf("result status = %q, want FAILED", result.Status)
+	}
+}
+
+func TestInvokeModelWithLeaseTimesOutWithReleasedLeaseDisposition(t *testing.T) {
+	t.Parallel()
+
+	scopes, scope := openInferenceScope(t, "invoke-timeout", "scoped-model", "generate")
+	catalog := mustCatalog(t, scopes)
+	lease := mustLeaseRef(t, "lease-1")
+	host := &recordingInferenceHost{
+		leases: map[string]models.ModelLease{
+			lease.String(): activeLease(scope, lease, "scoped-model", "worker-1"),
+		},
+	}
+	now := time.Now()
+	service := internalservice.New(
+		scopes,
+		availableInferenceAssets{},
+		catalog,
+		host,
+		&deadlineInvocationRuntime{},
+		func() time.Time { return now },
+		func() time.Duration { return time.Millisecond },
+	)
+
+	result, err := service.InvokeModelWithLease(context.Background(), invokeRequest(scope, lease, "worker-1", "scoped-model", "generate"))
+	if !errors.Is(err, models.ErrInferenceTimeout) {
+		t.Fatalf("timeout = %v, want ErrInferenceTimeout", err)
+	}
+	if result.Status != models.ModelInvocationStatusFailed ||
+		result.LeaseDisposition != models.InvocationLeaseReleased {
+		t.Fatalf("result = %#v, want failed released timeout outcome", result)
+	}
+	if host.releaseCalls != 1 {
+		t.Fatalf("lease release calls = %d, want 1", host.releaseCalls)
+	}
+}
+
+func TestCancelInvocationReleasesAcceptedInvocationCapacity(t *testing.T) {
+	t.Parallel()
+
+	scopes, scope := openInferenceScope(t, "invoke-cancel", "scoped-model", "hold")
+	catalog := mustCatalog(t, scopes)
+	lease := mustLeaseRef(t, "lease-1")
+	host := &recordingInferenceHost{
+		leases: map[string]models.ModelLease{
+			lease.String(): activeLease(scope, lease, "scoped-model", "worker-1"),
+		},
+	}
+	service := internalservice.New(
+		scopes,
+		availableInferenceAssets{},
+		catalog,
+		host,
+		holdInvocationRuntime{},
+		fixedClock(),
+		nil,
+	)
+
+	accepted, err := service.InvokeModelWithLease(
+		context.Background(),
+		invokeRequest(scope, lease, "worker-1", "scoped-model", "hold"),
+	)
+	if err != nil {
+		t.Fatalf("InvokeModelWithLease hold: %v", err)
+	}
+	if accepted.Status != models.ModelInvocationStatusAccepted ||
+		accepted.LeaseDisposition != models.InvocationLeaseRetained {
+		t.Fatalf("accepted = %#v, want retained accepted invocation", accepted)
+	}
+
+	cancelled, err := service.CancelInvocation(context.Background(), models.CancelInvocationRequest{
+		Scope:      scope,
+		Invocation: accepted.Invocation,
+	})
+	if err != nil {
+		t.Fatalf("CancelInvocation: %v", err)
+	}
+	if cancelled.Outcome != models.InvocationCancellationRequested ||
+		cancelled.Status != models.ModelInvocationStatusCancelled ||
+		cancelled.LeaseDisposition != models.InvocationLeaseReleased {
+		t.Fatalf("cancelled = %#v, want cancelled released outcome", cancelled)
+	}
+
+	repeated, err := service.CancelInvocation(context.Background(), models.CancelInvocationRequest{
+		Scope:      scope,
+		Invocation: accepted.Invocation,
+	})
+	if err != nil {
+		t.Fatalf("CancelInvocation repeated: %v", err)
+	}
+	if repeated.Outcome != models.InvocationCancellationAlreadyCancelled {
+		t.Fatalf("repeated cancellation = %#v, want ALREADY_CANCELLED", repeated)
+	}
+	if host.releaseCalls != 1 {
+		t.Fatalf("lease release calls = %d, want 1", host.releaseCalls)
+	}
+}
+
+func TestCancelInvocationReportsAlreadyCompletedForFinishedInvocation(t *testing.T) {
+	t.Parallel()
+
+	scopes, scope := openInferenceScope(t, "invoke-cancel-complete", "scoped-model", "generate")
+	catalog := mustCatalog(t, scopes)
+	lease := mustLeaseRef(t, "lease-1")
+	host := &recordingInferenceHost{
+		leases: map[string]models.ModelLease{
+			lease.String(): activeLease(scope, lease, "scoped-model", "worker-1"),
+		},
+	}
+	service := internalservice.New(
+		scopes,
+		availableInferenceAssets{},
+		catalog,
+		host,
+		&recordingInvocationRuntime{},
+		fixedClock(),
+		nil,
+	)
+
+	result, err := service.InvokeModelWithLease(
+		context.Background(),
+		invokeRequest(scope, lease, "worker-1", "scoped-model", "generate"),
+	)
+	if err != nil {
+		t.Fatalf("InvokeModelWithLease: %v", err)
+	}
+
+	cancelled, err := service.CancelInvocation(context.Background(), models.CancelInvocationRequest{
+		Scope:      scope,
+		Invocation: result.Invocation,
+	})
+	if err != nil {
+		t.Fatalf("CancelInvocation completed: %v", err)
+	}
+	if cancelled.Outcome != models.InvocationCancellationAlreadyCompleted {
+		t.Fatalf("late cancellation = %#v, want ALREADY_COMPLETED", cancelled)
+	}
+}
+
+func TestInvokeContextCancellationConvergesWithExplicitCancel(t *testing.T) {
+	t.Parallel()
+
+	scopes, scope := openInferenceScope(t, "invoke-context-cancel", "scoped-model", "generate")
+	catalog := mustCatalog(t, scopes)
+	lease := mustLeaseRef(t, "lease-1")
+	host := &recordingInferenceHost{
+		leases: map[string]models.ModelLease{
+			lease.String(): activeLease(scope, lease, "scoped-model", "worker-1"),
+		},
+	}
+	service := internalservice.New(
+		scopes,
+		availableInferenceAssets{},
+		catalog,
+		host,
+		&deadlineInvocationRuntime{},
+		fixedClock(),
+		nil,
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	contextResult, err := service.InvokeModelWithLease(
+		ctx,
+		invokeRequest(scope, lease, "worker-1", "scoped-model", "generate"),
+	)
+	if !errors.Is(err, models.ErrInferenceCancelled) {
+		t.Fatalf("context cancellation = %v, want ErrInferenceCancelled", err)
+	}
+	if contextResult.Status != models.ModelInvocationStatusCancelled ||
+		contextResult.LeaseDisposition != models.InvocationLeaseReleased ||
+		contextResult.CancellationOutcome != models.InvocationCancellationRequested {
+		t.Fatalf("context cancellation = %#v, want cancelled released outcome", contextResult)
+	}
+	if host.releaseCalls != 1 {
+		t.Fatalf("lease release calls = %d, want 1", host.releaseCalls)
+	}
+}
+
+func TestCancelInvocationRejectsUnknownInvocation(t *testing.T) {
+	t.Parallel()
+
+	scopes, scope := openInferenceScope(t, "invoke-cancel-unknown", "scoped-model", "generate")
+	catalog := mustCatalog(t, scopes)
+	service := internalservice.New(
+		scopes,
+		availableInferenceAssets{},
+		catalog,
+		&recordingInferenceHost{},
+		&recordingInvocationRuntime{},
+		fixedClock(),
+		nil,
+	)
+	unknown, err := (models.ModelInvocationRef{}).Parse("models-inference:unknown")
+	if err != nil {
+		t.Fatalf("parse unknown invocation: %v", err)
+	}
+	_, err = service.CancelInvocation(context.Background(), models.CancelInvocationRequest{
+		Scope:      scope,
+		Invocation: unknown,
+	})
+	if !errors.Is(err, models.ErrInvocationNotFound) {
+		t.Fatalf("CancelInvocation unknown = %v, want ErrInvocationNotFound", err)
 	}
 }
 
@@ -377,6 +588,7 @@ func newInferenceService(
 		host,
 		&recordingInvocationRuntime{},
 		fixedClock(),
+		nil,
 	)
 }
 
@@ -502,6 +714,28 @@ func (runtime *recordingInvocationRuntime) Invoke(
 		ContentType: request.Input.ContentType,
 		Content:     request.Input.Content,
 	}}, nil
+}
+
+type holdInvocationRuntime struct{}
+
+func (holdInvocationRuntime) Invoke(
+	context.Context,
+	models.InvokeModelRequest,
+) ([]models.InferenceContent, error) {
+	return nil, inference.ErrInvocationInFlight
+}
+
+type deadlineInvocationRuntime struct{}
+
+func (deadlineInvocationRuntime) Invoke(ctx context.Context, _ models.InvokeModelRequest) ([]models.InferenceContent, error) {
+	<-ctx.Done()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return nil, models.ErrInferenceTimeout
+	}
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return nil, fmt.Errorf("%w: %v", models.ErrInferenceCancelled, ctx.Err())
+	}
+	return nil, ctx.Err()
 }
 
 type recordingInferenceHost struct {

@@ -21,9 +21,11 @@ type service struct {
 	runtimeHost runtimehost.Service
 	runtime     inference.InvocationRuntime
 	clock       func() time.Time
+	executionDeadline func() time.Duration
 
 	mu             sync.Mutex
 	nextInvocation int
+	invocations    map[models.ModelInvocationRef]models.InvokeModelResult
 }
 
 var _ inference.Service = (*service)(nil)
@@ -38,14 +40,20 @@ func New(
 	runtimeHost runtimehost.Service,
 	runtime inference.InvocationRuntime,
 	clock func() time.Time,
+	executionDeadline func() time.Duration,
 ) inference.Service {
+	if executionDeadline == nil {
+		executionDeadline = defaultExecutionDeadline
+	}
 	return &service{
-		scopes:      scopes,
-		assets:      assets,
-		catalog:     catalog,
-		runtimeHost: runtimeHost,
-		runtime:     runtime,
-		clock:       clock,
+		scopes:            scopes,
+		assets:            assets,
+		catalog:           catalog,
+		runtimeHost:       runtimeHost,
+		runtime:           runtime,
+		clock:             clock,
+		executionDeadline: executionDeadline,
+		invocations:       make(map[models.ModelInvocationRef]models.InvokeModelResult),
 	}
 }
 
@@ -62,11 +70,10 @@ func (s *service) InvokeModelWithLease(
 	if err := validateInvocationResponseMode(request); err != nil {
 		return models.InvokeModelResult{}, err
 	}
-	if err := invokeContextError(ctx); err != nil {
-		return models.InvokeModelResult{}, err
-	}
 
-	leaseResult, err := s.runtimeHost.GetModelLease(ctx, models.GetModelLeaseRequest{
+	validationCtx := context.WithoutCancel(ctx)
+
+	leaseResult, err := s.runtimeHost.GetModelLease(validationCtx, models.GetModelLeaseRequest{
 		Scope: request.Scope,
 		Lease: request.Lease,
 	})
@@ -77,7 +84,7 @@ func (s *service) InvokeModelWithLease(
 		return models.InvokeModelResult{}, err
 	}
 
-	if _, err := s.catalog.GetCatalogModel(ctx, models.GetModelRequest{
+	if _, err := s.catalog.GetCatalogModel(validationCtx, models.GetModelRequest{
 		Scope:     request.Scope,
 		Name:      request.ModelName,
 		Operation: request.Operation,
@@ -85,7 +92,7 @@ func (s *service) InvokeModelWithLease(
 		return models.InvokeModelResult{}, catalogInvokeError(err)
 	}
 
-	if err := s.ensureModelAssetsAvailable(ctx, request); err != nil {
+	if err := s.ensureModelAssetsAvailable(validationCtx, request); err != nil {
 		return models.InvokeModelResult{}, err
 	}
 
@@ -98,35 +105,25 @@ func (s *service) InvokeModelWithLease(
 		return models.InvokeModelResult{}, err
 	}
 
-	content, err := s.runtime.Invoke(ctx, request)
+	accepted := acceptedInvocationResult(request, invocation)
+	s.putInvocation(invocation, accepted)
+
+	if err := invokeContextError(ctx); err != nil {
+		return s.finishCancelledInvocation(ctx, request, invocation, err)
+	}
+
+	invokeCtx, cancelDeadline := s.invokeWithDeadline(ctx)
+	defer cancelDeadline()
+
+	content, err := s.runtime.Invoke(invokeCtx, request)
+	if isInvocationInFlight(err) {
+		return accepted.Clone(), nil
+	}
 	if err != nil {
-		s.releaseInvocationLease(ctx, request)
-		return failedInvocationResult(request, invocation),
-			normalizeInvokeError(err)
+		return s.finishFailedInvocation(invokeCtx, request, invocation, err)
 	}
 
-	s.releaseInvocationLease(ctx, request)
-
-	return models.InvokeModelResult{
-		Invocation:       invocation,
-		Scope:            request.Scope,
-		Lease:            request.Lease,
-		ModelName:        request.ModelName,
-		Operation:        request.Operation,
-		Status:           models.ModelInvocationStatusCompleted,
-		Content:          append([]models.InferenceContent(nil), content...),
-		LeaseDisposition: models.InvocationLeaseReleased,
-	}.Clone(), nil
-}
-
-func (s *service) CancelInvocation(
-	context.Context,
-	models.CancelInvocationRequest,
-) (models.CancelInvocationResult, error) {
-	if s == nil {
-		return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
-	}
-	return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
+	return s.finishCompletedInvocation(ctx, request, invocation, content)
 }
 
 func (s *service) ensureModelAssetsAvailable(
