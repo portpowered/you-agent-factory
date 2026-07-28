@@ -877,6 +877,12 @@ response-stream output.
   `go-*-coverage-package-minimums.json` baselines; prove registration with
   `wire/manifest_registration_test.go` rather than re-editing manifests when
   IMP-SET already landed the rows.
+- Operator Settings top-level directory inventory for INV-SET-TOPLEVEL lives in
+  `docs/internal/projects/packaged-service-structure/operator-settings-top-level-inventory.json`
+  with drift verification in `internal/ownershipinventory/operator_settings_top_level.go`;
+  canonical retain children are `internal`, `transports`, and `wire`, with
+  `testdata` recorded as `test_only_retain` and unexpected public siblings
+  inventoried explicitly before remap stories regenerate ledgers.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore
