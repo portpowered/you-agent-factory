@@ -11,6 +11,7 @@ import (
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
@@ -113,6 +114,11 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			mutate: func(ports *constructionPorts) { ports.orchestratorValidator = nil },
 			want:   "orchestrator definition validator is required",
 		},
+		{
+			name:   "portable filesystem",
+			mutate: func(ports *constructionPorts) { ports.portableFileSystem = nil },
+			want:   "portable filesystem is required",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -134,6 +140,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 				ports.packagedInstaller,
 				ports.requiredToolChecker,
 				ports.orchestratorValidator,
+				ports.portableFileSystem,
 			)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("NewService() error = %v, want %q", err, test.want)
@@ -195,6 +202,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		},
 		stubRequiredToolChecker{},
 		stubOrchestratorValidator{},
+		platformfilesystem.Local{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -282,6 +290,7 @@ func TestNewServiceServesPublishedPackagedCatalogPeerBehavior(t *testing.T) {
 		ports.packagedInstaller,
 		ports.requiredToolChecker,
 		ports.orchestratorValidator,
+		ports.portableFileSystem,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -363,6 +372,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 		ports.packagedInstaller,
 		ports.requiredToolChecker,
 		ports.orchestratorValidator,
+		ports.portableFileSystem,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -373,6 +383,55 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	var root factorydefinitions.Service = service
 	if root == nil {
 		t.Fatal("constructed value is not assignable to factorydefinitions.Service")
+	}
+}
+
+func TestNewServiceDelegatesSnapshotPortabilityThroughRoot(t *testing.T) {
+	t.Parallel()
+
+	ports := validConstructionPorts(t)
+	service, err := factorydefinitionswire.NewService(
+		ports.sessionHost,
+		ports.validator,
+		ports.persistence,
+		ports.loader,
+		ports.applySupportedFiles,
+		ports.applyStarterWork,
+		ports.namedPaths,
+		ports.namedFactoryCatalogFileSystem,
+		ports.clock,
+		ports.versionFileSystem,
+		ports.listEffective,
+		ports.packagedCatalog,
+		ports.packagedInstaller,
+		ports.requiredToolChecker,
+		ports.orchestratorValidator,
+		ports.portableFileSystem,
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = service.CaptureFactorySnapshot(
+		t.Context(),
+		factorydefinitions.CaptureFactorySnapshotRequest{Canonical: []byte(`"not-object"`)},
+	)
+	if !errors.Is(err, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
+		t.Fatalf("CaptureFactorySnapshot() error = %v, want ErrInvalidFactorySnapshotPayload", err)
+	}
+	_, err = service.PrepareFactorySnapshotImport(
+		t.Context(),
+		factorydefinitions.PrepareFactorySnapshotImportRequest{Payload: []byte(`["not-object"]`)},
+	)
+	if !errors.Is(err, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
+		t.Fatalf("PrepareFactorySnapshotImport() error = %v, want ErrInvalidFactorySnapshotPayload", err)
+	}
+	_, err = service.MaterializeFactorySnapshot(
+		t.Context(),
+		factorydefinitions.MaterializeFactorySnapshotRequest{},
+	)
+	if !errors.Is(err, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize) {
+		t.Fatalf("MaterializeFactorySnapshot() error = %v, want ErrUnsafeFactorySnapshotMaterialize", err)
 	}
 }
 
@@ -410,6 +469,7 @@ type constructionPorts struct {
 	packagedInstaller             factorydefinitions.PackagedFactoryInstallationOperations
 	requiredToolChecker           factorydefinitions.RequiredToolChecker
 	orchestratorValidator         factorydefinitions.OrchestratorDefinitionValidator
+	portableFileSystem            portablefiles.FileSystem
 }
 
 func validConstructionPorts(t *testing.T) constructionPorts {
@@ -455,6 +515,7 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 		},
 		requiredToolChecker:   stubRequiredToolChecker{},
 		orchestratorValidator: stubOrchestratorValidator{},
+		portableFileSystem:    platformfilesystem.Local{},
 	}
 }
 
