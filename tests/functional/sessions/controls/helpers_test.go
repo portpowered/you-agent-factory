@@ -120,6 +120,32 @@ func readDurableFactorySession(
 	return session
 }
 
+func isDurableFactorySessionTerminal(
+	status factoryapi.FactorySessionDurableLifecycleStatus,
+) bool {
+	return status == factoryapi.FactorySessionDurableLifecycleStatusTerminated ||
+		status == factoryapi.FactorySessionDurableLifecycleStatusCanceled
+}
+
+func assertDurableFactorySessionRemainsTerminal(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+	context string,
+) {
+	t.Helper()
+
+	session := readDurableFactorySession(t, baseURL, sessionID)
+	if !isDurableFactorySessionTerminal(session.Status) {
+		t.Fatalf(
+			"%s: session %s status = %q, want terminal TERMINATED or CANCELED",
+			context,
+			sessionID,
+			session.Status,
+		)
+	}
+}
+
 func waitForDurableFactorySessionTerminal(
 	t *testing.T,
 	baseURL string,
