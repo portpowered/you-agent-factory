@@ -75,9 +75,9 @@ pkg/services/factory_definitions/authoredlayout/filesystem_test.go: unreachable 
 pkg/services/factory_definitions/contracts/owned_aliases.go: unreachable func: NormalizeAgentToolPolicy
 pkg/services/factory_definitions/definition/service.go: unreachable func: CurrentFactorySnapshotForSession
 pkg/services/factory_definitions/definition/validation_compatibility_test.go: unreachable func: assertValidationTarget
-pkg/services/factory_definitions/internal/namedfactories/service.go: unreachable func: MapDir
-pkg/services/factory_definitions/internal/namedfactories/service.go: unreachable func: ReadCurrentPointer
-pkg/services/factory_definitions/internal/namedfactories/service.go: unreachable func: ValidateName
+pkg/services/factory_definitions/internal/services/catalog/namedfactories/service.go: unreachable func: MapDir
+pkg/services/factory_definitions/internal/services/catalog/namedfactories/service.go: unreachable func: ReadCurrentPointer
+pkg/services/factory_definitions/internal/services/catalog/namedfactories/service.go: unreachable func: ValidateName
 pkg/services/factory_definitions/internal/testcomposition/composition.go: unreachable func: Composition.LoadedCurrentFactory
 pkg/services/factory_definitions/internal/testcomposition/composition.go: unreachable func: Composition.LoadedFactoryFromCanonicalJSON
 pkg/services/factory_definitions/internal/testcomposition/composition.go: unreachable func: Composition.PersistNamedFactoryUnchecked

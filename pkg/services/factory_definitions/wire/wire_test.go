@@ -15,7 +15,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
+	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	distributionscaffoldfacts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
@@ -187,7 +187,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		sessionHost,
 		stubValidator{},
 		stubPersistence{},
-		&factoryloading.Loader{},
+		&compilationloading.Loader{},
 		func(string, *factorydefinitions.FactoryConfig, bool, bool) error { return nil },
 		func(string, *factorydefinitions.FactoryConfig) error { return nil },
 		namedPaths,
@@ -528,7 +528,7 @@ type constructionPorts struct {
 	sessionHost                   factorydefinitions.SessionHost
 	validator                     factorydefinitions.Validator
 	persistence                   factorydefinitions.Persistence
-	loader                        *factoryloading.Loader
+	loader                        *compilationloading.Loader
 	applySupportedFiles           factorydefinitions.PortableBundledFilesApplier
 	applyStarterWork              factorydefinitions.FactoryStarterWorkApplier
 	namedPaths                    factorydefinitions.NamedPathResolver
@@ -563,7 +563,7 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 		sessionHost:                   &stubSessionHost{},
 		validator:                     stubValidator{},
 		persistence:                   stubPersistence{},
-		loader:                        &factoryloading.Loader{},
+		loader:                        &compilationloading.Loader{},
 		applySupportedFiles:           func(string, *factorydefinitions.FactoryConfig, bool, bool) error { return nil },
 		applyStarterWork:              func(string, *factorydefinitions.FactoryConfig) error { return nil },
 		namedPaths:                    stubNamedPathResolver{},

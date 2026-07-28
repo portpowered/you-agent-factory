@@ -92,8 +92,8 @@
     "pkg/services/factory_definitions/editable",
     "pkg/services/factory_definitions/internal",
     "pkg/services/factory_definitions/internal/contracts",
-    "pkg/services/factory_definitions/internal/namedfactories",
     "pkg/services/factory_definitions/internal/services/authoring_layout",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout",
     "pkg/services/factory_definitions/internal/services/authoring_layout/expand",
     "pkg/services/factory_definitions/internal/services/authoring_layout/flatten",
     "pkg/services/factory_definitions/internal/services/authoring_layout/internal/service",
@@ -102,6 +102,7 @@
     "pkg/services/factory_definitions/internal/services/authoring_layout/wire",
     "pkg/services/factory_definitions/internal/services/catalog",
     "pkg/services/factory_definitions/internal/services/catalog/internal/service",
+    "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
     "pkg/services/factory_definitions/internal/services/catalog/wire",
     "pkg/services/factory_definitions/internal/services/compilation",
     "pkg/services/factory_definitions/internal/services/compilation/canonical",
@@ -120,6 +121,7 @@
     "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
     "pkg/services/factory_definitions/internal/services/validation",
@@ -797,12 +799,12 @@
       "destination": "factory_definitions"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/namedfactories",
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout",
       "disposition": "move",
-      "destination": "factory_definitions/internal/services/catalog"
+      "destination": "factory_definitions/internal/services/authoring_layout"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout",
       "disposition": "move",
       "destination": "factory_definitions/internal/services/authoring_layout"
     },
@@ -843,6 +845,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog/internal/service",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/catalog"
     },
@@ -933,6 +940,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
+      "disposition": "move",
+      "destination": "factory_definitions/internal"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
       "disposition": "move",
       "destination": "factory_definitions/internal"
     },

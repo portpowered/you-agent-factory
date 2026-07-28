@@ -71,10 +71,10 @@ func TestMapCommittedOwnerPackageFactoryDefinitionsMoveDestinations(t *testing.T
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/internal/namedfactories",
+			path: "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/namedfactories",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
+				Disposition: DispositionRetain,
 				Destination: "factory_definitions/internal/services/catalog",
 			},
 		},

@@ -314,7 +314,6 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "namedpaths", prefix: "namedpaths/", dest: "factory_definitions/internal/services/catalog"},
 		{exact: "persistence", prefix: "persistence/", dest: "factory_definitions/internal/services/catalog"},
 		{exact: "resource", prefix: "resource/", dest: "factory_definitions/internal/services/catalog"},
-		{prefix: "internal/namedfactories", dest: "factory_definitions/internal/services/catalog"},
 		{exact: "definition", prefix: "definition/", dest: "factory_definitions/internal/services/compilation"},
 		{exact: "loading", prefix: "loading/", dest: "factory_definitions/internal/services/compilation"},
 		{exact: "loadedsource", prefix: "loadedsource/", dest: "factory_definitions/internal/services/compilation"},

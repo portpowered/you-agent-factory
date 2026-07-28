@@ -14,8 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
+	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
+	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
@@ -38,7 +38,7 @@ func NewService(
 	sessionHost factorydefinitions.SessionHost,
 	validator factorydefinitions.Validator,
 	persistence factorydefinitions.Persistence,
-	loader *factoryloading.Loader,
+	loader *compilationloading.Loader,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
@@ -112,7 +112,7 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
-	pruneRemovedDocs, err := portableconfig.NewPortableBundledDocsPruner(portableFileSystem)
+	pruneRemovedDocs, err := internalportableconfig.NewPortableBundledDocsPruner(portableFileSystem)
 	if err != nil {
 		return nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
 	}
@@ -122,10 +122,10 @@ func NewService(
 			return validationentry.MapFactoryJSONForPersistence(payload, loader.LoadSourceFromCanonicalJSON)
 		},
 		Loader:             loader,
-		MaterializeFiles:   portableconfig.NewMaterializer(portableFileSystem),
-		ValidateWrites:     portableconfig.NewWritesValidator(portableFileSystem),
+		MaterializeFiles:   internalportableconfig.NewMaterializer(portableFileSystem),
+		ValidateWrites:     internalportableconfig.NewWritesValidator(portableFileSystem),
 		PruneRemovedDocs:   pruneRemovedDocs,
-		CopySupportedFiles: portableconfig.NewFilesCopier(portableFileSystem),
+		CopySupportedFiles: internalportableconfig.NewFilesCopier(portableFileSystem),
 		AuthoredWriterFS:   authoringFS,
 		EnsureInbox:        inboxgitkeep.NewLocal(portableFileSystem),
 		PersistenceFS:      authoringFS,
@@ -196,7 +196,7 @@ func validateDependencies(
 	sessionHost factorydefinitions.SessionHost,
 	validator factorydefinitions.Validator,
 	persistence factorydefinitions.Persistence,
-	loader *factoryloading.Loader,
+	loader *compilationloading.Loader,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,

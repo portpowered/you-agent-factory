@@ -247,7 +247,7 @@
       "minimum": 88.23
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/namedfactories",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories",
       "minimum": 60.93
     },
     {

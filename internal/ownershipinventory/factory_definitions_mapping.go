@@ -21,7 +21,6 @@ var factoryDefinitionsMoveRules = []factoryDefinitionsMoveRule{
 	{exact: "namedpaths", prefix: "namedpaths/", subservice: "catalog"},
 	{exact: "persistence", prefix: "persistence/", subservice: "catalog"},
 	{exact: "resource", prefix: "resource/", subservice: "catalog"},
-	{prefix: "internal/namedfactories", subservice: "catalog"},
 	{exact: "definition", prefix: "definition/", subservice: "compilation"},
 	{exact: "loading", prefix: "loading/", subservice: "compilation"},
 	{exact: "loadedsource", prefix: "loadedsource/", subservice: "compilation"},
