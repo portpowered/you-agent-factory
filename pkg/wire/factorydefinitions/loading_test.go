@@ -9,7 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
 )
@@ -89,7 +88,7 @@ func TestLoaderUsesSameYAMLRootSelectionForRuntimeAndReadOnlyValidation(t *testi
 func newTestLoader(
 	t *testing.T,
 	fileSystem platformfilesystem.Local,
-) *factoryloading.Loader {
+) *factorydefinitionswire.Loader {
 	t.Helper()
 
 	applySupportedFiles, err := factorydefinitionswire.NewPortableBundledFilesApplier(fileSystem)

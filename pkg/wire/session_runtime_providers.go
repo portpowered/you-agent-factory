@@ -20,7 +20,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factoryworkstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workstationexecution"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -316,7 +315,7 @@ func provideOrchestratorDefinitionValidator(
 
 func provideFactoryDefinitionValidationService(
 	workflows factoryruntime.JavaScriptWorkflows,
-	loader *factoryloading.Loader,
+	loader *factorydefinitionswire.Loader,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) factorydefinitions.ValidationOperations {
 	_ = workflows
@@ -357,7 +356,7 @@ func provideNamedFactoryCatalog(
 
 func provideFactoryDefinitionPersistence(
 	validator factorydefinitions.Validator,
-	loader *factoryloading.Loader,
+	loader *factorydefinitionswire.Loader,
 	pruneRemovedDocs factorydefinitions.PortableBundledDocsPruner,
 	materializeFiles factorydefinitions.PortableBundledFilesMaterializer,
 	validateWrites factorydefinitions.PortableBundledFileWritesValidator,
@@ -405,7 +404,7 @@ func provideFactoryScaffoldInitializer(
 
 func provideEditableFactoryValidator(
 	validator factorydefinitions.DefinitionValidationOperation,
-	loader *factoryloading.Loader,
+	loader *factorydefinitionswire.Loader,
 ) factorysessions.EditableFactoryValidator {
 	return func(
 		ctx context.Context,
