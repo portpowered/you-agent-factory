@@ -860,6 +860,36 @@ response-stream output.
   remaining request-validation error and `FactoryInvocationResult` session
   result shape stay at their current boundary until Factory Session contracts
   converge; the Factory Session owner constructs that shared result.
+- Factory Sessions production Work imports are sealed by
+  `pkg/services/factory_sessions/work_import_boundary_test.go`
+  (`TestProductionPackagesImportWorkRootOnly`). Mirror
+  `pkg/services/recordings/runtime_import_boundary_test.go` when adding similar
+  CUT consumer-edge import proofs: `go list` every package under the Sessions
+  root and fail on any import outside `pkg/services/work`.
+- Factory Sessions invocation input preparation and primary-result selection
+  route through `work.Service` (`PrepareInvocationInput`,
+  `ResolvePrimaryResult`) injected on `SessionOwner` via
+  `invocationservice.Dependencies.Work`. Use `work.NewInvocationPolicyService()`
+  when only the published invocation/return-policy slice is needed; prove the
+  sealed edge with `pkg/services/factory_sessions/work_invocation_boundary_test.go`.
+- Factory Sessions Work admission, content staging, and materialization call
+  sites route through `work.Service` (`StageContent`, `PrepareContent`,
+  `PrepareWorkRequest`, `MaterializeContentURL`) rather than injecting
+  `work.ContentStagingService`, `work.RequestPreparationService`, or
+  `work.ContentMaterializer` as peer dependencies. Compose focused roles onto
+  the Work root at wire/transport edges with `work.AdmissionContentService` and
+  `work.MaterializationService`; adapt to Workers-only `ContentMaterializer`
+  boundaries with `work.ContentMaterializeFunc(workService.MaterializeContentURL)`.
+  Prove the HTTP admission/content edge in
+  `pkg/services/factory_sessions/transports/http/work_admission_content_boundary_test.go`.
+- Factory Sessions Work request construction and admission submit proofs live in
+  `pkg/services/factory_sessions/transports/http/work_request_boundary_test.go`
+  (HTTP `PrepareWorkRequest` + `SubmitWorkRequestForSession` through a recording
+  `work.Service`) and `pkg/services/factory_sessions/work_request_boundary_test.go`
+  (session-owned invocation submit constructing detached `work.WorkRequest` with
+  observable acceptance or typed `work.ErrInvalidWorkRequest` failures). Assert
+  behavioral submit result fields and typed error codes/messages, not import
+  inventory alone.
 - Work owner-local Wire at `pkg/services/work/wire` must stay registered under
   destination `work` in
   `docs/internal/packaged-service-structure/package-target-manifest.json`,
