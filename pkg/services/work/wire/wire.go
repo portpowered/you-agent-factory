@@ -1,5 +1,11 @@
-// Package wire is the Work service composition boundary. Application Wire uses
-// these providers without importing Work internal implementation packages.
+// Package wire is the Work service composition boundary.
+//
+// Wire performs construction only, returns the singular work.Service root
+// interface, and starts no lifecycle components. Parent-private
+// content_staging, content_materialization, and state_access owner wiring stays
+// inside the owner service assembly path; peers depend on Service rather than
+// owner internals or construction ports. Application Wire may continue using
+// nested content helper constructors without importing Work internal packages.
 package wire
 
 import (
@@ -9,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	contentstagingwire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_staging/wire"
 	contentmaterializationwire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/wire"
+	workservice "github.com/portpowered/infinite-you/pkg/services/work/service"
 )
 
 // DefaultContentMaterializationHTTPTimeout is the Work-owned outbound retrieval
@@ -30,6 +37,49 @@ func NewContentStagingService(
 	ttl time.Duration,
 ) (work.ContentStagingService, error) {
 	return contentstagingwire.NewService(filesystem, random, clock, ttl)
+}
+
+// NewService constructs an inert Work root from construction and process-edge
+// ports. It composes the accepted root through parent-private content_staging,
+// content_materialization, and state_access owners without publishing owner
+// types on the returned peer surface.
+func NewService(
+	runtimes work.RuntimeResolver,
+	filesystem work.ContentStagingFileSystem,
+	random work.ContentStagingRandom,
+	clock work.ContentStagingClock,
+	stagingTTL time.Duration,
+	hostPlatform work.ContentHostPlatform,
+	httpDoer work.ContentHTTPDoer,
+	inspectPath work.ContentInspectPath,
+	createTempFile work.ContentCreateTemporaryFile,
+	removePath work.ContentRemovePath,
+	writeFile work.ContentWriteFile,
+	openFile work.ContentOpenFile,
+) (work.Service, error) {
+	contentStaging, err := contentstagingwire.NewService(filesystem, random, clock, stagingTTL)
+	if err != nil {
+		return nil, err
+	}
+	contentMaterializer, err := contentmaterializationwire.NewService(
+		hostPlatform,
+		0,
+		0,
+		0,
+		false,
+		httpDoer,
+		"",
+		inspectPath,
+		createTempFile,
+		removePath,
+		writeFile,
+		openFile,
+	)
+	if err != nil {
+		return nil, err
+	}
+	service := workservice.NewService(runtimes, nil, contentStaging, contentMaterializer)
+	return service, nil
 }
 
 // NewContentMaterializationService constructs the nested content_materialization
