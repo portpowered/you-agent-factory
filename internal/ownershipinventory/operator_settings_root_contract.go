@@ -13,6 +13,8 @@ import (
 var OperatorSettingsThinRootContractFiles = []string{
 	"backend_scope.go",
 	"config_document.go",
+	"defaults_contract.go",
+	"defaults_resolution.go",
 	"doc.go",
 	"document_contract.go",
 	"input_inventory_contract.go",
@@ -34,16 +36,6 @@ type OperatorSettingsRootContractFoldTarget struct {
 // clusters beyond the thin Operator Settings service root contract.
 var OperatorSettingsExcessRootContractFolds = []OperatorSettingsRootContractFoldTarget{
 	{
-		Cluster: "resolution_composition",
-		Files: []string{
-			"environment_resolution.go",
-			"provider_scope.go",
-			"resolution_characterization_test.go",
-			"resolution_composition.go",
-		},
-		Destination: OperatorSettingsOwnerPackagePath + "/internal/services/resolution",
-	},
-	{
 		Cluster: "providers_root_construction",
 		Files: []string{
 			"providers_root_construct.go",
@@ -59,15 +51,6 @@ var OperatorSettingsExcessRootContractFolds = []OperatorSettingsRootContractFold
 			"testmain_test.go",
 		},
 		Destination: OperatorSettingsOwnerPackagePath + "/internal",
-	},
-	{
-		Cluster: "defaults_resolution_implementation",
-		Files: []string{
-			"atomic_config_test.go",
-			"operator_config.go",
-			"operator_config_test.go",
-		},
-		Destination: OperatorSettingsOwnerPackagePath + "/internal/services/resolution",
 	},
 }
 

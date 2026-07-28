@@ -16,6 +16,8 @@ const operatorSettingsRootRelative = "pkg/services/operator_settings"
 var operatorSettingsThinRootContractFiles = []string{
 	"backend_scope.go",
 	"config_document.go",
+	"defaults_contract.go",
+	"defaults_resolution.go",
 	"doc.go",
 	"document_contract.go",
 	"input_inventory_contract.go",
@@ -35,16 +37,6 @@ type operatorSettingsRootContractFoldTarget struct {
 // OperatorSettingsExcessRootContractFolds for package-target manifest checks.
 var operatorSettingsExcessRootContractFolds = []operatorSettingsRootContractFoldTarget{
 	{
-		cluster: "resolution_composition",
-		files: []string{
-			"environment_resolution.go",
-			"provider_scope.go",
-			"resolution_characterization_test.go",
-			"resolution_composition.go",
-		},
-		destination: "pkg/services/operator_settings/internal/services/resolution",
-	},
-	{
 		cluster: "providers_root_construction",
 		files: []string{
 			"providers_root_construct.go",
@@ -60,15 +52,6 @@ var operatorSettingsExcessRootContractFolds = []operatorSettingsRootContractFold
 			"testmain_test.go",
 		},
 		destination: "pkg/services/operator_settings/internal",
-	},
-	{
-		cluster: "defaults_resolution_implementation",
-		files: []string{
-			"atomic_config_test.go",
-			"operator_config.go",
-			"operator_config_test.go",
-		},
-		destination: "pkg/services/operator_settings/internal/services/resolution",
 	},
 }
 

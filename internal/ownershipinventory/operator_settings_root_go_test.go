@@ -118,6 +118,8 @@ func TestOperatorSettingsRootGoInventoryClassifiesThinRootContractSurfaces(t *te
 	wantThin := []string{
 		"backend_scope.go",
 		"config_document.go",
+		"defaults_contract.go",
+		"defaults_resolution.go",
 		"doc.go",
 		"document_contract.go",
 		"input_inventory_contract.go",
@@ -146,10 +148,8 @@ func TestOperatorSettingsRootGoInventoryNamesExcessFoldClusters(t *testing.T) {
 	}
 
 	want := map[string]string{
-		"resolution_composition":                "pkg/services/operator_settings/internal/services/resolution",
-		"providers_root_construction":           "pkg/services/operator_settings/internal",
-		"construction_ports":                    "pkg/services/operator_settings/internal",
-		"defaults_resolution_implementation":    "pkg/services/operator_settings/internal/services/resolution",
+		"providers_root_construction": "pkg/services/operator_settings/internal",
+		"construction_ports":          "pkg/services/operator_settings/internal",
 	}
 
 	for _, cluster := range inventory.Clusters {
@@ -175,9 +175,7 @@ func TestOperatorSettingsRootGoInventoryNamesExcessFoldClusters(t *testing.T) {
 	slices.Sort(gotClusters)
 	wantClusters := []string{
 		"construction_ports",
-		"defaults_resolution_implementation",
 		"providers_root_construction",
-		"resolution_composition",
 	}
 	if !slices.Equal(gotClusters, wantClusters) {
 		t.Fatalf("fold clusters = %v, want %v", gotClusters, wantClusters)
@@ -198,10 +196,7 @@ func TestOperatorSettingsRootGoInventoryDistinguishesThinContractTestsFromImplem
 		"service_root_contract_invariants_test.go",
 	}
 	wantFoldTests := []string{
-		"atomic_config_test.go",
 		"dependencies_test.go",
-		"operator_config_test.go",
-		"resolution_characterization_test.go",
 		"service_characterization_test.go",
 		"testmain_test.go",
 	}

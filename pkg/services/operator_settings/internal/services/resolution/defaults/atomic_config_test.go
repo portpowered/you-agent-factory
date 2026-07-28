@@ -1,6 +1,8 @@
-package operatorsettings
+package settingsresolution_test
+
 
 import (
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"context"
 	"errors"
 	"io"
@@ -26,7 +28,7 @@ func TestConfigDocumentServicePersist_AtomicallyPublishesCompleteConfig(t *testi
 		t.Fatalf("Parse() error = %v", err)
 	}
 	provider, model := "claude", "provider/model@next"
-	document, err = service.MergeProviderModelDefaults(document, ProviderModelUpdate{Provider: &provider, Model: &model})
+	document, err = service.MergeProviderModelDefaults(document, operatorsettings.ProviderModelUpdate{Provider: &provider, Model: &model})
 	if err != nil {
 		t.Fatalf("MergeProviderModelDefaults() error = %v", err)
 	}
@@ -92,14 +94,14 @@ func TestConfigDocumentServiceConfigureProviderModel_SerializationFailurePreserv
 	t.Parallel()
 	path, original, _ := persistedConfigFixture(t)
 	service := persistedConfigService(testFiles, testCreateTemp)
-	service.Encoder = func(Config) ([]byte, error) {
+	service.Encoder = func(operatorsettings.Config) ([]byte, error) {
 		return nil, errors.New("injected serialization failure")
 	}
 	model := "replacement"
 	_, err := service.ConfigureProviderModel(
 		context.Background(),
 		path,
-		ProviderModelUpdate{Model: &model},
+		operatorsettings.ProviderModelUpdate{Model: &model},
 	)
 	if err == nil || !strings.Contains(err.Error(), "injected serialization failure") {
 		t.Fatalf("ConfigureProviderModel() error = %v, want serialization failure", err)
@@ -147,9 +149,9 @@ func TestConfigDocumentServicePersist_RejectsBeforeFilesystemSideEffects(t *test
 	t.Parallel()
 	files := &faultFileSystem{FileSystem: testFiles}
 	service := persistedConfigService(files, testCreateTemp)
-	invalid := ConfigDocument{config: Config{WorkerPresets: []WorkerPreset{{ID: "invalid", ModelProvider: "DEFAULT"}}}}
-	if err := service.Persist(context.Background(), "config.json", invalid); err == nil {
-		t.Fatal("Persist() error = nil, want invalid candidate")
+	_, err := service.Parse([]byte(`{"workerPresets":[{"id":"invalid","modelProvider":"DEFAULT"}]}`))
+	if err == nil {
+		t.Fatal("Parse() error = nil, want invalid candidate")
 	}
 	if files.calls != 0 {
 		t.Fatalf("filesystem calls = %d, want zero", files.calls)
@@ -223,7 +225,7 @@ func TestConfigDocumentServicePersist_ConcurrentReadersSeeCompleteCandidates(t *
 			defer group.Done()
 			<-start
 			model := "concurrent-model-" + strconv.Itoa(index)
-			candidate, err := service.MergeProviderModelDefaults(base, ProviderModelUpdate{Model: &model})
+			candidate, err := service.MergeProviderModelDefaults(base, operatorsettings.ProviderModelUpdate{Model: &model})
 			if err == nil {
 				err = service.Persist(context.Background(), path, candidate)
 			}
@@ -277,12 +279,12 @@ func TestConfigDocumentServiceConfigureProviderModel_InputPathsPersistEquivalent
 	}
 	service := persistedConfigService(testFiles, testCreateTemp)
 	provider, model := " anthropic ", " provider/model@next "
-	update := ProviderModelUpdate{Provider: &provider, Model: &model}
-	var promptedDefaults Defaults
+	update := operatorsettings.ProviderModelUpdate{Provider: &provider, Model: &model}
+	var promptedDefaults operatorsettings.Defaults
 	prompted, err := service.ConfigureProviderModelPrompted(
 		context.Background(),
 		promptedPath,
-		func(_ context.Context, defaults Defaults) (ProviderModelUpdate, error) {
+		func(_ context.Context, defaults operatorsettings.Defaults) (operatorsettings.ProviderModelUpdate, error) {
 			promptedDefaults = defaults
 			return update, nil
 		},
@@ -294,7 +296,7 @@ func TestConfigDocumentServiceConfigureProviderModel_InputPathsPersistEquivalent
 	if err != nil {
 		t.Fatalf("ConfigureProviderModel() error = %v", err)
 	}
-	if promptedDefaults != (Defaults{WorkerModelProvider: "CODEX", WorkerModel: "existing"}) {
+	if promptedDefaults != (operatorsettings.Defaults{WorkerModelProvider: "CODEX", WorkerModel: "existing"}) {
 		t.Fatalf("prompt defaults = %#v, want existing defaults", promptedDefaults)
 	}
 	if !reflect.DeepEqual(prompted.FileConfig(), supplied.FileConfig()) || prompted.BackendScopeID() != supplied.BackendScopeID() {
@@ -321,7 +323,7 @@ func TestConfigDocumentServiceConfigureProviderModel_SerializesReadMergeReplaceT
 	var encodeCalls atomic.Int32
 	service := persistedConfigService(files, testCreateTemp)
 	service.PersistenceLock = lock
-	service.Encoder = func(config Config) ([]byte, error) {
+	service.Encoder = func(config operatorsettings.Config) ([]byte, error) {
 		if encodeCalls.Add(1) == 1 {
 			close(encoderEntered)
 			<-releaseEncoder
@@ -335,7 +337,7 @@ func TestConfigDocumentServiceConfigureProviderModel_SerializesReadMergeReplaceT
 		_, err := service.ConfigureProviderModel(
 			context.Background(),
 			path,
-			ProviderModelUpdate{Provider: &provider},
+			operatorsettings.ProviderModelUpdate{Provider: &provider},
 		)
 		providerResult <- err
 	}()
@@ -348,7 +350,7 @@ func TestConfigDocumentServiceConfigureProviderModel_SerializesReadMergeReplaceT
 		_, err := service.ConfigureProviderModel(
 			context.Background(),
 			path,
-			ProviderModelUpdate{Model: &model},
+			operatorsettings.ProviderModelUpdate{Model: &model},
 		)
 		modelResult <- err
 	}()
@@ -369,7 +371,7 @@ func TestConfigDocumentServiceConfigureProviderModel_SerializesReadMergeReplaceT
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got, want := document.FileConfig().Defaults, (Defaults{
+	if got, want := document.FileConfig().Defaults, (operatorsettings.Defaults{
 		WorkerModelProvider: "CLAUDE",
 		WorkerModel:         model,
 	}); got != want {
@@ -382,32 +384,32 @@ func TestConfigDocumentServiceConfigureProviderModelPrompted_InputStopsBeforePer
 	promptFailure := errors.New("prompt failed")
 	for _, test := range []struct {
 		name    string
-		prompt  func(context.CancelFunc) ProviderModelPrompt
+		prompt  func(context.CancelFunc) operatorsettings.ProviderModelPrompt
 		wantErr error
 	}{
-		{name: "EOF", prompt: func(context.CancelFunc) ProviderModelPrompt {
-			return func(context.Context, Defaults) (ProviderModelUpdate, error) { return ProviderModelUpdate{}, io.EOF }
-		}, wantErr: ErrProviderModelInputCanceled},
-		{name: "cancellation", prompt: func(context.CancelFunc) ProviderModelPrompt {
-			return func(context.Context, Defaults) (ProviderModelUpdate, error) {
-				return ProviderModelUpdate{}, ErrProviderModelInputCanceled
+		{name: "EOF", prompt: func(context.CancelFunc) operatorsettings.ProviderModelPrompt {
+			return func(context.Context, operatorsettings.Defaults) (operatorsettings.ProviderModelUpdate, error) { return operatorsettings.ProviderModelUpdate{}, io.EOF }
+		}, wantErr: operatorsettings.ErrProviderModelInputCanceled},
+		{name: "cancellation", prompt: func(context.CancelFunc) operatorsettings.ProviderModelPrompt {
+			return func(context.Context, operatorsettings.Defaults) (operatorsettings.ProviderModelUpdate, error) {
+				return operatorsettings.ProviderModelUpdate{}, operatorsettings.ErrProviderModelInputCanceled
 			}
-		}, wantErr: ErrProviderModelInputCanceled},
-		{name: "interrupt", prompt: func(context.CancelFunc) ProviderModelPrompt {
-			return func(context.Context, Defaults) (ProviderModelUpdate, error) {
-				return ProviderModelUpdate{}, ErrProviderModelInputCanceled
+		}, wantErr: operatorsettings.ErrProviderModelInputCanceled},
+		{name: "interrupt", prompt: func(context.CancelFunc) operatorsettings.ProviderModelPrompt {
+			return func(context.Context, operatorsettings.Defaults) (operatorsettings.ProviderModelUpdate, error) {
+				return operatorsettings.ProviderModelUpdate{}, operatorsettings.ErrProviderModelInputCanceled
 			}
-		}, wantErr: ErrProviderModelInputCanceled},
-		{name: "observed context cancellation", prompt: func(cancel context.CancelFunc) ProviderModelPrompt {
-			return func(context.Context, Defaults) (ProviderModelUpdate, error) {
+		}, wantErr: operatorsettings.ErrProviderModelInputCanceled},
+		{name: "observed context cancellation", prompt: func(cancel context.CancelFunc) operatorsettings.ProviderModelPrompt {
+			return func(context.Context, operatorsettings.Defaults) (operatorsettings.ProviderModelUpdate, error) {
 				cancel()
 				provider := "codex"
-				return ProviderModelUpdate{Provider: &provider}, nil
+				return operatorsettings.ProviderModelUpdate{Provider: &provider}, nil
 			}
 		}, wantErr: context.Canceled},
-		{name: "prompt error", prompt: func(context.CancelFunc) ProviderModelPrompt {
-			return func(context.Context, Defaults) (ProviderModelUpdate, error) {
-				return ProviderModelUpdate{}, promptFailure
+		{name: "prompt error", prompt: func(context.CancelFunc) operatorsettings.ProviderModelPrompt {
+			return func(context.Context, operatorsettings.Defaults) (operatorsettings.ProviderModelUpdate, error) {
+				return operatorsettings.ProviderModelUpdate{}, promptFailure
 			}
 		}, wantErr: promptFailure},
 	} {
@@ -423,7 +425,7 @@ func TestConfigDocumentServiceConfigureProviderModelPrompted_InputStopsBeforePer
 					}
 				}
 				createCalls := 0
-				service := persistedConfigService(testFiles, func(dir, pattern string) (TemporaryFile, error) {
+				service := persistedConfigService(testFiles, func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 					createCalls++
 					return testCreateTemp(dir, pattern)
 				})
@@ -450,14 +452,14 @@ func TestConfigDocumentServiceConfigureProviderModel_PreCanceledContextHasNoFile
 	t.Parallel()
 	files := &faultFileSystem{FileSystem: testFiles}
 	createCalls := 0
-	service := persistedConfigService(files, func(dir, pattern string) (TemporaryFile, error) {
+	service := persistedConfigService(files, func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 		createCalls++
 		return testCreateTemp(dir, pattern)
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	provider := "codex"
-	_, err := service.ConfigureProviderModel(ctx, filepath.Join(t.TempDir(), "config.json"), ProviderModelUpdate{Provider: &provider})
+	_, err := service.ConfigureProviderModel(ctx, filepath.Join(t.TempDir(), "config.json"), operatorsettings.ProviderModelUpdate{Provider: &provider})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("ConfigureProviderModel() error = %v, want context canceled", err)
 	}
@@ -468,18 +470,21 @@ func TestConfigDocumentServiceConfigureProviderModel_PreCanceledContextHasNoFile
 
 func TestConfigDocumentServiceOperations_RejectMissingBoundaries(t *testing.T) {
 	t.Parallel()
-	document := emptyConfigDocument()
-	prompt := func(context.Context, Defaults) (ProviderModelUpdate, error) {
-		return ProviderModelUpdate{}, nil
-	}
 	valid := persistedConfigService(testFiles, testCreateTemp)
+	document, err := valid.Parse([]byte(`{}`))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	prompt := func(context.Context, operatorsettings.Defaults) (operatorsettings.ProviderModelUpdate, error) {
+		return operatorsettings.ProviderModelUpdate{}, nil
+	}
 	for _, test := range []struct {
 		name    string
 		invoke  func() error
 		wantErr string
 	}{
 		{name: "configure context", invoke: func() error {
-			_, err := valid.ConfigureProviderModel(nil, "config.json", ProviderModelUpdate{})
+			_, err := valid.ConfigureProviderModel(nil, "config.json", operatorsettings.ProviderModelUpdate{})
 			return err
 		}, wantErr: "context is required"},
 		{name: "prompt", invoke: func() error {
@@ -494,14 +499,14 @@ func TestConfigDocumentServiceOperations_RejectMissingBoundaries(t *testing.T) {
 			return valid.Persist(nil, "config.json", document)
 		}, wantErr: "context is required"},
 		{name: "filesystem", invoke: func() error {
-			return (ConfigDocumentService{}).Persist(context.Background(), "config.json", document)
+			return (operatorsettings.ConfigDocumentService{}).Persist(context.Background(), "config.json", document)
 		}, wantErr: "filesystem is required"},
 		{name: "temporary file creator", invoke: func() error {
-			service := ConfigDocumentService{Files: testFiles}
+			service := operatorsettings.ConfigDocumentService{Files: testFiles}
 			return service.Persist(context.Background(), "config.json", document)
 		}, wantErr: "temporary-file creator is required"},
 		{name: "persistence lock", invoke: func() error {
-			service := ConfigDocumentService{Files: testFiles, CreateTemp: testCreateTemp}
+			service := operatorsettings.ConfigDocumentService{Files: testFiles, CreateTemp: testCreateTemp}
 			return service.Persist(context.Background(), "config.json", document)
 		}, wantErr: "persistence lock is required"},
 		{name: "path", invoke: func() error {
@@ -517,7 +522,7 @@ func TestConfigDocumentServiceOperations_RejectMissingBoundaries(t *testing.T) {
 }
 
 type faultFileSystem struct {
-	FileSystem
+	operatorsettings.FileSystem
 	failPhase      string
 	cancelOnChmod  context.CancelFunc
 	cancelOnRename context.CancelFunc
@@ -565,7 +570,7 @@ func (files *faultFileSystem) Rename(oldPath, newPath string) error {
 }
 
 type readCountingFileSystem struct {
-	FileSystem
+	operatorsettings.FileSystem
 	reads atomic.Int32
 }
 
@@ -589,7 +594,7 @@ func (lock *observedLocker) Unlock() {
 }
 
 type faultTemporaryFile struct {
-	TemporaryFile
+	operatorsettings.TemporaryFile
 	failPhase  string
 	shortWrite bool
 }
@@ -619,8 +624,8 @@ func (file *faultTemporaryFile) Close() error {
 	return file.TemporaryFile.Close()
 }
 
-func faultTemporaryFileCreator(failPhase string, shortWrite bool) CreateTemporaryFile {
-	return func(dir, pattern string) (TemporaryFile, error) {
+func faultTemporaryFileCreator(failPhase string, shortWrite bool) operatorsettings.CreateTemporaryFile {
+	return func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 		if failPhase == "create" {
 			return nil, errors.New("injected create failure")
 		}
@@ -632,8 +637,8 @@ func faultTemporaryFileCreator(failPhase string, shortWrite bool) CreateTemporar
 	}
 }
 
-func persistedConfigService(files FileSystem, create CreateTemporaryFile) ConfigDocumentService {
-	return ConfigDocumentService{
+func persistedConfigService(files operatorsettings.FileSystem, create operatorsettings.CreateTemporaryFile) operatorsettings.ConfigDocumentService {
+	return operatorsettings.ConfigDocumentService{
 		Files:           files,
 		CreateTemp:      create,
 		Providers:       controlledProviderCatalog,
@@ -643,7 +648,7 @@ func persistedConfigService(files FileSystem, create CreateTemporaryFile) Config
 	}
 }
 
-func persistedConfigFixture(t *testing.T) (string, []byte, ConfigDocument) {
+func persistedConfigFixture(t *testing.T) (string, []byte, operatorsettings.ConfigDocument) {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
@@ -657,7 +662,7 @@ func persistedConfigFixture(t *testing.T) (string, []byte, ConfigDocument) {
 		t.Fatalf("Parse() error = %v", err)
 	}
 	model := "replacement"
-	document, err = service.MergeProviderModelDefaults(document, ProviderModelUpdate{Model: &model})
+	document, err = service.MergeProviderModelDefaults(document, operatorsettings.ProviderModelUpdate{Model: &model})
 	if err != nil {
 		t.Fatalf("MergeProviderModelDefaults() error = %v", err)
 	}
@@ -675,7 +680,7 @@ func assertConfigBytesUnchanged(t *testing.T, path string, want []byte) {
 	}
 }
 
-func assertConfigSemanticallyUnchanged(t *testing.T, service ConfigDocumentService, path string, want []byte) {
+func assertConfigSemanticallyUnchanged(t *testing.T, service operatorsettings.ConfigDocumentService, path string, want []byte) {
 	t.Helper()
 	wantDocument, err := service.Parse(want)
 	if err != nil {

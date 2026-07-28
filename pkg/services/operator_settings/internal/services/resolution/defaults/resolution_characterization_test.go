@@ -1,4 +1,4 @@
-package operatorsettings_test
+package settingsresolution_test
 
 import (
 	"errors"

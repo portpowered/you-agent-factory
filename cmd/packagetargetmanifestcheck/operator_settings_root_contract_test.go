@@ -25,10 +25,8 @@ func TestOperatorSettingsExcessRootContractFoldDestinations(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]string{
-		"resolution_composition":             "pkg/services/operator_settings/internal/services/resolution",
-		"providers_root_construction":        "pkg/services/operator_settings/internal",
-		"construction_ports":                 "pkg/services/operator_settings/internal",
-		"defaults_resolution_implementation": "pkg/services/operator_settings/internal/services/resolution",
+		"providers_root_construction": "pkg/services/operator_settings/internal",
+		"construction_ports":          "pkg/services/operator_settings/internal",
 	}
 
 	for _, target := range operatorSettingsExcessRootContractFolds {
@@ -136,9 +134,7 @@ func TestOperatorSettingsExcessRootContractFoldClustersMatchInventoryNote(t *tes
 	slices.Sort(gotClusters)
 	wantClusters := []string{
 		"construction_ports",
-		"defaults_resolution_implementation",
 		"providers_root_construction",
-		"resolution_composition",
 	}
 	if !slices.Equal(gotClusters, wantClusters) {
 		t.Fatalf("fold clusters = %v, want %v", gotClusters, wantClusters)

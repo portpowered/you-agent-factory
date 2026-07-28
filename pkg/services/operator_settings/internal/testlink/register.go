@@ -10,6 +10,7 @@ import (
 
 	_ "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/identityinputinventory"
 	_ "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document"
+	_ "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/defaults"
 )
 
 // RegisterDocumentOwner wires the nested document owner constructor into Operator Settings

@@ -1,4 +1,4 @@
-package operatorsettings
+package settingsresolution
 
 import (
 	"fmt"

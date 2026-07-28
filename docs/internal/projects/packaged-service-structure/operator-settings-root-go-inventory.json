@@ -4,16 +4,6 @@
   "sortKey": "file name ascending byte order",
   "clusters": [
     {
-      "cluster": "resolution_composition",
-      "destination": "pkg/services/operator_settings/internal/services/resolution",
-      "files": [
-        "environment_resolution.go",
-        "provider_scope.go",
-        "resolution_characterization_test.go",
-        "resolution_composition.go"
-      ]
-    },
-    {
       "cluster": "providers_root_construction",
       "destination": "pkg/services/operator_settings/internal",
       "files": [
@@ -29,25 +19,9 @@
         "service_characterization_test.go",
         "testmain_test.go"
       ]
-    },
-    {
-      "cluster": "defaults_resolution_implementation",
-      "destination": "pkg/services/operator_settings/internal/services/resolution",
-      "files": [
-        "atomic_config_test.go",
-        "operator_config.go",
-        "operator_config_test.go"
-      ]
     }
   ],
   "files": [
-    {
-      "file": "atomic_config_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal/services/resolution",
-      "cluster": "defaults_resolution_implementation",
-      "note": "Atomic defaults/config characterization folds with private resolution implementation."
-    },
     {
       "file": "backend_scope.go",
       "classification": "thin_root_contract",
@@ -57,6 +31,16 @@
       "file": "config_document.go",
       "classification": "thin_root_contract",
       "note": "Peer-facing ConfigDocument and ConfigDocumentService thin surface delegating to the private document subservice."
+    },
+    {
+      "file": "defaults_contract.go",
+      "classification": "thin_root_contract",
+      "note": "Peer-facing operator defaults/config vocabulary retained at the thin Operator Settings root."
+    },
+    {
+      "file": "defaults_resolution.go",
+      "classification": "thin_root_contract",
+      "note": "Peer-facing defaults-resolution operations thin surface delegating to the private resolution subservice."
     },
     {
       "file": "dependencies.go",
@@ -83,37 +67,9 @@
       "note": "Peer-facing document request, result, value, and typed-error contracts."
     },
     {
-      "file": "environment_resolution.go",
-      "classification": "fold_target_resolution",
-      "foldDestination": "pkg/services/operator_settings/internal/services/resolution",
-      "cluster": "resolution_composition",
-      "note": "Environment-aware defaults resolution helper folds into private resolution subservice."
-    },
-    {
       "file": "input_inventory_contract.go",
       "classification": "thin_root_contract",
       "note": "Peer-facing operator-config input inventory types and ProjectInputInventory thin surface delegating to private implementation."
-    },
-    {
-      "file": "operator_config.go",
-      "classification": "fold_target_implementation",
-      "foldDestination": "pkg/services/operator_settings/internal/services/resolution",
-      "cluster": "defaults_resolution_implementation",
-      "note": "Defaults precedence and file/env/flag resolution implementation folds into private resolution subservice."
-    },
-    {
-      "file": "operator_config_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal/services/resolution",
-      "cluster": "defaults_resolution_implementation",
-      "note": "Operator-config resolution characterization folds with private resolution subservice."
-    },
-    {
-      "file": "provider_scope.go",
-      "classification": "fold_target_resolution",
-      "foldDestination": "pkg/services/operator_settings/internal/services/resolution",
-      "cluster": "resolution_composition",
-      "note": "Provider backend-scope derivation helper folds into private resolution subservice."
     },
     {
       "file": "providers_root_construct.go",
@@ -121,20 +77,6 @@
       "foldDestination": "pkg/services/operator_settings/internal",
       "cluster": "providers_root_construction",
       "note": "Providers root constructor registration folds into private implementation."
-    },
-    {
-      "file": "resolution_characterization_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal/services/resolution",
-      "cluster": "resolution_composition",
-      "note": "Resolution implementation characterization folds with private resolution subservice."
-    },
-    {
-      "file": "resolution_composition.go",
-      "classification": "fold_target_resolution",
-      "foldDestination": "pkg/services/operator_settings/internal/services/resolution",
-      "cluster": "resolution_composition",
-      "note": "Defaults resolution composition registration folds into private resolution subservice."
     },
     {
       "file": "resolution_contract.go",

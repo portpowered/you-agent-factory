@@ -1023,6 +1023,16 @@ response-stream output.
   through `ConfigureIdentityInputInventoryOperations`; wire/construct/servicewire/testlink
   blank-import the private package so registration runs before backend-scope and
   input-inventory callers execute.
+- CLN-SET-CONTRACT-ROOTS story-004 folds `resolution_composition` and
+  `defaults_resolution_implementation` into
+  `pkg/services/operator_settings/internal/services/resolution/defaults`
+  (`operator_config.go`, `environment_resolution.go`, `provider_scope.go`,
+  `register.go`); the peer root keeps `defaults_contract.go`,
+  `defaults_resolution.go`, and `resolution_contract.go` as thin surfaces wired
+  through `ConfigureDefaultsResolutionOperations` and
+  `ConfigureDefaultsResolutionFromHome`; keep `Config.Normalize` at the root for
+  codec decode paths; wire/construct/servicewire/testlink blank-import the
+  defaults subpackage so registration runs before defaults-resolution callers.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore
