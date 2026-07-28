@@ -50,6 +50,33 @@ func TestRecordingsTopLevelUnexpectedChildren(t *testing.T) {
 	}
 }
 
+func TestVerifyRecordingsTopLevelInventoryPassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	root := repositoryRoot(t)
+	if err := ownershipinventory.VerifyRecordingsTopLevelInventory(root); err != nil {
+		t.Fatalf("VerifyRecordingsTopLevelInventory() error = %v", err)
+	}
+}
+
+func TestVerifyRecordingsDeletedTransitionalPublicPathsAbsentPassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	root := repositoryRoot(t)
+	if err := ownershipinventory.VerifyRecordingsDeletedTransitionalPublicPathsAbsent(root); err != nil {
+		t.Fatalf("VerifyRecordingsDeletedTransitionalPublicPathsAbsent() error = %v", err)
+	}
+}
+
+func TestVerifyRecordingsPostDelTransitionalDebtBurnDownPassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	root := repositoryRoot(t)
+	if err := ownershipinventory.VerifyRecordingsPostDelTransitionalDebtBurnDown(root); err != nil {
+		t.Fatalf("VerifyRecordingsPostDelTransitionalDebtBurnDown() error = %v", err)
+	}
+}
+
 func TestIsRecordingsCanonicalRetainRest(t *testing.T) {
 	t.Parallel()
 
