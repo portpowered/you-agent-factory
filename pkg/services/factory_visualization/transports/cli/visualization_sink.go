@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 
-	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboard"
 )
@@ -30,19 +29,13 @@ func (s *service) BuildVisualizationSink(cfg SinkConfig) factoryvisualization.Si
 
 func renderSimpleDashboard(output io.Writer, input factoryvisualization.View) {
 	fmt.Fprint(output, dashboard.FormatSimpleDashboardWithRenderData(
-		dashboardEngineSnapshotHeader(input.Runtime),
+		dashboard.SimpleDashboardHeader{
+			TickCount:     input.Runtime.TickCount,
+			FactoryState:  input.Runtime.FactoryState,
+			RuntimeStatus: input.Runtime.RuntimeStatus,
+			Uptime:        input.Runtime.Uptime,
+		},
 		input.RenderData,
 		input.ObservedAt,
 	))
-}
-
-func dashboardEngineSnapshotHeader(
-	runtime factoryvisualization.RuntimeObservation,
-) state.RuntimeEngineStateSnapshot {
-	return state.RuntimeEngineStateSnapshot{
-		TickCount:     runtime.TickCount,
-		FactoryState:  runtime.FactoryState,
-		RuntimeStatus: runtime.RuntimeStatus,
-		Uptime:        runtime.Uptime,
-	}
 }

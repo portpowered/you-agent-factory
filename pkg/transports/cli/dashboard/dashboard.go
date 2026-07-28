@@ -12,6 +12,15 @@ import (
 	"time"
 )
 
+// SimpleDashboardHeader carries orchestration-neutral dashboard header facts
+// for simple-dashboard rendering without Petri-shaped snapshot aliases.
+type SimpleDashboardHeader struct {
+	FactoryState  string
+	RuntimeStatus interfaces.RuntimeStatus
+	TickCount     int
+	Uptime        time.Duration
+}
+
 // FormatSimpleDashboard renders the snapshot-only dashboard shell. Session
 // accounting requires FormatSimpleDashboardWithRenderData.
 func FormatSimpleDashboard(
@@ -34,12 +43,12 @@ func FormatSimpleDashboard(
 // FormatSimpleDashboardWithRenderData renders a dashboard using the dedicated
 // simple-dashboard render DTO for session accounting.
 func FormatSimpleDashboardWithRenderData(
-	es state.RuntimeEngineStateSnapshot,
+	header SimpleDashboardHeader,
 	renderData recordings.SimpleDashboardRenderData,
 	now time.Time,
 ) string {
 	return formatSimpleDashboardHeader(
-		es,
+		header,
 		now,
 		dashboardActiveViewFromRenderData(renderData),
 		dashboardQueueCountViewsFromRenderData(renderData),
@@ -50,7 +59,7 @@ func FormatSimpleDashboardWithRenderData(
 }
 
 func formatSimpleDashboardHeader(
-	es state.RuntimeEngineStateSnapshot,
+	header SimpleDashboardHeader,
 	now time.Time,
 	active dashboardActiveView,
 	queueCounts []dashboardQueueCountView,
@@ -62,9 +71,9 @@ func formatSimpleDashboardHeader(
 
 	b.WriteString("╔══════════════════════════════════════════╗\n")
 	fmt.Fprintf(&b, "║  Factory: %-10s  Runtime: %-8s  ║\n",
-		es.FactoryState, es.RuntimeStatus)
+		header.FactoryState, header.RuntimeStatus)
 	fmt.Fprintf(&b, "║  Uptime:  %-10s  Tick: %-11d  ║\n",
-		FormatDuration(es.Uptime.Truncate(time.Second)), es.TickCount)
+		FormatDuration(header.Uptime.Truncate(time.Second)), header.TickCount)
 	b.WriteString("╚══════════════════════════════════════════╝\n")
 
 	renderActiveWorkstations(&b, active, now)
@@ -73,7 +82,7 @@ func formatSimpleDashboardHeader(
 	renderCompletedWorkstations(&b, completedHistory)
 
 	if summary.HasData {
-		renderSessionMetrics(&b, summary, dashboardSessionStartTime(es.Uptime, now))
+		renderSessionMetrics(&b, summary, dashboardSessionStartTime(header.Uptime, now))
 	}
 
 	return b.String()
@@ -93,7 +102,7 @@ func formatSimpleDashboard(
 		topology = es.Topology
 	}
 	return formatSimpleDashboardHeader(
-		state.RuntimeEngineStateSnapshot{
+		SimpleDashboardHeader{
 			FactoryState:  es.FactoryState,
 			RuntimeStatus: es.RuntimeStatus,
 			TickCount:     es.TickCount,

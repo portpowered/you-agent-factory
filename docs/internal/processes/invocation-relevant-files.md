@@ -647,6 +647,13 @@ response-stream output.
   event subscription. Behavioral proof:
   `pkg/services/factory_visualization/runtime_observation_boundary_test.go`
   (`TestRuntimeObservationUsesRootServiceObserve`).
+- CLI visualization presentation maps dashboard header facts from
+  Visualization-owned `RuntimeObservation` fields through
+  `dashboard.SimpleDashboardHeader` instead of Petri-shaped
+  `RuntimeEngineStateSnapshot` aliases. The leased CLI transport package does
+  not import Factory Runtime. Proof:
+  `pkg/services/factory_visualization/transports/cli/presentation_runtime_snapshot_boundary_test.go`
+  (`TestPresentationSinkUsesVisualizationOwnedRuntimeFacts`).
 - Shared ordered output serialization and final-once terminal write helpers
   (transport-shaped, non-authority):
   `pkg/services/factory_visualization/factory_event_stream.go`,
