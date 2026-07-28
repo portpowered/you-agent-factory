@@ -2,15 +2,42 @@ package mcp
 
 import (
 	"fmt"
+	"strings"
 )
 
 const errorCodeBadRequest = "BAD_REQUEST"
 
 func decodeInputErrorEnvelope(context string, err error) ToolErrorEnvelope {
+	message := context
+	details := map[string]any{}
+	if err != nil {
+		if trimmed := strings.TrimSpace(err.Error()); trimmed != "" {
+			message = fmt.Sprintf("%s: %s", context, trimmed)
+		}
+		details["reason"] = err.Error()
+	}
 	return ToolErrorEnvelope{
 		Code:      errorCodeBadRequest,
-		Message:   fmt.Sprintf("%s: %v", context, err),
+		Message:   message,
 		Retryable: false,
+		Details:   details,
+	}
+}
+
+func validationErrorEnvelope(err error) ToolErrorEnvelope {
+	message := "invalid tool input"
+	details := map[string]any{}
+	if err != nil {
+		if trimmed := strings.TrimSpace(err.Error()); trimmed != "" {
+			message = trimmed
+		}
+		details["reason"] = err.Error()
+	}
+	return ToolErrorEnvelope{
+		Code:      errorCodeBadRequest,
+		Message:   message,
+		Retryable: false,
+		Details:   details,
 	}
 }
 

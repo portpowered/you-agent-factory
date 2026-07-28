@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
@@ -27,9 +28,10 @@ func Observe(
 		return ToolResponse[factoryruntime.ObserveResult]{Error: &envelope}
 	}
 
-	request := factoryruntime.ObserveRequest{}
-	if input.Scope != nil {
-		request.Scope = factoryruntime.ObservationScope(*input.Scope)
+	request, err := toObserveRequest(input)
+	if err != nil {
+		envelope := validationErrorEnvelope(err)
+		return ToolResponse[factoryruntime.ObserveResult]{Error: &envelope}
 	}
 
 	result, err := runtime.Observe(ctx, request)
@@ -38,4 +40,32 @@ func Observe(
 		return ToolResponse[factoryruntime.ObserveResult]{Error: &envelope}
 	}
 	return ToolResponse[factoryruntime.ObserveResult]{Result: &result}
+}
+
+func toObserveRequest(input ObserveInput) (factoryruntime.ObserveRequest, error) {
+	request := factoryruntime.ObserveRequest{}
+	if input.Scope == nil {
+		return request, nil
+	}
+	scope := factoryruntime.ObservationScope(*input.Scope)
+	if !validObservationScope(scope) {
+		return factoryruntime.ObserveRequest{}, fmt.Errorf(
+			`unsupported Factory Runtime observation scope %q`,
+			*input.Scope,
+		)
+	}
+	request.Scope = scope
+	return request, nil
+}
+
+func validObservationScope(scope factoryruntime.ObservationScope) bool {
+	switch scope {
+	case "", factoryruntime.ObservationScopeFull, factoryruntime.ObservationScopeStatus,
+		factoryruntime.ObservationScopeProgress, factoryruntime.ObservationScopeDispatches,
+		factoryruntime.ObservationScopeResults, factoryruntime.ObservationScopeResources,
+		factoryruntime.ObservationScopeHealth:
+		return true
+	default:
+		return false
+	}
 }
