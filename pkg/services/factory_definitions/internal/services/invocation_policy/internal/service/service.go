@@ -2,7 +2,7 @@ package service
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydecisionenvelope "github.com/portpowered/infinite-you/pkg/services/factory_definitions/decisionenvelope"
+	invocationpolicydecisionenvelope "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope"
 	factoryinvocationinterpolation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationinterpolation"
 	factoryinvocationoutput "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationoutput"
 	factoryinvocationworktype "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationworktype"
@@ -33,7 +33,7 @@ var _ invocationpolicyservice.Service = (*Service)(nil)
 // implementations under this owner without changing the published root surface.
 func New() *Service {
 	return &Service{
-		decisionEnvelope:        factorydecisionenvelope.NewService(),
+		decisionEnvelope:        invocationpolicydecisionenvelope.NewService(),
 		invocationInterpolation: factoryinvocationinterpolation.NewService(),
 		invocationOutput:        factoryinvocationoutput.NewService(),
 		invocationWorkType:      factoryinvocationworktype.NewService(),
