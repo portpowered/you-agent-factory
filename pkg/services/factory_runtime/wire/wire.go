@@ -73,3 +73,21 @@ func NewService(
 	}
 	return service, nil
 }
+
+// BindActiveService attaches the hosted runtime delegate that serves published
+// control, observation, and dispatch-plan operations on a wire-constructed
+// root.
+func BindActiveService(root factoryruntime.Service, active factoryruntime.Service) error {
+	if root == nil {
+		return fmt.Errorf("bind Factory Runtime active service: root is required")
+	}
+	if active == nil {
+		return fmt.Errorf("bind Factory Runtime active service: active service is required")
+	}
+	concrete, ok := root.(*factoryruntimeinternal.Root)
+	if !ok {
+		return fmt.Errorf("bind Factory Runtime active service: root is not wire-constructed implementation")
+	}
+	concrete.BindActiveService(active)
+	return nil
+}

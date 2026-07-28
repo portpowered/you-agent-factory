@@ -152,6 +152,16 @@ func (r *Root) RestoreCheckpoint(
 	}
 }
 
+// BindActiveService attaches the hosted runtime delegate that serves published
+// control, observation, and dispatch-plan operations on the wire-constructed
+// root.
+func (r *Root) BindActiveService(service factoryruntime.Service) {
+	if r == nil {
+		return
+	}
+	r.active = service
+}
+
 func (r *Root) delegate() factoryruntime.Service {
 	if r == nil || r.orchestration == nil || r.instanceHost == nil || r.dispatchPlan == nil {
 		return nil
