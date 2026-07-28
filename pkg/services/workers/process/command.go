@@ -54,6 +54,87 @@ func AdaptCommandRunner(runner platformprocess.CommandRunner) CommandRunner {
 	return adapted
 }
 
+// ProjectPlatformCommandRunner adapts a Workers-owned command runner back to
+// the platform subprocess boundary used by Providers built-in effects.
+func ProjectPlatformCommandRunner(runner CommandRunner) platformprocess.CommandRunner {
+	if runner == nil {
+		return nil
+	}
+	if adapted, ok := runner.(ExecCommandRunner); ok && adapted.Runner != nil {
+		return adapted.Runner
+	}
+	if adapted, ok := runner.(*ExecCommandRunner); ok && adapted != nil && adapted.Runner != nil {
+		return adapted.Runner
+	}
+	if streaming, ok := runner.(StreamingAdaptedCommandRunner); ok && streaming.Runner != nil {
+		return ProjectPlatformCommandRunner(streaming.ExecCommandRunner)
+	}
+	if streaming, ok := runner.(*StreamingAdaptedCommandRunner); ok && streaming != nil && streaming.Runner != nil {
+		return ProjectPlatformCommandRunner(streaming.ExecCommandRunner)
+	}
+	return projectedPlatformCommandRunner{runner: runner}
+}
+
+type projectedPlatformCommandRunner struct {
+	runner CommandRunner
+}
+
+func (r projectedPlatformCommandRunner) Run(
+	ctx context.Context,
+	req platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	if r.runner == nil {
+		return platformprocess.CommandResult{}, errors.New("workers projected platform command runner is required")
+	}
+	result, err := r.runner.Run(ctx, workersCommandRequest(req))
+	return platformCommandResult(result), err
+}
+
+func (r projectedPlatformCommandRunner) RunStreaming(
+	ctx context.Context,
+	req platformprocess.CommandRequest,
+	observer platformprocess.OutputChunkObserver,
+) (platformprocess.CommandResult, error) {
+	if r.runner == nil {
+		return platformprocess.CommandResult{}, errors.New("workers projected platform command runner is required")
+	}
+	streaming, ok := r.runner.(interface {
+		RunStreaming(context.Context, CommandRequest, OutputChunkObserver) (CommandResult, error)
+	})
+	if !ok {
+		result, err := r.Run(ctx, req)
+		if observer != nil {
+			if len(result.Stdout) > 0 {
+				observer(platformprocess.OutputStreamStdout, append([]byte(nil), result.Stdout...))
+			}
+			if len(result.Stderr) > 0 {
+				observer(platformprocess.OutputStreamStderr, append([]byte(nil), result.Stderr...))
+			}
+		}
+		return result, err
+	}
+	result, err := streaming.RunStreaming(ctx, workersCommandRequest(req), observer)
+	return platformCommandResult(result), err
+}
+
+func workersCommandRequest(req platformprocess.CommandRequest) CommandRequest {
+	return CommandRequest{
+		Command: req.Command,
+		Args:    req.Args,
+		Stdin:   req.Stdin,
+		Env:     req.Env,
+		WorkDir: req.WorkDir,
+	}
+}
+
+func platformCommandResult(result CommandResult) platformprocess.CommandResult {
+	return platformprocess.CommandResult{
+		Stdout:   result.Stdout,
+		Stderr:   result.Stderr,
+		ExitCode: result.ExitCode,
+	}
+}
+
 func (r ExecCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
 	runner := r.Runner
 	if runner == nil {

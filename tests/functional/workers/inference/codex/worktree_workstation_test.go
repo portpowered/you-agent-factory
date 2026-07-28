@@ -71,7 +71,9 @@ Process the input task.
 			})
 
 			runner := testutil.NewProviderCommandRunner(
-				platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
+				platformprocess.CommandResult{Stdout: []byte(
+					`{"type":"item.completed","item":{"id":"message-final","type":"agent_message","text":"Done. COMPLETE"}}` + "\n",
+				)},
 			)
 			server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 				FactoryDir: factoryDir,
@@ -96,7 +98,7 @@ Process the input task.
 				t.Fatalf("work dir = %q, want materialized checkout %q", call.WorkDir, wantCheckout)
 			}
 			assertArgsDoNotContain(t, call.Args, "--worktree")
-			support.AssertArgsContainSequence(t, call.Args, []string{"exec", "--model", "test-model", "-"})
+			support.AssertArgsContainSequence(t, call.Args, []string{"exec", "--json", "--model", "test-model", "-"})
 
 			if _, err := os.Stat(wantCheckout); err != nil {
 				t.Fatalf("materialized checkout missing at %s: %v", wantCheckout, err)

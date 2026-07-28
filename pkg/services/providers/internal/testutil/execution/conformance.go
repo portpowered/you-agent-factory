@@ -64,6 +64,9 @@ type Subject struct {
 	NewAdapter       func(Plan) Adapter
 	NewRoot          func(execution.Attempt) (providers.Service, error)
 	SupportsProgress bool
+	// Provider selects the canonical catalog identity exercised by the harness.
+	// It defaults to Codex when unset so existing fixtures stay provider-neutral.
+	Provider providers.ID
 }
 
 // Run exercises a controllable adapter only through the singular Providers
@@ -109,19 +112,20 @@ func Run(t *testing.T, subject Subject) {
 
 func runDetachedSuccess(t *testing.T, subject Subject) {
 	t.Helper()
-	nativeResult := successResult(true, nil)
+	provider := subjectProvider(subject)
+	nativeResult := successResult(provider, true, nil)
 	adapter, root := newSubjectRoot(t, subject, Plan{
 		Result:        nativeResult,
 		MutateRequest: true,
 	})
-	request := conformanceRequest()
+	request := conformanceRequest(provider)
 	wantRequest := request.Clone()
 
 	result, err := root.Execute(t.Context(), request)
 	if err != nil {
 		t.Fatalf("Execute(success) error = %v", err)
 	}
-	assertSuccess(t, result, true)
+	assertSuccess(t, provider, result, true)
 	if request.ResumeSession.ID != conformanceSessionID {
 		t.Fatalf("caller session = %#v, want unchanged", request.ResumeSession)
 	}
@@ -129,29 +133,32 @@ func runDetachedSuccess(t *testing.T, subject Subject) {
 
 	result.SessionRef.ID = "caller-mutated"
 	result.Diagnostics.Metadata["safe"] = "caller-mutated"
-	later, err := root.Execute(t.Context(), conformanceRequest())
+	later, err := root.Execute(t.Context(), conformanceRequest(provider))
 	if err != nil {
 		t.Fatalf("second Execute(success) error = %v", err)
 	}
-	assertSuccess(t, later, true)
+	assertSuccess(t, provider, later, true)
 	assertObservation(t, adapter, 2, 2, wantRequest)
 }
 
 func runSessionlessSuccess(t *testing.T, subject Subject) {
 	t.Helper()
+	provider := subjectProvider(subject)
 	adapter, root := newSubjectRoot(t, subject, Plan{
-		Result: successResult(false, nil),
+		Result: successResult(provider, false, nil),
 	})
-	result, err := root.Execute(t.Context(), conformanceRequest())
+	request := conformanceRequest(provider)
+	result, err := root.Execute(t.Context(), request)
 	if err != nil {
 		t.Fatalf("Execute(sessionless success) error = %v", err)
 	}
-	assertSuccess(t, result, false)
-	assertObservation(t, adapter, 1, 1, conformanceRequest())
+	assertSuccess(t, provider, result, false)
+	assertObservation(t, adapter, 1, 1, request)
 }
 
 func runProgressSuccess(t *testing.T, subject Subject) {
 	t.Helper()
+	provider := subjectProvider(subject)
 	progress := make([]providers.ExecuteProgress, conformanceProgressFacts)
 	for index := range progress {
 		progress[index] = providers.ExecuteProgress{
@@ -164,9 +171,10 @@ func runProgressSuccess(t *testing.T, subject Subject) {
 		}
 	}
 	adapter, root := newSubjectRoot(t, subject, Plan{
-		Result: successResult(true, progress),
+		Result: successResult(provider, true, progress),
 	})
-	result, err := root.Execute(t.Context(), conformanceRequest())
+	request := conformanceRequest(provider)
+	result, err := root.Execute(t.Context(), request)
 	if err != nil {
 		t.Fatalf("Execute(progress success) error = %v", err)
 	}
@@ -183,34 +191,38 @@ func runProgressSuccess(t *testing.T, subject Subject) {
 			t.Fatalf("progress[%d] leaked request/native-sensitive facts: %#v", index, fact)
 		}
 	}
-	assertObservation(t, adapter, 1, 1, conformanceRequest())
+	assertObservation(t, adapter, 1, 1, request)
 }
 
 func runDeclaredFailure(t *testing.T, subject Subject) {
 	t.Helper()
+	provider := subjectProvider(subject)
+	request := conformanceRequest(provider)
 	adapter, root := newSubjectRoot(t, subject, Plan{
 		Failure: providers.ExecuteFailure{
 			Kind:    providers.ExecuteFailureKindThrottled,
 			Message: "throttled " + conformanceSecret,
 		},
 	})
-	result, err := root.Execute(t.Context(), conformanceRequest())
+	result, err := root.Execute(t.Context(), request)
 	assertFailure(t, result, err, providers.ErrExecuteFailed, providers.ExecuteFailureKindThrottled)
 	if strings.Contains(err.Error(), conformanceSecret) {
 		t.Fatalf("Execute() error leaked sensitive request facts: %v", err)
 	}
-	assertObservation(t, adapter, 1, 1, conformanceRequest())
+	assertObservation(t, adapter, 1, 1, request)
 }
 
 func runParseFailure(t *testing.T, subject Subject) {
 	t.Helper()
+	provider := subjectProvider(subject)
+	request := conformanceRequest(provider)
 	adapter, root := newSubjectRoot(t, subject, Plan{
-		Result: successResult(true, nil),
+		Result: successResult(provider, true, nil),
 		Failure: execution.AttemptFailure{
 			FinalParseError: errors.New("raw native parse payload"),
 		},
 	})
-	result, err := root.Execute(t.Context(), conformanceRequest())
+	result, err := root.Execute(t.Context(), request)
 	failure := assertFailure(
 		t,
 		result,
@@ -225,11 +237,13 @@ func runParseFailure(t *testing.T, subject Subject) {
 	if strings.Contains(err.Error(), "raw native") {
 		t.Fatalf("Execute() error leaked native parse payload: %v", err)
 	}
-	assertObservation(t, adapter, 1, 1, conformanceRequest())
+	assertObservation(t, adapter, 1, 1, request)
 }
 
 func runContextFailure(t *testing.T, subject Subject, deadline bool) {
 	t.Helper()
+	provider := subjectProvider(subject)
+	request := conformanceRequest(provider)
 	adapter, root := newSubjectRoot(t, subject, Plan{WaitForContext: true})
 	ctx, cancel := context.WithCancel(t.Context())
 	wantSentinel := providers.ErrExecuteCancelled
@@ -242,7 +256,7 @@ func runContextFailure(t *testing.T, subject Subject, deadline bool) {
 	defer cancel()
 
 	outcome := make(chan executeOutcome, 1)
-	request := conformanceRequest()
+	wantRequest := request.Clone()
 	go func() {
 		result, err := root.Execute(ctx, request)
 		outcome <- executeOutcome{result: result, err: err}
@@ -258,13 +272,14 @@ func runContextFailure(t *testing.T, subject Subject, deadline bool) {
 	case <-time.After(time.Second):
 		t.Fatal("Execute() did not stop after its context ended")
 	}
-	assertObservation(t, adapter, 1, 1, conformanceRequest())
+	assertObservation(t, adapter, 1, 1, wantRequest)
 }
 
 func runPreTerminatedContext(t *testing.T, subject Subject, deadline bool) {
 	t.Helper()
+	provider := subjectProvider(subject)
 	adapter, root := newSubjectRoot(t, subject, Plan{
-		Result: successResult(true, nil),
+		Result: successResult(provider, true, nil),
 	})
 	ctx, cancel := context.WithCancel(t.Context())
 	wantSentinel := providers.ErrExecuteCancelled
@@ -276,21 +291,24 @@ func runPreTerminatedContext(t *testing.T, subject Subject, deadline bool) {
 	}
 	cancel()
 
-	result, err := root.Execute(ctx, conformanceRequest())
+	request := conformanceRequest(provider)
+	result, err := root.Execute(ctx, request)
 	assertFailure(t, result, err, wantSentinel, wantKind)
 	assertObservation(t, adapter, 0, 0, providers.ExecuteRequest{})
 }
 
 func runLateSuccessAfterCancellation(t *testing.T, subject Subject) {
 	t.Helper()
+	provider := subjectProvider(subject)
+	request := conformanceRequest(provider)
 	adapter, root := newSubjectRoot(t, subject, Plan{
-		Result:                    successResult(true, nil),
+		Result:                    successResult(provider, true, nil),
 		ReturnSuccessAfterContext: true,
 	})
 	ctx, cancel := context.WithCancel(t.Context())
 	outcome := make(chan executeOutcome, 1)
 	go func() {
-		result, err := root.Execute(ctx, conformanceRequest())
+		result, err := root.Execute(ctx, request)
 		outcome <- executeOutcome{result: result, err: err}
 	}()
 	awaitStarted(t, adapter.Started)
@@ -308,7 +326,7 @@ func runLateSuccessAfterCancellation(t *testing.T, subject Subject) {
 	case <-time.After(time.Second):
 		t.Fatal("Execute() did not suppress success after cancellation")
 	}
-	assertObservation(t, adapter, 1, 1, conformanceRequest())
+	assertObservation(t, adapter, 1, 1, request)
 }
 
 type executeOutcome struct {
@@ -331,9 +349,16 @@ func newSubjectRoot(
 	return adapter, root
 }
 
-func conformanceRequest() providers.ExecuteRequest {
+func subjectProvider(subject Subject) providers.ID {
+	if subject.Provider != "" {
+		return subject.Provider
+	}
+	return providers.IDCodex
+}
+
+func conformanceRequest(provider providers.ID) providers.ExecuteRequest {
 	return providers.ExecuteRequest{
-		Provider:         providers.IDCodex,
+		Provider:         provider,
 		AttemptID:        "attempt-conformance",
 		SystemPrompt:     conformanceSecret,
 		UserMessage:      "execute the fixture",
@@ -341,7 +366,7 @@ func conformanceRequest() providers.ExecuteRequest {
 		WorkingDirectory: "C:/conformance",
 		Worktree:         "C:/conformance/tree",
 		ResumeSession: &providers.SessionRef{
-			Provider: providers.IDCodex,
+			Provider: provider,
 			Kind:     providers.SessionIDKind,
 			ID:       conformanceSessionID,
 		},
@@ -349,6 +374,7 @@ func conformanceRequest() providers.ExecuteRequest {
 }
 
 func successResult(
+	provider providers.ID,
 	withSession bool,
 	progress []providers.ExecuteProgress,
 ) providers.ExecuteResult {
@@ -362,7 +388,7 @@ func successResult(
 	}
 	if withSession {
 		result.SessionRef = &providers.SessionRef{
-			Provider: providers.IDCodex,
+			Provider: provider,
 			Kind:     providers.SessionIDKind,
 			ID:       conformanceSessionID,
 		}
@@ -370,7 +396,12 @@ func successResult(
 	return result
 }
 
-func assertSuccess(t *testing.T, result providers.ExecuteResult, withSession bool) {
+func assertSuccess(
+	t *testing.T,
+	provider providers.ID,
+	result providers.ExecuteResult,
+	withSession bool,
+) {
 	t.Helper()
 	if result.Content != conformanceContent ||
 		result.Diagnostics == nil ||
@@ -380,7 +411,7 @@ func assertSuccess(t *testing.T, result providers.ExecuteResult, withSession boo
 	}
 	if withSession {
 		if result.SessionRef == nil ||
-			result.SessionRef.Provider != providers.IDCodex ||
+			result.SessionRef.Provider != provider ||
 			result.SessionRef.Kind != providers.SessionIDKind ||
 			result.SessionRef.ID != conformanceSessionID {
 			t.Fatalf("Execute() SessionRef = %#v", result.SessionRef)

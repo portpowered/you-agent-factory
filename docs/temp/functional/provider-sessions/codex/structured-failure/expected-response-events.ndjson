@@ -1,1 +1,1 @@
-{"code":"stream_failed","eventId":"a1329dee-c77f-4072-9c06-5181df3907fc","factorySessionId":"527a2e1c-d335-47a6-9d6c-239097e26689","message":"Codex authentication failed.","type":"error.failed"}
+{"code":"stream_failed","eventId":"<normalized>","factorySessionId":"<normalized>","message":"Codex authentication failed.","runId":"<normalized>","type":"error.failed"}
