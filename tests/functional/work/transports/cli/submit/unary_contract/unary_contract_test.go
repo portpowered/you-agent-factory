@@ -131,3 +131,22 @@ func TestCLISubmitUnaryDefaultAndExplicitSessionTargeting(t *testing.T) {
 		)
 	})
 }
+
+// TestCLISubmitUnaryStructuredFailurePreservesPublicMessage proves unary you submit
+// exits non-success against a structured backend rejection and preserves only the
+// public typed failure fields exposed by the CLI transport contract.
+func TestCLISubmitUnaryStructuredFailurePreservesPublicMessage(t *testing.T) {
+	server, assertRequest := newUnaryStructuredFailureServer(t)
+	process := buildUnaryContractProcess(t, serviceedges.Edges{})
+	payloadPath := writeUnaryContractPayloadFile(t, "# Reject\n\nStructured failure.")
+
+	inputs := executeUnarySubmitExpectingFailure(
+		t,
+		process,
+		server.URL,
+		unaryContractStructuredFailureWorkName,
+		payloadPath,
+	)
+	assertRequest(t)
+	assertUnarySubmitStructuredFailurePreservesPublicMessage(t, inputs)
+}

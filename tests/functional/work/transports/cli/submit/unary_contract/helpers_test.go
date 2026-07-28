@@ -2,8 +2,13 @@ package unary_contract_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -21,6 +26,9 @@ const (
 	unaryContractStdinWorkName            = "unary-stdin-task"
 	unaryContractDefaultSessionWorkName   = "unary-default-session-task"
 	unaryContractExplicitSessionWorkName  = "unary-explicit-session-task"
+	unaryContractStructuredFailureWorkName = "unary-structured-failure-task"
+	unaryContractStructuredFailureUnsafeMessage = "payload-secret access-token-secret"
+	unaryContractStructuredFailureUnsafeCredential = "sk-proj-secret123"
 )
 
 func buildUnaryContractProcess(t *testing.T, edges serviceedges.Edges) support.Process {
@@ -69,6 +77,119 @@ func executeUnarySubmitCLI(
 		)
 	}
 	return inputs.Stdout()
+}
+
+func executeUnarySubmitExpectingFailure(
+	t *testing.T,
+	process support.Process,
+	serverURL string,
+	workName string,
+	payloadPath string,
+) *support.CapturedInputs {
+	t.Helper()
+
+	home := t.TempDir()
+	args := []string{
+		"you", "--server", serverURL,
+		"submit",
+		"--name", workName,
+		"--work-type-name", unaryContractWorkType,
+		"--payload", payloadPath,
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = unaryContractHomeEnvironment(home)
+	inputs.Input.WorkingDirectory = home
+	stdinIsTTY := true
+	inputs.Input.StdinIsTTY = &stdinIsTTY
+	inputs.Input.Stdin = strings.NewReader("")
+	err := process.Execute(inputs.Input)
+	if err == nil {
+		t.Fatalf(
+			"Process.Execute(unary submit) unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s",
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	return inputs
+}
+
+func newUnaryStructuredFailureServer(t *testing.T) (*httptest.Server, func(*testing.T)) {
+	t.Helper()
+
+	var observedMethod string
+	var observedPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		observedMethod = r.Method
+		observedPath = r.URL.Path
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, fmt.Sprintf(`{
+			"message":%q,
+			"code":"BAD_REQUEST",
+			"family":"BAD_REQUEST",
+			"workId":%q
+		}`,
+			unaryContractStructuredFailureUnsafeMessage,
+			unaryContractStructuredFailureUnsafeCredential,
+		))
+	}))
+	t.Cleanup(server.Close)
+	return server, func(t *testing.T) {
+		t.Helper()
+		if observedMethod != http.MethodPost {
+			t.Fatalf("unary submit request method = %q, want POST", observedMethod)
+		}
+		wantPath := "/factory-sessions/~default/work"
+		if observedPath != wantPath {
+			t.Fatalf("unary submit request path = %q, want %q", observedPath, wantPath)
+		}
+	}
+}
+
+func assertUnarySubmitStructuredFailurePreservesPublicMessage(
+	t *testing.T,
+	inputs *support.CapturedInputs,
+) {
+	t.Helper()
+
+	combined := strings.Join([]string{
+		inputs.Stderr(),
+		inputs.Stdout(),
+	}, "\n")
+	for _, marker := range []string{
+		"submission failed (400)",
+		"code=BAD_REQUEST",
+		"family=BAD_REQUEST",
+	} {
+		if !strings.Contains(combined, marker) {
+			t.Fatalf("unary submit failure output missing public backend marker %q:\nstdout:\n%s\nstderr:\n%s",
+				marker, inputs.Stdout(), inputs.Stderr())
+		}
+	}
+	for _, leaked := range []string{
+		unaryContractStructuredFailureUnsafeMessage,
+		"access-token",
+		unaryContractStructuredFailureUnsafeCredential,
+		`"traceId":`,
+		`"workId":`,
+		"traceId:",
+		"workId:",
+	} {
+		if strings.Contains(combined, leaked) {
+			t.Fatalf("unary submit failure output must not contain %q:\nstdout:\n%s\nstderr:\n%s",
+				leaked, inputs.Stdout(), inputs.Stderr())
+		}
+	}
+}
+
+func writeUnaryContractPayloadFile(t *testing.T, content string) string {
+	t.Helper()
+	payloadPath := filepath.Join(t.TempDir(), "request.md")
+	if err := os.WriteFile(payloadPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write unary payload file: %v", err)
+	}
+	return payloadPath
 }
 
 func decodeUnarySubmitJSON(t *testing.T, output, workName string) submitcli.SubmitSuccessResult {
