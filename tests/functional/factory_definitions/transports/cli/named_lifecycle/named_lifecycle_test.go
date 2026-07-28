@@ -12,9 +12,11 @@ import (
 )
 
 const (
-	namedLifecycleFactoryName = "cli-named-lifecycle"
-	namedLifecycleWorkType    = "task"
-	namedLifecycleUpdatedType = "updated-task"
+	namedLifecycleFactoryName   = "cli-named-lifecycle"
+	listMembershipFactoryName   = "cli-list-membership"
+	namedLifecycleWorkType      = "task"
+	namedLifecycleUpdatedType   = "updated-task"
+	listMembershipWorkType      = "membership-task"
 )
 
 // TestCLIFactoryNamedCreateListUpdateDelete proves the public you factory
@@ -104,11 +106,117 @@ func TestCLIFactoryNamedCreateListUpdateDelete(t *testing.T) {
 	}
 }
 
+// TestCLIFactoryListReflectsCreateAndDelete proves public factory list membership
+// includes a named Factory after create and omits it after delete through
+// root.BuildProcess + Process.Execute.
+func TestCLIFactoryListReflectsCreateAndDelete(t *testing.T) {
+	workingDirectory := t.TempDir()
+	namedFactoriesRoot := filepath.Join(t.TempDir(), "named-factories")
+	sourceDir := support.ScaffoldFactory(t, listMembershipFactoryConfig(listMembershipWorkType))
+	sourcePath := filepath.Join(sourceDir, "factory.json")
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+
+	create := support.FakeInputs(t.Context(), []string{
+		"you",
+		"factory", "create", listMembershipFactoryName,
+		"--from", sourcePath,
+		"--dir", namedFactoriesRoot,
+	})
+	create.Input.WorkingDirectory = workingDirectory
+	if err := process.Execute(create.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(factory create) error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			create.Stdout(),
+			create.Stderr(),
+		)
+	}
+
+	assertFactoryListIncludes(t, process, workingDirectory, namedFactoriesRoot, listMembershipFactoryName)
+	assertHumanFactoryListIncludes(t, process, workingDirectory, namedFactoriesRoot, listMembershipFactoryName)
+
+	deleteInputs := support.FakeInputs(t.Context(), []string{
+		"you",
+		"factory", "delete", listMembershipFactoryName,
+		"--dir", namedFactoriesRoot,
+	})
+	deleteInputs.Input.WorkingDirectory = workingDirectory
+	if err := process.Execute(deleteInputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(factory delete) error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			deleteInputs.Stdout(),
+			deleteInputs.Stderr(),
+		)
+	}
+
+	assertFactoryListExcludes(t, process, workingDirectory, namedFactoriesRoot, listMembershipFactoryName)
+	assertHumanFactoryListExcludes(t, process, workingDirectory, namedFactoriesRoot, listMembershipFactoryName)
+}
+
 func assertFactoryListIncludes(
 	t *testing.T,
 	process support.Process,
 	workingDirectory, namedFactoriesRoot, name string,
 ) {
+	t.Helper()
+
+	entries := executeJSONFactoryList(t, process, workingDirectory, namedFactoriesRoot)
+	for _, entry := range entries {
+		if entry.Name == name {
+			return
+		}
+	}
+	t.Fatalf("factory list %#v missing named Factory %q", entries, name)
+}
+
+func assertFactoryListExcludes(
+	t *testing.T,
+	process support.Process,
+	workingDirectory, namedFactoriesRoot, name string,
+) {
+	t.Helper()
+
+	entries := executeJSONFactoryList(t, process, workingDirectory, namedFactoriesRoot)
+	for _, entry := range entries {
+		if entry.Name == name {
+			t.Fatalf("factory list %#v still includes named Factory %q after delete", entries, name)
+		}
+	}
+}
+
+func assertHumanFactoryListIncludes(
+	t *testing.T,
+	process support.Process,
+	workingDirectory, namedFactoriesRoot, name string,
+) {
+	t.Helper()
+
+	output := executeHumanFactoryList(t, process, workingDirectory, namedFactoriesRoot)
+	if !humanFactoryListContainsName(output, name) {
+		t.Fatalf("human factory list missing named Factory %q:\n%s", name, output)
+	}
+}
+
+func assertHumanFactoryListExcludes(
+	t *testing.T,
+	process support.Process,
+	workingDirectory, namedFactoriesRoot, name string,
+) {
+	t.Helper()
+
+	output := executeHumanFactoryList(t, process, workingDirectory, namedFactoriesRoot)
+	if humanFactoryListContainsName(output, name) {
+		t.Fatalf("human factory list still includes named Factory %q after delete:\n%s", name, output)
+	}
+}
+
+func executeJSONFactoryList(
+	t *testing.T,
+	process support.Process,
+	workingDirectory, namedFactoriesRoot string,
+) []factoryListEntry {
 	t.Helper()
 
 	list := support.FakeInputs(t.Context(), []string{
@@ -130,12 +238,45 @@ func assertFactoryListIncludes(
 	if err := json.Unmarshal([]byte(list.Stdout()), &entries); err != nil {
 		t.Fatalf("decode factory list: %v\n%s", err, list.Stdout())
 	}
-	for _, entry := range entries {
-		if entry.Name == name {
-			return
+	return entries
+}
+
+func executeHumanFactoryList(
+	t *testing.T,
+	process support.Process,
+	workingDirectory, namedFactoriesRoot string,
+) string {
+	t.Helper()
+
+	list := support.FakeInputs(t.Context(), []string{
+		"you",
+		"factory", "list",
+		"--dir", namedFactoriesRoot,
+	})
+	list.Input.WorkingDirectory = workingDirectory
+	if err := process.Execute(list.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(factory list) error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			list.Stdout(),
+			list.Stderr(),
+		)
+	}
+	return list.Stdout()
+}
+
+func humanFactoryListContainsName(output, name string) bool {
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		switch line {
+		case "NAME\tFACTORY DIRECTORY\tCURRENT", "No factories found.":
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) > 0 && fields[0] == name {
+			return true
 		}
 	}
-	t.Fatalf("factory list %#v missing named Factory %q", entries, name)
+	return false
 }
 
 func assertPersistedWorkType(t *testing.T, factoryPath, wantWorkType string) {
@@ -162,9 +303,17 @@ func assertPersistedWorkType(t *testing.T, factoryPath, wantWorkType string) {
 	}
 }
 
+func listMembershipFactoryConfig(workType string) map[string]any {
+	return namedLifecycleFactoryConfigWithName(listMembershipFactoryName, workType)
+}
+
 func namedLifecycleFactoryConfig(workType string) map[string]any {
+	return namedLifecycleFactoryConfigWithName(namedLifecycleFactoryName, workType)
+}
+
+func namedLifecycleFactoryConfigWithName(factoryName, workType string) map[string]any {
 	return map[string]any{
-		"name": namedLifecycleFactoryName,
+		"name": factoryName,
 		"workTypes": []map[string]any{
 			{
 				"name": workType,
