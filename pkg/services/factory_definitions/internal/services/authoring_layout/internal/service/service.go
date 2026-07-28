@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/expand"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/flatten"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
 )
 
@@ -149,28 +151,75 @@ func (s *Service) ExpandFactoryLayout(
 }
 
 func (s *Service) CreateNamedFactory(
-	_ context.Context,
-	_ factorydefinitions.CreateNamedFactoryRequest,
+	ctx context.Context,
+	request factorydefinitions.CreateNamedFactoryRequest,
 ) (factorydefinitions.CreateNamedFactoryResult, error) {
 	if err := s.requirePorts(); err != nil {
 		return factorydefinitions.CreateNamedFactoryResult{}, err
 	}
-	return factorydefinitions.CreateNamedFactoryResult{}, &factorydefinitions.AtomicFactoryWriteFailure{
-		PreviousPreserved: true,
-		Cause:             fmt.Errorf("factory layout collaborator is required"),
+	factoryDir, err := persist.NamedFactory(
+		ctx,
+		request.RootDir,
+		request.Name,
+		&request.Prepared,
+		false,
+		s.persistPorts(),
+	)
+	if err != nil {
+		return factorydefinitions.CreateNamedFactoryResult{}, atomicWriteFailure(request.Name, factoryDir, err)
 	}
+	return factorydefinitions.CreateNamedFactoryResult{
+		Name:       strings.TrimSpace(request.Name),
+		FactoryDir: factoryDir,
+	}, nil
 }
 
 func (s *Service) ReplaceNamedFactory(
-	_ context.Context,
-	_ factorydefinitions.ReplaceNamedFactoryRequest,
+	ctx context.Context,
+	request factorydefinitions.ReplaceNamedFactoryRequest,
 ) (factorydefinitions.ReplaceNamedFactoryResult, error) {
 	if err := s.requirePorts(); err != nil {
 		return factorydefinitions.ReplaceNamedFactoryResult{}, err
 	}
-	return factorydefinitions.ReplaceNamedFactoryResult{}, &factorydefinitions.AtomicFactoryWriteFailure{
+	factoryDir, err := persist.NamedFactory(
+		ctx,
+		request.RootDir,
+		request.Name,
+		&request.Prepared,
+		true,
+		s.persistPorts(),
+	)
+	if err != nil {
+		return factorydefinitions.ReplaceNamedFactoryResult{}, atomicWriteFailure(request.Name, factoryDir, err)
+	}
+	return factorydefinitions.ReplaceNamedFactoryResult{
+		Name:       strings.TrimSpace(request.Name),
+		FactoryDir: factoryDir,
+	}, nil
+}
+
+func (s *Service) persistPorts() persist.Ports {
+	return persist.Ports{
+		Write:                s.write,
+		Validate:             s.validate,
+		FileSystem:           s.fileSystem,
+		RequireDefinitionDir: s.requireDefinitionDir,
+		Directories:          s.directories,
+	}
+}
+
+func atomicWriteFailure(name, factoryDir string, cause error) error {
+	if cause == nil {
+		return nil
+	}
+	if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
+		return cause
+	}
+	return &factorydefinitions.AtomicFactoryWriteFailure{
+		Name:              strings.TrimSpace(name),
+		FactoryDir:        factoryDir,
 		PreviousPreserved: true,
-		Cause:             fmt.Errorf("factory layout collaborator is required"),
+		Cause:             cause,
 	}
 }
 
