@@ -24,13 +24,12 @@ func TestVerifyProviderSessionsZeroExtraPublicSiblingAbsenceFailsWhenLiveSibling
 	writeProviderSessionsTopLevelInventoryFixture(t, root, providerSessionsTopLevelInventoryFixture{
 		children: []ownershipinventory.ProviderSessionsTopLevelChild{
 			{Directory: "internal", Classification: ownershipinventory.ProviderSessionsTopLevelCanonicalRetain},
-			{Directory: "service", Classification: ownershipinventory.ProviderSessionsTopLevelUnexpectedPublicSibling},
 			{Directory: "transports", Classification: ownershipinventory.ProviderSessionsTopLevelCanonicalRetain},
 			{Directory: "wire", Classification: ownershipinventory.ProviderSessionsTopLevelCanonicalRetain},
 		},
 		hasUnexpectedBeyondService: false,
 	})
-	for _, directory := range []string{"internal", "service", "transports", "wire", "surprise"} {
+	for _, directory := range []string{"internal", "transports", "wire", "surprise"} {
 		mkdirAll(t, filepath.Join(root, "pkg/services/provider_sessions", directory))
 	}
 
@@ -59,14 +58,13 @@ func TestVerifyProviderSessionsINVDispositionBeyondServiceFailsWhenZeroExtraFlag
 	writeProviderSessionsTopLevelInventoryFixture(t, root, providerSessionsTopLevelInventoryFixture{
 		children: []ownershipinventory.ProviderSessionsTopLevelChild{
 			{Directory: "internal", Classification: ownershipinventory.ProviderSessionsTopLevelCanonicalRetain},
-			{Directory: "service", Classification: ownershipinventory.ProviderSessionsTopLevelUnexpectedPublicSibling},
 			{Directory: "surprise", Classification: ownershipinventory.ProviderSessionsTopLevelINVUnexpectedPublicSibling},
 			{Directory: "transports", Classification: ownershipinventory.ProviderSessionsTopLevelCanonicalRetain},
 			{Directory: "wire", Classification: ownershipinventory.ProviderSessionsTopLevelCanonicalRetain},
 		},
 		hasUnexpectedBeyondService: false,
 	})
-	for _, directory := range []string{"internal", "service", "surprise", "transports", "wire"} {
+	for _, directory := range []string{"internal", "surprise", "transports", "wire"} {
 		mkdirAll(t, filepath.Join(root, "pkg/services/provider_sessions", directory))
 	}
 

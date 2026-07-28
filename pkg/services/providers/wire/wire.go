@@ -11,6 +11,7 @@ import (
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 )
 
@@ -20,6 +21,14 @@ type CursorPlatformDependencies struct {
 	OperatingSystem string
 	TemporaryDir    string
 	TemporaryFiles  platformfilesystem.TemporaryFileSystem
+}
+
+// AgyPTYPlatformDependencies are platform facts required for the built-in Agy
+// PTY execution adapter.
+type AgyPTYPlatformDependencies struct {
+	Allocator agypty.PTYAllocator
+	Locator   platformprocess.ExecutableLocator
+	Inspector platformfilesystem.PathInspector
 }
 
 // Option configures Providers root construction.
@@ -32,6 +41,7 @@ type wireOptions struct {
 	commandRunner        platformprocess.CommandRunner
 	workersCommandRunner workers.CommandRunner
 	cursorPlatform       CursorPlatformDependencies
+	agyPTYPlatform       AgyPTYPlatformDependencies
 }
 
 type catalogOption struct {
@@ -90,6 +100,20 @@ func WithCursorPlatform(platform CursorPlatformDependencies) Option {
 	return cursorPlatformOption{platform: platform}
 }
 
+type agyPTYPlatformOption struct {
+	platform AgyPTYPlatformDependencies
+}
+
+func (o agyPTYPlatformOption) apply(opts *wireOptions) {
+	opts.agyPTYPlatform = o.platform
+}
+
+// WithAgyPTY injects the platform facts required for the built-in Agy PTY
+// execution adapter.
+func WithAgyPTY(platform AgyPTYPlatformDependencies) Option {
+	return agyPTYPlatformOption{platform: platform}
+}
+
 // NewService constructs one inert Providers root over sibling Catalog and
 // Execution capabilities sharing the same private catalog identity authority.
 func NewService(options ...Option) (providers.Service, error) {
@@ -103,7 +127,13 @@ func NewService(options ...Option) (providers.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newRoot(catalogService, config.commandRunner, config.workersCommandRunner, config.cursorPlatform)
+	return newRoot(
+		catalogService,
+		config.commandRunner,
+		config.workersCommandRunner,
+		config.cursorPlatform,
+		config.agyPTYPlatform,
+	)
 }
 
 func newRoot(
@@ -111,6 +141,7 @@ func newRoot(
 	commandRunner platformprocess.CommandRunner,
 	workersCommandRunner workers.CommandRunner,
 	cursorPlatform CursorPlatformDependencies,
+	agyPTYPlatform AgyPTYPlatformDependencies,
 ) (providers.Service, error) {
 	if workersCommandRunner == nil && commandRunner != nil {
 		workersCommandRunner = workerprocess.AdaptCommandRunner(commandRunner)
@@ -119,10 +150,17 @@ func newRoot(
 		catalogService,
 		executionwire.BuiltInDependenciesFromWorkersRunner(
 			workersCommandRunner,
-			executionwire.CursorPlatformDependencies{
-				OperatingSystem: cursorPlatform.OperatingSystem,
-				TemporaryDir:    cursorPlatform.TemporaryDir,
-				TemporaryFiles:  cursorPlatform.TemporaryFiles,
+			executionwire.BuiltInRunnerPlatformDependencies{
+				Cursor: executionwire.CursorPlatformDependencies{
+					OperatingSystem: cursorPlatform.OperatingSystem,
+					TemporaryDir:    cursorPlatform.TemporaryDir,
+					TemporaryFiles:  cursorPlatform.TemporaryFiles,
+				},
+				AgyPTY: executionwire.AgyPTYPlatformDependencies{
+					Allocator: agyPTYPlatform.Allocator,
+					Locator:   agyPTYPlatform.Locator,
+					Inspector: agyPTYPlatform.Inspector,
+				},
 			},
 		),
 	)

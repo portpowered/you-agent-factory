@@ -27,13 +27,12 @@ func TestVerifyProviderSessionsTopLevelInventoryFailsWhenLiveDirectoryMissingFro
 	writeProviderSessionsTopLevelInventoryFixture(t, root, providerSessionsTopLevelInventoryFixture{
 		children: []ownershipinventory.ProviderSessionsTopLevelChild{
 			{Directory: "internal", Classification: ownershipinventory.ProviderSessionsTopLevelCanonicalRetain},
-			{Directory: "service", Classification: ownershipinventory.ProviderSessionsTopLevelUnexpectedPublicSibling},
 			{Directory: "transports", Classification: ownershipinventory.ProviderSessionsTopLevelCanonicalRetain},
 			{Directory: "wire", Classification: ownershipinventory.ProviderSessionsTopLevelCanonicalRetain},
 		},
 		hasUnexpectedBeyondService: false,
 	})
-	for _, directory := range []string{"internal", "service", "transports", "wire", "surprise"} {
+	for _, directory := range []string{"internal", "transports", "wire", "surprise"} {
 		mkdirAll(t, filepath.Join(root, "pkg/services/provider_sessions", directory))
 	}
 
@@ -53,14 +52,13 @@ func TestVerifyProviderSessionsTopLevelInventoryFailsWhenUnexpectedSiblingBeyond
 	writeProviderSessionsTopLevelInventoryFixture(t, root, providerSessionsTopLevelInventoryFixture{
 		children: []ownershipinventory.ProviderSessionsTopLevelChild{
 			{Directory: "internal", Classification: ownershipinventory.ProviderSessionsTopLevelCanonicalRetain},
-			{Directory: "service", Classification: ownershipinventory.ProviderSessionsTopLevelUnexpectedPublicSibling},
 			{Directory: "surprise", Classification: ownershipinventory.ProviderSessionsTopLevelINVUnexpectedPublicSibling},
 			{Directory: "transports", Classification: ownershipinventory.ProviderSessionsTopLevelCanonicalRetain},
 			{Directory: "wire", Classification: ownershipinventory.ProviderSessionsTopLevelCanonicalRetain},
 		},
 		hasUnexpectedBeyondService: false,
 	})
-	for _, directory := range []string{"internal", "service", "surprise", "transports", "wire"} {
+	for _, directory := range []string{"internal", "surprise", "transports", "wire"} {
 		mkdirAll(t, filepath.Join(root, "pkg/services/provider_sessions", directory))
 	}
 
@@ -117,7 +115,7 @@ func TestProviderSessionsTopLevelInventoryClassifiesCanonicalRetainChildren(t *t
 	}
 }
 
-func TestProviderSessionsTopLevelInventoryClassifiesUnexpectedService(t *testing.T) {
+func TestProviderSessionsTopLevelInventoryHasNoUnexpectedPublicSiblings(t *testing.T) {
 	t.Parallel()
 
 	root := repositoryRoot(t)
@@ -133,8 +131,8 @@ func TestProviderSessionsTopLevelInventoryClassifiesUnexpectedService(t *testing
 			unexpected = append(unexpected, child.Directory)
 		}
 	}
-	if !slices.Equal(unexpected, []string{"service"}) {
-		t.Fatalf("unexpected public siblings = %v, want [service]", unexpected)
+	if len(unexpected) != 0 {
+		t.Fatalf("unexpected public siblings = %v, want none after DEL-PSES story 002", unexpected)
 	}
 }
 

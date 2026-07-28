@@ -851,7 +851,19 @@ Compilation-owned loading/loadedsource/runtimeconfig implementation lives under
 `internal/services/compilation/{loading,loadedsource,runtimeconfig}`; public
 `loading/`, `loadedsource/`, and `runtimeconfig/` remain transitional re-exports
 for `pkg/wire` and in-owner callers until peer imports retire in later stories.
-Factory Definitions `wire/wire.go` composes the compilation subservice from the
+Factory Definitions `wire/wire.go` composes the lifecycle host through
+`factory_definitions/internal` (`NewWithAuthoringLayout` → `internal/lifecycle`)
+and must not import public `definition/` or transitional `service/` shims;
+`wire/boundary_test.go`, `wire/wire_lifecycle_compose_test.go`, and
+`wire/wire_lifecycle_behavior_test.go` lock that construction path and prove
+Activate/Save/GetCurrent*/version behavior on the published `Service` root.
+New measurable owner packages such as `internal/lifecycle` must also be registered
+in both `go-unit-coverage-package-minimums.json` and
+`go-functional-coverage-package-minimums.json` when they first appear in CI profiles.
+`non_owner_definition_import_boundary_test.go` seals zero
+production peer imports of public `definition/` (including peer integration
+tests); peers use `factory_definitions` root or `factory_definitions/wire`.
+`wire/wire.go` also composes the compilation subservice from the
 nested loader ports and delegates `CompileEffectiveFactorySource` on the returned
 root `Service`. Bind compilation canonical encode through
 `internal/services/compilation/canonical` so owner wire does not import

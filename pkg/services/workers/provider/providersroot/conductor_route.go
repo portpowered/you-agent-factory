@@ -52,6 +52,8 @@ func conductorIdentity(providerID string) string {
 		return "kiro"
 	case workers.RunnerIDGemini:
 		return "gemini"
+	case workers.RunnerIDAgy:
+		return "agy"
 	default:
 		return normalized
 	}

@@ -12,14 +12,14 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/recordings/replay"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 const (
 	replayExecutionService = modulePrefix + "pkg/services/recordings/internal"
-	replayExecutionPackage = modulePrefix + "pkg/services/recordings/replay"
+	replayExecutionPackage = modulePrefix + "pkg/services/recordings/internal/services/replay/replay"
 )
 
 // TestReplayExecutionImportsRuntimeRootOnly seals CUT-REC-RUN story 003: replay
@@ -96,8 +96,8 @@ func loadReplayExecutionBoundaryArtifact(t *testing.T) *recordings.ReplayArtifac
 	t.Helper()
 
 	storage := platformreplay.NewLocal(runtime.GOOS)
-	path := filepath.FromSlash("../replay/testdata/inference-events.replay.json")
-	artifact, err := replay.Load(storage, path, replayExecutionFactorySnapshotDecoder)
+	path := filepath.FromSlash("services/replay/replay/testdata/inference-events.replay.json")
+	artifact, err := replayimpl.Load(storage, path, replayExecutionFactorySnapshotDecoder)
 	if err != nil {
 		t.Fatalf("Load replay fixture: %v", err)
 	}

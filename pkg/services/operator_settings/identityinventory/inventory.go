@@ -1,59 +1,25 @@
-// Package identityinventory documents deterministic inputs for Operator Settings
-// backend identity behavior.
+// Package identityinventory is a transitional shim over document-owned identity
+// input inventory. Implementation lives under internal/services/document.
 package identityinventory
 
-import operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-
-// InputInventoryFormatVersion identifies the system config input inventory shape.
-const InputInventoryFormatVersion = "system-config-input/v1"
-
-// InputIndexBaselineRelativePath is the committed system config input index fixture.
-const InputIndexBaselineRelativePath = "pkg/services/operator_settings/identityinventory/testdata/baseline/system-config-input-index.json"
-
-const (
-	outcomeAccept = "accept"
-	outcomeReject = "reject"
-
-	entrypointEnsureLocalBackendScope = "EnsureLocalBackendScope"
-	entrypointPersistBackendScopeID   = "persistBackendScopeID"
-
-	categoryEnsureScope  = "ensure-scope"
-	categoryPersistScope = "persist-scope"
+import (
+	documentidentityinventory "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/identityinventory"
 )
 
+// InputInventoryFormatVersion identifies the system config input inventory shape.
+const InputInventoryFormatVersion = documentidentityinventory.InputInventoryFormatVersion
+
+// InputIndexBaselineRelativePath is the committed system config input index fixture.
+const InputIndexBaselineRelativePath = documentidentityinventory.InputIndexBaselineRelativePath
+
 // InputInventory indexes deterministic system-config inputs and expected loader outcomes.
-type InputInventory struct {
-	FormatVersion       string      `json:"formatVersion"`
-	UnknownFieldPolicy  string      `json:"unknownFieldPolicy"`
-	SiblingPreservation string      `json:"siblingPreservation"`
-	Cases               []InputCase `json:"cases"`
-}
+type InputInventory = documentidentityinventory.InputInventory
 
 // InputCase records one indexed input and the production loader outcome it documents.
-type InputCase struct {
-	ID          string `json:"id"`
-	Category    string `json:"category"`
-	Entrypoint  string `json:"entrypoint"`
-	Outcome     string `json:"outcome"`
-	Fixture     string `json:"fixture,omitempty"`
-	Description string `json:"description"`
-
-	ExpectedScope            *ScopeExpectation         `json:"expectedScope,omitempty"`
-	PersistedFileExpectation *PersistedFileExpectation `json:"persistedFileExpectation,omitempty"`
-	PersistScopeID           string                    `json:"persistScopeID,omitempty"`
-	ErrorFragments           []string                  `json:"errorFragments,omitempty"`
-}
+type InputCase = documentidentityinventory.InputCase
 
 // ScopeExpectation records expected EnsureLocalBackendScope outputs for accepted cases.
-type ScopeExpectation struct {
-	BackendScopeID   string                               `json:"backendScopeID,omitempty"`
-	Outcome          operatorsettings.BackendScopeOutcome `json:"outcome,omitempty"`
-	RequireLocalUUID bool                                 `json:"requireLocalUUID,omitempty"`
-}
+type ScopeExpectation = documentidentityinventory.ScopeExpectation
 
 // PersistedFileExpectation records on-disk expectations after ensure or persist.
-type PersistedFileExpectation struct {
-	BackendScopeIDMatchesResolved bool     `json:"backendScopeIDMatchesResolved,omitempty"`
-	PreservesDefaults             bool     `json:"preservesDefaults,omitempty"`
-	PreservesSiblingKeys          []string `json:"preservesSiblingKeys,omitempty"`
-}
+type PersistedFileExpectation = documentidentityinventory.PersistedFileExpectation

@@ -10,7 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testpath"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	recordingprojections "github.com/portpowered/infinite-you/pkg/services/recordings/projections"
+	recordingprojections "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -373,7 +373,7 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsNilAndDetach
 }
 
 func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ReplayFixtureProjectsHistoricalConsumedPayloads(t *testing.T) {
-	events := loadWorkstationProjectionReplayFixtureEvents(t, "pkg", "services", "recordings", "projections", "testdata", "work-payload-lineage-replay.jsonl")
+	events := loadWorkstationProjectionReplayFixtureEvents(t, "pkg", "services", "recordings", "internal", "services", "projection_query", "projections", "testdata", "work-payload-lineage-replay.jsonl")
 	state, err := recordingprojections.ReconstructCanonicalFactoryWorldState(
 		events,
 		lastWorkstationProjectionFixtureTick(events),

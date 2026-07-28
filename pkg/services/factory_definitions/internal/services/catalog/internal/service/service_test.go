@@ -9,7 +9,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
@@ -450,7 +450,7 @@ func newRootCatalog(t *testing.T) factorydefinitions.Service {
 	if err != nil {
 		t.Fatalf("catalogwire.NewService: %v", err)
 	}
-	return factorydefinition.NewWithCatalog(nil, factorydefinition.StubActivationGateway(), catalogService)
+	return lifecycle.NewWithCatalog(nil, lifecycle.StubActivationGateway(), catalogService)
 }
 
 func writeNamedFactory(t *testing.T, rootDir, name string) string {

@@ -30,7 +30,7 @@ import (
 
 func TestNewScriptWrapProvider_Defaults(t *testing.T) {
 	t.Parallel()
-	p := NewScriptWrapProviderWithDependencies(false, nil, nil, nil, nil, nil, "", nil, nil)
+	p := NewScriptWrapProviderWithDependencies(false, nil, nil, nil, nil, nil, nil)
 	if p.SkipPermissions {
 		t.Error("expected SkipPermissions to default to false")
 	}
@@ -39,7 +39,7 @@ func TestNewScriptWrapProvider_Defaults(t *testing.T) {
 func TestNewScriptWrapProvider_WithOptions(t *testing.T) {
 	t.Parallel()
 	p := NewScriptWrapProviderWithDependencies(
-		true, nil, nil, nil, nil, nil, "", nil, nil)
+		true, nil, nil, nil, nil, nil, nil)
 
 	if !p.SkipPermissions {
 		t.Error("expected SkipPermissions to be true")
@@ -160,7 +160,7 @@ func TestScriptWrapProvider_Infer_CommandEnvironmentUsesAutomationDefaultsOverPr
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{Stdout: []byte("provider output")},
 	}
-	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		ModelProvider: nativeScriptWrapHarnessProvider,
@@ -185,7 +185,7 @@ func TestScriptWrapProvider_Infer_CommandEnvironmentIncludesAutomationDefaults(t
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{Stdout: []byte("provider output")},
 	}
-	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		ModelProvider: nativeScriptWrapHarnessProvider,
@@ -224,7 +224,7 @@ func TestSupportedModelProviders_BuildCommandRequest_UsesCLICommand(t *testing.T
 func TestScriptWrapProvider_Infer_CommandCanObserveAutomationDefaultsInEnvironment(t *testing.T) {
 	t.Parallel()
 	fakeExec := &envPrintingProviderExec{}
-	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 	resp, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		ModelProvider: nativeScriptWrapHarnessProvider,
@@ -311,7 +311,7 @@ func TestScriptWrapProvider_Infer_ClaudePayloadUsesExpectedCommandArgsAndEnv(t *
 	provider := NewScriptWrapProviderWithDependencies(
 
 		true, nil,
-		fakeExec, nil, nil, nil, "", nil, nil)
+		fakeExec, nil, nil, nil, nil)
 
 	req := workerexecution.ProviderInferenceRequest{
 		ModelProvider: string(modelprovider.ProviderClaude),
@@ -366,7 +366,7 @@ func TestScriptWrapProvider_Infer_PropagatesExecutionMetadataToProviderCommand(t
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{Stdout: []byte("provider output")},
 	}
-	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 	want := work.ExecutionMetadata{
 		DispatchCreatedTick: 3,
 		CurrentTick:         4,
@@ -392,7 +392,7 @@ func TestScriptWrapProvider_Infer_LogsSafePreparedInvocationBeforeExecution(t *t
 	sequence := []string{}
 	logger := &preparedInvocationTestLogger{sequence: &sequence}
 	runner := &preparedInvocationTestRunner{sequence: &sequence}
-	provider := NewScriptWrapProviderWithDependencies(false, logger, runner, nil, nil, nil, "", nil, nil)
+	provider := NewScriptWrapProviderWithDependencies(false, logger, runner, nil, nil, nil, nil)
 
 	ctx, cancel := context.WithDeadline(context.Background(), time.Date(2026, 7, 10, 12, 0, 0, 0, time.FixedZone("test", -7*60*60)))
 	defer cancel()
@@ -527,7 +527,7 @@ func TestScriptWrapProvider_Infer_ClaudeWithoutSessionLeavesMetadataNil(t *testi
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{Stdout: []byte("claude output without session")},
 	}
-	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 	resp, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		ModelProvider: string(modelprovider.ProviderClaude),
@@ -551,7 +551,7 @@ func TestScriptWrapProvider_Infer_ClaudeExitFailurePreservesConfiguredSessionMet
 			Stderr:   []byte(`API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"invalid api key"}}`),
 		},
 	}
-	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		ModelProvider: string(modelprovider.ProviderClaude),
@@ -590,7 +590,7 @@ func TestScriptWrapProvider_Infer_CodexPayloadUsesExpectedCommandArgsStdinAndEnv
 	provider := NewScriptWrapProviderWithDependencies(
 
 		true,
-		logging.NoopLogger{}, fakeExec, nil, nil, nil, "", nil, nil)
+		logging.NoopLogger{}, fakeExec, nil, nil, nil, nil)
 
 	req := workerexecution.ProviderInferenceRequest{
 		ModelProvider:    string(modelprovider.ProviderCodex),
@@ -642,7 +642,7 @@ func TestScriptWrapProvider_Infer_ClaudeRejectsImageContentBeforeRunner(t *testi
 	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("claude output")}}
-	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		ModelProvider: string(modelprovider.ProviderClaude),
@@ -731,7 +731,7 @@ func TestScriptWrapProvider_Infer_AttachesSharedCommandDiagnosticsToResponse(t *
 			Stderr: []byte("codex diagnostic stderr"),
 		},
 	}
-	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 	resp, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		ModelProvider:    nativeScriptWrapHarnessProvider,
@@ -778,7 +778,7 @@ func TestScriptWrapProvider_Infer_ConsumesCanonicalWorkDispatchInputTokens(t *te
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{Stdout: []byte("provider output")},
 	}
-	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 	inputToken := factoryruntime.RuntimeToken{
 		ID: "token-1",
 		Color: factoryruntime.RuntimeTokenColor{
@@ -823,7 +823,7 @@ func TestScriptWrapProvider_Infer_CommandDiagnosticsRedactSensitiveEnvWithoutCha
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{Stdout: []byte("provider diagnostic output")},
 	}
-	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 	resp, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		ModelProvider: nativeScriptWrapHarnessProvider,
@@ -896,7 +896,7 @@ func TestScriptWrapProvider_Infer_CodexWithoutSessionLeavesMetadataNil(t *testin
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{Stdout: []byte("codex output without session")},
 	}
-	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 	resp, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		ModelProvider: nativeScriptWrapHarnessProvider,
@@ -919,7 +919,7 @@ func TestScriptWrapProvider_Infer_ExitFailureIncludesExitCodeAndProcessOutput(t 
 			ExitCode: 1,
 		},
 	}
-	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		ModelProvider: nativeScriptWrapHarnessProvider,

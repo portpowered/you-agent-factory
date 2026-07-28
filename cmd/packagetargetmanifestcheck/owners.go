@@ -186,6 +186,9 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 	if owner == "factory_definitions" && rest == "internal" {
 		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionRetain), true
 	}
+	if owner == "factory_definitions" && strings.HasPrefix(rest, "internal/lifecycle") {
+		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionRetain), true
+	}
 
 	// Packages already under the committed private subservice container retain
 	// that nested destination unless the subservice is still transitional IMP debt.
@@ -294,6 +297,9 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "testdata", prefix: "testdata/", dest: "operator_settings/internal"},
 		{exact: "internal/construct", prefix: "internal/construct/", dest: "operator_settings/internal"},
 		{exact: "internal/service", prefix: "internal/service/", dest: "operator_settings/internal"},
+		{exact: "internal/construct", prefix: "internal/construct/", dest: "operator_settings/internal"},
+		{exact: "internal/testlink", prefix: "internal/testlink/", dest: "operator_settings/internal"},
+		{exact: "internal/testproviders", prefix: "internal/testproviders/", dest: "operator_settings/internal"},
 	},
 	"workers": {
 		{exact: "internal", dest: "workers/internal"},
@@ -346,6 +352,7 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "snapshotcapture", prefix: "snapshotcapture/", dest: "factory_definitions/internal/services/snapshots_portability"},
 		{exact: "portableconfig", prefix: "portableconfig/", dest: "factory_definitions/internal/services/snapshots_portability"},
 		{exact: "editable", prefix: "editable/", dest: "factory_definitions/internal/services/snapshots_portability"},
+		{exact: "replayconfig", prefix: "replayconfig/", dest: "factory_definitions/internal/services/snapshots_portability"},
 		{exact: "packagedinstallation", prefix: "packagedinstallation/", dest: "factory_definitions/internal/services/distribution"},
 		{exact: "packages/goal", prefix: "packages/goal/", dest: "factory_definitions/internal/services/invocation_policy"},
 		{exact: "packages", prefix: "packages/", dest: "factory_definitions/internal/services/distribution"},
@@ -358,7 +365,6 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "workstationexecution", prefix: "workstationexecution/", dest: "factory_definitions/internal/services/invocation_policy"},
 		{exact: "ttsobservability", prefix: "ttsobservability/", dest: "factory_definitions/internal/services/invocation_policy"},
 		{exact: "runtimeconfig", prefix: "runtimeconfig/", dest: "factory_definitions/internal"},
-		{exact: "replayconfig", prefix: "replayconfig/", dest: "factory_definitions/internal/services/snapshots_portability"},
 		{exact: "namevalue", prefix: "namevalue/", dest: "factory_definitions/internal/services/validation"},
 		{exact: "workers", prefix: "workers/", dest: "factory_definitions/internal/services/validation"},
 		{exact: "clonetests", prefix: "clonetests/", dest: "factory_definitions/internal"},

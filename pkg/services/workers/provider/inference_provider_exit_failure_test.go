@@ -72,20 +72,20 @@ func TestNewFromInputKeepsProviderCommandAndAgyPTYEdgesDistinct(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFactory: %v", err)
 	}
-	built, err := factory.New(false, nil, nil, nil, "")
+	built, err := factory.New(false, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewFromInput() error = %v", err)
 	}
 	loggingRunner, ok := built.exec.(*LoggingCommandRunner)
-	if !ok || loggingRunner.Runner != runner || loggingRunner.Clock != clock || built.agyAllocator != allocator {
-		t.Fatalf("constructed edges = (%#v, %T), want selected runner, clock, and allocator", built.exec, built.agyAllocator)
+	if !ok || loggingRunner.Runner != runner || loggingRunner.Clock != clock {
+		t.Fatalf("constructed edges = (%#v, %T), want selected runner and clock", built.exec, built.exec)
 	}
 }
 
 func TestFactoryNewRejectsMissingProviderTimingClock(t *testing.T) {
 	t.Parallel()
 	factory := &Factory{}
-	if _, err := factory.New(false, nil, nil, nil, ""); err == nil || !strings.Contains(err.Error(), "command clock is required") {
+	if _, err := factory.New(false, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "command clock is required") {
 		t.Fatalf("missing provider timing clock error = %v", err)
 	}
 }
@@ -115,7 +115,7 @@ func TestFactoryNewUsesInjectedClockForProviderDiagnostics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFactory() error = %v", err)
 	}
-	provider, err := factory.New(false, nil, nil, nil, "")
+	provider, err := factory.New(false, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("Factory.New() error = %v", err)
 	}
@@ -168,7 +168,7 @@ func TestScriptWrapProvider_Infer_CodexGPT56SolFailureUsesCanonicalResultAndDeci
 	result := entry.CommandResult()
 	result.Stderr = append([]byte("session_id: sess-codex-gpt-5-6-sol\n"), result.Stderr...)
 	fakeExec := &recordingProviderExec{result: result}
-	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		ModelProvider: string(modelprovider.ProviderCodex),
@@ -199,7 +199,7 @@ func TestScriptWrapProvider_Infer_LogsCorrelatedNormalizedCodexFailureAfterParsi
 			Stderr:   []byte(`ERROR: {"type":"invalid_request_error","status":400,"message":"The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."}` + "\n" + credential),
 		},
 	}
-	provider := NewScriptWrapProviderWithDependencies(false, logger, runner, nil, nil, nil, "", nil, nil)
+	provider := NewScriptWrapProviderWithDependencies(false, logger, runner, nil, nil, nil, nil)
 	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		ModelProvider: string(modelprovider.ProviderCodex),
 		Model:         "gpt-5.6-sol",
@@ -261,7 +261,7 @@ func TestScriptWrapProvider_Infer_LogsNormalizedFailuresWithoutSyntheticExitCode
 			sequence := []string{}
 			logger := &preparedInvocationTestLogger{sequence: &sequence}
 			runner := &preparedInvocationTestRunner{sequence: &sequence, err: tc.err}
-			provider := NewScriptWrapProviderWithDependencies(false, logger, runner, nil, nil, nil, "", nil, nil)
+			provider := NewScriptWrapProviderWithDependencies(false, logger, runner, nil, nil, nil, nil)
 			_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 				ModelProvider: string(modelprovider.ProviderClaude),
 				UserMessage:   "private prompt",
@@ -305,7 +305,7 @@ func TestScriptWrapProvider_Infer_CodexExecutionFailureJSONLogsExcludeCommandOut
 			provider := NewScriptWrapProviderWithDependencies(false, logging.NewZapLogger(zap.New(core), false), &recordingProviderExec{
 				result: CommandResult{Stdout: []byte(stdoutSecret), Stderr: []byte(stderrSecret)},
 				err:    tc.err,
-			}, nil, nil, nil, "", nil, nil)
+			}, nil, nil, nil, nil)
 
 			_, _ = provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 				ModelProvider: string(modelprovider.ProviderCodex),
@@ -353,7 +353,7 @@ func TestScriptWrapProvider_Infer_CodexUpgradeFailureIsSearchableInJSONLogs(t *t
 	provider := NewScriptWrapProviderWithDependencies(false, logging.NewZapLogger(zap.New(core), false), &recordingProviderExec{result: CommandResult{
 		ExitCode: 2,
 		Stderr:   []byte(`ERROR: {"type":"invalid_request_error","status":400,"message":"The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."}`),
-	}}, nil, nil, nil, "", nil, nil)
+	}}, nil, nil, nil, nil)
 
 	_, _ = provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		ModelProvider: string(modelprovider.ProviderCodex),

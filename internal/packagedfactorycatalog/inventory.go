@@ -13,7 +13,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/packageassets"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
+	factorydefinitionswirevalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/validation"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"gopkg.in/yaml.v3"
 )
@@ -176,7 +176,7 @@ func isSupportedRootName(name string) bool {
 }
 
 func validateCanonicalFactory(sourcePath string, cfg *factorydefinitions.FactoryConfig) error {
-	if validation := factoryvalidation.Validate(cfg); validation.HasBlockingTargets() {
+	if validation := factorydefinitionswirevalidation.ValidateFactoryDefinition(cfg); validation.HasBlockingTargets() {
 		var findings []string
 		for _, target := range validation.BlockingTargets() {
 			findings = append(findings, fmt.Sprintf("%s %s: %s", target.Code, target.Path, target.Message))

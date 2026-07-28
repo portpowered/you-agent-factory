@@ -20,13 +20,10 @@ import (
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
-	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
 	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
-	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
 	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
 	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
@@ -78,19 +75,16 @@ func NewService(
 		return nil, err
 	}
 
-	preparePortableFactoryConfig := snapshotsportabilityprepare.NewPreparer(
-		factorydefinitions.CloneFactoryConfig,
+	preparePortableFactoryConfig := PortableFactoryConfigPreparer(
 		applySupportedFiles,
 		applyStarterWork,
 	)
-	captureFactorySnapshot := snapshotsportabilitycapture.NewExplicit(
-		factorysnapshot.ObjectFromFactoryConfig,
-	)
+	captureFactorySnapshot := FactorySnapshotCapturer()
 	snapshotsPortability, err := snapshotsportabilitywire.NewService(snapshotsportability.Dependencies{
 		LoadCanonical:             loader.LoadSourceFromCanonicalJSON,
-		CaptureLoaded:             snapshotsportabilitycapture.NewLoaded(factorysnapshot.ObjectFromFactoryConfig),
+		CaptureLoaded:             LoadedFactorySnapshotCapturer(),
 		PreparePortable:           preparePortableFactoryConfig,
-		DecodeSnapshot:            snapshotsportabilitycapture.NewJSONDecoder(factorymapping.GeneratedFactoryFromOpenAPIJSON),
+		DecodeSnapshot:            FactorySnapshotJSONDecoder(),
 		MaterializePortableFiles:  snapshotsportabilitymaterialize.NewMaterializer(portableFileSystem),
 		ValidateMaterializeWrites: snapshotsportabilitymaterialize.NewWritesValidator(portableFileSystem),
 	})

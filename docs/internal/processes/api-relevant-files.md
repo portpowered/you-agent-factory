@@ -28,7 +28,7 @@ Use this map when changing the public REST contract.
   vocabulary is published through
   `pkg/services/factory_runtime/observation_projection_contracts.go` and proven
   by
-  `pkg/services/recordings/projections/projection_observation_boundary_test.go`.
+  `pkg/services/recordings/internal/services/projection_query/projections/projection_observation_boundary_test.go`.
   Runtime root request construction for control, observation, and dispatch-plan
   handoff is published through
   `pkg/services/factory_runtime/runtime_request_contracts.go` and proven by
@@ -350,6 +350,24 @@ Use this map when changing the public REST contract.
   `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, shared
   MCP host/composition fan-in, HTTP-WORK, CLI-WORK, or other services' MCP
   adapters when reconciling manifest churn.
+- DEL-PSES story 001 (`pss-del-pses-001`) confirms CLN-PSES fold packets are
+  Factory-complete before leased deletion begins. Observable gate proofs live in
+  `pkg/services/provider_sessions/del_pses_prerequisite_gate_test.go` (tree
+  invariants from CLN-PSES-FOLD-SERVICE internal fold, CLN-PSES-LEGACY-PACKAGES
+  zero-extra sibling lock and reader subservices, and CLN-PSES-CONTRACT-ROOTS thin
+  root contract seal). DEL-PSES story 002 (`pss-del-pses-002`) deletes the
+  emptied transitional `service/` compile shim and clears imports; proofs live in
+  `pkg/services/provider_sessions/del_pses_deletion_gate_test.go`. DEL-PSES story
+  003 (`pss-del-pses-003`) lowers structure, ownership, and package-target
+  baseline rows for the deleted transitional `service/` package; DEL-PSES story
+  004 (`pss-del-pses-004`) lowers unit and functional coverage minimum rows for
+  the same deleted package. Proofs live in
+  `pkg/services/provider_sessions/del_pses_baseline_gate_test.go`. DEL-PSES story
+  005 (`pss-del-pses-005`) proves root shape, structure/ownership debt reduction,
+  and repository structure verification; proofs live in
+  `pkg/services/provider_sessions/packaged_root_shape_test.go` and
+  `pkg/services/provider_sessions/del_pses_proof_gate_test.go`. Fold behavioral
+  proofs live in sibling boundary tests under `pkg/services/provider_sessions/`.
 - Provider Session HTTP decoding, generated-contract mapping, service
   invocation, typed root error mapping (`error_mapping.go`), cancel/timeout edge
   mapping, and response encoding for owned Provider Sessions operations live in

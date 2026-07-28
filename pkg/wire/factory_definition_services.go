@@ -21,7 +21,7 @@ import (
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingreplay "github.com/portpowered/infinite-you/pkg/services/recordings/replay"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
@@ -326,19 +326,19 @@ func providePortableBundledDocsPruner(
 }
 
 func providePortableBundledFilesMaterializer(fileSystem portablefiles.FileSystem) factorydefinitions.PortableBundledFilesMaterializer {
-	return portableconfig.NewMaterializer(fileSystem)
+	return factorydefinitionswire.NewPortableBundledFilesMaterializer(fileSystem)
 }
 
 func providePortableBundledFileWritesValidator(fileSystem portablefiles.FileSystem) factorydefinitions.PortableBundledFileWritesValidator {
-	return portableconfig.NewWritesValidator(fileSystem)
+	return factorydefinitionswire.NewPortableBundledFileWritesValidator(fileSystem)
 }
 
 func providePortableBundledFilesCopier(fileSystem portablefiles.FileSystem) factorydefinitions.PortableBundledFilesCopier {
-	return portableconfig.NewFilesCopier(fileSystem)
+	return factorydefinitionswire.NewPortableBundledFilesCopier(fileSystem)
 }
 
 func providePortableBundledFileSourceResolver(fileSystem portablefiles.FileSystem) (factorydefinitions.PortableBundledFileSourceResolver, error) {
-	return portableconfig.NewSupportedSourceResolver(fileSystem)
+	return factorydefinitionswire.NewPortableBundledFileSourceResolver(fileSystem)
 }
 
 func provideFactoryDefinitionLoader(
@@ -384,9 +384,10 @@ func provideReplayArtifactStorage() platformreplay.Storage {
 }
 
 func provideReplayArtifactLoader(storage platformreplay.Storage) recordings.ReplayArtifactLoader {
-	return func(path string) (*factorydefinitions.ReplayArtifact, error) {
-		return recordingreplay.Load(storage, path, wirefactorydefinitions.FactorySnapshotJSONDecoder())
-	}
+	return recordingswire.NewReplayArtifactLoader(
+		storage,
+		wirefactorydefinitions.FactorySnapshotJSONDecoder(),
+	)
 }
 
 func provideReplayRuntimeConfigDecoder() factorydefinitions.ReplayRuntimeConfigDecoder {

@@ -19,11 +19,10 @@ import (
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
 	factorynamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript"
@@ -36,7 +35,6 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	providersessionswire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingartifacts "github.com/portpowered/infinite-you/pkg/services/recordings/artifacts"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -59,8 +57,13 @@ func provideProvidersService(edges serviceedges.Edges) (providers.Service, error
 		OperatingSystem: string(resolveWorkersOperatingSystem(edges)),
 		TemporaryFiles:  provideWorkersProviderTemporaryFileSystem(edges),
 	}
+	agyPTYPlatform, err := provideProvidersAgyPTYPlatform(edges)
+	if err != nil {
+		return nil, err
+	}
 	options := []providerswire.Option{
 		providerswire.WithCursorPlatform(cursorPlatform),
+		providerswire.WithAgyPTY(agyPTYPlatform),
 	}
 	if edges.ProviderCommandRunner != nil {
 		options = append(options, providerswire.WithCommandRunner(edges.ProviderCommandRunner))
@@ -113,6 +116,10 @@ func provideProviderRegistryRebinder(
 ) (workerswire.ProviderRegistryRebinder, error) {
 	operatingSystem := string(resolveWorkersOperatingSystem(edges))
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
+	agyPTYPlatform, err := provideProvidersAgyPTYPlatform(edges)
+	if err != nil {
+		return nil, err
+	}
 	externalRegistrations := append(
 		[]providerregistry.Registration(nil),
 		externalProviderRegistrations(edges)...,
@@ -131,6 +138,7 @@ func provideProviderRegistryRebinder(
 				OperatingSystem: operatingSystem,
 				TemporaryFiles:  temporaryFiles,
 			}),
+			providerswire.WithAgyPTY(agyPTYPlatform),
 		)
 		if err != nil {
 			return nil, err
@@ -312,27 +320,28 @@ func provideFactoryDefinitionValidationService(
 	workflows factoryruntime.JavaScriptWorkflows,
 	loader *factoryloading.Loader,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
-) *factoryvalidation.Service {
-	return factoryvalidation.New(
+) factorydefinitions.ValidationOperations {
+	_ = workflows
+	return wirefactorydefinitions.ValidationOperations(
 		orchestratorValidator,
 		loader.LoadSourceFromCanonicalJSON,
 	)
 }
 
 func provideFactoryDefinitionValidator(
-	service *factoryvalidation.Service,
+	service factorydefinitions.ValidationOperations,
 ) factorydefinitions.Validator {
 	return service
 }
 
 func provideDefinitionValidationOperation(
-	service *factoryvalidation.Service,
+	service factorydefinitions.ValidationOperations,
 ) factorydefinitions.DefinitionValidationOperation {
 	return service
 }
 
 func provideSubmittedDefinitionValidationOperation(
-	service *factoryvalidation.Service,
+	service factorydefinitions.ValidationOperations,
 ) factorydefinitions.SubmittedDefinitionValidationOperation {
 	return service
 }
@@ -405,7 +414,7 @@ func provideEditableFactoryValidator(
 		snapshot *factorydefinitions.FactorySnapshot,
 		workstationLoader factorydefinitions.WorkstationLoader,
 	) error {
-		return factoryeditable.ValidateSnapshot(
+		return factorydefinitionswire.ValidateEditableSnapshot(
 			ctx,
 			snapshot,
 			workstationLoader,
@@ -525,7 +534,7 @@ func provideOrchestrationCompilation(
 func provideFactorySessionExecutionFactory(
 	workflows factoryruntime.JavaScriptWorkflows,
 	orchestration factoryruntime.OrchestrationJavaScriptExecution,
-	recordingWriter recordingartifacts.Writer,
+	recordingWriter recordings.PortableRecordingWriter,
 	stores factorysessionwire.RuntimePersistenceStoreFactory,
 	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
@@ -603,7 +612,7 @@ func provideFactorySessionExecutionFactory(
 func provideStandaloneSessionExecutionFactory(
 	workflows factoryruntime.JavaScriptWorkflows,
 	orchestration factoryruntime.OrchestrationJavaScriptExecution,
-	recordingWriter recordingartifacts.Writer,
+	recordingWriter recordings.PortableRecordingWriter,
 	stores factorysessionwire.RuntimePersistenceStoreFactory,
 	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
@@ -671,7 +680,7 @@ func providePortableRecordingWriter(edges serviceedges.Edges) (recordings.Portab
 	if renamePath == nil {
 		renamePath = os.Rename
 	}
-	return recordingartifacts.NewAtomicWriter(makeDirectories, createTemporaryFile, removePath, renamePath)
+	return recordingswire.NewPortableRecordingWriter(makeDirectories, createTemporaryFile, removePath, renamePath)
 }
 
 func provideLoadedFactorySnapshotCapturer() factorydefinitions.LoadedFactorySnapshotCapturer {
@@ -870,6 +879,26 @@ func provideWorkersProviderTemporaryFileSystem(edges serviceedges.Edges) platfor
 		return edges.WorkersProviderTemporaryFileSystem
 	}
 	return platformfilesystem.Local{}
+}
+
+func provideProvidersAgyPTYPlatform(edges serviceedges.Edges) (providerswire.AgyPTYPlatformDependencies, error) {
+	allocator, err := provideAgyPTYAllocator(edges)
+	if err != nil {
+		return providerswire.AgyPTYPlatformDependencies{}, err
+	}
+	executableLocator := edges.WorkersExecutableLocator
+	if executableLocator == nil {
+		executableLocator = platformprocess.HostExecutableLocator{}
+	}
+	executableInspector := edges.WorkersExecutablePathInspector
+	if executableInspector == nil {
+		executableInspector = platformfilesystem.Local{}
+	}
+	return providerswire.AgyPTYPlatformDependencies{
+		Allocator: allocator,
+		Locator:   executableLocator,
+		Inspector: executableInspector,
+	}, nil
 }
 
 func provideWorkersFactoryDocsFileSystem(edges serviceedges.Edges) platformfilesystem.ReadFileTree {

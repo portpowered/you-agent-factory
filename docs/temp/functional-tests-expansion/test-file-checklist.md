@@ -692,7 +692,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestFactoryInitIsIdempotent`.
   - `TestFactoryInitFailureRoutingProducesFailedWork`.
 
-- [ ] `tests/functional/factory/definitions/validation_test.go`
+- [x] `tests/functional/factory/definitions/validation_test.go`
   - `TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute`.
   - `TestFactoryValidationReportsAllActionableDefinitionErrors`.
   - `TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions`.
@@ -801,7 +801,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedTTSOptionalVoiceAndFormatReachModel` covers options.
   - `TestPackagedTTSModelFailureReturnsNoFalseArtifact` covers failure.
 
-- [ ] `tests/functional/factory/packaged/cross/package_cli_api_test.go`
+- [x] `tests/functional/factory/packaged/cross/package_cli_api_test.go`
   - `TestPackagedFactoryInvokedByCLICanBeInspectedByAPI` owns this package
     cross-surface state check.
   - `TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree` compares only

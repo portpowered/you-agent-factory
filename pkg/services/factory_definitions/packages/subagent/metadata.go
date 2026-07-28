@@ -1,31 +1,21 @@
+// Package subagent is a transitional shim over the Distribution-owned subagent
+// package asset/metadata implementation.
 package subagent
 
 import (
-	"strings"
-
+	distributionsubagent "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/subagent"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 const (
-	// PackagedFactoryName is the canonical named factory identifier for @you/subagent.
-	PackagedFactoryName = factorydefinitions.PackagedSubagentFactoryName
-	// PackagedFactoryProject is the stable project id for the built-in subagent factory.
-	PackagedFactoryProject = factorydefinitions.PackagedSubagentFactoryProject
-	// PackagedWorkTypeName is the DEFAULT-handled work type for one-pass subagent runs.
-	PackagedWorkTypeName = factorydefinitions.PackagedSubagentWorkTypeName
-	// PackagedRunWorkstationName is the single AGENT_RUN workstation name.
-	PackagedRunWorkstationName = factorydefinitions.PackagedSubagentRunWorkstationName
-	// PackagedWorkerName is the single AGENT_WORKER name.
-	PackagedWorkerName = factorydefinitions.PackagedSubagentWorkerName
+	PackagedFactoryName      = distributionsubagent.PackagedFactoryName
+	PackagedFactoryProject   = distributionsubagent.PackagedFactoryProject
+	PackagedWorkTypeName     = distributionsubagent.PackagedWorkTypeName
+	PackagedRunWorkstationName = distributionsubagent.PackagedRunWorkstationName
+	PackagedWorkerName       = distributionsubagent.PackagedWorkerName
 )
 
 // IsPackagedFactory reports whether cfg identifies the built-in @you/subagent factory.
 func IsPackagedFactory(cfg *factorydefinitions.FactoryConfig) bool {
-	if cfg == nil {
-		return false
-	}
-	if strings.TrimSpace(cfg.Name) == PackagedFactoryName {
-		return true
-	}
-	return strings.TrimSpace(cfg.Project) == PackagedFactoryProject
+	return distributionsubagent.IsPackagedFactory(cfg)
 }

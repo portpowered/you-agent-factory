@@ -3,7 +3,7 @@
 package requiredtools
 
 import (
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
@@ -13,6 +13,6 @@ func Validate(
 	cfg *factorydefinitions.FactoryConfig,
 	checker factorydefinitions.RequiredToolChecker,
 ) factorydefinitions.ValidationResult {
-	result := factoryvalidation.ValidateDeclarativeRequiredTools(cfg, checker)
+	result := impl.ValidateDeclarativeRequiredTools(cfg, checker)
 	return factorydefinitions.ValidationResult{Targets: append([]factorydefinitions.ValidationTarget(nil), result.Targets...)}
 }

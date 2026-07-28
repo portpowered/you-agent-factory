@@ -2,6 +2,7 @@ package service
 
 import (
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
+	agyadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
 	claudeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	codexadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	cursoradapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/cursor"
@@ -13,6 +14,7 @@ import (
 
 // BuiltInDependencies carries exact provider-native invocation effects.
 type BuiltInDependencies struct {
+	Agy      agyadapter.Effect
 	Codex    codexadapter.Effect
 	Claude   claudeadapter.Effect
 	Cursor   cursoradapter.Effect
@@ -34,6 +36,7 @@ func BuiltInRegistrations(
 		effects = dependencies[0]
 	}
 	return []execution.Registration{
+		agyadapter.NewRegistration(effects.Agy),
 		codexadapter.NewRegistration(effects.Codex),
 		claudeadapter.NewRegistration(effects.Claude),
 		cursoradapter.NewRegistration(effects.Cursor),

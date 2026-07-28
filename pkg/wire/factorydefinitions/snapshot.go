@@ -3,33 +3,25 @@ package factorydefinitions
 import (
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
-	factorysnapshotcapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 )
 
 // FactorySnapshotJSONDecoder binds the canonical public representation decoder
 // to Factory Definitions snapshot capture.
 func FactorySnapshotJSONDecoder() contracts.FactorySnapshotJSONDecoder {
-	return factorysnapshotcapture.NewJSONDecoder(
-		factorymapping.GeneratedFactoryFromOpenAPIJSON,
-	)
+	return factorydefinitionswire.FactorySnapshotJSONDecoder()
 }
 
 // LoadedFactorySnapshotCapturer binds canonical snapshot representation
 // mapping to the Factory Definitions capture implementation.
 func LoadedFactorySnapshotCapturer() contracts.LoadedFactorySnapshotCapturer {
-	return factorysnapshotcapture.NewLoaded(
-		factorysnapshot.ObjectFromFactoryConfig,
-	)
+	return factorydefinitionswire.LoadedFactorySnapshotCapturer()
 }
 
 // FactorySnapshotCapturer binds canonical representation mapping to explicit
 // Factory Definition snapshot capture.
 func FactorySnapshotCapturer() contracts.FactorySnapshotCapturer {
-	return factorysnapshotcapture.NewExplicit(
-		factorysnapshot.ObjectFromFactoryConfig,
-	)
+	return factorydefinitionswire.FactorySnapshotCapturer()
 }
 
 // FactorySnapshotDirectoryLoader composes authored Factory loading and
@@ -37,13 +29,5 @@ func FactorySnapshotCapturer() contracts.FactorySnapshotCapturer {
 func FactorySnapshotDirectoryLoader(
 	loader *factoryloading.Loader,
 ) contracts.FactorySnapshotDirectoryLoader {
-	return factorysnapshotcapture.NewDirectoryLoader(
-		func(
-			factoryDir string,
-			workstationLoader contracts.WorkstationLoader,
-		) (contracts.MutableLoadedFactorySource, error) {
-			return loader.LoadSourceFromFactoryDir(factoryDir, workstationLoader)
-		},
-		LoadedFactorySnapshotCapturer(),
-	)
+	return factorydefinitionswire.FactorySnapshotDirectoryLoader(loader)
 }

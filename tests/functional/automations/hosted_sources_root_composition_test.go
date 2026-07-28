@@ -14,6 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestBuildProcessRemainsHostedSourcesInertBeforeRuntimeLifecycle proves BuildProcess
+// does not activate hosted automation sources before the runtime lifecycle starts.
 func TestBuildProcessRemainsHostedSourcesInertBeforeRuntimeLifecycle(t *testing.T) {
 	t.Parallel()
 
