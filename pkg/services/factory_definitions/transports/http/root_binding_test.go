@@ -9,6 +9,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
 
@@ -321,4 +322,6 @@ var _ factorydefinitions.SubmittedDefinitionValidationOperation = (*httpDefiniti
 // Ensure generated handler signature compatibility for future route registration.
 var _ interface {
 	ValidateFactory(http.ResponseWriter, *http.Request)
+	GetCurrentFactoryBySessionId(http.ResponseWriter, *http.Request, factoryapi.SessionID)
+	SaveCurrentFactoryBySessionId(http.ResponseWriter, *http.Request, factoryapi.SessionID)
 } = (*factorydefinitionshttp.Adapter)(nil)

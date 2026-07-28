@@ -1,0 +1,113 @@
+package http
+
+import (
+	"errors"
+	"io"
+	"net/http"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition"
+	"go.uber.org/zap"
+)
+
+// GetCurrentFactoryBySessionId handles GET /factory-sessions/{session_id}/factory by
+// mapping the session identifier through the injected Definitions root.
+func (s *Server) GetCurrentFactoryBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+) {
+	root, ok := s.requireDefinitionsRoot(w)
+	if !ok {
+		return
+	}
+
+	factory, err := factorydefinition.GetCurrentFactoryForSession(r.Context(), root, string(sessionID))
+	if err != nil {
+		s.writeCurrentFactoryError(w, err, "get", zap.String("session_id", string(sessionID)))
+		return
+	}
+	s.writeJSON(w, http.StatusOK, factory)
+}
+
+// SaveCurrentFactoryBySessionId handles PUT /factory-sessions/{session_id}/factory by
+// decoding the submission payload and invoking the injected Definitions root.
+func (s *Server) SaveCurrentFactoryBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+) {
+	root, ok := s.requireDefinitionsRoot(w)
+	if !ok {
+		return
+	}
+
+	req, err := decodeSaveCurrentFactoryBody(r.Body)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeErrorWithTargets(
+				w,
+				http.StatusBadRequest,
+				message,
+				"BAD_REQUEST",
+				[]factoryapi.FactoryValidationTarget{
+					apisurface.FactoryValidationTargetToAPI(interfaces.FormFactoryPayloadValidationTarget()),
+				},
+			)
+			return
+		}
+		s.writeErrorWithTargets(
+			w,
+			http.StatusBadRequest,
+			"invalid request payload",
+			"BAD_REQUEST",
+			[]factoryapi.FactoryValidationTarget{
+				apisurface.FactoryValidationTargetToAPI(interfaces.FormFactoryPayloadValidationTarget()),
+			},
+		)
+		return
+	}
+
+	mode := factoryapi.FactorySaveModeReplaceCurrent
+	if req.Mode != nil {
+		mode = *req.Mode
+	}
+
+	saved, err := factorydefinition.New(root).Save(r.Context(), string(sessionID), mode, req.Factory)
+	if err != nil {
+		s.writeCurrentFactoryError(w, err, "save", zap.String("session_id", string(sessionID)))
+		return
+	}
+	s.writeJSON(w, http.StatusOK, saved)
+}
+
+func (s *Server) writeCurrentFactoryError(
+	w http.ResponseWriter,
+	err error,
+	action string,
+	fields ...zap.Field,
+) {
+	switch {
+	case errors.Is(err, apisurface.ErrFactorySessionNotFound):
+		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return
+	case errors.Is(err, apisurface.ErrCurrentFactoryNotFound):
+		s.writeError(w, http.StatusNotFound, "Current factory not found.", "NOT_FOUND")
+		return
+	default:
+		logFields := append([]zap.Field{zap.String("action", action)}, fields...)
+		s.logger.Error("current factory request failed", append(logFields, zap.Error(err))...)
+		if action == "get" {
+			s.writeError(w, http.StatusInternalServerError, "failed to load current factory", "INTERNAL_ERROR")
+			return
+		}
+		s.writeError(w, http.StatusInternalServerError, "failed to save current factory", "INTERNAL_ERROR")
+		return
+	}
+}
+
+func decodeSaveCurrentFactoryBody(body io.Reader) (factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody, error) {
+	return decodeStrictJSON[factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody](body)
+}
