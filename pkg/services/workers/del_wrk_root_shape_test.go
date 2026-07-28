@@ -18,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
 )
 
 // DEL-WRK story 004 proves the Workers root matches canonical shape plus thin
@@ -288,7 +287,7 @@ func TestDelWrkRootShape_RuntimeAssemblyWorkstationAndRunnerPathsRemainReachable
 		t.Fatalf("BuildRuntime(agent) bindings = %#v, want two", result.Bindings)
 	}
 
-	selection := workerrunner.ResolveRunnerSelection(" opencode ", workers.RunnerIDGemini, workers.RunnerIDCodex)
+	selection := workers.ResolveRunnerSelection(" opencode ", workers.RunnerIDGemini, workers.RunnerIDCodex)
 	if selection.RunnerID != workers.RunnerIDOpenCode {
 		t.Fatalf("runner selection = %#v, want opencode from workstation override", selection)
 	}
