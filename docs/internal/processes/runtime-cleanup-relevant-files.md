@@ -1242,3 +1242,20 @@ deleted residual transitional public packages. Lock the ledger absence proof in
 `pkg/services/factory_definitions/del_def_residual_baseline_gate_test.go` after
 `ownership-inventory.json`, `package-target-manifest.json`, and
 `package-structure-baseline.json` no longer list those deleted paths.
+
+## DEL-DEF-RESIDUAL coverage baseline burn-down
+
+Story 004 removes unit and functional coverage minimum rows for deleted residual
+transitional public import paths and dedupes story-002 retarget duplicates in
+`docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+`docs/internal/baselines/go-functional-coverage-package-minimums.json`. Lock the
+burn-down with coverage subtests in
+`pkg/services/factory_definitions/del_def_residual_baseline_gate_test.go`:
+
+| Ledger | Deleted public import paths (examples) | Proof |
+| --- | --- | --- |
+| `docs/internal/baselines/go-unit-coverage-package-minimums.json` | `github.com/portpowered/infinite-you/pkg/services/factory_definitions/{namedpaths,loading,decisionenvelope,packages,...}` | baseline gate coverage subtests |
+| `docs/internal/baselines/go-functional-coverage-package-minimums.json` | same deleted public import paths, including measurement exceptions | baseline gate coverage subtests |
+
+Internal `internal/services/*` import paths remain canonical coverage debt and
+are not removed by this packet.

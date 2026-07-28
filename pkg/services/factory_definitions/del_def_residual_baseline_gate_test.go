@@ -4,12 +4,16 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
-const ownerPrefix = "pkg/services/factory_definitions/"
+const (
+	ownerPrefix                           = "pkg/services/factory_definitions/"
+	factoryDefinitionsModuleImportPrefix  = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/"
+)
 
 var deletedResidualTransitionalPackagePaths = []string{
 	ownerPrefix + "namedpaths",
@@ -128,4 +132,59 @@ func TestDelDefResidualBaselineGate_DeletedTransitionalPackagesBaselinesRemoved(
 			}
 		}
 	})
+
+	t.Run("unit_coverage_minimums_omit_deleted_transitional_packages", func(t *testing.T) {
+		t.Parallel()
+		assertCoverageMinimumsOmitDeletedResidualTransitionalPackages(t, root, "go-unit-coverage-package-minimums.json")
+	})
+
+	t.Run("functional_coverage_minimums_omit_deleted_transitional_packages", func(t *testing.T) {
+		t.Parallel()
+		assertCoverageMinimumsOmitDeletedResidualTransitionalPackages(t, root, "go-functional-coverage-package-minimums.json")
+	})
+}
+
+func deletedResidualTransitionalImportPaths() []string {
+	paths := make([]string, len(deletedResidualTransitionalPackagePaths))
+	for i, packagePath := range deletedResidualTransitionalPackagePaths {
+		paths[i] = strings.Replace(packagePath, ownerPrefix, factoryDefinitionsModuleImportPrefix, 1)
+	}
+	paths = append(paths,
+		factoryDefinitionsModuleImportPrefix+"packages/goal",
+		factoryDefinitionsModuleImportPrefix+"packages/packageassets",
+		factoryDefinitionsModuleImportPrefix+"packages/promptassets",
+		factoryDefinitionsModuleImportPrefix+"packages/review",
+		factoryDefinitionsModuleImportPrefix+"packages/subagent",
+		factoryDefinitionsModuleImportPrefix+"packages/tts",
+		factoryDefinitionsModuleImportPrefix+"workers/taxonomy",
+	)
+	return paths
+}
+
+func assertCoverageMinimumsOmitDeletedResidualTransitionalPackages(t *testing.T, root, fileName string) {
+	t.Helper()
+
+	path := filepath.Join(root, "docs", "internal", "baselines", fileName)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", path, err)
+	}
+	var baseline struct {
+		Packages []struct {
+			Package string `json:"package"`
+		} `json:"packages"`
+	}
+	if err := json.Unmarshal(payload, &baseline); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+
+	deletedImportPaths := deletedResidualTransitionalImportPaths()
+	for _, row := range baseline.Packages {
+		for _, deleted := range deletedImportPaths {
+			if row.Package != deleted && !strings.HasPrefix(row.Package, deleted+"/") {
+				continue
+			}
+			t.Fatalf("%s still lists deleted residual transitional package %q", fileName, row.Package)
+		}
+	}
 }
