@@ -1036,6 +1036,12 @@
     },
     {
       "fromOwner": "automations",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/automations/transports/http -\u003e pkg/transports/http/generated"
+    },
+    {
+      "fromOwner": "automations",
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/services/automations -\u003e pkg/services/work"
@@ -2443,6 +2449,12 @@
     },
     {
       "packagePath": "pkg/services/automations/service",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/transports/http",
       "disposition": "retain",
       "destination": "automations",
       "destinationKind": "owner"
