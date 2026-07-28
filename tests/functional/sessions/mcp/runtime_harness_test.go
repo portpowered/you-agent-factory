@@ -114,6 +114,11 @@ func setupSimpleFinalWorkflowFixture(t *testing.T) string {
 	return setupWorkflowFixture(t, "sessions-mcp-controls-sync", "simple-final.workflow.js", "simple-final")
 }
 
+func setupThrowErrorWorkflowFixture(t *testing.T) string {
+	t.Helper()
+	return setupWorkflowFixture(t, "sessions-mcp-controls-sync-fail", "throw-error.workflow.js", "throw-error")
+}
+
 func startMCPSyncSucceededSession(
 	t *testing.T,
 	client *stdioMCPClient,
@@ -154,6 +159,89 @@ func startMCPSyncSucceededSession(
 		t.Fatalf("sync result status = %q, want FINAL", result.Result.ResultStatus)
 	}
 	return result
+}
+
+func startMCPSyncFailedSession(
+	t *testing.T,
+	client *stdioMCPClient,
+) factoryapi.FactorySessionSyncExecutionResponse {
+	t.Helper()
+
+	const workflowName = "throw-error"
+	workflowNamePtr := workflowName
+	args := map[string]any{"subject": "workflows"}
+	response := decodeToolResponse[factoryapi.FactorySessionSyncExecutionResponse](
+		t,
+		client.callTool(mcpfactorysession.ToolStartSync, factoryapi.FactorySessionExecutionRequest{
+			RequestId: "req-sessions-mcp-controls-sync-failure-001",
+			Source: factoryapi.FactorySessionExecutionSource{
+				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+				WorkflowName: &workflowNamePtr,
+			},
+			Args: &args,
+		}),
+	)
+	if response.Error != nil {
+		t.Fatalf("start_sync error envelope = %#v, want sync result-path failure", response.Error)
+	}
+	if response.Result == nil {
+		t.Fatal("start_sync result missing from sync failure response")
+	}
+	result := *response.Result
+	if result.SessionId == "" {
+		t.Fatal("sessionId missing from sync failure response")
+	}
+	if result.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("sync status = %q, want FAILED", result.Status)
+	}
+	assertMCPSyncFailureNotTerminalSuccess(t, result)
+	return result
+}
+
+func assertMCPSyncFailureNotTerminalSuccess(
+	t *testing.T,
+	syncResult factoryapi.FactorySessionSyncExecutionResponse,
+) {
+	t.Helper()
+	if syncResult.Status == factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("sync status = %q, want non-success terminal failure", syncResult.Status)
+	}
+	if syncResult.SyncOutcome == factoryapi.FactorySessionSyncExecutionOutcomeCompleted &&
+		syncResult.Result != nil &&
+		syncResult.Result.ResultStatus == factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("sync result = %#v, want no terminal success primary result", syncResult.Result)
+	}
+	if syncResult.Result == nil {
+		t.Fatal("sync embedded result missing for structured failure response")
+	}
+	embedded := syncResult.Result
+	if embedded.SessionStatus == nil ||
+		*embedded.SessionStatus != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("sync embedded sessionStatus = %#v, want FAILED", embedded.SessionStatus)
+	}
+	if embedded.ResultStatus == factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("sync embedded resultStatus = %q, want non-FINAL failure availability", embedded.ResultStatus)
+	}
+	if embedded.PrimaryResult != nil {
+		t.Fatalf("sync embedded primaryResult = %#v, want no terminal success payload", embedded.PrimaryResult)
+	}
+}
+
+func assertMCPStructuredFailureDetail(
+	t *testing.T,
+	failureDetail *factoryapi.FailureDetail,
+	context string,
+) {
+	t.Helper()
+	if failureDetail == nil {
+		t.Fatalf("%s failureDetail missing, want structured reason and message", context)
+	}
+	if strings.TrimSpace(string(failureDetail.Reason)) == "" {
+		t.Fatalf("%s failureDetail.reason missing, want stable machine-readable reason", context)
+	}
+	if strings.TrimSpace(failureDetail.Message) == "" {
+		t.Fatalf("%s failureDetail.message missing, want customer-safe failure message", context)
+	}
 }
 
 func startMCPRunningSession(t *testing.T, client *stdioMCPClient) string {

@@ -156,6 +156,31 @@ func TestMCPSynchronousFactorySessionReturnsTerminalResult(t *testing.T) {
 	closeMCPServer(t, nil, serveErr)
 }
 
+// TestMCPSynchronousFailureReturnsStructuredFailure proves public MCP
+// you.factory_session.start_sync surfaces a structured sync failure for a
+// failing Factory Session run without presenting a terminal success primary
+// result on the sync response or subsequent MCP session read.
+func TestMCPSynchronousFailureReturnsStructuredFailure(t *testing.T) {
+	projectRoot := setupThrowErrorWorkflowFixture(t)
+	client, shutdown, serveErr := startRootRuntimeMCPServer(t, projectRoot, nil)
+	assertMCPInitialized(t, client)
+
+	syncResult := startMCPSyncFailedSession(t, client)
+	sessionRead := readMCPSessionDurableReadModel(t, client, syncResult.SessionId)
+	assertCanonicalSessionID(t, sessionRead.SessionId, syncResult.SessionId, "sync failure session read")
+	if sessionRead.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("sync session read status = %q, want FAILED", sessionRead.Status)
+	}
+	assertMCPStructuredFailureDetail(t, sessionRead.FailureDetail, "sync failure session read")
+	if sessionRead.ResultSummary != nil &&
+		sessionRead.ResultSummary.ResultStatus == factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("sync session read resultSummary = %#v, want non-FINAL failure availability", sessionRead.ResultSummary)
+	}
+
+	shutdown()
+	closeMCPServer(t, nil, serveErr)
+}
+
 func toolNamesFromListResult(t *testing.T, result map[string]any) []string {
 	t.Helper()
 	rawTools, ok := result["tools"].([]any)
