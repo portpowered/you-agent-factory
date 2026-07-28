@@ -638,8 +638,8 @@ func FactoryForSession(resolver LiveSessionResolver, sessionID string) (factory.
 
 // LegacyObservationForService isolates migration-era Petri snapshot access
 // from the singular Factory Runtime Service contract.
-func LegacyObservationForService(runtime factory.Service) (factory.APIFactory, error) {
-	observation, ok := runtime.(factory.APIFactory)
+func LegacyObservationForService(runtime factory.Service) (factory.LegacySnapshotProvider, error) {
+	observation, ok := runtime.(factory.LegacySnapshotProvider)
 	if !ok || observation == nil {
 		return nil, fmt.Errorf("legacy Factory Runtime observation is unavailable")
 	}
@@ -665,7 +665,7 @@ func LegacyEventSourceForService(runtime factory.Service) (LegacyEventSource, er
 
 // LegacyInvocationSourcesForService resolves the paired compatibility
 // capabilities still needed by invocation observation in one boundary check.
-func LegacyInvocationSourcesForService(runtime factory.Service) (factory.APIFactory, LegacyEventSource, error) {
+func LegacyInvocationSourcesForService(runtime factory.Service) (factory.LegacySnapshotProvider, LegacyEventSource, error) {
 	observation, err := LegacyObservationForService(runtime)
 	if err != nil {
 		return nil, nil, err

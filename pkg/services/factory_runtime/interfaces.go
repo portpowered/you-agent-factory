@@ -35,8 +35,8 @@ type WorkMover interface {
 }
 
 // APIFactory is the migration-only factory boundary required by legacy HTTP
-// API and Factory Sessions adapters. New cross-service peers use Service,
-// which does not expose GetEngineStateSnapshot.
+// API and Factory Sessions adapters. New cross-service peers use Service and
+// do not require Petri-shaped engine snapshots.
 type APIFactory interface {
 	// SubmitWorkRequest injects a canonical work request batch idempotently.
 	SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error)
@@ -45,9 +45,13 @@ type APIFactory interface {
 	// live events. The live stream closes when ctx is canceled. When reconnect
 	// is non-nil, only events newer than the acknowledged cursor are replayed.
 	SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error)
+}
 
+// LegacySnapshotProvider is migration-only Petri snapshot access retained for
+// internal consumers. It is not part of the APIFactory or Service peer contracts.
+type LegacySnapshotProvider interface {
 	// GetEngineStateSnapshot returns the aggregate observability snapshot for
-	// migration-era consumers.
+	// migration-era consumers that still require Petri markings or topology.
 	GetEngineStateSnapshot(ctx context.Context) (*StateSnapshot, error)
 }
 
@@ -134,6 +138,7 @@ type Service interface {
 // cross-service root-slice peers depend on Service rather than this engine seam.
 type Factory interface {
 	APIFactory
+	LegacySnapshotProvider
 	WorkMover
 	Pause(ctx context.Context) error
 	Resume(ctx context.Context) error

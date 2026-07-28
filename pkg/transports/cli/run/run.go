@@ -47,10 +47,6 @@ type factoryServiceRunner interface {
 // RuntimeRunner is the local in-process runtime seam used by CLI startup.
 type RuntimeRunner = factoryServiceRunner
 
-type engineStateSnapshotProvider interface {
-	GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net], error)
-}
-
 type cleanInvocationSuccess struct {
 	Output       string `json:"output"`
 	WorkID       string `json:"workId"`

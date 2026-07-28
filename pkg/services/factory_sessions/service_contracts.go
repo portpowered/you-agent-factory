@@ -104,7 +104,6 @@ type Service interface {
 	ProbeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) error
 	ReadDurableFactorySessionEventStream(context.Context, string, EventReconnectRequest) (*factorydefinitions.FactoryEventStream, error)
 	ProbeDurableFactorySessionEvents(context.Context, string, EventReconnectRequest) error
-	GetEngineStateSnapshotForSession(context.Context, string) (*factoryruntime.StateSnapshot, error)
 	ObserveForSession(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
 	PauseLiveFactorySession(context.Context, string, ControlRequest) (LifecycleControlResult, error)
 	ResumeLiveFactorySession(context.Context, string, ControlRequest) (LifecycleControlResult, error)

@@ -24,9 +24,6 @@ type validationRole struct {
 
 type runtimeRole struct{ factoryruntime.Service }
 
-func (*runtimeRole) GetEngineStateSnapshot(context.Context) (*factoryruntime.LegacyEngineObservation, error) {
-	return nil, nil
-}
 func (*runtimeRole) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	return work.WorkRequestSubmitResult{}, nil
 }

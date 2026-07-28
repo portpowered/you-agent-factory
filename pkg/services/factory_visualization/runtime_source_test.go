@@ -205,9 +205,3 @@ func (f *sessionBoundRuntimeFactory) Observe(
 ) (factoryruntime.ObserveResult, error) {
 	return factoryruntime.ObserveResult{Observation: f.observation}, nil
 }
-
-func (f *sessionBoundRuntimeFactory) GetEngineStateSnapshot(
-	context.Context,
-) (*factoryruntime.StateSnapshot, error) {
-	return nil, nil
-}

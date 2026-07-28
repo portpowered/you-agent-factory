@@ -1,6 +1,7 @@
 package factory_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -81,5 +82,47 @@ func TestRequireIdleRuntimeFromObservation(t *testing.T) {
 	if err := factoryruntime.RequireIdleRuntimeFromObservation(busy); err == nil ||
 		!errors.Is(err, interfaces.ErrFactoryActivationRequiresIdle) {
 		t.Fatalf("RequireIdleRuntimeFromObservation(busy) = %v, want ErrFactoryActivationRequiresIdle", err)
+	}
+}
+
+// peerShapedRuntimeService is a minimal Service fake that exercises observation
+// without implementing LegacySnapshotProvider or APIFactory snapshot methods.
+type peerShapedRuntimeService struct {
+	factoryruntime.Service
+	observation factoryruntime.Observation
+}
+
+func (f *peerShapedRuntimeService) Observe(
+	_ context.Context,
+	req factoryruntime.ObserveRequest,
+) (factoryruntime.ObserveResult, error) {
+	if req.Scope == "" {
+		return factoryruntime.ObserveResult{}, factoryruntime.ErrInvalidObservationScope
+	}
+	return factoryruntime.ObserveResult{Observation: f.observation}, nil
+}
+
+func TestPeerShapedServiceFakeObservesWithoutLegacySnapshot(t *testing.T) {
+	t.Parallel()
+
+	want := factoryruntime.Observation{
+		Status: factoryruntime.ObservationStatusActive,
+		Health: factoryruntime.ObservationHealth{FactoryState: "RUNNING"},
+	}
+	runtime := &peerShapedRuntimeService{observation: want}
+
+	var _ factoryruntime.Service = runtime
+	if _, ok := any(runtime).(factoryruntime.LegacySnapshotProvider); ok {
+		t.Fatal("peer-shaped Service fake must not implement LegacySnapshotProvider")
+	}
+
+	result, err := runtime.Observe(context.Background(), factoryruntime.ObserveRequest{
+		Scope: factoryruntime.ObservationScopeHealth,
+	})
+	if err != nil {
+		t.Fatalf("Observe: %v", err)
+	}
+	if result.Observation.Status != want.Status || result.Observation.Health.FactoryState != want.Health.FactoryState {
+		t.Fatalf("observation = %#v, want %#v", result.Observation, want)
 	}
 }

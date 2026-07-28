@@ -152,8 +152,8 @@ func TestService_LiveRegistryPathsDelegateThroughLiveRuntimeOwner(t *testing.T) 
 		t.Fatalf("resolve get calls = %d, want at least 2", host.getCalls)
 	}
 
-	if _, err := gateway.GetEngineStateSnapshotForSession(ctx, session.ID); err != nil {
-		t.Fatalf("GetEngineStateSnapshotForSession: %v", err)
+	if _, err := gateway.ObserveForSession(ctx, session.ID, factoryruntime.ObserveRequest{Scope: factoryruntime.ObservationScopeFull}); err != nil {
+		t.Fatalf("ObserveForSession: %v", err)
 	}
 
 	if _, err := gateway.PauseLiveFactorySession(ctx, session.ID, factorysessions.ControlRequest{}); err != nil {

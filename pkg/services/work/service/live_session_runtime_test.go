@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -24,10 +23,6 @@ func (legacyMoveFactory) SubscribeFactoryEvents(
 	*interfaces.FactoryEventReconnectCursor,
 	interfaces.FactoryEventReconnectScope,
 ) (*interfaces.FactoryEventStream, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (legacyMoveFactory) GetEngineStateSnapshot(context.Context) (*factory.StateSnapshot, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 

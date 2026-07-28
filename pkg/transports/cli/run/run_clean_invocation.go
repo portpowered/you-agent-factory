@@ -32,7 +32,7 @@ func emitCleanInvocationOutcome(
 	duration time.Duration,
 ) error {
 	logger := cleanInvocationLogger(cfg.Logger)
-	provider, ok := runner.(engineStateSnapshotProvider)
+	provider, ok := runner.(state.LegacySnapshotProvider)
 	if !ok {
 		if runErr == nil {
 			err := &InvocationError{

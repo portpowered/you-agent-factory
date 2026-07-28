@@ -271,21 +271,3 @@ func (s *Service) SubscribeFactoryEventsForSession(ctx context.Context, sessionI
 	}
 	return stream, nil
 }
-
-// GetEngineStateSnapshotForSession returns the aggregate state snapshot for one
-// live Factory Session runtime.
-func (s *Service) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*factory.StateSnapshot, error) {
-	runtime, err := s.runtime(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	legacyObservation, ok := runtime.Factory.(factory.APIFactory)
-	if !ok {
-		return nil, fmt.Errorf("legacy Factory Runtime observation is unavailable")
-	}
-	snapshot, err := legacyObservation.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get engine state snapshot: %w", err)
-	}
-	return snapshot, nil
-}
