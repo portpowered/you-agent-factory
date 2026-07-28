@@ -3,6 +3,7 @@ package execution_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -169,4 +170,84 @@ func TestAPIDispatchListAndDetailExposePublicCorrelation(t *testing.T) {
 	}
 
 	functionalevidence.Covers(t, "rest/getFactorySessionDispatch", "rest/listFactorySessionDispatches")
+}
+
+// TestAPIPartialResultIsAvailableBeforeTerminalCompletion proves a durable
+// Factory Session exposes an observable partial-result projection through the
+// public results read surface while the session is still non-terminal and
+// before final completion is available.
+func TestAPIPartialResultIsAvailableBeforeTerminalCompletion(t *testing.T) {
+	dir := scaffoldPartialResultFactory(t)
+	provider := newPartialResultBlockingProvider(partialResultWorkflowName)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{ProviderOverride: provider},
+	})
+
+	started := startPartialResultAsync(t, server.URL())
+	if strings.TrimSpace(started.SessionId) == "" {
+		t.Fatal("sessionId is empty, want durable Factory Session identifier")
+	}
+	t.Cleanup(func() {
+		terminateDurableSession(t, server.URL(), started.SessionId)
+	})
+
+	waitForDurableSessionStatus(
+		t,
+		server.URL(),
+		started.SessionId,
+		factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		5*time.Second,
+	)
+	waitForFactoryDispatchStatus(
+		t,
+		server.URL(),
+		started.SessionId,
+		partialResultFirstDispatchID,
+		factoryapi.FactoryDispatchStatusCOMPLETED,
+		5*time.Second,
+	)
+	waitForFactoryDispatchStatus(
+		t,
+		server.URL(),
+		started.SessionId,
+		partialResultSecondDispatchID,
+		factoryapi.FactoryDispatchStatusRUNNING,
+		5*time.Second,
+	)
+
+	partial := waitForDurablePartialResult(t, server.URL(), started.SessionId, 5*time.Second)
+	if partial.SessionId != started.SessionId {
+		t.Fatalf("partial result sessionId = %q, want %q", partial.SessionId, started.SessionId)
+	}
+	if partial.SessionStatus == nil || *partial.SessionStatus != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("partial result sessionStatus = %#v, want RUNNING", partial.SessionStatus)
+	}
+	if partial.Mode == nil || *partial.Mode != factoryapi.FactorySessionResultModePartial {
+		t.Fatalf("partial result mode = %#v, want partial", partial.Mode)
+	}
+	assertPartialResultObservableBeforeTerminal(t, partial)
+
+	session := readDurableSession(t, server.URL(), started.SessionId)
+	if session.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("session status = %q, want RUNNING before terminal completion", session.Status)
+	}
+	if session.ResultSummary != nil &&
+		session.ResultSummary.ResultStatus == factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("resultSummary = %#v, want no FINAL summary before terminal completion", session.ResultSummary)
+	}
+	if session.LatestCheckpoint == nil || session.LatestCheckpoint.Label == nil ||
+		*session.LatestCheckpoint.Label != partialResultCheckpointLabel {
+		t.Fatalf("latestCheckpoint = %#v, want label %q", session.LatestCheckpoint, partialResultCheckpointLabel)
+	}
+
+	final := readDurableSessionResultWithMode(t, server.URL(), started.SessionId, "final")
+	if final.ResultStatus != factoryapi.FactorySessionResultStatusNotReady {
+		t.Fatalf("final-mode resultStatus = %q, want NOT_READY while session is running", final.ResultStatus)
+	}
+	if final.Availability == nil || final.Availability.Reason == nil ||
+		*final.Availability.Reason != "RESULT_NOT_READY" {
+		t.Fatalf("final-mode availability = %#v, want RESULT_NOT_READY", final.Availability)
+	}
 }

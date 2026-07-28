@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -24,9 +27,68 @@ const (
 	terminalSuccessPrimaryResult         = "primary result COMPLETE"
 	inlineJavaScriptWorkflowFileName     = "results-dispatches.workflow.js"
 	dispatchCorrelationWorkflowFileName  = "results-dispatches-correlation.workflow.js"
+	partialResultWorkflowName              = "resumable-two-step-fake-children"
 	dispatchCorrelationChildLabel        = "dispatch-correlation-child"
 	dispatchCorrelationChildPrompt       = "prove-dispatch-correlation"
+	partialResultCheckpointLabel         = "after-step-one"
+	partialResultFirstDispatchID         = "dispatch-1"
+	partialResultSecondDispatchID        = "dispatch-2"
 )
+
+type partialResultBlockingProvider struct {
+	mu              sync.Mutex
+	calls           int
+	blockedOnce     bool
+	contextCanceled int
+	workflowName    string
+}
+
+func newPartialResultBlockingProvider(workflowName string) *partialResultBlockingProvider {
+	return &partialResultBlockingProvider{workflowName: workflowName}
+}
+
+func (p *partialResultBlockingProvider) Infer(
+	ctx context.Context,
+	_ workerexecution.ProviderInferenceRequest,
+) (workerexecution.InferenceResponse, error) {
+	p.mu.Lock()
+	p.calls++
+	call := p.calls
+	alreadyBlocked := p.blockedOnce
+	p.mu.Unlock()
+
+	if call == 1 {
+		return workerexecution.InferenceResponse{
+			Content: fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
+				Provider: "mock",
+				Kind:     "session_id",
+				ID:       "partial-result-provider-session-1",
+			},
+		}, nil
+	}
+
+	if !alreadyBlocked {
+		p.mu.Lock()
+		p.blockedOnce = true
+		p.mu.Unlock()
+
+		<-ctx.Done()
+		p.mu.Lock()
+		p.contextCanceled++
+		p.mu.Unlock()
+		return workerexecution.InferenceResponse{}, ctx.Err()
+	}
+
+	return workerexecution.InferenceResponse{
+		Content: fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
+			Provider: "mock",
+			Kind:     "session_id",
+			ID:       "partial-result-provider-session-2",
+		},
+	}, nil
+}
 
 var dispatchCorrelationWorkflow = `return (async function () {
   const child = await agent.run({
@@ -104,6 +166,28 @@ func scaffoldDispatchCorrelationFactory(t *testing.T) string {
 		0o600,
 	); err != nil {
 		t.Fatalf("write dispatch correlation workflow: %v", err)
+	}
+	return dir
+}
+
+func scaffoldPartialResultFactory(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{"name": "results-dispatches-partial"})
+	workflowDir := filepath.Join(dir, ".claude", "workflows")
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	fixturePath := support.AgentFactoryPath(
+		t,
+		filepath.Join("tests", "fixtures", "javascript_runtime", partialResultWorkflowName+".workflow.js"),
+	)
+	raw, err := os.ReadFile(fixturePath)
+	if err != nil {
+		t.Fatalf("read workflow fixture %s: %v", fixturePath, err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, partialResultWorkflowName+".js"), raw, 0o600); err != nil {
+		t.Fatalf("write partial result workflow: %v", err)
 	}
 	return dir
 }
@@ -311,10 +395,171 @@ func readDurableSessionResult(
 ) factoryapi.FactorySessionResult {
 	t.Helper()
 
+	return readDurableSessionResultWithMode(t, serverURL, sessionID, "final")
+}
+
+func readDurableSessionResultWithMode(
+	t *testing.T,
+	serverURL, sessionID, mode string,
+) factoryapi.FactorySessionResult {
+	t.Helper()
+
 	return support.GetJSON[factoryapi.FactorySessionResult](
 		t,
-		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/results?mode=final",
+		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/results?mode="+mode,
 	)
+}
+
+func readDurableSession(
+	t *testing.T,
+	serverURL, sessionID string,
+) factoryapi.FactorySessionDurableReadModel {
+	t.Helper()
+
+	response := support.GetJSON[factoryapi.FactorySessionGetResponse](
+		t,
+		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID,
+	)
+	session, err := response.AsFactorySessionDurableReadModel()
+	if err != nil {
+		t.Fatalf("decode durable session %s: %v", sessionID, err)
+	}
+	if session.SessionId != sessionID {
+		t.Fatalf("durable session id = %q, want %q", session.SessionId, sessionID)
+	}
+	return session
+}
+
+func startPartialResultAsync(
+	t *testing.T,
+	serverURL string,
+) factoryapi.FactorySessionExecutionResponse {
+	t.Helper()
+
+	workflowName := partialResultWorkflowName
+	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
+		RequestId: "results-dispatches-partial-async",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+			WorkflowName: &workflowName,
+		},
+		Args: &map[string]any{
+			"subject": "workflows",
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal partial result async request: %v", err)
+	}
+
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/async"
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build partial result async request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST %s status = %d, want 200: %s", endpoint, response.StatusCode, strings.TrimSpace(string(payload)))
+	}
+
+	var started factoryapi.FactorySessionExecutionResponse
+	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
+		t.Fatalf("decode partial result async response: %v", err)
+	}
+	return started
+}
+
+func waitForDurableSessionStatus(
+	t *testing.T,
+	serverURL, sessionID string,
+	want factoryapi.FactorySessionDurableLifecycleStatus,
+	timeout time.Duration,
+) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		session := readDurableSession(t, serverURL, sessionID)
+		if session.Status == want {
+			return
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	session := readDurableSession(t, serverURL, sessionID)
+	t.Fatalf("durable session %s status = %q, want %q within %s", sessionID, session.Status, want, timeout)
+}
+
+func waitForFactoryDispatchStatus(
+	t *testing.T,
+	serverURL, sessionID, dispatchID string,
+	want factoryapi.FactoryDispatchStatus,
+	timeout time.Duration,
+) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		listed := listFactorySessionDispatches(t, serverURL, sessionID)
+		for _, dispatch := range listed.Dispatches {
+			if dispatch.Id != dispatchID {
+				continue
+			}
+			if dispatch.Status == want {
+				return
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("dispatch %s did not reach %s within %s", dispatchID, want, timeout)
+}
+
+func waitForDurablePartialResult(
+	t *testing.T,
+	serverURL, sessionID string,
+	timeout time.Duration,
+) factoryapi.FactorySessionResult {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		partial := readDurableSessionResultWithMode(t, serverURL, sessionID, "partial")
+		if partial.ResultStatus == factoryapi.FactorySessionResultStatusPartial &&
+			partial.PrimaryResult != nil && len(*partial.PrimaryResult) > 0 {
+			return partial
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	partial := readDurableSessionResultWithMode(t, serverURL, sessionID, "partial")
+	t.Fatalf(
+		"partial result = %#v, want PARTIAL status with primaryResult before %s",
+		partial,
+		timeout,
+	)
+	return partial
+}
+
+func terminateDurableSession(t *testing.T, serverURL, sessionID string) {
+	t.Helper()
+
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/" + sessionID + "/terminate"
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, http.NoBody)
+	if err != nil {
+		t.Fatalf("build terminate request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST %s status = %d, want 200: %s", endpoint, response.StatusCode, strings.TrimSpace(string(payload)))
+	}
 }
 
 func assertInvocationPrimaryResultText(
@@ -458,6 +703,32 @@ func assertDispatchListDetailPublicCorrelation(
 				)
 			}
 		}
+	}
+}
+
+func assertPartialResultObservableBeforeTerminal(
+	t *testing.T,
+	partial factoryapi.FactorySessionResult,
+) {
+	t.Helper()
+
+	if partial.ResultStatus != factoryapi.FactorySessionResultStatusPartial {
+		t.Fatalf("resultStatus = %q, want PARTIAL", partial.ResultStatus)
+	}
+	if partial.PrimaryResult == nil || len(*partial.PrimaryResult) == 0 {
+		t.Fatalf("primaryResult = %#v, want observable partial content", partial.PrimaryResult)
+	}
+	part, err := (*partial.PrimaryResult)[0].AsWorkJsonContentPart()
+	if err != nil {
+		t.Fatalf("primaryResult[0] as json part: %v", err)
+	}
+	payload, ok := part.Json.(map[string]any)
+	if !ok {
+		t.Fatalf("primaryResult json = %#v, want object", part.Json)
+	}
+	step, ok := payload["step"].(float64)
+	if !ok || int(step) != 1 {
+		t.Fatalf("primaryResult step = %#v, want checkpoint step 1", payload["step"])
 	}
 }
 
