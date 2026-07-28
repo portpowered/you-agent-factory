@@ -1399,6 +1399,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
+      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/named_lifecycle",
+      "scenario": "TestCLIFactoryDeleteMissingReturnsActionableFailure",
+      "lane": "short",
+      "destination": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
+      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/named_lifecycle",
+      "scenario": "TestCLIFactoryListReflectsCreateAndDelete",
+      "lane": "short",
+      "destination": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
+      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/named_lifecycle",
+      "scenario": "TestCLIFactoryNamedCreateListUpdateDelete",
+      "lane": "short",
+      "destination": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/definitions/defaults_test.go",
       "package": "you-agent-factory/tests/functional/factory/definitions",
       "scenario": "TestExplicitFactoryConfigOverridesGlobalDefaults",
@@ -1454,6 +1484,36 @@
       "scenario": "TestFactoryInitIsIdempotent",
       "lane": "short",
       "destination": "tests/functional/factory/definitions/init_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/import_export_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestExportedFactoryCanBeImportedAndRun",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/import_export_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/import_export_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestImportExportPreservesNestedDocsScriptsAndMetadata",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/import_export_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/import_export_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestInvalidImportDoesNotReplaceCurrentFactory",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/import_export_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -7849,6 +7909,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
+      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/help",
+      "scenario": "TestCLIRunHelpDistinguishesRequiredAndOptionalParameters",
+      "lane": "short",
+      "destination": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
+      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/help",
+      "scenario": "TestCLIRunHelpDoesNotDispatchExternalWork",
+      "lane": "short",
+      "destination": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
+      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/help",
+      "scenario": "TestCLIRunHelpShowsInvocationSignatureForNamedFactory",
+      "lane": "short",
+      "destination": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/workers/agent/root_build_test.go",
       "package": "you-agent-factory/tests/functional/workers/agent",
       "scenario": "TestAgentRunnerDeliveryRemainsInertThroughRootBuildProcessConstruction",
@@ -9387,7 +9477,7 @@
       "you-agent-factory/tests/functional/events/factory_events": 5,
       "you-agent-factory/tests/functional/factory/current": 6,
       "you-agent-factory/tests/functional/factory/definition_activation": 3,
-      "you-agent-factory/tests/functional/factory/definitions": 11,
+      "you-agent-factory/tests/functional/factory/definitions": 14,
       "you-agent-factory/tests/functional/factory/packaged/catalog": 10,
       "you-agent-factory/tests/functional/factory/packaged/catalog/required_inputs_test": 2,
       "you-agent-factory/tests/functional/factory/packaged/cross": 2,

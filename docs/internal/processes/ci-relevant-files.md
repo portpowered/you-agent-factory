@@ -678,6 +678,11 @@ Wave 0 functional-tests-expansion planning authority lives under
   `factory_definitions` and subsection `transports/cli` from the path; every
   top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
   stays viz-compatible.
+  `tests/functional/factory/definitions/import_export_test.go` owns export→import→run,
+  nested docs/scripts/metadata preservation, and invalid-import Current Factory
+  safety through `support.BuildProcess` + `support.FlattenFactoryConfig` /
+  `support.CreateNamedFactory` CLI round-trips with `support.RunFactoryToCompletionWithEdgesAndWork`
+  for terminal run proofs; catalog metadata infers domain `factory/definitions`.
   `make pkg-structure` enforces the domain-mirrored functional layout
   `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
   unclassified scenario packages are blocking, while existing nonconforming

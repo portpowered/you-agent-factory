@@ -745,10 +745,21 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIFactoryValidateDoesNotMutateOnFailure`.
   - `TestCLIFactoryPersistFromFileThenRunSucceeds`.
 
-- [ ] `tests/functional/factory/definitions/import_export_test.go`
+- [x] `tests/functional/factory/definitions/import_export_test.go`
   - `TestExportedFactoryCanBeImportedAndRun`.
   - `TestImportExportPreservesNestedDocsScriptsAndMetadata`.
   - `TestInvalidImportDoesNotReplaceCurrentFactory`.
+
+- [x] `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
+  - `TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation`.
+  - `TestCLISubmitBatchSuccessHumanAndJSONShapes`.
+  - `TestCLISubmitBatchInvalidJSONFailsBeforeUpsert`.
+  - `TestCLISubmitBatchContractHarnessExecutesThroughRootBuildProcess`.
+
+- [x] `tests/functional/workers/transports/cli/run/help/invocation_help_test.go`
+  - `TestCLIRunHelpShowsInvocationSignatureForNamedFactory`.
+  - `TestCLIRunHelpDistinguishesRequiredAndOptionalParameters`.
+  - `TestCLIRunHelpDoesNotDispatchExternalWork`.
 
 ### Factory visualization
 
