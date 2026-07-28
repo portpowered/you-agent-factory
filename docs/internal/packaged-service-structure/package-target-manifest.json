@@ -294,6 +294,7 @@
     "pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
     "pkg/services/provider_sessions/internal/services/cursor_reader/wire",
     "pkg/services/provider_sessions/service",
+    "pkg/services/provider_sessions/transports/http",
     "pkg/services/provider_sessions/wire",
     "pkg/services/providers",
     "pkg/services/providers/internal/service",
@@ -1734,6 +1735,11 @@
     },
     {
       "packagePath": "pkg/services/provider_sessions/service",
+      "disposition": "retain",
+      "destination": "provider_sessions"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/transports/http",
       "disposition": "retain",
       "destination": "provider_sessions"
     },
