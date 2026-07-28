@@ -1,4 +1,4 @@
-package service
+package internal
 
 import (
 	"context"
@@ -86,7 +86,7 @@ func (spy *inertConstructionSpy) Run(
 func TestServiceDelegatesWorkstationLifecycleThroughWorkersRoot(t *testing.T) {
 	t.Parallel()
 
-	var root workers.Service = &Service{workstations: workstationswire.NewService()}
+	var root workers.Service = &Service{Root: RootFrom(nil, workstationswire.NewService())}
 	request := workers.WorkstationPoolStartRequest{Bindings: []workers.AssembledRuntimeBinding{
 		{RoleName: "review", RoleKind: workers.RuntimeBuildRoleKindWorkstation},
 		{RoleName: "implement", RoleKind: workers.RuntimeBuildRoleKindWorkstation},
@@ -136,7 +136,7 @@ func TestServiceWorkstationLifecyclePreservesTypedFailures(t *testing.T) {
 		t.Fatalf("nil StartWorkstationPool() error = %v, want ErrWorkstationPoolUnavailable", err)
 	}
 
-	root := &Service{workstations: workstationswire.NewService()}
+	root := &Service{Root: RootFrom(nil, workstationswire.NewService())}
 	if _, err := root.StartWorkstationPool(
 		context.Background(),
 		workers.WorkstationPoolStartRequest{Bindings: []workers.AssembledRuntimeBinding{{
@@ -154,7 +154,7 @@ func TestServiceDelegatesWorkstationDispatchThroughWorkersRoot(t *testing.T) {
 	executor := &rootDispatchExecutor{
 		result: workers.WorkResult{Outcome: workers.OutcomeAccepted, Output: "routed"},
 	}
-	var root workers.Service = &Service{workstations: workstationswire.NewService()}
+	var root workers.Service = &Service{Root: RootFrom(nil, workstationswire.NewService())}
 	if _, err := root.StartWorkstationPool(
 		context.Background(),
 		workers.WorkstationPoolStartRequest{Bindings: []workers.AssembledRuntimeBinding{{
@@ -218,7 +218,7 @@ func TestServicePreservesCanonicalWorkstationSaturationThroughRoot(t *testing.T)
 		started: make(chan struct{}, 2),
 		release: make(chan struct{}),
 	}
-	var root workers.Service = &Service{workstations: workstationswire.NewService()}
+	var root workers.Service = &Service{Root: RootFrom(nil, workstationswire.NewService())}
 	if _, err := root.StartWorkstationPool(
 		context.Background(),
 		workers.WorkstationPoolStartRequest{Bindings: []workers.AssembledRuntimeBinding{{
@@ -275,7 +275,7 @@ func TestServiceDelegatesExplicitWorkstationCancellationThroughRoot(t *testing.T
 		started: make(chan struct{}, 1),
 		release: make(chan struct{}),
 	}
-	var root workers.Service = &Service{workstations: workstationswire.NewService()}
+	var root workers.Service = &Service{Root: RootFrom(nil, workstationswire.NewService())}
 	if _, err := root.StartWorkstationPool(
 		context.Background(),
 		workers.WorkstationPoolStartRequest{Bindings: []workers.AssembledRuntimeBinding{{
@@ -413,7 +413,7 @@ func startedRootService(
 	executor workers.WorkstationRequestExecutor,
 ) workers.Service {
 	t.Helper()
-	var root workers.Service = &Service{workstations: workstationswire.NewService()}
+	var root workers.Service = &Service{Root: RootFrom(nil, workstationswire.NewService())}
 	if _, err := root.StartWorkstationPool(
 		context.Background(),
 		workers.WorkstationPoolStartRequest{Bindings: []workers.AssembledRuntimeBinding{{
@@ -468,7 +468,7 @@ func TestBuildRuntimeDelegatesThroughWorkersRoot(t *testing.T) {
 		}},
 	}
 	assembly := &recordingRuntimeAssembly{result: want}
-	var root workers.Service = &Service{runtimeAssembly: assembly}
+	var root workers.Service = &Service{Root: RootFrom(assembly, nil)}
 	request := workers.RuntimeBuildRequest{
 		RunnerID: workers.RunnerIDCodex,
 		Roles: []workers.RuntimeBuildRoleRequest{{
@@ -509,7 +509,7 @@ func TestBuildRuntimePreservesAssemblyErrorIdentity(t *testing.T) {
 			t.Parallel()
 
 			assembly := &recordingRuntimeAssembly{err: wantErr}
-			var root workers.Service = &Service{runtimeAssembly: assembly}
+			var root workers.Service = &Service{Root: RootFrom(assembly, nil)}
 
 			result, err := root.BuildRuntime(t.Context(), workers.RuntimeBuildRequest{})
 			if !errors.Is(err, wantErr) {
@@ -551,7 +551,7 @@ func TestRuntimeBuildUsesPrivateRegistryWithoutRunnerExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newRuntimeAssemblyFromRegistrations() error = %v", err)
 	}
-	var root workers.Service = &Service{runtimeAssembly: assembly}
+	var root workers.Service = &Service{Root: RootFrom(assembly, nil)}
 	valid := workers.RuntimeBuildRequest{
 		RunnerID: workers.RunnerIDCodex,
 		RequiredRunnerCapabilities: []workers.RunnerOptionalCapability{
@@ -654,7 +654,7 @@ func TestRuntimeAssemblyConstructionAndBuildAreInert(t *testing.T) {
 		sessions:              spy,
 		providerCommandRunner: spy,
 		scriptCommandRunner:   spy,
-		runtimeAssembly:       assembly,
+		Root:                  RootFrom(assembly, nil),
 	}
 	if spy.currentRuntimeCalls != 0 || spy.commandCalls != 0 {
 		t.Fatalf(

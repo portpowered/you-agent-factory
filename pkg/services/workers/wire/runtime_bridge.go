@@ -1,8 +1,4 @@
-// Package service is a transitional compile shim that re-exports the composed
-// Workers runtime construction implementation from pkg/services/workers/internal.
-// Peers should construct through workers/wire; baseline deletion of this path is
-// owned by DEL-WRK.
-package service
+package wire
 
 import (
 	"time"
@@ -18,165 +14,19 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
-	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
-	workstations "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	"go.uber.org/zap"
 )
 
-// Service is the canonical Worker execution application service.
-type Service = workersinternal.Service
+// ProviderRegistryRebinder reconstructs the provider registry for runtime command edges.
+type ProviderRegistryRebinder = workersinternal.ProviderRegistryRebinder
 
 // CurrentRuntimeResolver resolves the active Factory Session runtime.
 type CurrentRuntimeResolver = workersinternal.CurrentRuntimeResolver
 
-// ModelInvocationExecutor builds a direct executor for one model-bound Worker.
-type ModelInvocationExecutor = workersinternal.ModelInvocationExecutor
-
-// ProviderRegistryRebinder reconstructs the provider registry for runtime command edges.
-type ProviderRegistryRebinder = workersinternal.ProviderRegistryRebinder
-
-// New constructs a Worker execution service from injected dependencies.
-func New(
-	sessions CurrentRuntimeResolver,
-	modelService models.Service,
-	providerCommandRunner workers.CommandRunner,
-	scriptCommandRunner workers.CommandRunner,
-	agyPTYAllocator agypty.PTYAllocator,
-	logger *zap.Logger,
-	verbose bool,
-	factoryRunnerID string,
-	invocationSkipPermissionsOverride *bool,
-	providerOverride workerprovider.Provider,
-	clock func() time.Time,
-	processEnvironment func() []string,
-	currentWorkingDirectory func() (string, error),
-	modelInvocationExecutor ModelInvocationExecutor,
-	contentMaterializer work.ContentMaterializer,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-	factoryDocs workers.FactoryDocsLoader,
-	resolveSymlinks workers.ResolveExecutableSymlinks,
-	executableLocator platformprocess.ExecutableLocator,
-	executableInspector platformfilesystem.PathInspector,
-	executableFiles platformfilesystem.ReadOpener,
-	operatingSystem workers.OperatingSystem,
-	worktreePreparer workers.FactoryWorktreePreparer,
-	agentRunHarness workeragentrun.HarnessAdapter,
-	retryRandom platformrandom.Source,
-	workstationFiles platformfilesystem.ReadFileInspector,
-	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	decisionEnvelopes ...factorydefinitions.DecisionEnvelopeService,
-) (*Service, error) {
-	return workersinternal.New(
-		sessions,
-		modelService,
-		providerCommandRunner,
-		scriptCommandRunner,
-		agyPTYAllocator,
-		logger,
-		verbose,
-		factoryRunnerID,
-		invocationSkipPermissionsOverride,
-		providerOverride,
-		clock,
-		processEnvironment,
-		currentWorkingDirectory,
-		modelInvocationExecutor,
-		contentMaterializer,
-		interpolation,
-		executionPolicy,
-		factoryDocs,
-		resolveSymlinks,
-		executableLocator,
-		executableInspector,
-		executableFiles,
-		operatingSystem,
-		worktreePreparer,
-		agentRunHarness,
-		retryRandom,
-		workstationFiles,
-		temporaryFiles,
-		decisionEnvelopes...,
-	)
-}
-
-// NewRoot constructs the inert Workers root from parent-private owners.
-func NewRoot(
-	runtimeAssembly runtimeassembly.Service,
-	workstationsOwner workstations.Service,
-) (workers.Service, error) {
-	return workersinternal.NewRoot(runtimeAssembly, workstationsOwner)
-}
-
-// NewRuntime constructs the public Workers runtime role.
-func NewRuntime(
-	sessions CurrentRuntimeResolver,
-	modelService models.Service,
-	modelsScope models.RuntimeScopeRef,
-	providerCommandRunner workers.CommandRunner,
-	scriptCommandRunner workers.CommandRunner,
-	allocator agypty.PTYAllocator,
-	logger *zap.Logger,
-	verbose bool,
-	factoryRunnerID string,
-	invocationSkipPermissionsOverride *bool,
-	providerOverride workerprovider.Provider,
-	now func() time.Time,
-	processEnvironment func() []string,
-	currentWorkingDirectory func() (string, error),
-	contentMaterializer work.ContentMaterializer,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-	factoryDocs workers.FactoryDocsLoader,
-	resolveSymlinks workers.ResolveExecutableSymlinks,
-	executableLocator platformprocess.ExecutableLocator,
-	executableInspector platformfilesystem.PathInspector,
-	executableFiles platformfilesystem.ReadOpener,
-	operatingSystem workers.OperatingSystem,
-	worktreePreparer workers.FactoryWorktreePreparer,
-	agentRunHarness workeragentrun.HarnessAdapter,
-	retryRandom platformrandom.Source,
-	workstationFiles platformfilesystem.ReadFileInspector,
-	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
-) (workers.RuntimeService, error) {
-	return workersinternal.NewRuntime(
-		sessions,
-		modelService,
-		modelsScope,
-		providerCommandRunner,
-		scriptCommandRunner,
-		allocator,
-		logger,
-		verbose,
-		factoryRunnerID,
-		invocationSkipPermissionsOverride,
-		providerOverride,
-		now,
-		processEnvironment,
-		currentWorkingDirectory,
-		contentMaterializer,
-		interpolation,
-		executionPolicy,
-		factoryDocs,
-		resolveSymlinks,
-		executableLocator,
-		executableInspector,
-		executableFiles,
-		operatingSystem,
-		worktreePreparer,
-		agentRunHarness,
-		retryRandom,
-		workstationFiles,
-		temporaryFiles,
-		decisionEnvelopes,
-	)
-}
-
-// NewRuntimeWithSelection constructs the Workers runtime while preserving runner injection edges.
+// NewRuntimeWithSelection constructs the Workers runtime through owner-internal implementation.
 func NewRuntimeWithSelection(
 	sessions CurrentRuntimeResolver,
 	modelService models.Service,
@@ -249,7 +99,7 @@ func NewRuntimeWithSelection(
 	)
 }
 
-// BuildRuntimeExecutors invokes the concrete Workers implementation selected by composition.
+// BuildRuntimeExecutors invokes the concrete Workers runtime implementation.
 func BuildRuntimeExecutors(
 	runtimeService workers.RuntimeService,
 	runtimeConfig factorydefinitions.RuntimeConfigLookup,
@@ -295,7 +145,7 @@ func NewMockCommandRunner(
 	return workersinternal.NewMockCommandRunner(config, runtimeConfig, next)
 }
 
-// LocalRuntimeHooks returns the Workers-owned recording hooks consumed by Models runtime.
+// LocalRuntimeHooks returns Workers-owned recording hooks for the Models runtime.
 func LocalRuntimeHooks() models.LocalRuntimeHooks {
 	return workersinternal.LocalRuntimeHooks()
 }
@@ -406,7 +256,7 @@ func NewProviderFromCommandRunner(
 	)
 }
 
-// ResolveTemplateFields exposes the Workers-owned template resolver to composition.
+// ResolveTemplateFields exposes the Workers-owned template resolver for composition.
 func ResolveTemplateFields(
 	workingDirectory string,
 	environment map[string]string,
@@ -420,31 +270,5 @@ func ResolveTemplateFields(
 		tokens,
 		workflowContext,
 		worktree,
-	)
-}
-
-// EffectiveFactoryRunnerID resolves the factory runner identity for runtime construction.
-func EffectiveFactoryRunnerID(override string, cfg *factorydefinitions.FactoryConfig) string {
-	return workersinternal.EffectiveFactoryRunnerID(override, cfg)
-}
-
-// ValidateRuntimeSelections validates configured runner identities before runtime startup.
-func ValidateRuntimeSelections(
-	cfg *factorydefinitions.FactoryConfig,
-	factoryRunnerID string,
-	runtimeCfg factorydefinitions.RuntimeConfigLookup,
-	executableLocator platformprocess.ExecutableLocator,
-	skipCommandAvailability bool,
-	invocationSkipPermissionsOverride *bool,
-	providers ...*providerregistry.Registry,
-) error {
-	return workersinternal.ValidateRuntimeSelections(
-		cfg,
-		factoryRunnerID,
-		runtimeCfg,
-		executableLocator,
-		skipCommandAvailability,
-		invocationSkipPermissionsOverride,
-		providers...,
 	)
 }

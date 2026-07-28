@@ -1743,7 +1743,7 @@
       "fromOwner": "workers",
       "toOwner": "factory_sessions",
       "class": "command",
-      "evidence": "pkg/services/workers/service -\u003e pkg/services/factory_sessions"
+      "evidence": "pkg/services/workers/internal -\u003e pkg/services/factory_sessions"
     },
     {
       "fromOwner": "workers",
@@ -4004,6 +4004,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_visualization/internal/recordingsqueries",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle",
       "disposition": "retain",
       "destination": "factory_visualization",
@@ -4053,6 +4059,12 @@
     },
     {
       "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/testing/recordingsstub",
       "disposition": "retain",
       "destination": "factory_visualization",
       "destinationKind": "owner"
@@ -4968,6 +4980,14 @@
       "destinationKind": "owner",
       "successor": "pkg/services/workers/internal/services/runners",
       "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal",
+      "disposition": "move",
+      "destination": "workers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",

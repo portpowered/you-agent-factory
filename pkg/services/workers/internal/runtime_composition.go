@@ -1,4 +1,4 @@
-package service
+package internal
 
 import (
 	"context"
@@ -100,8 +100,7 @@ func NewRuntime(
 	if err != nil {
 		return nil, err
 	}
-	runtimeService.runtimeAssembly = assembly
-	runtimeService.workstations = workstationswire.NewService()
+	runtimeService.Root = RootFrom(assembly, workstationswire.NewService())
 	return runtimeService, nil
 }
 
@@ -163,7 +162,7 @@ func NewRuntimeWithSelection(
 		if assemblyErr != nil {
 			return nil, assemblyErr
 		}
-		service.runtimeAssembly = assembly
+		service.Root = service.Root.ReplaceRuntimeAssembly(assembly)
 		service.invocationConductor = providerconductor.New(providerRegistry)
 		if builder, ok := service.executorBuilder.(*workerconstruction.Service); ok {
 			service.executorBuilder = builder.

@@ -1867,6 +1867,10 @@
       "minimum": 96.51
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal",
+      "minimum": 72.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners",
       "exception": {
         "kind": "measurement",
@@ -2046,7 +2050,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/service",
-      "minimum": 42.93
+      "minimum": 14.28
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/services/inference",
@@ -2062,7 +2066,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/wire",
-      "minimum": 87.20
+      "minimum": 82.14
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/worktree",

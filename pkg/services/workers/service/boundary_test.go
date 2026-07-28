@@ -18,7 +18,7 @@ func TestExecutorBuilderIsOwnedByWorkerExecutionService(t *testing.T) {
 	if !ok {
 		t.Fatal("resolve test source path")
 	}
-	ownerDir := filepath.Dir(filename)
+	ownerDir := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "internal"))
 	repoRoot := filepath.Clean(filepath.Join(ownerDir, "..", "..", "..", ".."))
 
 	var violations []string
@@ -52,6 +52,6 @@ func TestExecutorBuilderIsOwnedByWorkerExecutionService(t *testing.T) {
 		t.Fatalf("scan executor construction ownership: %v", err)
 	}
 	if len(violations) != 0 {
-		t.Fatalf("ExecutorBuilder construction must remain in pkg/services/workers/service; found %v", violations)
+		t.Fatalf("ExecutorBuilder construction must remain in pkg/services/workers/internal; found %v", violations)
 	}
 }
