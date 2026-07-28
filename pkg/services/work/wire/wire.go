@@ -97,6 +97,24 @@ func NewService(
 	return service, nil
 }
 
+// NewRuntimeService constructs a session-scoped Work root from application-wired
+// content collaborators. Application composition supplies shared content staging
+// and materialization services so runtime opening and peer edges observe the same
+// instances.
+func NewRuntimeService(
+	runtimes work.RuntimeResolver,
+	readSubmittedFile work.SubmittedFileReader,
+	contentStaging work.ContentStagingService,
+	contentMaterializer work.ContentMaterializer,
+) work.Service {
+	return internalservice.NewService(
+		runtimes,
+		readSubmittedFile,
+		contentStaging,
+		contentMaterializer,
+	)
+}
+
 // NewContentMaterializationService constructs the nested content_materialization
 // capability and returns it as the published Work ContentMaterializer role.
 func NewContentMaterializationService(
