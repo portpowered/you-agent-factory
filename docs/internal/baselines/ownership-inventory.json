@@ -2784,6 +2784,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/transports/mcp",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/ttsobservability",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -3624,6 +3630,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_visualization/transports/http",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_visualization/wire",
       "disposition": "retain",
       "destination": "factory_visualization",
@@ -4164,6 +4176,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/recordings/transports/mcp",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/recordings/wire",
       "disposition": "retain",
       "destination": "recordings",
@@ -4661,6 +4679,12 @@
     },
     {
       "packagePath": "pkg/services/workers/skippermissions",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/wire",
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"

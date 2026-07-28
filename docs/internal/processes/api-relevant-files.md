@@ -44,6 +44,22 @@ Use this map when changing the public REST contract.
   `pkg/transports/http` server composes injected service-owned adapters; HTTP-DEF
   proves fake-root parity at the adapter edge without importing Definitions
   internals.
+- Factory Visualization HTTP decoding, root contract mapping, typed error
+  translation, and cancel/timeout handling live in
+  `pkg/services/factory_visualization/transports/http`. HTTP-VIS proves
+  fake-root parity at the adapter edge without importing Visualization
+  internals or owning canonical visualization state.
+- The Visualization HTTP adapter package must stay registered in the allowed
+  shared manifests only: retain
+  `pkg/services/factory_visualization/transports/http` under destination
+  `factory_visualization` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json` and
+  `docs/internal/baselines/ownership-inventory.json`, and keep measured floors in
+  both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`.
+  Prove registration with `manifest_registration_test.go`; do not edit
+  `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, or
+  other services' HTTP adapters when reconciling manifest churn.
 - The Sessions HTTP adapter package must stay registered in the allowed shared
   manifests only: retain `pkg/services/factory_sessions/transports/http` under
   destination `factory_sessions` in
@@ -79,6 +95,22 @@ Use this map when changing the public REST contract.
   `docs/internal/baselines/ownership-inventory.json`, and the
   `go-*-coverage-package-minimums.json` baselines; prove registration with
   `manifest_registration_test.go`.
+- Factory Definitions MCP tool decoding, invocation, result/error mapping, and
+  catalog parity live under `pkg/services/factory_definitions/transports/mcp`.
+  Top-level MCP retains generated discovery, SDK registration, and stdio
+  composition; the service-owned adapter consumes Factory Definitions root
+  contracts and does not import or construct Definitions internals.
+- The Definitions MCP adapter package must stay registered in the allowed shared
+  manifests only: retain `pkg/services/factory_definitions/transports/mcp` under
+  destination `factory_definitions` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json` and
+  `docs/internal/baselines/ownership-inventory.json`, and keep measured floors in
+  both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`.
+  Prove registration with `manifest_registration_test.go`; do not edit
+  `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, shared
+  MCP host/composition fan-in, or other services' MCP adapters when reconciling
+  manifest churn.
 - Factory Session CLI request construction, rendering, diagnostics, and
   operation handlers live under
   `pkg/services/factory_sessions/transports/cli`; Factory Session MCP tool
@@ -99,6 +131,18 @@ Use this map when changing the public REST contract.
   `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, shared
   MCP host/composition fan-in, or other services' MCP adapters when reconciling
   manifest churn.
+- Recordings MCP tool decoding, invocation, result/error mapping, and catalog
+  parity live under `pkg/services/recordings/transports/mcp`. The Recordings MCP
+  adapter package must stay registered in the allowed shared manifests only:
+  retain `pkg/services/recordings/transports/mcp` under destination `recordings`
+  in `docs/internal/packaged-service-structure/package-target-manifest.json` and
+  `docs/internal/baselines/ownership-inventory.json`, and keep measured floors in
+  both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`.
+  Prove registration with `manifest_registration_test.go`; do not edit
+  `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, shared
+  MCP host/composition fan-in, HTTP-REC, CLI-REC, or other services' MCP
+  adapters when reconciling manifest churn.
 - Provider Session HTTP decoding, generated-contract mapping, service
   invocation, typed root error mapping (`error_mapping.go`), cancel/timeout edge
   mapping, and response encoding for owned Provider Sessions operations live in

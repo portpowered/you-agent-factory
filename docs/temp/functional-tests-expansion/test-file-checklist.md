@@ -42,7 +42,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIUnknownCommandReturnsUsageExitCode` verifies stdout remains empty
     and the process returns the documented non-success code.
 
-- [ ] `tests/functional/transport/cli/process/stdin_test.go`
+- [x] `tests/functional/transport/cli/process/stdin_test.go`
   - `TestRunReadsPromptFromStdin` verifies `you run -` consumes stdin and sends
     the exact value to the selected worker.
   - `TestSubmitBatchReadsJSONFromStdin` verifies `you submit batch -` consumes
