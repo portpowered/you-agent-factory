@@ -92,3 +92,28 @@ func TestPackagedQuorumOptionalMemberSettingsReachWorkers(t *testing.T) {
 	runner.assertProviderModel(t, packagedQuorumBranchBWorkstation, codex, "gpt-5.1")
 	runner.assertProviderModel(t, packagedQuorumMergeWorkstation, codex, "gpt-5.2")
 }
+
+// TestPackagedQuorumInsufficientSuccessfulMembersFails proves that packaged
+// @you/quorum invocation returns a failed public terminal outcome when fewer
+// than the required branch members succeed, without emitting a completed success
+// primary result for the failing run.
+func TestPackagedQuorumInsufficientSuccessfulMembersFails(t *testing.T) {
+	requestText := "functional packaged quorum insufficient successful members request"
+	runner := newPackagedQuorumBranchBFailingCommandRunner()
+
+	response, _, execErr := runPackagedQuorumCLIJSONFailureInvocation(t, runner, requestText)
+	if execErr == nil {
+		t.Fatal("Process.Execute error = nil, want terminal packaged-quorum branch failure")
+	}
+	assertPackagedQuorumInsufficientSuccessfulMembersFailed(t, response)
+
+	if got := runner.callCount(packagedQuorumBranchAWorkstation); got != 1 {
+		t.Fatalf("%s provider call count = %d, want one successful branch dispatch", packagedQuorumBranchAWorkstation, got)
+	}
+	if got := runner.callCount(packagedQuorumBranchBWorkstation); got < 1 {
+		t.Fatalf("%s provider call count = %d, want at least one failing branch dispatch", packagedQuorumBranchBWorkstation, got)
+	}
+	if got := runner.callCount(packagedQuorumMergeWorkstation); got != 0 {
+		t.Fatalf("%s provider call count = %d, want no merge dispatch before both branches succeed", packagedQuorumMergeWorkstation, got)
+	}
+}

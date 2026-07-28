@@ -3,6 +3,7 @@ package quorum
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -35,6 +36,42 @@ func newPackagedQuorumCommandRunner() *packagedQuorumCommandRunner {
 		callCounts: make(map[string]int),
 		requests:   make(map[string]platformprocess.CommandRequest),
 	}
+}
+
+func newPackagedQuorumBranchBFailingCommandRunner() *packagedQuorumBranchBFailingCommandRunner {
+	return &packagedQuorumBranchBFailingCommandRunner{
+		callCounts: make(map[string]int),
+	}
+}
+
+type packagedQuorumBranchBFailingCommandRunner struct {
+	mu         sync.Mutex
+	callCounts map[string]int
+}
+
+func (runner *packagedQuorumBranchBFailingCommandRunner) Run(
+	_ context.Context,
+	request platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	lane := packagedQuorumRequestLane(request)
+	runner.mu.Lock()
+	runner.callCounts[lane]++
+	runner.mu.Unlock()
+
+	switch lane {
+	case packagedQuorumBranchAWorkstation:
+		return packagedQuorumCodexResult("branch A COMPLETE"), nil
+	case packagedQuorumBranchBWorkstation:
+		return platformprocess.CommandResult{}, errors.New("packaged quorum branch B provider failure")
+	default:
+		return platformprocess.CommandResult{}, nil
+	}
+}
+
+func (runner *packagedQuorumBranchBFailingCommandRunner) callCount(workstation string) int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.callCounts[workstation]
 }
 
 func (runner *packagedQuorumCommandRunner) Run(
@@ -179,6 +216,66 @@ func runPackagedQuorumCLIJSONInvocation(
 		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
 	}
 	return response
+}
+
+func runPackagedQuorumCLIJSONFailureInvocation(
+	t *testing.T,
+	runner platformprocess.CommandRunner,
+	requestText string,
+	extraArgs ...string,
+) (factoryapi.InvocationResponse, string, error) {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedQuorumFactoryName)
+
+	args := []string{
+		"you", "--json", "run",
+		"--named", factorydefinitions.PackagedQuorumFactoryName,
+		"--no-record",
+	}
+	args = append(args, extraArgs...)
+	args = append(args, requestText)
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	})
+	execErr := process.Execute(inputs.Input)
+
+	var response factoryapi.InvocationResponse
+	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
+		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
+	}
+	return response, inputs.Stderr(), execErr
+}
+
+func assertPackagedQuorumInsufficientSuccessfulMembersFailed(
+	t *testing.T,
+	response factoryapi.InvocationResponse,
+) {
+	t.Helper()
+
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED; response = %#v", response.Status, response)
+	}
+	if response.PrimaryResult != nil {
+		t.Fatalf(
+			"primary result = %#v, want no completed success primary result after insufficient successful members",
+			response.PrimaryResult,
+		)
+	}
+	if response.WorkState == nil || !strings.Contains(*response.WorkState, ":failed") {
+		t.Fatalf("invocation workState = %#v, want a failed quorum member state", response.WorkState)
+	}
+	if response.ErrorCode == nil || strings.TrimSpace(string(*response.ErrorCode)) == "" {
+		t.Fatalf("errorCode = %#v, want stable public failure code", response.ErrorCode)
+	}
+	if response.Message == nil || strings.TrimSpace(*response.Message) == "" {
+		t.Fatalf("message = %#v, want stable public failure message", response.Message)
+	}
 }
 
 func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationResponse) string {
