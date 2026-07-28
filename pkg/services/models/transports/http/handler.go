@@ -2,17 +2,14 @@
 package http
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	"go.uber.org/zap"
 )
 
@@ -51,7 +48,7 @@ func (h *Handler) GetModel(w http.ResponseWriter, r *http.Request, modelName str
 }
 
 func (h *Handler) InvokeModel(w http.ResponseWriter, r *http.Request, modelName string) {
-	req, err := decodeModelInvocationRequestBody(r.Body)
+	req, err := decodeModelInvocationRequestFromHTTP(r.Body)
 	if err != nil {
 		message := "invalid request payload"
 		var validationErr requestValidationError
@@ -61,9 +58,12 @@ func (h *Handler) InvokeModel(w http.ResponseWriter, r *http.Request, modelName 
 		h.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
 		return
 	}
-	if strings.TrimSpace(req.Operation) == "" {
-		h.writeError(w, http.StatusBadRequest, "operation is required", "BAD_REQUEST")
-		return
+	if err := validateModelInvocationOperation(req); err != nil {
+		var validationErr requestValidationError
+		if errors.As(err, &validationErr) {
+			h.writeError(w, http.StatusBadRequest, validationErr.message, "BAD_REQUEST")
+			return
+		}
 	}
 
 	result, err := h.adapter.InvokeModel(r.Context(), modelName, req)
@@ -79,14 +79,7 @@ func (h *Handler) InvokeModel(w http.ResponseWriter, r *http.Request, modelName 
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, factoryapi.ModelInvocationResponse{
-		ModelName:        result.ModelName,
-		Worker:           result.Worker,
-		Operation:        result.Operation,
-		ProviderLocality: factoryapi.WorkerModelLocality(result.ProviderLocality),
-		Content:          derefGeneratedWorkContent(contentcontract.GeneratedPtrFromParts(result.Content)),
-		Bindings:         generatedResolvedModelInvocationBindings(result.Bindings),
-	})
+	h.writeJSON(w, http.StatusOK, modelInvocationResponseFromResult(result))
 }
 
 func (h *Handler) writeInvocationError(w http.ResponseWriter, err error) {
@@ -135,57 +128,6 @@ func (h *Handler) PullModel(w http.ResponseWriter, r *http.Request, modelName st
 func isModelPullError(err error) bool {
 	var pullErr *modelinference.PullError
 	return errors.As(err, &pullErr) && pullErr != nil
-}
-
-type requestValidationError struct{ message string }
-
-func (e requestValidationError) Error() string { return e.message }
-
-func decodeModelInvocationRequestBody(body io.Reader) (factoryapi.ModelInvocationRequest, error) {
-	var payload []byte
-	var err error
-	if body != nil {
-		payload, err = io.ReadAll(body)
-		if err != nil {
-			return factoryapi.ModelInvocationRequest{}, err
-		}
-	}
-	if len(bytes.TrimSpace(payload)) == 0 {
-		return factoryapi.ModelInvocationRequest{}, requestValidationError{message: "request body is required"}
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(payload, &fields); err != nil {
-		return factoryapi.ModelInvocationRequest{}, err
-	}
-	if err := validateWorkContentField(fields, ""); err != nil {
-		return factoryapi.ModelInvocationRequest{}, err
-	}
-	var request factoryapi.ModelInvocationRequest
-	if err := json.Unmarshal(payload, &request); err != nil {
-		return factoryapi.ModelInvocationRequest{}, err
-	}
-	return request, nil
-}
-
-func generatedResolvedModelInvocationBindings(values []modelinference.ResolvedModelOperationBinding) []factoryapi.ResolvedModelOperationBinding {
-	if len(values) == 0 {
-		return nil
-	}
-	bindings := make([]factoryapi.ResolvedModelOperationBinding, 0, len(values))
-	for _, binding := range values {
-		bindings = append(bindings, factoryapi.ResolvedModelOperationBinding{
-			Slot: binding.Slot, Source: factoryapi.ResolvedModelOperationBindingSource(binding.Source),
-			Content: derefGeneratedWorkContent(contentcontract.GeneratedPtrFromParts(binding.Content)),
-		})
-	}
-	return bindings
-}
-
-func derefGeneratedWorkContent(content *factoryapi.WorkContent) factoryapi.WorkContent {
-	if content == nil {
-		return nil
-	}
-	return *content
 }
 
 func (h *Handler) writeJSON(w http.ResponseWriter, status int, value any) {
