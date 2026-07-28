@@ -3,10 +3,10 @@ package initsetup_test
 import (
 	"testing"
 
-	internaltestlink "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testlink"
+	"github.com/portpowered/infinite-you/pkg/services/operator_settings/testlink"
 )
 
 func TestMain(m *testing.M) {
-	internaltestlink.RegisterProvidersRoot()
+	testlink.RegisterProvidersRoot()
 	m.Run()
 }
