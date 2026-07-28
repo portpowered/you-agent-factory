@@ -844,8 +844,9 @@ func provideRunRuntimeRunnerBuilder(
 				return initializer.OpenedApplication{}, err
 			}
 			return initializer.OpenedApplication{
-				Plan:        opened.Plan,
-				Diagnostics: runtimeartifact.Diagnostics(opened.Diagnostics),
+				Plan:           opened.Plan,
+				Diagnostics:    runtimeartifact.Diagnostics(opened.Diagnostics),
+				SessionInvoker: opened.SessionInvoker,
 			}, nil
 		})
 	}, nil

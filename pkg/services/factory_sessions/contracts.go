@@ -83,6 +83,12 @@ type FactoryInvocationOutcome struct {
 // FactoryEventConsumer receives ordered canonical events during one invocation.
 type FactoryEventConsumer func([]interfaces.FactoryEvent)
 
+// SessionInvoker is the canonical live-session invocation boundary used by
+// hosted run-scoped servers and HTTP POST /invocations.
+type SessionInvoker interface {
+	InvokeFactorySession(context.Context, string, InvocationRequest) (interfaces.FactoryInvocationResult, error)
+}
+
 // ApplicationOpeningPorts contains invocation-local observation edges.
 type ApplicationOpeningPorts struct {
 	InvocationMetricsRecorder interface {

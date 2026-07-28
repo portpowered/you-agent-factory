@@ -387,6 +387,7 @@ func TestRunFactoryInvocationCarriesPreparedCanonicalInputWithoutPlainArgs(t *te
 		*apiRequest,
 		operation,
 		testResponsePresentation(),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("runFactoryInvocation: %v", err)
@@ -433,6 +434,7 @@ func TestRunFactoryInvocationCarriesPreparedCompatibilityInputWithoutAPIContent(
 		*apiRequest,
 		operation,
 		testResponsePresentation(),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("runFactoryInvocation: %v", err)

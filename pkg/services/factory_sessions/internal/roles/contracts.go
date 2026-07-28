@@ -50,8 +50,9 @@ type OpenedApplicationRuntime struct {
 }
 
 type OpenedProcessApplication struct {
-	Plan        lifecycle.Plan
-	Diagnostics factoryruntime.RuntimeLogDiagnostics
+	Plan            lifecycle.Plan
+	Diagnostics     factoryruntime.RuntimeLogDiagnostics
+	SessionInvoker  SessionInvoker
 }
 
 type OpenedInvocationRuntime struct {

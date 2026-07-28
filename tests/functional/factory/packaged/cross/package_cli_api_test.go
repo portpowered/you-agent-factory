@@ -765,14 +765,9 @@ func assertPackagedGoalCLIInvocationInspectableByAPI(
 	hasGoalComplete := hasPackagedGoalCompleteWork(listed)
 	hasCorrelatedEvent := packagedGoalFactoryEventsCorrelateWithCLIInvocation(events, cliResponse)
 	hasTraceCorrelatedWork := packagedGoalListedWorkCorrelatesWithCLIInvocation(listed, cliResponse)
-	hasRuntimeWorkSignal := inspection.maxProcessing > 0 ||
-		inspection.maxTerminal > 0 ||
-		status.Categories.Terminal > 0 ||
-		status.Categories.Processing > 0 ||
-		inspection.sawFactoryActive
-	if !hasGoalComplete && !hasCorrelatedEvent && !hasTraceCorrelatedWork && !hasRuntimeWorkSignal {
+	if !hasGoalComplete && !hasCorrelatedEvent && !hasTraceCorrelatedWork {
 		t.Fatalf(
-			"API inspectability evidence missing for CLI-started run: need goal:complete work, identity-correlated factory events, trace/request-correlated listed work, or observed runtime work signals during polling; requestId=%q traceId=%q workId=%q events=%d listed=%#v status=%#v inspection=%#v",
+			"API inspectability evidence missing for CLI-started run: need goal:complete work, identity-correlated factory events, or trace/request-correlated listed work; requestId=%q traceId=%q workId=%q events=%d listed=%#v status=%#v inspection=%#v",
 			cliResponse.RequestId,
 			cliResponse.TraceId,
 			stringValue(cliResponse.WorkId),
@@ -786,7 +781,7 @@ func assertPackagedGoalCLIInvocationInspectableByAPI(
 		listed,
 		stringValue(correlatedWork.WorkId),
 		"goal:complete",
-	) && !hasCorrelatedEvent && !hasTraceCorrelatedWork && !hasRuntimeWorkSignal {
+	) && !hasCorrelatedEvent && !hasTraceCorrelatedWork {
 		t.Fatalf(
 			"correlated API goal work %q is not at goal:complete and no factory events correlated to CLI identity were observed",
 			stringValue(correlatedWork.WorkId),

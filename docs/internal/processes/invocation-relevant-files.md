@@ -2028,8 +2028,11 @@ response-stream output.
   effort retained-event read); collect default-session factory events while the
   run-scoped server is live; and compare the returned session/status/work/event
   facts with the CLI `InvocationResponse` identity and primary-result fields using
-  fail-closed assertions. Do not treat uncorrelated `SessionStarted` alone as
-  sufficient inspectability proof.
+  fail-closed assertions. Do not treat uncorrelated `SessionStarted`, bare
+  `RUNNING`, or peak `/status` categories alone as sufficient inspectability proof.
+  Hosted `--with-server` one-shot runs must invoke on the opened API-server
+  session (`HostedSessionInvokerSink`) so `GET /work` and factory events reflect
+  the same CLI-started run.
 - Packaged `@you/goal` CLI/API primary-outcome shape agreement lives in the same
   cross cell (`TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree`). Compare
   independent API `POST /factory-sessions/~default/invocations` responses with

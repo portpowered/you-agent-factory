@@ -55,7 +55,7 @@ func TestRunFactoryInvocation_LiveAndReplayPreserveCanonicalJavaScriptOrder(t *t
 			}
 			if err := runFactoryInvocation(
 				context.Background(), cfg, invocationTarget(cfg, nil, nil),
-				factoryapi.InvocationRequest{}, operation, testResponsePresentation(),
+				factoryapi.InvocationRequest{}, operation, testResponsePresentation(), nil,
 			); err != nil {
 				t.Fatalf("run Factory invocation: %v", err)
 			}
@@ -143,7 +143,7 @@ func TestRunFactoryInvocation_LiveEventIsWrittenBeforeOperationCompletes(t *test
 	go func() {
 		done <- runFactoryInvocation(
 			context.Background(), cfg, invocationTarget(cfg, nil, nil),
-			factoryapi.InvocationRequest{}, operation, testResponsePresentation(),
+			factoryapi.InvocationRequest{}, operation, testResponsePresentation(), nil,
 		)
 	}()
 

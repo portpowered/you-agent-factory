@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 )
 
 // LocalRuntimeRunner is an already-constructed runtime selected by an
@@ -18,8 +19,9 @@ type LocalRuntimeRunner interface {
 // services retain their request and result contracts and adapt them to this
 // value at the composition boundary.
 type OpenedApplication struct {
-	Plan        lifecycle.Plan
-	Diagnostics runtimeartifact.Diagnostics
+	Plan           lifecycle.Plan
+	Diagnostics    runtimeartifact.Diagnostics
+	SessionInvoker factorysessions.SessionInvoker
 }
 
 // ApplicationOpeningOperation opens one already-composed product application
