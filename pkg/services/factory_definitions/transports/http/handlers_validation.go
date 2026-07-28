@@ -33,7 +33,10 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
 			return
 		}
-		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		if s.writeDefinitionsRootError(w, err) {
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, invalidRequestPayloadMessage, "BAD_REQUEST")
 		return
 	}
 

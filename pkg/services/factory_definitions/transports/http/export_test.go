@@ -1,0 +1,3 @@
+package http
+
+var DefinitionsRootErrorResponseForTest = definitionsRootErrorResponse

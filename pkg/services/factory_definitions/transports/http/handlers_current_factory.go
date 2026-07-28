@@ -1,7 +1,6 @@
 package http
 
 import (
-	"errors"
 	"io"
 	"net/http"
 
@@ -89,23 +88,12 @@ func (s *Server) writeCurrentFactoryError(
 	action string,
 	fields ...zap.Field,
 ) {
-	switch {
-	case errors.Is(err, apisurface.ErrFactorySessionNotFound):
-		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
-		return
-	case errors.Is(err, apisurface.ErrCurrentFactoryNotFound):
-		s.writeError(w, http.StatusNotFound, "Current factory not found.", "NOT_FOUND")
-		return
-	default:
-		logFields := append([]zap.Field{zap.String("action", action)}, fields...)
-		s.logger.Error("current factory request failed", append(logFields, zap.Error(err))...)
-		if action == "get" {
-			s.writeError(w, http.StatusInternalServerError, "failed to load current factory", "INTERNAL_ERROR")
-			return
-		}
-		s.writeError(w, http.StatusInternalServerError, "failed to save current factory", "INTERNAL_ERROR")
-		return
+	logFields := append([]zap.Field{zap.String("action", action)}, fields...)
+	fallbackMessage := "failed to save current factory"
+	if action == "get" {
+		fallbackMessage = "failed to load current factory"
 	}
+	s.writeDefinitionsRootErrorOrInternal(w, err, fallbackMessage, logFields...)
 }
 
 func decodeSaveCurrentFactoryBody(body io.Reader) (factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody, error) {
