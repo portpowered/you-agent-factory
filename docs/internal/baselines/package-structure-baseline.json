@@ -1484,6 +1484,11 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_definitions/transports/cli/yaml_parity/yaml_parity_test.go",
+      "target": "factory_definitions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/internal/restclient/adapter.go",
       "target": "internal"
     },

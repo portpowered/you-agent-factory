@@ -730,6 +730,16 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIFactoryDeleteMissingReturnsActionableFailure` verifies delete of a
     missing named Factory returns an actionable failure without mutation.
 
+- [x] `tests/functional/factory_definitions/transports/cli/yaml_parity/yaml_parity_test.go`
+  - `TestCLIFactoryJSONAndYAMLValidateFlattenAndRunParity` verifies validate,
+    flatten, and run parity across JSON, YAML, and YML file and directory sources.
+  - `TestCLIFactoryYAMLCreateAndUpdateRemainRunnableAfterCanonicalPersistence`
+    verifies YAML create and JSON update remain runnable after canonical
+    persistence.
+  - `TestCLIFactoryRejectedAuthoredSourcesFailBeforeRuntimeExecution` verifies
+    rejected authored sources fail before provider/runtime execution with source
+    context in diagnostics.
+
 - [ ] `tests/functional/factory/definitions/import_export_test.go`
   - `TestExportedFactoryCanBeImportedAndRun`.
   - `TestImportExportPreservesNestedDocsScriptsAndMetadata`.
