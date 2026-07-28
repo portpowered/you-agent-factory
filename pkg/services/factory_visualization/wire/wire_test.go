@@ -145,6 +145,64 @@ func requireLifecycleError(
 	}
 }
 
+func requirePresentationError(
+	t *testing.T,
+	err error,
+	kind factoryvisualization.PresentationErrorKind,
+	label string,
+) {
+	t.Helper()
+	var presErr *factoryvisualization.PresentationError
+	if !errors.As(err, &presErr) || presErr.Kind != kind {
+		t.Fatalf("%s: error = %v, want %s", label, err, kind)
+	}
+}
+
+func mustNewWireRoot(t *testing.T) factoryvisualization.Root {
+	t.Helper()
+	root, err := factoryvisualizationwire.NewRoot(
+		wireSourceStub{},
+		wireProjectionStub{},
+		wireClock{},
+		factoryvisualization.SinkFunc(func(factoryvisualization.View) {}),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+	if root == nil {
+		t.Fatal("NewRoot() returned nil root")
+	}
+	return root
+}
+
+func TestNewRootServesPublishedPeerBehavior(t *testing.T) {
+	t.Parallel()
+
+	var root factoryvisualization.Root = mustNewWireRoot(t)
+
+	_, err := root.OpenPresentation(context.Background(), factoryvisualization.OpenPresentationRequest{})
+	requirePresentationError(
+		t,
+		err,
+		factoryvisualization.PresentationErrorInvalidInput,
+		"OpenPresentation missing parameters",
+	)
+
+	opened, err := root.OpenPresentation(context.Background(), factoryvisualization.OpenPresentationRequest{
+		Mode: factoryvisualization.PresentationDeliveryBestEffort,
+	})
+	if err != nil {
+		t.Fatalf("OpenPresentation best-effort: error = %v", err)
+	}
+	if opened.SessionID == "" {
+		t.Fatalf("OpenPresentation result = %#v, want non-empty session id", opened)
+	}
+	if opened.Mode != factoryvisualization.PresentationDeliveryBestEffort {
+		t.Fatalf("OpenPresentation mode = %q, want %q", opened.Mode, factoryvisualization.PresentationDeliveryBestEffort)
+	}
+}
+
 func TestNewRootConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 
