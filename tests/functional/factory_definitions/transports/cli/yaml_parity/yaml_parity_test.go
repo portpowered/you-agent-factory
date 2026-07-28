@@ -13,6 +13,7 @@ import (
 )
 
 const (
+	goalFactoryName      = "portable-goal"
 	goalWorkerName       = "goal-executor"
 	goalWorkstationName  = "execute-goal"
 	wantInvocationResult = "mock worker accepted"
@@ -64,6 +65,54 @@ func TestCLIFactoryJSONAndYAMLValidateFlattenAndRunParity(t *testing.T) {
 				t.Fatalf("invocation result = %q, want %q", got, wantInvocationResult)
 			}
 		})
+	}
+}
+
+// TestCLIFactoryYAMLCreateAndUpdateRemainRunnableAfterCanonicalPersistence proves
+// a named Factory created from YAML and later updated from JSON remains runnable
+// via the public named-factory run path after the CLI persists the canonical
+// factory.json durable form.
+func TestCLIFactoryYAMLCreateAndUpdateRemainRunnableAfterCanonicalPersistence(t *testing.T) {
+	homeDir := t.TempDir()
+	workingDirectory := t.TempDir()
+	yamlSource := filepath.Join(materializePackagedGoal(t, "factory.yaml"), "factory.yaml")
+	jsonSource := filepath.Join(materializePackagedGoal(t, "factory.json"), "factory.json")
+
+	factoryDir := support.CreateNamedFactory(
+		t,
+		homeDir,
+		workingDirectory,
+		goalFactoryName,
+		yamlSource,
+	)
+	env := customerEnvironment(homeDir)
+	if got := invokeGoal(t, env, workingDirectory, "--named", goalFactoryName); got != wantInvocationResult {
+		t.Fatalf("YAML-created invocation result = %q, want %q", got, wantInvocationResult)
+	}
+	if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
+		t.Fatalf("YAML-created Factory missing canonical factory.json: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(factoryDir, "factory.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("YAML-created Factory unexpectedly persisted factory.yaml: %v", err)
+	}
+
+	update := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "factory", "update", goalFactoryName,
+		"--from", jsonSource,
+		"--dir", filepath.Dir(factoryDir),
+	})
+	update.Input.Env = env
+	update.Input.WorkingDirectory = workingDirectory
+	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(update.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(factory update) error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			update.Stdout(),
+			update.Stderr(),
+		)
+	}
+	if got := invokeGoal(t, env, workingDirectory, "--named", goalFactoryName); got != wantInvocationResult {
+		t.Fatalf("JSON-updated invocation result = %q, want %q", got, wantInvocationResult)
 	}
 }
 
