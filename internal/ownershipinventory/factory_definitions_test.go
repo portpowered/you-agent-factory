@@ -221,16 +221,7 @@ func TestFactoryDefinitionsInventoryRejectsRetainToOwnerRoot(t *testing.T) {
 			continue
 		}
 		rest := strings.TrimPrefix(packagePath, ownerPrefix)
-		if rest == "wire" || strings.HasPrefix(rest, "wire/") {
-			continue
-		}
-		if rest == "transports" || strings.HasPrefix(rest, "transports/") {
-			continue
-		}
-		if strings.HasPrefix(rest, "internal/services/catalog") {
-			continue
-		}
-		if strings.HasPrefix(rest, "internal/services/validation") {
+		if factoryDefinitionsCanonicalRetainRest(rest) {
 			continue
 		}
 

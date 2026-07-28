@@ -161,6 +161,39 @@ func TestMapCommittedOwnerPackageFactoryDefinitionsMoveDestinations(t *testing.T
 	}
 }
 
+func TestCommittedManifestFactoryDefinitionsRejectsRetainToOwnerRoot(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
+	if err != nil {
+		t.Fatalf("loadManifest() error = %v", err)
+	}
+
+	const ownerPrefix = "pkg/services/factory_definitions/"
+	for _, row := range manifest.Packages {
+		if row.PackagePath == "pkg/services/factory_definitions" {
+			continue
+		}
+		if !strings.HasPrefix(row.PackagePath, ownerPrefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(row.PackagePath, ownerPrefix)
+		if factoryDefinitionsCanonicalRetainRest(rest) {
+			continue
+		}
+		if row.Disposition == DispositionRetain && row.Destination == "factory_definitions" {
+			t.Fatalf("committed manifest row retain→factory_definitions for %q", row.PackagePath)
+		}
+		if row.Disposition != DispositionMove {
+			t.Fatalf("committed manifest row %q disposition = %q, want move", row.PackagePath, row.Disposition)
+		}
+		if row.Destination == "factory_definitions" {
+			t.Fatalf("committed manifest row %q move destination = owner root, want nested plan path", row.PackagePath)
+		}
+	}
+}
+
 func TestFactoryDefinitionsInventoryRejectsRetainToOwnerRoot(t *testing.T) {
 	t.Parallel()
 
@@ -179,16 +212,7 @@ func TestFactoryDefinitionsInventoryRejectsRetainToOwnerRoot(t *testing.T) {
 			continue
 		}
 		rest := strings.TrimPrefix(packagePath, ownerPrefix)
-		if rest == "wire" || strings.HasPrefix(rest, "wire/") {
-			continue
-		}
-		if rest == "transports" || strings.HasPrefix(rest, "transports/") {
-			continue
-		}
-		if strings.HasPrefix(rest, "internal/services/catalog") {
-			continue
-		}
-		if strings.HasPrefix(rest, "internal/services/validation") {
+		if factoryDefinitionsCanonicalRetainRest(rest) {
 			continue
 		}
 
@@ -202,5 +226,20 @@ func TestFactoryDefinitionsInventoryRejectsRetainToOwnerRoot(t *testing.T) {
 		if got.Disposition != DispositionMove {
 			t.Fatalf("inventory path %q disposition = %q, want move", packagePath, got.Disposition)
 		}
+	}
+}
+
+func factoryDefinitionsCanonicalRetainRest(rest string) bool {
+	switch {
+	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
+		return true
+	case rest == "transports" || strings.HasPrefix(rest, "transports/"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/catalog"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/validation"):
+		return true
+	default:
+		return false
 	}
 }
