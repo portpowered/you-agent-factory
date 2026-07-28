@@ -96,6 +96,26 @@ func TestDiscoverTools_RepresentativeSchemaFields(t *testing.T) {
 	}
 }
 
+func TestDiscoverTools_InstallPackagedFormatEnumMatchesRuntimeAcceptedValues(t *testing.T) {
+	t.Parallel()
+
+	byName := toolDefinitionsByName(t)
+	installProps := byName[factorydefinitionmcp.ToolInstallPackaged].InputSchema["properties"].(map[string]any)
+	formatSchema, ok := installProps["format"].(map[string]any)
+	if !ok {
+		t.Fatal("install packaged format schema missing")
+	}
+	enumValues, ok := formatSchema["enum"].([]string)
+	if !ok {
+		t.Fatalf("install packaged format enum = %#v, want []string", formatSchema["enum"])
+	}
+
+	want := []string{"json", "yaml", "yml"}
+	if !slices.Equal(enumValues, want) {
+		t.Fatalf("install packaged format enum = %#v, want %#v", enumValues, want)
+	}
+}
+
 func TestDiscoverTools_OutputSchemasDocumentSharedErrorEnvelope(t *testing.T) {
 	t.Parallel()
 

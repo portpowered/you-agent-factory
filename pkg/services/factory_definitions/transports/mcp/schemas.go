@@ -154,7 +154,7 @@ func installPackagedFactoryInputSchema() map[string]any {
 		"dir":     stringProperty("Destination named-factory root directory. Defaults to the caller home directory when omitted."),
 		"format": enumStringProperty(
 			"Portable editable format for the installed factory layout.",
-			"json", "yaml", "toml",
+			"json", "yaml", "yml",
 		),
 		"replace": booleanProperty("When true, replace an existing installed factory at the destination."),
 	}, "package")

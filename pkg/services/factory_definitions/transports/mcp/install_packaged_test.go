@@ -205,6 +205,74 @@ func TestBind_InstallPackagedToolUnknownPackageReturnsTypedErrorEnvelope(t *test
 	}
 }
 
+func TestBind_InstallPackagedToolAcceptsYmlFormat(t *testing.T) {
+	t.Parallel()
+
+	destDir := t.TempDir()
+	var gotFormat factorydefinitions.PackagedFactoryFormat
+	install := factorydefinitions.InstallPackagedFactoryOperation(func(
+		_ context.Context,
+		request factorydefinitions.InstallPackagedFactoryRequest,
+	) (factorydefinitions.InstallPackagedFactoryResult, error) {
+		gotFormat = request.Format
+		return factorydefinitions.InstallPackagedFactoryResult{
+			Definition: factorydefinitions.DistributedFactoryDefinitionFacts{
+				Name:       "@you/goal",
+				FactoryDir: destDir + "/goal",
+			},
+			Outcome: factorydefinitions.PackagedFactoryInstallCreated,
+			Format:  factorydefinitions.PackagedFactoryFormatYML,
+		}, nil
+	})
+	operation := factorydefinitionmcp.Bind(factorydefinitionmcp.RootBinding{Install: install})
+	_, err := operation(
+		context.Background(),
+		factorydefinitionmcp.ToolInstallPackaged,
+		installPackagedToolInput(t, map[string]any{
+			"package": "@you/goal",
+			"dir":     destDir,
+			"format":  "yml",
+		}),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(install_packaged) error = %v", err)
+	}
+	if gotFormat != factorydefinitions.PackagedFactoryFormatYML {
+		t.Fatalf("install request format = %q, want YML", gotFormat)
+	}
+}
+
+func TestBind_InstallPackagedToolRejectsUnsupportedTomlFormat(t *testing.T) {
+	t.Parallel()
+
+	destDir := t.TempDir()
+	install := factorydefinitions.InstallPackagedFactoryOperation(func(
+		context.Context,
+		factorydefinitions.InstallPackagedFactoryRequest,
+	) (factorydefinitions.InstallPackagedFactoryResult, error) {
+		t.Fatal("install should not run when format is unsupported")
+		return factorydefinitions.InstallPackagedFactoryResult{}, nil
+	})
+	operation := factorydefinitionmcp.Bind(factorydefinitionmcp.RootBinding{Install: install})
+	raw, err := operation(
+		context.Background(),
+		factorydefinitionmcp.ToolInstallPackaged,
+		installPackagedToolInput(t, map[string]any{
+			"package": "@you/goal",
+			"dir":     destDir,
+			"format":  "toml",
+		}),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(install_packaged) error = %v", err)
+	}
+
+	envelope := assertTypedToolErrorEnvelope(t, raw, "BAD_REQUEST", false)
+	if !strings.Contains(envelope.Message, "unsupported format") {
+		t.Fatalf("error.message = %q, want unsupported format context", envelope.Message)
+	}
+}
+
 func TestBind_InstallPackagedToolMalformedJSONDoesNotInvokeInstallRole(t *testing.T) {
 	t.Parallel()
 
