@@ -13,6 +13,11 @@ Use this map when changing the public REST contract.
   `pkg/services/recordings/transports/http`. The adapter consumes the accepted
   `recordings.Service` root only; fake-root tests inject a focused root fake
   without constructing ledger, lifecycle, replay, or artifact-export graphs.
+  CUT-REC-RUN seals Recordings production imports of Factory Runtime to the
+  service root only (`pkg/services/factory_runtime`); the lease-wide guard is
+  `pkg/services/recordings/runtime_import_boundary_test.go` and fails closed on
+  nested `factory_runtime/**`, legacy `pkg/factory/**`, and
+  `pkg/transports/mapping/factory*` production imports.
   Event subscribe/history decode and SSE encoding live in
   `event_subscribe_mapping.go` and `handlers_events.go`; map reconnect query
   params into `recordings.SubscribeRequest` before `SubscribeFrom`, and encode
