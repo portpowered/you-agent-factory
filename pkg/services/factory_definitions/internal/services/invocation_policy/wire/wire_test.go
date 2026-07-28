@@ -7,6 +7,7 @@ import (
 	invocationpolicyservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy"
 	invocationpolicywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 func TestNewService_ConstructsPublishedRootPolicyContracts(t *testing.T) {
@@ -129,5 +130,92 @@ func TestNewService_GoalRoutingDecisionEnvelopeThroughNestedOwner(t *testing.T) 
 	}
 	if malformed.Error == "" {
 		t.Fatal("malformed envelope error is empty, want actionable failure text")
+	}
+}
+
+func TestNewService_InvocationInterpolationThroughNestedOwner(t *testing.T) {
+	t.Parallel()
+
+	svc, err := invocationpolicywire.NewService(invocationpolicyservice.Dependencies{})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	interpolation := svc.InvocationInterpolation()
+	workstation, err := interpolation.InterpolateWorkstationConfig(
+		factorydefinitions.FactoryWorkstationConfig{
+			PromptTemplate: "Use ${input} now",
+		},
+		&work.InvocationArguments{
+			Arguments: map[string]work.InvocationArgument{
+				"input": {Values: []string{"draft"}},
+			},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("InterpolateWorkstationConfig: %v", err)
+	}
+	if workstation.PromptTemplate != "Use draft now" {
+		t.Fatalf("PromptTemplate = %q, want interpolated draft", workstation.PromptTemplate)
+	}
+
+	_, err = interpolation.InterpolateWorkstationConfig(
+		factorydefinitions.FactoryWorkstationConfig{
+			PromptTemplate: "Use ${missing} now",
+		},
+		&work.InvocationArguments{},
+		nil,
+	)
+	if err == nil {
+		t.Fatal("InterpolateWorkstationConfig error = nil, want invalid interpolation")
+	}
+}
+
+func TestNewService_InvocationOutputThroughNestedOwner(t *testing.T) {
+	t.Parallel()
+
+	svc, err := invocationpolicywire.NewService(invocationpolicyservice.Dependencies{})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	output := svc.InvocationOutput()
+	workstation := &factorydefinitions.FactoryWorkstationConfig{
+		Name: "execute-goal",
+		Type: factorydefinitions.WorkstationTypeModel,
+	}
+	if !output.ShouldFormatInvocationSummary(workstation) {
+		t.Fatal("ShouldFormatInvocationSummary() = false, want true for goal workstation")
+	}
+
+	content, err := output.SummaryContentFromWorkerOutput("Final goal summary.\nCOMPLETE", "COMPLETE")
+	if err != nil {
+		t.Fatalf("SummaryContentFromWorkerOutput: %v", err)
+	}
+	if len(content) != 1 || content[0].Text != "Final goal summary." {
+		t.Fatalf("summary content = %#v, want normalized goal summary text", content)
+	}
+}
+
+func TestNewService_InvocationWorkTypeThroughNestedOwner(t *testing.T) {
+	t.Parallel()
+
+	svc, err := invocationpolicywire.NewService(invocationpolicyservice.Dependencies{})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	workType, err := svc.InvocationWorkType().DefaultWorkType(&factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
+			{Name: "task"},
+			{Name: "story", HandlingBehavior: []string{factorydefinitions.WorkTypeHandlingBehaviorDefault}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("DefaultWorkType: %v", err)
+	}
+	if workType != "story" {
+		t.Fatalf("DefaultWorkType = %q, want story", workType)
 	}
 }

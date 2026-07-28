@@ -3,9 +3,9 @@ package service
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	invocationpolicydecisionenvelope "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope"
-	factoryinvocationinterpolation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationinterpolation"
-	factoryinvocationoutput "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationoutput"
-	factoryinvocationworktype "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationworktype"
+	invocationpolicyinterpolation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation"
+	invocationpolicyoutput "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput"
+	invocationpolicyworktype "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype"
 	invocationpolicyservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy"
 	factoryquorumpolicy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/quorumpolicy"
 	factoryttsobservability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/ttsobservability"
@@ -34,9 +34,9 @@ var _ invocationpolicyservice.Service = (*Service)(nil)
 func New() *Service {
 	return &Service{
 		decisionEnvelope:        invocationpolicydecisionenvelope.NewService(),
-		invocationInterpolation: factoryinvocationinterpolation.NewService(),
-		invocationOutput:        factoryinvocationoutput.NewService(),
-		invocationWorkType:      factoryinvocationworktype.NewService(),
+		invocationInterpolation: invocationpolicyinterpolation.NewService(),
+		invocationOutput:        invocationpolicyoutput.NewService(),
+		invocationWorkType:      invocationpolicyworktype.NewService(),
 		quorumPolicy:            factoryquorumpolicy.NewService(),
 		workPropagation:         factoryworkpropagation.NewService(),
 		workstationExecution:    factoryworkstationexecution.NewService(),
