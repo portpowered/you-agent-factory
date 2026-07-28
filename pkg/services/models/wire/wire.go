@@ -19,6 +19,8 @@ import (
 	assetswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire"
 	catalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
+	inferencewire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/wire"
+	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 	runtimehostwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
@@ -119,11 +121,23 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
+	inferenceService, err := inferencewire.NewService(
+		runtimeScopes,
+		assetService,
+		catalogService,
+		runtimeHost,
+		inference.InputEchoInvocationRuntime{},
+		inference.InertArtifactFileSystem{},
+		now,
+	)
+	if err != nil {
+		return nil, err
+	}
 	service, err := modelsservice.NewRoot(
 		launcher, hostHTTP, clock,
 		runtimeRunner, runtimeHTTP, localmodels.InspectFile(runtimeInspect),
 		localmodels.TempDirectory(runtimeTempDir), createTempFile,
-		runtimeScopes, catalogService, assetService, runtimeHost,
+		runtimeScopes, catalogService, assetService, runtimeHost, inferenceService,
 		models.ProcessDependencies{
 			Logger: logger, Clock: now, PullMetrics: pullMetrics,
 			HostLogger: hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,

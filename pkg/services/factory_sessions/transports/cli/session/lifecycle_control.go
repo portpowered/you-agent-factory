@@ -56,6 +56,11 @@ type Operations struct {
 }
 
 type service struct {
+	http    clihttp.Protocol
+	prepare RequestPreparation
+}
+
+type boundService struct {
 	list           func(ListConfig) error
 	show           func(ShowConfig) error
 	pause          func(LifecycleControlConfig) error
@@ -65,9 +70,18 @@ type service struct {
 	delete         func(DeleteConfig) error
 }
 
-// Bind constructs the typed Sessions CLI service from injected operations.
+// New constructs the Sessions CLI service injected into Cobra composition.
+func New(httpProtocol clihttp.Protocol, prepare RequestPreparation) Service {
+	if httpProtocol == nil || prepare == nil {
+		return nil
+	}
+	return &service{http: httpProtocol, prepare: prepare}
+}
+
+// Bind constructs a Sessions CLI service from injected per-command operations.
+// Production composition should use New instead.
 func Bind(ops Operations) Service {
-	return &service{
+	return &boundService{
 		list:           ops.List,
 		show:           ops.Show,
 		pause:          ops.Pause,
@@ -79,48 +93,84 @@ func Bind(ops Operations) Service {
 }
 
 func (service *service) List(cfg ListConfig) error {
+	cfg.HTTP = service.http
+	cfg.Preparation = service.prepare
+	return List(cfg)
+}
+
+func (service *service) Show(cfg ShowConfig) error {
+	cfg.HTTP = service.http
+	return Show(cfg)
+}
+
+func (service *service) Pause(cfg LifecycleControlConfig) error {
+	cfg.HTTP = service.http
+	return Pause(cfg)
+}
+
+func (service *service) Resume(cfg LifecycleControlConfig) error {
+	cfg.HTTP = service.http
+	return Resume(cfg)
+}
+
+func (service *service) ListDispatches(cfg DispatchesConfig) error {
+	cfg.HTTP = service.http
+	return Dispatches(cfg)
+}
+
+func (service *service) Create(cfg CreateConfig) error {
+	cfg.HTTP = service.http
+	return Create(cfg)
+}
+
+func (service *service) Delete(cfg DeleteConfig) error {
+	cfg.HTTP = service.http
+	return Delete(cfg)
+}
+
+func (service *boundService) List(cfg ListConfig) error {
 	if service == nil || service.list == nil {
 		return fmt.Errorf("session list service is required")
 	}
 	return service.list(cfg)
 }
 
-func (service *service) Show(cfg ShowConfig) error {
+func (service *boundService) Show(cfg ShowConfig) error {
 	if service == nil || service.show == nil {
 		return fmt.Errorf("session show service is required")
 	}
 	return service.show(cfg)
 }
 
-func (service *service) Pause(cfg LifecycleControlConfig) error {
+func (service *boundService) Pause(cfg LifecycleControlConfig) error {
 	if service == nil || service.pause == nil {
 		return fmt.Errorf("session pause service is required")
 	}
 	return service.pause(cfg)
 }
 
-func (service *service) Resume(cfg LifecycleControlConfig) error {
+func (service *boundService) Resume(cfg LifecycleControlConfig) error {
 	if service == nil || service.resume == nil {
 		return fmt.Errorf("session resume service is required")
 	}
 	return service.resume(cfg)
 }
 
-func (service *service) ListDispatches(cfg DispatchesConfig) error {
+func (service *boundService) ListDispatches(cfg DispatchesConfig) error {
 	if service == nil || service.listDispatches == nil {
 		return fmt.Errorf("session dispatches service is required")
 	}
 	return service.listDispatches(cfg)
 }
 
-func (service *service) Create(cfg CreateConfig) error {
+func (service *boundService) Create(cfg CreateConfig) error {
 	if service == nil || service.create == nil {
 		return fmt.Errorf("session create service is required")
 	}
 	return service.create(cfg)
 }
 
-func (service *service) Delete(cfg DeleteConfig) error {
+func (service *boundService) Delete(cfg DeleteConfig) error {
 	if service == nil || service.delete == nil {
 		return fmt.Errorf("session delete service is required")
 	}
