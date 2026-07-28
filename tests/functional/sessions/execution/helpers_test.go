@@ -47,6 +47,22 @@ func newPartialResultBlockingProvider(workflowName string) *partialResultBlockin
 	return &partialResultBlockingProvider{workflowName: workflowName}
 }
 
+func (p *partialResultBlockingProvider) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		p.mu.Lock()
+		canceled := p.contextCanceled
+		p.mu.Unlock()
+		if canceled > 0 {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("provider Infer did not observe canceled workflow context")
+}
+
 func (p *partialResultBlockingProvider) Infer(
 	ctx context.Context,
 	_ workerexecution.ProviderInferenceRequest,
@@ -581,23 +597,55 @@ func waitForDurablePartialResult(
 	return partial
 }
 
-func terminateDurableSession(t *testing.T, serverURL, sessionID string) {
+func interruptFactoryDispatch(
+	t *testing.T,
+	serverURL, sessionID, dispatchID, reason string,
+) {
 	t.Helper()
 
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/" + sessionID + "/terminate"
-	request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, http.NoBody)
+	payload, err := json.Marshal(factoryapi.FactorySessionInterruptDispatchRequest{
+		DispatchId: dispatchID,
+		Reason:     &reason,
+	})
 	if err != nil {
-		t.Fatalf("build terminate request: %v", err)
+		t.Fatalf("marshal interrupt dispatch request: %v", err)
 	}
+
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/" + sessionID + "/interrupt-dispatch"
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build interrupt dispatch request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatalf("POST %s: %v", endpoint, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		payload, _ := io.ReadAll(response.Body)
-		t.Fatalf("POST %s status = %d, want 200: %s", endpoint, response.StatusCode, strings.TrimSpace(string(payload)))
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST %s status = %d, want 200: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
 	}
+}
+
+func releaseBlockedPartialResultSession(
+	t *testing.T,
+	serverURL string,
+	provider *partialResultBlockingProvider,
+	sessionID string,
+) {
+	t.Helper()
+
+	reason := "results dispatches partial result cleanup"
+	interruptFactoryDispatch(t, serverURL, sessionID, partialResultSecondDispatchID, reason)
+	provider.waitForCanceledInfer(t, 5*time.Second)
+	waitForDurableSessionStatus(
+		t,
+		serverURL,
+		sessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusInterrupted,
+		5*time.Second,
+	)
 }
 
 func assertInvocationPrimaryResultText(

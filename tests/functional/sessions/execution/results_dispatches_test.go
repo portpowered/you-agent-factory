@@ -309,7 +309,8 @@ func TestAPIPartialResultIsAvailableBeforeTerminalCompletion(t *testing.T) {
 		t.Fatal("sessionId is empty, want durable Factory Session identifier")
 	}
 	t.Cleanup(func() {
-		terminateDurableSession(t, server.URL(), started.SessionId)
+		releaseBlockedPartialResultSession(t, server.URL(), provider, started.SessionId)
+		server.Stop(t)
 	})
 
 	waitForDurableSessionStatus(
