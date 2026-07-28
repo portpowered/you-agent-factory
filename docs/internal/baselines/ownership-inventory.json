@@ -3247,22 +3247,6 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"
