@@ -802,6 +802,13 @@ response-stream output.
   `internal/service` and `wire` only. Query the accepted `providers.Service` root
   for provider identity canonicalization at resolve time; do not cache availability
   in settings state or add Providers→Operator Settings imports.
+- Operator Settings owner-local Wire at `pkg/services/operator_settings/wire`
+  must stay registered under destination `operator_settings` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and both
+  `go-*-coverage-package-minimums.json` baselines; prove registration with
+  `wire/manifest_registration_test.go` rather than re-editing manifests when
+  IMP-SET already landed the rows.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore
