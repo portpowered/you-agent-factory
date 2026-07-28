@@ -8,7 +8,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
 // Root contract typed errors for orchestration-neutral Runtime control and
@@ -74,7 +73,7 @@ type WorkersRuntimeExecutorsFactory func(
 	logging.Logger,
 	bool,
 	*bool,
-	workerprovider.Provider,
+	workers.Provider,
 	workers.ProgressPublisher,
 	workers.ScriptEventRecorder,
 	workers.InferenceEventRecorder,
