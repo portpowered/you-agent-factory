@@ -84,7 +84,6 @@ var productOwnerTopLevelSpecs = map[string]ownerTopLevelSpec{
 			"runtime",
 			"runtimecontract",
 			"scheduler",
-			"service",
 			"state",
 			"subsystems",
 			"testdata",
