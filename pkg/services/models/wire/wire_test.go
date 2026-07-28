@@ -304,6 +304,61 @@ func mustNewWireService(t *testing.T) models.Service {
 	return service
 }
 
+func TestNewServiceServesPublishedModelsPeerBehavior(t *testing.T) {
+	t.Parallel()
+
+	var service models.Service = mustNewWireService(t)
+	config := models.RuntimeScopeConfig{
+		CacheDirectory: t.TempDir(),
+		Runtime: models.RuntimeConfig{
+			Workers: []models.RuntimeWorker{{
+				Name:          "voice-local",
+				Type:          models.RuntimeWorkerTypeModel,
+				Model:         "OMNIVOICE_Q4_K_M",
+				ModelLocality: models.RuntimeModelLocalityLocal,
+				Operations:    []models.RuntimeOperation{{Name: "TTS"}},
+			}},
+		},
+	}
+	opened, err := service.OpenRuntimeScope(
+		context.Background(),
+		models.OpenRuntimeScopeRequest{Config: config},
+	)
+	if err != nil {
+		t.Fatalf("OpenRuntimeScope: %v", err)
+	}
+
+	readiness, err := service.GetModelReadiness(context.Background(), models.GetModelReadinessRequest{
+		Scope: opened.Scope, Name: "OMNIVOICE_Q4_K_M", Operation: "TTS",
+	})
+	if err != nil {
+		t.Fatalf("GetModelReadiness: %v", err)
+	}
+	if readiness.Readiness.ReadinessState != models.ReadinessStateMissing {
+		t.Fatalf("scoped readiness = %s, want MISSING", readiness.Readiness.ReadinessState)
+	}
+
+	other := mustNewWireService(t)
+	foreign, err := other.OpenRuntimeScope(
+		context.Background(),
+		models.OpenRuntimeScopeRequest{Config: config},
+	)
+	if err != nil {
+		t.Fatalf("open foreign scope: %v", err)
+	}
+	if opened.Scope.String() == foreign.Scope.String() {
+		t.Fatalf("separate Wire-built authorities issued the same scope %q", opened.Scope.String())
+	}
+
+	_, err = service.ListCatalog(
+		context.Background(),
+		models.ListModelsRequest{Scope: foreign.Scope},
+	)
+	if !errors.Is(err, models.ErrRuntimeScopeForeign) {
+		t.Fatalf("ListCatalog foreign scope error = %v, want ErrRuntimeScopeForeign", err)
+	}
+}
+
 func TestProductionCompositionRejectsScopesFromAnotherModelsAuthority(t *testing.T) {
 	t.Parallel()
 
