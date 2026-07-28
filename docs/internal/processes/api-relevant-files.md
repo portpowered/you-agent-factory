@@ -180,11 +180,12 @@ Use this map when changing the public REST contract.
   proves fake-root parity at the adapter edge without importing Definitions
   internals.
   pss-cln-def-fold-toplevel seals non-owner production imports of the transitional
-  `factory_definitions/service` compile shim to the documented Automations-leased
-  `pkg/wire` residual only; the repository-wide guard is
-  `pkg/services/factory_definitions/non_owner_service_import_boundary_test.go`,
+  `factory_definitions/service` compile shim to the Factory Definitions owner only;
+  RET-DEF-ROOT-WIRE retargeted root `pkg/wire` off the shim. The repository-wide
+  guard is `pkg/services/factory_definitions/non_owner_service_import_boundary_test.go`,
   with `pkg/services/factory_definitions/service` registered in
-  `cmd/pkgboundarycheck` converged service subpackage roots.
+  `cmd/pkgboundarycheck` converged service subpackage roots. Root pkg/wire must
+  not reintroduce the transitional import (`root_wire_hold_test.go`).
   DEL-DEF story 001 (`pss-del-def-001`) confirms prerequisite packets are
   Factory-complete before leased deletion begins. Observable gate proofs live in
   `pkg/services/factory_definitions/del_def_prerequisite_gate_test.go` (tree
@@ -199,8 +200,9 @@ Use this map when changing the public REST contract.
   DEL-DEF story 002 (`pss-del-def-002`) deletes emptied transitional DEF
   top-level packages (`authoredlayout`, `portableconfig`, `loading`,
   `runtimeconfig`, `namedfactories`) and retargets owner imports to
-  `internal/services/*` destinations. The `service/` compile shim remains under
-  the Automations-leased `pkg/wire` hold. Import-clearing proof is
+  `internal/services/*` destinations. The `service/` compile shim remains for
+  owner-local transitional construction until DEL-DEF-RESIDUAL deletes it.
+  Import-clearing proof is
   `pkg/services/factory_definitions/del_def_transitional_deletion_test.go`;
   deletion/absence proofs are in `del_def_prerequisite_gate_test.go`. Root
   `pkg/wire` composition ports moved to public exports under

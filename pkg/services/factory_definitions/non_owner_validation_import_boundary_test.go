@@ -62,12 +62,11 @@ func TestNonOwnerProductionPackages_DoNotImportValidationInternalsOrTransitional
 					continue
 				}
 				t.Fatalf(
-					"%s must not import %s %s; use %s or %s",
+					"%s must not import %s %s; use %s or factory_definitions/wire",
 					packagePath,
 					forbidden.label,
 					importPath,
 					factoryDefinitionsOwnerPrefix,
-					rootPkgWireResidualImportPrefix,
 				)
 			}
 		}
