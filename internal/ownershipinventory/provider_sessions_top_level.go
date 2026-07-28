@@ -189,12 +189,6 @@ func validateProviderSessionsTopLevelInventory(inventory ProviderSessionsTopLeve
 		if !isProviderSessionsTopLevelClassification(child.Classification) {
 			return fmt.Errorf("provider sessions top-level inventory child %q has unknown classification %q", child.Directory, child.Classification)
 		}
-		if child.Directory == "service" {
-			if child.Classification != ProviderSessionsTopLevelUnexpectedPublicSibling {
-				return fmt.Errorf("provider sessions top-level inventory child service must be %q, got %q", ProviderSessionsTopLevelUnexpectedPublicSibling, child.Classification)
-			}
-			continue
-		}
 		if isProviderSessionsUnexpectedPublicSiblingClassification(child.Classification) {
 			unexpectedBeyondService = append(unexpectedBeyondService, child.Directory)
 		}

@@ -1,9 +1,6 @@
 package contractvalidator
 
-import (
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/callbehavior"
-	jscatalog "github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/catalog"
-)
+import factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 
 // JavaScriptRuntimeCatalogCallBehaviorParityDiagnostics applies authored-catalog
 // representative call-behavior parity checks against the installed baseline.
@@ -22,7 +19,10 @@ func JavaScriptRuntimeCatalogCallBehaviorParityDiagnostics(document string, valu
 		)}
 	}
 
-	issues, err := jscatalog.CatalogCallBehaviorParityIssues(root, callbehavior.ProjectInstalledCallBehavior())
+	issues, err := factoryruntime.JavaScriptCatalogCallBehaviorParityIssues(
+		root,
+		factoryruntime.JavaScriptProjectInstalledCallBehavior(),
+	)
 	if err != nil {
 		return []Diagnostic{newDiagnostic("catalog.call_behavior.parse", "/symbols", err.Error(), document)}
 	}

@@ -8,7 +8,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	factoryeventkinds "github.com/portpowered/infinite-you/pkg/services/recordings/events/kinds"
+	factoryeventkinds "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events/kinds"
 )
 
 // ValidAppendEvent reports whether event carries the identity, kind, timestamp,

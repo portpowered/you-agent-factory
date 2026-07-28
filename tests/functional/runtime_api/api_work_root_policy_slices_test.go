@@ -135,6 +135,9 @@ func TestWorkRootPolicySlicesRejectUnsupportedOperations(t *testing.T) {
 	}
 }
 
+// TestWorkRootPolicyServiceResolvePrimaryResultHonorsCanceledContext proves
+// invocation primary-result resolution returns context.Canceled when the caller
+// cancels the request context before resolution runs.
 func TestWorkRootPolicyServiceResolvePrimaryResultHonorsCanceledContext(t *testing.T) {
 	t.Parallel()
 
@@ -147,6 +150,9 @@ func TestWorkRootPolicyServiceResolvePrimaryResultHonorsCanceledContext(t *testi
 	}
 }
 
+// TestWorkRootPolicyServicePrepareInvocationInputRejectsWhitespaceOnlyText proves
+// invocation input preparation rejects compatibility-content text that is only
+// whitespace with ErrInvalidInvocationInput.
 func TestWorkRootPolicyServicePrepareInvocationInputRejectsWhitespaceOnlyText(t *testing.T) {
 	t.Parallel()
 
@@ -158,6 +164,9 @@ func TestWorkRootPolicyServicePrepareInvocationInputRejectsWhitespaceOnlyText(t 
 	}
 }
 
+// TestWorkRootPolicyServicePrepareInvocationInputAcceptsDirectArgs proves
+// invocation input preparation normalizes direct structured args against an
+// active signature into the prepared argument map.
 func TestWorkRootPolicyServicePrepareInvocationInputAcceptsDirectArgs(t *testing.T) {
 	t.Parallel()
 
@@ -179,6 +188,9 @@ func TestWorkRootPolicyServicePrepareInvocationInputAcceptsDirectArgs(t *testing
 	}
 }
 
+// TestWorkRootPolicyServiceResolvePrimaryResultSubmittedTerminalSuccess proves
+// invocation primary-result resolution returns the terminal work text when the
+// submitted work request reaches a terminal success state.
 func TestWorkRootPolicyServiceResolvePrimaryResultSubmittedTerminalSuccess(t *testing.T) {
 	t.Parallel()
 

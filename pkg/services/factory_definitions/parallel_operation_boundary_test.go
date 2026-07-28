@@ -9,10 +9,8 @@ import (
 )
 
 // parallelOperationAllowedPackages may still reference deletion-only parallel
-// catalog operation aliases until pkg/wire and remaining construction surfaces
-// finish cutover in a later packet.
+// catalog operation aliases until remaining construction surfaces finish cutover.
 var parallelOperationAllowedPackages = []string{
-	"github.com/portpowered/infinite-you/pkg/wire",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition",
@@ -28,7 +26,7 @@ var parallelOperationAllowedPackages = []string{
 var parallelOperationPreferredPeerPackages = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mcp",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle",
 }
 
 func TestParallelOperationPreferredPeers_DoNotReferenceLegacyCatalogAuthority(t *testing.T) {

@@ -415,7 +415,6 @@ func (s *Service) legacyProviderRunner(
 		logger,
 		inferenceProgressPublisher,
 		responseExecutor,
-		strings.TrimSpace(runtimeConfig.FactoryDir()),
 	)
 	if err != nil {
 		return nil, err

@@ -7,7 +7,7 @@ import (
 	"context"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
@@ -98,7 +98,7 @@ func NewWithAuthoringLayout(
 		packagedInstaller.Install == nil {
 		return nil
 	}
-	host, err := factorydefinition.NewHost(
+	host, err := lifecycle.NewHost(
 		sessionHost.PersistRootDir, sessionHost.WorkstationLoader,
 		loadFactory,
 		readCurrentFactoryPointer,
@@ -143,7 +143,7 @@ func NewWithAuthoringLayout(
 		OrchestratorValidator: orchestratorValidator,
 	})
 	composition := applyCompositionOptions(options)
-	distributionService := factorydefinition.ComposeDistributionService(
+	distributionService := lifecycle.ComposeDistributionService(
 		packagedCatalog,
 		packagedInstaller,
 		composition.scaffoldInitializer,
@@ -152,7 +152,7 @@ func NewWithAuthoringLayout(
 	if distributionService == nil {
 		return nil
 	}
-	return factorydefinition.NewWithCatalogPackagesValidationDistributionAndAuthoring(
+	return lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
 		host,
 		activationGateway,
 		catalogService,

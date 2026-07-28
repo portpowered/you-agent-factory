@@ -1,8 +1,8 @@
 package goal
 
-import "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationoutput"
+import distributiongoal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/goal"
 
 var (
-	ShouldFormatInvocationSummary  = invocationoutput.ShouldFormatInvocationSummary
-	SummaryContentFromWorkerOutput = invocationoutput.SummaryContentFromWorkerOutput
+	ShouldFormatInvocationSummary  = distributiongoal.ShouldFormatInvocationSummary
+	SummaryContentFromWorkerOutput = distributiongoal.SummaryContentFromWorkerOutput
 )

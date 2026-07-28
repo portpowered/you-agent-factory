@@ -9,10 +9,10 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
-	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
+	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 )
 
 func TestPrivateCatalog_RootGetSucceedsThroughOwnership(t *testing.T) {
@@ -406,9 +406,9 @@ func TestPrivateCatalog_RequiresInjectedPorts(t *testing.T) {
 	t.Parallel()
 
 	fileSystem := platformfilesystem.Local{}
-	paths, err := factorynamedpaths.New(fileSystem)
+	paths, err := catalognamedpaths.New(fileSystem)
 	if err != nil {
-		t.Fatalf("namedpaths.New: %v", err)
+		t.Fatalf("catalognamedpaths.New: %v", err)
 	}
 
 	if _, err := catalogwire.NewService(catalog.Dependencies{
@@ -439,9 +439,9 @@ func newRootCatalog(t *testing.T) factorydefinitions.Service {
 	t.Helper()
 
 	fileSystem := platformfilesystem.Local{}
-	paths, err := factorynamedpaths.New(fileSystem)
+	paths, err := catalognamedpaths.New(fileSystem)
 	if err != nil {
-		t.Fatalf("namedpaths.New: %v", err)
+		t.Fatalf("catalognamedpaths.New: %v", err)
 	}
 	catalogService, err := catalogwire.NewService(catalog.Dependencies{
 		Paths:      paths,
@@ -450,7 +450,7 @@ func newRootCatalog(t *testing.T) factorydefinitions.Service {
 	if err != nil {
 		t.Fatalf("catalogwire.NewService: %v", err)
 	}
-	return factorydefinition.NewWithCatalog(nil, factorydefinition.StubActivationGateway(), catalogService)
+	return lifecycle.NewWithCatalog(nil, lifecycle.StubActivationGateway(), catalogService)
 }
 
 func writeNamedFactory(t *testing.T, rootDir, name string) string {

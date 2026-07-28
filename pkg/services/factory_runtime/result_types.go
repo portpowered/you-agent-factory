@@ -2,7 +2,7 @@ package factory
 
 import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 

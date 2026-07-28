@@ -120,7 +120,7 @@ func (o *SessionOwner) InvokeFactorySession(
 	resolved, err := o.resolveSessionInvocationInput(ctx, factoryCfg, request)
 	if err != nil {
 		o.normalizationFailure(sessionID, factoryCfg, sourceHint, err)
-		return FactoryInvocationResult{}, err
+		return FactoryInvocationResult{}, qualifySessionInvocationError(factoryCfg, err)
 	}
 	o.normalizationSuccess(factoryCfg, resolved.Source)
 	if o.interpolation == nil {
@@ -131,7 +131,7 @@ func (o *SessionOwner) InvokeFactorySession(
 	}
 	if err := o.interpolation.ValidateInvocationInterpolation(factoryCfg, work.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments), factorydefinitions.FileReader(o.inputFiles)); err != nil {
 		o.interpolationFailure(sessionID, factoryCfg, resolved, err)
-		return FactoryInvocationResult{}, normalizeSessionInvocationError(err)
+		return FactoryInvocationResult{}, qualifySessionInvocationError(factoryCfg, err)
 	}
 
 	if o.workTypes == nil {
@@ -425,6 +425,17 @@ func normalizeSessionInvocationError(err error) error {
 		return &factorydefinitions.RequestValidationError{Message: validationErr.Message}
 	}
 	return err
+}
+
+func qualifySessionInvocationError(
+	factoryCfg *factorydefinitions.FactoryConfig,
+	err error,
+) error {
+	err = normalizeSessionInvocationError(err)
+	if factoryCfg == nil {
+		return err
+	}
+	return work.QualifyInvocationArgumentError(err, factorydefinitions.CustomerVisibleFactoryName(factoryCfg))
 }
 
 // SessionInvocationSourceHint reports a low-cardinality source before full normalization.

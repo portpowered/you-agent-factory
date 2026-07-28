@@ -28,6 +28,7 @@ var factoryDefinitionsMoveRules = []factoryDefinitionsMoveRule{
 	{exact: "snapshotcapture", prefix: "snapshotcapture/", subservice: "snapshots_portability"},
 	{exact: "portableconfig", prefix: "portableconfig/", subservice: "snapshots_portability"},
 	{exact: "editable", prefix: "editable/", subservice: "snapshots_portability"},
+	{exact: "replayconfig", prefix: "replayconfig/", subservice: "snapshots_portability"},
 	{exact: "packagedinstallation", prefix: "packagedinstallation/", subservice: "distribution"},
 	{exact: "packages/goal", prefix: "packages/goal/", subservice: "invocation_policy"},
 	{exact: "packages", prefix: "packages/", subservice: "distribution"},
@@ -40,7 +41,6 @@ var factoryDefinitionsMoveRules = []factoryDefinitionsMoveRule{
 	{exact: "workstationexecution", prefix: "workstationexecution/", subservice: "invocation_policy"},
 	{exact: "ttsobservability", prefix: "ttsobservability/", subservice: "invocation_policy"},
 	{exact: "runtimeconfig", prefix: "runtimeconfig/"},
-	{exact: "replayconfig", prefix: "replayconfig/", subservice: "snapshots_portability"},
 	{exact: "namevalue", prefix: "namevalue/", subservice: "validation"},
 	{exact: "workers", prefix: "workers/", subservice: "validation"},
 	{exact: "clonetests", prefix: "clonetests/"},
@@ -91,6 +91,8 @@ func isFactoryDefinitionsCanonicalRetain(rest string) bool {
 	case strings.HasPrefix(rest, "internal/services/distribution"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/snapshots_portability"):
+		return true
+	case strings.HasPrefix(rest, "internal/lifecycle"):
 		return true
 	case strings.HasPrefix(rest, "internal/contracts"):
 		return true

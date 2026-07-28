@@ -51,10 +51,6 @@
       "name": "TestBuildProcessRemainsFilesystemWatcherInertBeforeRuntimeLifecycle"
     },
     {
-      "file": "automations/hosted_sources_root_composition_test.go",
-      "name": "TestBuildProcessRemainsHostedSourcesInertBeforeRuntimeLifecycle"
-    },
-    {
       "file": "bootstrap_portability/agent_factory_export_import_fixture_test.go",
       "name": "TestAgentFactoryExportImportFixture_AuthoredLayoutInterpolatesProjectSpecificPromptContent"
     },
@@ -808,10 +804,6 @@
     },
     {
       "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_AcceptsStructuredArgsWithActiveSignature"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
       "name": "TestSessionInvocationAPI_CanceledRequestContextStopsRequest"
     },
     {
@@ -845,22 +837,6 @@
     {
       "file": "runtime_api/api_submit_runtime_work_trace_shaping_smoke_test.go",
       "name": "TestSubmitRuntimeWork_EmitsCanonicalTraceAwareBatchEvent"
-    },
-    {
-      "file": "runtime_api/api_work_root_policy_slices_test.go",
-      "name": "TestWorkRootPolicyServicePrepareInvocationInputAcceptsDirectArgs"
-    },
-    {
-      "file": "runtime_api/api_work_root_policy_slices_test.go",
-      "name": "TestWorkRootPolicyServicePrepareInvocationInputRejectsWhitespaceOnlyText"
-    },
-    {
-      "file": "runtime_api/api_work_root_policy_slices_test.go",
-      "name": "TestWorkRootPolicyServiceResolvePrimaryResultHonorsCanceledContext"
-    },
-    {
-      "file": "runtime_api/api_work_root_policy_slices_test.go",
-      "name": "TestWorkRootPolicyServiceResolvePrimaryResultSubmittedTerminalSuccess"
     },
     {
       "file": "runtime_api/dashboard_engine_state_test.go",

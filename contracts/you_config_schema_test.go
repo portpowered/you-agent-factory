@@ -83,8 +83,8 @@ func TestYouConfigSchemaValidFixtures(t *testing.T) {
 		{name: "backend scope sibling", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "testdata", "fixtures", "valid", "backend-scope-sibling.json")},
 		{name: "worker presets missing", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "testdata", "fixtures", "valid", "worker-presets-missing.json")},
 		{name: "load defaults", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "testdata", "fixtures", "valid", "load-defaults.json")},
-		{name: "existing backend scope", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "identityinventory", "testdata", "fixtures", "valid", "existing-scope.json")},
-		{name: "defaults sibling", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "identityinventory", "testdata", "fixtures", "valid", "defaults-sibling.json")},
+		{name: "existing backend scope", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "internal", "services", "document", "identityinventory", "testdata", "fixtures", "valid", "existing-scope.json")},
+		{name: "defaults sibling", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "internal", "services", "document", "identityinventory", "testdata", "fixtures", "valid", "defaults-sibling.json")},
 	}
 
 	for _, test := range tests {

@@ -69,7 +69,7 @@ func TestScriptWrapProvider_Infer_CodexExitFailuresNormalizeIntoSharedContract(t
 		entryLabel := providerErrorCorpusEntryLabel(tc.entry)
 		t.Run(entryLabel, func(t *testing.T) {
 			fakeExec := &recordingProviderExec{result: tc.entry.CommandResult()}
-			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 			_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 				ModelProvider: string(modelprovider.ProviderCodex),
@@ -161,7 +161,7 @@ func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *tes
 		t.Run(tc.name, func(t *testing.T) {
 			provider := NewScriptWrapProviderWithDependencies(false, nil, &recordingProviderExec{
 				result: CommandResult{ExitCode: 1, Stderr: []byte(tc.stderr)},
-			}, nil, nil, nil, "", nil, nil)
+			}, nil, nil, nil, nil)
 
 			_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 				ModelProvider: string(modelprovider.ProviderCodex),
@@ -208,7 +208,7 @@ func TestScriptWrapProvider_Infer_CodexWindowsCorpusEntryRemainsDistinctFromAuth
 		entry := providerErrorCorpusEntryForTest(t, tc.entryName)
 		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
 			fakeExec := &recordingProviderExec{result: entry.CommandResult()}
-			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 			_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 				ModelProvider: string(modelprovider.ProviderCodex),
@@ -289,7 +289,7 @@ func TestScriptWrapProvider_Infer_CodexWindowsExitCode4294967295Normalization(t 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeExec := &recordingProviderExec{result: tc.result}
-			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 			_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 				ModelProvider: string(modelprovider.ProviderCodex),
@@ -362,7 +362,7 @@ func TestScriptWrapProvider_Infer_CodexExitFailureReturnsSafeBoundedMessage(t *t
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeExec := &recordingProviderExec{result: tc.result}
-			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 			_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 				ModelProvider: string(modelprovider.ProviderCodex),
@@ -460,7 +460,7 @@ func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCatego
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeExec := &recordingProviderExec{result: tc.result}
-			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 			_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 				ModelProvider: string(modelprovider.ProviderCodex),
@@ -493,7 +493,7 @@ func TestScriptWrapProvider_Infer_April11RecordingFailureShapesNormalize(t *test
 					Stderr:   []byte(sample.Stderr),
 				},
 			}
-			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 			_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 				ModelProvider: string(modelprovider.ProviderCodex),
@@ -521,7 +521,7 @@ func TestScriptWrapProvider_Infer_CodexExitFailurePreservesSessionMetadata(t *te
 			Stderr:   []byte(`{"event":"session.created","session_id":"sess_codex_error_123"}`),
 		},
 	}
-	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		ModelProvider: string(modelprovider.ProviderCodex),
@@ -585,7 +585,7 @@ func TestScriptWrapProvider_Infer_ClaudeExitFailuresNormalizeIntoSharedContract(
 		entryLabel := providerErrorCorpusEntryLabel(tc.entry)
 		t.Run(entryLabel, func(t *testing.T) {
 			fakeExec := &recordingProviderExec{result: tc.entry.CommandResult()}
-			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 			_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 				ModelProvider: string(modelprovider.ProviderClaude),
@@ -904,7 +904,7 @@ func TestScriptWrapProvider_Infer_RunErrorsNormalizeTimeoutAndMisconfigured(t *t
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeExec := &recordingProviderExec{result: tc.result, err: tc.runErr}
-			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 			_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 				ModelProvider: string(modelprovider.ProviderCodex),
@@ -956,7 +956,7 @@ func TestScriptWrapProvider_Infer_ProviderTimeoutTextNormalizesToRetryableTimeou
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeExec := &recordingProviderExec{result: tc.result}
-			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
+			provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, nil)
 
 			_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 				ModelProvider: string(modelprovider.ProviderCodex),

@@ -1,3 +1,6 @@
+// Transitional decision-envelope re-export shim. Interpretation remains owned by
+// factory_definitions/decisionenvelope until CLN-DEF-FOLD-INVOCATION-POLICY
+// cutover; distribution owns only goal asset/materialize/metadata modules.
 package goal
 
 import (

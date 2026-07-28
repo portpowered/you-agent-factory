@@ -37,6 +37,11 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			want:   "session host is required",
 		},
 		{
+			name:   "activation gateway",
+			mutate: func(ports *constructionPorts) { ports.activationGateway = nil },
+			want:   "activation gateway is required",
+		},
+		{
 			name:   "validator",
 			mutate: func(ports *constructionPorts) { ports.validator = nil },
 			want:   "validator is required",

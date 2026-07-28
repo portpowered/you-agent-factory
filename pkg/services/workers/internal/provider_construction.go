@@ -42,7 +42,7 @@ func NewProviderFromCommandRunner(
 	if err != nil {
 		return nil, fmt.Errorf("construct provider-backed worker: %w", err)
 	}
-	provider, err := factory.New(false, nil, nil, nil, "")
+	provider, err := factory.New(false, nil, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("construct provider-backed worker: %w", err)
 	}

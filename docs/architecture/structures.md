@@ -124,8 +124,8 @@ flowchart LR
     end
 
     subgraph currentRuntime[Factory runtime]
-        currentFactoryRuntime[[pkg/services/factory_runtime/runtime]]
-        currentEngine[[pkg/services/factory_runtime/engine core tick loop]]
+        currentFactoryRuntime[[pkg/services/factory_runtime/internal/services/orchestration/runtime]]
+        currentEngine[[pkg/services/factory_runtime/internal/services/orchestration/engine core tick loop]]
         currentSubmissionBuffer[(Submission buffer)]
         currentResultBuffer[(Worker-result buffer)]
 

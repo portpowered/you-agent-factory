@@ -13,10 +13,11 @@ import (
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
-// Fold-preservation proofs for pss-cln-set-fold-servicewire-005. Every case
-// constructs Operator Settings exclusively through operator_settings/wire and
-// exercises observable document, identity, resolution, and config outcomes on
-// the published operatorsettings.Service root.
+// Fold-preservation proofs for pss-cln-set-legacy-packages-004 (and the earlier
+// pss-cln-set-fold-servicewire-005 baseline). Every case constructs Operator
+// Settings exclusively through operator_settings/wire and exercises observable
+// document, identity, resolution, and config outcomes on the published
+// operatorsettings.Service root.
 
 func TestWireFoldPreservesDocumentIdentityResolutionAndConfigBehavior(t *testing.T) {
 	t.Parallel()

@@ -1,8 +1,8 @@
 package subagent
 
-import "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationoutput"
+import distributionsubagent "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/subagent"
 
 var (
-	ShouldFormatInvocationResponse  = invocationoutput.ShouldFormatInvocationResponse
-	ResponseContentFromWorkerOutput = invocationoutput.ResponseContentFromWorkerOutput
+	ShouldFormatInvocationResponse  = distributionsubagent.ShouldFormatInvocationResponse
+	ResponseContentFromWorkerOutput = distributionsubagent.ResponseContentFromWorkerOutput
 )

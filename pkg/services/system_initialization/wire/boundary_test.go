@@ -49,6 +49,8 @@ func TestWirePackageBoundary_DoesNotImportInitializerLifecyclePackages(t *testin
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation",
 		"github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire",
 		"github.com/portpowered/infinite-you/pkg/services/operator_settings/identityinventory",
+		"github.com/portpowered/infinite-you/pkg/services/operator_settings/testlink",
+		"github.com/portpowered/infinite-you/pkg/services/operator_settings/testproviders",
 		"github.com/portpowered/infinite-you/pkg/services/operator_settings/internal",
 	}
 	for _, dep := range strings.Fields(string(output)) {

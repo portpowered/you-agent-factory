@@ -106,7 +106,6 @@ func (s *Service) providerInstance() (inferencecontract.Provider, error) {
 		logging.EnsureLogger(s.config.Logger),
 		s.config.Publish,
 		responseExecutor,
-		strings.TrimSpace(s.config.FactoryDirectory),
 	)
 	if err != nil {
 		return nil, err
@@ -155,6 +154,8 @@ func modelProviderForProviderIdentity(providerID string) string {
 		return string(modelprovider.ProviderOpenCode)
 	case workers.RunnerIDPi:
 		return string(modelprovider.ProviderPi)
+	case workers.RunnerIDAgy:
+		return string(modelprovider.ProviderAgy)
 	default:
 		return providerID
 	}

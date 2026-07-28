@@ -9,8 +9,34 @@ import (
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-// stubActivationGateway is the default no-op activation gateway for definition
-// package tests. Host-specific tests can override individual methods on a copy.
+func newTestService(host Host, gateway ...factoryroot.DefinitionActivationGateway) *Service {
+	activationGateway := factoryroot.DefinitionActivationGateway(StubActivationGateway())
+	if len(gateway) > 0 && gateway[0] != nil {
+		activationGateway = gateway[0]
+	}
+	return New(host, activationGateway)
+}
+
+// trackingActivationGateway records activation gateway calls for characterization tests.
+type trackingActivationGateway struct {
+	stubActivationGateway
+
+	runSessionID         string
+	sessionForActivation *factorydefinitions.DefinitionSession
+	persistRoot          string
+	folderPath           string
+	idleRuntimeErr       error
+	idleNamedErr         error
+	activateErr          error
+	swapErr              error
+	saveNow              time.Time
+	lockDepth            atomic.Int32
+	activateCalls        atomic.Int32
+	swapCalls            atomic.Int32
+	activatedName        string
+	swappedName          string
+}
+
 type stubActivationGateway struct{}
 
 func (stubActivationGateway) RunSessionID() string { return "" }
@@ -49,39 +75,6 @@ func (stubActivationGateway) ActivateSessionEditableFactory(context.Context, *fa
 
 func (stubActivationGateway) SwapPersistedNamedFactoryRuntime(context.Context, string, *factorydefinitions.DefinitionSession, string, string, string, string) error {
 	return nil
-}
-
-// StubActivationGateway returns the default no-op activation gateway for tests.
-func StubActivationGateway() factoryroot.DefinitionActivationGateway {
-	return stubActivationGateway{}
-}
-
-func newTestService(host Host, gateway ...factoryroot.DefinitionActivationGateway) *Service {
-	activationGateway := factoryroot.DefinitionActivationGateway(stubActivationGateway{})
-	if len(gateway) > 0 && gateway[0] != nil {
-		activationGateway = gateway[0]
-	}
-	return New(host, activationGateway)
-}
-
-// trackingActivationGateway records activation gateway calls for characterization tests.
-type trackingActivationGateway struct {
-	stubActivationGateway
-
-	runSessionID         string
-	sessionForActivation *factorydefinitions.DefinitionSession
-	persistRoot          string
-	folderPath           string
-	idleRuntimeErr       error
-	idleNamedErr         error
-	activateErr          error
-	swapErr              error
-	saveNow              time.Time
-	lockDepth            atomic.Int32
-	activateCalls        atomic.Int32
-	swapCalls            atomic.Int32
-	activatedName        string
-	swappedName          string
 }
 
 func (g *trackingActivationGateway) RunSessionID() string {

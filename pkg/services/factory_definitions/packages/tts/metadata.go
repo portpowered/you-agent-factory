@@ -1,21 +1,26 @@
+// Package tts is a transitional shim over the Distribution-owned TTS package
+// asset/metadata implementation.
 package tts
 
 import (
+	distributiontts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/tts"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationoutput"
 )
 
 const (
-	PackagedFactoryProject        = factorydefinitions.PackagedTTSFactoryProject
-	PackagedInvokeWorkstationName = factorydefinitions.PackagedTTSInvokeWorkstationName
-	DefaultModelName              = factorydefinitions.DefaultTTSModelName
-	DefaultBackendName            = factorydefinitions.DefaultTTSBackendName
+	PackagedFactoryProject        = distributiontts.PackagedFactoryProject
+	PackagedInvokeWorkstationName = distributiontts.PackagedInvokeWorkstationName
+	DefaultModelName              = distributiontts.DefaultModelName
+	DefaultBackendName            = distributiontts.DefaultBackendName
 )
 
-type InvocationMetadata = factorydefinitions.TTSInvocationMetadata
+type InvocationMetadata = distributiontts.InvocationMetadata
 
 var (
-	ShouldFormatInvocationMetadata  = invocationoutput.ShouldFormatTTSInvocationMetadata
-	BackendLabelFromWorker          = invocationoutput.TTSBackendLabelFromWorker
-	MetadataContentFromWorkerOutput = invocationoutput.TTSMetadataContentFromWorkerOutput
+	ShouldFormatInvocationMetadata  = distributiontts.ShouldFormatInvocationMetadata
+	BackendLabelFromWorker          = distributiontts.BackendLabelFromWorker
+	MetadataContentFromWorkerOutput = distributiontts.MetadataContentFromWorkerOutput
 )
+
+// PackagedFactoryName is re-exported for transitional callers.
+const PackagedFactoryName = factorydefinitions.PackagedTTSFactoryName

@@ -31,8 +31,7 @@ import (
 	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorynamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -64,7 +63,7 @@ func provideCurrentFactoryDirectoryResolver(
 	namedPaths factorydefinitions.NamedPathResolver,
 ) factorydefinitions.CurrentFactoryDirectoryResolver {
 	return func(rootDir string) (string, error) {
-		return factorynamedfactories.ResolveCurrent(namedPaths, rootDir)
+		return factorydefinitionswire.ResolveCurrent(namedPaths, rootDir)
 	}
 }
 
@@ -378,7 +377,7 @@ func providePackagedFactoryInstallation(
 	persistence factorydefinitions.Persistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
 ) factorydefinitions.PackagedFactoryInstallationOperations {
-	installer := packagedinstallation.New(persistence, fileSystem)
+	installer := factorydefinitionsservice.NewPackagedFactoryInstallationService(persistence, fileSystem)
 	return factorydefinitions.PackagedFactoryInstallationOperations{
 		Install: installer.InstallPackagedFactory,
 	}

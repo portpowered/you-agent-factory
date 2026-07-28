@@ -2,9 +2,11 @@
 package wire
 
 import (
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
-	executionservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service"
+	agyadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
 	claudeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	codexadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	cursoradapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/cursor"
@@ -12,9 +14,9 @@ import (
 	kiroadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/kiro"
 	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/opencode"
 	piadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/pi"
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	executionservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 )
 
@@ -52,23 +54,45 @@ type CursorPlatformDependencies struct {
 	TemporaryFiles  platformfilesystem.TemporaryFileSystem
 }
 
+// AgyPTYPlatformDependencies are platform facts required for the built-in Agy
+// PTY execution adapter.
+type AgyPTYPlatformDependencies struct {
+	Allocator   agypty.PTYAllocator
+	Locator     platformprocess.ExecutableLocator
+	Inspector   platformfilesystem.PathInspector
+}
+
+// BuiltInRunnerPlatformDependencies carries optional platform facts for
+// built-in adapter effects constructed from the Workers subprocess runner.
+type BuiltInRunnerPlatformDependencies struct {
+	Cursor CursorPlatformDependencies
+	AgyPTY AgyPTYPlatformDependencies
+}
+
 // BuiltInDependenciesFromWorkersRunner constructs built-in adapter effects
 // from the shared Workers subprocess runner.
 func BuiltInDependenciesFromWorkersRunner(
 	runner workers.CommandRunner,
-	cursorPlatform ...CursorPlatformDependencies,
+	platform ...BuiltInRunnerPlatformDependencies,
 ) executionservice.BuiltInDependencies {
-	var platform CursorPlatformDependencies
-	if len(cursorPlatform) > 0 {
-		platform = cursorPlatform[0]
+	var deps BuiltInRunnerPlatformDependencies
+	if len(platform) > 0 {
+		deps = platform[0]
 	}
 	return executionservice.BuiltInDependencies{
+		Agy: agyadapter.NewPTYEffect(agyadapter.PTYEffectOptions{
+			Allocator: deps.AgyPTY.Allocator,
+			ExecutableDependencies: agyadapter.ExecutableDependencies{
+				Locator:   deps.AgyPTY.Locator,
+				Inspector: deps.AgyPTY.Inspector,
+			},
+		}),
 		Codex:  codexadapter.NewCommandEffect(runner),
 		Claude: claudeadapter.NewCommandEffect(runner),
 		Cursor: cursoradapter.NewCommandEffect(runner, cursoradapter.CommandEffectOptions{
-			OperatingSystem: platform.OperatingSystem,
-			TemporaryDir:    platform.TemporaryDir,
-			TemporaryFiles:  platform.TemporaryFiles,
+			OperatingSystem: deps.Cursor.OperatingSystem,
+			TemporaryDir:    deps.Cursor.TemporaryDir,
+			TemporaryFiles:  deps.Cursor.TemporaryFiles,
 		}),
 		Gemini:   geminiadapter.NewCommandEffect(runner),
 		Kiro:     kiroadapter.NewCommandEffect(runner),
