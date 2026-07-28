@@ -3,6 +3,7 @@ package validate_persist
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -10,11 +11,17 @@ import (
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const durableBaselineFactoryName = "validate-persist-baseline"
+const (
+	durableBaselineFactoryName = "validate-persist-baseline"
+	persistThenRunFactoryName  = "validate-persist-run"
+	persistThenRunPrimaryResult = "persist-from-file run COMPLETE"
+)
 
 const invalidFactoryWithDanglingWorker = `{
 	"name":"invalid-validate-persist",
@@ -96,6 +103,82 @@ func TestCLIFactoryValidateDoesNotMutateOnFailure(t *testing.T) {
 
 	after := captureDurableBaseline(t, home, workingDirectory, factoryDir)
 	assertDurableBaselineUnchanged(t, before, after)
+}
+
+// TestCLIFactoryPersistFromFileThenRunSucceeds proves persist-from-file through
+// the public Factory CLI create path produces a durable Factory that succeeds on
+// a subsequent public run invocation with a customer-visible primary result.
+func TestCLIFactoryPersistFromFileThenRunSucceeds(t *testing.T) {
+	home := t.TempDir()
+	workingDirectory := t.TempDir()
+	env := customerHomeEnvironment(home)
+
+	sourceDir := support.ScaffoldSingleStepFactory(t, persistThenRunFactoryName)
+	support.UpdateFactoryConfig(t, sourceDir, func(cfg map[string]any) {
+		workTypes, ok := cfg["workTypes"].([]any)
+		if !ok || len(workTypes) == 0 {
+			t.Fatal("persist-then-run factory missing workTypes")
+		}
+		workType, ok := workTypes[0].(map[string]any)
+		if !ok {
+			t.Fatal("persist-then-run factory workType has unexpected shape")
+		}
+		workType["handlingBehavior"] = []any{"DEFAULT"}
+	})
+	support.WriteAgentConfig(
+		t,
+		sourceDir,
+		"processor",
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
+	)
+	sourcePath := filepath.Join(sourceDir, interfaces.FactoryConfigFile)
+
+	factoryDir := support.CreateNamedFactory(
+		t,
+		home,
+		workingDirectory,
+		persistThenRunFactoryName,
+		sourcePath,
+	)
+	if _, err := os.Stat(filepath.Join(factoryDir, interfaces.FactoryConfigFile)); err != nil {
+		t.Fatalf("persisted %s missing after factory create --from: %v", interfaces.FactoryConfigFile, err)
+	}
+
+	providerRunner := support.NewStaticSuccessCommandRunner(persistThenRunPrimaryResult)
+	api := support.NewProcessAPIServer()
+	edges := serviceedges.Edges{APIServerStarter: api.Start}
+	support.ConfigureWorkerCommands(t, &edges, providerRunner, nil)
+	process := support.BuildProcess(t, edges)
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run",
+		"--named", persistThenRunFactoryName,
+		"--no-record",
+		"--with-server",
+		"prove persist-from-file then run",
+	})
+	inputs.Input.Env = env
+	inputs.Input.WorkingDirectory = workingDirectory
+
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	_ = api.WaitForURL(t)
+	<-command.Done()
+	if err := command.Err(); err != nil {
+		t.Fatalf(
+			"Process.Execute(factory run) error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+
+	response := decodeInvocationResponse(t, inputs.Stdout())
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("invocation status = %q, want %q", response.Status, factoryapi.InvocationTerminalStatusCompleted)
+	}
+	if got := invocationPrimaryResultText(t, response); got != persistThenRunPrimaryResult {
+		t.Fatalf("primaryResult = %q, want %q", got, persistThenRunPrimaryResult)
+	}
 }
 
 func assertValidateRejectedActionably(t *testing.T, factorySource string, wants ...string) {
@@ -245,4 +328,35 @@ func writeFactoryFile(t *testing.T, body string) string {
 		t.Fatalf("write factory.json: %v", err)
 	}
 	return path
+}
+
+func customerHomeEnvironment(home string) []string {
+	return append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+}
+
+func decodeInvocationResponse(t *testing.T, stdout string) factoryapi.InvocationResponse {
+	t.Helper()
+
+	decoder := json.NewDecoder(strings.NewReader(stdout))
+	var response factoryapi.InvocationResponse
+	if err := decoder.Decode(&response); err != nil {
+		t.Fatalf("decode InvocationResponse: %v\nstdout:\n%s", err, stdout)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		t.Fatalf("stdout contains data after InvocationResponse: %v\nstdout:\n%s", err, stdout)
+	}
+	return response
+}
+
+func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationResponse) string {
+	t.Helper()
+
+	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+		t.Fatalf("primaryResult = %#v, want one text content part", response.PrimaryResult)
+	}
+	part, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("primaryResult text part: %v", err)
+	}
+	return part.Text
 }
