@@ -158,6 +158,19 @@
   infers domain `sessions` and subsection `controls` from the path; every
   top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
   stays viz-compatible.
+  Execution workstation functional coverage belongs in
+  `tests/functional/workstations/execution/`: prove multi-item and staged two-step
+  collection through `basic_test.go` with the stateless-collector fixture,
+  public work listings, dispatch observations, and terminal/failed state
+  projections; prove competing-workstation contention, shared-executor staged
+  resolution, and distinct-worker workstation binding through
+  `contention_test.go` with scaffolded or legacy fixtures and injected
+  `edges.Edges.ProviderOverride`. Drive proofs through
+  `support.RunFactoryToCompletionWithEdgesAndObservations` and substitute
+  external effects only through `edges.Edges`. Catalog metadata infers domain
+  `workstations` and subsection `execution` from the path; every top-level
+  `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
   Inline JavaScript Factory loading functional coverage belongs in
   `tests/functional/orchestration/javascript/loading/inline_javascript_test.go`:
   drive sync Factory Session execution through `support.BuildProcess` +
