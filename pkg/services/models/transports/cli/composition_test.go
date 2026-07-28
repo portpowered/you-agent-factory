@@ -402,3 +402,104 @@ func TestAdaptCompositionInvocationBuildsOwnedServiceFromPresentationCollaborato
 		t.Fatalf("Pull() output = %q, want model name", out.String())
 	}
 }
+
+func TestConfigFromCompositionWiresInvokeScopeFromPresentationCollaborator(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (modelinference.RuntimeScopeRef{}).Parse("composition:test:scope")
+	if err != nil {
+		t.Fatalf("parse runtime scope: %v", err)
+	}
+	var opened bool
+	invocation := factorySessionPresentationInvocation{
+		root: compositionModelsRoot{},
+		openScope: func(context.Context, factorysessions.ModelsPresentationScopeRequest) (factorysessions.ModelsPresentationScope, error) {
+			opened = true
+			return factorysessions.ModelsPresentationScope{Scope: scope}, nil
+		},
+	}
+	cfg := modelscli.ConfigFromComposition(
+		compositionHTTPProtocol(t),
+		modelscli.AdaptCompositionInvocationForTest(invocation),
+	)
+	if cfg.Models == nil {
+		t.Fatal("ConfigFromComposition() Models = nil, want presentation root")
+	}
+	if cfg.OpenInvokeScope == nil {
+		t.Fatal("ConfigFromComposition() OpenInvokeScope = nil, want presentation scope opener")
+	}
+	openedScope, err := cfg.OpenInvokeScope(context.Background(), modelscli.InvokeConfig{
+		Context: context.Background(),
+	})
+	if err != nil {
+		t.Fatalf("OpenInvokeScope() error = %v", err)
+	}
+	if !opened {
+		t.Fatal("OpenInvokeScope() did not delegate through presentation collaborator")
+	}
+	if openedScope.Scope != scope {
+		t.Fatalf("opened scope = %q, want %q", openedScope.Scope, scope)
+	}
+}
+
+func TestNewInvokesThroughPresentationCollaboratorOwnedPath(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	lease := testModelLease(t)
+	var openedScope bool
+	invocation := factorySessionPresentationInvocation{
+		root: stubModelsRoot{
+			getCatalogModel: func(_ context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				if request.Scope != scope {
+					t.Fatalf("GetCatalogModel scope = %q, want %q", request.Scope, scope)
+				}
+				return modelinference.GetModelResult{
+					Model: modelinference.Detail{
+						Summary: modelinference.Summary{Name: request.Name},
+						Capabilities: []modelinference.Capability{{
+							Worker: "voice-local",
+							Operations: []modelinference.Operation{{
+								Name: request.Operation,
+							}},
+						}},
+					},
+				}, nil
+			},
+			acquireModelLease: func(_ context.Context, _ modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error) {
+				return modelinference.AcquireModelLeaseResult{
+					Lease: modelinference.ModelLease{Lease: lease},
+				}, nil
+			},
+			invokeModelWithLease: func(_ context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				return modelinference.InvokeModelResult{
+					ModelName: request.ModelName,
+					Operation: request.Operation,
+					Content:   []modelinference.InferenceContent{{ContentType: "text/plain", Content: "owned"}},
+				}, nil
+			},
+		},
+		openScope: func(context.Context, factorysessions.ModelsPresentationScopeRequest) (factorysessions.ModelsPresentationScope, error) {
+			openedScope = true
+			return factorysessions.ModelsPresentationScope{Scope: scope}, nil
+		},
+	}
+	service := modelscli.New(compositionHTTPProtocol(t), invocation)
+	var out bytes.Buffer
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context:   context.Background(),
+		ModelName: "OMNIVOICE_Q4_K_M",
+		Operation: "TTS",
+		Text:      "hello",
+		JSON:      true,
+		Output:    &out,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	if !openedScope {
+		t.Fatal("Invoke() did not open presentation scope through owned adapter path")
+	}
+	if !strings.Contains(out.String(), "owned") {
+		t.Fatalf("Invoke() output = %q, want owned inference content", out.String())
+	}
+}
