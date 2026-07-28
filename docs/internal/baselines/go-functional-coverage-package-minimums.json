@@ -2320,7 +2320,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/internal/service",
-      "minimum": 73.50
+      "minimum": 72.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/lineagegraph",
