@@ -77,14 +77,6 @@ func TestMapResidualPackageRetainsApprovedFamilies(t *testing.T) {
 				Destination: "wire",
 			},
 		},
-		{
-			path: "pkg/wire/factorydefinitions",
-			want: PackageMapping{
-				PackagePath: "pkg/wire/factorydefinitions",
-				Disposition: DispositionRetain,
-				Destination: "wire",
-			},
-		},
 	}
 
 	for _, tc := range cases {

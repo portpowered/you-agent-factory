@@ -7,10 +7,11 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout"
+	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
+	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
 	factorydefinitiontestcomposition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
 	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
@@ -66,7 +67,7 @@ func prepareLayoutForPersistenceTest(
 	validator factorydefinitions.Validator,
 ) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
 	mapper := factorymapping.NewFactoryConfigMapper()
-	return factoryauthoredlayout.Prepare(
+	return authoringlayoutprepare.FactoryLayout(
 		ctx,
 		segment,
 		payload,
