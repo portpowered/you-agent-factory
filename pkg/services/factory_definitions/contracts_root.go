@@ -146,6 +146,8 @@ const (
 	WorkerTypeInference                                  = contracts.WorkerTypeInference
 	WorkerTypeModel                                      = contracts.WorkerTypeModel
 	WorkerTypeScript                                     = contracts.WorkerTypeScript
+	WorkerTypeHosted                                     = contracts.WorkerTypeHosted
+	WorkerTypePoller                                     = contracts.WorkerTypePoller
 	ModelLocalityLocal                                   = workerconfig.ModelLocalityLocal
 	ModelLocalityCloud                                   = workerconfig.ModelLocalityCloud
 	AgentToolPolicyDisabled                              = workerconfig.AgentToolPolicyDisabled
@@ -225,10 +227,11 @@ var NormalizeAgentToolPolicy = workerconfig.NormalizeAgentToolPolicy
 var CloneWorkerConfig = workerconfig.Clone
 
 // Foreign-vocabulary deletion-only aliases below are retained until
-// CLN-DEF-CONTRACTS story 005 rehomes worker vocabulary toward Workers and
-// Providers. Event envelope vocabulary was rehomed to pkg/services/recordings
-// in story 003; world-state, dispatch, and replay vocabulary were rehomed in
-// story 004.
+// CLN-DEF-CONTRACTS story 007 deletes the contracts mega-barrel. Event envelope
+// vocabulary was rehomed to pkg/services/recordings in story 003; world-state,
+// dispatch, and replay vocabulary were rehomed in story 004; worker and provider
+// execution vocabulary was rehomed to pkg/services/workers and
+// pkg/services/providers in story 005.
 
 type (
 	ArcMode                                          = contracts.ArcMode
@@ -291,9 +294,7 @@ type (
 	TokenMutationRecord                              = contracts.TokenMutationRecord
 	WorkPropagationMode                              = contracts.WorkPropagationMode
 	WorkRequestPayload                               = contracts.WorkRequestPayload
-	WorkstationInput                                 = contracts.WorkstationInput
 	WorkstationLoader                                = contracts.WorkstationLoader
-	WorkstationResult                                = contracts.WorkstationResult
 	BundledFileContentConfig                         = contracts.BundledFileContentConfig
 	ClassificationRouteConfig                        = contracts.ClassificationRouteConfig
 	FactoryOrchestratorConfig                        = contracts.FactoryOrchestratorConfig
@@ -306,9 +307,6 @@ type (
 	RelationshipChangePayload                        = contracts.RelationshipChangePayload
 	WorkInputPayload                                 = contracts.WorkInputPayload
 	WorkPropagationConfig                            = contracts.WorkPropagationConfig
-	WorkstationOutput                                = contracts.WorkstationOutput
-	WorkstationRequestPayload                        = contracts.WorkstationRequestPayload
-	WorkstationResponsePayload                       = contracts.WorkstationResponsePayload
 )
 
 const (
@@ -401,8 +399,6 @@ const (
 	SupportedFactoryLayoutSchemaVersion           = contracts.SupportedFactoryLayoutSchemaVersion
 	SystemTimeDashboardPendingPlaceID             = contracts.SystemTimeDashboardPendingPlaceID
 	SystemTimeDashboardWorkTypeID                 = contracts.SystemTimeDashboardWorkTypeID
-	WorkerTypeHosted                              = contracts.WorkerTypeHosted
-	WorkerTypePoller                              = contracts.WorkerTypePoller
 	WorkstationTypeAgent                          = contracts.WorkstationTypeAgent
 	WorkstationTypeInvoke                         = contracts.WorkstationTypeInvoke
 	WorkstationTypeScript                         = contracts.WorkstationTypeScript

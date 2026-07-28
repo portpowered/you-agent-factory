@@ -13,12 +13,16 @@
 // Foreign event envelope vocabulary is owned by pkg/services/recordings
 // (event_contract.go). World-state, dispatch, and replay vocabulary is owned
 // by pkg/services/recordings and pkg/services/factory_runtime (world_state_contract.go,
-// dispatch_contract.go, replay_contract.go). Deletion-only aliases remain in
-// event_recording_deletion_aliases.go, world_state_recording_deletion_aliases.go,
-// dispatch_runtime_deletion_aliases.go, and replay_recording_deletion_aliases.go
+// dispatch_contract.go, replay_contract.go). Worker execution vocabulary is
+// owned by pkg/services/workers (worker_vocabulary_contract.go,
+// execution_contracts.go); provider-session identity is published at
+// pkg/services/providers (SessionRef) and pkg/services/workers
+// (ProviderSessionMetadata). Deletion-only aliases remain in event_recording_deletion_aliases.go,
+// world_state_recording_deletion_aliases.go, dispatch_runtime_deletion_aliases.go,
+// replay_recording_deletion_aliases.go, and worker_provider_deletion_aliases.go
 // until peers finish cutover.
 //
 // Foreign worker vocabulary below the foreign-vocabulary marker in
-// contracts_root.go is temporary deletion-only aliases until CLN-DEF story 005
-// rehomes them.
+// contracts_root.go is temporary deletion-only debt until CLN-DEF story 007
+// deletes the contracts mega-barrel.
 package factorydefinitions

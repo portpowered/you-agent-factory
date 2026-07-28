@@ -785,7 +785,15 @@ replay vocabulary at `pkg/services/recordings/world_state_contract.go` and
 `factory_definitions/contracts` for those surfaces. Temporary deletion-only
 aliases remain in `world_state_recording_deletion_aliases.go`,
 `dispatch_runtime_deletion_aliases.go`, and `replay_recording_deletion_aliases.go`.
-The
+CLN-DEF-CONTRACTS story 005 publishes worker execution vocabulary at
+`pkg/services/workers` (`worker_vocabulary_contract.go`, `WorkstationResult` in
+`execution_contracts.go`); provider-session identity remains on
+`pkg/services/providers` (`SessionRef` in `identity_contract.go`) and
+`pkg/services/workers` (`ProviderSessionMetadata`). `worker_vocabulary_boundary_test.go`
+and `recordings/workers_root_boundary_test.go` prove replay and diagnostics
+consumers import Workers root ports instead of `factory_definitions/contracts`.
+Temporary worker execution deletion-only aliases remain in
+`worker_provider_deletion_aliases.go`. The
 parent-private nested validation subservice locks its public surface in
 `internal/services/validation/boundary_test.go`: `service.go` exports only
 `Service` and `Dependencies` with factory_definitions root request/result
