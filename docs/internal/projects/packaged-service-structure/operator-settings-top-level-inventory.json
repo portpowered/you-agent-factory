@@ -2,37 +2,16 @@
   "formatVersion": "pss-operator-settings-top-level-inventory/v1",
   "ownerPackage": "pkg/services/operator_settings",
   "sortKey": "directory name ascending byte order",
-  "unexpectedPublicSiblings": [
-    "identityinventory",
-    "servicewire",
-    "testlink",
-    "testproviders"
-  ],
+  "unexpectedPublicSiblings": [],
   "children": [
-    {
-      "directory": "identityinventory",
-      "classification": "unexpected_public_sibling"
-    },
     {
       "directory": "internal",
       "classification": "canonical_retain"
     },
     {
-      "directory": "servicewire",
-      "classification": "unexpected_public_sibling"
-    },
-    {
       "directory": "testdata",
       "classification": "test_only_retain",
       "note": "Owner-root shared Operator Settings contract and resolution fixtures for package tests; not a public product surface."
-    },
-    {
-      "directory": "testlink",
-      "classification": "unexpected_public_sibling"
-    },
-    {
-      "directory": "testproviders",
-      "classification": "unexpected_public_sibling"
     },
     {
       "directory": "transports",

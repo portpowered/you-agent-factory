@@ -302,7 +302,7 @@ fnd-12-cli-behavior-baselines:
 
 fnd-12-http-behavior-baselines:
 	$(GO) test ./tests/functional/transport/http/server -run TestGeneratedClientAndServerSchemaStayAligned -count=1 -timeout $(GO_TEST_TIMEOUT)
-	$(GO) test ./tests/functional/runtime_api -run TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmission -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./tests/functional/work/submission -run TestAPISubmitWorkRejectsEmptyStructuredSubmission -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 fnd-12-mcp-behavior-baselines:
 	$(GO) test ./pkg/transports/mcp/server -run '^Test(ServeStdioUsesSDKProtocolAndRegistersCatalog|SDKProtocolErrors)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
@@ -513,7 +513,8 @@ artifact-contract-closeout:
 	$(GO) test ./pkg/transports/http ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/portableconfig/integrationtests ./pkg/services/recordings/replay ./pkg/platform/replay ./tests/adhoc ./tests/functional/bootstrap_portability ./tests/functional/runtime_api -run "Test(AutomatPortabilityFixture_|GeneratedAPIIntegrationSmoke_)" -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./tests/functional/work/submission -run TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./tests/functional/transport/http/server -run TestGeneratedClientAndServerSchemaStayAligned -count=1 -timeout $(GO_TEST_TIMEOUT)
-	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/replay_contracts -run "Test(ReplayEventStreamArtifactSmoke_|WorkerPublicContractSmoke_)" -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/replay_contracts -run "TestReplayEventStreamArtifactSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/script -run "TestWorkerPublicContractSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 lint:
 	$(MAKE) $(LINT_TARGETS)

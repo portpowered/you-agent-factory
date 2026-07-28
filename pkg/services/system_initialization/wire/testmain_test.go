@@ -3,9 +3,10 @@ package systeminitializationwire
 import (
 	"testing"
 
-	_ "github.com/portpowered/infinite-you/pkg/services/operator_settings/testlink"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
 func TestMain(m *testing.M) {
+	settingswire.RegisterTestComposition()
 	m.Run()
 }

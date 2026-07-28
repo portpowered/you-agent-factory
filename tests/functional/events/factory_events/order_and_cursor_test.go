@@ -1,6 +1,12 @@
 package factory_events
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -657,5 +663,345 @@ func assertFactoryEventsSameRelativeOrder(
 				first[index].Id,
 			)
 		}
+	}
+}
+
+// TestCanonicalTopologySnapshotsPreservePublicIdentityAndResourceEvidence proves
+// durable Factory Event topology snapshots keep stable public entity IDs and
+// resource evidence across InitialStructureRequest and FactoryChange events
+// even when customer-facing names change.
+func TestCanonicalTopologySnapshotsPreservePublicIdentityAndResourceEvidence(t *testing.T) {
+	dir := scaffoldCanonicalTopologyFactory(
+		t,
+		"gpu",
+		"writer",
+		"task",
+		"queued",
+		"review",
+	)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	initialStructure := requireInitialStructureFactoryEvent(t, server.GetFactoryEvents(t))
+	initialPayload, err := initialStructure.Payload.AsInitialStructureRequestEventPayload()
+	if err != nil {
+		t.Fatalf("decode initial-structure payload: %v", err)
+	}
+	assertCanonicalTopologyFactoryEvidence(t, initialPayload.Factory)
+
+	initialEvents := server.GetFactoryEvents(t)
+	current := getCurrentFactoryAt(t, server.URL())
+	saveCurrentFactoryAt(
+		t,
+		server.URL(),
+		current.Version,
+		"accelerator",
+		"author",
+		"job",
+		"waiting",
+		"approval",
+	)
+
+	factoryChange := requireFactoryChangeAfterEvents(t, initialEvents, server.GetFactoryEvents(t))
+	changePayload, err := factoryChange.Payload.AsFactoryChangeEventPayload()
+	if err != nil {
+		t.Fatalf("decode factory-change payload: %v", err)
+	}
+	assertCanonicalTopologyFactoryEvidence(t, changePayload.Factory)
+}
+
+func scaffoldCanonicalTopologyFactory(
+	t *testing.T,
+	resourceName,
+	workerName,
+	workTypeName,
+	initialStateName,
+	workstationName string,
+) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "canonical-topology",
+		"id":   "canonical-topology-runtime",
+		"resources": []any{
+			map[string]any{"id": "gpu-stable", "name": resourceName, "capacity": 2},
+		},
+		"workers": []any{
+			map[string]any{
+				"id":               "writer-stable",
+				"name":             workerName,
+				"type":             "MODEL_WORKER",
+				"modelProvider":    "CLAUDE",
+				"executorProvider": "SCRIPT_WRAP",
+				"model":            "claude-sonnet-4-20250514",
+				"resources": []any{
+					map[string]any{"name": resourceName, "capacity": 1},
+				},
+			},
+		},
+		"workTypes": []any{
+			map[string]any{
+				"id":   "task-stable",
+				"name": workTypeName,
+				"states": []any{
+					map[string]any{"id": "queued-stable", "name": initialStateName, "type": "INITIAL"},
+					map[string]any{"id": "done-stable", "name": "done", "type": "TERMINAL"},
+					map[string]any{"id": "failed-stable", "name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workstations": []map[string]any{{
+			"id":       "review-stable",
+			"name":     workstationName,
+			"behavior": "STANDARD",
+			"type":     "MODEL_WORKSTATION",
+			"worker":   workerName,
+			"body":     "Review work.",
+			"inputs": []any{
+				map[string]any{"workType": workTypeName, "state": initialStateName},
+			},
+			"outputs": []any{
+				map[string]any{"workType": workTypeName, "state": "done"},
+			},
+			"onFailure": []any{
+				map[string]any{"workType": workTypeName, "state": "failed"},
+			},
+			"resources": []any{
+				map[string]any{"name": resourceName, "capacity": 1},
+			},
+		}},
+	})
+	return dir
+}
+
+func getCurrentFactoryAt(t *testing.T, serverURL string) factoryapi.Factory {
+	t.Helper()
+
+	resp, err := http.Get(serverURL + "/factory-sessions/~default/factory")
+	if err != nil {
+		t.Fatalf("GET /factory-sessions/~default/factory: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /factory-sessions/~default/factory status = %d, want 200", resp.StatusCode)
+	}
+	var current factoryapi.Factory
+	if err := json.NewDecoder(resp.Body).Decode(&current); err != nil {
+		t.Fatalf("decode current factory response: %v", err)
+	}
+	return current
+}
+
+func saveCurrentFactoryAt(
+	t *testing.T,
+	serverURL string,
+	version *factoryapi.HybridLogicalTimestamp,
+	resourceName,
+	workerName,
+	workTypeName,
+	initialStateName,
+	workstationName string,
+) {
+	t.Helper()
+
+	if version == nil {
+		t.Fatal("factory version = nil, want version metadata for save")
+	}
+	nextVersion := factoryapi.HybridLogicalTimestamp{
+		Logical:  version.Logical + 1,
+		Physical: version.Physical.UTC().Add(time.Nanosecond),
+	}
+	body := canonicalTopologyFactorySaveBody(
+		nextVersion,
+		resourceName,
+		workerName,
+		workTypeName,
+		initialStateName,
+		workstationName,
+	)
+
+	req, err := http.NewRequest(
+		http.MethodPut,
+		serverURL+"/factory-sessions/~default/factory",
+		bytes.NewReader([]byte(body)),
+	)
+	if err != nil {
+		t.Fatalf("new current factory save request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT /factory-sessions/~default/factory: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		responseBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf(
+			"PUT /factory-sessions/~default/factory status = %d, want 200: %s",
+			resp.StatusCode,
+			responseBody,
+		)
+	}
+}
+
+func canonicalTopologyFactorySaveBody(
+	version factoryapi.HybridLogicalTimestamp,
+	resourceName,
+	workerName,
+	workTypeName,
+	initialStateName,
+	workstationName string,
+) string {
+	document := map[string]any{
+		"name": "UNDEFINED",
+		"id":   "canonical-topology-runtime",
+		"version": map[string]string{
+			"logical":  strconv.FormatInt(version.Logical.Int64(), 10),
+			"physical": version.Physical.UTC().Format(time.RFC3339Nano),
+		},
+		"resources": []map[string]any{
+			{"id": "gpu-stable", "name": resourceName, "capacity": 2},
+		},
+		"workers": []map[string]any{
+			{
+				"id":               "writer-stable",
+				"name":             workerName,
+				"type":             "MODEL_WORKER",
+				"modelProvider":    "CLAUDE",
+				"executorProvider": "SCRIPT_WRAP",
+				"model":            "claude-sonnet-4-20250514",
+				"resources": []map[string]any{
+					{"name": resourceName, "capacity": 1},
+				},
+			},
+		},
+		"workTypes": []map[string]any{
+			{
+				"id":   "task-stable",
+				"name": workTypeName,
+				"states": []map[string]string{
+					{"id": "queued-stable", "name": initialStateName, "type": "INITIAL"},
+					{"id": "done-stable", "name": "done", "type": "TERMINAL"},
+					{"id": "failed-stable", "name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workstations": []map[string]any{
+			{
+				"id":       "review-stable",
+				"name":     workstationName,
+				"behavior": "STANDARD",
+				"type":     "MODEL_WORKSTATION",
+				"body":     "Review work.",
+				"worker":   workerName,
+				"inputs": []map[string]string{
+					{"workType": workTypeName, "state": initialStateName},
+				},
+				"outputs": []map[string]string{
+					{"workType": workTypeName, "state": "done"},
+				},
+				"onFailure": []map[string]string{
+					{"workType": workTypeName, "state": "failed"},
+				},
+				"resources": []map[string]any{
+					{"name": resourceName, "capacity": 1},
+				},
+			},
+		},
+	}
+	body, err := json.Marshal(document)
+	if err != nil {
+		panic(fmt.Sprintf("marshal canonical topology save document: %v", err))
+	}
+	return fmt.Sprintf(`{"factory":%s}`, body)
+}
+
+func requireInitialStructureFactoryEvent(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+) factoryapi.FactoryEvent {
+	t.Helper()
+
+	for _, event := range events {
+		if event.Type == factoryapi.FactoryEventTypeInitialStructureRequest {
+			return event
+		}
+	}
+	t.Fatal("retained Factory Event history missing InitialStructureRequest")
+	return factoryapi.FactoryEvent{}
+}
+
+func requireFactoryChangeAfterEvents(
+	t *testing.T,
+	before []factoryapi.FactoryEvent,
+	after []factoryapi.FactoryEvent,
+) factoryapi.FactoryEvent {
+	t.Helper()
+
+	minSequence := -1
+	for _, event := range before {
+		if event.Context.Sequence > minSequence {
+			minSequence = event.Context.Sequence
+		}
+	}
+	for _, event := range after {
+		if event.Context.Sequence > minSequence && event.Type == factoryapi.FactoryEventTypeFactoryChange {
+			return event
+		}
+	}
+	t.Fatal("retained Factory Event history missing FactoryChange after save")
+	return factoryapi.FactoryEvent{}
+}
+
+func assertCanonicalTopologyFactoryEvidence(t *testing.T, factory factoryapi.Factory) {
+	t.Helper()
+
+	if factory.Resources == nil || len(*factory.Resources) != 1 {
+		t.Fatalf("Factory snapshot resources = %#v, want one durable resource", factory.Resources)
+	}
+	resource := (*factory.Resources)[0]
+	if resource.Id == nil || *resource.Id != "gpu-stable" {
+		t.Fatalf("Factory snapshot resource id = %#v, want gpu-stable", resource.Id)
+	}
+
+	if factory.Workers == nil || len(*factory.Workers) != 1 {
+		t.Fatalf("Factory snapshot workers = %#v, want one durable worker", factory.Workers)
+	}
+	worker := (*factory.Workers)[0]
+	if worker.Id == nil || *worker.Id != "writer-stable" {
+		t.Fatalf("Factory snapshot worker id = %#v, want writer-stable", worker.Id)
+	}
+	if worker.Resources == nil || len(*worker.Resources) != 1 {
+		t.Fatalf("Factory snapshot worker resources = %#v, want one resource requirement", worker.Resources)
+	}
+
+	if factory.WorkTypes == nil || len(*factory.WorkTypes) != 1 {
+		t.Fatalf("Factory snapshot work types = %#v, want one durable work type", factory.WorkTypes)
+	}
+	workType := (*factory.WorkTypes)[0]
+	if workType.Id == nil || *workType.Id != "task-stable" {
+		t.Fatalf("Factory snapshot work type id = %#v, want task-stable", workType.Id)
+	}
+	if len(workType.States) != 3 {
+		t.Fatalf("Factory snapshot work type states = %#v, want three durable states", workType.States)
+	}
+	if workType.States[0].Id == nil || *workType.States[0].Id != "queued-stable" {
+		t.Fatalf("Factory snapshot initial state id = %#v, want queued-stable", workType.States[0].Id)
+	}
+
+	if factory.Workstations == nil || len(*factory.Workstations) != 1 {
+		t.Fatalf("Factory snapshot workstations = %#v, want one durable workstation", factory.Workstations)
+	}
+	workstation := (*factory.Workstations)[0]
+	if workstation.Id == nil || *workstation.Id != "review-stable" {
+		t.Fatalf("Factory snapshot workstation id = %#v, want review-stable", workstation.Id)
+	}
+	if workstation.Resources == nil || len(*workstation.Resources) != 1 {
+		t.Fatalf("Factory snapshot workstation resources = %#v, want one resource requirement", workstation.Resources)
 	}
 }

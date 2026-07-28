@@ -124,7 +124,7 @@ func TestOperatorSettingsTopLevelInventoryClassifiesUnexpectedPublicSiblings(t *
 		t.Fatalf("LoadOperatorSettingsTopLevelInventory() error = %v", err)
 	}
 
-	wantUnexpected := []string{"identityinventory", "servicewire", "testlink", "testproviders"}
+	wantUnexpected := []string{}
 	if !slices.Equal(inventory.UnexpectedPublicSiblings, wantUnexpected) {
 		t.Fatalf("unexpected public siblings = %v, want %v", inventory.UnexpectedPublicSiblings, wantUnexpected)
 	}
