@@ -38,7 +38,13 @@ func TestPackagedDeepResearchRequiredInputCompletes(t *testing.T) {
 	})
 
 	args := map[string]any{"topic": topic}
-	response := startPackagedDeepResearchInvocation(t, server, factoryDir, args)
+	response := startPackagedDeepResearchInvocation(
+		t,
+		server,
+		factoryDir,
+		"packaged-deep-research-required-input",
+		args,
+	)
 	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED; response = %#v", response.Status, response)
 	}
@@ -93,10 +99,113 @@ func TestPackagedDeepResearchRequiredInputCompletes(t *testing.T) {
 	}
 }
 
+// TestPackagedDeepResearchOptionalInputsReachWorkers proves that optional
+// deep-research overrides such as research depth, specialist cap, and approved
+// model execution selection reach mock workers and are observable on dispatch
+// execution selection and the primary synthesis result.
+func TestPackagedDeepResearchOptionalInputsReachWorkers(t *testing.T) {
+	topic := fmt.Sprintf(
+		"functional packaged deep research optional overrides %d with enough breadth for specialist delegation",
+		time.Now().UnixNano(),
+	)
+
+	factoryDir := support.InstallPackagedFactory(
+		t,
+		t.TempDir(),
+		factorydefinitions.PackagedDeepResearchFactoryName,
+	)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+
+	args := map[string]any{
+		"topic":           topic,
+		"researchDepth":   3,
+		"maxSubagents":    1,
+		"modelProvider":   "CODEX",
+		"model":           "gpt-5",
+		"reasoningEffort": "medium",
+	}
+	response := startPackagedDeepResearchInvocation(
+		t,
+		server,
+		factoryDir,
+		"packaged-deep-research-optional-inputs",
+		args,
+	)
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("session status = %q, want SUCCEEDED; response = %#v", response.Status, response)
+	}
+	if response.Result == nil || response.Result.PrimaryResult == nil || len(*response.Result.PrimaryResult) != 1 {
+		t.Fatalf("primary result = %#v, want one synthesized result part", response.Result)
+	}
+	if strings.TrimSpace(response.SessionId) == "" {
+		t.Fatal("sessionId is empty, want durable JavaScript session ID")
+	}
+
+	primary, err := json.Marshal((*response.Result.PrimaryResult)[0])
+	if err != nil {
+		t.Fatalf("marshal primary result: %v", err)
+	}
+	primaryText := string(primary)
+	for _, want := range []string{
+		topic,
+		`"researchDepth":3`,
+		`"maxSubagents":1`,
+		`"modelProvider":"CODEX"`,
+		`"model":"gpt-5"`,
+		`"reasoningEffort":"medium"`,
+		"research-specialist-technical",
+	} {
+		if !strings.Contains(primaryText, want) {
+			t.Fatalf("primary result = %s, want substring %q", primaryText, want)
+		}
+	}
+
+	dispatches := listFactorySessionDispatches(t, server.URL(), response.SessionId)
+	if len(dispatches.Dispatches) != 2 {
+		t.Fatalf(
+			"dispatch count = %d, want one bounded specialist dispatch and one lead synthesis",
+			len(dispatches.Dispatches),
+		)
+	}
+	labels := make(map[string]bool)
+	for _, dispatch := range dispatches.Dispatches {
+		if dispatch.Label != nil {
+			labels[*dispatch.Label] = true
+		}
+		if dispatch.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
+			t.Fatalf("dispatch status = %q, want COMPLETED", dispatch.Status)
+		}
+		if dispatch.ModelProvider == nil || *dispatch.ModelProvider != "CODEX" ||
+			dispatch.Model == nil || *dispatch.Model != "gpt-5" ||
+			dispatch.ReasoningEffort == nil || *dispatch.ReasoningEffort != "medium" {
+			t.Fatalf(
+				"dispatch execution selection = provider=%#v model=%#v reasoning=%#v, want approved overrides",
+				dispatch.ModelProvider,
+				dispatch.Model,
+				dispatch.ReasoningEffort,
+			)
+		}
+	}
+	if !labels["research-specialist-technical"] || !labels["lead-research-synthesis"] {
+		t.Fatalf(
+			"dispatch labels = %#v, want technical specialist and lead synthesis",
+			labels,
+		)
+	}
+	if labels["research-specialist-tradeoffs"] {
+		t.Fatalf("dispatch labels = %#v, want tradeoffs specialist omitted when maxSubagents is 1", labels)
+	}
+}
+
 func startPackagedDeepResearchInvocation(
 	t *testing.T,
 	server *support.FunctionalAPIServer,
 	factoryDir string,
+	requestID string,
 	args map[string]any,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
@@ -107,7 +216,7 @@ func startPackagedDeepResearchInvocation(
 		t,
 		server.URL()+"/factory-sessions/sync",
 		factoryapi.FactorySessionExecutionRequest{
-			RequestId: "packaged-deep-research-required-input",
+			RequestId: requestID,
 			Source: factoryapi.FactorySessionExecutionSource{
 				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
 				WorkflowFile: &workflowFile,
