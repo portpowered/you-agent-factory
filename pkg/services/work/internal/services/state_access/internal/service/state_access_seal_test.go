@@ -154,6 +154,32 @@ func TestStateAccessOwnerDoesNotImportFactoryRuntimeOrPetri(t *testing.T) {
 		"orchestrators/petri",
 		"pkg/factory/",
 	}
+	assertStateAccessOwnerForbiddenImports(t, forbidden, "Factory Runtime or Petri")
+}
+
+// TestStateAccessOwnerDoesNotImportRecordingsNestedPackages fails closed when
+// the private state_access owner reaches Recordings through nested packages
+// instead of the Recordings service root contract.
+func TestStateAccessOwnerDoesNotImportRecordingsNestedPackages(t *testing.T) {
+	t.Parallel()
+
+	forbidden := []string{
+		"pkg/services/recordings/service",
+		"pkg/services/recordings/internal",
+		"pkg/services/recordings/events",
+		"pkg/services/recordings/replay",
+		"pkg/services/recordings/projections",
+		"pkg/services/recordings/artifacts",
+	}
+	assertStateAccessOwnerForbiddenImports(t, forbidden, "nested Recordings")
+}
+
+func assertStateAccessOwnerForbiddenImports(
+	t *testing.T,
+	forbidden []string,
+	ownerLabel string,
+) {
+	t.Helper()
 	packages := []string{
 		".",
 		filepath.Join("..", ".."),
@@ -174,7 +200,7 @@ func TestStateAccessOwnerDoesNotImportFactoryRuntimeOrPetri(t *testing.T) {
 			}
 			for _, needle := range forbidden {
 				if strings.Contains(string(source), needle) {
-					t.Errorf("%s imports forbidden Factory Runtime or Petri package %q", entry.Name(), needle)
+					t.Errorf("%s imports forbidden %s package %q", entry.Name(), ownerLabel, needle)
 				}
 			}
 		}
