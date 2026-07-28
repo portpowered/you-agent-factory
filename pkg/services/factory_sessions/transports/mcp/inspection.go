@@ -27,6 +27,9 @@ func ListDispatches(
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
 	}
+	if response, done := requestContextErrorResponse[factoryapi.ListFactorySessionDispatchesResponse](ctx); done {
+		return response
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
@@ -63,6 +66,9 @@ func ListArtifacts(
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{Error: &envelope}
 	}
+	if response, done := requestContextErrorResponse[factoryapi.ListFactorySessionArtifactsResponse](ctx); done {
+		return response
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{Error: &envelope}
@@ -98,6 +104,9 @@ func ReadEvents(ctx context.Context, service factorysessionexecution.ExecutionSe
 	if ctx == nil {
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[ReadEventsResult]{Error: &envelope}
+	}
+	if response, done := requestContextErrorResponse[ReadEventsResult](ctx); done {
+		return response
 	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
@@ -158,6 +167,9 @@ func Control(
 	if ctx == nil {
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryapi.FactorySessionLifecycleControlResponse]{Error: &envelope}
+	}
+	if response, done := requestContextErrorResponse[factoryapi.FactorySessionLifecycleControlResponse](ctx); done {
+		return response
 	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()

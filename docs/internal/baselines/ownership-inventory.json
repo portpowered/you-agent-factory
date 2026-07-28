@@ -2766,6 +2766,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/transports/http",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/ttsobservability",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -3589,6 +3595,12 @@
     },
     {
       "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/wire",
       "disposition": "retain",
       "destination": "factory_visualization",
       "destinationKind": "owner"

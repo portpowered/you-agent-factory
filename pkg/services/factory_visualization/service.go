@@ -59,6 +59,8 @@ type Service struct {
 	activation activationlifecycle.Service
 	projection liveviewprojection.Service
 
+	presentationOwner responsePresentationOwner
+
 	source      Source
 	projections recordings.ProjectionService
 	clock       Clock
@@ -89,10 +91,10 @@ func New(
 		return nil, errors.New("initialize Factory visualization: presentation sink is required")
 	}
 	activation, err := activationlifecyclewire.NewService(
-		activationSourceAdapter{source: source},
+		ActivationEventSource(source),
 		projections,
 		clock,
-		activationSinkAdapter{sink: sink},
+		ActivationViewSink(sink),
 		activationlifecycle.ErrorReporter(reportError),
 	)
 	if err != nil {
@@ -102,27 +104,22 @@ func New(
 		source,
 		projections,
 		clock,
-		adaptSink(sink),
+		ProjectionSink(sink),
 		reportError,
 	)
 	if err != nil {
 		return nil, err
 	}
-	liveviewprojectionwire.BindRetainedEventsSupplier(projection, func() []factorydefinitions.FactoryEvent {
-		if activation == nil {
-			return nil
-		}
-		return activation.RetainedEvents()
-	})
-	return &Service{
-		activation:  activation,
-		projection:  projection,
-		source:      source,
-		projections: projections,
-		clock:       clock,
-		sink:        sink,
-		reportError: reportError,
-	}, nil
+	return AssembleRoot(
+		activation,
+		projection,
+		defaultResponsePresentationOwner(),
+		source,
+		projections,
+		clock,
+		sink,
+		reportError,
+	)
 }
 
 // Start subscribes once to retained-then-live canonical Factory events.
