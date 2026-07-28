@@ -1419,6 +1419,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/quorum",
+      "scenario": "TestPackagedQuorumRequiredInputCompletes",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/quorum",
+      "scenario": "TestPackagedQuorumOptionalMemberSettingsReachWorkers",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/quorum",
+      "scenario": "TestPackagedQuorumInsufficientSuccessfulMembersFails",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/packaged/subagent/invocation_test.go",
       "package": "you-agent-factory/tests/functional/factory/packaged/subagent",
       "scenario": "TestPackagedSubagentChildFailureReturnsStableFailure",
@@ -2594,6 +2624,36 @@
       "scenario": "TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession",
       "lane": "short",
       "destination": "tests/functional/provider_sessions/association/association_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/provider_sessions/association/response_exec_metadata_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions/association",
+      "scenario": "TestResponseExecGoldenMetadataSurvivesAPIResponseEvents",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/association/response_exec_metadata_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/provider_sessions/association/response_exec_metadata_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions/association",
+      "scenario": "TestResponseExecGoldenMetadataSurvivesCLIProjection",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/association/response_exec_metadata_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/provider_sessions/association/response_exec_metadata_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions/association",
+      "scenario": "TestResponseExecGoldenMetadataSurvivesReplay",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/association/response_exec_metadata_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -7912,7 +7972,7 @@
       "operator_settings": 10,
       "orchestration": 48,
       "product": 13,
-      "provider_sessions": 3,
+      "provider_sessions": 6,
       "providers": 55,
       "replay_contracts": 23,
       "runtime_api": 95,
@@ -7925,9 +7985,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 769,
+    "customer_top_level_Test_scenarios": 775,
     "lane_functionallong": 95,
-    "lane_short": 674,
+    "lane_short": 680,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -7966,7 +8026,7 @@
       "you-agent-factory/tests/functional/product/init_setup": 11,
       "you-agent-factory/tests/functional/product/packaged_factory_guard_failure": 1,
       "you-agent-factory/tests/functional/product/packaged_factory_portability": 1,
-      "you-agent-factory/tests/functional/provider_sessions/association": 3,
+      "you-agent-factory/tests/functional/provider_sessions/association": 6,
       "you-agent-factory/tests/functional/providers": 36,
       "you-agent-factory/tests/functional/providers/codex": 7,
       "you-agent-factory/tests/functional/providers/cursor": 8,
@@ -8097,13 +8157,13 @@
   "completeness_audit": {
     "audited_at_utc": "2026-07-28T04:10:00Z",
     "story": "ft-wave2-factory-definitions-init-mergeability",
-    "live_customer_scenarios": 712,
-    "ledger_rows": 712,
+    "live_customer_scenarios": 775,
+    "ledger_rows": 775,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 617,
+    "lane_short": 680,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 51,

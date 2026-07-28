@@ -806,6 +806,20 @@ Wave 0 functional-tests-expansion planning authority lives under
   needs a customer-readable Go doc so `functionaltestmetadata` stays
   viz-compatible.
 
+- `tests/functional/provider_sessions/association/response_exec_metadata_test.go`
+  owns response-exec golden metadata survival across CLI Factory Event projection,
+  API `FactoryResponseEvent` history, and replay observation. Drive proofs through
+  `support.RunFactoryToCompletionWithEdgesAndResponseEvents` or
+  `support.StartFunctionalAPIServer` with `--record` / `--replay`, replaying
+  sanitized FND-006 Codex goldens via `serviceedges.Edges{ProviderCommandRunner:
+  ...}` and asserting against checked-in provider-session, invocation-result, and
+  response-event golden metadata with `support.CompareProviderSessionJSON` /
+  `CompareProviderSessionNDJSON` only (never production mappers under assertion).
+  Do not widen into `association_test.go` correlation scenarios or `details/*`.
+  Catalog metadata infers domain `provider_sessions` and subsection `association`;
+  every top-level `Test*` needs a customer-readable Go doc and `//golden:` manifest
+  directive so `functionaltestmetadata` stays viz-compatible.
+
 - `tests/functional/automations/` owns root.BuildProcess evidence for packaged
   Automations cron scheduling and filesystem watcher preseed. Keep cron workstation
   factories explicit with `"behavior": "CRON"` and observe submissions through

@@ -81,7 +81,6 @@
     "pkg/services/automations/internal/services/script_pollers",
     "pkg/services/automations/internal/services/script_pollers/internal/service",
     "pkg/services/automations/internal/services/script_pollers/wire",
-    "pkg/services/automations/service",
     "pkg/services/automations/transports/http",
     "pkg/services/automations/wire",
     "pkg/services/edges",
@@ -164,6 +163,8 @@
     "pkg/services/factory_runtime/context",
     "pkg/services/factory_runtime/definitionmapping",
     "pkg/services/factory_runtime/engine",
+    "pkg/services/factory_runtime/internal/factorystatus",
+    "pkg/services/factory_runtime/internal/legacysnapshot",
     "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
     "pkg/services/factory_runtime/internal/orchestrators/javascript/runtime",
     "pkg/services/factory_runtime/internal/orchestrators/javascript/source",
@@ -222,6 +223,7 @@
     "pkg/services/factory_sessions/internal/invocation",
     "pkg/services/factory_sessions/internal/invocation/packagedtts",
     "pkg/services/factory_sessions/internal/invocation/runtimeadapter",
+    "pkg/services/factory_sessions/internal/legacysnapshot",
     "pkg/services/factory_sessions/internal/livesession",
     "pkg/services/factory_sessions/internal/logicaltarget",
     "pkg/services/factory_sessions/internal/processlifecycle",
@@ -732,11 +734,6 @@
       "destination": "automations/internal/services/script_pollers"
     },
     {
-      "packagePath": "pkg/services/automations/service",
-      "disposition": "move",
-      "destination": "automations/internal"
-    },
-    {
       "packagePath": "pkg/services/automations/transports/http",
       "disposition": "retain",
       "destination": "automations"
@@ -1147,6 +1144,16 @@
       "destination": "factory_runtime"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
       "disposition": "move",
       "destination": "factory_runtime/internal/services/orchestration"
@@ -1433,6 +1440,11 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/invocation/runtimeadapter",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/legacysnapshot",
       "disposition": "retain",
       "destination": "factory_sessions"
     },

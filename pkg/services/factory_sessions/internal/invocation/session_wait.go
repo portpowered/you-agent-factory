@@ -96,6 +96,15 @@ func (o *SessionOwner) resolveObservation(
 	if classified, ok := work.ClassifyMissingPrimaryResult(selectionInput); ok {
 		return o.failedResult(sessionID, input, classified), true, nil
 	}
+	if packaged {
+		worldState, _ := selectionInput.WorldState.(interfaces.FactoryWorldState)
+		if result, ok := o.packagedTerminalFailureResult(sessionID, input, worldState); ok {
+			return result, true, nil
+		}
+	}
+	if classified, ok := work.ClassifyFailedInvocation(sessionID, selectionInput); ok {
+		return o.failedResult(sessionID, input, classified), true, nil
+	}
 	if _, exists := observation.WorldState.WorkRequestsByID[input.RequestID]; !exists || observation.ActiveWork {
 		return FactoryInvocationResult{}, false, nil
 	}
@@ -111,20 +120,7 @@ func (o *SessionOwner) resolveStoppedInvocation(
 ) FactoryInvocationResult {
 	if packaged {
 		worldState, _ := selectionInput.WorldState.(interfaces.FactoryWorldState)
-		if failure := o.specialCase.TerminalFailure(worldState, input.RequestID); failure != nil {
-			result := FactoryInvocationResult{
-				RequestID: input.RequestID, TraceID: input.TraceID,
-				Status:    interfaces.InvocationTerminalStatusFailed,
-				ErrorCode: failure.ErrorCode, Message: failure.Message,
-			}
-			// Packaged terminal failures retain the general failure metric, but
-			// their diagnostic record is the packaged failure log emitted below.
-			if o.telemetry != nil {
-				o.telemetry.InvocationFailed(input.FactoryConfig, input.InputSource, result.ErrorCode)
-			}
-			if telemetry, ok := o.telemetry.(SessionInvocationPackagedTelemetry); ok {
-				telemetry.PackagedInvocationFailed(sessionID, input, *failure)
-			}
+		if result, ok := o.packagedTerminalFailureResult(sessionID, input, worldState); ok {
 			return result
 		}
 	}
@@ -138,6 +134,34 @@ func (o *SessionOwner) resolveStoppedInvocation(
 		return o.failedResult(sessionID, input, classified)
 	}
 	return o.failedResult(sessionID, input, primaryErr)
+}
+
+func (o *SessionOwner) packagedTerminalFailureResult(
+	sessionID string,
+	input SessionInvocationWaitInput,
+	worldState interfaces.FactoryWorldState,
+) (FactoryInvocationResult, bool) {
+	if o.specialCase == nil {
+		return FactoryInvocationResult{}, false
+	}
+	failure := o.specialCase.TerminalFailure(worldState, input.RequestID)
+	if failure == nil {
+		return FactoryInvocationResult{}, false
+	}
+	result := FactoryInvocationResult{
+		RequestID: input.RequestID, TraceID: input.TraceID,
+		Status:    interfaces.InvocationTerminalStatusFailed,
+		ErrorCode: failure.ErrorCode, Message: failure.Message,
+	}
+	// Packaged terminal failures retain the general failure metric, but
+	// their diagnostic record is the packaged failure log emitted below.
+	if o.telemetry != nil {
+		o.telemetry.InvocationFailed(input.FactoryConfig, input.InputSource, result.ErrorCode)
+	}
+	if telemetry, ok := o.telemetry.(SessionInvocationPackagedTelemetry); ok {
+		telemetry.PackagedInvocationFailed(sessionID, input, *failure)
+	}
+	return result, true
 }
 
 func (o *SessionOwner) completedResult(
