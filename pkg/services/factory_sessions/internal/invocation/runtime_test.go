@@ -39,6 +39,17 @@ type invocationRuntimeFactory struct {
 	factory.Service
 }
 
+func (invocationRuntimeFactory) Observe(context.Context, factory.ObserveRequest) (factory.ObserveResult, error) {
+	return factory.ObserveResult{
+		Observation: factory.Observation{
+			Status: factory.ObservationStatusIdle,
+			Health: factory.ObservationHealth{
+				FactoryState: string(interfaces.FactoryStateIdle),
+			},
+		},
+	}, nil
+}
+
 func (invocationRuntimeFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net], error) {
 	return &interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net]{
 		FactoryState: string(interfaces.FactoryStateIdle),

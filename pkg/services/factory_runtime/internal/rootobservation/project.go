@@ -42,6 +42,10 @@ func Project(
 			LifecycleControlStatus: snap.LifecycleControlStatus,
 			StreamGenerationID:     snap.StreamGenerationID,
 			Uptime:                 snap.Uptime,
+			ActiveThrottlePauses: append(
+				[]interfaces.ActiveThrottlePause(nil),
+				snap.ActiveThrottlePauses...,
+			),
 		},
 	}
 	return filterObservationScope(full, scope)
