@@ -58,12 +58,12 @@ func TestMapPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			retainOwner: "factory_runtime",
 		},
 		{
-			path:        "pkg/services/factory_runtime/internal/services/checkpoint_recovery/checkpointstore",
+			path:        "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
 			wantRetain:  true,
 			retainOwner: "factory_runtime",
 		},
 		{
-			path:        "pkg/services/factory_runtime/internal/services/checkpoint_recovery/checkpointsummary",
+			path:        "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
 			wantRetain:  true,
 			retainOwner: "factory_runtime",
 		},

@@ -63,17 +63,17 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/checkpointstore",
+			path: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/checkpointstore",
+				PackagePath: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
 				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/checkpoint_recovery",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/checkpointsummary",
+			path: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/checkpointsummary",
+				PackagePath: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
 				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/checkpoint_recovery",
 			},

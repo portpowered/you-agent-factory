@@ -85,8 +85,8 @@ func TestFactoryRuntimeEnginePipelinePackagesRetainUnderSubservices(t *testing.T
 		path string
 	}{
 		{path: "pkg/services/factory_runtime/internal/services/instance_host/build"},
-		{path: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/checkpointstore"},
-		{path: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/checkpointsummary"},
+		{path: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore"},
+		{path: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary"},
 	}
 
 	for _, tc := range cases {
