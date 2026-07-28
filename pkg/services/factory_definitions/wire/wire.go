@@ -24,7 +24,7 @@ import (
 	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
 	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
 	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
-	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
+	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
@@ -52,7 +52,7 @@ func NewService(
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 	portableFileSystem portablefiles.FileSystem,
 	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
-	options ...factorydefinitionsservice.CompositionOption,
+	options ...CompositionOption,
 ) (factorydefinitions.Service, error) {
 	if err := validateDependencies(
 		sessionHost,
@@ -136,7 +136,7 @@ func NewService(
 		return nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
 	}
 
-	definitions := factorydefinitionsservice.NewWithAuthoringLayout(
+	definitions := factorydefinitionsinternal.NewWithAuthoringLayout(
 		sessionHost,
 		clock,
 		versionFileSystem,
@@ -175,14 +175,14 @@ func NewService(
 		return nil, fmt.Errorf("construct Factory Definitions: implementation rejected its dependencies")
 	}
 
-	attached, err := factorydefinitionsservice.AttachEffectiveCatalog(definitions, listEffective)
+	attached, err := factorydefinitionsinternal.AttachEffectiveCatalog(definitions, listEffective)
 	if err != nil {
 		return nil, err
 	}
 	if attached == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: effective catalog attachment rejected its dependencies")
 	}
-	withSnapshots, err := factorydefinitionsservice.AttachSnapshotsPortability(attached, snapshotsPortability)
+	withSnapshots, err := factorydefinitionsinternal.AttachSnapshotsPortability(attached, snapshotsPortability)
 	if err != nil {
 		return nil, err
 	}
