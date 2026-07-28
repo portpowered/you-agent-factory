@@ -4188,6 +4188,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/system_initialization/transports/cli",
+      "disposition": "retain",
+      "destination": "system_initialization",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/system_initialization/wire",
       "disposition": "retain",
       "destination": "system_initialization",

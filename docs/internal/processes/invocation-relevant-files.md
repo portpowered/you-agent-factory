@@ -867,7 +867,11 @@ response-stream output.
   `docs/internal/baselines/ownership-inventory.json`, and both
   `go-*-coverage-package-minimums.json` baselines; prove registration with
   `wire/manifest_registration_test.go` rather than re-editing manifests when
-  IMP-BOOT already landed the rows. Bare root/help, invalid commands,
+  IMP-BOOT already landed the rows. The Bootstrap CLI adapter at
+  `pkg/services/system_initialization/transports/cli` must stay registered under
+  destination `system_initialization` in the same shared manifests; prove
+  registration with `transports/cli/manifest_registration_test.go` rather than
+  re-editing manifests when CLI-BOOT already landed the rows. Bare root/help, invalid commands,
   and `you init` do not activate system initialization: `you init` owns only the
   atomic provider/model settings update. The retired `you config init` command,
   its CLI renderer, and installer invocation must remain absent. Root-built

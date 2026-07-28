@@ -1491,6 +1491,10 @@
       "minimum": 80.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization/transports/cli",
+      "minimum": 87.90
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire",
       "minimum": 100.00
     },
