@@ -8,6 +8,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -29,7 +30,9 @@ type ExternalEffects struct {
 	ScriptCommandRunner       platformprocess.CommandRunner
 	SubmissionRecorder        recordings.SubmissionRecorder
 	DispatchRecorder          recordings.DispatchRecorder
-	RuntimeHostObserver       factorysessions.RuntimeHostObserver
+	RuntimeHostObserver              factorysessions.RuntimeHostObserver
+	FactoryVisualizationSink         factoryvisualization.Sink
+	FactoryVisualizationRootObserver factoryvisualization.RootObserver
 	HostedClock               workers.HostedPollerClock
 	HostedHTTPClient          workers.HostedPollerHTTPDoer
 	HostedSecretResolver      workers.HostedPollerSecretResolver
