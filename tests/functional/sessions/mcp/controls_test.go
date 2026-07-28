@@ -127,6 +127,35 @@ func TestMCPControlledSessionIsReadableThroughAPI(t *testing.T) {
 	closeMCPServer(t, nil, serveErr)
 }
 
+// TestMCPSynchronousFactorySessionReturnsTerminalResult proves public MCP
+// you.factory_session.start_sync returns a terminal success result for a
+// successful Factory Session run without requiring async polling.
+func TestMCPSynchronousFactorySessionReturnsTerminalResult(t *testing.T) {
+	projectRoot := setupSimpleFinalWorkflowFixture(t)
+	client, shutdown, serveErr := startRootRuntimeMCPServer(t, projectRoot, nil)
+	assertMCPInitialized(t, client)
+
+	toolsResult := client.call("tools/list", map[string]any{})
+	toolNames := toolNamesFromListResult(t, toolsResult.Result)
+	if !containsString(toolNames, mcpfactorysession.ToolStartSync) {
+		t.Fatalf("tools/list missing sync start tool %q; got %#v", mcpfactorysession.ToolStartSync, toolNames)
+	}
+
+	syncResult := startMCPSyncSucceededSession(t, client)
+	sessionRead := readMCPSessionDurableReadModel(t, client, syncResult.SessionId)
+	assertCanonicalSessionID(t, sessionRead.SessionId, syncResult.SessionId, "sync session read")
+	if sessionRead.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("sync session read status = %q, want SUCCEEDED", sessionRead.Status)
+	}
+	if sessionRead.ResultSummary == nil ||
+		sessionRead.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("sync session read resultSummary = %#v, want FINAL", sessionRead.ResultSummary)
+	}
+
+	shutdown()
+	closeMCPServer(t, nil, serveErr)
+}
+
 func toolNamesFromListResult(t *testing.T, result map[string]any) []string {
 	t.Helper()
 	rawTools, ok := result["tools"].([]any)

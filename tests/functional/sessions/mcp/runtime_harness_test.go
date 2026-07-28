@@ -83,11 +83,10 @@ func startRootRuntimeMCPServer(
 	return newStdioMCPClient(t, stdinWrite, stdoutRead), shutdown, serveErr
 }
 
-func setupBusyLoopWorkflowFixture(t *testing.T) string {
+func setupWorkflowFixture(t *testing.T, factoryID, fixtureFile, workflowName string) string {
 	t.Helper()
 
-	const workflowName = "busy-loop"
-	projectRoot := support.ScaffoldSingleStepFactory(t, "sessions-mcp-controls")
+	projectRoot := support.ScaffoldSingleStepFactory(t, factoryID)
 	t.Cleanup(func() {
 		_ = os.RemoveAll(projectRoot)
 	})
@@ -95,14 +94,66 @@ func setupBusyLoopWorkflowFixture(t *testing.T) string {
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "fixtures", "javascript_runtime", "busy-loop.workflow.js"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "fixtures", "javascript_runtime", fixtureFile))
 	if err != nil {
-		t.Fatalf("read busy-loop workflow fixture: %v", err)
+		t.Fatalf("read %s workflow fixture: %v", workflowName, err)
 	}
 	if err := os.WriteFile(filepath.Join(workflowDir, workflowName+".js"), raw, 0o600); err != nil {
 		t.Fatalf("write workflow: %v", err)
 	}
 	return projectRoot
+}
+
+func setupBusyLoopWorkflowFixture(t *testing.T) string {
+	t.Helper()
+	return setupWorkflowFixture(t, "sessions-mcp-controls", "busy-loop.workflow.js", "busy-loop")
+}
+
+func setupSimpleFinalWorkflowFixture(t *testing.T) string {
+	t.Helper()
+	return setupWorkflowFixture(t, "sessions-mcp-controls-sync", "simple-final.workflow.js", "simple-final")
+}
+
+func startMCPSyncSucceededSession(
+	t *testing.T,
+	client *stdioMCPClient,
+) factoryapi.FactorySessionSyncExecutionResponse {
+	t.Helper()
+
+	const workflowName = "simple-final"
+	workflowNamePtr := workflowName
+	args := map[string]any{"subject": "workflows", "count": 2, "prefix": "you"}
+	response := decodeToolResponse[factoryapi.FactorySessionSyncExecutionResponse](
+		t,
+		client.callTool(mcpfactorysession.ToolStartSync, factoryapi.FactorySessionExecutionRequest{
+			RequestId: "req-sessions-mcp-controls-sync-success-001",
+			Source: factoryapi.FactorySessionExecutionSource{
+				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+				WorkflowName: &workflowNamePtr,
+			},
+			Args: &args,
+		}),
+	)
+	if response.Error != nil || response.Result == nil {
+		t.Fatalf("start_sync = %#v, want success", response)
+	}
+	result := *response.Result
+	if result.SessionId == "" {
+		t.Fatal("sessionId missing from sync start response")
+	}
+	if result.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("sync status = %q, want SUCCEEDED", result.Status)
+	}
+	if result.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeCompleted {
+		t.Fatalf("syncOutcome = %q, want COMPLETED", result.SyncOutcome)
+	}
+	if result.Result == nil {
+		t.Fatal("terminal result missing from sync start response")
+	}
+	if result.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("sync result status = %q, want FINAL", result.Result.ResultStatus)
+	}
+	return result
 }
 
 func startMCPRunningSession(t *testing.T, client *stdioMCPClient) string {
