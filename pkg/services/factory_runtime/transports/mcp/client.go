@@ -72,6 +72,13 @@ func callToolJSON[Input any, Output any](
 	return json.Marshal(handler(request))
 }
 
+// IsCanonicalToolHandlerRegistered reports whether the live CallTool path
+// registers a handler for one canonical Factory Runtime tool name.
+func IsCanonicalToolHandlerRegistered(name string) bool {
+	_, ok := canonicalToolHandlers[name]
+	return ok
+}
+
 // CallTool invokes one Factory Runtime tool against an explicitly supplied
 // Runtime root. Protocol servers receive the bound ToolOperation rather than
 // choosing between construction paths.
