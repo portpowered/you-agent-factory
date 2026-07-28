@@ -1343,6 +1343,12 @@
     },
     {
       "fromOwner": "factory_visualization",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/factory_visualization/transports/http -\u003e pkg/transports/http/generated"
+    },
+    {
+      "fromOwner": "factory_visualization",
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/services/factory_visualization/transports/cli -\u003e pkg/services/work"
@@ -4059,6 +4065,12 @@
     },
     {
       "packagePath": "pkg/services/operator_settings/testlink",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/transports/mcp",
       "disposition": "retain",
       "destination": "operator_settings",
       "destinationKind": "owner"
