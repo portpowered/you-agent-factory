@@ -619,10 +619,6 @@
       "name": "TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayReachableUntilCanceled"
     },
     {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_AcceptsStructuredArgsWithActiveSignature"
-    },
-    {
       "file": "runtime_api/dashboard_engine_state_test.go",
       "name": "TestDashboard_EngineStateSnapshot_EndToEnd"
     },

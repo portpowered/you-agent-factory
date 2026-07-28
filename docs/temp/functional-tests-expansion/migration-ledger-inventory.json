@@ -8619,36 +8619,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go",
-      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/lifecycle",
-      "scenario": "TestCLIRunCleanInvocationCompletesWithoutDashboardStartup",
-      "lane": "short",
-      "destination": "tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go",
-      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/lifecycle",
-      "scenario": "TestCLIRunCleanInvocationFailurePreservesPublicError",
-      "lane": "short",
-      "destination": "tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go",
-      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/lifecycle",
-      "scenario": "TestCLIRunServerAttachedInvocationTargetsExistingFactorySession",
-      "lane": "short",
-      "destination": "tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/workflow/code_review_loop_long_test.go",
       "package": "you-agent-factory/tests/functional/workflow",
       "scenario": "TestCodeReviewLoop",
@@ -9287,9 +9257,79 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_runtime/peer_import_boundary_test.go",
+      "package": "you-agent-factory/tests/functional/factory_runtime",
+      "scenario": "TestFunctionalFactoryRuntimePackageUsesPublicProcessImportsOnly",
+      "lane": "short",
+      "destination": "tests/functional/factory_runtime/peer_import_boundary_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_runtime/peer_import_boundary_test.go",
+      "package": "you-agent-factory/tests/functional/factory_runtime",
+      "scenario": "TestProductionPeersReachFactoryRuntimeThroughPublishedSurfacesOnly",
+      "lane": "short",
+      "destination": "tests/functional/factory_runtime/peer_import_boundary_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_runtime/root_composition/build_process_inert_test.go",
+      "package": "you-agent-factory/tests/functional/factory_runtime/root_composition",
+      "scenario": "TestFactoryRuntimeEffectsRemainInertThroughRootBuildProcessConstruction",
+      "lane": "short",
+      "destination": "tests/functional/factory_runtime/root_composition/build_process_inert_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_runtime/root_composition/lifecycle_activation_test.go",
+      "package": "you-agent-factory/tests/functional/factory_runtime/root_composition",
+      "scenario": "TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuildProcessAfterLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/factory_runtime/root_composition/lifecycle_activation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_runtime/root_composition/packaged_root_shape_test.go",
+      "package": "you-agent-factory/tests/functional/factory_runtime/root_composition",
+      "scenario": "TestFactoryRuntimePackagedRootShapeMatchesCanonicalServiceLayout",
+      "lane": "short",
+      "destination": "tests/functional/factory_runtime/root_composition/packaged_root_shape_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_runtime/root_composition/workflow_orchestration_activation_test.go",
+      "package": "you-agent-factory/tests/functional/factory_runtime/root_composition",
+      "scenario": "TestFactoryRuntimeJavaScriptWorkflowActivatesThroughRootBuildProcessAfterLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/factory_runtime/root_composition/workflow_orchestration_activation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_runtime/root_composition/workflow_orchestration_activation_test.go",
+      "package": "you-agent-factory/tests/functional/factory_runtime/root_composition",
+      "scenario": "TestFactoryRuntimePetriOrchestrationActivatesThroughRootBuildProcessAfterLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/factory_runtime/root_composition/workflow_orchestration_activation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T16:45:00Z",
+  "scanned_at_utc": "2026-07-28T16:02:22Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
@@ -9329,9 +9369,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 914,
+    "customer_top_level_Test_scenarios": 913,
     "lane_functionallong": 96,
-    "lane_short": 818,
+    "lane_short": 817,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 14,
@@ -9447,7 +9487,8 @@
       "you-agent-factory/tests/functional/workstations/execution": 4,
       "you-agent-factory/tests/functional/workstations/poller": 4,
       "you-agent-factory/tests/functional/workstations/repeater": 13,
-      "you-agent-factory/tests/functional/workstations/watcher": 9
+      "you-agent-factory/tests/functional/workstations/watcher": 9,
+      "you-agent-factory/tests/functional/factory_runtime": 2
     },
     "files_with_customer_Test": 254,
     "functional_test_go_files": 253,
@@ -9521,21 +9562,21 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-28T16:45:00Z",
-    "story": "ft-wave2-work-relationships-parent-child-003",
-    "live_customer_scenarios": 914,
-    "ledger_rows": 914,
+    "audited_at_utc": "2026-07-28T16:02:22Z",
+    "story": "ft-wave2-events-response-events-stream-mergeability",
+    "live_customer_scenarios": 913,
+    "ledger_rows": 913,
     "unmapped_scenarios": 0,
     "checklist_destinations": 441,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 818,
+    "lane_short": 817,
     "lane_functionallong": 96,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 51,
     "validator": "go run ./cmd/migrationledgercheck",
-    "row_count": 914,
-    "short_lane_rows": 818,
+    "row_count": 913,
+    "short_lane_rows": 817,
     "functionallong_lane_rows": 96
   }
 }
