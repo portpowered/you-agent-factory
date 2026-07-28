@@ -22,8 +22,6 @@ var workThinRootContractFiles = []string{
 	"contracts.go",
 	"input.go",
 	"input_test.go",
-	"invocation_policy_service.go",
-	"invocation_policy_service_test.go",
 	"invocation_return_policy_contract.go",
 	"read_contract.go",
 	"recordings_import_boundary_test.go",
