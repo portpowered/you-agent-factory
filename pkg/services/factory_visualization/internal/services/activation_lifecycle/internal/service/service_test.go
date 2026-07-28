@@ -7,7 +7,7 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	lifecycleservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service"
 )
@@ -24,7 +24,7 @@ func TestActivationLifecycleOwnerBacksRootLifecycleSlice(t *testing.T) {
 	presentCalls := 0
 	owner, err := lifecycleservice.New(
 		source,
-		lifecycleProjectionStub{},
+		&recordingsstub.Service{},
 		fixedLifecycleClock{now: time.Unix(1, 0)},
 		lifecycleSinkFunc(func(activationlifecycle.View) { presentCalls++ }),
 		nil,
@@ -115,29 +115,6 @@ func newClosableLifecycleEventStream() (*factorydefinitions.FactoryEventStream, 
 		Events: events,
 	}, events
 }
-
-type lifecycleProjectionStub struct{}
-
-func (lifecycleProjectionStub) ReconstructFactoryWorldState(
-	[]factorydefinitions.FactoryEvent,
-	int,
-) (factorydefinitions.FactoryWorldState, error) {
-	return factorydefinitions.FactoryWorldState{}, nil
-}
-
-func (lifecycleProjectionStub) SimpleDashboardRenderData(
-	factorydefinitions.FactoryWorldState,
-) recordings.SimpleDashboardRenderData {
-	return recordings.SimpleDashboardRenderData{}
-}
-
-func (lifecycleProjectionStub) ProjectActiveThrottlePauses(
-	factorydefinitions.InitialStructurePayload,
-	[]factorydefinitions.ActiveThrottlePause,
-) []factorydefinitions.FactoryWorldThrottlePause {
-	return nil
-}
-
 type fixedLifecycleClock struct{ now time.Time }
 
 func (c fixedLifecycleClock) Now() time.Time { return c.now }

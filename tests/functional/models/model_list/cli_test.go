@@ -67,3 +67,80 @@ func TestProcessModelsInspect_UsesResolvedModelNameArgument(t *testing.T) {
 		t.Fatalf("inspect response = %#v, want OMNIVOICE_Q4_K_M", response)
 	}
 }
+
+// TestProcessModelsPull_UsesServerFlagAndReturnsPullJSON proves pull routing and JSON pull output.
+func TestProcessModelsPull_UsesServerFlagAndReturnsPullJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models/OMNIVOICE_Q4_K_M/pull" {
+			t.Fatalf("path = %q, want /models/OMNIVOICE_Q4_K_M/pull", r.URL.Path)
+		}
+		_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"PULLED","cachePath":"/tmp/models/OMNIVOICE_Q4_K_M","revision":"rev1","downloadedFiles":[{"path":"weights.gguf","bytes":42}],"managedRuntimePull":{"identity":"OMNIVOICE_Q4_K_M","pullOutcome":"INSTALLED_SUCCESSFULLY","readinessState":"READY"}}`)
+	}))
+	t.Cleanup(server.Close)
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "--server", strings.TrimSuffix(server.URL, "/"),
+		"models", "pull", "OMNIVOICE_Q4_K_M",
+	})
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(models pull) error = %v\nstderr=%s", err, inputs.Stderr())
+	}
+
+	var response factoryapi.ModelPullResponse
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &response); err != nil {
+		t.Fatalf("decode models pull output: %v\n%s", err, inputs.Stdout())
+	}
+	if response.ModelName != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("pull response = %#v, want OMNIVOICE_Q4_K_M", response)
+	}
+}
+
+// TestProcessModelsList_ReturnsHumanReadableCatalog proves list human presentation.
+func TestProcessModelsList_ReturnsHumanReadableCatalog(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models" {
+			t.Fatalf("path = %q, want /models", r.URL.Path)
+		}
+		_, _ = io.WriteString(w, `{"results":[{"name":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[]}]}`)
+	}))
+	t.Cleanup(server.Close)
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--server", strings.TrimSuffix(server.URL, "/"), "models", "list",
+	})
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(models list) error = %v\nstderr=%s", err, inputs.Stderr())
+	}
+	for _, want := range []string{"OMNIVOICE_Q4_K_M", "TTS", "NAME"} {
+		if !strings.Contains(inputs.Stdout(), want) {
+			t.Fatalf("list output missing %q:\n%s", want, inputs.Stdout())
+		}
+	}
+}
+
+// TestProcessModelsInspect_ReturnsHumanReadableDetail proves inspect human presentation.
+func TestProcessModelsInspect_ReturnsHumanReadableDetail(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models/OMNIVOICE_Q4_K_M" {
+			t.Fatalf("path = %q, want /models/OMNIVOICE_Q4_K_M", r.URL.Path)
+		}
+		_, _ = io.WriteString(w, `{"name":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[],"capabilities":[],"diagnostics":{}}`)
+	}))
+	t.Cleanup(server.Close)
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--server", strings.TrimSuffix(server.URL, "/"),
+		"models", "inspect", "OMNIVOICE_Q4_K_M",
+	})
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(models inspect) error = %v\nstderr=%s", err, inputs.Stderr())
+	}
+	for _, want := range []string{"Name:\tOMNIVOICE_Q4_K_M", "TTS"} {
+		if !strings.Contains(inputs.Stdout(), want) {
+			t.Fatalf("inspect output missing %q:\n%s", want, inputs.Stdout())
+		}
+	}
+}
