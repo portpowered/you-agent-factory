@@ -158,6 +158,17 @@
   infers domain `sessions` and subsection `controls` from the path; every
   top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
   stays viz-compatible.
+  Petri dispatch simple-run functional coverage belongs in
+  `tests/functional/orchestration/petri/dispatch/simple_run_test.go`: prove
+  cold-start and preseeded admission, archive-terminal completion, config-driven
+  and scaffolded service-pipeline happy paths, noop fallback, multi-item
+  completion, single- and two-stage pipelines, ideation and dispatcher workflow
+  completion, worker failure routing, and invocation input/output mapping through
+  `support.RunFactoryToCompletionWithEdgesAndWork` with external effects
+  substituted only through `edges.Edges`. Catalog metadata infers domain
+  `orchestration` and subsection `petri/dispatch` from the path; every top-level
+  `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
   Execution workstation functional coverage belongs in
   `tests/functional/workstations/execution/`: prove multi-item and staged two-step
   collection through `basic_test.go` with the stateless-collector fixture,
