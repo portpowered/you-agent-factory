@@ -1578,7 +1578,10 @@ response-stream output.
   `support.RunFactoryToCompletionWithEdges` without importing provider package
   internals. `providers` is an approved deep functional domain; aggregate files
   directly under `tests/functional/providers` remain shallow deletion-only
-  debt. Prove each migrated
+  debt. Agy functional harness tests under `tests/functional/providers/agy`
+  inject `serviceedges.Edges{AgyPTYHost, AgyPTYClock, WorkersExecutableLocator,
+  WorkersResolveSymlinks}` rather than `ProviderCommandRunner` because Agy
+  executes through the Providers PTY adapter. Prove each migrated
   Integration against the shared inference contract through
   `inferencecontract.ExecuteInvocation` for the success and failure postures
   that apply to that provider's authored support/capability set (for Gemini:
