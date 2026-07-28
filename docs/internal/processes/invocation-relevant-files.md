@@ -2026,7 +2026,9 @@ response-stream output.
   refresh the snapshot after CLI completion when the server is still live; collect
   default-session factory events while the run-scoped server is live; and compare
   the returned session/status/work/event facts with the CLI `InvocationResponse`
-  identity and primary-result fields using fail-closed assertions.
+  identity and primary-result fields using fail-closed assertions. Do not use
+  `support.WaitForTerminalStatus` for packaged goal one-shot invocations because
+  `/status` categories may stay empty after completion.
 - Packaged `@you/goal` CLI/API primary-outcome shape agreement lives in the same
   cross cell (`TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree`). Compare
   independent API `POST /factory-sessions/~default/invocations` responses with
