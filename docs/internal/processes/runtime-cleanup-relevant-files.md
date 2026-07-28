@@ -890,7 +890,13 @@ or root-only fakes in Sessions tests instead of importing
 `factory_runtime/javascript`. Lock the execution lease with
 `pkg/services/factory_sessions/internal/execution/durable_execution_boundary_test.go`
 and production-plus-test import scanning in that package's
-`TestExecutionLeaseImportsFactoryRuntimeOnlyThroughRoot`. Do not publish a
+`TestExecutionLeaseImportsFactoryRuntimeOnlyThroughRoot`. Session opening and
+projection must consume Runtime root observation and snapshot shapes
+(`Observation`, `StateSnapshot`, `ObserveRequest`/`ObserveResult`) through
+`pkg/services/factory_runtime` only; lock the opening/projection lease with
+`pkg/services/factory_sessions/internal/sessionprojection/opening_projection_boundary_test.go`
+(import scan plus `TestProjectionContextConstructsFromRootObservationAndSnapshot`).
+Do not publish a
 second peer-facing Runtime authority
 (hosting `Lifecycle`/`HostedInstance`, `Factory` run-loop, or
 `JavaScriptWorkflows`) for control, observation, dispatch-plan, or checkpoint
