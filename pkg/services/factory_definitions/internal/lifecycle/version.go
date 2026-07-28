@@ -1,4 +1,4 @@
-package factorydefinition
+package lifecycle
 
 import (
 	"fmt"
