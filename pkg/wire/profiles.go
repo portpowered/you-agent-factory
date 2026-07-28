@@ -32,7 +32,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"

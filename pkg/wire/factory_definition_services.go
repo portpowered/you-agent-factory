@@ -20,7 +20,6 @@ import (
 	factoryinvocationoutput "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationoutput"
 	factoryinvocationworktype "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationworktype"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	factoryquorumpolicy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/quorumpolicy"
 	factoryttsobservability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/ttsobservability"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"

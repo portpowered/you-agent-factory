@@ -11,7 +11,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
 )
 

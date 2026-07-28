@@ -21,7 +21,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
-	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factoryworkstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workstationexecution"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
