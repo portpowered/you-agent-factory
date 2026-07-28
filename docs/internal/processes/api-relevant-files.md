@@ -38,6 +38,15 @@ Use this map when changing the public REST contract.
   `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
   `docs/internal/baselines/go-functional-coverage-package-minimums.json` when
   introducing new adapter packages.
+- Factory Runtime HTTP decoding, generated-contract mapping, Runtime root
+  invocation, typed error mapping, and cancel/timeout handling live in
+  `pkg/services/factory_runtime/transports/http`. The adapter consumes the
+  accepted `factory_runtime.Service` root only; fake-root tests inject a focused
+  root fake without constructing hosting, Petri, JavaScript, or Wire graphs.
+  Declare owned generated operationIds in `owned_surface.go` and prove adapter
+  production sources do not directly import
+  `pkg/services/factory_runtime/internal/**` (source scan, not transitive deps
+  through the accepted root package).
 - Factory Definitions HTTP decoding, generated-contract mapping, service
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_definitions/transports/http`. The top-level
