@@ -234,7 +234,7 @@ func openRuntime(
 		nil,
 		edges.ProviderOverride,
 		runtimeService,
-		selectedModels, modelsBind.Scope, work.ContentMaterializeFunc(workService.MaterializeContentURL),
+		selectedModels, modelsBind.Scope, workService,
 		workersRuntimeFactory,
 	)
 	if err != nil {

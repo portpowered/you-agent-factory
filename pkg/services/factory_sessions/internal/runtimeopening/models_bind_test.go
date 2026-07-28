@@ -386,7 +386,7 @@ func (failure *openingCoordinatorFailure) openWorkerExecution(
 	roles.CurrentRuntimeResolver,
 	models.Service,
 	models.RuntimeScopeRef,
-	work.ContentMaterializer,
+	work.Service,
 	WorkersRuntimeFactory,
 ) (workers.RuntimeService, error) {
 	*failure.events = append(*failure.events, "later-step-failed")
