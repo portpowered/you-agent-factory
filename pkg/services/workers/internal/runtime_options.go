@@ -100,6 +100,10 @@ func (s *Service) BuildRuntimeExecutors(
 			return nil, fmt.Errorf("construct worker %q: %w", configured.Name, err)
 		}
 		if result.Dispatch == nil {
+			if interfaces.IsPollerWorkerType(definition.Type) {
+				executors[configured.Name] = &workerexecutor.NoopExecutor{}
+				continue
+			}
 			return nil, fmt.Errorf("unsupported worker type for worker %q: %s", configured.Name, definition.Type)
 		}
 		executors[configured.Name] = result.Dispatch
