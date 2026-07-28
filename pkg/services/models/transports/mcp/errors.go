@@ -1,6 +1,7 @@
 package modelmcp
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -37,6 +38,8 @@ const (
 	errorCodeModelOperationUnsupported    = "model.operation.unsupported"
 	errorCodeInferenceResponseUnsupported = "model.inference.response_mode_unsupported"
 	errorCodeInternalExecution            = "model.execution.internal"
+	errorCodeRequestCanceled              = "model.request.canceled"
+	errorCodeRequestTimedOut              = "model.request.timed_out"
 	errorMessageRuntimeScopeInvalid = "models runtime scope is invalid"
 	errorMessageRuntimeScopeStale   = "models runtime scope is stale"
 	errorMessageRuntimeScopeForeign = "models runtime scope is foreign"
@@ -58,7 +61,51 @@ const (
 	errorMessageModelOperationUnsupported   = "models operation is not supported"
 	errorMessageInferenceResponseUnsupported = "models inference response mode is not supported"
 	errorMessageInternalExecution           = "models execution failed"
+	errorMessageRequestCanceled             = "models request was canceled"
+	errorMessageRequestTimedOut               = "models request timed out"
 )
+
+func requestContextErrorResponse[T any](ctx context.Context) (ToolResponse[T], bool) {
+	if envelope, ok := contextRequestErrorEnvelope(ctx.Err()); ok {
+		return ToolResponse[T]{Error: &envelope}, true
+	}
+	return ToolResponse[T]{}, false
+}
+
+func contextRequestErrorEnvelope(err error) (ToolErrorEnvelope, bool) {
+	if err == nil {
+		return ToolErrorEnvelope{}, false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return contextDeadlineExceededErrorEnvelope(), true
+	}
+	if errors.Is(err, context.Canceled) {
+		return contextCanceledErrorEnvelope(), true
+	}
+	return ToolErrorEnvelope{}, false
+}
+
+func contextCanceledErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeRequestCanceled,
+		Message:   errorMessageRequestCanceled,
+		Retryable: false,
+		Details: map[string]any{
+			"reason": "CANCELED",
+		},
+	}
+}
+
+func contextDeadlineExceededErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeRequestTimedOut,
+		Message:   errorMessageRequestTimedOut,
+		Retryable: true,
+		Details: map[string]any{
+			"reason": "TIMED_OUT",
+		},
+	}
+}
 
 func decodeInputErrorEnvelope(context string, err error) ToolErrorEnvelope {
 	message := context
@@ -347,6 +394,9 @@ func runtimeScopeErrorEnvelope(err error) (ToolErrorEnvelope, bool) {
 }
 
 func executionErrorEnvelope(err error) ToolErrorEnvelope {
+	if envelope, ok := contextRequestErrorEnvelope(err); ok {
+		return envelope
+	}
 	message := errorMessageInternalExecution
 	details := map[string]any{}
 	if err != nil {

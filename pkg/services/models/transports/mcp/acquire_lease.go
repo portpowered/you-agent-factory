@@ -21,6 +21,9 @@ func AcquireLease(
 	service models.Service,
 	input AcquireLeaseInput,
 ) ToolResponse[AcquireLeaseResult] {
+	if response, done := requestContextErrorResponse[AcquireLeaseResult](ctx); done {
+		return response
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[AcquireLeaseResult]{Error: &envelope}

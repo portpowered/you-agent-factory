@@ -31,6 +31,9 @@ func InvokeWithLease(
 	service models.Service,
 	input InvokeWithLeaseInput,
 ) ToolResponse[InvokeWithLeaseResult] {
+	if response, done := requestContextErrorResponse[InvokeWithLeaseResult](ctx); done {
+		return response
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[InvokeWithLeaseResult]{Error: &envelope}

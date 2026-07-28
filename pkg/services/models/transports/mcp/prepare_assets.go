@@ -20,6 +20,9 @@ func PrepareAssets(
 	service models.Service,
 	input PrepareAssetsInput,
 ) ToolResponse[models.PrepareModelAssetsResult] {
+	if response, done := requestContextErrorResponse[models.PrepareModelAssetsResult](ctx); done {
+		return response
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[models.PrepareModelAssetsResult]{Error: &envelope}

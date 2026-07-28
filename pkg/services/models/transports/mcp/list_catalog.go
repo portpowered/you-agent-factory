@@ -18,6 +18,9 @@ func ListCatalog(
 	service models.Service,
 	input ListCatalogInput,
 ) ToolResponse[models.ListModelsResult] {
+	if response, done := requestContextErrorResponse[models.ListModelsResult](ctx); done {
+		return response
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[models.ListModelsResult]{Error: &envelope}
