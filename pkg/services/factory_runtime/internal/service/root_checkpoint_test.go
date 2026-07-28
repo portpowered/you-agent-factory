@@ -17,6 +17,7 @@ import (
 type checkpointDelegate struct {
 	captureCalled bool
 	loadCalled    bool
+	restoreCalled bool
 }
 
 func (d *checkpointDelegate) ControlPause(context.Context, factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
@@ -64,8 +65,12 @@ func (d *checkpointDelegate) LoadCheckpoint(_ context.Context, req factoryruntim
 		Compatible: req.ExpectedSchemaVersion == 0 || req.ExpectedSchemaVersion == 1,
 	}, nil
 }
-func (d *checkpointDelegate) RestoreCheckpoint(context.Context, factoryruntime.RestoreCheckpointRequest) (factoryruntime.RestoreCheckpointResult, error) {
-	return factoryruntime.RestoreCheckpointResult{}, factoryruntime.ErrCapabilityUnavailable
+func (d *checkpointDelegate) RestoreCheckpoint(_ context.Context, req factoryruntime.RestoreCheckpointRequest) (factoryruntime.RestoreCheckpointResult, error) {
+	d.restoreCalled = true
+	return factoryruntime.RestoreCheckpointResult{
+		Outcome:      factoryruntime.CheckpointOutcomeRestored,
+		CheckpointID: req.Checkpoint.CheckpointID,
+	}, nil
 }
 
 func TestRootCaptureCheckpointDelegatesToActiveRuntime(t *testing.T) {
@@ -213,5 +218,79 @@ func TestRootCaptureCheckpointWithoutActiveRuntimeReportsUnavailable(t *testing.
 	})
 	if !errors.Is(err, factoryruntime.ErrCapabilityUnavailable) {
 		t.Fatalf("CaptureCheckpoint() error = %v, want ErrCapabilityUnavailable", err)
+	}
+}
+
+func TestRootRestoreCheckpointDelegatesToActiveRuntime(t *testing.T) {
+	t.Parallel()
+
+	instanceHost, err := instancehostwire.New(instancehost.Dependencies{Clock: clockwork.NewFakeClock()})
+	if err != nil {
+		t.Fatalf("instance host wire: %v", err)
+	}
+	delegate := &checkpointDelegate{}
+	root := &Root{
+		orchestration: orchestrationwire.New(func() string { return "id" }, nil, nil),
+		instanceHost:  instanceHost,
+		dispatchPlan:  dispatchplanningwire.New(nil, nil),
+		active:        delegate,
+	}
+
+	result, err := root.RestoreCheckpoint(context.Background(), factoryruntime.RestoreCheckpointRequest{
+		Checkpoint: factoryruntime.Checkpoint{
+			CheckpointID: "checkpoint-1", SchemaVersion: 1, Payload: []byte(`{"opaque":true}`),
+		},
+	})
+	if err != nil {
+		t.Fatalf("RestoreCheckpoint() error = %v", err)
+	}
+	if !delegate.restoreCalled {
+		t.Fatal("RestoreCheckpoint() did not delegate to active runtime")
+	}
+	if result.Outcome != factoryruntime.CheckpointOutcomeRestored ||
+		result.CheckpointID != "checkpoint-1" {
+		t.Fatalf("RestoreCheckpoint() = %#v, want delegated RESTORED checkpoint", result)
+	}
+}
+
+func TestRootRestoreCheckpointRejectsMissingIdentity(t *testing.T) {
+	t.Parallel()
+
+	root, err := NewRoot(
+		func() string { return "id" },
+		nil,
+		nil,
+		clockwork.NewFakeClock(),
+		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+	_, err = root.RestoreCheckpoint(context.Background(), factoryruntime.RestoreCheckpointRequest{})
+	if !errors.Is(err, factoryruntime.ErrCheckpointNotFound) {
+		t.Fatalf("RestoreCheckpoint() error = %v, want ErrCheckpointNotFound", err)
+	}
+}
+
+func TestRootRestoreCheckpointWithoutActiveRuntimeReportsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	root, err := NewRoot(
+		func() string { return "id" },
+		nil,
+		nil,
+		clockwork.NewFakeClock(),
+		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+	_, err = root.RestoreCheckpoint(context.Background(), factoryruntime.RestoreCheckpointRequest{
+		Checkpoint: factoryruntime.Checkpoint{CheckpointID: "checkpoint-1", SchemaVersion: 1, Payload: []byte(`{}`)},
+	})
+	if !errors.Is(err, factoryruntime.ErrCapabilityUnavailable) {
+		t.Fatalf("RestoreCheckpoint() error = %v, want ErrCapabilityUnavailable", err)
 	}
 }

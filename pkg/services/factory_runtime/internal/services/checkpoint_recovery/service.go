@@ -17,6 +17,10 @@ var ErrCheckpointNotFound = factoryruntime.ErrCheckpointNotFound
 // shape checks without exposing strategy codec internals.
 var ErrCorruptCheckpoint = factoryruntime.ErrCorruptCheckpoint
 
+// ErrIncompatibleCheckpoint indicates the checkpoint schema or opaque payload
+// is incompatible with the Runtime restore surface.
+var ErrIncompatibleCheckpoint = factoryruntime.ErrIncompatibleCheckpoint
+
 // Envelope is a versioned opaque checkpoint envelope persisted by checkpoint
 // identity inside checkpoint_recovery. Payload bytes are opaque strategy data.
 type Envelope struct {

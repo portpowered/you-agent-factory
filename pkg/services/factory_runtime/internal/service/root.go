@@ -153,19 +153,16 @@ func (r *Root) LoadCheckpoint(
 }
 
 func (r *Root) RestoreCheckpoint(
-	_ context.Context,
+	ctx context.Context,
 	req factoryruntime.RestoreCheckpointRequest,
 ) (factoryruntime.RestoreCheckpointResult, error) {
-	switch {
-	case req.Checkpoint.CheckpointID == "":
+	if strings.TrimSpace(req.Checkpoint.CheckpointID) == "" {
 		return factoryruntime.RestoreCheckpointResult{}, factoryruntime.ErrCheckpointNotFound
-	case req.Checkpoint.SchemaVersion <= 0 || len(req.Checkpoint.Payload) == 0:
-		return factoryruntime.RestoreCheckpointResult{}, factoryruntime.ErrCorruptCheckpoint
-	case req.Checkpoint.SchemaVersion != 1:
-		return factoryruntime.RestoreCheckpointResult{}, factoryruntime.ErrIncompatibleCheckpoint
-	default:
-		return factoryruntime.RestoreCheckpointResult{}, factoryruntime.ErrCapabilityUnavailable
 	}
+	if r != nil && r.active != nil {
+		return r.active.RestoreCheckpoint(ctx, req)
+	}
+	return factoryruntime.RestoreCheckpointResult{}, factoryruntime.ErrCapabilityUnavailable
 }
 
 func (r *Root) delegate() factoryruntime.Service {

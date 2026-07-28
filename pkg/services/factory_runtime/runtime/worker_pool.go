@@ -357,16 +357,33 @@ func (f *factoryImpl) RestoreCheckpoint(
 	_ context.Context,
 	req factory.RestoreCheckpointRequest,
 ) (factory.RestoreCheckpointResult, error) {
-	var validationErr error
-	switch {
-	case req.Checkpoint.CheckpointID == "":
-		validationErr = factory.ErrCheckpointNotFound
-	case req.Checkpoint.SchemaVersion <= 0 || len(req.Checkpoint.Payload) == 0:
-		validationErr = factory.ErrCorruptCheckpoint
-	case req.Checkpoint.SchemaVersion != 1:
-		validationErr = factory.ErrIncompatibleCheckpoint
+	checkpointID := strings.TrimSpace(req.Checkpoint.CheckpointID)
+	if checkpointID == "" {
+		return factory.RestoreCheckpointResult{}, factory.ErrCheckpointNotFound
 	}
-	return factory.RestoreCheckpointResult{}, f.unavailableRootCapability(validationErr != nil, validationErr, false)
+	f.mu.RLock()
+	state := f.state
+	recovery := f.checkpointRecovery
+	f.mu.RUnlock()
+	if err := checkpointCaptureLifecycleError(state); err != nil {
+		return factory.RestoreCheckpointResult{}, err
+	}
+	if recovery == nil {
+		return factory.RestoreCheckpointResult{}, factory.ErrCapabilityUnavailable
+	}
+	restored, err := recovery.Restore(checkpointrecovery.RestoreRequest{
+		Envelope: checkpointrecovery.EnvelopeFromRootCheckpoint(req.Checkpoint),
+	})
+	if err != nil {
+		return factory.RestoreCheckpointResult{}, err
+	}
+	f.mu.Lock()
+	f.state = interfaces.FactoryState(restored.Facts.FactoryState)
+	f.mu.Unlock()
+	return factory.RestoreCheckpointResult{
+		Outcome:      factory.CheckpointOutcomeRestored,
+		CheckpointID: checkpointID,
+	}, nil
 }
 
 func (f *factoryImpl) unavailableRootCapability(invalid bool, invalidErr error, allowStopped bool) error {

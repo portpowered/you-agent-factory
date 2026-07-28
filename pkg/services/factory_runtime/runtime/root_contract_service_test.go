@@ -637,14 +637,22 @@ func TestFactoryImpl_CheckpointContracts_DoNotReportFalseSuccess(t *testing.T) {
 	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "missing"})
 	requireRootErrIs(t, err, factory.ErrCheckpointNotFound, "LoadCheckpoint(missing)")
 
-	_, err = impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{
-		Checkpoint: factory.Checkpoint{CheckpointID: "cp-1", SchemaVersion: 1, Payload: []byte(`{}`)},
-	})
-	requireRootErrIs(t, err, factory.ErrCapabilityUnavailable, "RestoreCheckpoint(paused)")
+	restored, err := impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{Checkpoint: captured.Checkpoint})
+	requireNoRootErr(t, err, "RestoreCheckpoint(captured)")
+	if restored.Outcome != factory.CheckpointOutcomeRestored || restored.CheckpointID != "cp-1" {
+		t.Fatalf("RestoreCheckpoint(captured) = %#v, want RESTORED cp-1", restored)
+	}
+	loadedAfterRestore, err := impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-1"})
+	requireNoRootErr(t, err, "LoadCheckpoint(after restore)")
+	if loadedAfterRestore.Checkpoint.CheckpointID != captured.Checkpoint.CheckpointID ||
+		loadedAfterRestore.Checkpoint.SchemaVersion != captured.Checkpoint.SchemaVersion ||
+		string(loadedAfterRestore.Checkpoint.Payload) != string(captured.Checkpoint.Payload) {
+		t.Fatalf("LoadCheckpoint(after restore) checkpoint = %#v, want restored envelope %#v", loadedAfterRestore.Checkpoint, captured.Checkpoint)
+	}
 	_, err = impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{Checkpoint: factory.Checkpoint{CheckpointID: "bad", SchemaVersion: 1}})
 	requireRootErrIs(t, err, factory.ErrCorruptCheckpoint, "RestoreCheckpoint(corrupt)")
 	_, err = impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{
-		Checkpoint: factory.Checkpoint{CheckpointID: "cp-2", SchemaVersion: 2, Payload: []byte(`{}`)},
+		Checkpoint: factory.Checkpoint{CheckpointID: "cp-2", SchemaVersion: 2, Payload: []byte(`{"factoryState":"PAUSED"}`)},
 	})
 	requireRootErrIs(t, err, factory.ErrIncompatibleCheckpoint, "RestoreCheckpoint(incompatible)")
 
@@ -657,7 +665,7 @@ func TestFactoryImpl_CheckpointContracts_DoNotReportFalseSuccess(t *testing.T) {
 		t.Fatalf("LoadCheckpoint(completed) outcome = %q, want LOADED", loadedAfterComplete.Outcome)
 	}
 	_, err = impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{
-		Checkpoint: factory.Checkpoint{CheckpointID: "cp-2", SchemaVersion: 1, Payload: []byte(`{}`)},
+		Checkpoint: factory.Checkpoint{CheckpointID: "cp-2", SchemaVersion: 1, Payload: []byte(`{"factoryState":"PAUSED"}`)},
 	})
 	requireRootErrIs(t, err, factory.ErrNotRunning, "RestoreCheckpoint(completed)")
 }

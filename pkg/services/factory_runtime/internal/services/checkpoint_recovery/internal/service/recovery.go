@@ -62,3 +62,42 @@ func (r *Recovery) Load(req checkpointrecovery.LoadRequest) (checkpointrecovery.
 		Compatible: checkpointrecovery.CompatibilityForSchema(envelope.SchemaVersion, req.ExpectedSchemaVersion),
 	}, nil
 }
+
+// Restore validates, persists, and decodes one compatible opaque checkpoint
+// envelope without mutating hosted Runtime execution state.
+func (r *Recovery) Restore(req checkpointrecovery.RestoreRequest) (checkpointrecovery.RestoreResult, error) {
+	envelope := req.Envelope
+	checkpointID := strings.TrimSpace(envelope.CheckpointID)
+	if checkpointID == "" {
+		return checkpointrecovery.RestoreResult{}, checkpointrecovery.ErrCheckpointNotFound
+	}
+	if err := checkpointrecovery.ValidateEnvelope(envelope); err != nil {
+		return checkpointrecovery.RestoreResult{}, err
+	}
+	if envelope.SchemaVersion != checkpointrecovery.RuntimeOpaqueCheckpointSchemaVersion {
+		return checkpointrecovery.RestoreResult{}, checkpointrecovery.ErrIncompatibleCheckpoint
+	}
+	strategyKind := strings.TrimSpace(envelope.StrategyKind)
+	if strategyKind == "" {
+		strategyKind = checkpointrecovery.RuntimeOpaqueCheckpointStrategyKind
+		envelope.StrategyKind = strategyKind
+	}
+	if strategyKind != checkpointrecovery.RuntimeOpaqueCheckpointStrategyKind {
+		return checkpointrecovery.RestoreResult{}, checkpointrecovery.ErrIncompatibleCheckpoint
+	}
+	facts, err := checkpointrecovery.RestoreRuntimeOpaquePayload(envelope.Payload)
+	if err != nil {
+		return checkpointrecovery.RestoreResult{}, err
+	}
+	if err := r.store.Put(envelope); err != nil {
+		return checkpointrecovery.RestoreResult{}, err
+	}
+	stored, err := r.store.Get(checkpointID)
+	if err != nil {
+		return checkpointrecovery.RestoreResult{}, err
+	}
+	return checkpointrecovery.RestoreResult{
+		Envelope: stored,
+		Facts:    facts,
+	}, nil
+}

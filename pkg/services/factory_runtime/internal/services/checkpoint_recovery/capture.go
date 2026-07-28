@@ -36,11 +36,12 @@ type CaptureResult struct {
 	Envelope Envelope
 }
 
-// Service owns Runtime-private checkpoint capture and load against the opaque
-// store port. Restore remains a separate root operation in a later story.
+// Service owns Runtime-private checkpoint capture, load, and restore against the
+// opaque store port.
 type Service interface {
 	Capture(CaptureRequest) (CaptureResult, error)
 	Load(LoadRequest) (LoadResult, error)
+	Restore(RestoreRequest) (RestoreResult, error)
 }
 
 // EncodeRuntimeOpaquePayload serializes minimal execution facts into opaque
@@ -64,4 +65,34 @@ func RootCheckpointFromEnvelope(envelope Envelope) factoryruntime.Checkpoint {
 		StrategyKind:  envelope.StrategyKind,
 		Payload:       append([]byte(nil), envelope.Payload...),
 	}
+}
+
+// EnvelopeFromRootCheckpoint maps a published Runtime root checkpoint to the
+// private envelope vocabulary used inside checkpoint_recovery.
+func EnvelopeFromRootCheckpoint(checkpoint factoryruntime.Checkpoint) Envelope {
+	return Envelope{
+		CheckpointID:  strings.TrimSpace(checkpoint.CheckpointID),
+		SchemaVersion: checkpoint.SchemaVersion,
+		StrategyKind:  strings.TrimSpace(checkpoint.StrategyKind),
+		Payload:       append([]byte(nil), checkpoint.Payload...),
+	}
+}
+
+// RestoreRuntimeOpaquePayload decodes opaque strategy bytes into execution facts
+// suitable for mutable Runtime state restore.
+func RestoreRuntimeOpaquePayload(payload []byte) (ExecutionCaptureFacts, error) {
+	if len(payload) == 0 {
+		return ExecutionCaptureFacts{}, ErrCorruptCheckpoint
+	}
+	var decoded struct {
+		FactoryState string `json:"factoryState"`
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		return ExecutionCaptureFacts{}, ErrCorruptCheckpoint
+	}
+	state := strings.TrimSpace(decoded.FactoryState)
+	if state == "" {
+		return ExecutionCaptureFacts{}, ErrCorruptCheckpoint
+	}
+	return ExecutionCaptureFacts{FactoryState: state}, nil
 }
