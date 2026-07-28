@@ -19,8 +19,7 @@ import (
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/construction"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
-	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
-	workstations "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations"
+	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
@@ -34,6 +33,7 @@ import (
 
 // Service is the canonical Worker execution application service.
 type Service struct {
+	workersinternal.Root
 	sessions                          CurrentRuntimeResolver
 	models                            models.Service
 	modelsScope                       models.RuntimeScopeRef
@@ -66,8 +66,6 @@ type Service struct {
 	providerRegistry                  *providerregistry.Registry
 	providerRegistryRebinder          ProviderRegistryRebinder
 	invocationConductor               *providerconductor.Conductor
-	runtimeAssembly                   runtimeassembly.Service
-	workstations                      workstations.Service
 	agentDispatchUsesRegisteredRunner bool
 }
 
@@ -224,13 +222,13 @@ func (s *Service) BuildRuntime(
 	ctx context.Context,
 	request workers.RuntimeBuildRequest,
 ) (workers.RuntimeBuildResult, error) {
-	if s == nil || s.runtimeAssembly == nil {
+	if s == nil {
 		return workers.RuntimeBuildResult{}, fmt.Errorf(
 			"%w: Workers Runtime Assembly is required",
 			workers.ErrIncompleteRuntimeAssembly,
 		)
 	}
-	return s.runtimeAssembly.Build(ctx, request)
+	return s.Root.BuildRuntime(ctx, request)
 }
 
 // StartWorkstationPool delegates lifecycle activation to the parent-private
@@ -239,10 +237,10 @@ func (s *Service) StartWorkstationPool(
 	ctx context.Context,
 	request workers.WorkstationPoolStartRequest,
 ) (workers.WorkstationPoolStartResult, error) {
-	if s == nil || s.workstations == nil {
+	if s == nil {
 		return workers.WorkstationPoolStartResult{}, workers.ErrWorkstationPoolUnavailable
 	}
-	return s.workstations.Start(ctx, request)
+	return s.Root.StartWorkstationPool(ctx, request)
 }
 
 // StopWorkstationPool delegates terminal shutdown to the parent-private
@@ -250,10 +248,10 @@ func (s *Service) StartWorkstationPool(
 func (s *Service) StopWorkstationPool(
 	ctx context.Context,
 ) (workers.WorkstationPoolStopResult, error) {
-	if s == nil || s.workstations == nil {
+	if s == nil {
 		return workers.WorkstationPoolStopResult{}, workers.ErrWorkstationPoolUnavailable
 	}
-	return s.workstations.Stop(ctx)
+	return s.Root.StopWorkstationPool(ctx)
 }
 
 // WorkstationRoute reports availability through the private lifecycle owner.
@@ -261,10 +259,10 @@ func (s *Service) WorkstationRoute(
 	ctx context.Context,
 	request workers.WorkstationRouteRequest,
 ) (workers.WorkstationRouteResult, error) {
-	if s == nil || s.workstations == nil {
+	if s == nil {
 		return workers.WorkstationRouteResult{}, workers.ErrWorkstationPoolUnavailable
 	}
-	return s.workstations.Route(ctx, request)
+	return s.Root.WorkstationRoute(ctx, request)
 }
 
 // DispatchWorkstation delegates execution to the private workstation owner.
@@ -272,10 +270,10 @@ func (s *Service) DispatchWorkstation(
 	ctx context.Context,
 	request workers.WorkstationDispatchRequest,
 ) (workers.WorkstationDispatchResult, error) {
-	if s == nil || s.workstations == nil {
+	if s == nil {
 		return workers.WorkstationDispatchResult{}, workers.ErrWorkstationPoolUnavailable
 	}
-	return s.workstations.Dispatch(ctx, request)
+	return s.Root.DispatchWorkstation(ctx, request)
 }
 
 // CancelWorkstationDispatch delegates explicit cancellation to the private
@@ -284,10 +282,10 @@ func (s *Service) CancelWorkstationDispatch(
 	ctx context.Context,
 	request workers.WorkstationDispatchCancelRequest,
 ) (workers.WorkstationDispatchCancelResult, error) {
-	if s == nil || s.workstations == nil {
+	if s == nil {
 		return workers.WorkstationDispatchCancelResult{}, workers.ErrWorkstationPoolUnavailable
 	}
-	return s.workstations.Cancel(ctx, request)
+	return s.Root.CancelWorkstationDispatch(ctx, request)
 }
 
 func (s *Service) modelInvocationExecutor(

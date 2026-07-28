@@ -39,7 +39,7 @@ func applyReboundProviderRegistry(service *Service, registry *providerregistry.R
 	if err != nil {
 		return err
 	}
-	service.runtimeAssembly = assembly
+	service.Root = service.Root.ReplaceRuntimeAssembly(assembly)
 	if builder, ok := service.executorBuilder.(*workerconstruction.Service); ok {
 		service.executorBuilder = builder.
 			WithRunnerSelection(registry.ResolveRunnerSelection).

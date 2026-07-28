@@ -17,6 +17,7 @@ import (
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/construction"
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/execution/recording"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
+	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
@@ -100,8 +101,7 @@ func NewRuntime(
 	if err != nil {
 		return nil, err
 	}
-	runtimeService.runtimeAssembly = assembly
-	runtimeService.workstations = workstationswire.NewService()
+	runtimeService.Root = workersinternal.RootFrom(assembly, workstationswire.NewService())
 	return runtimeService, nil
 }
 
@@ -163,7 +163,7 @@ func NewRuntimeWithSelection(
 		if assemblyErr != nil {
 			return nil, assemblyErr
 		}
-		service.runtimeAssembly = assembly
+		service.Root = service.Root.ReplaceRuntimeAssembly(assembly)
 		service.invocationConductor = providerconductor.New(providerRegistry)
 		if builder, ok := service.executorBuilder.(*workerconstruction.Service); ok {
 			service.executorBuilder = builder.
