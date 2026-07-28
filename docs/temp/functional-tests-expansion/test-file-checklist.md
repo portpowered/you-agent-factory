@@ -1115,7 +1115,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestFactoryEventStreamIsOrderedAndClosesAtSessionTermination`.
   - `TestFactoryEventStreamReconnectHasNoGapOrDuplicate`.
 
-- [ ] `tests/functional/events/response_events/stream_test.go`
+- [x] `tests/functional/events/response_events/stream_test.go`
   - `TestAPIResponseEventSSEStreamsRetainedThenLiveEvents`.
   - `TestAPIResponseEventCursorGapEmitsStreamGap`.
   - `TestAPIResponseEventSessionExpiryReturnsTypedGone`.

@@ -551,18 +551,6 @@
       "name": "TestReplayRuntimeConfigSmoke_CanonicalWorkstationsDriveDispatchAndReplay"
     },
     {
-      "file": "replay_contracts/replay_script_boundary_events_test.go",
-      "name": "TestReplayScriptBoundaryEvents_CanonicalHistoryAndArtifactIncludeScriptResponseBoundary"
-    },
-    {
-      "file": "replay_contracts/replay_script_boundary_events_test.go",
-      "name": "TestReplayScriptBoundaryEvents_CanonicalHistoryIncludesScriptRequestBoundary"
-    },
-    {
-      "file": "replay_contracts/replay_script_boundary_events_test.go",
-      "name": "TestReplayScriptBoundaryEvents_ProcessFailureBoundaryPersistsInCanonicalHistoryAndArtifact"
-    },
-    {
       "file": "replay_contracts/replay_thin_event_dual_dispatch_smoke_long_test.go",
       "name": "TestReplayThinEventDualDispatchSmoke_ReplayAndReadersReuseSharedArtifact"
     },
@@ -596,15 +584,7 @@
     },
     {
       "file": "runtime_api/api_inference_events_test.go",
-      "name": "TestInferenceEvents_HTTPStreamAndPublicWorkCorrelateRetryAttempts"
-    },
-    {
-      "file": "runtime_api/api_inference_events_test.go",
       "name": "TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact"
-    },
-    {
-      "file": "runtime_api/api_inference_events_test.go",
-      "name": "TestInferenceEvents_ThinEventSmoke_CapturesThinnedDispatchInferenceSequenceAndReconstructsViews"
     },
     {
       "file": "runtime_api/api_model_local_inference_long_test.go",

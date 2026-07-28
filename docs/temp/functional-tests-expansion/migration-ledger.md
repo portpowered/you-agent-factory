@@ -1107,7 +1107,7 @@ ownership reaches zero.
 | `bootstrap_portability-delete-05-factory-current` | bootstrap_portability | 3 | factory/current | consumed |
 | `replay_contracts-delete-01-events-replay` | replay_contracts | 16 | events/replay | artifact-contract-closeout |
 | `replay_contracts-delete-02-events-factory-events` | replay_contracts | 1 | events/factory_events | released |
-| `replay_contracts-delete-03-events-response-events` | replay_contracts | 3 | events/response_events | none |
+| `replay_contracts-delete-03-events-response-events` | replay_contracts | 3 | events/response_events | released |
 | `replay_contracts-delete-04-work-submission` | replay_contracts | 1 | work/submission | released |
 | `replay_contracts-delete-05-workers-script` | replay_contracts | 1 | workers/script | released |
 | `replay_contracts-delete-06-wrong-layer` | replay_contracts | 2 | approved wrong-layer (package-integration) | released |
@@ -1615,7 +1615,7 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `bootstrap_portability-delete-05-factory-current` | bootstrap_portability | 3 | factory/current | consumed |
 | `replay_contracts-delete-01-events-replay` | replay_contracts | 16 | events/replay | planned |
 | `replay_contracts-delete-02-events-factory-events` | replay_contracts | 1 | events/factory_events | released |
-| `replay_contracts-delete-03-events-response-events` | replay_contracts | 3 | events/response_events | planned |
+| `replay_contracts-delete-03-events-response-events` | replay_contracts | 3 | events/response_events | released |
 | `replay_contracts-delete-04-work-submission` | replay_contracts | 1 | work/submission | released |
 | `replay_contracts-delete-05-workers-script` | replay_contracts | 1 | workers/script | released |
 | `replay_contracts-delete-06-wrong-layer` | replay_contracts | 2 | approved wrong-layer (package-integration) | released |

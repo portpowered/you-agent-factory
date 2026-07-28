@@ -1269,6 +1269,46 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/events/response_events/stream_test.go",
+      "package": "you-agent-factory/tests/functional/events/response_events",
+      "scenario": "TestAPIResponseEventCursorGapEmitsStreamGap",
+      "lane": "short",
+      "destination": "tests/functional/events/response_events/stream_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/events/response_events/stream_test.go",
+      "package": "you-agent-factory/tests/functional/events/response_events",
+      "scenario": "TestAPIResponseEventSSEStreamsRetainedThenLiveEvents",
+      "lane": "short",
+      "destination": "tests/functional/events/response_events/stream_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/events/response_events/stream_test.go",
+      "package": "you-agent-factory/tests/functional/events/response_events",
+      "scenario": "TestAPIResponseEventSessionExpiryReturnsTypedGone",
+      "lane": "short",
+      "destination": "tests/functional/events/response_events/stream_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/events/response_events/stream_test.go",
+      "package": "you-agent-factory/tests/functional/events/response_events",
+      "scenario": "TestAPIResponseEventStreamClosesAtDocumentedBoundary",
+      "lane": "short",
+      "destination": "tests/functional/events/response_events/stream_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/current/prompt_template_test.go",
       "package": "you-agent-factory/tests/functional/factory/current",
       "scenario": "TestAPIInvalidPromptTemplateNamesMissingVariables",
@@ -4609,36 +4649,6 @@
       "deletion_only_batch": "replay_contracts-delete-01-events-replay"
     },
     {
-      "source_path": "tests/functional/replay_contracts/replay_script_boundary_events_test.go",
-      "package": "you-agent-factory/tests/functional/replay_contracts",
-      "scenario": "TestReplayScriptBoundaryEvents_CanonicalHistoryAndArtifactIncludeScriptResponseBoundary",
-      "lane": "short",
-      "destination": "tests/functional/events/response_events/stream_test.go",
-      "catch_all": "replay_contracts",
-      "specialty_targets": "none",
-      "deletion_only_batch": "replay_contracts-delete-03-events-response-events"
-    },
-    {
-      "source_path": "tests/functional/replay_contracts/replay_script_boundary_events_test.go",
-      "package": "you-agent-factory/tests/functional/replay_contracts",
-      "scenario": "TestReplayScriptBoundaryEvents_CanonicalHistoryIncludesScriptRequestBoundary",
-      "lane": "short",
-      "destination": "tests/functional/events/response_events/stream_test.go",
-      "catch_all": "replay_contracts",
-      "specialty_targets": "none",
-      "deletion_only_batch": "replay_contracts-delete-03-events-response-events"
-    },
-    {
-      "source_path": "tests/functional/replay_contracts/replay_script_boundary_events_test.go",
-      "package": "you-agent-factory/tests/functional/replay_contracts",
-      "scenario": "TestReplayScriptBoundaryEvents_ProcessFailureBoundaryPersistsInCanonicalHistoryAndArtifact",
-      "lane": "short",
-      "destination": "tests/functional/events/response_events/stream_test.go",
-      "catch_all": "replay_contracts",
-      "specialty_targets": "none",
-      "deletion_only_batch": "replay_contracts-delete-03-events-response-events"
-    },
-    {
       "source_path": "tests/functional/replay_contracts/replay_thin_event_dual_dispatch_smoke_long_test.go",
       "package": "you-agent-factory/tests/functional/replay_contracts",
       "scenario": "TestReplayThinEventDualDispatchSmoke_ReplayAndReadersReuseSharedArtifact",
@@ -4731,29 +4741,9 @@
     {
       "source_path": "tests/functional/runtime_api/api_inference_events_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestInferenceEvents_HTTPStreamAndPublicWorkCorrelateRetryAttempts",
-      "lane": "short",
-      "destination": "tests/functional/events/response_events/stream_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-07-events-replay"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_inference_events_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact",
       "lane": "short",
       "destination": "tests/functional/events/factory_events/order_and_cursor_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-07-events-replay"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_inference_events_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestInferenceEvents_ThinEventSmoke_CapturesThinnedDispatchInferenceSequenceAndReconstructsViews",
-      "lane": "short",
-      "destination": "tests/functional/events/response_events/stream_test.go",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
       "deletion_only_batch": "runtime_api-delete-07-events-replay"
@@ -9549,8 +9539,7 @@
       "bootstrap_portability-delete-03-factory-definitions-import-export",
       "bootstrap_portability-delete-04-portable-config",
       "bootstrap_portability-delete-06-transport-cli",
-      "replay_contracts-delete-01-events-replay",
-      "replay_contracts-delete-03-events-response-events"
+      "replay_contracts-delete-01-events-replay"
     ]
   },
   "remaining_packages_mapping": {
