@@ -140,6 +140,7 @@ func (stubFilesystemInputReader) ReadDir(string) ([]fs.DirEntry, error) { return
 func (stubFilesystemInputReader) ReadFile(string) ([]byte, error)       { return nil, nil }
 func (stubFilesystemInputReader) Stat(string) (fs.FileInfo, error)      { return nil, nil }
 
+// Peer-behavior coverage pairs Service and Root success/failure paths in one test.
 func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 	t.Parallel()
 
