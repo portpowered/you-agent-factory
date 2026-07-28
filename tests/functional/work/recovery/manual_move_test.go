@@ -2,6 +2,7 @@ package recovery
 
 import (
 	"errors"
+	"net/http"
 	"testing"
 	"time"
 
@@ -92,5 +93,78 @@ func TestFailedCascadeCanBeRecoveredByPublicWorkMove(t *testing.T) {
 	}
 	if !support.HasWorkAtCustomerState(listed, parentWorkID, support.WorkCustomerLocation("task", "complete")) {
 		t.Fatalf("work listing = %#v, want parent at task:complete", listed.Results)
+	}
+}
+
+// TestTerminalFailedWorkCannotBeRedispatchedIllegally proves terminal failed work
+// rejects a forbidden public move while an in-flight redispatch is consuming the
+// work item, leaving the customer-visible state unchanged after the refusal.
+func TestTerminalFailedWorkCannotBeRedispatchedIllegally(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow work recovery functional test")
+	}
+
+	const (
+		workID    = "redispatch-guard-work-id"
+		traceID   = "trace-redispatch-guard"
+		requestID = "request-redispatch-guard"
+	)
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "happy_path"))
+	provider := newRecoveryRedispatchBlockingProvider("worker-a", "worker-a")
+	server := startRecoveryAPIServer(t, dir, provider)
+	defer server.Stop(t)
+
+	workTypeName := "task"
+	support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
+		RequestId: requestID,
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &[]factoryapi.Work{{
+			Name:         "task",
+			WorkId:       stringPtr(workID),
+			WorkTypeName: &workTypeName,
+			TraceId:      stringPtr(traceID),
+			Payload:      map[string]string{"title": "terminal failed redispatch guard"},
+		}},
+	})
+
+	waitForWorkIDsAtState(t, server.URL(), []string{workID}, "failed", 15*time.Second)
+	failedLocation := support.WorkCustomerLocation(workTypeName, "failed")
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if !support.HasWorkAtCustomerState(listed, workID, failedLocation) {
+		t.Fatalf("work listing = %#v, want %s before illegal redispatch attempt", listed.Results, failedLocation)
+	}
+
+	recoveryMoved := postMoveWork(t, server.URL(), workID, "init")
+	if workStateName(recoveryMoved.State) != "init" {
+		t.Fatalf("recovery move response = %#v, want init", recoveryMoved)
+	}
+
+	provider.waitForBlockedRedispatch(t, 15*time.Second)
+	waitForSessionInFlightDispatches(t, server.URL(), 1, 15*time.Second)
+
+	beforeIllegalMove := support.ListDefaultSessionWork(t, server.URL())
+	beforeState := workStateName(requireWorkByID(t, beforeIllegalMove, workID).State)
+
+	status, body := postMoveWorkStatus(t, server.URL(), workID, "processing")
+	if status != http.StatusBadRequest && status != http.StatusNotFound {
+		t.Fatalf("illegal redispatch move status = %d, want 400 or 404 refusal: %s", status, body)
+	}
+
+	afterIllegalMove := support.ListDefaultSessionWork(t, server.URL())
+	afterState := workStateName(requireWorkByID(t, afterIllegalMove, workID).State)
+	if afterState != beforeState {
+		t.Fatalf("work state after illegal move = %q, want unchanged %q; listing=%#v", afterState, beforeState, afterIllegalMove.Results)
+	}
+	if support.HasWorkAtCustomerState(afterIllegalMove, workID, support.WorkCustomerLocation(workTypeName, "complete")) {
+		t.Fatalf("work listing = %#v, want no unauthorized completion after illegal redispatch", afterIllegalMove.Results)
+	}
+
+	provider.releaseBlockedRedispatch()
+	waitForWorkIDsAtState(t, server.URL(), []string{workID}, "failed", 15*time.Second)
+
+	finalListed := support.ListDefaultSessionWork(t, server.URL())
+	if !support.HasWorkAtCustomerState(finalListed, workID, failedLocation) {
+		t.Fatalf("final work listing = %#v, want terminal failed %s", finalListed.Results, failedLocation)
 	}
 }

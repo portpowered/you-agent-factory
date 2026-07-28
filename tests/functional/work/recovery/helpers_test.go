@@ -2,13 +2,17 @@ package recovery
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -28,6 +32,37 @@ func startRecoveryAPIServer(
 			ProviderOverride: provider,
 		},
 	})
+}
+
+func postMoveWorkExpectStatus(
+	t *testing.T,
+	baseURL, workID, stateName string,
+	wantStatus int,
+) (int, string) {
+	t.Helper()
+
+	status, body := postMoveWorkStatus(t, baseURL, workID, stateName)
+	if status != wantStatus {
+		t.Fatalf("POST /work/%s/move status = %d, want %d: %s", workID, status, wantStatus, body)
+	}
+	return status, body
+}
+
+func postMoveWorkStatus(t *testing.T, baseURL, workID, stateName string) (int, string) {
+	t.Helper()
+
+	body, err := json.Marshal(factoryapi.MoveWorkRequest{StateName: stateName})
+	if err != nil {
+		t.Fatalf("marshal move request: %v", err)
+	}
+	endpoint := support.DefaultSessionWorkURL(baseURL, "/work/"+workID+"/move")
+	resp, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer resp.Body.Close()
+	payload, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(payload)
 }
 
 func postMoveWork(t *testing.T, baseURL, workID, stateName string) factoryapi.Work {
@@ -122,6 +157,17 @@ func waitForWorkIDsComplete(
 	return nil
 }
 
+func requireWorkByID(t *testing.T, listed factoryapi.ListWorkResponse, workID string) factoryapi.Work {
+	t.Helper()
+	for _, item := range listed.Results {
+		if support.StringPointerValue(item.WorkId) == workID {
+			return item
+		}
+	}
+	t.Fatalf("work ID %q missing from listing: %#v", workID, listed.Results)
+	return factoryapi.Work{}
+}
+
 func workStateName(state *factoryapi.WorkState) string {
 	if state == nil {
 		return ""
@@ -131,4 +177,97 @@ func workStateName(state *factoryapi.WorkState) string {
 
 func stringPtr(value string) *string {
 	return &value
+}
+
+type recoveryRedispatchBlockingProvider struct {
+	failWorker   string
+	blockWorker  string
+	callCounts   map[string]int
+	blockStarted chan struct{}
+	releaseBlock chan struct{}
+	releaseOnce  sync.Once
+	mu           sync.Mutex
+}
+
+var _ workerprovider.Provider = (*recoveryRedispatchBlockingProvider)(nil)
+
+func newRecoveryRedispatchBlockingProvider(failWorker, blockWorker string) *recoveryRedispatchBlockingProvider {
+	return &recoveryRedispatchBlockingProvider{
+		failWorker:   failWorker,
+		blockWorker:  blockWorker,
+		callCounts:   make(map[string]int),
+		blockStarted: make(chan struct{}, 1),
+		releaseBlock: make(chan struct{}),
+	}
+}
+
+func (p *recoveryRedispatchBlockingProvider) Infer(
+	ctx context.Context,
+	req workerexecution.ProviderInferenceRequest,
+) (workerexecution.InferenceResponse, error) {
+	workerName := req.WorkerType
+	if workerName == "" {
+		workerName = req.Dispatch.WorkerType
+	}
+	p.mu.Lock()
+	p.callCounts[workerName]++
+	callCount := p.callCounts[workerName]
+	p.mu.Unlock()
+
+	if workerName == p.failWorker && callCount == 1 {
+		return workerexecution.InferenceResponse{}, errors.New("initial terminal failure")
+	}
+	if workerName == p.blockWorker && callCount >= 1 {
+		select {
+		case p.blockStarted <- struct{}{}:
+		default:
+		}
+		select {
+		case <-p.releaseBlock:
+		case <-ctx.Done():
+			return workerexecution.InferenceResponse{}, ctx.Err()
+		}
+		return workerexecution.InferenceResponse{}, errors.New("recovery redispatch failed again")
+	}
+	return workerexecution.InferenceResponse{Content: "COMPLETE"}, nil
+}
+
+func (p *recoveryRedispatchBlockingProvider) CallCount(worker string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.callCounts[worker]
+}
+
+func (p *recoveryRedispatchBlockingProvider) waitForBlockedRedispatch(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	select {
+	case <-p.blockStarted:
+	case <-time.After(timeout):
+		t.Fatalf("timed out waiting %s for blocked redispatch provider call", timeout)
+	}
+}
+
+func (p *recoveryRedispatchBlockingProvider) releaseBlockedRedispatch() {
+	p.releaseOnce.Do(func() {
+		close(p.releaseBlock)
+	})
+}
+
+func waitForSessionInFlightDispatches(
+	t *testing.T,
+	baseURL string,
+	want int,
+	timeout time.Duration,
+) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		session := support.GetDefaultSession(t, baseURL)
+		if session.Runtime.Progress.InFlightCount == want {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	session := support.GetDefaultSession(t, baseURL)
+	t.Fatalf("timed out waiting for inFlightCount=%d; session progress=%#v", want, session.Runtime.Progress)
 }
