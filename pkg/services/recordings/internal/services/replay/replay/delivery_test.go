@@ -589,6 +589,54 @@ func TestWorkStateChangeHook_ReplaysOperatorMoveAtRecordedTick(t *testing.T) {
 	}
 }
 
+func TestCompletionDeliveryPlan_CustomerWorkIDRecordedInputMatchesRuntimeTokenIdentity(t *testing.T) {
+	recorded := replayTestDispatch("dispatch-1", "step-one", 2, "trace-1", "record-replay-failure-work", "record-replay-failure-work")
+	plan, err := NewCompletionDeliveryPlan(testFactorySnapshotDecoder, testRuntimeConfigDecoder, deliveryArtifact(t,
+		recorded,
+		replayTestCompletion("completion-1", "dispatch-1", "step-one", 4),
+	))
+	if err != nil {
+		t.Fatalf("NewCompletionDeliveryPlan: %v", err)
+	}
+
+	observed := replayTestDispatch("observed-dispatch", "step-one", 5, "trace-1", "record-replay-failure-work", "tok-task-1")
+	deliveryTick, ok, err := plan.DeliveryTickForDispatch(observed)
+	if err != nil {
+		t.Fatalf("DeliveryTickForDispatch: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected delivery match for customer work id vs runtime token identity")
+	}
+	if deliveryTick < 4 {
+		t.Fatalf("delivery tick = %d, want at least recorded completion tick 4", deliveryTick)
+	}
+}
+
+func TestCompletionDeliveryPlan_ReobservedConsumedDispatchDoesNotDiverge(t *testing.T) {
+	recorded := replayTestDispatch("dispatch-1", "step-two", 5, "trace-1", "record-replay-failure-work", "record-replay-failure-work")
+	plan, err := NewCompletionDeliveryPlan(testFactorySnapshotDecoder, testRuntimeConfigDecoder, deliveryArtifact(t,
+		recorded,
+		replayTestCompletionWithOutcome("completion-1", "dispatch-1", "step-two", 7, workerexecution.OutcomeFailed),
+	))
+	if err != nil {
+		t.Fatalf("NewCompletionDeliveryPlan: %v", err)
+	}
+
+	observed := replayTestDispatch("observed-dispatch", "step-two", 5, "trace-1", "record-replay-failure-work", "record-replay-failure-work")
+	if _, _, err := plan.DeliveryTickForDispatch(observed); err != nil {
+		t.Fatalf("DeliveryTickForDispatch: %v", err)
+	}
+
+	duplicate := replayTestDispatch("duplicate-dispatch", "step-two", 8, "trace-1", "record-replay-failure-work", "record-replay-failure-work")
+	deliveryTick, ok, err := plan.DeliveryTickForDispatch(duplicate)
+	if err != nil {
+		t.Fatalf("DeliveryTickForDispatch duplicate: %v", err)
+	}
+	if ok {
+		t.Fatalf("duplicate delivery tick = %d, want no second scheduled completion", deliveryTick)
+	}
+}
+
 func replayTestDispatch(dispatchID, transitionID string, tick int, traceID, workID, tokenID string) work.WorkDispatch {
 	return work.WorkDispatch{
 		DispatchID:      dispatchID,
@@ -605,10 +653,14 @@ func replayTestDispatch(dispatchID, transitionID string, tick int, traceID, work
 }
 
 func replayTestCompletion(_ string, dispatchID string, transitionID string, _ int) workerexecution.WorkResult {
+	return replayTestCompletionWithOutcome("", dispatchID, transitionID, 0, workerexecution.OutcomeAccepted)
+}
+
+func replayTestCompletionWithOutcome(_ string, dispatchID string, transitionID string, _ int, outcome workerexecution.WorkOutcome) workerexecution.WorkResult {
 	return workerexecution.WorkResult{
 		DispatchID:   dispatchID,
 		TransitionID: transitionID,
-		Outcome:      workerexecution.OutcomeAccepted,
+		Outcome:      outcome,
 	}
 }
 

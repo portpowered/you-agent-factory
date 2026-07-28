@@ -502,6 +502,16 @@ func (p *CompletionDeliveryPlan) DeliveryTickForDispatch(dispatch work.WorkDispa
 		}
 		return deliveryTick, true, nil
 	}
+	for i := range p.records {
+		record := &p.records[i]
+		if !record.used || !recordedDispatchMatches(record.dispatch, dispatch) {
+			continue
+		}
+		// Failed completions can leave replay marking behind the recorded
+		// terminal placement, so an equivalent dispatch may be observed again
+		// without a second recorded completion envelope.
+		return 0, false, nil
+	}
 	if expected, ok := p.expectedForObservedDispatchLocked(dispatch); ok {
 		return 0, false, newDivergenceError(
 			DivergenceCategoryDispatchMismatch,
@@ -614,9 +624,37 @@ func dispatchMatches(recorded, observed work.WorkDispatch) bool {
 		return false
 	}
 	if len(recorded.InputTokens) > 0 && !tokenIDsMatch(workers.WorkDispatchInputTokens(recorded), workers.WorkDispatchInputTokens(observed)) {
-		return false
+		if !dispatchWorkIDsCoverRecordedInputs(recorded, observed) {
+			return false
+		}
 	}
 	return executionMetadataMatches(recorded.Execution, observed.Execution)
+}
+
+func dispatchWorkIDsCoverRecordedInputs(recorded, observed work.WorkDispatch) bool {
+	if len(recorded.Execution.WorkIDs) == 0 ||
+		!reflect.DeepEqual(recorded.Execution.WorkIDs, observed.Execution.WorkIDs) {
+		return false
+	}
+	recordedTokens := nonResourceTokens(workers.WorkDispatchInputTokens(recorded))
+	observedTokens := nonResourceTokens(workers.WorkDispatchInputTokens(observed))
+	if len(recordedTokens) == 0 || len(recordedTokens) != len(observedTokens) {
+		return false
+	}
+	for _, token := range recordedTokens {
+		identity := replayTokenIdentity(token)
+		found := false
+		for _, workID := range recorded.Execution.WorkIDs {
+			if identity == workID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 func tokenIDsMatch(recorded, observed []workerexecution.Token) bool {

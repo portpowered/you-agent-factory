@@ -1,8 +1,11 @@
 package replay
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +21,17 @@ const (
 	recordReplaySuccessWorkID   = "record-replay-success-work"
 	recordReplaySuccessTraceID  = "record-replay-success-trace"
 	recordReplaySuccessArtifact = "record-replay-success.replay.json"
+
+	recordReplayFailureWorkID   = "record-replay-failure-work"
+	recordReplayFailureTraceID  = "record-replay-failure-trace"
+	recordReplayFailureArtifact = "record-replay-failure.replay.json"
+
+	recordReplayTimeoutWorkID   = "record-replay-timeout-work"
+	recordReplayTimeoutTraceID  = "record-replay-timeout-trace"
+	recordReplayTimeoutArtifact = "record-replay-timeout.replay.json"
+
+	deterministicProviderFailureExit   = 7
+	deterministicProviderFailureStderr = "deterministic provider rejection"
 )
 
 type recordReplayPublicOutcome struct {
@@ -96,6 +110,137 @@ func TestRecordReplayReproducesSuccessfulPublicOutcome(t *testing.T) {
 		t.Fatalf("replay provider command runner calls = %d, want 0 without live worker dispatch", got)
 	}
 	replayServer.Stop(t)
+}
+
+// TestRecordReplayReproducesFailureAndLifecycleControls proves recorded failed or
+// lifecycle-controlled factory runs replay through the public CLI --replay
+// surface and reconstruct the same public terminal or partial outcomes — failed
+// Work placement, safe dispatch failure detail, and documented execution-timeout
+// lifecycle controls — without re-dispatching live workers or contacting model
+// providers.
+func TestRecordReplayReproducesFailureAndLifecycleControls(t *testing.T) {
+	t.Run("provider dispatch failure", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
+		artifactPath := filepath.Join(t.TempDir(), recordReplayFailureArtifact)
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "task",
+			WorkID:     recordReplayFailureWorkID,
+			TraceID:    recordReplayFailureTraceID,
+			Payload:    []byte(`{"title":"record replay provider dispatch failure"}`),
+		})
+
+		recordRunner := support.NewShapedProviderCommandRunner(
+			platformprocess.CommandResult{Stdout: []byte("step one COMPLETE")},
+			platformprocess.CommandResult{
+				ExitCode: deterministicProviderFailureExit,
+				Stderr:   []byte(deterministicProviderFailureStderr),
+			},
+		)
+		recordServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+			FactoryDir:                dir,
+			WaitForServiceModeRuntime: true,
+			Args:                      []string{"--record", artifactPath},
+			Edges: serviceedges.Edges{
+				ProviderCommandRunner: recordRunner,
+			},
+		})
+		live := observeRecordReplayPublicOutcome(t, recordServer, recordReplayFailureWorkID)
+		assertFailedRecordReplayPublicOutcome(t, live, recordReplayFailureWorkID)
+		assertFailedDispatchResponsePreserved(t, live.events, factoryapi.WorkFailureTypeUnknown)
+		if got := recordRunner.CallCount(); got != 2 {
+			t.Fatalf("record provider command runner calls = %d, want 2 live dispatches ending in failure", got)
+		}
+		recordServer.Stop(t)
+
+		recordedEvents := testutil.GeneratedFactoryEvents(t, testutil.LoadReplayArtifact(t, artifactPath).Events)
+		recordedArtifacts := factoryArtifactSummariesFromEvents(t, recordedEvents)
+
+		if err := os.RemoveAll(dir); err != nil {
+			t.Fatalf("remove original fixture dir: %v", err)
+		}
+
+		replayRunner := testutil.NewProviderCommandRunner(
+			platformprocess.CommandResult{Stdout: []byte("replay must not invoke providers")},
+		)
+		replayServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+			FactoryDir: t.TempDir(),
+			Args:       []string{"--replay", artifactPath, "--no-record"},
+			Edges: serviceedges.Edges{
+				ProviderCommandRunner: replayRunner,
+			},
+		})
+		replayed := observeRecordReplayPublicOutcome(t, replayServer, recordReplayFailureWorkID)
+		assertFailedRecordReplayPublicOutcome(t, replayed, recordReplayFailureWorkID)
+		assertFailedRecordReplayPublicOutcomesMatch(t, live, replayed)
+		assertFactoryArtifactSummariesMatch(t, recordedArtifacts, replayed.artifacts)
+		assertFailedDispatchResponsePreserved(t, replayed.events, factoryapi.WorkFailureTypeUnknown)
+		if got := replayRunner.CallCount(); got != 0 {
+			t.Fatalf("replay provider command runner calls = %d, want 0 without live worker dispatch", got)
+		}
+		replayServer.Stop(t)
+	})
+
+	t.Run("execution timeout lifecycle control", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
+		support.WriteWorkstationConfig(t, dir, "step-two", `---
+type: MODEL_WORKSTATION
+limits:
+  maxExecutionTime: 10ms
+---
+Do the work.
+`)
+		artifactPath := filepath.Join(t.TempDir(), recordReplayTimeoutArtifact)
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "task",
+			WorkID:     recordReplayTimeoutWorkID,
+			TraceID:    recordReplayTimeoutTraceID,
+			Payload:    []byte(`{"title":"record replay execution timeout lifecycle control"}`),
+		})
+
+		recordRunner := newTimeoutLifecycleProviderCommandRunner()
+		recordServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+			FactoryDir:                dir,
+			WaitForServiceModeRuntime: true,
+			Args:                      []string{"--record", artifactPath},
+			Edges: serviceedges.Edges{
+				ProviderCommandRunner: recordRunner,
+			},
+		})
+		live := observeRecordReplayPublicOutcome(t, recordServer, recordReplayTimeoutWorkID)
+		assertFailedRecordReplayPublicOutcome(t, live, recordReplayTimeoutWorkID)
+		assertExecutionTimeoutLifecycleControlPreserved(t, live.events)
+		if got := recordRunner.CallCount(); got < 2 {
+			t.Fatalf("record provider command runner calls = %d, want step-one success and timed-out step-two", got)
+		}
+		recordServer.Stop(t)
+
+		recordedEvents := testutil.GeneratedFactoryEvents(t, testutil.LoadReplayArtifact(t, artifactPath).Events)
+		recordedArtifacts := factoryArtifactSummariesFromEvents(t, recordedEvents)
+
+		if err := os.RemoveAll(dir); err != nil {
+			t.Fatalf("remove original fixture dir: %v", err)
+		}
+
+		replayRunner := testutil.NewProviderCommandRunner(
+			platformprocess.CommandResult{Stdout: []byte("replay must not invoke providers")},
+		)
+		replayServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+			FactoryDir: t.TempDir(),
+			Args:       []string{"--replay", artifactPath, "--no-record"},
+			Edges: serviceedges.Edges{
+				ProviderCommandRunner: replayRunner,
+			},
+		})
+		replayed := observeRecordReplayPublicOutcome(t, replayServer, recordReplayTimeoutWorkID)
+		assertFailedRecordReplayPublicOutcome(t, replayed, recordReplayTimeoutWorkID)
+		assertFailedRecordReplayPublicOutcomesMatch(t, live, replayed)
+		assertFactoryArtifactSummariesMatch(t, recordedArtifacts, replayed.artifacts)
+		assertExecutionTimeoutLifecycleControlPreserved(t, replayed.events)
+		if got := replayRunner.CallCount(); got != 0 {
+			t.Fatalf("replay provider command runner calls = %d, want 0 without live worker dispatch", got)
+		}
+		replayServer.Stop(t)
+	})
 }
 
 func observeRecordReplayPublicOutcome(
@@ -350,4 +495,226 @@ func workStateType(item factoryapi.Work) factoryapi.WorkStateType {
 		return ""
 	}
 	return item.State.Type
+}
+
+func assertFailedRecordReplayPublicOutcome(t *testing.T, outcome recordReplayPublicOutcome, workID string) {
+	t.Helper()
+
+	if outcome.status.Categories.Failed == 0 {
+		t.Fatalf("failed work count = %d, want at least one failed work token", outcome.status.Categories.Failed)
+	}
+	if outcome.status.Categories.Initial != 0 || outcome.status.Categories.Processing != 0 {
+		t.Fatalf(
+			"non-terminal work categories = initial:%d processing:%d, want both zero",
+			outcome.status.Categories.Initial,
+			outcome.status.Categories.Processing,
+		)
+	}
+	if got := support.CountWorkAtCustomerState(outcome.work, "task:failed"); got != 1 {
+		t.Fatalf("task:failed token count = %d, want 1", got)
+	}
+	if got := support.CountWorkAtCustomerState(outcome.work, "task:complete"); got != 0 {
+		t.Fatalf("task:complete token count = %d, want 0", got)
+	}
+	if stringPointerValue(outcome.workByID.WorkId) != workID {
+		t.Fatalf("work detail id = %q, want %q", stringPointerValue(outcome.workByID.WorkId), workID)
+	}
+	if workStateType(outcome.workByID) != factoryapi.WorkStateTypeFAILED {
+		t.Fatalf("work result state type = %s, want FAILED public terminal classification", workStateType(outcome.workByID))
+	}
+	if workStateName(outcome.workByID) != "failed" {
+		t.Fatalf("work result state = %q, want failed public placement", workStateName(outcome.workByID))
+	}
+	if len(outcome.events) == 0 {
+		t.Fatal("retained Factory Event history is empty")
+	}
+	assertFactoryEventsAscendingOrder(t, outcome.events)
+}
+
+func assertFailedRecordReplayPublicOutcomesMatch(t *testing.T, live, replayed recordReplayPublicOutcome) {
+	t.Helper()
+
+	assertRecordReplayPublicOutcomesMatch(t, live, replayed)
+	assertFailedDispatchResponsesMatch(t, live.events, replayed.events)
+}
+
+func assertFailedDispatchResponsePreserved(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	wantReason factoryapi.WorkFailureType,
+) {
+	t.Helper()
+
+	response := lastFailedDispatchResponse(t, events)
+	if response.Outcome != factoryapi.WorkOutcomeFailed {
+		t.Fatalf("dispatch outcome = %s, want FAILED", response.Outcome)
+	}
+	if response.Output != nil {
+		t.Fatalf("dispatch output = %#v, want no primary result on failed replay", response.Output)
+	}
+	if response.FailureDetail == nil {
+		t.Fatal("dispatch FailureDetail missing for failed replay observation")
+	}
+	if !failureReasonMatches(wantReason, response.FailureDetail.Reason) {
+		t.Fatalf(
+			"failure reason = %s, want %s safe failure classification",
+			response.FailureDetail.Reason,
+			wantReason,
+		)
+	}
+	if strings.TrimSpace(response.FailureDetail.Message) == "" {
+		t.Fatal("dispatch FailureDetail message is empty, want safe failure detail")
+	}
+}
+
+func assertFailedDispatchResponsesMatch(t *testing.T, live, replayed []factoryapi.FactoryEvent) {
+	t.Helper()
+
+	liveResponse := lastFailedDispatchResponse(t, live)
+	replayResponse := lastFailedDispatchResponse(t, replayed)
+	if liveResponse.Outcome != replayResponse.Outcome {
+		t.Fatalf("dispatch outcome = live:%s replay:%s, want matching failed public outcome", liveResponse.Outcome, replayResponse.Outcome)
+	}
+	if liveResponse.FailureDetail == nil || replayResponse.FailureDetail == nil {
+		t.Fatal("dispatch FailureDetail missing on live or replayed failed observation")
+	}
+	if strings.TrimSpace(liveResponse.FailureDetail.Message) == "" ||
+		strings.TrimSpace(replayResponse.FailureDetail.Message) == "" {
+		t.Fatal("dispatch FailureDetail message missing on live or replayed failed observation")
+	}
+	if failureReasonMatches(liveResponse.FailureDetail.Reason, replayResponse.FailureDetail.Reason) {
+		return
+	}
+	if liveResponse.Error == nil || replayResponse.Error == nil {
+		t.Fatal("dispatch error missing on live or replayed failed observation")
+	}
+	if !dispatchFailureErrorsMatch(liveResponse.Error, replayResponse.Error) {
+		t.Fatalf(
+			"failure reason = live:%s replay:%s error = live:%#v replay:%#v, want matching public failure classification",
+			liveResponse.FailureDetail.Reason,
+			replayResponse.FailureDetail.Reason,
+			liveResponse.Error,
+			replayResponse.Error,
+		)
+	}
+}
+
+func isTimeoutLifecycleFailureReason(reason factoryapi.WorkFailureType) bool {
+	return reason == factoryapi.WorkFailureTypeTimeout ||
+		reason == factoryapi.WorkFailureTypeInternalServerError
+}
+
+func isProviderDispatchFailureReason(reason factoryapi.WorkFailureType) bool {
+	return reason == factoryapi.WorkFailureTypeUnknown ||
+		reason == factoryapi.WorkFailureTypeInternalServerError
+}
+
+func failureReasonMatches(want, got factoryapi.WorkFailureType) bool {
+	if want == got {
+		return true
+	}
+	if isProviderDispatchFailureReason(want) && isProviderDispatchFailureReason(got) {
+		return true
+	}
+	if isTimeoutLifecycleFailureReason(want) && isTimeoutLifecycleFailureReason(got) {
+		return true
+	}
+	return false
+}
+
+func dispatchFailureErrorsMatch(live, replay *string) bool {
+	if live == nil || replay == nil {
+		return false
+	}
+	liveText := strings.ToLower(*live)
+	replayText := strings.ToLower(*replay)
+	if strings.HasPrefix(liveText, "provider error:") && strings.HasPrefix(replayText, "provider error:") {
+		return true
+	}
+	for _, fragment := range []string{"timeout", "deadline exceeded", "execution timeout"} {
+		if strings.Contains(liveText, fragment) && strings.Contains(replayText, fragment) {
+			return true
+		}
+	}
+	return liveText == replayText
+}
+
+func assertExecutionTimeoutLifecycleControlPreserved(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
+
+	response := lastFailedDispatchResponse(t, events)
+	if response.Outcome != factoryapi.WorkOutcomeFailed {
+		t.Fatalf("dispatch outcome = %s, want FAILED timeout lifecycle control", response.Outcome)
+	}
+	if response.FailureDetail == nil {
+		t.Fatal("dispatch FailureDetail missing for timeout lifecycle control")
+	}
+	if response.FailureDetail.Reason != factoryapi.WorkFailureTypeTimeout &&
+		response.FailureDetail.Reason != factoryapi.WorkFailureTypeInternalServerError {
+		t.Fatalf(
+			"failure reason = %s, want TIMEOUT or documented timeout-adjacent lifecycle classification",
+			response.FailureDetail.Reason,
+		)
+	}
+	if response.Error == nil {
+		t.Fatal("dispatch error missing for timeout lifecycle control")
+	}
+	if !strings.Contains(*response.Error, "timeout") &&
+		!strings.Contains(*response.Error, "deadline exceeded") {
+		t.Fatalf(
+			"dispatch error = %q, want timeout lifecycle detail",
+			*response.Error,
+		)
+	}
+}
+
+func lastFailedDispatchResponse(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.DispatchResponseEventPayload {
+	t.Helper()
+
+	dispatches := support.ObserveDispatchEvents(t, events)
+	for index := len(dispatches) - 1; index >= 0; index-- {
+		response := dispatches[index].Response
+		if response != nil && response.Outcome == factoryapi.WorkOutcomeFailed {
+			return *response
+		}
+	}
+	t.Fatal("factory events missing failed dispatch response")
+	return factoryapi.DispatchResponseEventPayload{}
+}
+
+type timeoutLifecycleProviderCommandRunner struct {
+	mu        sync.Mutex
+	callCount int
+	success   *support.ShapedProviderCommandRunner
+}
+
+func newTimeoutLifecycleProviderCommandRunner() *timeoutLifecycleProviderCommandRunner {
+	return &timeoutLifecycleProviderCommandRunner{
+		success: support.NewShapedProviderCommandRunner(
+			platformprocess.CommandResult{Stdout: []byte("step one COMPLETE")},
+		),
+	}
+}
+
+func (r *timeoutLifecycleProviderCommandRunner) Run(
+	ctx context.Context,
+	req platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	r.mu.Lock()
+	r.callCount++
+	call := r.callCount
+	r.mu.Unlock()
+
+	if call == 1 {
+		return r.success.Run(ctx, req)
+	}
+
+	<-ctx.Done()
+	return platformprocess.CommandResult{}, ctx.Err()
+}
+
+func (r *timeoutLifecycleProviderCommandRunner) CallCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.callCount
 }
