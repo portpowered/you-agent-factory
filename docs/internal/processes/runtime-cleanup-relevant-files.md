@@ -848,7 +848,10 @@ loading/loadedsource/runtimeconfig packages, and `wire/wire.go` constructs from
 injected ports without selecting Runtime/Petri implementations or sibling
 catalog/authoring_layout/validation/snapshots_portability/distribution leases.
 Compilation-owned loading/loadedsource/runtimeconfig implementation lives under
-`internal/services/compilation/{loading,loadedsource,runtimeconfig}`; public
+`internal/services/compilation/{loading,loadedsource,runtimeconfig}`; runtime
+load/merge characterization coverage lives under
+`internal/services/compilation/runtimetests` (not public `loading/runtimetests`);
+public
 `loading/`, `loadedsource/`, and `runtimeconfig/` remain transitional re-exports
 for `pkg/wire` and in-owner callers until peer imports retire in later stories.
 Factory Definitions `wire/wire.go` composes the lifecycle host through

@@ -4,13 +4,13 @@ import (
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/loadedsource"
+	compilationloadedsource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource"
 )
 
 // LoadedFactoryConfig preserves the concrete nil-receiver coverage in this
 // implementation-owned suite. Production consumers use the root
 // MutableLoadedFactorySource contract.
-type LoadedFactoryConfig = loadedsource.Source
+type LoadedFactoryConfig = compilationloadedsource.Source
 
 type InlineRuntimeDefinitionOptions struct {
 	RequireSplitDefinitions bool
@@ -22,7 +22,7 @@ func NewLoadedFactoryConfig(
 	factoryConfig *factorydefinitions.FactoryConfig,
 	runtimeDefinitions factorydefinitions.RuntimeDefinitionLookup,
 ) (*LoadedFactoryConfig, error) {
-	source, err := loadedsource.New(
+	source, err := compilationloadedsource.New(
 		factoryDir,
 		factoryConfig,
 		runtimeDefinitions,
@@ -80,10 +80,10 @@ func concreteLoadedSource(
 	if err != nil {
 		return nil, err
 	}
-	loaded, ok := source.(*loadedsource.Source)
+	loaded, ok := source.(*compilationloadedsource.Source)
 	if !ok {
 		return nil, fmt.Errorf(
-			"Factory Definitions composition returned %T, want *loadedsource.Source",
+			"Factory Definitions composition returned %T, want *compilationloadedsource.Source",
 			source,
 		)
 	}
