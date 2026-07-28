@@ -3,7 +3,6 @@ package runtimeopening
 import (
 	"errors"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -13,14 +12,17 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	operatorconfig 	"github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/internal/testpath"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
 func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
-	path := filepath.Join(
-		"..", "..", "..", "recordings", "artifacts", "testdata", "valid-v2.json",
+	path := testpath.MustRepoPathFromCaller(
+		t,
+		0,
+		"pkg", "services", "recordings", "internal", "services", "artifacts_export", "artifacts", "testdata", "valid-v2.json",
 	)
 	rootDir := t.TempDir()
 	var loggerSessionID string
