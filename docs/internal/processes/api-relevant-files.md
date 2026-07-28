@@ -362,7 +362,11 @@ Use this map when changing the public REST contract.
   baseline rows for the deleted transitional `service/` package; DEL-PSES story
   004 (`pss-del-pses-004`) lowers unit and functional coverage minimum rows for
   the same deleted package. Proofs live in
-  `pkg/services/provider_sessions/del_pses_baseline_gate_test.go`. Fold behavioral
+  `pkg/services/provider_sessions/del_pses_baseline_gate_test.go`. DEL-PSES story
+  005 (`pss-del-pses-005`) proves root shape, structure/ownership debt reduction,
+  and repository structure verification; proofs live in
+  `pkg/services/provider_sessions/packaged_root_shape_test.go` and
+  `pkg/services/provider_sessions/del_pses_proof_gate_test.go`. Fold behavioral
   proofs live in sibling boundary tests under `pkg/services/provider_sessions/`.
 - Provider Session HTTP decoding, generated-contract mapping, service
   invocation, typed root error mapping (`error_mapping.go`), cancel/timeout edge
