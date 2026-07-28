@@ -92,6 +92,59 @@ func TestCLISubmitBatchSuccessHumanAndJSONShapes(t *testing.T) {
 	functionalevidence.Covers(t, "cli/you.submit.batch")
 }
 
+// TestCLISubmitBatchInvalidJSONFailsBeforeUpsert proves malformed batch JSON
+// fails from public you submit batch before any Factory Session Work upsert so
+// bad payloads never partially mutate Work state.
+func TestCLISubmitBatchInvalidJSONFailsBeforeUpsert(t *testing.T) {
+	serverURL, requests := newInstrumentedSubmitBatchServer(t)
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{})
+	process := buildBatchContractProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	})
+
+	stdout, stderr, err := executeSubmitBatchCLIExpectError(t, process, []string{
+		"you", "--server", serverURL,
+		"submit", "batch", invalidInlineBatchJSON(),
+	})
+	if err == nil {
+		t.Fatalf(
+			"Process.Execute(invalid batch JSON) succeeded; stdout:\n%s\nstderr:\n%s",
+			stdout,
+			stderr,
+		)
+	}
+
+	diagnostic := err.Error() + "\n" + stderr
+	for _, marker := range []string{
+		"parse inline JSON",
+		"invalid character",
+	} {
+		if !strings.Contains(diagnostic, marker) {
+			t.Fatalf("invalid batch JSON diagnostic missing %q:\n%s", marker, diagnostic)
+		}
+	}
+
+	combined := stdout + stderr
+	for _, marker := range []string{
+		"requestId:",
+		"traceId:",
+		"work count:",
+	} {
+		if strings.Contains(combined, marker) {
+			t.Fatalf(
+				"invalid batch JSON output must not contain success marker %q:\nstdout:\n%s\nstderr:\n%s",
+				marker,
+				stdout,
+				stderr,
+			)
+		}
+	}
+
+	if requests.Load() != 0 {
+		t.Fatalf("submit batch invalid JSON sent %d HTTP requests, want 0", requests.Load())
+	}
+}
+
 // TestCLISubmitBatchContractHarnessExecutesThroughRootBuildProcess proves the
 // Work-owned batch_contract cell constructs a customer process through
 // root.BuildProcess, invokes public you submit batch through Process.Execute,

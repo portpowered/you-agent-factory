@@ -102,6 +102,10 @@ func successJSONInlineBatchJSON() string {
 	)
 }
 
+func invalidInlineBatchJSON() string {
+	return `{not-json`
+}
+
 func successSubmitBatchFactoryConfig() map[string]any {
 	return map[string]any{
 		"name": "work-cli-submit-batch-contract-success",
