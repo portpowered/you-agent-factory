@@ -9,7 +9,6 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	resolution "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
@@ -60,7 +59,7 @@ func TestDefaultResolutionServicePropagatesProvidersRootErrors(t *testing.T) {
 
 	previousProviders := constructProvidersRoot
 	t.Cleanup(func() { constructProvidersRoot = previousProviders })
-	constructProvidersRoot = func(...providerswire.Option) (providers.Service, error) {
+	constructProvidersRoot = func() (providers.Service, error) {
 		return nil, errors.New("providers root failed")
 	}
 
