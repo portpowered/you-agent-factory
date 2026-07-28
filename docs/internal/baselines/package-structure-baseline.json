@@ -999,16 +999,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/config_driven_execution_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/doc.go",
       "target": "smoke"
     },
@@ -1040,11 +1030,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/service_pipeline_config_helpers_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/stateless_loaded_config_smoke_long_test.go",
       "target": "smoke"
     },
     {
@@ -2435,7 +2420,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/edges",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
@@ -2540,17 +2525,17 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/agents",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/inference",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/testing",
-      "target": "\u003cnone\u003e"
+      "target": "<none>"
     },
     {
       "rule": "service-root-missing-internal",

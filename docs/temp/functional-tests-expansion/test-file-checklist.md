@@ -624,6 +624,30 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     explicit `--session` targeting through public CLI contracts.
   - `TestCLISubmitUnaryStructuredFailurePreservesPublicMessage` verifies typed
     failure preservation against a controlled public HTTP edge.
+  - `TestCLISubmitUnaryContractHarnessExecutesThroughRootBuildProcess` verifies
+    the Work-owned CLI unary contract cell uses root.BuildProcess + edges.Edges.
+
+- [x] `tests/functional/work/peer_import_boundary_test.go`
+  - `TestFunctionalWorkPackageUsesPublicProcessImportsOnly`.
+  - `TestWorkProductionPeersReachWorkThroughPublishedSurfacesOnly`.
+
+- [x] `tests/functional/work/root_composition/build_process_inert_test.go`
+  - `TestWorkEffectsRemainInertThroughRootBuildProcessConstruction`.
+
+- [x] `tests/functional/work/root_composition/packaged_root_shape_test.go`
+  - `TestWorkPackagedRootShapeMatchesCanonicalServiceLayout`.
+
+- [x] `tests/functional/work/root_composition/recovery_recordings_visualization_activation_test.go`
+  - `TestWorkRecordingsReadActivatesThroughRootBuildProcessAfterLifecycle`.
+  - `TestWorkRecoveryActivatesThroughRootBuildProcessAfterLifecycle`.
+  - `TestWorkVisualizationActivatesThroughRootBuildProcessAfterLifecycle`.
+
+- [x] `tests/functional/work/root_composition/routing_relationship_activation_test.go`
+  - `TestWorkRelationshipsActivateThroughRootBuildProcessAfterLifecycle`.
+  - `TestWorkRoutingActivatesThroughRootBuildProcessAfterLifecycle`.
+
+- [x] `tests/functional/work/root_composition/submission_activation_test.go`
+  - `TestWorkSubmissionAndCLISubmitActivateThroughRootBuildProcessAfterLifecycle`.
 
 - [x] `tests/functional/work/recordings/recordings_read_test.go`
   - `TestRecordingsBackedWorkReadsUseRecordingsRootContract`.
@@ -766,6 +790,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestFactoryInitFailureRoutingProducesFailedWork`.
 
 - [x] `tests/functional/factory/definitions/validation_test.go`
+  - `TestFactoryValidationAcceptsMultiWorkTypeExecutableTopology`.
   - `TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute`.
   - `TestFactoryValidationReportsAllActionableDefinitionErrors`.
   - `TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions`.
@@ -775,7 +800,11 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/factory/definitions/defaults_test.go`
   - `TestGlobalConfigSuppliesDefaultProviderAndModel`.
   - `TestExplicitFactoryConfigOverridesGlobalDefaults`.
+  - `TestOperatorGlobalDefaultsAndWorkerPresetResolveAtProviderEdge`.
   - `TestSingleDiscoveredProviderIsUsedWhenNoDefaultExists`.
+
+- [x] `tests/functional/factory/definitions/defaults_loaded_config_long_test.go`
+  - `TestLoadedFactoryConfigDrivesProviderEdgePromptAndStopToken`.
 
 - [x] `tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go`
   - `TestCLIFactoryNamedCreateListUpdateDelete` verifies create, list, update, and

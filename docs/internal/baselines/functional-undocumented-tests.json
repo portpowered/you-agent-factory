@@ -863,38 +863,6 @@
       "name": "TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree"
     },
     {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_EmptyInputRejectedWithStableCode"
-    },
-    {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_NamedFactoryCLIAndAPIShareSuccessOutcome"
-    },
-    {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_PositionalCLIAndAPIShareSuccessOutcome"
-    },
-    {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_SourceConflictRejectedBeforeInvocation"
-    },
-    {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_StdinCLIAndAPITextShareSuccessOutcome"
-    },
-    {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_UnresolvedPrimaryResultReportsStableFailure"
-    },
-    {
-      "file": "smoke/config_driven_execution_test.go",
-      "name": "TestConfigDrivenExecution_AddWorkType"
-    },
-    {
-      "file": "smoke/config_driven_execution_test.go",
-      "name": "TestConfigDrivenExecution_GlobalConfigDrivesDefaultsAndWorkerPreset"
-    },
-    {
       "file": "smoke/guarded_loop_breaker_long_test.go",
       "name": "TestIntegrationSmoke_GuardedLoopBreakerRoutesOverLimitExampleWorkToFailed"
     },
@@ -925,10 +893,6 @@
     {
       "file": "smoke/service_lifecycle_smoke_long_test.go",
       "name": "TestServiceLifecycle_WorkFileSubmissionCompletesTwoStagePipeline"
-    },
-    {
-      "file": "smoke/stateless_loaded_config_smoke_long_test.go",
-      "name": "TestStatelessExecutionSmoke_LoadedConfigDrivesExecution"
     },
     {
       "file": "work/recordings/recordings_read_test.go",
