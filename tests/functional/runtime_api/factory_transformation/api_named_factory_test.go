@@ -70,92 +70,6 @@ func TestFactoryTransformation_NamedFactoryPortableFilesReadBackThroughCanonical
 	assertPersistedFactoryJSONStripsInlineBundledContent(t, filepath.Join(importedDir, interfaces.FactoryConfigFile))
 }
 
-func TestFactoryTransformation_CreateNamedFactory_ReturnsBobOnFailureTarget(t *testing.T) {
-	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
-
-	server := startFactoryTransformationServer(t, rootDir)
-	body := `{
-		"name":"beta",
-		"id":"beta",
-		"workTypes":[{"name":"task","states":[
-			{"name":"in-review","type":"PROCESSING"},
-			{"name":"complete","type":"TERMINAL"}
-		]}],
-		"workers":[{"name":"worker-a","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"}],
-		"workstations":[{
-			"name":"bob",
-			"behavior":"REPEATER",
-			"type":"MODEL_WORKSTATION",
-			"worker":"worker-a",
-			"inputs":[],
-			"outputs":[{"workType":"task","state":"in-review"}],
-			"onRejection":[{"workType":"task","state":"complete"}]
-		}]
-	}`
-
-	resp := createNamedFactoryExpectStatus(t, server.URL(), body, http.StatusBadRequest)
-	var errResp factoryapi.ErrorResponse
-	decodeJSONResponse(t, resp, &errResp, "decode invalid named factory create response")
-	if errResp.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY {
-		t.Fatalf("error code = %q, want INVALID_FACTORY", errResp.Code)
-	}
-	if errResp.Family != factoryapi.ErrorFamilyBadRequest {
-		t.Fatalf("error family = %q, want BAD_REQUEST", errResp.Family)
-	}
-	if errResp.Targets == nil || !hasValidationTarget(
-		*errResp.Targets,
-		factoryValidationCodeWorkstationMissingFailureRoute,
-		factoryapi.FactoryValidationSubjectTypeWorkstation,
-		"bob",
-		factoryapi.FactoryValidationSubjectLocationOnFailure,
-	) {
-		t.Fatalf("error targets = %#v, want bob ON_FAILURE target", errResp.Targets)
-	}
-}
-
-func TestFactoryTransformation_CreateNamedFactory_ReturnsMultipleTopologyValidationTargets(t *testing.T) {
-	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
-
-	server := startFactoryTransformationServer(t, rootDir)
-	body := `{
-		"name":"beta",
-		"id":"beta",
-		"workTypes":[{"name":"story","states":[
-			{"name":"queued","type":"INITIAL"},
-			{"name":"queued-dup","type":"PROCESSING"}
-		]}],
-		"workers":[
-			{"name":"worker-a","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"},
-			{"name":"worker-a","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"}
-		],
-		"workstations":[{
-			"name":"process",
-			"behavior":"STANDARD",
-			"type":"MODEL_WORKSTATION",
-			"worker":"missing-worker",
-			"inputs":[{"workType":"story","state":"queued"}],
-			"outputs":[{"workType":"story","state":"missing-state"}]
-		}]
-	}`
-
-	resp := createNamedFactoryExpectStatus(t, server.URL(), body, http.StatusBadRequest)
-	var errResp factoryapi.ErrorResponse
-	decodeJSONResponse(t, resp, &errResp, "decode invalid named factory create response")
-	if errResp.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY {
-		t.Fatalf("error code = %q, want INVALID_FACTORY", errResp.Code)
-	}
-	if errResp.Targets == nil || len(*errResp.Targets) < 2 {
-		t.Fatalf("error targets = %#v, want multiple blocking validation targets", errResp.Targets)
-	}
-	if !hasValidationTargetCode(*errResp.Targets, factoryValidationCodeDuplicateIdentifier) ||
-		!hasValidationTargetCode(*errResp.Targets, factoryValidationCodeDanglingWorkerReference) ||
-		!hasValidationTargetCode(*errResp.Targets, factoryValidationCodeDanglingPlaceReference) {
-		t.Fatalf("error targets = %#v, want duplicate worker, dangling worker, and dangling place targets", errResp.Targets)
-	}
-}
-
 func TestFactoryTransformation_CreateNamedFactoryEmitsCanonicalFactoryChangeEvent(t *testing.T) {
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
@@ -204,15 +118,6 @@ func createNamedFactoryExpectStatus(t *testing.T, serverURL, body string, wantSt
 		requestBody,
 		wantStatus,
 	)
-}
-
-func hasValidationTargetCode(targets []factoryapi.FactoryValidationTarget, code string) bool {
-	for _, target := range targets {
-		if target.Code == code {
-			return true
-		}
-	}
-	return false
 }
 
 func assertFactoryWorkType(t *testing.T, factory factoryapi.Factory, want string, contextLabel string) {

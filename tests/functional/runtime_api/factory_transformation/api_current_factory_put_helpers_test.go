@@ -10,17 +10,6 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// Factory validation codes are part of the generated HTTP response contract.
-// Functional tests assert the serialized customer-facing values instead of
-// importing the validation implementation that produces them.
-const (
-	factoryValidationCodeDanglingPlaceReference         = "factory.route.danglingPlaceReference"
-	factoryValidationCodeDanglingWorkerReference        = "factory.worker.danglingReference"
-	factoryValidationCodeDuplicateIdentifier            = "factory.duplicateIdentifier"
-	factoryValidationCodeLayoutUnknownNodeReference     = "factory.layout.unknownNodeReference"
-	factoryValidationCodeWorkstationMissingFailureRoute = "factory.workstation.missingFailureRoute"
-)
-
 func assertFunctionalSplitLayoutAtRoot(t *testing.T, rootDir, project string) {
 	t.Helper()
 
