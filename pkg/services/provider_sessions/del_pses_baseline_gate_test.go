@@ -9,11 +9,14 @@ import (
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
-const deletedProviderSessionsServicePackagePath = "pkg/services/provider_sessions/service"
+const (
+	deletedProviderSessionsServicePackagePath      = "pkg/services/provider_sessions/service"
+	deletedProviderSessionsServiceImportPath       = "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service"
+)
 
-// DEL-PSES story 003 lowers structure, ownership, and package-target baselines
-// for the deleted transitional service/ package. Each subtest proves one ledger
-// no longer lists the deleted path as retain or move debt.
+// DEL-PSES stories 003 and 004 lower structure, ownership, package-target, and
+// coverage baselines for the deleted transitional service/ package. Each subtest
+// proves one ledger no longer lists the deleted path as retain or move debt.
 
 func TestDelPsesBaselineGate_DeletedTransitionalServiceBaselinesRemoved(t *testing.T) {
 	t.Parallel()
@@ -83,4 +86,37 @@ func TestDelPsesBaselineGate_DeletedTransitionalServiceBaselinesRemoved(t *testi
 			}
 		}
 	})
+
+	t.Run("unit_coverage_minimums_omit_deleted_service_package", func(t *testing.T) {
+		t.Parallel()
+		assertCoverageMinimumsOmitDeletedServicePackage(t, root, "go-unit-coverage-package-minimums.json")
+	})
+
+	t.Run("functional_coverage_minimums_omit_deleted_service_package", func(t *testing.T) {
+		t.Parallel()
+		assertCoverageMinimumsOmitDeletedServicePackage(t, root, "go-functional-coverage-package-minimums.json")
+	})
+}
+
+func assertCoverageMinimumsOmitDeletedServicePackage(t *testing.T, root, fileName string) {
+	t.Helper()
+
+	path := filepath.Join(root, "docs", "internal", "baselines", fileName)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", path, err)
+	}
+	var baseline struct {
+		Packages []struct {
+			Package string `json:"package"`
+		} `json:"packages"`
+	}
+	if err := json.Unmarshal(payload, &baseline); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	for _, row := range baseline.Packages {
+		if row.Package == deletedProviderSessionsServiceImportPath {
+			t.Fatalf("%s still lists deleted transitional package %q", fileName, deletedProviderSessionsServiceImportPath)
+		}
+	}
 }

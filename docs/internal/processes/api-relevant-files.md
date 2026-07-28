@@ -359,7 +359,9 @@ Use this map when changing the public REST contract.
   emptied transitional `service/` compile shim and clears imports; proofs live in
   `pkg/services/provider_sessions/del_pses_deletion_gate_test.go`. DEL-PSES story
   003 (`pss-del-pses-003`) lowers structure, ownership, and package-target
-  baseline rows for the deleted transitional `service/` package; proofs live in
+  baseline rows for the deleted transitional `service/` package; DEL-PSES story
+  004 (`pss-del-pses-004`) lowers unit and functional coverage minimum rows for
+  the same deleted package. Proofs live in
   `pkg/services/provider_sessions/del_pses_baseline_gate_test.go`. Fold behavioral
   proofs live in sibling boundary tests under `pkg/services/provider_sessions/`.
 - Provider Session HTTP decoding, generated-contract mapping, service
