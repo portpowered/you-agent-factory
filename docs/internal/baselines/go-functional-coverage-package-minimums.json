@@ -1623,6 +1623,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct",
+      "minimum": 50.90
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service",
       "exception": {
         "kind": "measurement",
