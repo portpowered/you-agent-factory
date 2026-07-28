@@ -23,6 +23,11 @@ const (
 	serviceImportPrefix = "github.com/portpowered/infinite-you/pkg/services/"
 )
 
+var workSubmissionScenarioPaths = []string{
+	"tests/functional/work/submission/batch_inputs_test.go",
+	"tests/functional/work/submission/http_test.go",
+}
+
 var forbiddenRequestBatchImports = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/",
 	"github.com/portpowered/infinite-you/pkg/service",
@@ -132,6 +137,14 @@ func run(args []string, stderr io.Writer) error {
 	}
 	if err := checkSource(cfg.root, cfg.path); err != nil {
 		return err
+	}
+	for _, path := range workSubmissionScenarioPaths {
+		if path == cfg.path {
+			continue
+		}
+		if err := checkSource(cfg.root, path); err != nil {
+			return err
+		}
 	}
 	if err := checkAggregateProviderTests(cfg.root); err != nil {
 		return err

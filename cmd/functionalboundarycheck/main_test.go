@@ -67,9 +67,12 @@ func TestCheckSourceRejectsNonFunctionalTestPath(t *testing.T) {
 }
 
 func TestCheckSourceChecksMigratedScenarioWithoutLegacyQuarantine(t *testing.T) {
-	path := filepath.Join("..", "..", filepath.FromSlash(defaultScenarioPath))
-	if err := checkSource(filepath.Join("..", ".."), path); err != nil {
-		t.Fatalf("checkSource(%q) error = %v", defaultScenarioPath, err)
+	repoRoot := filepath.Join("..", "..")
+	for _, scenarioPath := range append([]string{defaultScenarioPath}, workSubmissionScenarioPaths...) {
+		path := filepath.Join(repoRoot, filepath.FromSlash(scenarioPath))
+		if err := checkSource(repoRoot, path); err != nil {
+			t.Fatalf("checkSource(%q) error = %v", scenarioPath, err)
+		}
 	}
 }
 
