@@ -883,88 +883,12 @@
       "name": "TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures"
     },
     {
-      "file": "workflow/code_review_loop_long_test.go",
-      "name": "TestCodeReviewLoop"
-    },
-    {
       "file": "workflow/config_driven_retry_loop_breaker_test.go",
       "name": "TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit"
     },
     {
       "file": "workflow/config_driven_retry_loop_breaker_test.go",
       "name": "TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries"
-    },
-    {
-      "file": "workflow/conflict_resolution_test.go",
-      "name": "TestConflictResolution_ResolverFails"
-    },
-    {
-      "file": "workflow/conflict_resolution_test.go",
-      "name": "TestConflictResolution_ReviewApproveFirstTry"
-    },
-    {
-      "file": "workflow/conflict_resolution_test.go",
-      "name": "TestConflictResolution_ReviewFailResolveReReview"
-    },
-    {
-      "file": "workflow/logical_move_long_test.go",
-      "name": "TestLogicalMove_PreservesTokenColor"
-    },
-    {
-      "file": "workflow/logical_move_long_test.go",
-      "name": "TestLogicalMove_Success"
-    },
-    {
-      "file": "workflow/multi_output_color_propagation_long_test.go",
-      "name": "TestMultiOutputColorPropagation"
-    },
-    {
-      "file": "workflow/multi_output_color_propagation_long_test.go",
-      "name": "TestMultiOutputColorPropagation_NameAvailableDownstream"
-    },
-    {
-      "file": "workflow/multi_output_color_propagation_test.go",
-      "name": "TestDocReviewerExamplePNGFanoutPreservesSharedNameDownstream"
-    },
-    {
-      "file": "workflow/multi_output_color_propagation_test.go",
-      "name": "TestMultiOutputReviewerFanoutPreservesSharedNameDownstream"
-    },
-    {
-      "file": "workflow/multi_output_color_propagation_test.go",
-      "name": "TestNtoN_TypeMatching"
-    },
-    {
-      "file": "workflow/name_propagation_long_test.go",
-      "name": "TestNamePropagation_InPromptTemplate"
-    },
-    {
-      "file": "workflow/name_propagation_long_test.go",
-      "name": "TestNamePropagation_MarkdownFile"
-    },
-    {
-      "file": "workflow/rejection_path_test.go",
-      "name": "TestRejectionPath_NoRejectionArcsFailsToken"
-    },
-    {
-      "file": "workflow/rejection_path_test.go",
-      "name": "TestRejectionPath_NoRejectionArcsFailureRecordSet"
-    },
-    {
-      "file": "workflow/rejection_path_test.go",
-      "name": "TestRejectionPath_NoRejectionArcsReleasesResources"
-    },
-    {
-      "file": "workflow/rejection_path_test.go",
-      "name": "TestRejectionPath_WithRejectionArcsRoutesViaArcs"
-    },
-    {
-      "file": "workflow/repeater_parameterized_test.go",
-      "name": "TestParameterizedFields_UnresolvedTemplateRoutesToFailure"
-    },
-    {
-      "file": "workflow/repeater_parameterized_test.go",
-      "name": "TestParameterizedFields_WorkingDirectoryResolvesFromTags"
     },
     {
       "file": "workflow/review_retry_exhaustion_long_test.go",

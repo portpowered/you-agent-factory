@@ -608,6 +608,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly`.
 
 - [x] `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
+- [x] `tests/functional/work/transports/cli/submit/unary_contract/unary_contract_test.go`
   - `TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation` verifies dry-run
     summary without Work upsert.
   - `TestCLISubmitBatchSuccessHumanAndJSONShapes` verifies human and JSON success
@@ -666,6 +667,28 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/work/submission/stage_and_submit_test.go`
   - `TestAPIStageAndSubmitFileCreatesExpectedWork`.
 
+- [x] `tests/functional/work/peer_import_boundary_test.go`
+  - `TestFunctionalWorkPackageUsesPublicProcessImportsOnly`.
+  - `TestWorkProductionPeersReachWorkThroughPublishedSurfacesOnly`.
+
+- [x] `tests/functional/work/root_composition/build_process_inert_test.go`
+  - `TestWorkEffectsRemainInertThroughRootBuildProcessConstruction`.
+
+- [x] `tests/functional/work/root_composition/packaged_root_shape_test.go`
+  - `TestWorkPackagedRootShapeMatchesCanonicalServiceLayout`.
+
+- [x] `tests/functional/work/root_composition/recovery_recordings_visualization_activation_test.go`
+  - `TestWorkRecoveryActivatesThroughRootBuildProcessAfterLifecycle`.
+  - `TestWorkRecordingsReadActivatesThroughRootBuildProcessAfterLifecycle`.
+  - `TestWorkVisualizationActivatesThroughRootBuildProcessAfterLifecycle`.
+
+- [x] `tests/functional/work/root_composition/routing_relationship_activation_test.go`
+  - `TestWorkRoutingActivatesThroughRootBuildProcessAfterLifecycle`.
+  - `TestWorkRelationshipsActivateThroughRootBuildProcessAfterLifecycle`.
+
+- [x] `tests/functional/work/root_composition/submission_activation_test.go`
+  - `TestWorkSubmissionAndCLISubmitActivateThroughRootBuildProcessAfterLifecycle`.
+
 - [x] `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
   - `TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation`.
   - `TestCLISubmitBatchSuccessHumanAndJSONShapes`.
@@ -687,6 +710,16 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/work/relationships/parent_child_test.go`
   - `TestParentChildLineageSurvivesDispatchAndReplay`.
   - `TestChildFailureProjectsToDocumentedParentView`.
+  - `TestDispatchPreservesSubmittedWorkPayloadTagsAndType`.
+  - `TestRejectionFeedbackSurfacesOnExecutorRetry`.
+  - `TestParentAndDependsOnLineageSurviveOnChildDispatch`.
+
+- [x] `tests/functional/work/relationships/multi_output_propagation_test.go`
+  - `TestMultiOutputFanoutPreservesSourceNameOnDownstreamWork`.
+  - `TestMultiOutputNameAvailableOnDownstreamTask`.
+  - `TestReviewerFanoutPreservesSharedNameDownstream`.
+  - `TestDocReviewerPNGFanoutPreservesSharedNameDownstream`.
+  - `TestNtoNTypeMatchingCompletesEveryAuthoredBranch`.
 
 - [x] `tests/functional/work/routing/logical_move_test.go`
   - `TestLogicalMoveCompletesWithoutWorkerDispatch`.
@@ -697,6 +730,10 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestClassifierRoutesEveryKnownDecision`.
   - `TestClassifierUnknownAndMalformedDecisionFailDistinctly`.
   - `TestClassifierMultiOutputPreservesPayload`.
+  - `TestClassifierReworkFailureTerminatesWithoutCompletion`.
+  - `TestClassifierRejectionWithoutArcsRoutesToFailedTerminal`.
+  - `TestClassifierRejectionWithoutArcsRecordsDispatchFeedback`.
+  - `TestClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork`.
 
 - [x] `tests/functional/work/recovery/manual_move_test.go`
   - `TestFailedCascadeCanBeRecoveredByPublicWorkMove`.
@@ -858,6 +895,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLISubmitUnaryFileAndStdinReachWork`.
   - `TestCLISubmitUnaryDefaultAndExplicitSessionTargeting`.
   - `TestCLISubmitUnaryStructuredFailurePreservesPublicMessage`.
+  - `TestCLISubmitUnaryContractHarnessExecutesThroughRootBuildProcess`.
 
 - [x] `tests/functional/workers/transports/cli/run/help/invocation_help_test.go`
   - `TestCLIRunHelpShowsInvocationSignatureForNamedFactory`.
@@ -972,6 +1010,10 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedReviewRejectionCarriesFeedback` covers retry context.
   - `TestPackagedReviewRetryExhaustionFails` covers bounded failure.
 
+- [x] `tests/functional/factory/packaged/review/invocation_long_test.go`
+  - `TestCodeReviewLoop` covers reject-then-accept review loop with dispatch
+    input propagation and bounded retry counts.
+
 - [x] `tests/functional/factory/packaged/subagent/invocation_test.go`
   - `TestPackagedSubagentReturnsChildResult` covers basic dispatch.
   - `TestPackagedSubagentStreamsChildResponseEvents` covers observation.
@@ -1015,6 +1057,9 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPICurrentFactoriesRemainSessionScoped`.
   - Current Factory docs/save/version/session scenarios migrated from
     `runtime_api-delete-06-factory-current`.
+  - `TestProcessFactoryConfigVersionChangesObservableRouting`.
+  - `TestProcessRejectionLoopCompletesAfterRetry`.
+  - `TestProcessIndependentFactoryRootsRemainIsolated`.
 
 - [x] `tests/functional/factory/current/read_save_layout_test.go`
   - Portable layout accept/reject/preserve/prune and waypoint/size variants
@@ -1036,6 +1081,10 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIPromptTemplateContractAndValidationRoundTrip`.
   - `TestAPIInvalidPromptTemplateNamesMissingVariables`.
   - `TestAPITemplateValidationDoesNotMutateCurrentFactory`.
+  - `TestProcessWorkNameMapsIntoPromptTemplate`.
+  - `TestProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate`.
+  - `TestProcessSubmissionTagsReachDispatchInputTokens`.
+  - `TestProcessParameterizedTemplateFailureRoutesWorkToFailed`.
 
 ## Wave 2 — provider sessions
 
