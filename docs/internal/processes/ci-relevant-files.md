@@ -611,6 +611,11 @@ Wave 0 functional-tests-expansion planning authority lives under
   `nestedOwnerMoveRules` (Recordings, Factory Definitions, Factory Runtime,
   Workers, Work, and Operator Settings) and emit move rows with concrete
   `successor` paths rather than prefix-retaining transitional public siblings.
+  Cross-owner retain-rejection guards live in
+  `cmd/packagetargetmanifestcheck/unexpected_sibling_retain_test.go` and
+  `internal/ownershipinventory/unexpected_sibling_retain_test.go` (plus
+  `internal/ownershipinventory/remaining_owners_test.go`); they sweep inventoried
+  unexpected siblings and fail on deliberate retain→owner-root mappings.
   `make ownership-inventory-check` runs `VerifyFreeze` against
   `docs/internal/baselines/ownership-inventory.json` and
   `docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json`,
