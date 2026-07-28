@@ -60,7 +60,12 @@ Use this map when changing the public REST contract.
   accept-dispatch-result through `PlanDispatch` and `AcceptDispatchResult` with
   published `DispatchPlanOutcome` success vocabulary in
   `dispatch_plan_mapping.go`; typed dispatch-plan failures map at the adapter
-  edge before story 006 centralizes the full sentinel set.
+  edge before story 006 centralizes the full sentinel set. Checkpoint adaptation
+  (`handlers_checkpoint.go`) maps capture/load/restore through
+  `CaptureCheckpoint`, `LoadCheckpoint`, and `RestoreCheckpoint` with published
+  `CheckpointOutcome` success vocabulary in `checkpoint_mapping.go`; typed
+  checkpoint failures map at the adapter edge before story 006 centralizes the
+  full sentinel set.
 - Factory Definitions HTTP decoding, generated-contract mapping, service
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_definitions/transports/http`. The top-level
