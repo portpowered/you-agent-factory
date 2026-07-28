@@ -790,6 +790,10 @@ root `Service`. Bind compilation canonical encode through
 `internal/services/compilation/canonical` so owner wire does not import
 transport-mapping `factoryconfig` for content identity; authored/canonical decode
 and normalize remain on injected loader ports composed from process wire.
+Register new compilation production packages with
+`go run ./cmd/packagetargetmanifestcheck -write-inventory -write-owner-packages`,
+matching retain rows in `docs/internal/baselines/ownership-inventory.json`, and
+unit/functional coverage minimums for each nested package path.
 Snapshot
 slices stay on the singular `Service` via `CaptureFactorySnapshot`,
 `PrepareFactorySnapshotImport`, and `MaterializeFactorySnapshot` returning
