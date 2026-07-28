@@ -94,6 +94,7 @@ func TestBind_UnsupportedToolReturnsStableError(t *testing.T) {
 
 type mcpDefinitionsValidationFake struct {
 	invoked bool
+	result  factorydefinitions.ValidationResult
 }
 
 func (fake *mcpDefinitionsValidationFake) ValidateSubmittedDefinition(
@@ -101,6 +102,9 @@ func (fake *mcpDefinitionsValidationFake) ValidateSubmittedDefinition(
 	_ factorydefinitions.SubmittedDefinitionValidationRequest,
 ) (factorydefinitions.ValidationResult, error) {
 	fake.invoked = true
+	if len(fake.result.Targets) > 0 {
+		return fake.result, nil
+	}
 	return factorydefinitions.ValidationResult{
 		Targets: []factorydefinitions.ValidationTarget{{
 			Code:     "factory.validation.stub",

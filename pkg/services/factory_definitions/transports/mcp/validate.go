@@ -27,7 +27,10 @@ func Validate(
 
 	result, err := validationentry.ValidateFactoryAPI(ctx, factory, validation)
 	if err != nil {
-		envelope := decodeInputErrorEnvelope("validate factory definition", err)
+		if envelope, ok := validationErrorEnvelope(err); ok {
+			return ToolResponse[factoryapi.FactoryValidationResult]{Error: &envelope}
+		}
+		envelope := opaqueValidationErrorEnvelope()
 		return ToolResponse[factoryapi.FactoryValidationResult]{Error: &envelope}
 	}
 	apiResult := apisurface.FactoryValidationResultToAPI(result)
