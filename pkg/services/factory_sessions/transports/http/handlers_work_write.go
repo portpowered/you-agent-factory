@@ -79,14 +79,14 @@ func (s *Server) submitWorkContent(
 	if req.Items == nil {
 		return contentcontract.PartsFromGenerated(req.Content), nil
 	}
-	if s.contentStaging == nil {
-		return nil, errors.New("Work content staging service is unavailable")
+	if s.workService == nil {
+		return nil, errors.New("Work service is unavailable")
 	}
 	items, err := stagedSubmissionItemsFromGenerated(*req.Items)
 	if err != nil {
 		return nil, err
 	}
-	content, err := s.contentStaging.PrepareContent(ctx, items)
+	content, err := s.workService.PrepareContent(ctx, items)
 	if err != nil {
 		var stagingErr *work.ContentStagingError
 		if errors.As(err, &stagingErr) {
@@ -660,14 +660,14 @@ func (s *Server) prepareWorkRequest(
 	request workdomain.WorkRequest,
 	canonicalJSON []byte,
 ) (workdomain.WorkRequest, error) {
-	if s.requestPreparation == nil {
-		return workdomain.WorkRequest{}, errors.New("Work Request preparation service is unavailable")
+	if s.workService == nil {
+		return workdomain.WorkRequest{}, errors.New("Work service is unavailable")
 	}
 	defaultWorkTypeID, err := s.defaultWorkTypeIDForSession(ctx, sessionID)
 	if err != nil {
 		return workdomain.WorkRequest{}, err
 	}
-	return s.requestPreparation.PrepareWorkRequest(ctx, work.WorkRequestPreparation{
+	return s.workService.PrepareWorkRequest(ctx, work.WorkRequestPreparation{
 		Request:           request,
 		CanonicalJSON:     canonicalJSON,
 		DefaultWorkTypeID: defaultWorkTypeID,

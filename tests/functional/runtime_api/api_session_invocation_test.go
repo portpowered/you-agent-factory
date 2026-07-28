@@ -47,6 +47,28 @@ func TestSessionInvocationAPI_ReturnsPrimaryResult(t *testing.T) {
 	recorder.assertContainsMetric(t, "invocation.result_type", map[string]string{"input_source": "COMPATIBILITY_CONTENT", "result_type": "text"})
 }
 
+func TestSessionInvocationAPI_AcceptsStructuredArgsWithActiveSignature(t *testing.T) {
+	dir := scaffoldStructuredArgsInvocationFactory(t)
+	server := startFunctionalServerWithArgs(t, dir, false, nil, withWorkerCommands(support.NewStaticSuccessCommandRunner("structured primary COMPLETE"), nil))
+
+	response := postInvocation(t, server.URL(), factoryapi.InvocationRequest{
+		Args: &map[string]any{"input": "structured invoke"},
+	})
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("invocation status = %q, want COMPLETED", response.Status)
+	}
+	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+		t.Fatalf("invocation primaryResult = %#v, want one text part", response.PrimaryResult)
+	}
+	part, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("primaryResult[0] as text part: %v", err)
+	}
+	if part.Text != "structured primary COMPLETE" {
+		t.Fatalf("primaryResult text = %q, want %q", part.Text, "structured primary COMPLETE")
+	}
+}
+
 func TestSessionInvocationAPI_RejectsWhitespaceOnlyText(t *testing.T) {
 	dir := scaffoldInvocationFactory(t, nil)
 	server := startFunctionalServerWithArgs(t, dir, false, nil, withWorkerCommands(support.NewStaticSuccessCommandRunner("primary result COMPLETE"), nil))
@@ -246,6 +268,30 @@ func (r *blockingInvocationRunner) Run(ctx context.Context, _ platformprocess.Co
 	}
 	<-ctx.Done()
 	return platformprocess.CommandResult{}, ctx.Err()
+}
+
+func scaffoldStructuredArgsInvocationFactory(t *testing.T) string {
+	t.Helper()
+
+	cfg := simplePipelineConfig()
+	cfg["invocationSignature"] = map[string]any{
+		"parameters": []any{
+			map[string]any{
+				"name":     "input",
+				"required": true,
+				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+			},
+		},
+	}
+	workTypes := cfg["workTypes"].([]map[string]any)
+	for i := range workTypes {
+		if name, _ := workTypes[i]["name"].(string); name == "task" {
+			workTypes[i]["handlingBehavior"] = []string{"DEFAULT"}
+		}
+	}
+	dir := support.ScaffoldFactory(t, cfg)
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	return dir
 }
 
 func scaffoldInvocationFactory(t *testing.T, overrides map[string]any) string {

@@ -860,6 +860,36 @@ response-stream output.
   remaining request-validation error and `FactoryInvocationResult` session
   result shape stay at their current boundary until Factory Session contracts
   converge; the Factory Session owner constructs that shared result.
+- Factory Sessions production Work imports are sealed by
+  `pkg/services/factory_sessions/work_import_boundary_test.go`
+  (`TestProductionPackagesImportWorkRootOnly`). Mirror
+  `pkg/services/recordings/runtime_import_boundary_test.go` when adding similar
+  CUT consumer-edge import proofs: `go list` every package under the Sessions
+  root and fail on any import outside `pkg/services/work`.
+- Factory Sessions invocation input preparation and primary-result selection
+  route through `work.Service` (`PrepareInvocationInput`,
+  `ResolvePrimaryResult`) injected on `SessionOwner` via
+  `invocationservice.Dependencies.Work`. Use `work.NewInvocationPolicyService()`
+  when only the published invocation/return-policy slice is needed; prove the
+  sealed edge with `pkg/services/factory_sessions/work_invocation_boundary_test.go`.
+- Factory Sessions Work admission, content staging, and materialization call
+  sites route through `work.Service` (`StageContent`, `PrepareContent`,
+  `PrepareWorkRequest`, `MaterializeContentURL`) rather than injecting
+  `work.ContentStagingService`, `work.RequestPreparationService`, or
+  `work.ContentMaterializer` as peer dependencies. Compose focused roles onto
+  the Work root at wire/transport edges with `work.AdmissionContentService` and
+  `work.MaterializationService`; adapt to Workers-only `ContentMaterializer`
+  boundaries with `work.ContentMaterializeFunc(workService.MaterializeContentURL)`.
+  Prove the HTTP admission/content edge in
+  `pkg/services/factory_sessions/transports/http/work_admission_content_boundary_test.go`.
+- Factory Sessions Work request construction and admission submit proofs live in
+  `pkg/services/factory_sessions/transports/http/work_request_boundary_test.go`
+  (HTTP `PrepareWorkRequest` + `SubmitWorkRequestForSession` through a recording
+  `work.Service`) and `pkg/services/factory_sessions/work_request_boundary_test.go`
+  (session-owned invocation submit constructing detached `work.WorkRequest` with
+  observable acceptance or typed `work.ErrInvalidWorkRequest` failures). Assert
+  behavioral submit result fields and typed error codes/messages, not import
+  inventory alone.
 - Work owner-local Wire at `pkg/services/work/wire` must stay registered under
   destination `work` in
   `docs/internal/packaged-service-structure/package-target-manifest.json`,
@@ -922,6 +952,40 @@ response-stream output.
   `go-*-coverage-package-minimums.json` baselines; prove registration with
   `wire/manifest_registration_test.go` rather than re-editing manifests when
   IMP-SET already landed the rows.
+- Operator Settings top-level directory inventory for INV-SET-TOPLEVEL lives in
+  `docs/internal/projects/packaged-service-structure/operator-settings-top-level-inventory.json`
+  with drift verification in `internal/ownershipinventory/operator_settings_top_level.go`;
+  canonical retain children are `internal`, `transports`, and `wire`, with
+  `testdata` recorded as `test_only_retain` and unexpected public siblings
+  inventoried explicitly before remap stories regenerate ledgers.
+- Unexpected Operator Settings public siblings (`identityinventory`, `servicewire`,
+  `testlink`, `testproviders`) remap through
+  `internal/ownershipinventory/operator_settings_mapping.go` and
+  `cmd/packagetargetmanifestcheck/owners.go` nestedOwnerMoveRules to
+  `operator_settings/internal` (test helpers share the private internal
+  destination because package-target vocabulary allows only `internal` or
+  `internal/services/<subservice>` nesting); regenerate
+  `docs/internal/baselines/ownership-inventory.json` and
+  `docs/internal/packaged-service-structure/package-target-manifest.json` after
+  remap mapping changes.
+- Operator Settings excess root `.go` contract inventory for INV-SET-TOPLEVEL
+  lives in
+  `docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json`
+  with drift verification in
+  `internal/ownershipinventory/operator_settings_root_go.go`; thin-root retain
+  surfaces are `doc.go`, `service_contract.go`, `document_contract.go`, and
+  `resolution_contract.go` plus root-contract seal tests; excess clusters fold
+  to `operator_settings/internal` or
+  `operator_settings/internal/services/{document,resolution}` for
+  CLN-SET-CONTRACT-ROOTS.
+- Operator Settings INV-SET-TOPLEVEL retain-regression proofs live in
+  `internal/ownershipinventory/operator_settings_dual_ledger.go` plus mirrored
+  tests in `internal/ownershipinventory/operator_settings_baseline_test.go`,
+  `internal/ownershipinventory/operator_settings_dual_ledger_test.go`, and
+  `cmd/packagetargetmanifestcheck/operator_settings_test.go`; use
+  `VerifyOperatorSettingsDualLedgerAlignment` to prove ownership-inventory and
+  package-target-manifest agree on unexpected-sibling move rows and that fold
+  targets never regress to owner-root retain destinations.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore
@@ -995,14 +1059,24 @@ response-stream output.
   in `pkg/services/system_initialization/internal/workflow` and must not import
   `pkg/initializer`, transports, `pkg/wire`, or Settings/Definitions store
   surfaces such as `factory_definitions/packagedinstallation`; boundary proof
-  lives in `internal/workflow/boundary_test.go` and `wire/boundary_test.go`.
+  lives in `boundary_test.go`, `internal/workflow/boundary_test.go`, and
+  `wire/boundary_test.go`.
   Bootstrap owner-local Wire at `pkg/services/system_initialization/wire` must
   stay registered under destination `system_initialization` in
   `docs/internal/packaged-service-structure/package-target-manifest.json`,
   `docs/internal/baselines/ownership-inventory.json`, and both
   `go-*-coverage-package-minimums.json` baselines; prove registration with
   `wire/manifest_registration_test.go` rather than re-editing manifests when
-  IMP-BOOT already landed the rows. The Bootstrap CLI adapter at
+  IMP-BOOT already landed the rows. Bootstrap composition at
+  `pkg/wire/profiles.go` must construct the packaged ensure-installer for
+  `provideSystemInitializationService` through
+  `factorydefinitionsservice.NewPackagedFactoryInstaller`, not
+  `factory_definitions/packagedinstallation`; composed initialize proofs live in
+  `pkg/wire/system_initialization_composition_test.go`. Focused initialize/scaffold
+  proofs through injected Definitions root catalog and ensure-installer collaborators
+  live in `initialize_definitions_root_boundary_test.go` (created/skipped outcomes,
+  customer-owned Factory preservation, partial-failure rollback facts, and
+  AttachFactoryDefinitions absence). The Bootstrap CLI adapter at
   `pkg/services/system_initialization/transports/cli` must stay registered under
   destination `system_initialization` in the same shared manifests; prove
   registration with `transports/cli/manifest_registration_test.go` rather than

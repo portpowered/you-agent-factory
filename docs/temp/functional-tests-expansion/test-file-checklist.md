@@ -727,6 +727,15 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedSubagentChildFailureReturnsStableFailure` covers error.
 
 - [x] `tests/functional/factory/packaged/tts/invocation_test.go`
+- [x] `tests/functional/models/root_composition/build_process_inert_test.go`
+- [x] `tests/functional/models/root_composition/catalog_discovery_test.go`
+- [x] `tests/functional/models/root_composition/inference_invoke_test.go`
+- [x] `tests/functional/models/root_composition/peer_import_seal_test.go`
+- [x] `tests/functional/models/root_composition/readiness_assets_host_test.go`
+- [x] `tests/functional/runtime_api/api_javascript_sync_structured_input_test.go`
+- [x] `tests/functional/runtime_api/api_multi_work_dispatch_smoke_test.go`
+- [x] `tests/functional/runtime_api/api_work_root_policy_slices_test.go`
+- [x] `tests/functional/runtime_api/api_work_service_application_slices_test.go`
 - [x] `tests/functional/factory/definition_activation/gateway_wiring_test.go`
 - [x] `tests/functional/models/model_invoke/http_workcontent_coverage_test.go`
 - [x] `tests/functional/models/model_list/adapter_owned_coverage_test.go`
@@ -751,7 +760,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPISaveCurrentFactoryValidatesBeforePersistence`.
   - `TestAPICurrentFactoriesRemainSessionScoped`.
 
-- [ ] `tests/functional/factory/current/prompt_template_test.go`
+- [x] `tests/functional/factory/current/prompt_template_test.go`
   - `TestAPIPromptTemplateContractAndValidationRoundTrip`.
   - `TestAPIInvalidPromptTemplateNamesMissingVariables`.
   - `TestAPITemplateValidationDoesNotMutateCurrentFactory`.
