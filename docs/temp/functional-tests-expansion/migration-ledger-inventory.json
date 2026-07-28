@@ -4609,6 +4609,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/sessions/execution/visibility_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/execution",
+      "scenario": "TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads",
+      "lane": "short",
+      "destination": "tests/functional/sessions/execution/visibility_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/execution/visibility_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/execution",
+      "scenario": "TestAPIInvocationResultMatchesCLICompatibleFacts",
+      "lane": "short",
+      "destination": "tests/functional/sessions/execution/visibility_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/sessions/live_runtime_build_process_test.go",
       "package": "you-agent-factory/tests/functional/sessions",
       "scenario": "TestBuildProcessRoutesLiveOpenListControlAndCloseThroughFactorySessionsRoot",
@@ -8208,7 +8228,7 @@
       "you-agent-factory/tests/functional/sessions": 1,
       "you-agent-factory/tests/functional/sessions/cli": 2,
       "you-agent-factory/tests/functional/sessions/controls": 5,
-      "you-agent-factory/tests/functional/sessions/execution": 3,
+      "you-agent-factory/tests/functional/sessions/execution": 5,
       "you-agent-factory/tests/functional/sessions/mcp": 7,
       "you-agent-factory/tests/functional/sessions/lifecycle": 6,
       "you-agent-factory/tests/functional/sessions/restart": 3,
