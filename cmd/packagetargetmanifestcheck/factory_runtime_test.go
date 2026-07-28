@@ -47,34 +47,34 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/build",
+			path: "pkg/services/factory_runtime/internal/services/instance_host/build",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/build",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/instance_host/build",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/instance_host",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/checkpointstore",
+			path: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/checkpointstore",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/checkpoint_recovery",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/checkpointsummary",
+			path: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/checkpointsummary",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/checkpoint_recovery",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/javascript",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/javascript",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/javascript",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/javascript",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
@@ -87,74 +87,146 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/tooling/javascript/catalog",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/catalog",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/tooling/javascript/catalog",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/catalog",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/engine",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/engine",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/engine",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/engine",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/runtime",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/runtime",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/runtime",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/runtime",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/runtime/buffers",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/runtime/buffers",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/runtimecontract",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/runtimecontract",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/runtimecontract",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/runtimecontract",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/scheduler",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/scheduler",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/scheduler",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/scheduler",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/state",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/state",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/state",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/state",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/subsystems",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/subsystems",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/subsystems",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/subsystems",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/token",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/token",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/token",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/token",
+				Disposition: DispositionRetain,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/internal/services/orchestration/context",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/context",
+				Disposition: DispositionRetain,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
+				Disposition: DispositionRetain,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/internal/services/orchestration/metrics",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/metrics",
+				Disposition: DispositionRetain,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
+				Disposition: DispositionRetain,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
+				Disposition: DispositionRetain,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
+				Disposition: DispositionRetain,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/internal/services/orchestration/state/validation",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/state/validation",
+				Disposition: DispositionRetain,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/internal/services/orchestration/throttle",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/throttle",
+				Disposition: DispositionRetain,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
@@ -249,24 +321,5 @@ func TestFactoryRuntimeInventoryRejectsRetainToOwnerRoot(t *testing.T) {
 		if got.Disposition != DispositionMove {
 			t.Fatalf("inventory path %q disposition = %q, want move", packagePath, got.Disposition)
 		}
-	}
-}
-
-func factoryRuntimeCanonicalRetainRest(rest string) bool {
-	switch {
-	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
-		return true
-	case rest == "transports" || strings.HasPrefix(rest, "transports/"):
-		return true
-	case strings.HasPrefix(rest, "internal/services/orchestration"):
-		return true
-	case strings.HasPrefix(rest, "internal/services/instance_host"):
-		return true
-	case strings.HasPrefix(rest, "internal/services/dispatch_planning"):
-		return true
-	case strings.HasPrefix(rest, "internal/services/checkpoint_recovery"):
-		return true
-	default:
-		return false
 	}
 }

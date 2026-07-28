@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 )
 
 func TestLoad_BundlesDefaultAndNamedRelativeImportsExecutes(t *testing.T) {

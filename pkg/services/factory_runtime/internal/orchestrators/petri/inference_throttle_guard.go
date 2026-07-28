@@ -5,8 +5,8 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorythrottle "github.com/portpowered/infinite-you/pkg/services/factory_runtime/throttle"
-	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token"
+	factorythrottle "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/throttle"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 

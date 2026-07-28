@@ -854,23 +854,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "minimum": 43.87
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/build",
-      "minimum": 74.72
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/context",
-      "minimum": 5.55
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/definitionmapping",
-      "minimum": 61.62
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/engine",
-      "minimum": 73.32
+      "minimum": 43.40
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal",
@@ -981,6 +965,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build",
+      "minimum": 74.72
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/internal/service",
       "minimum": 0.00
     },
@@ -999,60 +987,96 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context",
+      "minimum": 5.55
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
+      "minimum": 61.62
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/engine",
+      "minimum": 73.32
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/internal/service",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript",
+      "minimum": 42.85
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/metrics",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
+      "minimum": 48.38
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
+      "minimum": 87.50
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime",
+      "minimum": 60.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
+      "minimum": 55.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtimecontract",
+      "minimum": 45.60
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler",
+      "minimum": 74.20
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state",
+      "minimum": 81.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state/validation",
+      "minimum": 31.86
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems",
+      "minimum": 62.42
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/throttle",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token",
+      "minimum": 87.27
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
+      "minimum": 80.80
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/callbehavior",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/catalog",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/symbolidentity",
       "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire",
       "minimum": 0.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript",
-      "minimum": 42.85
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/metrics",
-      "minimum": 100.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestrationowner",
-      "minimum": 0.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract",
-      "minimum": 48.38
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/replayhooks",
-      "minimum": 87.50
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime",
-      "minimum": 59.85
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime/buffers",
-      "minimum": 55.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtimecontract",
-      "minimum": 45.60
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/scheduler",
-      "minimum": 74.20
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/state",
-      "minimum": 81.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/state/validation",
-      "minimum": 31.86
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/subsystems",
-      "minimum": 62.42
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/testkit",
@@ -1063,30 +1087,6 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/throttle",
-      "minimum": 0.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token",
-      "minimum": 87.27
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token_transformer",
-      "minimum": 80.80
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/callbehavior",
-      "minimum": 0.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/catalog",
-      "minimum": 0.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/symbolidentity",
-      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli",
