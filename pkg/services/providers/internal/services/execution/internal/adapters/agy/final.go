@@ -1,10 +1,12 @@
 package agy
 
 import (
+	"errors"
 	"strings"
 	"unicode/utf8"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 )
 
 const maxPublishedTextBytes = 256 * 1024
@@ -41,4 +43,39 @@ func boundedText(value string) string {
 // ParseFinalOutputForTest exposes final-only selection for adapter tests.
 func ParseFinalOutputForTest(stdout []byte) (string, *providers.ExecuteFailure) {
 	return parseFinalOutput(stdout)
+}
+
+func partialTimeoutStdout(stdout []byte, effectErr error) (string, bool) {
+	if !isTimeoutPTYError(effectErr) {
+		return "", false
+	}
+	if !utf8.Valid(stdout) {
+		return "", false
+	}
+	content := strings.TrimSpace(string(stdout))
+	if content == "" {
+		return "", false
+	}
+	if agypty.ContainsTerminalEscapeOrControl(content) {
+		return "", false
+	}
+	return boundedText(content), true
+}
+
+func isTimeoutPTYError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, agypty.ErrSessionTimedOut) {
+		return true
+	}
+	var declared providers.ExecuteFailure
+	if errors.As(err, &declared) {
+		return declared.Kind == providers.ExecuteFailureKindTimeout
+	}
+	var declaredPointer *providers.ExecuteFailure
+	if errors.As(err, &declaredPointer) && declaredPointer != nil {
+		return declaredPointer.Kind == providers.ExecuteFailureKindTimeout
+	}
+	return false
 }

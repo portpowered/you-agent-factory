@@ -40,6 +40,8 @@ type EffectResult struct {
 	DurationMillis int64
 	Metadata       map[string]string
 	SessionRef     *providers.SessionRef
+	// CapturedStdout retains cleaned PTY stdout for timeout partial publication.
+	CapturedStdout []byte
 }
 
 // NewRegistration binds one Agy effect to the canonical Agy identity.
@@ -69,6 +71,7 @@ func newAttempt(effect Effect) execution.Attempt {
 				sessionRef = sessionRefFromRequest(request.ResumeSession)
 			}
 			failure = attachFailureSession(failure, sessionRef)
+			failure = attachPartialTimeoutProgress(failure, effectResult.CapturedStdout, effectErr)
 			return providers.ExecuteResult{SessionRef: sessionRef}, failure
 		}
 		content, parseFailure := parseFinalOutput(stdout.Bytes())
@@ -168,6 +171,33 @@ func attachFailureSession(
 	}
 	declared := failure.Declared.Clone()
 	declared.SessionRef = cloneSessionRef(sessionRef)
+	failure.Declared = &declared
+	failure.NativeError = nil
+	return failure
+}
+
+func attachPartialTimeoutProgress(
+	failure execution.AttemptFailure,
+	stdout []byte,
+	effectErr error,
+) execution.AttemptFailure {
+	partial, ok := partialTimeoutStdout(stdout, effectErr)
+	if !ok || failure.Declared == nil {
+		return failure
+	}
+	declared := failure.Declared.Clone()
+	diagnostics := declared.Diagnostics
+	if diagnostics == nil {
+		diagnostics = &providers.ExecuteDiagnostics{}
+	} else {
+		cloned := diagnostics.Clone()
+		diagnostics = &cloned
+	}
+	diagnostics.Progress = append(diagnostics.Progress, providers.ExecuteProgress{
+		Phase:  "message.completed",
+		Detail: partial,
+	})
+	declared.Diagnostics = diagnostics
 	failure.Declared = &declared
 	failure.NativeError = nil
 	return failure

@@ -270,7 +270,7 @@ func TestAgyRootTimeoutPreservesResumeSessionOnFailure(t *testing.T) {
 		t.Fatal("Execute() error = nil, want timeout failure")
 	}
 	if result.Content != "" {
-		t.Fatalf("result content = %q, want no terminal success on timeout", result.Content)
+		t.Fatalf("result content = %q, want empty result on timeout failure", result.Content)
 	}
 	var failure providers.ExecuteFailure
 	if !errors.As(err, &failure) {
@@ -278,6 +278,12 @@ func TestAgyRootTimeoutPreservesResumeSessionOnFailure(t *testing.T) {
 	}
 	if failure.Kind != providers.ExecuteFailureKindTimeout {
 		t.Fatalf("failure kind = %q, want timeout", failure.Kind)
+	}
+	if failure.Diagnostics == nil || len(failure.Diagnostics.Progress) == 0 {
+		t.Fatalf("failure diagnostics = %#v, want partial timeout progress", failure.Diagnostics)
+	}
+	if got := failure.Diagnostics.Progress[0].Detail; got != "partial answer before timeout" {
+		t.Fatalf("partial timeout detail = %q, want partial answer before timeout", got)
 	}
 	if failure.SessionRef == nil || failure.SessionRef.ID != "session-on-failure" {
 		t.Fatalf("failure SessionRef = %#v, want resumed session", failure.SessionRef)

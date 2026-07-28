@@ -66,9 +66,11 @@ func NewPTYEffect(options PTYEffectOptions) Effect {
 			return EffectResult{SessionRef: sessionRef}, orchestrationFailure(err)
 		}
 		result, runErr := runPTY(ctx, options.Allocator, launch, sessionConfig, observe)
+		cleaned := cleanedPTYText(result)
 		effectResult := EffectResult{
 			DurationMillis: time.Since(started).Milliseconds(),
 			SessionRef:     sessionRef,
+			CapturedStdout: []byte(cleaned),
 		}
 		if runErr != nil {
 			return effectResult, nativePTYError(ctx, result, runErr)

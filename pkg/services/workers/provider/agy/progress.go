@@ -99,7 +99,7 @@ func writeFailureProgress(
 	failure inference.Failure,
 ) error {
 	payload, err := json.Marshal(workerexecution.ErrorPayload{
-		Code:      string(failure.Kind()),
+		Code:      failureErrorCode(failure),
 		Message:   failure.Message(),
 		Retryable: failure.Retryable(),
 	})
@@ -123,4 +123,17 @@ func writeFailureProgress(
 		return err
 	}
 	return writer.WriteEvent(ctx, event)
+}
+
+func failureErrorCode(failure inference.Failure) string {
+	switch failure.Kind() {
+	case inference.FailureTimeout:
+		return "timeout"
+	case inference.FailureThrottled:
+		return "throttled"
+	case inference.FailureInvalidRequest, inference.FailureMalformedOutput:
+		return "permanent_bad_request"
+	default:
+		return "stream_failed"
+	}
 }
