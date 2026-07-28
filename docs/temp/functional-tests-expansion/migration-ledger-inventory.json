@@ -7409,6 +7409,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/work/relationships/parent_child_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestChildFailureProjectsToDocumentedParentView",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/parent_child_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/parent_child_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestParentChildLineageSurvivesDispatchAndReplay",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/parent_child_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/work/routing/classifier_test.go",
       "package": "you-agent-factory/tests/functional/work/routing",
       "scenario": "TestClassifierMultiOutputPreservesPayload",
@@ -7524,6 +7544,16 @@
       "scenario": "TestAPIUpsertWorkRequestUsesCanonicalIdentity",
       "lane": "short",
       "destination": "tests/functional/work/submission/http_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/submission/stage_and_submit_test.go",
+      "package": "you-agent-factory/tests/functional/work/submission",
+      "scenario": "TestAPIStageAndSubmitFileCreatesExpectedWork",
+      "lane": "short",
+      "destination": "tests/functional/work/submission/stage_and_submit_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -8949,12 +8979,12 @@
       "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T10:49:30Z",
+  "scanned_at_utc": "2026-07-28T09:30:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 619,
+      "none": 622,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -8981,14 +9011,14 @@
       "sessions": 40,
       "smoke": 62,
       "transport": 106,
-      "work": 26,
+      "work": 29,
       "workers": 77,
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 875,
+    "customer_top_level_Test_scenarios": 878,
     "lane_functionallong": 95,
-    "lane_short": 780,
+    "lane_short": 783,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 14,
@@ -9068,9 +9098,9 @@
       "you-agent-factory/tests/functional/work/cli": 1,
       "you-agent-factory/tests/functional/work/recordings": 4,
       "you-agent-factory/tests/functional/work/recovery": 4,
-      "you-agent-factory/tests/functional/work/relationships": 4,
+      "you-agent-factory/tests/functional/work/relationships": 6,
       "you-agent-factory/tests/functional/work/routing": 6,
-      "you-agent-factory/tests/functional/work/submission": 6,
+      "you-agent-factory/tests/functional/work/submission": 7,
       "you-agent-factory/tests/functional/work/visualization": 1,
       "you-agent-factory/tests/functional/workers/agent": 1,
       "you-agent-factory/tests/functional/workers/inference": 16,
@@ -9167,18 +9197,21 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-28T04:10:00Z",
-    "story": "ft-wave2-factory-definitions-init-mergeability",
-    "live_customer_scenarios": 875,
-    "ledger_rows": 875,
+    "audited_at_utc": "2026-07-28T10:50:00Z",
+    "story": "ft-wave2-work-relationships-parent-child-003",
+    "live_customer_scenarios": 854,
+    "ledger_rows": 854,
     "unmapped_scenarios": 0,
     "checklist_destinations": 436,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 780,
+    "lane_short": 759,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 51,
-    "validator": "go run ./cmd/migrationledgercheck"
+    "validator": "go run ./cmd/migrationledgercheck",
+    "row_count": 854,
+    "short_lane_rows": 759,
+    "functionallong_lane_rows": 95
   }
 }
