@@ -1,4 +1,4 @@
-package recordings
+package workstation
 
 import (
 	"encoding/json"

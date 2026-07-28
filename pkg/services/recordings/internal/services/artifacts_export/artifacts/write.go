@@ -3,27 +3,10 @@ package artifacts
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"io/fs"
 	"path/filepath"
+
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 )
-
-type TemporaryFile interface {
-	io.Writer
-	Name() string
-	Chmod(fs.FileMode) error
-	Sync() error
-	Close() error
-}
-
-type MakeDirectories func(string, fs.FileMode) error
-type CreateTemporaryFile func(string, string) (TemporaryFile, error)
-type RemovePath func(string) error
-type RenamePath func(string, string) error
-
-type Writer interface {
-	Write(string, Recording) error
-}
 
 type AtomicWriter struct {
 	makeDirectories     MakeDirectories
@@ -32,11 +15,19 @@ type AtomicWriter struct {
 	renamePath          RenamePath
 }
 
-func NewAtomicWriter(makeDirectories MakeDirectories, createTemporaryFile CreateTemporaryFile, removePath RemovePath, renamePath RenamePath) (*AtomicWriter, error) {
+func NewAtomicWriter(
+	makeDirectories MakeDirectories,
+	createTemporaryFile CreateTemporaryFile,
+	removePath RemovePath,
+	renamePath RenamePath,
+) (*AtomicWriter, error) {
 	if makeDirectories == nil || createTemporaryFile == nil || removePath == nil || renamePath == nil {
 		return nil, fmt.Errorf("recording artifact write operations are required")
 	}
-	return &AtomicWriter{makeDirectories: makeDirectories, createTemporaryFile: createTemporaryFile, removePath: removePath, renamePath: renamePath}, nil
+	return &AtomicWriter{
+		makeDirectories: makeDirectories, createTemporaryFile: createTemporaryFile,
+		removePath: removePath, renamePath: renamePath,
+	}, nil
 }
 
 // Write validates and atomically persists one portable recording. A failed
@@ -83,3 +74,5 @@ func (writer *AtomicWriter) Write(path string, value Recording) error {
 	}
 	return nil
 }
+
+var _ recordings.PortableRecordingWriter = (*AtomicWriter)(nil)

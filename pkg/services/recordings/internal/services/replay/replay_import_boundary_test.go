@@ -1,4 +1,4 @@
-package recordings_test
+package recordingsreplay_test
 
 import (
 	"os/exec"
@@ -6,7 +6,11 @@ import (
 	"testing"
 )
 
-const recordingsReplayShim = recordingsOwnerRoot + "/replay"
+const (
+	modulePrefix        = "github.com/portpowered/infinite-you/"
+	recordingsOwnerRoot   = modulePrefix + "pkg/services/recordings"
+	recordingsReplayShim = recordingsOwnerRoot + "/replay"
+)
 
 // TestPeerProductionPackagesDoNotImportRecordingsReplay seals
 // pss-cln-rec-legacy-packages-003: production packages outside the Recordings
@@ -57,4 +61,64 @@ func assertPackageDoesNotImportRecordingsReplayShim(t *testing.T, packagePath st
 			)
 		}
 	}
+}
+
+func listPeerProductionPackages(t *testing.T) []string {
+	t.Helper()
+
+	var packages []string
+	for _, packagePath := range listRepositoryProductionPackages(t) {
+		if strings.HasPrefix(packagePath, recordingsOwnerRoot) {
+			continue
+		}
+		packages = append(packages, packagePath)
+	}
+	return packages
+}
+
+func listRecordingsOwnerProductionPackages(t *testing.T) []string {
+	t.Helper()
+
+	var packages []string
+	for _, packagePath := range listRepositoryProductionPackages(t) {
+		if !strings.HasPrefix(packagePath, recordingsOwnerRoot) {
+			continue
+		}
+		packages = append(packages, packagePath)
+	}
+	return packages
+}
+
+func listRepositoryProductionPackages(t *testing.T) []string {
+	t.Helper()
+
+	cmd := exec.Command("go", "list", "./...")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list repository packages: %v\n%s", err, output)
+	}
+
+	var packages []string
+	for _, packagePath := range strings.Fields(string(output)) {
+		if strings.HasSuffix(packagePath, "_test") {
+			continue
+		}
+		packages = append(packages, packagePath)
+	}
+	return packages
+}
+
+func shortPeerPackageName(packagePath string) string {
+	return strings.TrimPrefix(packagePath, modulePrefix)
+}
+
+func shortRecordingsOwnerPackageName(packagePath string) string {
+	if strings.HasPrefix(packagePath, recordingsOwnerRoot) {
+		rest := strings.TrimPrefix(packagePath, recordingsOwnerRoot)
+		if rest == "" {
+			return "recordings"
+		}
+		return strings.TrimPrefix(rest, "/")
+	}
+	return packagePath
 }

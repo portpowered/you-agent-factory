@@ -1,4 +1,4 @@
-package recordings_test
+package canonicalledger_test
 
 import (
 	"os/exec"
@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-const recordingsEventsShim = recordingsOwnerRoot + "/events"
+const recordingsEventsShim = modulePrefix + "pkg/services/recordings/events"
 
 // TestPeerProductionPackagesDoNotImportRecordingsEvents seals
 // pss-cln-rec-legacy-packages-001: production packages outside the Recordings
@@ -39,6 +39,53 @@ func TestRecordingsOwnerConstructsThroughCanonicalLedgerEvents(t *testing.T) {
 	}
 }
 
+func listPeerProductionPackages(t *testing.T) []string {
+	t.Helper()
+
+	recordingsOwnerRoot := modulePrefix + "pkg/services/recordings"
+	var packages []string
+	for _, packagePath := range listRepositoryProductionPackages(t) {
+		if strings.HasPrefix(packagePath, recordingsOwnerRoot) {
+			continue
+		}
+		packages = append(packages, packagePath)
+	}
+	return packages
+}
+
+func listRecordingsOwnerProductionPackages(t *testing.T) []string {
+	t.Helper()
+
+	recordingsOwnerRoot := modulePrefix + "pkg/services/recordings"
+	var packages []string
+	for _, packagePath := range listRepositoryProductionPackages(t) {
+		if !strings.HasPrefix(packagePath, recordingsOwnerRoot) {
+			continue
+		}
+		packages = append(packages, packagePath)
+	}
+	return packages
+}
+
+func listRepositoryProductionPackages(t *testing.T) []string {
+	t.Helper()
+
+	cmd := exec.Command("go", "list", "./...")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list repository packages: %v\n%s", err, output)
+	}
+
+	var packages []string
+	for _, packagePath := range strings.Fields(string(output)) {
+		if strings.HasSuffix(packagePath, "_test") {
+			continue
+		}
+		packages = append(packages, packagePath)
+	}
+	return packages
+}
+
 func assertPackageDoesNotImportRecordingsEventsShim(t *testing.T, packagePath string) {
 	t.Helper()
 
@@ -57,4 +104,20 @@ func assertPackageDoesNotImportRecordingsEventsShim(t *testing.T, packagePath st
 			)
 		}
 	}
+}
+
+func shortPeerPackageName(packagePath string) string {
+	return strings.TrimPrefix(packagePath, modulePrefix)
+}
+
+func shortRecordingsOwnerPackageName(packagePath string) string {
+	recordingsOwnerRoot := modulePrefix + "pkg/services/recordings"
+	if strings.HasPrefix(packagePath, recordingsOwnerRoot) {
+		rest := strings.TrimPrefix(packagePath, recordingsOwnerRoot)
+		if rest == "" {
+			return "recordings"
+		}
+		return strings.TrimPrefix(rest, "/")
+	}
+	return packagePath
 }

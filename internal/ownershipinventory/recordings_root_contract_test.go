@@ -30,6 +30,9 @@ func TestRecordingsThinRootContractFiles(t *testing.T) {
 		"contracts.go",
 		"contracts_test.go",
 		"metadata.go",
+		"portable_recording.go",
+		"portable_recording_build.go",
+		"portable_recording_validate.go",
 		"runtime_import_boundary_test.go",
 		"runtime_request_boundary_test.go",
 		"service_import_boundary_test.go",
@@ -59,48 +62,8 @@ func TestRecordingsThinRootContractFiles(t *testing.T) {
 func TestRecordingsExcessRootContractFoldDestinations(t *testing.T) {
 	t.Parallel()
 
-	want := map[string]string{
-		"artifacts":             "pkg/services/recordings/internal/services/artifacts_export",
-		"event":                 "pkg/services/recordings/internal/services/canonical_ledger",
-		"world_state":           "pkg/services/recordings/internal/services/projection_query",
-		"replay":                "pkg/services/recordings/internal/services/replay",
-		"dispatch":              "pkg/services/recordings/internal/services/projection_query",
-		"workstation_request":   "pkg/services/recordings/internal/services/projection_query",
-		"live_recording_target": "pkg/services/recordings/internal/services/recording_lifecycle",
-	}
-
-	for _, target := range ownershipinventory.RecordingsExcessRootContractFolds {
-		wantDestination, ok := want[target.Cluster]
-		if !ok {
-			t.Fatalf("unexpected fold cluster %q", target.Cluster)
-		}
-		if target.Destination != wantDestination {
-			t.Fatalf("cluster %q destination = %q, want %q", target.Cluster, target.Destination, wantDestination)
-		}
-		if len(target.Files) == 0 {
-			t.Fatalf("cluster %q has no inventoried files", target.Cluster)
-		}
-		if !strings.HasPrefix(ownershipinventory.RecordingsRootContractFoldCondition(target.Cluster), "CLN-REC-CONTRACT-ROOTS") {
-			t.Fatalf("fold condition for %q missing CLN-REC-CONTRACT-ROOTS prefix", target.Cluster)
-		}
-	}
-
-	gotClusters := make([]string, 0, len(ownershipinventory.RecordingsExcessRootContractFolds))
-	for _, target := range ownershipinventory.RecordingsExcessRootContractFolds {
-		gotClusters = append(gotClusters, target.Cluster)
-	}
-	slices.Sort(gotClusters)
-	wantClusters := []string{
-		"artifacts",
-		"dispatch",
-		"event",
-		"live_recording_target",
-		"replay",
-		"workstation_request",
-		"world_state",
-	}
-	if !slices.Equal(gotClusters, wantClusters) {
-		t.Fatalf("fold clusters = %v, want %v", gotClusters, wantClusters)
+	if len(ownershipinventory.RecordingsExcessRootContractFolds) != 0 {
+		t.Fatalf("fold clusters = %v, want none after CLN-REC-CONTRACT-ROOTS seal", ownershipinventory.RecordingsExcessRootContractFolds)
 	}
 }
 

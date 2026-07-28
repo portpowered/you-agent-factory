@@ -14,6 +14,9 @@ var RecordingsThinRootContractFiles = []string{
 	"contracts.go",
 	"contracts_test.go",
 	"metadata.go",
+	"portable_recording.go",
+	"portable_recording_build.go",
+	"portable_recording_validate.go",
 	"runtime_import_boundary_test.go",
 	"runtime_request_boundary_test.go",
 	"service_import_boundary_test.go",
@@ -36,67 +39,7 @@ type RecordingsRootContractFoldTarget struct {
 
 // RecordingsExcessRootContractFolds inventories excess root contract/helper
 // clusters beyond the thin Recordings service root contract.
-var RecordingsExcessRootContractFolds = []RecordingsRootContractFoldTarget{
-	{
-		Cluster: "event",
-		Files: []string{
-			"canonical_event_contract_test.go",
-			"event_contract.go",
-			"event_contract_test.go",
-			"event_vocabulary_boundary_test.go",
-			"events_import_boundary_test.go",
-		},
-		Destination: recordingsPackagePrefix + "/internal/services/canonical_ledger",
-	},
-	{
-		Cluster: "world_state",
-		Files: []string{
-			"world_state_contract.go",
-			"world_state_contract_test.go",
-			"projections_import_boundary_test.go",
-		},
-		Destination: recordingsPackagePrefix + "/internal/services/projection_query",
-	},
-	{
-		Cluster: "artifacts",
-		Files: []string{
-			"artifacts_import_boundary_test.go",
-		},
-		Destination: recordingsPackagePrefix + "/internal/services/artifacts_export",
-	},
-	{
-		Cluster: "replay",
-		Files: []string{
-			"replay_contract.go",
-			"replay_import_boundary_test.go",
-		},
-		Destination: recordingsPackagePrefix + "/internal/services/replay",
-	},
-	{
-		Cluster: "dispatch",
-		Files: []string{
-			"dispatch_contract.go",
-		},
-		Destination: recordingsPackagePrefix + "/internal/services/projection_query",
-	},
-	{
-		Cluster: "workstation_request",
-		Files: []string{
-			"workstation_requests.go",
-			"workstation_requests_content_assert_test.go",
-			"workstation_requests_test.go",
-		},
-		Destination: recordingsPackagePrefix + "/internal/services/projection_query",
-	},
-	{
-		Cluster: "live_recording_target",
-		Files: []string{
-			"live_recording_target.go",
-			"live_recording_target_test.go",
-		},
-		Destination: recordingsPackagePrefix + "/internal/services/recording_lifecycle",
-	},
-}
+var RecordingsExcessRootContractFolds = []RecordingsRootContractFoldTarget{}
 
 // ListRecordingsRootGoFiles returns every live root-level .go file name under
 // pkg/services/recordings/.

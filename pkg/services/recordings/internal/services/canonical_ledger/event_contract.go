@@ -1,4 +1,4 @@
-package recordings
+package canonicalledger
 
 import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
