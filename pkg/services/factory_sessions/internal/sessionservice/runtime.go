@@ -152,11 +152,17 @@ func (fs *SessionRuntime) requireIdleRuntime(ctx context.Context) error {
 		return fs.requireIdleRuntimeForSession(ctx, sessionID)
 	}
 
-	snapshot, err := fs.GetEngineStateSnapshot(ctx)
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return fmt.Errorf("factory runtime is not available")
+	}
+	observationResult, err := runtime.Observe(ctx, factory.ObserveRequest{
+		Scope: factory.ObservationScopeFull,
+	})
 	if err != nil {
 		return fmt.Errorf("read current runtime status: %w", err)
 	}
-	return factory.RequireIdleRuntime(snapshot)
+	return factory.RequireIdleRuntimeFromObservation(observationResult.Observation)
 }
 
 func (fs *SessionRuntime) currentRuntimeBundle() factoryRuntimeBundle {

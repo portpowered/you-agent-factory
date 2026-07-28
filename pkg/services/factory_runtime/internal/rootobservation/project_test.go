@@ -5,14 +5,16 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/factorystatus"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func sampleRootObservationSnapshot() *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
-	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+func sampleRootObservationSnapshot() *legacysnapshot.Snapshot {
+	return &legacysnapshot.Snapshot{
 		RuntimeStatus:          interfaces.RuntimeStatusActive,
 		InFlightCount:          1,
 		TickCount:              7,
@@ -127,17 +129,17 @@ func TestProject_ScopeFilters(t *testing.T) {
 }
 
 func TestProject_MapsRuntimeStatus(t *testing.T) {
-	idleSnap := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{RuntimeStatus: interfaces.RuntimeStatusIdle}
+	idleSnap := &legacysnapshot.Snapshot{RuntimeStatus: interfaces.RuntimeStatusIdle}
 	if got := Project(idleSnap, ""); got.Status != factory.ObservationStatusIdle {
 		t.Fatalf("idle status = %q, want IDLE", got.Status)
 	}
 
-	finishedSnap := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{RuntimeStatus: interfaces.RuntimeStatusFinished}
+	finishedSnap := &legacysnapshot.Snapshot{RuntimeStatus: interfaces.RuntimeStatusFinished}
 	if got := Project(finishedSnap, factory.ObservationScopeFull); got.Status != factory.ObservationStatusFinished {
 		t.Fatalf("finished status = %q, want FINISHED", got.Status)
 	}
 
-	unknownStatus := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{RuntimeStatus: interfaces.RuntimeStatus("weird")}
+	unknownStatus := &legacysnapshot.Snapshot{RuntimeStatus: interfaces.RuntimeStatus("weird")}
 	if got := Project(unknownStatus, factory.ObservationScopeFull); got.Status != factory.ObservationStatusIdle {
 		t.Fatalf("unknown runtime status = %q, want IDLE default", got.Status)
 	}
@@ -146,7 +148,7 @@ func TestProject_MapsRuntimeStatus(t *testing.T) {
 func TestProject_FactoryStatusMatchesSnapshotProjection(t *testing.T) {
 	t.Parallel()
 	snap := sampleRootObservationSnapshot()
-	fromSnapshot := factory.NewFactoryStatusProjector().ProjectFactoryStatus(snap)
+	fromSnapshot := factorystatus.ProjectFromSnapshot(snap)
 	fromObservation := factory.FactoryStatusFromObservation(Project(snap, factory.ObservationScopeFull))
 	if fromObservation.RuntimeStatus != fromSnapshot.RuntimeStatus ||
 		fromObservation.FactoryState != fromSnapshot.FactoryState ||

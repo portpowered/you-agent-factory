@@ -24,9 +24,6 @@ type validationRole struct {
 
 type runtimeRole struct{ factoryruntime.Service }
 
-func (*runtimeRole) GetEngineStateSnapshot(context.Context) (*factoryruntime.LegacyEngineObservation, error) {
-	return nil, nil
-}
 func (*runtimeRole) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	return work.WorkRequestSubmitResult{}, nil
 }
@@ -57,10 +54,6 @@ type requestPreparationRole struct {
 	factorysessionshttp.RequestPreparation
 }
 type statusProjectorRole struct{}
-
-func (statusProjectorRole) ProjectFactoryStatus(*factoryruntime.LegacyEngineObservation) factoryruntime.FactoryStatus {
-	return factoryruntime.FactoryStatus{}
-}
 
 func (statusProjectorRole) ProjectFactoryStatusFromObservation(observation factoryruntime.Observation) factoryruntime.FactoryStatus {
 	return factoryruntime.FactoryStatusFromObservation(observation)

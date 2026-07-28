@@ -81,10 +81,6 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err
 	}
-	snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, session.ID)
-	if err != nil {
-		return factorysessions.ProjectionContext{}, err
-	}
 	observationResult, err := fs.ObserveForSession(ctx, session.ID, factoryruntime.ObserveRequest{
 		Scope: factoryruntime.ObservationScopeFull,
 	})
@@ -109,7 +105,7 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 		return factorysessions.ProjectionContext{}, err
 	}
 	return sessionprojection.BuildProjectionContext(sessionprojection.ProjectionBuildInput{
-		Session: session, RuntimeConfig: runtimeCfg, Snapshot: snapshot,
+		Session: session, RuntimeConfig: runtimeCfg,
 		Observation: observationResult.Observation,
 		BackendScopeID: backendScopeID, LogicalSessionKey: resolvedIdentity.LogicalSessionKeyID,
 		NormalizedTarget: &resolvedIdentity.RuntimeTarget, RuntimeStartedAt: startedAt,

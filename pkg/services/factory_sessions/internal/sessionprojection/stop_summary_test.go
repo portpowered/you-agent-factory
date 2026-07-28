@@ -7,6 +7,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	. "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -57,10 +58,10 @@ func TestProjectFactorySessionStopSummaryAppliesCanonicalPrecedence(t *testing.T
 	}
 }
 
-func stoppedWorkSnapshot(now time.Time, stateName string) (*factoryruntime.StateSnapshot, *factoryruntime.RuntimeToken) {
+func stoppedWorkSnapshot(now time.Time, stateName string) (*legacysnapshot.Snapshot, *factoryruntime.RuntimeToken) {
 	placeID := "goal:" + stateName
 	token := &factoryruntime.RuntimeToken{ID: "token-1", PlaceID: placeID, EnteredAt: now, Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1", WorkTypeID: "goal", Name: "Goal"}}
-	return &factoryruntime.StateSnapshot{
+	return &legacysnapshot.Snapshot{
 		Marking:  factoryruntime.PetriMarkingSnapshot{Tokens: map[string]*factoryruntime.RuntimeToken{token.ID: token}},
 		Topology: &factoryruntime.Net{Places: map[string]*factoryruntime.PetriPlace{placeID: {ID: placeID, TypeID: "goal", State: stateName}}},
 	}, token
