@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-const recordingsRoot = modulePrefix + "pkg/services/recordings"
-
 // TestProductionPackagesImportRecordingsRootOnly seals CUT-VIS-REC story 001:
 // Factory Visualization production packages may depend on Recordings only through
 // the service root contract, not nested Recordings implementation paths.

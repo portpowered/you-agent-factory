@@ -68,6 +68,7 @@ func assembleRuntimeProducts(
 			Workers: workerService, Sessions: factorySessionGateway,
 			Invoker: sessionInvocation, InputResolver: inputResolver,
 			Execution: factorySessionGateway, Lifecycle: lifecycle,
+			ModelsScope:    modelsBind.Scope,
 			CloseArtifacts: closeResources,
 		},
 		execution: roles.OpenedExecutionRuntime{

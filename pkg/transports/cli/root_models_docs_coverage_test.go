@@ -810,8 +810,8 @@ func TestModelsListCommand_DefaultServerAndJSONFlagMapToConfig(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute models list: %v", err)
 	}
-	if got.Server != "http://localhost:7437" {
-		t.Fatalf("server = %q, want http://localhost:7437", got.Server)
+	if got.Server != "" {
+		t.Fatalf("server = %q, want empty when --server is manifest-default so owned Models CLI routing stays local", got.Server)
 	}
 	if !got.JSON {
 		t.Fatal("expected --json to map to ListConfig.JSON")

@@ -13,19 +13,19 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode"
+	opencodepkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/opencode"
 )
 
 const (
-	opencodeThrottleFailureMessage   = opencodeadapter.ThrottleFailureMessage
-	opencodeTimeoutFailureMessage    = opencodeadapter.TimeoutFailureMessage
+	opencodeThrottleFailureMessage   = opencodepkg.ThrottleFailureMessage
+	opencodeTimeoutFailureMessage    = opencodepkg.TimeoutFailureMessage
 	opencodeServerFailureMessage     = "OpenCode encountered a temporary server error."
-	opencodeBadRequestFailureMessage = opencodeadapter.BadRequestFailureMessage
+	opencodeBadRequestFailureMessage = opencodepkg.BadRequestFailureMessage
 	opencodeFailureMessageBytes      = 512
 )
 
 func ParseOpenCodeProviderFailure(result CommandResult) ProviderFailureResult {
-	parsed := opencodeadapter.ParseProviderFailure(opencodeadapter.FailureInput{
+	parsed := opencodepkg.ParseProviderFailure(opencodepkg.FailureInput{
 		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
 	})
 	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}

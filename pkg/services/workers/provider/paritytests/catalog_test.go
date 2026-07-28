@@ -20,12 +20,7 @@ const (
 )
 
 const (
-	FixtureFullStreamClaude     = "full-stream-claude"
-	FixturePartialStreamCodex   = "partial-stream-codex"
-	FixtureSnapshotOnlyOpenCode = "snapshot-only-opencode"
-	FixtureFinalOnlyOpenCode    = "final-only-opencode"
-	FixtureToolLifecycleClaude  = "tool-lifecycle-claude"
-	FixtureAgyFinalOnly         = "agy-final-only"
+	FixtureAgyFinalOnly = "agy-final-only"
 )
 
 // Fixture describes one sanitized parity transcript and its expected terminal outcome.
@@ -44,34 +39,6 @@ type Fixture struct {
 // Catalog returns the canonical parity fixture matrix for Batch 09 proofs.
 func Catalog() []Fixture {
 	return []Fixture{
-		{
-			ID:             FixtureSnapshotOnlyOpenCode,
-			FidelityClass:  FidelitySnapshotOnly,
-			Provider:       adapter.Identity(modelprovider.ProviderOpenCode),
-			TranscriptFile: "testdata/snapshot_only_opencode.jsonl",
-			Request: workerexecution.ProviderInferenceRequest{
-				Dispatch: work.WorkDispatch{DispatchID: "dispatch-parity-snapshot-only"},
-				Model:    "openai/gpt-5", UserMessage: "parity fixture prompt",
-			},
-			WantContent: "Parity snapshot answer",
-			WantCapabilities: adapter.Capabilities{
-				NativeStreaming: true, MessageSnapshots: true, StableItemIDs: true,
-			},
-		},
-		{
-			ID:             FixtureFinalOnlyOpenCode,
-			FidelityClass:  FidelityFinalOnly,
-			Provider:       adapter.Identity(modelprovider.ProviderOpenCode),
-			TranscriptFile: "testdata/final_only_opencode.txt",
-			Request: workerexecution.ProviderInferenceRequest{
-				Dispatch: work.WorkDispatch{DispatchID: "dispatch-parity-final-only"},
-				Model:    "openai/gpt-5", UserMessage: "parity fixture prompt",
-			},
-			WantContent: "Parity final-only answer",
-			WantCapabilities: adapter.Capabilities{
-				MessageSnapshots: true, FinalOnly: true,
-			},
-		},
 		{
 			ID:             FixtureAgyFinalOnly,
 			FidelityClass:  FidelityFinalOnly,

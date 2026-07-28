@@ -132,9 +132,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ports := base
 			test.mutate(&ports)
-			service, err := factorydefinitionswire.NewService(
-				ports.sessionHost,
-				ports.validator,
+			service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
 				ports.persistence,
 				ports.loader,
 				ports.applySupportedFiles,
@@ -183,9 +181,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		t.Fatalf("NewPackagedFactoryCatalog() error = %v", err)
 	}
 
-	service, err := factorydefinitionswire.NewService(
-		sessionHost,
-		stubValidator{},
+	service, err := factorydefinitionswire.NewService(sessionHost, wireStubActivationGateway{}, stubValidator{},
 		stubPersistence{},
 		&factoryloading.Loader{},
 		func(string, *factorydefinitions.FactoryConfig, bool, bool) error { return nil },
@@ -246,9 +242,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 			sessionHost.runtimeCalls,
 		)
 	}
-	if sessionHost.attachCalls != 1 {
-		t.Fatalf("AttachFactoryDefinitions calls = %d, want exactly one construction-time wiring call", sessionHost.attachCalls)
-	}
 	if leaked := runtime.NumGoroutine() - baselineGoroutines; leaked > 4 {
 		t.Fatalf(
 			"construction started background goroutines: baseline=%d current=%d delta=%d",
@@ -284,9 +277,7 @@ func TestNewServiceServesPublishedPackagedCatalogPeerBehavior(t *testing.T) {
 
 	ports := validConstructionPorts(t)
 	ports.packagedCatalog = packagedCatalog
-	service, err := factorydefinitionswire.NewService(
-		ports.sessionHost,
-		ports.validator,
+	service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
 		ports.persistence,
 		ports.loader,
 		ports.applySupportedFiles,
@@ -346,6 +337,7 @@ func TestNewServiceServesPublishedCompilePeerBehavior(t *testing.T) {
 	ports := validConstructionPorts(t)
 	service, err := factorydefinitionswire.NewService(
 		ports.sessionHost,
+		ports.activationGateway,
 		ports.validator,
 		ports.persistence,
 		ports.loader,
@@ -425,9 +417,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
 	ports := validConstructionPorts(t)
-	service, err := factorydefinitionswire.NewService(
-		ports.sessionHost,
-		ports.validator,
+	service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
 		ports.persistence,
 		ports.loader,
 		ports.applySupportedFiles,
@@ -462,6 +452,7 @@ func TestNewServiceDelegatesSnapshotPortabilityThroughRoot(t *testing.T) {
 	ports := validConstructionPorts(t)
 	service, err := factorydefinitionswire.NewService(
 		ports.sessionHost,
+		ports.activationGateway,
 		ports.validator,
 		ports.persistence,
 		ports.loader,
@@ -526,6 +517,7 @@ func (stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
 
 type constructionPorts struct {
 	sessionHost                   factorydefinitions.SessionHost
+	activationGateway             factorydefinitions.DefinitionActivationGateway
 	validator                     factorydefinitions.Validator
 	persistence                   factorydefinitions.Persistence
 	loader                        *factoryloading.Loader
@@ -559,8 +551,10 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 		t.Fatalf("NewPackagedFactoryCatalog() error = %v", err)
 	}
 
+	host := stubSessionHost{}
 	return constructionPorts{
-		sessionHost:                   &stubSessionHost{},
+		sessionHost:                   host,
+		activationGateway:             wireStubActivationGateway{},
 		validator:                     stubValidator{},
 		persistence:                   stubPersistence{},
 		loader:                        &factoryloading.Loader{},
@@ -622,50 +616,50 @@ func (stubSessionHost) ValidateEditableFactorySnapshot(context.Context, *factory
 func (stubSessionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*factorydefinitions.FactorySnapshot, error) {
 	return nil, errors.New("session not found")
 }
-func (stubSessionHost) WithActivationLock(func() error) error { return nil }
-func (stubSessionHost) RequireIdleRuntimeForSession(context.Context, string) error {
-	return nil
-}
-func (stubSessionHost) ActivateSessionEditableFactory(
-	context.Context,
-	*factorydefinitions.DefinitionSession,
-	string, string, string, string, string,
-) error {
-	return nil
-}
 func (stubSessionHost) ReplaceFactoryLayoutAtDir(
 	string,
 	*factorydefinitions.PreparedFactoryLayoutPayload,
 ) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
 	return nil, nil
 }
-func (stubSessionHost) SaveNow() time.Time   { return time.Unix(0, 0) }
-func (stubSessionHost) RunSessionID() string { return "" }
-func (stubSessionHost) SessionForActivation(string) *factorydefinitions.DefinitionSession {
+
+type wireStubActivationGateway struct{}
+
+func (wireStubActivationGateway) RunSessionID() string { return "" }
+func (wireStubActivationGateway) SessionForActivation(string) *factorydefinitions.DefinitionSession {
 	return nil
 }
-func (stubSessionHost) NamedFactoryActivationPaths(*factorydefinitions.DefinitionSession) (string, string) {
+func (wireStubActivationGateway) RequireSession(string) (*factorydefinitions.DefinitionSession, error) {
+	return nil, errors.New("session not found")
+}
+func (wireStubActivationGateway) SessionFactoryPersistRoot(*factorydefinitions.DefinitionSession) string {
+	return ""
+}
+func (wireStubActivationGateway) NamedFactoryActivationPaths(*factorydefinitions.DefinitionSession) (string, string) {
 	return "", ""
 }
-func (stubSessionHost) RequireIdleBeforeNamedFactoryActivation(
+func (wireStubActivationGateway) SaveNow() time.Time { return time.Unix(0, 0) }
+func (wireStubActivationGateway) WithActivationLock(fn func() error) error { return fn() }
+func (wireStubActivationGateway) RequireIdleRuntimeForSession(context.Context, string) error {
+	return nil
+}
+func (wireStubActivationGateway) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *factorydefinitions.DefinitionSession) error {
+	return nil
+}
+func (wireStubActivationGateway) ActivateSessionEditableFactory(
 	context.Context,
-	string,
 	*factorydefinitions.DefinitionSession,
+	string, string, string, string, string,
 ) error {
 	return nil
 }
-func (stubSessionHost) SwapPersistedNamedFactoryRuntime(
+func (wireStubActivationGateway) SwapPersistedNamedFactoryRuntime(
 	context.Context,
 	string,
 	*factorydefinitions.DefinitionSession,
 	string, string, string, string,
 ) error {
 	return nil
-}
-func (stubSessionHost) AttachFactoryDefinitions(
-	definitions factorydefinitions.Service,
-) factorydefinitions.Service {
-	return definitions
 }
 
 type stubValidator struct{}
@@ -823,7 +817,6 @@ func (c *recordingClock) Now() time.Time {
 
 type recordingSessionHost struct {
 	runtimeCalls int
-	attachCalls  int
 }
 
 func (h *recordingSessionHost) recordRuntimeCall() {
@@ -876,77 +869,12 @@ func (h *recordingSessionHost) GetCurrentFactorySnapshotForSession(context.Conte
 	return nil, errors.New("session not found")
 }
 
-func (h *recordingSessionHost) WithActivationLock(func() error) error {
-	h.recordRuntimeCall()
-	return nil
-}
-
-func (h *recordingSessionHost) RequireIdleRuntimeForSession(context.Context, string) error {
-	h.recordRuntimeCall()
-	return nil
-}
-
-func (h *recordingSessionHost) ActivateSessionEditableFactory(
-	context.Context,
-	*factorydefinitions.DefinitionSession,
-	string, string, string, string, string,
-) error {
-	h.recordRuntimeCall()
-	return nil
-}
-
 func (h *recordingSessionHost) ReplaceFactoryLayoutAtDir(
 	string,
 	*factorydefinitions.PreparedFactoryLayoutPayload,
 ) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
 	h.recordRuntimeCall()
 	return nil, nil
-}
-
-func (h *recordingSessionHost) SaveNow() time.Time {
-	h.recordRuntimeCall()
-	return time.Unix(0, 0)
-}
-
-func (h *recordingSessionHost) RunSessionID() string {
-	h.recordRuntimeCall()
-	return ""
-}
-
-func (h *recordingSessionHost) SessionForActivation(string) *factorydefinitions.DefinitionSession {
-	h.recordRuntimeCall()
-	return nil
-}
-
-func (h *recordingSessionHost) NamedFactoryActivationPaths(*factorydefinitions.DefinitionSession) (string, string) {
-	h.recordRuntimeCall()
-	return "", ""
-}
-
-func (h *recordingSessionHost) RequireIdleBeforeNamedFactoryActivation(
-	context.Context,
-	string,
-	*factorydefinitions.DefinitionSession,
-) error {
-	h.recordRuntimeCall()
-	return nil
-}
-
-func (h *recordingSessionHost) SwapPersistedNamedFactoryRuntime(
-	context.Context,
-	string,
-	*factorydefinitions.DefinitionSession,
-	string, string, string, string,
-) error {
-	h.recordRuntimeCall()
-	return nil
-}
-
-func (h *recordingSessionHost) AttachFactoryDefinitions(
-	definitions factorydefinitions.Service,
-) factorydefinitions.Service {
-	h.attachCalls++
-	return definitions
 }
 
 func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T) {
@@ -993,6 +921,7 @@ func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T
 
 	service, err := factorydefinitionswire.NewService(
 		ports.sessionHost,
+		ports.activationGateway,
 		ports.validator,
 		ports.persistence,
 		ports.loader,

@@ -11,7 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -63,7 +62,7 @@ func TestCursorGoldenMalformedRecordReturnsStableDiagnostic(t *testing.T) {
 	}
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCursor, request.Model))
+	support.WriteAgentConfig(t, dir, "worker", cursorGoldenWorkerConfig(request.Model))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"cursor golden malformed record"}`))
 
 	exitCode := 0
@@ -213,7 +212,7 @@ func runCursorFailureGoldenCase(
 	}
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCursor, request.Model))
+	support.WriteAgentConfig(t, dir, "worker", cursorGoldenWorkerConfig(request.Model))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"cursor golden `+caseName+`"}`))
 
 	exitCode := 1

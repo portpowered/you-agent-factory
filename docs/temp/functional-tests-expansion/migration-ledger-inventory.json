@@ -1449,6 +1449,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/packaged/review/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/review",
+      "scenario": "TestPackagedReviewApprovalCompletes",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/review/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/review/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/review",
+      "scenario": "TestPackagedReviewRejectionCarriesFeedback",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/review/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/review/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/review",
+      "scenario": "TestPackagedReviewRetryExhaustionFails",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/review/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/packaged/subagent/invocation_test.go",
       "package": "you-agent-factory/tests/functional/factory/packaged/subagent",
       "scenario": "TestPackagedSubagentChildFailureReturnsStableFailure",
@@ -1474,16 +1504,6 @@
       "scenario": "TestPackagedSubagentStreamsChildResponseEvents",
       "lane": "short",
       "destination": "tests/functional/factory/packaged/subagent/invocation_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory/runtime_lifecycle/one_shot_test.go",
-      "package": "you-agent-factory/tests/functional/factory/runtime_lifecycle",
-      "scenario": "TestOneShotRunJoinsRuntimeLifecycle",
-      "lane": "short",
-      "destination": "tests/functional/sessions/lifecycle/crud_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -4694,6 +4714,66 @@
       "scenario": "TestFactorySessionResumeDoesNotRepeatCompletedDispatch",
       "lane": "short",
       "destination": "tests/functional/sessions/restart/logical_identity_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/lifecycle/crud_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/lifecycle",
+      "scenario": "TestFactorySessionCreateListShowDelete",
+      "lane": "short",
+      "destination": "tests/functional/sessions/lifecycle/crud_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/lifecycle/crud_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/lifecycle",
+      "scenario": "TestFactorySessionListMultipleSessions",
+      "lane": "short",
+      "destination": "tests/functional/sessions/lifecycle/crud_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/lifecycle/crud_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/lifecycle",
+      "scenario": "TestFactorySessionMissingShowAndDeleteFail",
+      "lane": "short",
+      "destination": "tests/functional/sessions/lifecycle/crud_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/lifecycle/crud_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/lifecycle",
+      "scenario": "TestAPIOpenListGetAndCloseFactorySession",
+      "lane": "short",
+      "destination": "tests/functional/sessions/lifecycle/crud_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/lifecycle/crud_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/lifecycle",
+      "scenario": "TestAPIFactorySessionNotFoundUsesTypedError",
+      "lane": "short",
+      "destination": "tests/functional/sessions/lifecycle/crud_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/lifecycle/crud_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/lifecycle",
+      "scenario": "TestAPIMultipleFactorySessionsRemainIsolated",
+      "lane": "short",
+      "destination": "tests/functional/sessions/lifecycle/crud_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -7987,6 +8067,56 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/events/factory_events/order_and_cursor_test.go",
+      "package": "you-agent-factory/tests/functional/events/factory_events",
+      "scenario": "TestAPIEventCursorReturnsOnlyNewerEvents",
+      "lane": "short",
+      "destination": "tests/functional/events/factory_events/order_and_cursor_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/events/factory_events/order_and_cursor_test.go",
+      "package": "you-agent-factory/tests/functional/events/factory_events",
+      "scenario": "TestAPIGetFactoryEventsReturnsOrderedDurableHistory",
+      "lane": "short",
+      "destination": "tests/functional/events/factory_events/order_and_cursor_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/events/factory_events/order_and_cursor_test.go",
+      "package": "you-agent-factory/tests/functional/events/factory_events",
+      "scenario": "TestAPIInvalidEventCursorReturnsTypedError",
+      "lane": "short",
+      "destination": "tests/functional/events/factory_events/order_and_cursor_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/events/factory_events/order_and_cursor_test.go",
+      "package": "you-agent-factory/tests/functional/events/factory_events",
+      "scenario": "TestFactoryEventStreamIsOrderedAndClosesAtSessionTermination",
+      "lane": "short",
+      "destination": "tests/functional/events/factory_events/order_and_cursor_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/events/factory_events/order_and_cursor_test.go",
+      "package": "you-agent-factory/tests/functional/events/factory_events",
+      "scenario": "TestFactoryEventStreamReconnectHasNoGapOrDuplicate",
+      "lane": "short",
+      "destination": "tests/functional/events/factory_events/order_and_cursor_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
   "scanned_at_utc": "2026-07-28T07:03:39Z",
@@ -7994,7 +8124,7 @@
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 523,
+      "none": 528,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -8017,17 +8147,18 @@
       "replay_contracts": 23,
       "runtime_api": 95,
       "sessionparity": 13,
-      "sessions": 21,
+      "sessions": 27,
       "smoke": 62,
       "transport": 106,
       "work": 20,
       "workers": 74,
       "workflow": 30,
-      "workstations": 34
+      "workstations": 34,
+      "events": 32
     },
-    "customer_top_level_Test_scenarios": 779,
+    "customer_top_level_Test_scenarios": 784,
     "lane_functionallong": 95,
-    "lane_short": 684,
+    "lane_short": 689,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -8048,7 +8179,6 @@
       "you-agent-factory/tests/functional/factory/packaged/goal": 4,
       "you-agent-factory/tests/functional/factory/packaged/quorum": 3,
       "you-agent-factory/tests/functional/factory/packaged/subagent": 3,
-      "you-agent-factory/tests/functional/factory/runtime_lifecycle": 1,
       "you-agent-factory/tests/functional/guards_batch": 23,
       "you-agent-factory/tests/functional/models/model_invoke": 3,
       "you-agent-factory/tests/functional/models/model_list": 2,
@@ -8080,6 +8210,7 @@
       "you-agent-factory/tests/functional/sessions/controls": 5,
       "you-agent-factory/tests/functional/sessions/execution": 3,
       "you-agent-factory/tests/functional/sessions/mcp": 7,
+      "you-agent-factory/tests/functional/sessions/lifecycle": 6,
       "you-agent-factory/tests/functional/sessions/restart": 3,
       "you-agent-factory/tests/functional/smoke": 62,
       "you-agent-factory/tests/functional/transport/cli/commands": 20,
@@ -8190,7 +8321,7 @@
       "cli": 56,
       "config_init": 8,
       "models": 1,
-      "operator_settings": 1,
+      "operator_settings": 10,
       "providers": 46,
       "sessionparity": 13,
       "work": 1

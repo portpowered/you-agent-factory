@@ -155,7 +155,7 @@ func newParallelOperationCatalogPair(
 	if err != nil {
 		t.Fatalf("catalogwire.NewService: %v", err)
 	}
-	return legacyCatalog, factorydefinition.NewWithCatalog(nil, catalogService), paths
+	return legacyCatalog, factorydefinition.NewWithCatalog(nil, factorydefinition.StubActivationGateway(), catalogService), paths
 }
 
 func writeParallelOperationNamedFactory(t *testing.T, rootDir, name string) string {

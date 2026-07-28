@@ -2,39 +2,31 @@ package cursor
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
-	"sync"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
-// IntegrationDependencies are Cursor's injected subprocess and temporary-file
-// effects plus the platform facts needed for Windows prompt materialization.
+// IntegrationDependencies are the Providers collaborators used by Cursor's
+// registry-backed integration on the neutral conductor path.
 type IntegrationDependencies struct {
-	CommandRunner   workerprocess.CommandRunner
-	OperatingSystem string
-	TemporaryDir    string
-	TemporaryFiles  platformfilesystem.TemporaryFileSystem
+	ProvidersService providers.Service
 }
 
-// Integration owns Cursor invocation through the neutral response protocol.
+// Integration routes Cursor through the Providers root execution boundary.
 type Integration struct {
-	dependencies IntegrationDependencies
+	providers providers.Service
 }
 
-// NewIntegration constructs Cursor's registry-ready integration.
-func NewIntegration(dependencies ...IntegrationDependencies) *Integration {
+// NewIntegration constructs Cursor's registry-backed integration.
+func NewIntegration(deps ...IntegrationDependencies) *Integration {
 	integration := &Integration{}
-	if len(dependencies) > 0 {
-		integration.dependencies = dependencies[0]
+	if len(deps) > 0 {
+		integration.providers = deps[0].ProvidersService
 	}
 	return integration
 }
@@ -43,7 +35,6 @@ func (*Integration) Identity() inference.Identity {
 	return inference.Identity("cursor")
 }
 
-// MaximumCapabilities mirrors Cursor's accepted catalog manifest.
 func (*Integration) MaximumCapabilities() inference.CapabilitySet {
 	return inference.NewCapabilitySet(
 		inference.CapabilityPromptSubmission,
@@ -65,373 +56,211 @@ func (i *Integration) Capabilities(context.Context, inference.InvocationRequest)
 	return i.MaximumCapabilities(), nil
 }
 
-// Invoke publishes decoded Cursor stream records in subprocess order and
-// closes the writer once with the authoritative parsed completion.
+// Invoke executes Cursor through providers.Service and publishes progress
+// before closing with exactly one terminal outcome.
 func (i *Integration) Invoke(
 	ctx context.Context,
 	request inference.InvocationRequest,
 	writer inference.ResponseWriter,
 ) error {
-	requestedSession := cursorRequestedSession(request)
-	providerAdapter := i.newAdapter(requestedSession)
-	registry, err := adapter.NewRegistry(providerAdapter)
-	if err != nil {
-		return err
+	if i == nil || i.providers == nil {
+		failure := inference.NewFailure(inference.FailureInput{
+			Kind:    inference.FailureDependency,
+			Message: "Cursor Providers service is unavailable",
+		})
+		if err := writeFailureProgress(ctx, writer, request.InvocationID(), failure); err != nil {
+			return err
+		}
+		return writer.Close(ctx, inference.FailedCompletion(failure))
 	}
-	publication := &cursorPublication{ctx: ctx, writer: writer}
-	started, err := cursorRunEvent(request.InvocationID(), workerexecution.PhaseStarted)
-	if err != nil {
-		return err
-	}
-	if err := publication.writeEvent(started); err != nil {
-		return err
-	}
-	result, executeErr := adapter.Execute(ctx, registry, cursorStreamingRunner{
-		runner: i.dependencies.CommandRunner,
-	}, adapter.ExecuteInput{
-		Provider: providerAdapter.Identity(),
-		Command: adapter.CommandContext{
-			Request:         cursorRequestFromInvocation(request),
-			SkipPermissions: request.Execution().SkipPermissions,
-		},
-		Decoder: adapter.DecoderContext{
-			RunID:      request.InvocationID(),
-			DispatchID: request.InvocationID(),
-		},
-		ObserveDraft: publication.write,
-	})
-	if err := publication.err(); err != nil {
-		return err
-	}
+	result, err := i.providers.Execute(ctx, executeRequestFromInvocation(request))
 	if errors.Is(ctx.Err(), context.Canceled) && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return context.Canceled
+		return ctx.Err()
 	}
-	if errors.Is(result.CommandError, context.Canceled) &&
-		!errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return result.CommandError
-	}
-	if result.Failure != nil {
-		return writer.Close(ctx, inference.FailedCompletion(
-			cursorInferenceFailureForResult(*result.Failure, result),
-		))
-	}
-	if executeErr != nil {
-		return writer.Close(ctx, inference.FailedCompletion(inference.NewFailure(inference.FailureInput{
-			Kind:    inference.FailureUnknown,
-			Message: cursorUnknownFailureMessage,
-		})))
-	}
-	completed, err := cursorRunEvent(request.InvocationID(), workerexecution.PhaseCompleted)
 	if err != nil {
+		failure := failureFromExecuteError(request, err)
+		if executeFailure, ok := providersExecuteFailure(err); ok &&
+			executeFailure.Diagnostics != nil &&
+			len(executeFailure.Diagnostics.Progress) > 0 {
+			if writeErr := writeFailureDiagnosticsProgress(
+				ctx,
+				writer,
+				request.InvocationID(),
+				executeFailure.Diagnostics,
+			); writeErr != nil {
+				return writeErr
+			}
+		}
+		if writeErr := writeFailureProgress(ctx, writer, request.InvocationID(), failure); writeErr != nil {
+			return writeErr
+		}
+		return writer.Close(ctx, inference.FailedCompletion(failure))
+	}
+	if err := writeProgressEvents(
+		ctx,
+		writer,
+		request.InvocationID(),
+		result.Diagnostics,
+		result.Content,
+	); err != nil {
 		return err
 	}
-	if err := publication.writeEvent(completed); err != nil {
-		return err
-	}
-	return writer.Close(ctx, inference.SuccessfulCompletion(cursorInferenceResponse(result.Response)))
+	return writer.Close(ctx, inference.SuccessfulCompletion(inference.NewResponse(inference.ResponseInput{
+		Content:         result.Content,
+		ProviderSession: successSessionForInvocation(request, result.SessionRef),
+	})))
 }
 
-func (i *Integration) newAdapter(
-	requestedSession *workerexecution.ProviderSessionMetadata,
-) *Adapter {
-	result := NewAdapter(AdapterDependencies{
-		OperatingSystem: i.dependencies.OperatingSystem,
-		TemporaryDir:    i.dependencies.TemporaryDir,
-		TemporaryFiles:  i.dependencies.TemporaryFiles,
-	})
-	result.requestedSession = cloneCursorProviderSession(requestedSession)
-	return result
+func executeRequestFromInvocation(request inference.InvocationRequest) providers.ExecuteRequest {
+	execution := request.Execution()
+	executeRequest := providers.ExecuteRequest{
+		Provider:           providers.IDCursor,
+		AttemptID:          request.InvocationID(),
+		Model:              request.Model(),
+		SkipPermissions:    execution.SkipPermissions,
+		SystemPrompt:       request.SystemPrompt(),
+		UserMessage:        request.UserMessage(),
+		OutputSchema:       request.OutputSchema(),
+		WorkingDirectory:   execution.WorkingDirectory,
+		Worktree:           execution.Worktree,
+		ProcessEnvironment: append([]string(nil), execution.ProcessEnvironment...),
+		EnvVars:            cloneStringMap(execution.EnvVars),
+		WorkerType:         workerNameFromExecution(execution),
+		WorkstationName:    workstationNameFromExecution(execution),
+	}
+	if session := requestedSession(request); session != nil {
+		executeRequest.ResumeSession = session
+	}
+	return executeRequest
 }
 
-type cursorPublication struct {
-	mu     sync.Mutex
-	ctx    context.Context
-	writer inference.ResponseWriter
-	first  error
+func workerNameFromExecution(execution workers.ProviderInferenceRequest) string {
+	if execution.WorkerType != "" {
+		return execution.WorkerType
+	}
+	return execution.Dispatch.WorkerType
 }
 
-func (p *cursorPublication) write(draft workerexecution.Draft) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.first != nil {
-		return
+func workstationNameFromExecution(execution workers.ProviderInferenceRequest) string {
+	if execution.WorkstationType != "" {
+		return execution.WorkstationType
 	}
-	// Cursor's system/init record announces the resumable provider session; it
-	// is not a lifecycle that Cursor later terminates. The authoritative
-	// provider-session reference is carried by the completion instead.
-	if draft.Kind == workerexecution.KindSession {
-		return
-	}
-	event, err := cursorInferenceEvent(draft)
-	if err == nil {
-		err = p.writer.WriteEvent(p.ctx, event)
-	}
-	if err != nil {
-		p.first = err
-	}
+	return execution.Dispatch.WorkstationName
 }
 
-func (p *cursorPublication) writeEvent(event inference.EventDraft) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.first != nil {
-		return p.first
+func requestedSession(request inference.InvocationRequest) *providers.SessionRef {
+	if session := request.ProviderSession(); session != nil &&
+		workers.CanonicalProviderSessionProvider(session.Provider()) == string(modelprovider.ProviderCursor) &&
+		strings.TrimSpace(session.Kind()) == providers.SessionIDKind {
+		return &providers.SessionRef{
+			Provider: providers.IDCursor,
+			Kind:     providers.SessionIDKind,
+			ID:       strings.TrimSpace(session.ID()),
+		}
 	}
-	if err := p.writer.WriteEvent(p.ctx, event); err != nil {
-		p.first = err
+	if sessionID := strings.TrimSpace(request.Execution().SessionID); sessionID != "" {
+		return &providers.SessionRef{
+			Provider: providers.IDCursor,
+			Kind:     providers.SessionIDKind,
+			ID:       sessionID,
+		}
 	}
-	return p.first
+	return nil
 }
 
-func (p *cursorPublication) err() error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.first
-}
-
-func cursorRunEvent(runID string, phase workerexecution.Phase) (inference.EventDraft, error) {
-	payload, err := json.Marshal(workerexecution.RunPayload{Status: string(phase)})
-	if err != nil {
-		return inference.EventDraft{}, fmt.Errorf("marshal Cursor run payload: %w", err)
+func failureFromExecuteError(request inference.InvocationRequest, err error) inference.Failure {
+	var failure providers.ExecuteFailure
+	if errors.As(err, &failure) {
+		return inference.NewFailure(inference.FailureInput{
+			Kind:            executeFailureKind(failure.Kind),
+			Message:         failure.Message,
+			ProviderSession: failureSessionForInvocation(request, failure.SessionRef),
+		})
 	}
-	return inference.NewEventDraft(inference.EventDraftInput{
-		RunID: runID, Kind: workerexecution.KindRun, Phase: phase, Payload: payload,
-		Provenance: workerexecution.Provenance{
-			Provider: "cursor", Delivery: workerexecution.DeliverySynthesized,
-			Representation:  workerexecution.RepresentationNotification,
-			Fidelity:        workerexecution.FidelityLifecycleOnly,
-			NativeEventType: "command_lifecycle",
-		},
-	})
-}
-
-func cursorInferenceEvent(draft workerexecution.Draft) (inference.EventDraft, error) {
-	return inference.NewEventDraft(inference.EventDraftInput{
-		RunID:              draft.RunID,
-		Kind:               draft.Kind,
-		Phase:              draft.Phase,
-		Provenance:         draft.Provenance,
-		Payload:            draft.Payload,
-		TurnID:             draft.TurnID,
-		ItemID:             draft.ItemID,
-		ParentItemID:       draft.ParentItemID,
-		ProviderSessionRef: draft.ProviderSessionRef,
-	})
-}
-
-func cursorInferenceResponse(response workerexecution.InferenceResponse) inference.Response {
-	var metadata map[string]string
-	if response.Diagnostics != nil && response.Diagnostics.Provider != nil {
-		metadata = response.Diagnostics.Provider.ResponseMetadata
+	if errors.Is(err, providers.ErrExecuteCancelled) {
+		return inference.NewFailure(inference.FailureInput{
+			Kind:    inference.FailureCanceled,
+			Message: "provider invocation was canceled",
+		})
 	}
-	return inference.NewResponse(inference.ResponseInput{
-		Content:         response.Content,
-		ProviderSession: cursorInferenceSession(response.ProviderSession),
-		Metadata:        metadata,
-	})
-}
-
-func cursorInferenceSession(session *workerexecution.ProviderSessionMetadata) *inference.ProviderSession {
-	if session == nil {
-		return nil
-	}
-	result := inference.NewProviderSession(session.Provider, session.Kind, session.ID, nil)
-	return &result
-}
-
-func cursorInferenceFailure(facts adapter.FailureFacts) inference.Failure {
-	return inference.NewFailure(inference.FailureInput{
-		Kind:            cursorInferenceFailureKind(facts.Type),
-		Message:         facts.Message,
-		Retryable:       facts.Retry.Retryable,
-		ProviderSession: cursorInferenceSession(facts.ProviderSession),
-	})
-}
-
-func cursorInferenceFailureForResult(
-	facts adapter.FailureFacts,
-	result adapter.ExecuteResult,
-) inference.Failure {
-	failure := cursorInferenceFailure(facts)
-	if facts.Type != workerexecution.WorkFailureTypeUnknown ||
-		result.ParseError == nil ||
-		result.CommandError != nil ||
-		result.Command.ExitCode != 0 {
-		return failure
-	}
-	var parseFailure *ParseFailure
-	if !errors.As(result.ParseError, &parseFailure) {
-		return failure
-	}
-	if _, canonical := parseFailure.CanonicalResult(); canonical {
-		return failure
+	if errors.Is(err, providers.ErrExecuteTimeout) {
+		return inference.NewFailure(inference.FailureInput{
+			Kind:    inference.FailureTimeout,
+			Message: "provider execution timed out",
+		})
 	}
 	return inference.NewFailure(inference.FailureInput{
-		Kind:            inference.FailureMalformedOutput,
-		Message:         facts.Message,
-		Retryable:       false,
-		ProviderSession: cursorInferenceSession(facts.ProviderSession),
+		Kind:            inference.FailureUnknown,
+		Message:         "Cursor invocation failed.",
+		ProviderSession: failureSessionForInvocation(request, nil),
 	})
 }
 
-func cursorInferenceFailureKind(failureType workerexecution.WorkFailureType) inference.FailureKind {
-	switch failureType {
-	case workerexecution.WorkFailureTypeTimeout:
+func executeFailureKind(kind providers.ExecuteFailureKind) inference.FailureKind {
+	switch kind {
+	case providers.ExecuteFailureKindCanceled:
+		return inference.FailureCanceled
+	case providers.ExecuteFailureKindTimeout:
 		return inference.FailureTimeout
-	case workerexecution.WorkFailureTypeThrottled:
-		return inference.FailureThrottled
-	case workerexecution.WorkFailureTypeAuthFailure:
+	case providers.ExecuteFailureKindAuthentication:
 		return inference.FailureAuthentication
-	case workerexecution.WorkFailureTypePermanentBadRequest:
+	case providers.ExecuteFailureKindInvalidRequest:
 		return inference.FailureInvalidRequest
-	case workerexecution.WorkFailureTypeMisconfigured:
+	case providers.ExecuteFailureKindThrottled:
+		return inference.FailureThrottled
+	case providers.ExecuteFailureKindDependency:
 		return inference.FailureDependency
 	default:
 		return inference.FailureUnknown
 	}
 }
 
-func cursorRequestFromInvocation(request inference.InvocationRequest) workerexecution.ProviderInferenceRequest {
-	providerRequest := request.Execution()
-	if providerRequest.Dispatch.DispatchID == "" {
-		providerRequest.Dispatch.DispatchID = request.InvocationID()
-	}
-	providerRequest.ModelProvider = string(modelprovider.ProviderCursor)
-	providerRequest.Model = request.Model()
-	providerRequest.SystemPrompt = request.SystemPrompt()
-	providerRequest.UserMessage = request.UserMessage()
-	providerRequest.OutputSchema = request.OutputSchema()
-	if session := cursorRequestedSession(request); session != nil {
-		providerRequest.SessionID = session.ID
-	}
-	return providerRequest
+func sessionRefFromResult(ref *providers.SessionRef) *inference.ProviderSession {
+	return sessionRefToInference(ref)
 }
 
-func cursorRequestedSession(
+func sessionRefToInference(ref *providers.SessionRef) *inference.ProviderSession {
+	if ref == nil || strings.TrimSpace(ref.ID) == "" {
+		return nil
+	}
+	session := inference.NewProviderSession(string(ref.Provider), ref.Kind, ref.ID, nil)
+	return &session
+}
+
+func failureSessionForInvocation(
 	request inference.InvocationRequest,
-) *workerexecution.ProviderSessionMetadata {
-	if session := request.ProviderSession(); session != nil &&
-		workerexecution.CanonicalProviderSessionProvider(session.Provider()) == "cursor" &&
-		strings.TrimSpace(session.Kind()) == ProviderSessionKindSessionID {
-		return canonicalProviderSession("cursor", session.ID())
+	ref *providers.SessionRef,
+) *inference.ProviderSession {
+	if session := sessionRefToInference(ref); session != nil {
+		return session
 	}
-	return canonicalProviderSession("cursor", request.Execution().SessionID)
+	return sessionRefToInference(requestedSession(request))
 }
 
-type cursorStreamingRunner struct {
-	runner workerprocess.CommandRunner
+func successSessionForInvocation(
+	request inference.InvocationRequest,
+	ref *providers.SessionRef,
+) *inference.ProviderSession {
+	return failureSessionForInvocation(request, ref)
 }
 
-func (r cursorStreamingRunner) Run(
-	ctx context.Context,
-	request workerprocess.CommandRequest,
-	observe func(adapter.Observation) error,
-) (workerprocess.CommandResult, error) {
-	if r.runner == nil {
-		return workerprocess.CommandResult{}, errors.New("Cursor command runner is required")
+func cloneStringMap(values map[string]string) map[string]string {
+	if values == nil {
+		return nil
 	}
-	if streaming, ok := r.runner.(interface {
-		RunStreaming(context.Context, workerprocess.CommandRequest, workerprocess.OutputChunkObserver) (workerprocess.CommandResult, error)
-	}); ok {
-		var observeMu sync.Mutex
-		var observeErr error
-		result, runErr := streaming.RunStreaming(ctx, request, func(stream string, chunk []byte) {
-			observeMu.Lock()
-			defer observeMu.Unlock()
-			if observeErr == nil {
-				observeErr = observe(adapter.Observation{Stream: adapter.OutputStream(stream), Chunk: chunk})
-			}
-		})
-		return result, errors.Join(runErr, observeErr)
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
 	}
-	result, runErr := r.runner.Run(ctx, request)
-	if len(result.Stdout) > 0 {
-		runErr = errors.Join(runErr, observe(adapter.Observation{Stream: adapter.OutputStreamStdout, Chunk: result.Stdout}))
-	}
-	if len(result.Stderr) > 0 {
-		runErr = errors.Join(runErr, observe(adapter.Observation{Stream: adapter.OutputStreamStderr, Chunk: result.Stderr}))
-	}
-	return result, runErr
+	return cloned
 }
 
-func (a *Adapter) NewDecoder(_ context.Context, input adapter.DecoderContext) (adapter.Decoder, error) {
-	return newResponseEventDecoderWithSession(input, a.requestedSession), nil
+func providersExecuteFailure(err error) (providers.ExecuteFailure, bool) {
+	var failure providers.ExecuteFailure
+	if errors.As(err, &failure) {
+		return failure, true
+	}
+	return providers.ExecuteFailure{}, false
 }
 
-func (a *Adapter) ParseFinal(_ context.Context, input adapter.FinalParseContext) (adapter.FinalParseResult, error) {
-	parsed, failure := parseInferenceResult(
-		string(modelprovider.ProviderCursor),
-		input.CommandResult.Stdout,
-		a.requestedSession,
-	)
-	if failure != nil {
-		return adapter.FinalParseResult{}, failure
-	}
-	return adapter.FinalParseResult{Response: workerexecution.InferenceResponse{
-		Content:         parsed.Content,
-		ProviderSession: parsed.ProviderSession,
-		Diagnostics:     WithResponseMetadata(nil, parsed.ResponseMetadata),
-	}}, nil
-}
-
-func (*Adapter) Capabilities(context.Context, adapter.CapabilityContext) (adapter.CapabilityResult, error) {
-	return adapter.CapabilityResult{Capabilities: adapter.Capabilities{
-		NativeStreaming: true, MessageDeltas: true, MessageSnapshots: true,
-		ToolLifecycle: true, ToolOutputDeltas: true, StableItemIDs: true,
-	}}, nil
-}
-
-func (a *Adapter) ClassifyFailure(ctx context.Context, input adapter.FailureContext) adapter.FailureResult {
-	if input.CommandError == nil && input.CommandResult.ExitCode == 0 &&
-		input.DecodeError == nil && input.FlushError == nil && input.ParseError == nil {
-		return adapter.FailureResult{}
-	}
-	failure := FailureResult{
-		Reason:  workerexecution.WorkFailureTypeTimeout,
-		Message: cursorTimeoutFailureMessage,
-	}
-	if !errors.Is(ctx.Err(), context.DeadlineExceeded) &&
-		!errors.Is(input.CommandError, context.DeadlineExceeded) {
-		failure = ParseProviderFailure(FailureInput{
-			Stdout: input.CommandResult.Stdout, Stderr: input.CommandResult.Stderr,
-			ExitCode: input.CommandResult.ExitCode, FallbackReason: workerexecution.WorkFailureTypeUnknown,
-		})
-	}
-	if failure.ProviderSession == nil {
-		failure.ProviderSession = latestCursorProviderSession(
-			string(modelprovider.ProviderCursor),
-			input.CommandResult.Stdout,
-			a.requestedSession,
-		)
-	}
-	family := workerexecution.WorkFailureFamilyTerminal
-	retryable := cursorFailureRetryable(failure.Reason)
-	if failure.Reason == workerexecution.WorkFailureTypeThrottled {
-		family = workerexecution.WorkFailureFamilyThrottle
-	} else if retryable {
-		family = workerexecution.WorkFailureFamilyRetryable
-	}
-	return adapter.FailureResult{Failure: &adapter.FailureFacts{
-		Family: family, Type: failure.Reason, Message: failure.Message,
-		Retry:           adapter.RetryGuidance{Retryable: retryable},
-		ProviderSession: failure.ProviderSession,
-	}}
-}
-
-func latestCursorProviderSession(
-	provider string,
-	stdout []byte,
-	requestedSession *workerexecution.ProviderSessionMetadata,
-) *workerexecution.ProviderSessionMetadata {
-	session := cloneCursorProviderSession(requestedSession)
-	for _, line := range splitNonEmptyLines(stdout) {
-		if observed := cursorProviderSessionFromStructuredLine(provider, line); observed != nil {
-			session = observed
-		}
-	}
-	return session
-}
-
-var _ adapter.Adapter = (*Adapter)(nil)
-var _ adapter.StreamingCommandRunner = cursorStreamingRunner{}
 var _ inference.Integration = (*Integration)(nil)

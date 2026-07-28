@@ -141,7 +141,7 @@ func derefGeneratedWorkContent(content *factoryapi.WorkContent) factoryapi.WorkC
 
 func generatedResolvedModelInvocationBindings(values []modelinference.ResolvedModelOperationBinding) []factoryapi.ResolvedModelOperationBinding {
 	if len(values) == 0 {
-		return nil
+		return []factoryapi.ResolvedModelOperationBinding{}
 	}
 	bindings := make([]factoryapi.ResolvedModelOperationBinding, 0, len(values))
 	for _, binding := range values {

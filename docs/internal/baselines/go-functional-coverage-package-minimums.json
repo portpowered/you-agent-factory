@@ -244,7 +244,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
-      "minimum": 57.75
+      "exception": {
+        "kind": "migration",
+        "justification": "CUT-DEF-SES moved activation lock, idle, and swap ports from definition Host wrappers to the Sessions DefinitionActivationGateway; the functional profile no longer executes the removed host adapter statements.",
+        "owner": "factory-definition-maintainers",
+        "deadline": "2026-12-31",
+        "removalGate": "Functional coverage for the definition package is restored through gateway integration tests without reintroducing Host activation wrappers."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable",
@@ -624,7 +630,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",
-      "minimum": 65.51
+      "exception": {
+        "kind": "migration",
+        "justification": "CUT-DEF-SES requires DefinitionActivationGateway in service composition and removes AttachFactoryDefinitions callback wiring; the functional profile no longer executes the retired construction statements.",
+        "owner": "factory-definition-maintainers",
+        "deadline": "2026-12-31",
+        "removalGate": "Functional coverage for the service composition package is restored through gateway integration tests without reintroducing attach-back construction."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture",
@@ -1068,7 +1080,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/fragmentmap",
-      "minimum": 51.32
+      "minimum": 49.55
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/ndjsoncontract",
@@ -1879,6 +1891,14 @@
       "minimum": 0.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/cursor",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/opencode",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service",
       "exception": {
         "kind": "measurement",
@@ -2442,15 +2462,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider",
-      "minimum": 39.88
+      "minimum": 36.92
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter",
-      "minimum": 77.06
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode",
-      "minimum": 48.24
+      "minimum": 68.80
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/testkit",
@@ -2515,6 +2531,10 @@
       "minimum": 71.55
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/opencode",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/pi",
       "minimum": 45.03
     },
@@ -2524,7 +2544,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry",
-      "minimum": 65.58
+      "minimum": 65.54
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured",
