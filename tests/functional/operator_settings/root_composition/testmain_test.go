@@ -1,4 +1,4 @@
-package servicewire
+package root_composition_test
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
-// TestMain registers operator-settings composition hooks before wire composition tests run.
+// TestMain registers Operator Settings composition hooks before functional proofs run.
 func TestMain(m *testing.M) {
 	settingswire.RegisterTestComposition()
 	m.Run()
