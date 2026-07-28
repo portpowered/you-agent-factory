@@ -13,7 +13,6 @@ import (
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service/host"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	"go.uber.org/zap"
 )
 
@@ -33,7 +32,7 @@ func NewRuntimeBuild(
 	workflowID string,
 	defaultSessionID string,
 	workstationLoader factorydefinitions.WorkstationLoader,
-	providerOverride workerprovider.Provider,
+	providerOverride workers.Provider,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
 	mockWorkersConfig *workers.MockWorkersConfig,

@@ -20,7 +20,6 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -3813,7 +3812,7 @@ return { ok: true };`
 		t.Fatalf("unmarshal default policy: %v", err)
 	}
 
-	workflows := realJavaScriptWorkflowsForExecutionTest(t)
+	workflows := policyDeniedModelWorkflows(workflowSource)
 	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
 		ProjectRoot:       projectRoot,
 		ChildExecutorMode: ChildExecutorModeFake,
@@ -3859,21 +3858,49 @@ return { ok: true };`
 	}
 }
 
-func realJavaScriptWorkflowsForExecutionTest(t *testing.T) factory.JavaScriptWorkflows {
-	t.Helper()
-	return factoryruntimejavascript.New(localWorkflowSourceFilesForExecutionTest{}, os.UserHomeDir, filepath.EvalSymlinks)
-}
-
-type localWorkflowSourceFilesForExecutionTest struct{}
-
-func (localWorkflowSourceFilesForExecutionTest) ReadDir(path string) ([]os.DirEntry, error) {
-	return os.ReadDir(path)
-}
-func (localWorkflowSourceFilesForExecutionTest) ReadFile(path string) ([]byte, error) {
-	return os.ReadFile(path)
-}
-func (localWorkflowSourceFilesForExecutionTest) Stat(path string) (os.FileInfo, error) {
-	return os.Stat(path)
+func policyDeniedModelWorkflows(workflowSource string) factory.JavaScriptWorkflows {
+	policyMessage := `policy denied: model "gpt-denied" is not listed in allowedModels`
+	return factoryruntimefixtures.ScriptedJavaScriptWorkflows{
+		ResolveSourceFunc: func(
+			request factory.WorkflowSourceRequest,
+			_ factory.WorkflowSourceContext,
+		) factory.WorkflowSourceResolution {
+			return factory.WorkflowSourceResolution{
+				RequestKind:  request.Kind,
+				RequestValue: request.Value,
+				ResolvedKind: request.Kind,
+				SourceRef:    request.Value,
+				SourceHash:   "sha256:policy-denied",
+				Dialect:      "you-workflow-v1",
+				Content:      workflowSource,
+				Found:        true,
+			}
+		},
+		LoadSourceFunc: func(request factory.WorkflowValidationLoadRequest) (
+			factory.WorkflowValidationLoadedSource,
+			[]factory.WorkflowValidationIssue,
+		) {
+			return factory.WorkflowValidationLoadedSource{
+				SourceRef:        request.SourceRef,
+				SourceHash:       "sha256:policy-denied",
+				Format:           factory.WorkflowValidationFormatJavaScript,
+				AuthoredSource:   request.Content,
+				ExecutableSource: request.Content,
+			}, nil
+		},
+		RunFunc: func(
+			context.Context,
+			factory.JavaScriptRuntimeRequest,
+			factory.JavaScriptRuntimeHooks,
+		) (factory.JavaScriptRuntimeOutcome, error) {
+			return factory.JavaScriptRuntimeOutcome{
+				Failure: factory.JavaScriptRuntimeFailure{
+					Code:    factory.JavaScriptRuntimeCodeScriptError,
+					Message: policyMessage,
+				},
+			}, nil
+		},
+	}
 }
 
 type orchestrationJavaScriptAdapter struct {

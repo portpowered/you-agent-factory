@@ -281,7 +281,7 @@ func BuildRuntimeExecutors(
 	logger logging.Logger,
 	skipBuiltInRunnerPrerequisiteValidation bool,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride workerprovider.Provider,
+	providerOverride workers.Provider,
 	progressPublisher workers.ProgressPublisher,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workers.InferenceEventRecorder,

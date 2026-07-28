@@ -1219,8 +1219,8 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/factory/catalog/effective_catalog_test.go",
-      "package": "you-agent-factory/tests/functional/factory/catalog",
+      "source_path": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
       "scenario": "TestFactoryListHonorsPreCanceledContextAtomically",
       "lane": "short",
       "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
@@ -1229,8 +1229,8 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/factory/catalog/effective_catalog_test.go",
-      "package": "you-agent-factory/tests/functional/factory/catalog",
+      "source_path": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
       "scenario": "TestFactoryListProjectsEffectiveCatalogWithoutInitialization",
       "lane": "short",
       "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
@@ -1239,8 +1239,8 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/factory/catalog/effective_catalog_test.go",
-      "package": "you-agent-factory/tests/functional/factory/catalog",
+      "source_path": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
       "scenario": "TestFactoryListReportsCatalogDiscoveryFailuresAtomically",
       "lane": "short",
       "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
@@ -5319,8 +5319,8 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/transport/http/packaged_factories_catalog_test.go",
-      "package": "you-agent-factory/tests/functional/transport/http",
+      "source_path": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
       "scenario": "TestPackagedFactoriesAPI_ReturnsPublishedCatalog",
       "lane": "short",
       "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
@@ -7133,7 +7133,7 @@
       "package": "you-agent-factory/tests/functional/workers/agent",
       "scenario": "TestAgentRunnerDeliveryRemainsInertThroughRootBuildProcessConstruction",
       "lane": "short",
-      "destination": "wrong-layer: package-integration — root.BuildProcess and Providers wire composition smoke without proving a customer product scenario. Replacement evidence owner: pkg/root and pkg/services/providers/wire package-integration tests.",
+      "destination": "wrong-layer: package-integration \u2014 root.BuildProcess and Providers wire composition smoke without proving a customer product scenario. Replacement evidence owner: pkg/root and pkg/services/providers/wire package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -7247,6 +7247,56 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestNewEmbeddedFactoryRequiresFunctionalMatrixEntry",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestPackagedFactoryCatalogHasUniqueStableNames",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestPackagedFactoryCatalogListsEveryEmbeddedFactory",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/claude/conductor_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/claude",
+      "scenario": "TestClaudeConductorSuccessThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "wrong-layer: package-integration \u2014 root.BuildProcess and Providers wire composition smoke without proving a customer product scenario. Replacement evidence owner: pkg/root and pkg/services/providers/wire package-integration tests.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/codex/conductor_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/codex",
+      "scenario": "TestCodexConductorSuccessThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "wrong-layer: package-integration \u2014 root.BuildProcess and Providers wire composition smoke without proving a customer product scenario. Replacement evidence owner: pkg/root and pkg/services/providers/wire package-integration tests.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
   "scanned_at_utc": "2026-07-28T03:45:00Z",
@@ -7284,9 +7334,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 702,
+    "customer_top_level_Test_scenarios": 710,
     "lane_functionallong": 95,
-    "lane_short": 607,
+    "lane_short": 615,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -7299,7 +7349,7 @@
       "you-agent-factory/tests/functional/cli/named_invocation": 6,
       "you-agent-factory/tests/functional/cli/root_discovery": 9,
       "you-agent-factory/tests/functional/cli/session_resume": 6,
-      "you-agent-factory/tests/functional/factory/catalog": 3,
+      "you-agent-factory/tests/functional/factory/packaged/catalog": 7,
       "you-agent-factory/tests/functional/factory/packaged/deep_research": 3,
       "you-agent-factory/tests/functional/factory/runtime_lifecycle": 1,
       "you-agent-factory/tests/functional/guards_batch": 23,
@@ -7335,7 +7385,6 @@
       "you-agent-factory/tests/functional/transport/cli/parameters": 19,
       "you-agent-factory/tests/functional/transport/cli/process": 17,
       "you-agent-factory/tests/functional/transport/docs": 1,
-      "you-agent-factory/tests/functional/transport/http": 1,
       "you-agent-factory/tests/functional/transport/http/server": 14,
       "you-agent-factory/tests/functional/transport/http/status": 2,
       "you-agent-factory/tests/functional/transport/mcp/protocol": 3,
@@ -7349,8 +7398,8 @@
       "you-agent-factory/tests/functional/workers/agent": 1,
       "you-agent-factory/tests/functional/workers/inference": 16,
       "you-agent-factory/tests/functional/workers/inference/agy": 3,
-      "you-agent-factory/tests/functional/workers/inference/claude": 4,
-      "you-agent-factory/tests/functional/workers/inference/codex": 5,
+      "you-agent-factory/tests/functional/workers/inference/claude": 5,
+      "you-agent-factory/tests/functional/workers/inference/codex": 6,
       "you-agent-factory/tests/functional/workers/inference/cursor": 4,
       "you-agent-factory/tests/functional/workers/inference/gemini": 12,
       "you-agent-factory/tests/functional/workers/inference/kiro": 3,
