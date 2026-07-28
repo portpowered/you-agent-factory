@@ -4129,6 +4129,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/sessions/execution/results_dispatches_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/execution",
+      "scenario": "TestAPIDispatchListAndDetailExposePublicCorrelation",
+      "lane": "short",
+      "destination": "tests/functional/sessions/execution/results_dispatches_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/execution/results_dispatches_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/execution",
+      "scenario": "TestAPIPartialResultIsAvailableBeforeTerminalCompletion",
+      "lane": "short",
+      "destination": "tests/functional/sessions/execution/results_dispatches_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/execution/results_dispatches_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/execution",
+      "scenario": "TestAPIResultAndResultsExposeTerminalInvocationData",
+      "lane": "short",
+      "destination": "tests/functional/sessions/execution/results_dispatches_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/sessions/live_runtime_build_process_test.go",
       "package": "you-agent-factory/tests/functional/sessions",
       "scenario": "TestBuildProcessRoutesLiveOpenListControlAndCloseThroughFactorySessionsRoot",
@@ -7573,6 +7603,7 @@
       "you-agent-factory/tests/functional/sessionparity": 13,
       "you-agent-factory/tests/functional/sessions": 1,
       "you-agent-factory/tests/functional/sessions/cli": 2,
+      "you-agent-factory/tests/functional/sessions/execution": 3,
       "you-agent-factory/tests/functional/sessions/restart": 3,
       "you-agent-factory/tests/functional/smoke": 62,
       "you-agent-factory/tests/functional/transport/cli/commands": 20,
