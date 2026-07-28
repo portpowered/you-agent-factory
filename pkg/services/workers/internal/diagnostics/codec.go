@@ -1,4 +1,4 @@
-package workers
+package diagnostics
 
 import (
 	"encoding/json"
@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	workerenvdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/envdiagnostics"
 )
 
 // CloneSafeWorkDiagnostics returns a detached safe diagnostics snapshot.
@@ -17,7 +19,7 @@ func CloneSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *SafeWorkDiagnos
 		RenderedPrompt: cloneSafeRenderedPromptDiagnostic(diagnostics.RenderedPrompt),
 		Provider:       cloneSafeProviderDiagnostic(diagnostics.Provider),
 		AgentRun:       cloneSafeAgentRunDiagnostic(diagnostics.AgentRun),
-		Invocation:     CloneInvocationDiagnostic(diagnostics.Invocation),
+		Invocation:     cloneSafeInvocationDiagnostic(diagnostics.Invocation),
 	}
 }
 
@@ -300,7 +302,7 @@ func safeDiagnosticMetadataValue(key, value string) string {
 	switch strings.ToLower(strings.TrimSpace(key)) {
 	case "working_directory", "worktree":
 		if isHostSpecificDiagnosticPath(value) {
-			return MetadataOnlyCommandEnvValue
+			return workerenvdiagnostics.MetadataOnlyCommandEnvValue
 		}
 	}
 	return value

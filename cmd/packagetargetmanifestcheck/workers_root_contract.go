@@ -23,6 +23,7 @@ var workersThinRootContractFiles = []string{
 	"failure.go",
 	"interfaces.go",
 	"legacy_fold_boundary_test.go",
+	"mock_workers_contracts.go",
 	"progress_observations.go",
 	"prompt_template_contracts.go",
 	"provider_port.go",
@@ -31,6 +32,7 @@ var workersThinRootContractFiles = []string{
 	"runtime_service.go",
 	"runner_policy_contracts.go",
 	"safe_diagnostics.go",
+	"safe_diagnostics_forward.go",
 	"sessions_consumer_boundary_test.go",
 	"sessions_consumer_contracts.go",
 	"service_import_boundary_test.go",
@@ -51,18 +53,7 @@ type workersRootContractMoveTarget struct {
 
 // workersRootContractMoveTargets mirrors internal/ownershipinventory
 // WorkersRootContractMoveTargets for package-target manifest checks.
-var workersRootContractMoveTargets = []workersRootContractMoveTarget{
-	{
-		cluster:     "workers_internal",
-		destination: "pkg/services/workers/internal",
-		files: []string{
-			"executor_test_helpers_test.go",
-			"mock_workers.go",
-			"mock_workers_config_test.go",
-			"safe_diagnostics_codec.go",
-		},
-	},
-}
+var workersRootContractMoveTargets = []workersRootContractMoveTarget{}
 
 func listWorkersRootGoFiles(root string) ([]string, error) {
 	workersRoot := filepath.Join(root, filepath.FromSlash(workersRootRelative))

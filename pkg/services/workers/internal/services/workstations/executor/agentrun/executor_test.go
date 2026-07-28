@@ -9,7 +9,6 @@ import (
 	"time"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/internal/diagnostics"
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 
@@ -491,7 +490,7 @@ func TestAgentRunExecutor_RecordsAgentRunResponseEvent(t *testing.T) {
 	if len(recorded) != 1 {
 		t.Fatalf("recorded events = %d, want 1", len(recorded))
 	}
-	diagnostics, err := workerdiagnostics.SafeWorkDiagnosticsFromEventPayload(recorded[0].Payload.Diagnostics)
+	diagnostics, err := workerexecution.SafeWorkDiagnosticsFromEventPayload(recorded[0].Payload.Diagnostics)
 	if err != nil {
 		t.Fatalf("decode diagnostics: %v", err)
 	}

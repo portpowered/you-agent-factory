@@ -24,6 +24,7 @@ var WorkersThinRootContractFiles = []string{
 	"failure.go",
 	"interfaces.go",
 	"legacy_fold_boundary_test.go",
+	"mock_workers_contracts.go",
 	"progress_observations.go",
 	"prompt_template_contracts.go",
 	"provider_port.go",
@@ -32,6 +33,7 @@ var WorkersThinRootContractFiles = []string{
 	"runtime_service.go",
 	"runner_policy_contracts.go",
 	"safe_diagnostics.go",
+	"safe_diagnostics_forward.go",
 	"sessions_consumer_boundary_test.go",
 	"sessions_consumer_contracts.go",
 	"service_import_boundary_test.go",
@@ -53,19 +55,8 @@ type WorkersRootContractMoveTarget struct {
 }
 
 // WorkersRootContractMoveTargets inventories root implementation clusters beyond
-// the thin Workers service root contract.
-var WorkersRootContractMoveTargets = []WorkersRootContractMoveTarget{
-	{
-		Cluster:     "workers_internal",
-		Destination: workersPackagePrefix + "/internal",
-		Files: []string{
-			"executor_test_helpers_test.go",
-			"mock_workers.go",
-			"mock_workers_config_test.go",
-			"safe_diagnostics_codec.go",
-		},
-	},
-}
+// the thin Workers service root contract. Empty after story 004 fold.
+var WorkersRootContractMoveTargets = []WorkersRootContractMoveTarget{}
 
 // ListWorkersRootGoFiles returns every live root-level .go file name under
 // pkg/services/workers/.
@@ -135,4 +126,4 @@ func IsWorkersPrivateRootContractMoveDestination(destination string) bool {
 
 // WorkersRootContractBaselineFileCount is the inventoried root .go file count
 // before CLN-WRK-CONTRACT-ROOTS moves begin.
-const WorkersRootContractBaselineFileCount = 31
+const WorkersRootContractBaselineFileCount = 29

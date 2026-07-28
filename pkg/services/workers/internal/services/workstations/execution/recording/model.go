@@ -17,7 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/internal/diagnostics"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
 
@@ -273,16 +272,16 @@ func outputContent(raw string) *[]work.WorkContentPart {
 // Diagnostics returns the redacted event-safe diagnostics payload shared by
 // every model execution recording path.
 func Diagnostics(success *workerexecution.WorkDiagnostics, executionErr error) json.RawMessage {
-	var safe *workerdiagnostics.SafeWorkDiagnostics
+	var safe *workerexecution.SafeWorkDiagnostics
 	if success != nil {
-		safe = workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(success)
+		safe = workerexecution.SafeWorkDiagnosticsFromWorkDiagnostics(success)
 	} else {
 		var providerErr *workerprovider.ProviderError
 		if errors.As(executionErr, &providerErr) {
-			safe = workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
+			safe = workerexecution.SafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
 		}
 	}
-	payload, encodeErr := workerdiagnostics.SafeWorkDiagnosticsEventPayload(safe)
+	payload, encodeErr := workerexecution.SafeWorkDiagnosticsEventPayload(safe)
 	if encodeErr != nil || string(payload) == "null" {
 		return nil
 	}

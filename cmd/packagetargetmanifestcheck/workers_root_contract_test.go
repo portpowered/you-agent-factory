@@ -20,8 +20,8 @@ func TestWorkersRootGoFilesMatchCommittedInventory(t *testing.T) {
 		t.Fatalf("live root .go files = %v, want committed inventory %v", live, want)
 	}
 
-	if len(live) != 31 {
-		t.Fatalf("live root .go file count = %d, want baseline 31", len(live))
+	if len(live) != 29 {
+		t.Fatalf("live root .go file count = %d, want baseline 29", len(live))
 	}
 }
 
@@ -135,7 +135,7 @@ func TestWorkersRootContractMoveClustersMatchInventoryNote(t *testing.T) {
 		}
 	}
 	slices.Sort(gotClusters)
-	wantClusters := []string{"workers_internal"}
+	wantClusters := []string{}
 	slices.Sort(wantClusters)
 	if !slices.Equal(gotClusters, wantClusters) {
 		t.Fatalf("move clusters = %v, want %v", gotClusters, wantClusters)

@@ -5,28 +5,28 @@ import (
 	"reflect"
 	"testing"
 
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerenvdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/envdiagnostics"
 )
 
 func TestSafeWorkDiagnosticsRedactsHostSpecificWorkingDirectory(t *testing.T) {
 	t.Parallel()
-	safe := SafeWorkDiagnosticsFromWorkDiagnostics(&workerexecution.WorkDiagnostics{
-		Provider: &workerexecution.ProviderDiagnostic{
+	safe := SafeWorkDiagnosticsFromWorkDiagnostics(&WorkDiagnostics{
+		Provider: &ProviderDiagnostic{
 			RequestMetadata: map[string]string{
 				"working_directory": `C:\Users\alice\factory`,
 				"worktree":          "feature-runtime",
 			},
 		},
 	})
-	if got := safe.Provider.RequestMetadata["working_directory"]; got != workerexecution.MetadataOnlyCommandEnvValue {
+	if got := safe.Provider.RequestMetadata["working_directory"]; got != workerenvdiagnostics.MetadataOnlyCommandEnvValue {
 		t.Fatalf("working_directory = %q, want metadata-only marker", got)
 	}
 	if got := safe.Provider.RequestMetadata["worktree"]; got != "feature-runtime" {
 		t.Fatalf("worktree = %q, want portable branch name preserved", got)
 	}
 
-	relative := SafeWorkDiagnosticsFromWorkDiagnostics(&workerexecution.WorkDiagnostics{
-		Provider: &workerexecution.ProviderDiagnostic{
+	relative := SafeWorkDiagnosticsFromWorkDiagnostics(&WorkDiagnostics{
+		Provider: &ProviderDiagnostic{
 			RequestMetadata: map[string]string{
 				"working_directory": "workspace/cursor",
 			},
@@ -36,8 +36,8 @@ func TestSafeWorkDiagnosticsRedactsHostSpecificWorkingDirectory(t *testing.T) {
 		t.Fatalf("relative working_directory = %q, want preserved portable path", got)
 	}
 
-	portableAbsolute := SafeWorkDiagnosticsFromWorkDiagnostics(&workerexecution.WorkDiagnostics{
-		Provider: &workerexecution.ProviderDiagnostic{
+	portableAbsolute := SafeWorkDiagnosticsFromWorkDiagnostics(&WorkDiagnostics{
+		Provider: &ProviderDiagnostic{
 			RequestMetadata: map[string]string{
 				"working_directory": `C:\repo`,
 			},
@@ -50,14 +50,14 @@ func TestSafeWorkDiagnosticsRedactsHostSpecificWorkingDirectory(t *testing.T) {
 
 func TestSafeWorkDiagnosticsAllowlistAndCloneIsolation(t *testing.T) {
 	t.Parallel()
-	safe := SafeWorkDiagnosticsFromWorkDiagnostics(&workerexecution.WorkDiagnostics{
-		Provider: &workerexecution.ProviderDiagnostic{RequestMetadata: map[string]string{
+	safe := SafeWorkDiagnosticsFromWorkDiagnostics(&WorkDiagnostics{
+		Provider: &ProviderDiagnostic{RequestMetadata: map[string]string{
 			"request_id":        "req-1",
 			"authorization":     "secret",
 			"working_directory": `C:\Users\operator\workspace`,
 			"worktree":          `C:\Users\operator\worktree`,
 		}},
-		RenderedPrompt: &workerexecution.RenderedPromptDiagnostic{Variables: map[string]string{"trace_id": "trace-1", "api_key": "secret"}},
+		RenderedPrompt: &RenderedPromptDiagnostic{Variables: map[string]string{"trace_id": "trace-1", "api_key": "secret"}},
 	})
 	if safe.Provider.RequestMetadata["request_id"] != "req-1" {
 		t.Fatal("safe request metadata was dropped")
@@ -65,10 +65,10 @@ func TestSafeWorkDiagnosticsAllowlistAndCloneIsolation(t *testing.T) {
 	if _, ok := safe.Provider.RequestMetadata["authorization"]; ok {
 		t.Fatal("secret provider metadata leaked")
 	}
-	if got := safe.Provider.RequestMetadata["working_directory"]; got != workerexecution.MetadataOnlyCommandEnvValue {
+	if got := safe.Provider.RequestMetadata["working_directory"]; got != workerenvdiagnostics.MetadataOnlyCommandEnvValue {
 		t.Fatalf("host working directory = %q, want metadata-only marker", got)
 	}
-	if got := safe.Provider.RequestMetadata["worktree"]; got != workerexecution.MetadataOnlyCommandEnvValue {
+	if got := safe.Provider.RequestMetadata["worktree"]; got != workerenvdiagnostics.MetadataOnlyCommandEnvValue {
 		t.Fatalf("host worktree = %q, want metadata-only marker", got)
 	}
 	if _, ok := safe.RenderedPrompt.Variables["api_key"]; ok {
