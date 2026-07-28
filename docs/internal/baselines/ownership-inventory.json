@@ -238,6 +238,19 @@
       "failureRecovery": "Install/scaffold failures roll back or report Definition distribution faults."
     },
     {
+      "serviceId": "factory_definitions/invocation_policy",
+      "owner": "factory_definitions",
+      "kind": "nested",
+      "parentServiceId": "factory_definitions",
+      "targetPath": "pkg/services/factory_definitions/internal/services/invocation_policy",
+      "authority": "Definition-owned interpretation of authored Factory behavior at invocation time: decision envelopes, interpolation, output shaping, work-type selection, quorum lineage, work propagation, workstation execution limits, and TTS observability identity.",
+      "stateStore": "Stateless invocation-time policy derivations over authored worker, workstation, and packaged configuration.",
+      "lifecycle": "Policy interpretation runs on command during worker and workstation invocation; no independent daemon.",
+      "consumers": "Factory Definitions root, Factory Sessions invocation, and Workers dispatch consumers via Definitions root.",
+      "transactionBoundary": "Invocation policy does not mutate peer stores; interpretation outputs are Definition-owned values consumed at invocation.",
+      "failureRecovery": "Malformed authored policy and unsupported invocation contracts surface as Definition-owned rejection facts."
+    },
+    {
       "serviceId": "factory_definitions/snapshots_portability",
       "owner": "factory_definitions",
       "kind": "nested",
@@ -1405,7 +1418,7 @@
       "fromOwner": "operator_settings",
       "toOwner": "providers",
       "class": "command",
-      "evidence": "pkg/services/operator_settings/internal/services/resolution/internal/service -\u003e pkg/services/providers"
+      "evidence": "pkg/services/operator_settings/internal/construct -\u003e pkg/services/providers"
     },
     {
       "fromOwner": "operator_settings",
@@ -4340,6 +4353,14 @@
       "destinationKind": "owner",
       "successor": "pkg/services/operator_settings/internal/services/document",
       "deletionCondition": "delete public package after IMP-OPS-document private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/construct",
+      "disposition": "move",
+      "destination": "operator_settings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/operator_settings/internal/service",
