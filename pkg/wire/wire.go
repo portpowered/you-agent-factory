@@ -10,7 +10,6 @@ import (
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	edges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -117,12 +116,14 @@ var servicesSet = wire.NewSet(
 	provideWorkSubmittedFileReader,
 	provideWorkContentHostPlatform,
 	provideContentMaterializer,
+	provideFactoryInvocationPolicyPorts,
 	provideDecisionEnvelopeService,
 	provideInvocationInterpolationService,
 	provideInvocationOutputShapingService,
 	provideInvocationWorkTypeService,
 	provideQuorumPolicyService,
 	provideWorkPropagationPolicyService,
+	provideWorkstationExecutionPolicyService,
 	provideTTSObservabilityService,
 	provideAutomationFactory,
 	provideFactorySessionsService,
@@ -169,9 +170,9 @@ var servicesSet = wire.NewSet(
 	providePortableBundledFileWritesValidator,
 	providePortableBundledFilesCopier,
 	providePortableBundledFileSourceResolver,
-	portableconfig.NewPortableBundledFilesApplier,
-	portableconfig.NewFactoryStarterWorkApplier,
-	portableconfig.NewPortableBundledDocsPruner,
+	providePortableBundledFilesApplier,
+	provideFactoryStarterWorkApplier,
+	providePortableBundledDocsPruner,
 	provideFactoryDefinitionLoader,
 	provideFactoryRuntimeClockResolver,
 	provideFactoryRuntimeSessionLoggerFactory,
