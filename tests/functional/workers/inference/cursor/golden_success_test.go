@@ -55,7 +55,7 @@ func TestCursorGoldenTextSuccessAndSessionIdentity(t *testing.T) {
 	}
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCursor, request.Model))
+	support.WriteAgentConfig(t, dir, "worker", cursorGoldenWorkerConfig(request.Model))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"cursor golden success"}`))
 
 	exitCode := 0
@@ -146,7 +146,7 @@ func TestCursorGoldenReadableProviderSessionDetails(t *testing.T) {
 	}
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCursor, request.Model))
+	support.WriteAgentConfig(t, dir, "worker", cursorGoldenWorkerConfig(request.Model))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"cursor golden success detail"}`))
 
 	exitCode := 0
@@ -619,6 +619,15 @@ func cursorGoldenMessageText(message factoryapi.FactoryResponseEventMessagePaylo
 		}
 	}
 	return ""
+}
+
+func cursorGoldenWorkerConfig(model string) string {
+	return strings.Replace(
+		support.BuildModelWorkerConfig(modelprovider.ProviderCursor, model),
+		"stopToken: COMPLETE",
+		"skipPermissions: true\nstopToken: COMPLETE",
+		1,
+	)
 }
 
 func mustMarshalJSON(value any) json.RawMessage {

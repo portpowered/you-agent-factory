@@ -84,7 +84,7 @@ func validateEditableFactoryTopology(submitted factoryapi.Factory, workstationLo
 	snapshot := mustFactorySnapshot(submitted)
 	return factorydefinition.New(validationDefinitionHost{
 		workstationLoader: workstationLoader,
-	}).ValidateEditableFactoryTopology(context.Background(), snapshot)
+	}, factorydefinition.StubActivationGateway()).ValidateEditableFactoryTopology(context.Background(), snapshot)
 }
 
 func validateUpsertNamedFactoryRequest(
@@ -94,5 +94,5 @@ func validateUpsertNamedFactoryRequest(
 	snapshot := mustFactorySnapshot(request)
 	return factorydefinition.New(validationDefinitionHost{
 		workstationLoader: workstationLoader,
-	}).ValidateUpsertNamedFactoryRequest(context.Background(), string(request.Name), snapshot)
+	}, factorydefinition.StubActivationGateway()).ValidateUpsertNamedFactoryRequest(context.Background(), string(request.Name), snapshot)
 }

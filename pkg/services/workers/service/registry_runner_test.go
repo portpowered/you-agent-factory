@@ -9,11 +9,13 @@ import (
 	"testing"
 
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
-	cursorpkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
@@ -442,24 +444,9 @@ func TestConductorInvocationRunnerRoutesMigratedGeminiThroughConductor(t *testin
 func TestConductorInvocationRunnerRoutesMigratedCursorThroughConductor(t *testing.T) {
 	t.Parallel()
 
-	commandRunner := &builtInConductorCommandRunner{
-		result: workers.CommandResult{
-			Stdout: cursorpkg.SuccessStdoutJSON("cursor via conductor", "cursor-session-123"),
-		},
-	}
-	registrations, err := providerregistry.BuiltInRegistrations(
-		providerregistry.BuiltInDependencies{
-			CommandRunner:   commandRunner,
-			OperatingSystem: "linux",
-		},
-	)
-	if err != nil {
-		t.Fatalf("BuiltInRegistrations() error = %v", err)
-	}
-	providers, err := providerregistry.New(registrations...)
-	if err != nil {
-		t.Fatalf("registry.New() error = %v", err)
-	}
+	stdout := cursorConductorSuccessStdout("cursor via conductor", "cursor-session-123")
+	platformRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: stdout})
+	providers := cursorConductorRegistryWithRunner(t, platformRunner)
 	native := &conductorRouteRecordingRunner{}
 	runner := conductorInvocationRunner{
 		next:      native,
@@ -483,8 +470,8 @@ func TestConductorInvocationRunnerRoutesMigratedCursorThroughConductor(t *testin
 	if native.calls != 0 {
 		t.Fatalf("native runner calls = %d, want 0 for migrated Cursor", native.calls)
 	}
-	if commandRunner.calls != 1 || commandRunner.request.Command != "agent" {
-		t.Fatalf("Cursor command calls = %d request = %#v", commandRunner.calls, commandRunner.request)
+	if platformRunner.CallCount() != 1 || platformRunner.LastRequest().Command != "agent" {
+		t.Fatalf("Cursor command calls = %d request = %#v", platformRunner.CallCount(), platformRunner.LastRequest())
 	}
 	if providers.UsesNativeRunner("cursor") || providers.UsesNativeRunner("agent") {
 		t.Fatal("UsesNativeRunner(cursor) = true, want conductor route")
@@ -703,6 +690,32 @@ func externalConductorManifest(t *testing.T, identity, alias string) providerreg
 	}
 	manifest.MaximumResponseFidelityCapabilities = providerregistry.ResponseFidelityCapabilities{}
 	return manifest
+}
+
+func cursorConductorSuccessStdout(content, sessionID string) []byte {
+	return []byte(`{"type":"result","subtype":"success","is_error":false,"result":"` + content + `","session_id":"` + sessionID + `"}` + "\n")
+}
+
+func cursorConductorRegistryWithRunner(
+	t *testing.T,
+	runner platformprocess.CommandRunner,
+) *providerregistry.Registry {
+	t.Helper()
+	providersService, err := providerswire.NewService(providerswire.WithCommandRunner(runner))
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
+	builtIns, err := providerregistry.BuiltInRegistrations(providerregistry.BuiltInDependencies{
+		ProvidersService: providersService,
+	})
+	if err != nil {
+		t.Fatalf("BuiltInRegistrations() error = %v", err)
+	}
+	providers, err := providerregistry.New(builtIns...)
+	if err != nil {
+		t.Fatalf("registry.New() error = %v", err)
+	}
+	return providers
 }
 
 func geminiConductorRegistry(t *testing.T, runner workers.CommandRunner) *providerregistry.Registry {

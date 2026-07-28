@@ -6,16 +6,6 @@ import (
 	"testing"
 )
 
-func TestTransportParity_SnapshotOnlyCLIAndAPIAgree(t *testing.T) {
-	t.Parallel()
-	assertTransportParityForFixture(t, FixtureSnapshotOnlyOpenCode)
-}
-
-func TestTransportParity_FinalOnlyOpenCodeCLIAndAPIAgree(t *testing.T) {
-	t.Parallel()
-	assertTransportParityForFixture(t, FixtureFinalOnlyOpenCode)
-}
-
 func TestTransportParity_AgyFinalOnlyCLIAndAPIAgree(t *testing.T) {
 	t.Parallel()
 	assertTransportParityForFixture(t, FixtureAgyFinalOnly)

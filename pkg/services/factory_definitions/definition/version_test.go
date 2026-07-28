@@ -5,14 +5,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestService_RequireFreshEditableFactoryVersion_RejectsMissingBaseVersion(t *testing.T) {
 	t.Parallel()
 
-	err := New(stubDefinitionHost{}).RequireFreshEditableFactoryVersion(nil, factorydefinitions.FactoryVersion{
+	err := newTestService(stubDefinitionHost{}).RequireFreshEditableFactoryVersion(nil, factorydefinitions.FactoryVersion{
 		Logical:  1,
 		Physical: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 	})
@@ -32,7 +32,7 @@ func TestService_RequireFreshEditableFactoryVersion_RejectsStaleVersion(t *testi
 		Logical:  4,
 		Physical: time.Date(2026, 3, 1, 12, 0, 1, 0, time.UTC),
 	}
-	err := New(stubDefinitionHost{}).RequireFreshEditableFactoryVersion(&stale, current)
+	err := newTestService(stubDefinitionHost{}).RequireFreshEditableFactoryVersion(&stale, current)
 	if !errors.Is(err, apisurface.ErrFactoryVersionStale) {
 		t.Fatalf("error = %v, want %v", err, apisurface.ErrFactoryVersionStale)
 	}
@@ -49,7 +49,7 @@ func TestService_RequireFreshEditableFactoryVersion_AcceptsAdvancedVersion(t *te
 		Logical:  6,
 		Physical: time.Date(2026, 3, 1, 12, 0, 1, 0, time.UTC),
 	}
-	if err := New(stubDefinitionHost{}).RequireFreshEditableFactoryVersion(&advanced, current); err != nil {
+	if err := newTestService(stubDefinitionHost{}).RequireFreshEditableFactoryVersion(&advanced, current); err != nil {
 		t.Fatalf("RequireFreshEditableFactoryVersion: %v", err)
 	}
 }
@@ -62,7 +62,7 @@ func TestService_NextEditableFactoryVersion_AdvancesLogicalAndPhysical(t *testin
 		Physical: time.Date(2026, 4, 1, 8, 0, 0, 0, time.UTC),
 	}
 	now := time.Date(2026, 4, 1, 8, 0, 0, 0, time.UTC)
-	got := New(stubDefinitionHost{}).NextEditableFactoryVersion(&current, now)
+	got := newTestService(stubDefinitionHost{}).NextEditableFactoryVersion(&current, now)
 	if got.Logical != 8 {
 		t.Fatalf("logical = %d, want 8", got.Logical)
 	}
@@ -75,7 +75,7 @@ func TestService_NextEditableFactoryVersion_UsesNowWhenNoCurrentVersion(t *testi
 	t.Parallel()
 
 	now := time.Date(2026, 4, 2, 9, 0, 0, 0, time.UTC)
-	got := New(stubDefinitionHost{}).NextEditableFactoryVersion(nil, now)
+	got := newTestService(stubDefinitionHost{}).NextEditableFactoryVersion(nil, now)
 	if got.Logical != 1 || !got.Physical.Equal(now) {
 		t.Fatalf("version = %#v, want logical=1 physical=%s", got, now)
 	}

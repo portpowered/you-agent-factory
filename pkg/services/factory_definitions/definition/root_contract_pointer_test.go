@@ -36,7 +36,7 @@ func (packagedCatalogStub) ResolveBuiltInPackagedFactory(
 func TestService_PromotedUnimplementedRootSlices(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	svc := New(stubDefinitionHost{})
+	svc := newTestService(stubDefinitionHost{})
 
 	if _, err := svc.ListNamedFactories(ctx, factoryroot.ListNamedFactoriesRequest{}); err == nil {
 		t.Fatal("promoted ListNamedFactories: expected collaborator-required error")
@@ -74,6 +74,7 @@ func TestServiceDelegatesBuiltInCatalogThroughDefinitionsRoot(t *testing.T) {
 	t.Parallel()
 	svc := NewWithCatalogAndPackages(
 		stubDefinitionHost{},
+		stubActivationGateway{},
 		nil,
 		factoryroot.PackagedFactoryCatalogOperations{
 			List:    packagedCatalogStub{}.ListBuiltInPackagedFactories,
@@ -102,6 +103,7 @@ func TestServiceResolvesThenInstallsBuiltInPackage(t *testing.T) {
 	var installedFormat factoryroot.PackagedFactoryFormat
 	svc := NewWithCatalogPackagesAndInstallation(
 		stubDefinitionHost{},
+		stubActivationGateway{},
 		nil,
 		factoryroot.PackagedFactoryCatalogOperations{
 			List:    packagedCatalogStub{}.ListBuiltInPackagedFactories,
@@ -155,6 +157,7 @@ func TestInstallPackagedFactory_RejectsIncompatibleScaffoldOptionsBeforeCatalogL
 	t.Parallel()
 	svc := NewWithCatalogPackagesAndInstallation(
 		stubDefinitionHost{},
+		stubActivationGateway{},
 		nil,
 		factoryroot.PackagedFactoryCatalogOperations{
 			List: func(
