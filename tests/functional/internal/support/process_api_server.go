@@ -61,6 +61,19 @@ func (server *ProcessAPIServer) Start(
 	return nil
 }
 
+// BaseURL returns the bound httptest URL after Ready has been signaled.
+func (server *ProcessAPIServer) BaseURL() (string, bool) {
+	if server == nil {
+		return "", false
+	}
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	if server.url == "" {
+		return "", false
+	}
+	return server.url, true
+}
+
 // Ready is closed after the httptest server is accepting requests.
 func (server *ProcessAPIServer) Ready() <-chan struct{} {
 	if server == nil {
@@ -89,4 +102,21 @@ func (server *ProcessAPIServer) WaitForURL(t testing.TB) string {
 		t.Fatal("process API server became ready without a URL")
 	}
 	return server.url
+}
+
+// WaitForBaseURL waits for the injected transport to start and returns its URL
+// or an error. It is safe to call from background goroutines.
+func (server *ProcessAPIServer) WaitForBaseURL(timeout time.Duration) (string, error) {
+	if server == nil {
+		return "", fmt.Errorf("process API server is required")
+	}
+	select {
+	case <-server.ready:
+	case <-time.After(timeout):
+		return "", fmt.Errorf("timed out waiting for process API server")
+	}
+	if baseURL, ok := server.BaseURL(); ok {
+		return baseURL, nil
+	}
+	return "", fmt.Errorf("process API server became ready without a URL")
 }
