@@ -96,6 +96,7 @@ func TestHandlerFromRoot_ValidateFactoryInvokesDefinitionsRootValidateStructural
 
 type httpDefinitionsValidationFake struct {
 	invoked bool
+	result  factorydefinitions.ValidationResult
 }
 
 func (fake *httpDefinitionsValidationFake) ValidateSubmittedDefinition(
@@ -103,6 +104,9 @@ func (fake *httpDefinitionsValidationFake) ValidateSubmittedDefinition(
 	_ factorydefinitions.SubmittedDefinitionValidationRequest,
 ) (factorydefinitions.ValidationResult, error) {
 	fake.invoked = true
+	if fake.result.Targets != nil {
+		return fake.result, nil
+	}
 	return factorydefinitions.ValidationResult{
 		Targets: []factorydefinitions.ValidationTarget{{
 			Code:     "factory.validation.stub",
