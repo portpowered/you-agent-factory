@@ -63,6 +63,12 @@ Use this map when changing the public REST contract.
   `pkg/services/work/transports/http`. The adapter consumes the accepted
   `work.Service` root only; fake-root tests inject a focused root fake without
   constructing state-access, content-staging, or materialization graphs.
+  CUT-WORK-REC seals Work production imports of Recordings to the service root
+  only; the lease-wide guard is
+  `pkg/services/work/recordings_import_boundary_test.go`, and behavioral
+  request-construction proofs live in
+  `pkg/services/work/recordings_request_boundary_test.go` plus
+  `state_access/wire/recordings_adapter_test.go`.
   Package-boundary tests must prove the adapter does not import
   `pkg/services/work/internal/**`. Register the package in
   `docs/internal/packaged-service-structure/package-target-manifest.json`,
