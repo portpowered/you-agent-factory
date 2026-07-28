@@ -3,6 +3,8 @@ package details
 import (
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -19,6 +21,7 @@ import (
 const (
 	codexGoldenExpectedProviderSessionDetailFile = "expected-provider-session-detail.json"
 	codexGoldenRolloutFile                       = "rollout.jsonl"
+	codexMissingTranscriptSessionID              = "session_fixture_codex_missing_transcript"
 )
 
 // TestCodexProviderSessionDetailsLoadFromGoldenMetadata loads a sanitized Codex
@@ -86,6 +89,42 @@ func TestCodexProviderSessionDetailsLoadFromGoldenMetadata(t *testing.T) {
 	}
 }
 
+// TestCodexProviderSessionMissingTranscriptReturnsNotFound proves that requesting
+// Codex Provider Session details for a session_id with no stored rollout returns
+// a distinguishable not-found outcome instead of fabricating session detail.
+func TestCodexProviderSessionMissingTranscriptReturnsNotFound(t *testing.T) {
+	homeDir := t.TempDir()
+
+	server := startCodexProviderSessionDetailServer(t, homeDir, serviceedges.Edges{})
+	defer server.Stop(t)
+
+	body := getCodexProviderSessionDetailErrorBody(
+		t,
+		server.URL(),
+		codexMissingTranscriptSessionID,
+		http.StatusNotFound,
+	)
+	if !strings.Contains(body, "provider session not found") {
+		t.Fatalf("error body = %q, want not-found message", body)
+	}
+
+	var failure factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(body), &failure); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if failure.Code != factoryapi.ErrorResponseCodeNOTFOUND {
+		t.Fatalf("error code = %q, want NOT_FOUND", failure.Code)
+	}
+	if failure.Message == "" {
+		t.Fatal("error message is empty, want customer-readable not-found diagnostic")
+	}
+	if strings.Contains(body, `"transcript"`) || strings.Contains(body, `"providerSession"`) {
+		t.Fatalf("not-found response fabricated provider session detail: %s", body)
+	}
+
+	assertCodexProviderSessionErrorBodySafe(t, "missing-transcript", body, homeDir)
+}
+
 func startCodexProviderSessionDetailServer(
 	t *testing.T,
 	homeDir string,
@@ -108,6 +147,43 @@ func startCodexProviderSessionDetailServer(
 
 func codexSessionsRoot(homeDir string) string {
 	return filepath.Join(homeDir, ".codex", "sessions")
+}
+
+func getCodexProviderSessionDetailErrorBody(
+	t *testing.T,
+	baseURL, sessionID string,
+	wantStatus int,
+) string {
+	t.Helper()
+
+	response, err := http.Get(codexProviderSessionDetailURL(baseURL, sessionID))
+	if err != nil {
+		t.Fatalf("GET provider session detail: %v", err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read provider session detail body: %v", err)
+	}
+	if response.StatusCode != wantStatus {
+		t.Fatalf(
+			"GET provider session detail status = %d, want %d: %s",
+			response.StatusCode,
+			wantStatus,
+			strings.TrimSpace(string(body)),
+		)
+	}
+	return string(body)
+}
+
+func assertCodexProviderSessionErrorBodySafe(t *testing.T, caseID, body, homeDir string) {
+	t.Helper()
+	if err := support.ValidateProviderSessionFixtureContent(caseID, "provider-session-detail", []byte(body)); err != nil {
+		t.Fatalf("provider session response leaked forbidden material: %v\nbody=%s", err, body)
+	}
+	if strings.Contains(body, homeDir) || strings.Contains(body, codexSessionsRoot(homeDir)) {
+		t.Fatalf("provider session response leaked configured host path: %s", body)
+	}
 }
 
 func codexProviderSessionDetailURL(baseURL, sessionID string) string {
