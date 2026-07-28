@@ -12,7 +12,6 @@ import (
 // nested import.
 var productionPackages = []string{
 	"github.com/portpowered/infinite-you/pkg/services/provider_sessions",
-	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/service",
 	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire",
 	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http",
 	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader",

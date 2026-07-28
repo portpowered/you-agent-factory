@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
-	workertaxonomy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers/taxonomy"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy"
 )
 
 type Workstation struct {

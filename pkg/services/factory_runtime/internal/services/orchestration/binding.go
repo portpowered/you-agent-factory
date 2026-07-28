@@ -1,6 +1,6 @@
 package orchestration
 
-import "github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
+import "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 
 type compiledBinding struct {
 	kind        Kind

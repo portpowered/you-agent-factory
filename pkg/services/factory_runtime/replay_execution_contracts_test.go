@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/replayhooks"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks"
 )
 
 func TestReplayExecutionContractsPublishRuntimeRootHookVocabulary(t *testing.T) {

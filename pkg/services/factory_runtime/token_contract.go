@@ -1,6 +1,6 @@
 package factory
 
-import "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token"
+import "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 
 // Runtime token contracts are published at the Factory Runtime service root.
 // The token subpackage remains an owner-internal implementation surface.

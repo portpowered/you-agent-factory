@@ -78,6 +78,8 @@ func isFactoryRuntimeCanonicalRetain(rest string) bool {
 		return true
 	case rest == "transports" || strings.HasPrefix(rest, "transports/"):
 		return true
+	case rest == "internal" || strings.HasPrefix(rest, "internal/host"):
+		return true
 	case strings.HasPrefix(rest, "internal/services/orchestration"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/instance_host"):

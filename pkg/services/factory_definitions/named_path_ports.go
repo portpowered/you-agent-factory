@@ -3,7 +3,7 @@ package factorydefinitions
 import (
 	"io/fs"
 
-	namedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
+	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 )
 
 // NamedPathFileSystem is the exact filesystem effect used to resolve and
@@ -28,7 +28,7 @@ type NamedPathResolver interface {
 // NamedFactoryCandidatePaths contains the detached, ordered paths used to
 // diagnose a failed cross-root named Factory lookup. Project remains first in
 // the same precedence order used by the named Factory catalog.
-type NamedFactoryCandidatePaths = namedpaths.CandidatePaths
+type NamedFactoryCandidatePaths = catalognamedpaths.CandidatePaths
 
 // NamedFactoryCandidatePathsResolver is the exact Factory Definitions
 // operation supplied to callers that need detached candidate paths. It keeps

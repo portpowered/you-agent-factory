@@ -8,30 +8,9 @@ import (
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
-const (
-	providerSessionsServicePackagePath      = "pkg/services/provider_sessions/service"
-	providerSessionsServiceManifestDest     = "provider_sessions/internal"
-	providerSessionsServiceOwnershipSuccessor = "pkg/services/provider_sessions/internal"
-)
+const deletedProviderSessionsServicePackagePath = "pkg/services/provider_sessions/service"
 
-func TestMapCommittedOwnerPackageProviderSessionsServiceMoveDestination(t *testing.T) {
-	t.Parallel()
-
-	got, ok := mapCommittedOwnerPackage(providerSessionsServicePackagePath)
-	if !ok {
-		t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", providerSessionsServicePackagePath)
-	}
-	want := PackageMapping{
-		PackagePath: providerSessionsServicePackagePath,
-		Disposition: DispositionMove,
-		Destination: providerSessionsServiceManifestDest,
-	}
-	if got != want {
-		t.Fatalf("mapCommittedOwnerPackage(%q) = %#v, want %#v", providerSessionsServicePackagePath, got, want)
-	}
-}
-
-func TestMapCommittedOwnerPackageProviderSessionsPrivateReadersDoNotReplaceServiceMove(t *testing.T) {
+func TestMapCommittedOwnerPackageProviderSessionsPrivateReadersRetain(t *testing.T) {
 	t.Parallel()
 
 	privateReaders := []string{
@@ -51,17 +30,9 @@ func TestMapCommittedOwnerPackageProviderSessionsPrivateReadersDoNotReplaceServi
 			t.Fatalf("mapCommittedOwnerPackage(%q) destination = %q, want nested private reader destination", packagePath, got.Destination)
 		}
 	}
-
-	serviceMapping, ok := mapCommittedOwnerPackage(providerSessionsServicePackagePath)
-	if !ok {
-		t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", providerSessionsServicePackagePath)
-	}
-	if serviceMapping.Disposition != DispositionMove || serviceMapping.Destination != providerSessionsServiceManifestDest {
-		t.Fatalf("public service/ regressed after private readers exist: %#v", serviceMapping)
-	}
 }
 
-func TestProviderSessionsCommittedManifestLocksServiceMoveDestination(t *testing.T) {
+func TestProviderSessionsCommittedManifestOmitsDeletedTransitionalServicePackage(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
@@ -70,53 +41,15 @@ func TestProviderSessionsCommittedManifestLocksServiceMoveDestination(t *testing
 		t.Fatalf("loadManifest() error = %v", err)
 	}
 
-	var serviceRow *PackageMapping
-	for index := range manifest.Packages {
-		if manifest.Packages[index].PackagePath == providerSessionsServicePackagePath {
-			serviceRow = &manifest.Packages[index]
-			break
+	for _, packagePath := range manifest.Inventory {
+		if packagePath == deletedProviderSessionsServicePackagePath {
+			t.Fatalf("committed manifest inventory still lists deleted transitional package %q", deletedProviderSessionsServicePackagePath)
 		}
 	}
-	if serviceRow == nil {
-		t.Fatalf("committed package-target manifest missing %q", providerSessionsServicePackagePath)
-	}
-	if serviceRow.Disposition != DispositionMove {
-		t.Fatalf("committed manifest row disposition = %q, want move", serviceRow.Disposition)
-	}
-	if serviceRow.Destination != providerSessionsServiceManifestDest {
-		t.Fatalf("committed manifest row destination = %q, want %s", serviceRow.Destination, providerSessionsServiceManifestDest)
-	}
-}
-
-func TestProviderSessionsDualLedgerAgreeOnServiceMoveDestination(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := findRepoRoot(t)
-	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
-	if err != nil {
-		t.Fatalf("loadManifest() error = %v", err)
-	}
-	ownership, err := ownershipinventory.Load(repoRoot)
-	if err != nil {
-		t.Fatalf("ownershipinventory.Load() error = %v", err)
-	}
-
-	manifestRow, ok := manifestPackageRow(manifest, providerSessionsServicePackagePath)
-	if !ok {
-		t.Fatalf("package-target manifest missing %q", providerSessionsServicePackagePath)
-	}
-	ownershipRow, ok := ownershipPackageRow(ownership, providerSessionsServicePackagePath)
-	if !ok {
-		t.Fatalf("ownership inventory missing %q", providerSessionsServicePackagePath)
-	}
-	if manifestRow.Disposition != DispositionMove || ownershipRow.Disposition != ownershipinventory.DispositionMove {
-		t.Fatalf("service/ move disposition drift: manifest=%q ownership=%q", manifestRow.Disposition, ownershipRow.Disposition)
-	}
-	if manifestRow.Destination != providerSessionsServiceManifestDest {
-		t.Fatalf("manifest destination = %q, want %s", manifestRow.Destination, providerSessionsServiceManifestDest)
-	}
-	if ownershipRow.Successor != providerSessionsServiceOwnershipSuccessor {
-		t.Fatalf("ownership successor = %q, want %s", ownershipRow.Successor, providerSessionsServiceOwnershipSuccessor)
+	for _, row := range manifest.Packages {
+		if row.PackagePath == deletedProviderSessionsServicePackagePath {
+			t.Fatalf("committed manifest packages still list deleted transitional package %q", deletedProviderSessionsServicePackagePath)
+		}
 	}
 }
 

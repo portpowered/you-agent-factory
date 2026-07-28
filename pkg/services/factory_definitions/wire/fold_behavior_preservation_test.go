@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
@@ -18,7 +19,6 @@ import (
 	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	factorydefinitiontestcomposition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -85,6 +85,86 @@ func TestWireFoldPreservesCatalogThroughPublishedRoot(t *testing.T) {
 	}
 	if errors.Is(missingErr, factorydefinitions.ErrInvalidNamedFactoryName) {
 		t.Fatal("missing named factory must not also match invalid-name sentinel")
+	}
+}
+
+func TestWireFoldPreservesCatalogResolveDeleteAndCurrentPointerThroughPublishedRoot(t *testing.T) {
+	t.Parallel()
+
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+	alphaDir := writeFoldPreservationNamedFactory(t, projectRoot, "alpha")
+	_ = writeFoldPreservationNamedFactory(t, projectRoot, "beta")
+	_ = writeFoldPreservationNamedFactory(t, globalRoot, "alpha")
+	service := newWireFoldPreservationService(t)
+	ctx := context.Background()
+
+	resolved, err := service.ResolveNamedFactory(
+		ctx,
+		factorydefinitions.ResolveNamedFactoryRequest{
+			ProjectRoot: projectRoot,
+			GlobalRoot:  globalRoot,
+			Name:        "alpha",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ResolveNamedFactory(alpha) error = %v", err)
+	}
+	if resolved.Resolution.FactoryDir != alphaDir ||
+		resolved.Resolution.Source != factorydefinitions.NamedFactoryResolutionSourceProjectLocal {
+		t.Fatalf("ResolveNamedFactory() = %#v, want project-local alpha at %q", resolved.Resolution, alphaDir)
+	}
+
+	if _, err := service.SetCurrentFactoryPointer(
+		ctx,
+		factorydefinitions.SetCurrentFactoryPointerRequest{RootDir: projectRoot, Name: "beta"},
+	); err != nil {
+		t.Fatalf("SetCurrentFactoryPointer(beta) error = %v", err)
+	}
+	pointer, err := service.GetCurrentFactoryPointer(
+		ctx,
+		factorydefinitions.GetCurrentFactoryPointerRequest{RootDir: projectRoot},
+	)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryPointer() error = %v", err)
+	}
+	if pointer.Name != "beta" {
+		t.Fatalf("GetCurrentFactoryPointer() = %#v, want beta current pointer", pointer)
+	}
+
+	emptyRoot := t.TempDir()
+	_, missingPointerErr := service.GetCurrentFactoryPointer(
+		ctx,
+		factorydefinitions.GetCurrentFactoryPointerRequest{RootDir: emptyRoot},
+	)
+	if !errors.Is(missingPointerErr, factorydefinitions.ErrCurrentFactoryNotFound) {
+		t.Fatalf(
+			"GetCurrentFactoryPointer(missing) error = %v, want %v",
+			missingPointerErr,
+			factorydefinitions.ErrCurrentFactoryNotFound,
+		)
+	}
+
+	deleted, err := service.DeleteNamedFactory(
+		ctx,
+		factorydefinitions.DeleteNamedFactoryRequest{RootDir: projectRoot, Name: "alpha"},
+	)
+	if err != nil {
+		t.Fatalf("DeleteNamedFactory(alpha) error = %v", err)
+	}
+	if deleted.FactoryDir != alphaDir {
+		t.Fatalf("DeleteNamedFactory() factoryDir = %q, want %q", deleted.FactoryDir, alphaDir)
+	}
+
+	listed, err := service.ListNamedFactories(
+		ctx,
+		factorydefinitions.ListNamedFactoriesRequest{RootDir: projectRoot},
+	)
+	if err != nil {
+		t.Fatalf("ListNamedFactories() after delete error = %v", err)
+	}
+	if len(listed.Entries) != 1 || listed.Entries[0].Name != "beta" {
+		t.Fatalf("ListNamedFactories() after delete = %#v, want only beta", listed.Entries)
 	}
 }
 
@@ -176,6 +256,107 @@ func TestWireFoldPreservesValidateThroughPublishedRoot(t *testing.T) {
 			factorydefinitions.ErrInvalidFactoryDefinitionPayload,
 		)
 	}
+}
+
+func TestWireFoldPreservesWorkerWorkstationCompatibilityThroughPublishedRoot(t *testing.T) {
+	t.Parallel()
+
+	service := newWireFoldPreservationService(t)
+	ctx := context.Background()
+	payload := []byte(`{
+		"name":"alpha",
+		"workTypes":[{"name":"story","states":[
+			{"name":"queued","type":"INITIAL"},
+			{"name":"done","type":"TERMINAL"},
+			{"name":"failed","type":"FAILED"}
+		]}],
+		"workers":[{"name":"worker-a","type":"AGENT_WORKER"}],
+		"workstations":[{
+			"name":"process",
+			"type":"INFERENCE_RUN",
+			"worker":"worker-a",
+			"operation":"TTS",
+			"inputs":[{"workType":"story","state":"queued"}],
+			"outputs":[{"workType":"story","state":"done"}],
+			"onFailure":[{"workType":"story","state":"failed"}]
+		}]
+	}`)
+
+	_, err := service.ValidateStructuralFactoryDefinition(
+		ctx,
+		factorydefinitions.ValidateStructuralFactoryDefinitionRequest{
+			Canonical: payload,
+			Profile:   factorydefinitions.ValidationProfileTopology,
+		},
+	)
+	assertWireFoldValidationFailure(
+		t,
+		err,
+		factorydefinitions.ValidationCodeWorkerWorkstationBehaviorCompatibility,
+	)
+}
+
+func TestWireFoldPreservesRequiredToolsThroughPublishedRoot(t *testing.T) {
+	t.Parallel()
+
+	service := newWireFoldPreservationService(t, withRequiredToolChecker(foldRequiredToolChecker{
+		"missing-tool": {
+			FailureKind: factorydefinitions.RequiredToolFailureKindMissing,
+			Err:         errors.New(`required tool "Portable helper" command "missing-tool" was not found on PATH`),
+		},
+	}))
+	ctx := context.Background()
+	payload := []byte(`{
+		"name":"alpha",
+		"workTypes":[{"name":"story","states":[
+			{"name":"queued","type":"INITIAL"},
+			{"name":"done","type":"TERMINAL"},
+			{"name":"failed","type":"FAILED"}
+		]}],
+		"workers":[{"name":"worker-a"}],
+		"workstations":[{
+			"name":"process",
+			"worker":"worker-a",
+			"inputs":[{"workType":"story","state":"queued"}],
+			"outputs":[{"workType":"story","state":"done"}],
+			"onFailure":[{"workType":"story","state":"failed"}]
+		}],
+		"supportingFiles":{"requiredTools":[{"name":"Portable helper","command":"missing-tool"}]}
+	}`)
+
+	_, err := service.ValidateStructuralFactoryDefinition(
+		ctx,
+		factorydefinitions.ValidateStructuralFactoryDefinitionRequest{
+			Canonical: payload,
+			Profile:   factorydefinitions.ValidationProfileTopology,
+		},
+	)
+	assertWireFoldValidationFailure(t, err, "factory.requiredTool.missing")
+}
+
+func TestWireFoldPreservesEffectiveValidationTypedFailureThroughPublishedRoot(t *testing.T) {
+	t.Parallel()
+
+	service := newWireFoldPreservationService(t)
+	ctx := context.Background()
+	payload := []byte(factoryfixtures.CrossPathValidAlphaFactoryJSON)
+
+	_, err := service.ValidateEffectiveFactoryDefinition(
+		ctx,
+		factorydefinitions.ValidateEffectiveFactoryDefinitionRequest{
+			Canonical: payload,
+			Effective: factorydefinitions.EffectiveFactorySource{
+				FactoryDir:      "/factories/alpha",
+				RuntimeBaseDir:  "/factories/alpha",
+				ContentIdentity: string(payload),
+			},
+		},
+	)
+	assertWireFoldValidationFailure(
+		t,
+		err,
+		"work-type-handling-behavior-required-default",
+	)
 }
 
 func TestWireFoldPreservesSnapshotPortabilityThroughPublishedRoot(t *testing.T) {
@@ -315,7 +496,27 @@ func withPackagedCatalog(
 }
 
 type foldPreservationPorts struct {
-	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations
+	packagedCatalog     factorydefinitions.PackagedFactoryCatalogOperations
+	requiredToolChecker factorydefinitions.RequiredToolChecker
+}
+
+func withRequiredToolChecker(
+	checker factorydefinitions.RequiredToolChecker,
+) foldPreservationOption {
+	return func(ports *foldPreservationPorts) {
+		ports.requiredToolChecker = checker
+	}
+}
+
+type foldRequiredToolChecker map[string]factorydefinitions.RequiredToolCheckResult
+
+func (c foldRequiredToolChecker) Check(
+	tool factorydefinitions.RequiredToolConfig,
+) factorydefinitions.RequiredToolCheckResult {
+	if result, ok := c[tool.Command]; ok {
+		return result
+	}
+	return factorydefinitions.RequiredToolCheckResult{}
 }
 
 func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOption) factorydefinitions.Service {
@@ -327,7 +528,7 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 	}
 
 	composition := newFoldPreservationComposition()
-	validator := factoryvalidation.New(nil)
+	validator := factorydefinitionswire.NewValidationOperations(nil)
 	mapInput := func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
 		return validationentry.MapFactoryJSONForPersistence(payload, composition.LoadCanonicalJSON)
 	}
@@ -371,6 +572,11 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 
 	applySupportedFiles, applyStarterWork, _ := factorydefinitiontestcomposition.PortableOperations(fileSystem)
 
+	requiredToolChecker := ports.requiredToolChecker
+	if requiredToolChecker == nil {
+		requiredToolChecker = stubRequiredToolChecker{}
+	}
+
 	service, err := factorydefinitionswire.NewService(
 		stubSessionHost{},
 		wireStubActivationGateway{},
@@ -402,7 +608,7 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 				}, nil
 			},
 		},
-		stubRequiredToolChecker{},
+		requiredToolChecker,
 		stubOrchestratorValidator{},
 		fileSystem,
 		directoryreplace.Local{},
@@ -470,6 +676,41 @@ func foldPreservationEffectivePayload(t *testing.T) []byte {
 		t.Fatalf("Marshal(alpha factory): %v", err)
 	}
 	return payload
+}
+
+func assertWireFoldValidationFailure(t *testing.T, err error, wantCodes ...string) {
+	t.Helper()
+
+	var validationFailure *factorydefinitions.FactoryDefinitionValidationFailure
+	if !errors.As(err, &validationFailure) {
+		t.Fatalf("error = %v, want FactoryDefinitionValidationFailure", err)
+	}
+	if !errors.Is(err, factorydefinitions.ErrFactoryDefinitionValidationFailed) {
+		t.Fatalf("error = %v, want %v", err, factorydefinitions.ErrFactoryDefinitionValidationFailed)
+	}
+	if errors.Is(err, factorydefinitions.ErrInvalidFactoryDefinitionPayload) {
+		t.Fatal("validation findings must not also match ErrInvalidFactoryDefinitionPayload")
+	}
+	if len(validationFailure.Validation.Targets) == 0 {
+		t.Fatal("FactoryDefinitionValidationFailure must carry validation targets")
+	}
+
+	hasErrorFinding := false
+	for _, target := range validationFailure.Validation.Targets {
+		if target.Severity == factorydefinitions.ValidationSeverityError {
+			hasErrorFinding = true
+		}
+		if strings.Contains(strings.ToLower(target.Code), "petri") ||
+			strings.Contains(strings.ToLower(target.Message), "petri") {
+			t.Fatalf("published validation findings must not use Petri vocabulary: %#v", target)
+		}
+	}
+	if !hasErrorFinding {
+		t.Fatal("FactoryDefinitionValidationFailure must carry at least one error-severity finding")
+	}
+	for _, code := range wantCodes {
+		validationassert.HasDomainTargetCode(t, validationFailure.Validation.Targets, code)
+	}
 }
 
 func writeFoldPreservationNamedFactory(t *testing.T, rootDir, name string) string {

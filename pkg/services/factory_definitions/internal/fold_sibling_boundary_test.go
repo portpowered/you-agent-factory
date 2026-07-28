@@ -26,6 +26,7 @@ var foldedPublicSiblingSuffixes = []string{
 	"/packages/subagent",
 	"/packages/tts",
 	"/namedfactories",
+	"/resource",
 }
 
 var foldSiblingScanRoots = []string{

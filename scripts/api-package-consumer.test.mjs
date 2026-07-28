@@ -42,7 +42,7 @@ const protectedFiles = [
 	"packages/api/generated/schemas/mock-workers.schema.json",
 	"packages/api/generated/javascript/runtime-api.json",
 	"pkg/services/workers/internal/interface/testdata/baseline/mock-workers-topology.json",
-	"pkg/services/factory_runtime/tooling/javascript/javascript-runtime-symbols.json",
+	"pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/javascript-runtime-symbols.json",
 	"pkg/transports/http/generated/server.gen.go",
 	"pkg/transports/http/client/client.gen.go",
 	"ui/src/api/generated/openapi.ts",
