@@ -145,12 +145,6 @@ func (f *rootControlObservationFake) RestoreCheckpoint(
 	}, nil
 }
 
-func (f *rootControlObservationFake) GetEngineStateSnapshot(
-	context.Context,
-) (*factoryruntime.StateSnapshot, error) {
-	return &factoryruntime.StateSnapshot{FactoryState: f.factoryState}, nil
-}
-
 func (f *rootControlObservationFake) SubmitWorkRequest(
 	context.Context,
 	work.WorkRequest,
