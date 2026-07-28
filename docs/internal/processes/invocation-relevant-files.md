@@ -1954,6 +1954,16 @@ response-stream output.
   Keep usage lines, parameter descriptions, defaults, accepted values, output
   hints, and example rendering derived from `interfaces.InvocationSignatureConfig`
   instead of hard-coding packaged-factory argument inventories in CLI help.
+- Functional ownership for Factory-aware `you run` invocation help belongs in
+  `tests/functional/workers/transports/cli/run/help/invocation_help_test.go`:
+  prove named-Factory signature help, required vs optional parameter distinction,
+  and read-only no-dispatch guarantees through `support.BuildProcess` +
+  `Process.Execute` on `you run --named <factory> --help`; seed factories with
+  `support.ScaffoldFactory` and `support.CreateNamedFactory`; install
+  `testutil.NewProviderCommandRunner` via `serviceedges.Edges` for no-dispatch
+  proofs. Do not place this coverage under root `pkg/transports/cli` or catch-all
+  `tests/functional/cli/`; package-level renderer regressions remain in
+  `pkg/transports/cli/run/run_invocation_test.go`.
 - `docs/reference/run.md` (`you docs run`) owns supported `@you/fusion`
   invocation and signature-aware help. Factory materialization, examples, and
   edit-after-materialize behavior belong in

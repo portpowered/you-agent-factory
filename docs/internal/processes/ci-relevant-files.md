@@ -306,6 +306,19 @@
   Catalog metadata infers domain `workers` and subsection `mock` from the path;
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+  Workers CLI run invocation-help functional coverage belongs in
+  `tests/functional/workers/transports/cli/run/help/invocation_help_test.go`:
+  prove Factory invocation signature help for `you run --named <factory> --help`
+  through `support.BuildProcess` + `support.FakeInputs` with
+  `HOME`/`USERPROFILE` pinned to the seeded named-factory catalog; prove
+  required vs optional parameter labels and usage tokens from observable stdout
+  only; prove read-only help with
+  `serviceedges.Edges{ProviderCommandRunner: testutil.NewProviderCommandRunner()}`
+  and zero provider dispatch. Substitute external effects only through
+  `edges.Edges`; do not use `--with-mock-workers` for this cell. Catalog
+  metadata infers domain `workers` and subsection `transports` from the path;
+  every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
   Packaged `@you/subagent` invocation functional coverage belongs in
   `tests/functional/factory/packaged/subagent/invocation_test.go`: prove child
   primary-result return through public CLI JSON and hermetic no-server named
