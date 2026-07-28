@@ -452,6 +452,7 @@ func assertProviderAutomationDefaults(t *testing.T, env []string) {
 	}
 }
 func TestScriptWrapProvider_Infer_CodexImageContentEmitsOrderedImageArgs(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	workspace := t.TempDir()
 	imageOne := "fixtures/one.png"
@@ -529,6 +530,7 @@ func TestScriptWrapProvider_Infer_CodexImageContentEmitsOrderedImageArgs(t *test
 }
 
 func TestScriptWrapProvider_Infer_CodexTextOnlyContentDoesNotEmitImageArgs(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("codex output")}}
 	provider := NewScriptWrapProviderWithDependencies(
@@ -557,6 +559,7 @@ func TestScriptWrapProvider_Infer_CodexTextOnlyContentDoesNotEmitImageArgs(t *te
 }
 
 func TestScriptWrapProvider_Infer_CodexMissingImageFailsBeforeRunner(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("codex output")}}
 	provider := NewScriptWrapProviderWithDependencies(
@@ -606,6 +609,7 @@ func TestScriptWrapProvider_Infer_CodexMissingImageFailsBeforeRunner(t *testing.
 }
 
 func TestScriptWrapProvider_Infer_CodexRemoteImageMaterializesToTempPath(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	body := []byte("remote-image")
 	remoteURL := "https://assets.example.test/remote.png"
@@ -672,6 +676,7 @@ func (e *codexImageMaterializationAssertExec) Run(ctx context.Context, req Comma
 }
 
 func TestScriptWrapProvider_Infer_CodexInaccessibleRemoteImageFailsBeforeRunner(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	remoteURL := "https://assets.example.test/missing.png"
 
@@ -716,6 +721,7 @@ func TestScriptWrapProvider_Infer_CodexInaccessibleRemoteImageFailsBeforeRunner(
 
 // Smoke: one Codex dispatch materializes both file:// and remote https URLs to distinct -i paths.
 func TestScriptWrapProvider_Infer_CodexBatchLocalAndRemoteImageURLs(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	workspace := t.TempDir()
 	localPath := filepath.Join(workspace, "local.png")

@@ -315,6 +315,53 @@ func TestResolveProviderIDUsesStaticCanonicalAuthority(t *testing.T) {
 	}
 }
 
+func TestRegistrationProviderReturnsStaticDetachedCatalogFacts(t *testing.T) {
+	t.Parallel()
+
+	probeCalls := 0
+	service, err := internalservice.New(internalservice.WithProbeQuery(func(
+		context.Context,
+		providers.Descriptor,
+	) (catalog.ProbeFacts, error) {
+		probeCalls++
+		return catalog.ProbeFacts{}, nil
+	}))
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	codex, err := service.RegistrationProvider(providers.IDCodex)
+	if err != nil {
+		t.Fatalf("RegistrationProvider(codex) = %v", err)
+	}
+	claude, err := service.RegistrationProvider(providers.IDClaude)
+	if err != nil {
+		t.Fatalf("RegistrationProvider(claude) = %v", err)
+	}
+	if codex.ID != providers.IDCodex ||
+		codex.Availability != providers.AvailabilitySelectable ||
+		!slices.Contains(codex.Capabilities, providers.CapabilityStructuredOutput) {
+		t.Fatalf("Codex registration facts = %#v", codex)
+	}
+	if claude.ID != providers.IDClaude ||
+		claude.Availability != providers.AvailabilitySelectable ||
+		!slices.Contains(claude.Capabilities, providers.CapabilityMessageDeltas) {
+		t.Fatalf("Claude registration facts = %#v", claude)
+	}
+	if probeCalls != 0 {
+		t.Fatalf("RegistrationProvider() probe calls = %d, want 0", probeCalls)
+	}
+
+	codex.Capabilities[0] = providers.CapabilityUsage
+	reloaded, err := service.RegistrationProvider(providers.IDCodex)
+	if err != nil {
+		t.Fatalf("second RegistrationProvider(codex) = %v", err)
+	}
+	if reflect.DeepEqual(reloaded.Capabilities, codex.Capabilities) {
+		t.Fatal("RegistrationProvider() returned catalog-owned capability slice")
+	}
+}
+
 func TestGetProviderReturnsDetachedValues(t *testing.T) {
 	t.Parallel()
 

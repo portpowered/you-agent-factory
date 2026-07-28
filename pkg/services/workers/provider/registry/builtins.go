@@ -7,7 +7,10 @@ import (
 
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/claude"
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/codex"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
@@ -21,9 +24,10 @@ const nativeRuntimePrerequisite = "provider-native-runtime"
 // ProviderCommandRunner edge used by native executors so conductor-routed
 // built-ins and functional overrides share one command boundary.
 type BuiltInDependencies struct {
-	CommandRunner   workerprocess.CommandRunner
-	OperatingSystem string
-	TemporaryFiles  platformfilesystem.TemporaryFileSystem
+	CommandRunner    workerprocess.CommandRunner
+	OperatingSystem  string
+	TemporaryFiles   platformfilesystem.TemporaryFileSystem
+	ProvidersService providers.Service
 }
 
 // BuiltInRegistrations returns detached registrations for every selectable
@@ -103,6 +107,20 @@ func migratedBuiltInIntegration(
 	dependencies BuiltInDependencies,
 ) inference.Integration {
 	switch normalize(string(identity)) {
+	case "claude":
+		if dependencies.ProvidersService == nil {
+			return claude.NewIntegration()
+		}
+		return claude.NewIntegration(claude.IntegrationDependencies{
+			ProvidersService: dependencies.ProvidersService,
+		})
+	case "codex":
+		if dependencies.ProvidersService == nil {
+			return codex.NewIntegration()
+		}
+		return codex.NewIntegration(codex.IntegrationDependencies{
+			ProvidersService: dependencies.ProvidersService,
+		})
 	case "cursor":
 		return cursor.NewIntegration(cursor.IntegrationDependencies{
 			CommandRunner:   dependencies.CommandRunner,

@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -31,7 +30,7 @@ func TestSessionInvocationAPI_PackagedGoalReturnsExplicitSummaryPrimaryResult(t 
 }
 
 func TestSessionInvocationAPI_PackagedGoalContinueRepeatsBeforeCompletion(t *testing.T) {
-	runner := testutil.NewProviderCommandRunner(
+	runner := support.NewShapedProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte("ordinary partial progress\n<CONTINUE>")},
 		platformprocess.CommandResult{Stdout: []byte("finished after continue\n<COMPLETE>")},
 	)
@@ -45,7 +44,7 @@ func TestSessionInvocationAPI_PackagedGoalContinueRepeatsBeforeCompletion(t *tes
 }
 
 func TestSessionInvocationAPI_PackagedGoalRejectRepeatsBeforeCompletion(t *testing.T) {
-	runner := testutil.NewProviderCommandRunner(
+	runner := support.NewShapedProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte("goal is not complete yet")},
 		platformprocess.CommandResult{Stdout: []byte("finished after rejection\n<COMPLETE>")},
 	)

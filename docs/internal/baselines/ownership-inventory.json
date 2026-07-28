@@ -1447,7 +1447,7 @@
       "fromOwner": "providers",
       "toOwner": "platform",
       "class": "external_effect",
-      "evidence": "pkg/services/workers/agypty -\u003e pkg/platform/clock"
+      "evidence": "pkg/services/providers/internal/services/execution/wire -\u003e pkg/platform/process"
     },
     {
       "fromOwner": "providers",
@@ -1459,7 +1459,7 @@
       "fromOwner": "providers",
       "toOwner": "workers",
       "class": "command",
-      "evidence": "pkg/services/workers/cliprovider -\u003e pkg/services/workers"
+      "evidence": "pkg/services/providers/internal/services/execution/internal/adapters/claude -\u003e pkg/services/workers"
     },
     {
       "fromOwner": "recordings",
@@ -1472,12 +1472,6 @@
       "toOwner": "platform",
       "class": "external_effect",
       "evidence": "pkg/services/recordings/replay -\u003e pkg/platform/replay"
-    },
-    {
-      "fromOwner": "recordings",
-      "toOwner": "providers",
-      "class": "command",
-      "evidence": "pkg/services/recordings -\u003e pkg/services/workers/provider/inferencecontract"
     },
     {
       "fromOwner": "recordings",
@@ -1726,6 +1720,12 @@
       "toOwner": "factory_sessions",
       "class": "command",
       "evidence": "pkg/services/work/service -\u003e pkg/services/factory_sessions"
+    },
+    {
+      "fromOwner": "work",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/work/transports/cli -\u003e pkg/transports/cli/clihttp"
     },
     {
       "fromOwner": "workers",
@@ -4072,6 +4072,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/claude",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/codex",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/providers/internal/services/execution/internal/service",
       "disposition": "retain",
       "destination": "providers",
@@ -4388,6 +4406,18 @@
       "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
     },
     {
+      "packagePath": "pkg/services/work/transports/cli",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/transports/mcp",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/work/wire",
       "disposition": "retain",
       "destination": "work",
@@ -4620,31 +4650,7 @@
       "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
     },
     {
-      "packagePath": "pkg/services/workers/provider/claude/exitfailure",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
       "packagePath": "pkg/services/workers/provider/codex",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/provider/codex/exitfailure",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/provider/codex/progress",
       "disposition": "move",
       "destination": "providers",
       "destinationKind": "owner",

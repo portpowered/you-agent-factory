@@ -12,8 +12,9 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
-	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	operatorconfig 	"github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	"go.uber.org/zap"
 )
@@ -172,7 +173,7 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 		_ factoryruntime.Clock,
 		_ map[string]struct{},
 		settings factoryruntime.JavaScriptWorkerSettings,
-		_ bool,
+		_ *workers.MockWorkersConfig,
 	) (factorysessions.ExecutionService, error) {
 		got = settings
 		return nil, nil
@@ -189,6 +190,7 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 		factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
 		factorysessions.SessionRuntimeOpeningRequest{SystemConfigHome: t.TempDir()},
 		RuntimeRoot{FactoryRootDir: t.TempDir()},
+		nil,
 		nil,
 		nil,
 		executionFactory,

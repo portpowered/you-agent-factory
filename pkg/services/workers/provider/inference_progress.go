@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -15,7 +16,6 @@ import (
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
 	agyadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy"
-	codexprogress "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex/progress"
 )
 
 const (
@@ -33,23 +33,28 @@ const (
 )
 
 const (
-	codexRetainedTextBytes       = codexprogress.ProgressRetainedTextBytes
-	codexRetainedProgressBytes   = codexprogress.ProgressRetainedProgressBytes
-	codexMetadataRunnerIDKey     = codexprogress.ProgressMetadataRunnerIDKey
-	codexMetadataWorkIDKey       = codexprogress.ProgressMetadataWorkIDKey
-	codexMetadataWorkstationKey  = codexprogress.ProgressMetadataWorkstationKey
-	codexMetadataTextBytesKey    = codexprogress.ProgressMetadataTextBytesKey
-	codexMetadataTruncatedKey    = codexprogress.ProgressMetadataTruncatedKey
-	codexMetadataRawBytesKey     = codexprogress.ProgressMetadataRawBytesKey
-	codexMetadataRawSHA256Key    = codexprogress.ProgressMetadataRawSHA256Key
-	codexMetadataDiagnosticKey   = codexprogress.ProgressMetadataDiagnosticKey
-	codexDiagnosticUnknownEvent  = codexprogress.ProgressDiagnosticUnknownEvent
-	codexDiagnosticMalformedJSON = codexprogress.ProgressDiagnosticMalformedJSON
-	codexDiagnosticIncompleteSSE = codexprogress.ProgressDiagnosticIncompleteSSE
+	codexRetainedTextBytes       = 4096
+	codexRetainedProgressBytes   = 1024
+	codexMetadataRunnerIDKey     = "runner_id"
+	codexMetadataWorkIDKey       = "work_id"
+	codexMetadataWorkstationKey  = "workstation_name"
+	codexMetadataTextBytesKey    = "text_bytes"
+	codexMetadataTruncatedKey    = "payload_truncated"
+	codexMetadataRawBytesKey     = "raw_bytes"
+	codexMetadataRawSHA256Key    = "raw_sha256"
+	codexMetadataDiagnosticKey   = "diagnostic_class"
+	codexDiagnosticUnknownEvent  = "unknown_event"
+	codexDiagnosticMalformedJSON = "malformed_json"
+	codexDiagnosticIncompleteSSE = "incomplete_event_stream"
 )
 
 func isCodexCommand(command string) bool {
-	return codexprogress.IsCommand(command)
+	base := filepath.Base(strings.ReplaceAll(strings.TrimSpace(command), `\`, "/"))
+	extension := strings.ToLower(filepath.Ext(base))
+	if extension == ".exe" || extension == ".cmd" || extension == ".bat" {
+		base = strings.TrimSuffix(base, filepath.Ext(base))
+	}
+	return strings.EqualFold(base, string(modelprovider.ProviderCodex))
 }
 
 // InferenceProgressFragment is the provider-boundary shape for transient internal
@@ -283,49 +288,13 @@ type progressStreamObserver interface {
 }
 
 func progressStreamIdentity(command string) adapter.Identity {
-	if codexprogress.IsCommand(command) {
-		return adapter.Identity(modelprovider.ProviderCodex)
-	}
 	return adapter.NormalizeIdentity(adapter.Identity(command))
 }
 
 func newProgressStreamObserver(
-	req CommandRequest,
-	publisher InferenceProgressPublisher,
-	logger logging.Logger,
+	_ CommandRequest,
+	_ InferenceProgressPublisher,
+	_ logging.Logger,
 ) progressStreamObserver {
-	switch progressStreamIdentity(req.Command) {
-	case adapter.Identity(modelprovider.ProviderCodex):
-		return &codexProgressObserver{
-			stream: codexprogress.NewProgressStream(req, func(fragment codexprogress.ProgressFragment) {
-				publisher(inferenceProgressFragmentFromCodex(fragment))
-			}),
-		}
-	default:
-		return nil
-	}
-}
-
-type codexProgressObserver struct {
-	stream *codexprogress.ProgressStream
-}
-
-func (o *codexProgressObserver) observe(_ context.Context, stream string, chunk []byte) bool {
-	return o.stream.Observe(stream, chunk)
-}
-
-func (o *codexProgressObserver) flush(_ context.Context, _ CommandResult, _ error) {
-	o.stream.Flush()
-}
-
-func inferenceProgressFragmentFromCodex(fragment codexprogress.ProgressFragment) InferenceProgressFragment {
-	return InferenceProgressFragment{
-		DispatchID:         fragment.DispatchID,
-		Kind:               fragment.Kind,
-		Type:               fragment.Type,
-		Payload:            fragment.Payload,
-		ProviderSessionRef: workerexecution.CloneProviderSessionMetadata(fragment.ProviderSessionRef),
-		ExternalEventType:  fragment.ExternalEventType,
-		Metadata:           fragment.Metadata,
-	}
+	return nil
 }
