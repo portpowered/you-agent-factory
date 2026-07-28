@@ -59,6 +59,39 @@ func TestPackagedFactoriesRejectMissingRequiredInputs(t *testing.T) {
 	}
 }
 
+// TestPackagedFactoriesNameMissingInputAndFactory proves that omitting required
+// invocation inputs for every packaged Factory in the embedded package matrix
+// surfaces customer-visible failure diagnostics naming both the missing input and
+// the Factory under test through the public packaged-catalog invocation boundary.
+func TestPackagedFactoriesNameMissingInputAndFactory(t *testing.T) {
+	cases, err := packagedFactoriesWithRequiredInvocationInputs()
+	if err != nil {
+		t.Fatalf("packaged Factory matrix: %v", err)
+	}
+	if len(cases) == 0 {
+		t.Fatal("packaged Factory matrix has no required-input cases")
+	}
+
+	for _, testcase := range cases {
+		testcase := testcase
+		t.Run(testcase.factoryName, func(t *testing.T) {
+			runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+			run := runPackagedFactoryMissingRequiredInputInvocation(
+				t,
+				runner,
+				testcase.factoryName,
+			)
+			assertPackagedFactoryMissingRequiredInputRejected(t, run, runner)
+			assertPackagedFactoryMissingRequiredInputDiagnosticsNameFactoryAndInput(
+				t,
+				run,
+				testcase.factoryName,
+				testcase.requiredParameters,
+			)
+		})
+	}
+}
+
 func packagedFactoriesWithRequiredInvocationInputs() ([]packagedFactoryRequiredInputCase, error) {
 	inventory, err := packagedfactorycatalog.Discover(
 		context.Background(),
@@ -255,4 +288,53 @@ func packagedFactoryMissingRequiredInputRejected(run packagedFactoryMissingRequi
 		return true
 	}
 	return false
+}
+
+func assertPackagedFactoryMissingRequiredInputDiagnosticsNameFactoryAndInput(
+	t *testing.T,
+	run packagedFactoryMissingRequiredInputRun,
+	factoryName string,
+	requiredParameters []string,
+) {
+	t.Helper()
+
+	diagnostic := packagedFactoryMissingRequiredInputDiagnostic(run)
+	if !strings.Contains(diagnostic, factoryName) {
+		t.Fatalf(
+			"failure diagnostic = %q, want Factory name %q",
+			diagnostic,
+			factoryName,
+		)
+	}
+	for _, parameterName := range requiredParameters {
+		if !packagedFactoryMissingRequiredInputDiagnosticNamesParameter(diagnostic, parameterName) {
+			t.Fatalf(
+				"failure diagnostic = %q, want missing required input name %q",
+				diagnostic,
+				parameterName,
+			)
+		}
+	}
+}
+
+func packagedFactoryMissingRequiredInputDiagnostic(run packagedFactoryMissingRequiredInputRun) string {
+	parts := make([]string, 0, 3)
+	if run.execErr != nil {
+		parts = append(parts, run.execErr.Error())
+	}
+	if run.errorResponse.Message != "" {
+		parts = append(parts, run.errorResponse.Message)
+	}
+	if run.response.Message != nil {
+		parts = append(parts, *run.response.Message)
+	}
+	return strings.Join(parts, "\n")
+}
+
+func packagedFactoryMissingRequiredInputDiagnosticNamesParameter(diagnostic, parameterName string) bool {
+	if strings.TrimSpace(parameterName) == "" {
+		return false
+	}
+	return strings.Contains(diagnostic, parameterName) ||
+		strings.Contains(diagnostic, fmt.Sprintf("%q", parameterName))
 }
