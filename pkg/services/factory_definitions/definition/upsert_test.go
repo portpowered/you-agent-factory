@@ -11,7 +11,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
+	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
 	factorysnapshotcapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -220,7 +220,7 @@ func (h *upsertDefinitionHost) PreparePortableFactoryConfig(
 	factoryConfig *factorydefinitions.FactoryConfig,
 	includeInlineContent bool,
 ) (*factorydefinitions.FactoryConfig, error) {
-	return portableconfig.Prepare(
+	return snapshotsportabilityprepare.PrepareConfig(
 		factoryDir,
 		factoryConfig,
 		includeInlineContent,

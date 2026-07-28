@@ -246,6 +246,11 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIRunSuccessPrimaryResultTextJSONAndNDJSON`.
   - `TestCLIRunFailureOmitsFalseSuccessPrimaryResult`.
 
+- [x] `tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go`
+  - `TestCLIRunCleanInvocationCompletesWithoutDashboardStartup`.
+  - `TestCLIRunCleanInvocationFailurePreservesPublicError`.
+  - `TestCLIRunServerAttachedInvocationTargetsExistingFactorySession`.
+
 ### Inference workers — shared contract
 
 - [x] `tests/functional/workers/inference/selection_test.go`
@@ -801,6 +806,11 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIRunSuccessPrimaryResultTextJSONAndNDJSON`.
   - `TestCLIRunFailureOmitsFalseSuccessPrimaryResult`.
 
+- [x] `tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go`
+  - `TestCLIRunCleanInvocationCompletesWithoutDashboardStartup`.
+  - `TestCLIRunCleanInvocationFailurePreservesPublicError`.
+  - `TestCLIRunServerAttachedInvocationTargetsExistingFactorySession`.
+
 ### Factory visualization
 
 - [x] `tests/functional/factory_visualization/activation_lifecycle_test.go`
@@ -830,6 +840,23 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied`.
   - `TestPetriParentOrSameNameGuardReleasesExpectedWork`.
   - `TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState`.
+
+- [x] `tests/functional/factory_runtime/peer_import_boundary_test.go`
+  - `TestFunctionalFactoryRuntimePackageUsesPublicProcessImportsOnly`.
+  - `TestProductionPeersReachFactoryRuntimeThroughPublishedSurfacesOnly`.
+
+- [x] `tests/functional/factory_runtime/root_composition/build_process_inert_test.go`
+  - `TestFactoryRuntimeEffectsRemainInertThroughRootBuildProcessConstruction`.
+
+- [x] `tests/functional/factory_runtime/root_composition/lifecycle_activation_test.go`
+  - `TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuildProcessAfterLifecycle`.
+
+- [x] `tests/functional/factory_runtime/root_composition/packaged_root_shape_test.go`
+  - `TestFactoryRuntimePackagedRootShapeMatchesCanonicalServiceLayout`.
+
+- [x] `tests/functional/factory_runtime/root_composition/workflow_orchestration_activation_test.go`
+  - `TestFactoryRuntimeJavaScriptWorkflowActivatesThroughRootBuildProcessAfterLifecycle`.
+  - `TestFactoryRuntimePetriOrchestrationActivatesThroughRootBuildProcessAfterLifecycle`.
 
 ### Packaged factories
 

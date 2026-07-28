@@ -119,18 +119,6 @@
       "name": "TestFactoryMetadataSnapshotRejectsInvalidProgrammaticExampleArguments"
     },
     {
-      "file": "bootstrap_portability/watcher_current_factory_activation_long_test.go",
-      "name": "TestCurrentFactoryActivationFixture_ActivatesSecondPersistedFactoryAndResolvesCurrentFactory"
-    },
-    {
-      "file": "bootstrap_portability/watcher_current_factory_activation_long_test.go",
-      "name": "TestCurrentFactoryActivationFixture_LiveAPIReadsFollowActivatedFactory"
-    },
-    {
-      "file": "bootstrap_portability/watcher_current_factory_activation_long_test.go",
-      "name": "TestCurrentFactoryActivationFixture_WatchedFileExecutionFollowsActivatedFactory"
-    },
-    {
       "file": "cli/factory_run/output/failure_test.go",
       "name": "TestInvocationFailureOutputContracts"
     },

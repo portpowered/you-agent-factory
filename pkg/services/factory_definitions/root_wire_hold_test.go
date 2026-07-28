@@ -19,10 +19,10 @@ const (
 )
 
 var transitionalServiceForbiddenImports = []string{
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire",
 }
 

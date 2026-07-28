@@ -9,7 +9,6 @@ import (
 const (
 	compilationPackageRoot = modulePrefix + "pkg/services/factory_definitions/internal/services/compilation"
 	factoryDefinitionsWire = modulePrefix + "pkg/services/factory_definitions/wire"
-	wireFactoryDefinitions   = modulePrefix + "pkg/wire/factorydefinitions"
 )
 
 var transitionalCompileLoadImportRoots = []string{
@@ -20,7 +19,6 @@ var transitionalCompileLoadImportRoots = []string{
 
 var wireCompileLoadPackages = []string{
 	rootWirePackage,
-	wireFactoryDefinitions,
 	factoryDefinitionsWire,
 }
 

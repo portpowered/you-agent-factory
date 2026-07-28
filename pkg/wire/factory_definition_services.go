@@ -15,14 +15,12 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
-	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
 )
 
 func provideWorkContentHostPlatform(edges serviceedges.Edges) work.ContentHostPlatform {
@@ -308,19 +306,19 @@ func provideFactoryDefinitionInputInboxSentinelEnsurer(
 func providePortableBundledFilesApplier(
 	fileSystem portablefiles.FileSystem,
 ) (factorydefinitions.PortableBundledFilesApplier, error) {
-	return portableconfig.NewPortableBundledFilesApplier(fileSystem)
+	return factorydefinitionswire.NewPortableBundledFilesApplier(fileSystem)
 }
 
 func provideFactoryStarterWorkApplier(
 	fileSystem portablefiles.FileSystem,
 ) (factorydefinitions.FactoryStarterWorkApplier, error) {
-	return portableconfig.NewFactoryStarterWorkApplier(fileSystem)
+	return factorydefinitionswire.NewFactoryStarterWorkApplier(fileSystem)
 }
 
 func providePortableBundledDocsPruner(
 	fileSystem portablefiles.FileSystem,
 ) (factorydefinitions.PortableBundledDocsPruner, error) {
-	return portableconfig.NewPortableBundledDocsPruner(fileSystem)
+	return factorydefinitionswire.NewPortableBundledDocsPruner(fileSystem)
 }
 
 func providePortableBundledFilesMaterializer(fileSystem portablefiles.FileSystem) factorydefinitions.PortableBundledFilesMaterializer {
@@ -350,7 +348,7 @@ func provideFactoryDefinitionLoader(
 	inspectSource factorydefinitions.PortableBundledFileInspection,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 ) *factorydefinitionswire.Loader {
-	return wirefactorydefinitions.Loader(
+	return factorydefinitionswire.NewLoader(
 		applySupportedFiles,
 		applyStarterWork,
 		materializeFiles,
@@ -366,7 +364,7 @@ func provideFactoryDefinitionLoader(
 func provideAuthoredFactorySourceLoader(
 	fileSystem factorydefinitions.AuthoredLayoutReaderFileSystem,
 ) factorydefinitions.AuthoredFactorySourceLoader {
-	return wirefactorydefinitions.AuthoredFactorySourceLoader(fileSystem)
+	return factorydefinitionswire.AuthoredFactorySourceLoader(fileSystem)
 }
 
 func provideLoadedFactoryLoader(
@@ -384,10 +382,10 @@ func provideReplayArtifactStorage() platformreplay.Storage {
 func provideReplayArtifactLoader(storage platformreplay.Storage) recordings.ReplayArtifactLoader {
 	return recordingswire.NewReplayArtifactLoader(
 		storage,
-		wirefactorydefinitions.FactorySnapshotJSONDecoder(),
+		factorydefinitionswire.FactorySnapshotJSONDecoder(),
 	)
 }
 
 func provideReplayRuntimeConfigDecoder() factorydefinitions.ReplayRuntimeConfigDecoder {
-	return wirefactorydefinitions.ReplayRuntimeConfigDecoder()
+	return factorydefinitionswire.ReplayRuntimeConfigDecoder()
 }

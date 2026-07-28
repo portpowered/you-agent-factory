@@ -2749,11 +2749,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_definitions/authoredlayout",
-      "target": "pkg/services/factory_definitions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/clonetests",
       "target": "pkg/services/factory_definitions"
     },
@@ -2874,6 +2869,11 @@
     },
     {
       "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
+      "target": "pkg/services/factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
       "target": "pkg/services/factory_definitions/internal/services/snapshots_portability"
     },
@@ -2909,16 +2909,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_definitions/loading",
-      "target": "pkg/services/factory_definitions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_definitions/namedfactories",
-      "target": "pkg/services/factory_definitions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/namedpaths",
       "target": "pkg/services/factory_definitions"
     },
@@ -2944,11 +2934,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_definitions/portableconfig",
-      "target": "pkg/services/factory_definitions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/quorumpolicy",
       "target": "pkg/services/factory_definitions"
     },
@@ -2960,11 +2945,6 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/resource",
-      "target": "pkg/services/factory_definitions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_definitions/runtimeconfig",
       "target": "pkg/services/factory_definitions"
     },
     {
