@@ -115,6 +115,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal",
+      "minimum": 85.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron",
       "exception": {
         "kind": "measurement",
@@ -201,10 +205,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire",
       "minimum": 100.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal",
-      "minimum": 85.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/service",
