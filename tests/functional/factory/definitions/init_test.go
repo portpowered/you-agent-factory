@@ -2,6 +2,7 @@ package definitions
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,6 +103,49 @@ func TestFactoryInitIsIdempotent(t *testing.T) {
 	}
 
 	assertPortableInitScaffoldLayout(t, factoryRoot)
+}
+
+// TestFactoryInitFailureRoutingProducesFailedWork proves provider execution
+// failure on the default initialized portable scaffold routes seeded Work to
+// task:failed through public Work and session observations instead of complete.
+func TestFactoryInitFailureRoutingProducesFailedWork(t *testing.T) {
+	hostFactoryDir := support.ScaffoldFactory(t, initHostFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                hostFactoryDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+
+	workspaceDir := filepath.Join(t.TempDir(), "init-failure-workspace")
+	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+		t.Fatalf("create init workspace: %v", err)
+	}
+
+	initFactoryViaSessionCreate(t, server.URL(), workspaceDir)
+
+	factoryRoot := filepath.Join(workspaceDir, factorydefinitions.FactoryDir)
+	assertPortableInitScaffoldLayout(t, factoryRoot)
+
+	testutil.WriteSeedFile(t, factoryRoot, initFactoryWorkType, []byte(`{"title": "init factory failure routing"}`))
+
+	provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
+		"processor": {
+			{Error: errors.New("provider execution failed")},
+		},
+	})
+
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+		t,
+		factoryRoot,
+		serviceedges.Edges{ProviderOverride: provider},
+		15*time.Second,
+	)
+	assertInitWorkReachedTerminalState(t, listed, "failed")
+
+	if provider.CallCount("processor") != 1 {
+		t.Fatalf("provider calls = %d, want 1", provider.CallCount("processor"))
+	}
 }
 
 func initHostFactoryConfig() map[string]any {
