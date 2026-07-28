@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -334,4 +335,117 @@ func primaryResultText(t *testing.T, response factoryapi.InvocationResponse) str
 		t.Fatalf("primaryResult[0] as text part: %v", err)
 	}
 	return part.Text
+}
+
+func startPackagedGoalSessionServer(t *testing.T, factoryDir string) *support.FunctionalAPIServer {
+	t.Helper()
+
+	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+}
+
+func postPackagedGoalJSON[T any](t *testing.T, endpoint string, request any, failurePrefix string) T {
+	t.Helper()
+
+	var body io.Reader
+	if request != nil {
+		encoded, err := json.Marshal(request)
+		if err != nil {
+			t.Fatalf("%s: marshal request: %v", failurePrefix, err)
+		}
+		body = bytes.NewReader(encoded)
+	}
+	resp, err := http.Post(endpoint, "application/json", body)
+	if err != nil {
+		t.Fatalf("%s: POST %s: %v", failurePrefix, endpoint, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("%s: POST %s status = %d, want success: %s", failurePrefix, endpoint, resp.StatusCode, string(payload))
+	}
+	var out T
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("%s: decode %s response: %v", failurePrefix, endpoint, err)
+	}
+	return out
+}
+
+func submitPackagedGoalWork(t *testing.T, baseURL, name, text string) factoryapi.SubmitWorkResponse {
+	t.Helper()
+
+	body, err := json.Marshal(map[string]any{
+		"name":         name,
+		"workTypeName": "goal",
+		"items": []map[string]any{{
+			"type": "text",
+			"text": text,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal packaged goal submit request: %v", err)
+	}
+	resp, err := http.Post(support.DefaultSessionWorkURL(baseURL, "/work"), "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /work goal submit: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /work goal submit status = %d, want 201: %s", resp.StatusCode, string(payload))
+	}
+	var submitted factoryapi.SubmitWorkResponse
+	if err := json.NewDecoder(resp.Body).Decode(&submitted); err != nil {
+		t.Fatalf("decode goal submit response: %v", err)
+	}
+	if strings.TrimSpace(support.StringPointerValue(submitted.WorkId)) == "" {
+		t.Fatalf("goal submit response = %#v, want work id", submitted)
+	}
+	return submitted
+}
+
+func packagedGoalWorkStateName(state *factoryapi.WorkState) string {
+	if state == nil {
+		return ""
+	}
+	return state.Name
+}
+
+func waitForPackagedGoalWorkIDsComplete(
+	t *testing.T,
+	baseURL string,
+	workIDs []string,
+	timeout time.Duration,
+) []factoryapi.Work {
+	t.Helper()
+
+	want := make(map[string]bool, len(workIDs))
+	for _, workID := range workIDs {
+		want[workID] = true
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		listed := support.ListDefaultSessionWork(t, baseURL)
+		found := make(map[string]factoryapi.Work, len(want))
+		for _, item := range listed.Results {
+			workID := support.StringPointerValue(item.WorkId)
+			if want[workID] && packagedGoalWorkStateName(item.State) == "complete" {
+				found[workID] = item
+			}
+		}
+		if len(found) == len(want) {
+			items := make([]factoryapi.Work, 0, len(workIDs))
+			for _, workID := range workIDs {
+				items = append(items, found[workID])
+			}
+			return items
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	t.Fatalf("timed out waiting for completed goal work IDs %v; last work response: %#v", workIDs, listed)
+	return nil
 }
