@@ -282,6 +282,15 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 	},
 	"work": {
 		{exact: "materialize", prefix: "materialize/", dest: "work/internal/services/content_materialization"},
+		{exact: "stateaccessrecordings", prefix: "stateaccessrecordings/", dest: "work/internal/services/state_access"},
+		{exact: "testdata", prefix: "testdata/", dest: "work/internal"},
+	},
+	"operator_settings": {
+		{exact: "identityinventory", prefix: "identityinventory/", dest: "operator_settings/internal/services/document"},
+		{exact: "servicewire", prefix: "servicewire/", dest: "operator_settings/internal"},
+		{exact: "testlink", prefix: "testlink/", dest: "operator_settings/internal"},
+		{exact: "testdata", prefix: "testdata/", dest: "operator_settings/internal"},
+		{exact: "internal/service", prefix: "internal/service/", dest: "operator_settings/internal"},
 	},
 	"workers": {
 		{exact: "construction", prefix: "construction/", dest: "workers/internal/services/runtime_assembly"},
@@ -347,6 +356,8 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "runtimeconfig", prefix: "runtimeconfig/", dest: "factory_definitions/internal"},
 		{exact: "replayconfig", prefix: "replayconfig/", dest: "factory_definitions/internal"},
 		{exact: "workers", prefix: "workers/", dest: "factory_definitions/internal"},
+		{exact: "clonetests", prefix: "clonetests/", dest: "factory_definitions/internal"},
+		{exact: "systeminitializationtests", prefix: "systeminitializationtests/", dest: "factory_definitions/internal"},
 		{prefix: "internal/testcomposition", dest: "factory_definitions/internal"},
 	},
 }
