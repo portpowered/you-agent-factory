@@ -677,6 +677,11 @@ response-stream output.
   execution publishes canonical phase/checkpoint updates through the same
   invocation-local callback, and finite replay history enters that consumer
   before the separate terminal response is finalized.
+- Durable JavaScript `agent.run` live child invocations must rebuild through
+  `conductorInvocationWithProgress` in `pkg/wire/session_runtime_providers.go`
+  so migrated cursor/opencode attempts publish canonical response drafts via
+  `sessionProgressPublisher`; legacy `invocationWithProgress` only emits legacy
+  progress fragments that durable response-event stores ignore.
 - JavaScript canonical history must remain append-only while an invocation-local
   consumer is attached. Build phase/checkpoint events in runtime-record order,
   represent phase completion as a distinct immutable transition, and assign

@@ -545,6 +545,12 @@ func provideFactorySessionExecutionFactory(
 				liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
 					return conductorInvocationWithProgress(reboundRegistry, runner, allocator, publisher)
 				}
+			} else if mockWorkers == nil &&
+				registry != nil &&
+				conductorInvocationWithProgress != nil {
+				liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
+					return conductorInvocationWithProgress(registry, runner, allocator, publisher)
+				}
 			} else if mockWorkers == nil && invocationWithProgress != nil {
 				liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
 					return invocationWithProgress(runner, allocator, publisher)

@@ -237,6 +237,7 @@ func isConductorRoutedProvider(provider string) bool {
 	case string(modelprovider.ProviderCodex),
 		string(modelprovider.ProviderClaude),
 		string(modelprovider.ProviderCursor),
+		"cursor",
 		string(modelprovider.ProviderOpenCode):
 		return true
 	default:
