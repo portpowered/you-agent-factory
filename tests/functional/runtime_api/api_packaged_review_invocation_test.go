@@ -44,7 +44,7 @@ func TestSessionInvocationAPI_PackagedReviewRejectsThenApprovesRevision(t *testi
 	if len(requests) != 4 {
 		t.Fatalf("recorded provider requests = %d, want 4", len(requests))
 	}
-	secondWorkPrompt := strings.Join(requests[2].Args, " ")
+	secondWorkPrompt := commandPrompt(requests[2])
 	if !strings.Contains(secondWorkPrompt, "write release notes") || !strings.Contains(secondWorkPrompt, "first candidate") || !strings.Contains(secondWorkPrompt, "add the missing release date") {
 		t.Fatalf("revised work prompt = %q, want request, rejected candidate, and review feedback", secondWorkPrompt)
 	}
