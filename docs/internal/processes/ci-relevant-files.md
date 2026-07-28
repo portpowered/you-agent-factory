@@ -670,6 +670,14 @@ Wave 0 functional-tests-expansion planning authority lives under
   `providers/agy/process_harness_test.go`), reconcile them into the ledger
   companion and checklist in the same closeout pass so
   `go run ./cmd/migrationledgercheck` stays aligned with the live tree.
+  Held `bootstrap_portability` deletion batches (`delete-02-factory-definitions-validation`,
+  `delete-03-factory-definitions-import-export`, `delete-04-portable-config`) close out
+  the same way: retire catch-all rows, add destination `n/a` rows (including
+  `factory_config_portability_test.go` FatFactory coverage and
+  `artifact-contract-closeout` specialty on AutomatPortability destination rows),
+  drop consumed batch ids from `ExpectedDeletionOnlyBatches` and
+  `guards_bootstrap_replay_mapping.batch_ids`, and mark batches `consumed` in
+  `migration-ledger.md`.
   After rebasing a migration branch onto `main`, also deduplicate ledger rows
   introduced by parallel closeout work (duplicate provider harness entries) and
   add inventory/checklist cells for any new live scenarios landing from `main`
