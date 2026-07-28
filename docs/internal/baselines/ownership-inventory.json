@@ -1217,12 +1217,6 @@
     },
     {
       "fromOwner": "factory_runtime",
-      "toOwner": "transports",
-      "class": "command",
-      "evidence": "pkg/services/factory_runtime/transports/http -\u003e pkg/transports/http/generated"
-    },
-    {
-      "fromOwner": "factory_runtime",
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/services/factory_runtime/engine -\u003e pkg/services/work"
@@ -1453,7 +1447,7 @@
       "fromOwner": "providers",
       "toOwner": "platform",
       "class": "external_effect",
-      "evidence": "pkg/services/providers/internal/services/execution/internal/adapters/claude -\u003e pkg/platform/process"
+      "evidence": "pkg/services/providers/internal/services/execution/wire -\u003e pkg/platform/process"
     },
     {
       "fromOwner": "providers",
@@ -1465,7 +1459,7 @@
       "fromOwner": "providers",
       "toOwner": "workers",
       "class": "command",
-      "evidence": "pkg/services/workers/cliprovider -\u003e pkg/services/workers"
+      "evidence": "pkg/services/providers/internal/services/execution/internal/adapters/claude -\u003e pkg/services/workers"
     },
     {
       "fromOwner": "recordings",
@@ -1478,12 +1472,6 @@
       "toOwner": "platform",
       "class": "external_effect",
       "evidence": "pkg/services/recordings/replay -\u003e pkg/platform/replay"
-    },
-    {
-      "fromOwner": "recordings",
-      "toOwner": "providers",
-      "class": "command",
-      "evidence": "pkg/services/recordings -\u003e pkg/services/workers/provider/inferencecontract"
     },
     {
       "fromOwner": "recordings",
@@ -4187,6 +4175,12 @@
     },
     {
       "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/codex",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch",
       "disposition": "retain",
       "destination": "providers",
       "destinationKind": "owner"
