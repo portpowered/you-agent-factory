@@ -98,8 +98,6 @@ var ExpectedDeletionOnlyBatches = []string{
 	"runtime_api-delete-09-workers-resilience",
 	"runtime_api-delete-10-observability-product",
 	"runtime_api-delete-11-wrong-layer",
-	"smoke-delete-03-factory-definitions",
-	"smoke-delete-06-factory-packaged-cross",
 	"smoke-delete-09-guards",
 	"smoke-delete-11-resilience-process",
 	"smoke-delete-12-product-docs",
@@ -117,12 +115,8 @@ var ExpectedDeletionOnlyBatches = []string{
 	"bootstrap_portability-delete-02-factory-definitions-validation",
 	"bootstrap_portability-delete-03-factory-definitions-import-export",
 	"bootstrap_portability-delete-04-portable-config",
-	"bootstrap_portability-delete-05-factory-current",
 	"replay_contracts-delete-01-events-replay",
-	"replay_contracts-delete-02-events-factory-events",
 	"replay_contracts-delete-03-events-response-events",
-	"replay_contracts-delete-04-work-submission",
-	"replay_contracts-delete-06-wrong-layer",
 }
 
 // Check validates ledger completeness against the live functional tree.

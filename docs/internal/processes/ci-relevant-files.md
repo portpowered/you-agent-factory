@@ -643,6 +643,26 @@ Wave 0 functional-tests-expansion planning authority lives under
   files (for example `observability/verification/verify_tier_contract_test.go`
   and `workers/mock/service_config_override_alignment_*`), and drop released batch
   ids from `ExpectedDeletionOnlyBatches`.
+  Ready `replay_contracts` deletion batches (`delete-02`, `delete-04`,
+  `delete-05`, `delete-06`) release by removing catch-all source rows,
+  adding destination `n/a` rows for migrated live scenarios, dropping
+  consumed batch ids from `ExpectedDeletionOnlyBatches` and
+  `guards_bootstrap_replay_mapping.batch_ids`, and marking batches
+  `released` in `migration-ledger.md`; wrong-layer delete-06 needs no new
+  live row because `deadcode_contract_test.go` already owns replacement
+  evidence. When merged main adds provider harness scenarios (for example
+  `providers/agy/process_harness_test.go`), reconcile them into the ledger
+  companion and checklist in the same closeout pass so
+  `go run ./cmd/migrationledgercheck` stays aligned with the live tree.
+  After rebasing a migration branch onto `main`, also deduplicate ledger rows
+  introduced by parallel closeout work (duplicate provider harness entries) and
+  add inventory/checklist cells for any new live scenarios landing from `main`
+  before pushing.
+  Held destination-cleared smoke batches `smoke-delete-03-factory-definitions` and
+  `smoke-delete-06-factory-packaged-cross` follow the same release pattern after
+  stories 001–003 migrate/delete: add destination-owned rows (including
+  `defaults_loaded_config_long_test.go` checklist cell), remove stale smoke source
+  rows, and mark both batches `released`.
   `tests/functional/factory/definitions/init_test.go` owns public Factory-init
   functional coverage through `session create --init-new-factory` against
   `support.StartFunctionalAPIServer`, with seeded Work run via
@@ -1053,6 +1073,17 @@ Wave 0 functional-tests-expansion planning authority lives under
   infers domain `provider_sessions` and subsection `root_composition`; every
   top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
   stays viz-compatible.
+
+- `tests/functional/work/peer_import_boundary_test.go` owns Work FUN functional
+  import seal (pss-fun-work-005): every package under `tests/functional/work/...`
+  must not import `pkg/services/work/internal`, deleted transitional Work packages
+  (`service/`, `stateaccessrecordings/`), or legacy `pkg/work*` consumer edges.
+  Named production peers must reach Work only through `pkg/services/work` or
+  `pkg/services/work/transports/*`. Use exact `isWorkServiceImport` matching
+  (`work` root or `work/` subpath) so `pkg/services/workers` is not mistaken for
+  Work. Complements `tests/functional/work/root_composition/*` behavioral proofs;
+  recordings-root contract proofs under `tests/functional/work/recordings` may
+  still import `pkg/services/work/wire`.
 
 - `tests/functional/provider_sessions/build_process_inert_test.go` owns
   Provider Sessions inert-construction proof through `support.BuildProcess` /

@@ -1579,10 +1579,6 @@
       "minimum": 84.06
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/identityinventory",
-      "minimum": 100.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal",
       "minimum": 25.00
     },
@@ -1649,24 +1645,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders",
       "minimum": 93.33
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire",
-      "minimum": 100.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/testlink",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active unit coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/testproviders",
-      "minimum": 75.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli",

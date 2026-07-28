@@ -924,13 +924,18 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/bootstrap_portability/watcher_current_factory_activation_long_test.go",
+      "filePath": "tests/functional/bootstrap_portability/work_assertions_test.go",
       "target": "bootstrap_portability"
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/bootstrap_portability/work_assertions_test.go",
-      "target": "bootstrap_portability"
+      "filePath": "tests/functional/factory_runtime/doc.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/factory_runtime/peer_import_boundary_test.go",
+      "target": "factory_runtime"
     },
     {
       "rule": "functional-test-missing-subsection",
@@ -1099,11 +1104,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/replay_contracts/canonical_topology_snapshot_projection_test.go",
-      "target": "replay_contracts"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/replay_contracts/doc.go",
       "target": "replay_contracts"
     },
@@ -1120,11 +1120,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/replay_contracts/replay_factory_only_serialization_smoke_long_test.go",
-      "target": "replay_contracts"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/replay_contracts/replay_legacy_unary_retirement_smoke_long_test.go",
       "target": "replay_contracts"
     },
     {
@@ -1170,11 +1165,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/replay_contracts/replay_work_dispatch_contract_smoke_long_test.go",
-      "target": "replay_contracts"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/replay_contracts/short_helpers_contract_test.go",
       "target": "replay_contracts"
     },
     {
@@ -1234,16 +1224,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/config_driven_execution_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/doc.go",
       "target": "smoke"
     },
@@ -1264,11 +1244,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/packaged_goal_parity_helpers_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/packaged_goal_public_contract_test.go",
       "target": "smoke"
     },
@@ -1284,8 +1259,13 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/stateless_loaded_config_smoke_long_test.go",
-      "target": "smoke"
+      "filePath": "tests/functional/work/doc.go",
+      "target": "work"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/work/peer_import_boundary_test.go",
+      "target": "work"
     },
     {
       "rule": "functional-test-missing-subsection",
@@ -1448,13 +1428,28 @@
       "target": "factory_definitions"
     },
     {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/factory_runtime/doc.go",
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/orchestrators/petri/guards/doc.go",
       "target": "factory_runtime"
     },
     {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/factory_runtime/peer_import_boundary_test.go",
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/orchestrators/petri/routing/doc.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/orchestrators/petri/routing/helpers_test.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go",
       "target": "factory_runtime"
     },
     {
@@ -1480,31 +1475,6 @@
     {
       "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/factory_runtime/root_composition/workflow_orchestration_activation_test.go",
-      "target": "factory_runtime"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/factory_runtime/orchestrators/petri/guards/doc.go",
-      "target": "factory_runtime"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "target": "factory_runtime"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/factory_runtime/orchestrators/petri/routing/doc.go",
-      "target": "factory_runtime"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/factory_runtime/orchestrators/petri/routing/helpers_test.go",
-      "target": "factory_runtime"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go",
       "target": "factory_runtime"
     },
     {
@@ -3284,11 +3254,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/operator_settings/identityinventory",
-      "target": "pkg/services/operator_settings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/operator_settings/internal/services/document/identityinventory",
       "target": "pkg/services/operator_settings/internal/services/document"
     },
@@ -3299,22 +3264,7 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/operator_settings/servicewire",
-      "target": "pkg/services/operator_settings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/operator_settings/testdata",
-      "target": "pkg/services/operator_settings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/operator_settings/testlink",
-      "target": "pkg/services/operator_settings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/operator_settings/testproviders",
       "target": "pkg/services/operator_settings"
     },
     {

@@ -16,10 +16,6 @@ type operatorSettingsMoveRule struct {
 // operatorSettingsMoveRules mirrors cmd/packagetargetmanifestcheck nestedOwnerMoveRules
 // for operator_settings. Ownership rows keep owner destination with concrete successor paths.
 var operatorSettingsMoveRules = []operatorSettingsMoveRule{
-	{exact: "identityinventory", prefix: "identityinventory/", subservice: "document"},
-	{exact: "servicewire", prefix: "servicewire/", subservice: ""},
-	{exact: "testlink", prefix: "testlink/", subservice: ""},
-	{exact: "testproviders", prefix: "testproviders/", subservice: ""},
 	{exact: "testdata", prefix: "testdata/", subservice: ""},
 	{exact: "internal/service", prefix: "internal/service/", subservice: ""},
 	{exact: "internal/construct", prefix: "internal/construct/", subservice: ""},

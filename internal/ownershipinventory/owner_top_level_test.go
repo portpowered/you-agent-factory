@@ -91,9 +91,6 @@ func TestOwnerTopLevelInventoryCoversPacketGaps(t *testing.T) {
 		"workers": {
 			"construction", "diagnostics", "execution",
 		},
-		"operator_settings": {
-			"identityinventory", "servicewire", "testlink",
-		},
 		"work": {
 			"testdata",
 		},

@@ -119,18 +119,6 @@
       "name": "TestFactoryMetadataSnapshotRejectsInvalidProgrammaticExampleArguments"
     },
     {
-      "file": "bootstrap_portability/watcher_current_factory_activation_long_test.go",
-      "name": "TestCurrentFactoryActivationFixture_ActivatesSecondPersistedFactoryAndResolvesCurrentFactory"
-    },
-    {
-      "file": "bootstrap_portability/watcher_current_factory_activation_long_test.go",
-      "name": "TestCurrentFactoryActivationFixture_LiveAPIReadsFollowActivatedFactory"
-    },
-    {
-      "file": "bootstrap_portability/watcher_current_factory_activation_long_test.go",
-      "name": "TestCurrentFactoryActivationFixture_WatchedFileExecutionFollowsActivatedFactory"
-    },
-    {
       "file": "cli/factory_run/output/failure_test.go",
       "name": "TestInvocationFailureOutputContracts"
     },
@@ -527,10 +515,6 @@
       "name": "TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies"
     },
     {
-      "file": "replay_contracts/canonical_topology_snapshot_projection_test.go",
-      "name": "TestCanonicalTopologySnapshotsPreservePublicIdentityAndResourceEvidence"
-    },
-    {
       "file": "replay_contracts/replay_event_stream_artifact_smoke_long_test.go",
       "name": "TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifact"
     },
@@ -541,10 +525,6 @@
     {
       "file": "replay_contracts/replay_factory_only_serialization_smoke_long_test.go",
       "name": "TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPayload"
-    },
-    {
-      "file": "replay_contracts/replay_legacy_unary_retirement_smoke_long_test.go",
-      "name": "TestLegacyUnaryRetirementSmoke_ReplaySubmitsCanonicalBatchWorkRequests"
     },
     {
       "file": "replay_contracts/replay_record_end_to_end_long_test.go",
@@ -1015,38 +995,6 @@
       "name": "TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree"
     },
     {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_EmptyInputRejectedWithStableCode"
-    },
-    {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_NamedFactoryCLIAndAPIShareSuccessOutcome"
-    },
-    {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_PositionalCLIAndAPIShareSuccessOutcome"
-    },
-    {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_SourceConflictRejectedBeforeInvocation"
-    },
-    {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_StdinCLIAndAPITextShareSuccessOutcome"
-    },
-    {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_UnresolvedPrimaryResultReportsStableFailure"
-    },
-    {
-      "file": "smoke/config_driven_execution_test.go",
-      "name": "TestConfigDrivenExecution_AddWorkType"
-    },
-    {
-      "file": "smoke/config_driven_execution_test.go",
-      "name": "TestConfigDrivenExecution_GlobalConfigDrivesDefaultsAndWorkerPreset"
-    },
-    {
       "file": "smoke/guarded_loop_breaker_long_test.go",
       "name": "TestIntegrationSmoke_GuardedLoopBreakerRoutesOverLimitExampleWorkToFailed"
     },
@@ -1077,10 +1025,6 @@
     {
       "file": "smoke/service_lifecycle_smoke_long_test.go",
       "name": "TestServiceLifecycle_WorkFileSubmissionCompletesTwoStagePipeline"
-    },
-    {
-      "file": "smoke/stateless_loaded_config_smoke_long_test.go",
-      "name": "TestStatelessExecutionSmoke_LoadedConfigDrivesExecution"
     },
     {
       "file": "work/recordings/recordings_read_test.go",
