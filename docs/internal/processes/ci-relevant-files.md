@@ -855,10 +855,15 @@ Wave 0 functional-tests-expansion planning authority lives under
   `support.NewStaticSuccessCommandRunner` (preferred over `--with-mock-workers`);
   scaffold a minimal Codex model-worker factory with `support.ScaffoldFactory`
   and `support.BuildModelWorkerConfig`; prove default primary-result stdout is
-  pipeable and free of dashboard open/startup sidecar chatter. Catalog metadata
-  infers domain `workers` and subsection `transports/cli/run/lifecycle` from the
-  path; every top-level `Test*` needs a customer-readable Go doc so
-  `functionaltestmetadata` stays viz-compatible.
+  pipeable and free of dashboard open/startup sidecar chatter. For
+  server-attached targeting, start an already-open Factory Session with
+  `support.StartFunctionalAPIServer` + `WaitForServiceModeRuntime`, optionally
+  open an explicit session through `support.OpenFactorySessionAt`, then issue
+  `you --server <url> run --factory ...` (no `--with-server`) and correlate the
+  unchanged default session identity through public `session show` / session GET
+  reads. Catalog metadata infers domain `workers` and subsection
+  `transports/cli/run/lifecycle` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
 - Packaged `@you/tts` invocation functional coverage belongs in
   `tests/functional/factory/packaged/tts/invocation_test.go`: prove required-text
   audio artifact metadata, optional voice/format reachability on fake provider
