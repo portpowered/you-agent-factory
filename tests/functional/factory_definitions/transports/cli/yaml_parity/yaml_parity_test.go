@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -113,6 +114,90 @@ func TestCLIFactoryYAMLCreateAndUpdateRemainRunnableAfterCanonicalPersistence(t 
 	}
 	if got := invokeGoal(t, env, workingDirectory, "--named", goalFactoryName); got != wantInvocationResult {
 		t.Fatalf("JSON-updated invocation result = %q, want %q", got, wantInvocationResult)
+	}
+}
+
+// TestCLIFactoryRejectedAuthoredSourcesFailBeforeRuntimeExecution proves malformed,
+// mismatched, unsupported, missing, and ambiguous authored Factory sources are
+// rejected by the public CLI before provider/runtime execution and retain
+// actionable source context in public diagnostics.
+func TestCLIFactoryRejectedAuthoredSourcesFailBeforeRuntimeExecution(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		prepare func(*testing.T) []string
+		wants   []string
+	}{
+		{
+			name: "malformed YAML",
+			prepare: func(t *testing.T) []string {
+				path := writeFile(t, filepath.Join(t.TempDir(), "factory.yaml"), "name: [\n")
+				return []string{"--factory", path}
+			},
+			wants: []string{"factory.yaml", "YAML"},
+		},
+		{
+			name: "JSON representation mismatch",
+			prepare: func(t *testing.T) []string {
+				path := writeFile(t, filepath.Join(t.TempDir(), "factory.json"), `{"name":["invalid"]}`)
+				return []string{"--factory", path}
+			},
+			wants: []string{"factory.json", "(JSON)", "parse factory config"},
+		},
+		{
+			name: "YAML representation mismatch",
+			prepare: func(t *testing.T) []string {
+				path := writeFile(t, filepath.Join(t.TempDir(), "factory.yaml"), "name:\n  - invalid\n")
+				return []string{"--factory", path}
+			},
+			wants: []string{"factory.yaml", "(YAML)", "parse factory config"},
+		},
+		{
+			name: "unsupported extension",
+			prepare: func(t *testing.T) []string {
+				path := writeFile(t, filepath.Join(t.TempDir(), "factory.toml"), "name = 'factory'\n")
+				return []string{"--factory", path}
+			},
+			wants: []string{".json", ".yaml", ".yml"},
+		},
+		{
+			name: "missing directory root",
+			prepare: func(t *testing.T) []string {
+				return []string{"--factory", t.TempDir()}
+			},
+			wants: []string{"factory.json", "factory.yaml", "factory.yml"},
+		},
+		{
+			name: "ambiguous directory roots",
+			prepare: func(t *testing.T) []string {
+				dir := t.TempDir()
+				writeFile(t, filepath.Join(dir, "factory.json"), "{}")
+				writeFile(t, filepath.Join(dir, "factory.yaml"), "{}")
+				return []string{"--factory", dir}
+			},
+			wants: []string{"factory.json", "factory.yaml", "ambiguous"},
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			runner := support.NewRecordingCommandRunner("runtime must not execute")
+			args := append([]string{"you", "run"}, test.prepare(t)...)
+			args = append(args, "runtime must not start")
+			inputs := support.FakeInputs(t.Context(), args)
+			inputs.Input.WorkingDirectory = t.TempDir()
+			err := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner}).Execute(inputs.Input)
+			if err == nil {
+				t.Fatal("Process.Execute() error = nil")
+			}
+			diagnostic := err.Error() + "\n" + inputs.Stderr()
+			for _, want := range test.wants {
+				if !strings.Contains(diagnostic, want) {
+					t.Fatalf("diagnostic %q does not contain %q", diagnostic, want)
+				}
+			}
+			if runner.CallCount() != 0 {
+				t.Fatalf("provider command runner call count = %d, want 0", runner.CallCount())
+			}
+		})
 	}
 }
 
