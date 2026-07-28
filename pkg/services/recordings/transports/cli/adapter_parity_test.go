@@ -188,6 +188,7 @@ func TestAdapterResolveRecordPathWithContextHonorsCancellation(t *testing.T) {
 func TestAdapterResolveRecordPathWithContextHonorsCancellationAfterPlanner(t *testing.T) {
 	t.Parallel()
 
+	// Covers the post-planner cancellation checkpoint in ResolveRecordPathWithContext.
 	adapter := recordingscli.New()
 	ctx, cancel := context.WithCancel(context.Background())
 	planner := recordings.LiveRecordingTargetPlannerFunc(
