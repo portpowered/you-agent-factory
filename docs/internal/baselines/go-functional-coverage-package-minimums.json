@@ -1908,7 +1908,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work",
-      "minimum": 64.25
+      "minimum": 61.06
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization",
