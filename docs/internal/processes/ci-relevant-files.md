@@ -362,6 +362,18 @@
   infers domain `transport` and subsection `http/server` from the path; every
   top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
   stays viz-compatible.
+  HTTP generated-client functional coverage belongs in
+  `tests/functional/transport/http/server/generated_client_test.go`: prove status
+  and Factory Session round-trips through the published generated HTTP client
+  with caller-owned HTTP dependencies and cancellation/deadline bounds, prove
+  representative structured API failures decode into typed client results, and
+  prove generated client and server schemas stay aligned with the published
+  OpenAPI contract against the live functional server. `make api-smoke` and
+  `artifact-contract-closeout` run
+  `TestGeneratedClientAndServerSchemaStayAligned` from this cell. Catalog
+  metadata infers domain `transport` and subsection `http/server` from the path;
+  every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
   HTTP API server OpenAPI routing functional coverage belongs in
   `tests/functional/transport/http/server/routing_test.go`: prove every
   published OpenAPI operation inventory entry reaches a non-404 handler through
