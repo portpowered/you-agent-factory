@@ -410,6 +410,8 @@ func factoryDefinitionsCanonicalRetainRest(rest string) bool {
 		return true
 	case strings.HasPrefix(rest, "internal/contracts"):
 		return true
+	case strings.HasPrefix(rest, "internal/lifecycle"):
+		return true
 	default:
 		return false
 	}
