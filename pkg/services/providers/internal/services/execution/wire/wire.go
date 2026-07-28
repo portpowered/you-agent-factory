@@ -8,6 +8,7 @@ import (
 	claudeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	codexadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	cursoradapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/cursor"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
@@ -39,14 +40,31 @@ func BuiltInDependenciesFromRunner(
 	return BuiltInDependenciesFromWorkersRunner(workerprocess.AdaptCommandRunner(runner))
 }
 
+// CursorPlatformDependencies are platform facts required for oversized Windows
+// Cursor prompt materialization in the built-in Providers Execution adapter.
+type CursorPlatformDependencies struct {
+	OperatingSystem string
+	TemporaryDir    string
+	TemporaryFiles  platformfilesystem.TemporaryFileSystem
+}
+
 // BuiltInDependenciesFromWorkersRunner constructs built-in adapter effects
 // from the shared Workers subprocess runner.
 func BuiltInDependenciesFromWorkersRunner(
 	runner workers.CommandRunner,
+	cursorPlatform ...CursorPlatformDependencies,
 ) executionservice.BuiltInDependencies {
+	var platform CursorPlatformDependencies
+	if len(cursorPlatform) > 0 {
+		platform = cursorPlatform[0]
+	}
 	return executionservice.BuiltInDependencies{
 		Codex:  codexadapter.NewCommandEffect(runner),
 		Claude: claudeadapter.NewCommandEffect(runner),
-		Cursor: cursoradapter.NewCommandEffect(runner),
+		Cursor: cursoradapter.NewCommandEffect(runner, cursoradapter.CommandEffectOptions{
+			OperatingSystem: platform.OperatingSystem,
+			TemporaryDir:    platform.TemporaryDir,
+			TemporaryFiles:  platform.TemporaryFiles,
+		}),
 	}
 }

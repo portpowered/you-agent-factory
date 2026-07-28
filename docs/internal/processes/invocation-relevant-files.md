@@ -356,6 +356,10 @@ primary-result behavior.
   `result` record selection, and detached session extraction invocation-local.
   Register the adapter for canonical `providers.IDCursor` (`agent`) and resolve
   the `cursor` catalog alias only through Providers Catalog before dispatch.
+  Materialize oversized Windows prompts to a temporary `@path` argument through
+  `CommandEffectOptions` injected from `providers/wire.CursorPlatformDependencies`
+  and `providers/wire.WithCursorPlatform`; keep UTF-16 limit, cleanup-once, and
+  fail-closed behavior aligned with the legacy Workers Cursor shim.
   Inject the native effect into the adapter registration; reconcile lifecycle
   failures with the same precedence rules as other Providers-owned adapters.
 - Keep reusable one-attempt conformance under the Providers-private Execution

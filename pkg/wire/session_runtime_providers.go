@@ -57,14 +57,23 @@ import (
 )
 
 func provideProvidersService(edges serviceedges.Edges) (providers.Service, error) {
+	cursorPlatform := providerswire.CursorPlatformDependencies{
+		OperatingSystem: string(resolveWorkersOperatingSystem(edges)),
+		TemporaryFiles:  provideWorkersProviderTemporaryFileSystem(edges),
+	}
+	options := []providerswire.Option{
+		providerswire.WithCursorPlatform(cursorPlatform),
+	}
 	if edges.ProviderCommandRunner != nil {
-		return providerswire.NewService(providerswire.WithCommandRunner(edges.ProviderCommandRunner))
+		options = append(options, providerswire.WithCommandRunner(edges.ProviderCommandRunner))
+		return providerswire.NewService(options...)
 	}
 	commandRunner, err := providePlatformProcessCommandRunner(edges)
 	if err != nil {
 		return nil, err
 	}
-	return providerswire.NewService(providerswire.WithCommandRunner(commandRunner))
+	options = append(options, providerswire.WithCommandRunner(commandRunner))
+	return providerswire.NewService(options...)
 }
 
 func provideProviderRegistry(
@@ -120,6 +129,10 @@ func provideProviderRegistryRebinder(
 		}
 		providersService, err := providerswire.NewService(
 			providerswire.WithWorkersCommandRunner(providerRunner),
+			providerswire.WithCursorPlatform(providerswire.CursorPlatformDependencies{
+				OperatingSystem: operatingSystem,
+				TemporaryFiles:  temporaryFiles,
+			}),
 		)
 		if err != nil {
 			return nil, err

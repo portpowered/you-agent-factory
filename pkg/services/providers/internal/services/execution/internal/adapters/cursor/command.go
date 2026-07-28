@@ -6,12 +6,22 @@ import (
 	"strings"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 )
+
+// CommandEffectOptions are platform facts required for oversized Windows prompt
+// materialization. Omitted dependencies are valid for direct prompts; oversized
+// Windows prompts fail closed without their required temporary-file effect.
+type CommandEffectOptions struct {
+	OperatingSystem string
+	TemporaryDir    string
+	TemporaryFiles  platformfilesystem.TemporaryFileSystem
+}
 
 const (
 	cursorAgentCommand       = "agent"
@@ -28,9 +38,16 @@ var commandAutomationDefaults = []workerprocess.CommandEnvEntry{
 }
 
 // NewCommandEffect binds one streaming subprocess runner to the Cursor adapter.
-func NewCommandEffect(runner workers.CommandRunner) Effect {
+func NewCommandEffect(
+	runner workers.CommandRunner,
+	options ...CommandEffectOptions,
+) Effect {
 	if runner == nil {
 		return nil
+	}
+	var platform CommandEffectOptions
+	if len(options) > 0 {
+		platform = options[0]
 	}
 	return EffectFunc(func(
 		ctx context.Context,
@@ -38,7 +55,10 @@ func NewCommandEffect(runner workers.CommandRunner) Effect {
 		observe func([]byte) error,
 	) (EffectResult, error) {
 		started := time.Now()
-		command, err := buildCommand(request)
+		command, cleanup, err := buildCommand(ctx, request, platform)
+		if cleanup != nil {
+			defer cleanup()
+		}
 		if err != nil {
 			return EffectResult{}, execution.AttemptFailure{NativeError: err}
 		}
@@ -54,9 +74,13 @@ func NewCommandEffect(runner workers.CommandRunner) Effect {
 	})
 }
 
-func buildCommand(request providers.ExecuteRequest) (workers.CommandRequest, error) {
+func buildCommand(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+	platform CommandEffectOptions,
+) (workers.CommandRequest, func(), error) {
 	if err := validateCursorOptionalCapabilities(request); err != nil {
-		return workers.CommandRequest{}, err
+		return workers.CommandRequest{}, nil, err
 	}
 	args := make([]string, 0, 14)
 	if request.SkipPermissions {
@@ -81,6 +105,13 @@ func buildCommand(request providers.ExecuteRequest) (workers.CommandRequest, err
 		"--stream-partial-output",
 		buildPrompt(request),
 	)
+	args, cleanup, err := materializePrompt(ctx, request, platform, args)
+	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		return workers.CommandRequest{}, nil, err
+	}
 	return commanddispatch.WorkersCommand(request, workers.CommandRequest{
 		Command: cursorAgentCommand,
 		Args:    args,
@@ -89,7 +120,7 @@ func buildCommand(request providers.ExecuteRequest) (workers.CommandRequest, err
 			request.EnvVars,
 		),
 		WorkDir: request.WorkingDirectory,
-	}), nil
+	}), cleanup, nil
 }
 
 func buildPrompt(request providers.ExecuteRequest) string {
