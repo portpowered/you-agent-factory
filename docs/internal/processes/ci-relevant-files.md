@@ -847,6 +847,18 @@ Wave 0 functional-tests-expansion planning authority lives under
   Catalog metadata infers domain `workers` and subsection
   `transports/cli/run/modes` from the path; every top-level `Test*` needs a
   customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+- Workers-owned CLI run lifecycle functional coverage belongs in
+  `tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go`:
+  drive clean/prompt-style public `you run --factory` through
+  `support.BuildProcess` + `support.FakeInputs` with `serviceedges.Edges`
+  populated via `support.ConfigureWorkerCommands` and
+  `support.NewStaticSuccessCommandRunner` (preferred over `--with-mock-workers`);
+  scaffold a minimal Codex model-worker factory with `support.ScaffoldFactory`
+  and `support.BuildModelWorkerConfig`; prove default primary-result stdout is
+  pipeable and free of dashboard open/startup sidecar chatter. Catalog metadata
+  infers domain `workers` and subsection `transports/cli/run/lifecycle` from the
+  path; every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
 - Packaged `@you/tts` invocation functional coverage belongs in
   `tests/functional/factory/packaged/tts/invocation_test.go`: prove required-text
   audio artifact metadata, optional voice/format reachability on fake provider
