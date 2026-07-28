@@ -123,6 +123,82 @@ func TestWireCompositionRegisterDefaultsResolutionFromHomeRestoresAdapterOwnersh
 	settingswire.RegisterDefaultsResolutionFromHome()
 }
 
+func TestResolveFromHomeRejectsMissingFilesystemPorts(t *testing.T) {
+	t.Parallel()
+
+	_, err := operatorsettings.ResolveFromHomeWithEnvironment(
+		nil,
+		globalconfigmapping.Decode,
+		t.TempDir(),
+		operatorsettings.Defaults{},
+		operatorsettings.FlagOverrides{},
+	)
+	if err == nil || !strings.Contains(err.Error(), "resolve operator defaults") {
+		t.Fatalf("ResolveFromHomeWithEnvironment() error = %v, want home-port construction failure", err)
+	}
+}
+
+func TestResolveFromHomeUsesSettingsAdapterOwnershipPath(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := operatorsettings.DefaultConfigPath(homeDir)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(config dir): %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{
+		"defaults": {
+			"workerModelProvider": "openai",
+			"workerModel": "gpt-5"
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config): %v", err)
+	}
+
+	resolved, err := operatorsettings.ResolveFromHomeWithEnvironment(
+		platformfilesystem.Local{},
+		globalconfigmapping.Decode,
+		homeDir,
+		operatorsettings.Defaults{},
+		operatorsettings.FlagOverrides{},
+	)
+	if err != nil {
+		t.Fatalf("ResolveFromHomeWithEnvironment() error = %v", err)
+	}
+	if resolved.WorkerModelProvider != "CODEX" {
+		t.Fatalf("provider = %q, want CODEX from adapter ownership path", resolved.WorkerModelProvider)
+	}
+}
+
+func TestWireCompositionFromConfigDocumentConstructsFromDocumentPorts(t *testing.T) {
+	t.Parallel()
+
+	root, err := settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{
+		Files:     platformfilesystem.Local{},
+		Decoder:   globalconfigmapping.Decode,
+		Encoder:   globalconfigmapping.Encode,
+		Providers: wireCompositionProviderCatalog,
+		CreateTemp: func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
+	}
+	if root == nil {
+		t.Fatal("NewServiceFromConfigDocument() = nil, want Settings root")
+	}
+}
+
+func TestWireCompositionFromConfigDocumentRejectsMissingDocumentPorts(t *testing.T) {
+	t.Parallel()
+
+	_, err := settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{})
+	if err == nil || !strings.Contains(err.Error(), "operator settings document ports are required") {
+		t.Fatalf("NewServiceFromConfigDocument() error = %v, want document ports required", err)
+	}
+}
+
 func wireCompositionProviderCatalog(value string) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "codex", "openai":
