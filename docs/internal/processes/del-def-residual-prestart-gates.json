@@ -1,0 +1,104 @@
+{
+  "packet_id": "DEL-DEF-RESIDUAL",
+  "branch_name": "pss-del-def-residual",
+  "recorded_at_utc": "2026-07-28T14:20:00Z",
+  "deletion_hold_active": true,
+  "deletion_hold_reason": "DEL-DEF PR #1603 is open and owns overlapping TOPLEVEL deletion leases; residual deletion must not race live DEL-DEF.",
+  "gates": {
+    "INV-DEF-INVOCATION-POLICY": {
+      "branch_name": "pss-inv-def-invocation-policy",
+      "merged_pr": 1605,
+      "merged_at_utc": "2026-07-28T11:30:52Z",
+      "factory_complete": true,
+      "observable_proof": [
+        "pkg/services/factory_definitions/internal/services/invocation_policy",
+        "pkg/services/factory_definitions/wire/invocation_policy_test.go"
+      ]
+    },
+    "CLN-DEF-FOLD-CATALOG": {
+      "branch_name": "pss-cln-def-fold-catalog",
+      "merged_pr": 1608,
+      "merged_at_utc": "2026-07-28T13:16:35Z",
+      "factory_complete": true,
+      "observable_proof": [
+        "pkg/services/factory_definitions/internal/services/catalog",
+        "pkg/services/factory_definitions/folded_catalog_sibling_import_boundary_test.go"
+      ]
+    },
+    "CLN-DEF-FOLD-COMPILATION": {
+      "branch_name": "pss-cln-def-fold-compilation",
+      "merged_pr": 1607,
+      "merged_at_utc": "2026-07-28T13:37:43Z",
+      "factory_complete": true,
+      "observable_proof": [
+        "pkg/services/factory_definitions/internal/services/compilation",
+        "pkg/services/factory_definitions/compile_load_lease_hold_test.go"
+      ]
+    },
+    "CLN-DEF-FOLD-COMPOSITION": {
+      "branch_name": "pss-cln-def-fold-composition",
+      "merged_pr": 1606,
+      "merged_at_utc": "2026-07-28T12:38:27Z",
+      "factory_complete": true,
+      "observable_proof": [
+        "pkg/services/factory_definitions/internal/lifecycle",
+        "pkg/services/factory_definitions/internal/fold_sibling_boundary_test.go"
+      ]
+    },
+    "CLN-DEF-FOLD-VALIDATION": {
+      "branch_name": "pss-cln-def-fold-validation",
+      "merged_pr": 1610,
+      "merged_at_utc": "2026-07-28T12:55:35Z",
+      "factory_complete": true,
+      "observable_proof": [
+        "pkg/services/factory_definitions/internal/services/validation",
+        "pkg/services/factory_definitions/sealed_validation_path_boundary_test.go"
+      ]
+    },
+    "CLN-DEF-FOLD-SNAPSHOTS": {
+      "branch_name": "pss-cln-def-fold-snapshots",
+      "merged_pr": 1613,
+      "merged_at_utc": "2026-07-28T12:35:36Z",
+      "factory_complete": true,
+      "observable_proof": [
+        "pkg/services/factory_definitions/internal/services/snapshots_portability",
+        "pkg/services/factory_definitions/wire/fold_behavior_preservation_test.go"
+      ]
+    },
+    "CLN-DEF-FOLD-DISTRIBUTION": {
+      "branch_name": "pss-cln-def-fold-distribution",
+      "merged_pr": 1611,
+      "merged_at_utc": "2026-07-28T12:28:17Z",
+      "factory_complete": true,
+      "observable_proof": [
+        "pkg/services/factory_definitions/internal/services/distribution",
+        "pkg/services/factory_definitions/wire/fold_behavior_preservation_test.go"
+      ]
+    },
+    "CLN-DEF-FOLD-INVOCATION-POLICY": {
+      "branch_name": "pss-cln-def-fold-invocation-policy",
+      "merged_pr": 1615,
+      "merged_at_utc": "2026-07-28T14:10:31Z",
+      "factory_complete": true,
+      "observable_proof": [
+        "pkg/services/factory_definitions/internal/services/invocation_policy",
+        "pkg/services/factory_definitions/wire/invocation_policy_test.go"
+      ]
+    },
+    "DEL-DEF": {
+      "branch_name": "pss-del-def",
+      "open_pr": 1603,
+      "factory_complete": false,
+      "overlapping_deletion_lease_paths": [
+        "pkg/services/factory_definitions/service",
+        "pkg/services/factory_definitions/authoredlayout",
+        "pkg/services/factory_definitions/clonetests",
+        "pkg/services/factory_definitions/definition"
+      ],
+      "observable_proof": [
+        "pkg/services/factory_definitions/service remains present until DEL-DEF merges",
+        "pkg/services/factory_definitions/root_wire_hold_test.go"
+      ]
+    }
+  }
+}

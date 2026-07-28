@@ -1208,3 +1208,29 @@ debt with
 Sibling proof tests in `pkg/services/factory_runtime/wire/` and
 `packaged_root_shape_test.go` remain the focused owners for pre-start gates,
 baseline burn-down, and packaged-root shape drift.
+
+## DEL-DEF-RESIDUAL pre-start gates
+
+`DEL-DEF-RESIDUAL` must not begin leased residual transitional package deletion
+or baseline burn-down until residual fold packets and
+`INV-DEF-INVOCATION-POLICY` are Factory-complete and live `DEL-DEF` is terminal
+or no longer owns overlapping deletion leases:
+
+| Gate | Branch | Status artifact |
+| --- | --- | --- |
+| `INV-DEF-INVOCATION-POLICY` | `pss-inv-def-invocation-policy` | merged PR #1605; `internal/services/invocation_policy`; `wire/invocation_policy_test.go` |
+| `CLN-DEF-FOLD-CATALOG` | `pss-cln-def-fold-catalog` | merged PR #1608; `internal/services/catalog` |
+| `CLN-DEF-FOLD-COMPILATION` | `pss-cln-def-fold-compilation` | merged PR #1607; `internal/services/compilation` |
+| `CLN-DEF-FOLD-COMPOSITION` | `pss-cln-def-fold-composition` | merged PR #1606; `internal/lifecycle` |
+| `CLN-DEF-FOLD-VALIDATION` | `pss-cln-def-fold-validation` | merged PR #1610; `internal/services/validation` |
+| `CLN-DEF-FOLD-SNAPSHOTS` | `pss-cln-def-fold-snapshots` | merged PR #1613; `internal/services/snapshots_portability` |
+| `CLN-DEF-FOLD-DISTRIBUTION` | `pss-cln-def-fold-distribution` | merged PR #1611; `internal/services/distribution` |
+| `CLN-DEF-FOLD-INVOCATION-POLICY` | `pss-cln-def-fold-invocation-policy` | merged PR #1615; `internal/services/invocation_policy` |
+| `DEL-DEF` (serialization) | `pss-del-def` | open PR #1603 owns `service/`, `authoredlayout/`, `clonetests/`, `definition/` until merged |
+
+Record the operational gate snapshot in
+`docs/internal/processes/del-def-residual-prestart-gates.json` and lock the
+confirmation with
+`pkg/services/factory_definitions/del_def_residual_prerequisite_gate_test.go`.
+While `DEL-DEF` remains in-flight, `deletion_hold_active` is `true` and story
+002+ residual deletion or baseline burn-down must wait.
