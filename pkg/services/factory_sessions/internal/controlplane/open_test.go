@@ -3,6 +3,8 @@ package controlplane_test
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -239,6 +241,58 @@ func TestOpenFromFolder_InitNewFactoryAcceptsMissingNestedFactory(t *testing.T) 
 	if result.SessionID != "sess-init" {
 		t.Fatalf("session id = %q, want sess-init", result.SessionID)
 	}
+}
+
+func TestOpenFromFolder_InitNewFactoryReinitializesExistingRunnableTargetIdempotently(t *testing.T) {
+	t.Parallel()
+
+	workspaceDir := t.TempDir()
+	factoryDir := filepath.Join(workspaceDir, "factory")
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("mkdir factory dir: %v", err)
+	}
+
+	target := factorysessions.Target{
+		Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "factory"},
+		FactoryDir: factoryDir,
+	}
+	host := &openControlHost{
+		targets: []factorysessions.Target{target},
+	}
+	var scaffoldDirs []string
+	hostWithScaffoldTracking := &idempotentReinitHost{
+		openControlHost: host,
+		scaffoldDirs:    &scaffoldDirs,
+	}
+
+	result, err := controlplane.OpenFromFolder(
+		context.Background(),
+		hostWithScaffoldTracking,
+		&liveOpenHost{sessionID: "sess-reinit"},
+		workspaceDir,
+		nil,
+		false,
+		true,
+	)
+	if err != nil {
+		t.Fatalf("OpenFromFolder: %v", err)
+	}
+	if result.SessionID != "sess-reinit" {
+		t.Fatalf("session id = %q, want sess-reinit", result.SessionID)
+	}
+	if len(scaffoldDirs) != 1 || scaffoldDirs[0] != target.FactoryDir {
+		t.Fatalf("scaffold dirs = %v, want one idempotent call for %q", scaffoldDirs, target.FactoryDir)
+	}
+}
+
+type idempotentReinitHost struct {
+	*openControlHost
+	scaffoldDirs *[]string
+}
+
+func (h *idempotentReinitHost) InitializeFactoryScaffold(factoryDir string) error {
+	*h.scaffoldDirs = append(*h.scaffoldDirs, factoryDir)
+	return nil
 }
 
 func TestGetLiveFactorySession_ReturnsNotFoundForMissingSession(t *testing.T) {

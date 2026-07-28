@@ -60,6 +60,50 @@ func TestFactoryInitCreatesRunnablePortableScaffold(t *testing.T) {
 	}
 }
 
+// TestFactoryInitIsIdempotent proves a second public Factory init against the
+// same workspace preserves customer-edited scaffold files instead of rewriting
+// generated starter content.
+func TestFactoryInitIsIdempotent(t *testing.T) {
+	hostFactoryDir := support.ScaffoldFactory(t, initHostFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                hostFactoryDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+
+	workspaceDir := filepath.Join(t.TempDir(), "init-idempotent-workspace")
+	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+		t.Fatalf("create init workspace: %v", err)
+	}
+
+	initFactoryViaSessionCreate(t, server.URL(), workspaceDir)
+
+	factoryRoot := filepath.Join(workspaceDir, factorydefinitions.FactoryDir)
+	customPath := filepath.Join(factoryRoot, "workers", "processor", "AGENTS.md")
+	original, err := os.ReadFile(customPath)
+	if err != nil {
+		t.Fatalf("read processor AGENTS.md: %v", err)
+	}
+	const customerMarker = "Customer-edited processor instructions for idempotent init."
+	custom := strings.Replace(string(original), "Complete the task.", customerMarker, 1)
+	if err := os.WriteFile(customPath, []byte(custom), 0o644); err != nil {
+		t.Fatalf("write customer-edited processor AGENTS.md: %v", err)
+	}
+
+	initFactoryViaSessionCreate(t, server.URL(), workspaceDir)
+
+	got, err := os.ReadFile(customPath)
+	if err != nil {
+		t.Fatalf("read processor AGENTS.md after re-init: %v", err)
+	}
+	if string(got) != custom {
+		t.Fatalf("processor AGENTS.md after re-init = %q, want preserved customer content %q", got, custom)
+	}
+
+	assertPortableInitScaffoldLayout(t, factoryRoot)
+}
+
 func initHostFactoryConfig() map[string]any {
 	return map[string]any{
 		"name": "factory-definitions-init-host",
