@@ -10,12 +10,16 @@ import (
 var operatorSettingsForbiddenImportRoots = []string{
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire",
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings/identityinventory",
+	"github.com/portpowered/infinite-you/pkg/services/operator_settings/testlink",
+	"github.com/portpowered/infinite-you/pkg/services/operator_settings/testproviders",
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings/internal",
 }
 
 var operatorSettingsForbiddenImportPathFragments = []string{
 	"pkg/services/operator_settings/servicewire",
 	"pkg/services/operator_settings/identityinventory",
+	"pkg/services/operator_settings/testlink",
+	"pkg/services/operator_settings/testproviders",
 	"pkg/services/operator_settings/internal/",
 }
 

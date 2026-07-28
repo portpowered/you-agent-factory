@@ -36,7 +36,6 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	providersessionswire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingartifacts "github.com/portpowered/infinite-you/pkg/services/recordings/artifacts"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -521,7 +520,7 @@ func provideOrchestrationCompilation(
 func provideFactorySessionExecutionFactory(
 	workflows factoryruntime.JavaScriptWorkflows,
 	orchestration factoryruntime.OrchestrationJavaScriptExecution,
-	recordingWriter recordingartifacts.Writer,
+	recordingWriter recordings.PortableRecordingWriter,
 	stores factorysessionwire.RuntimePersistenceStoreFactory,
 	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
@@ -599,7 +598,7 @@ func provideFactorySessionExecutionFactory(
 func provideStandaloneSessionExecutionFactory(
 	workflows factoryruntime.JavaScriptWorkflows,
 	orchestration factoryruntime.OrchestrationJavaScriptExecution,
-	recordingWriter recordingartifacts.Writer,
+	recordingWriter recordings.PortableRecordingWriter,
 	stores factorysessionwire.RuntimePersistenceStoreFactory,
 	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
@@ -667,7 +666,7 @@ func providePortableRecordingWriter(edges serviceedges.Edges) (recordings.Portab
 	if renamePath == nil {
 		renamePath = os.Rename
 	}
-	return recordingartifacts.NewAtomicWriter(makeDirectories, createTemporaryFile, removePath, renamePath)
+	return recordingswire.NewPortableRecordingWriter(makeDirectories, createTemporaryFile, removePath, renamePath)
 }
 
 func provideLoadedFactorySnapshotCapturer() factorydefinitions.LoadedFactorySnapshotCapturer {

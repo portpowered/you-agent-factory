@@ -32,6 +32,8 @@ func TestWorkflowDoesNotDependOnInitializerOrTransports(t *testing.T) {
 			"pkg/services/edges",
 			"pkg/services/operator_settings/servicewire",
 			"pkg/services/operator_settings/identityinventory",
+			"pkg/services/operator_settings/testlink",
+			"pkg/services/operator_settings/testproviders",
 			"pkg/services/operator_settings/internal/",
 		} {
 			if strings.Contains(string(source), forbidden) {
@@ -95,6 +97,8 @@ func TestWorkflowPackageBoundary_DoesNotImportInitializerOrStoreOwnershipPackage
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation",
 		"github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire",
 		"github.com/portpowered/infinite-you/pkg/services/operator_settings/identityinventory",
+		"github.com/portpowered/infinite-you/pkg/services/operator_settings/testlink",
+		"github.com/portpowered/infinite-you/pkg/services/operator_settings/testproviders",
 		"github.com/portpowered/infinite-you/pkg/services/operator_settings/internal",
 	}
 	for _, dep := range strings.Fields(string(output)) {

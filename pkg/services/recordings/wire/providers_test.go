@@ -1,6 +1,7 @@
 package wire_test
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -33,6 +34,19 @@ func TestProviderBridgesConstructPublishedSurfaces(t *testing.T) {
 	)
 
 	_, _, _, _, _ = recordingswire.NewReplayExecution(&recordings.ReplayArtifact{}, nil, nil)
+
+	_, err := recordingswire.NewPortableRecordingWriter(
+		os.MkdirAll,
+		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		os.Remove,
+		os.Rename,
+	)
+	if err != nil {
+		t.Fatalf("NewPortableRecordingWriter() error = %v", err)
+	}
+	_ = recordingswire.NewReplayArtifactLoader(nil, nil)
 }
 
 func TestNewServiceWithProjectionRejectsMissingProjection(t *testing.T) {

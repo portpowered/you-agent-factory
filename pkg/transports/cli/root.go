@@ -814,7 +814,7 @@ func resolveLegacyRunFactoryPrompt(cmd *cobra.Command, promptArgs []string, prep
 	}
 	input, err := prepareRunInvocationInput(cmd, promptArgs, nil, preparation)
 	if err != nil {
-		return runcli.MapInvocationInputError(err)
+		return mapRunInvocationInputError(err, "")
 	}
 	if input.ResolvedInput != nil {
 		return fmt.Errorf("positional prompt arguments require --factory or --named")
@@ -831,7 +831,7 @@ func resolveSignatureRunFactoryPrompt(
 ) error {
 	prepared, err := prepareRunInvocationInput(cmd, promptArgs, signature, preparation)
 	if err != nil {
-		return runcli.MapInvocationInputError(err)
+		return mapRunInvocationInputError(err, cfg.NamedFactoryName)
 	}
 	cfg.InvocationNormalizedArguments = prepared.NormalizedArguments
 	cfg.PreparedInvocationInput = &prepared
@@ -847,7 +847,7 @@ func resolveCompatibilityRunFactoryPrompt(
 ) error {
 	input, err := prepareRunInvocationInput(cmd, promptArgs, nil, preparation)
 	if err != nil {
-		return runcli.MapInvocationInputError(err)
+		return mapRunInvocationInputError(err, cfg.NamedFactoryName)
 	}
 	if workChanged && input.ResolvedInput != nil {
 		return fmt.Errorf("%s cannot be used with --work", runcli.InvocationInputSourceFromWork(input.Source))
@@ -934,6 +934,10 @@ func assignCompatibilityInvocationInput(cfg *runcli.RunConfig, input work.Prepar
 
 func runCommandInputIsTTY(ctx context.Context) bool {
 	return startupcli.StdinIsTTY(ctx)
+}
+
+func mapRunInvocationInputError(err error, factoryName string) error {
+	return runcli.MapInvocationInputError(work.QualifyInvocationArgumentError(err, factoryName))
 }
 
 func newProductionDocsCommand(

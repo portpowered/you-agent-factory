@@ -1559,6 +1559,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/packaged/catalog/required_inputs_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog/required_inputs_test",
+      "scenario": "TestPackagedFactoriesNameMissingInputAndFactory",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/required_inputs_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/required_inputs_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog/required_inputs_test",
+      "scenario": "TestPackagedFactoriesRejectMissingRequiredInputs",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/required_inputs_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/packaged/deep_research/invocation_test.go",
       "package": "you-agent-factory/tests/functional/factory/packaged/deep_research",
       "scenario": "TestPackagedDeepResearchOptionalInputsReachWorkers",
@@ -1774,6 +1794,66 @@
       "scenario": "TestPackagedTTSRequiredInputProducesAudioArtifactMetadata",
       "lane": "short",
       "destination": "tests/functional/factory/packaged/tts/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_visualization/activation_lifecycle_test.go",
+      "package": "you-agent-factory/tests/functional/factory_visualization",
+      "scenario": "TestVisualizationActivatesThroughPublicRootAfterLifecycle",
+      "lane": "short",
+      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/activation_lifecycle_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_visualization/inert_construction_test.go",
+      "package": "you-agent-factory/tests/functional/factory_visualization",
+      "scenario": "TestVisualizationRemainsInertThroughRootBuildProcessConstruction",
+      "lane": "short",
+      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/inert_construction_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_visualization/observe_live_view_test.go",
+      "package": "you-agent-factory/tests/functional/factory_visualization",
+      "scenario": "TestVisualizationObserveThroughPublicRootAfterLifecycle",
+      "lane": "short",
+      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/observe_live_view_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_visualization/peer_import_boundary_test.go",
+      "package": "you-agent-factory/tests/functional/factory_visualization",
+      "scenario": "TestFunctionalProofsImportOnlyPublishedVisualizationSurfaces",
+      "lane": "short",
+      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/peer_import_boundary_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_visualization/peer_import_boundary_test.go",
+      "package": "you-agent-factory/tests/functional/factory_visualization",
+      "scenario": "TestProductionPeersReachVisualizationThroughPublishedSurfacesOnly",
+      "lane": "short",
+      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/peer_import_boundary_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_visualization/response_presentation_test.go",
+      "package": "you-agent-factory/tests/functional/factory_visualization",
+      "scenario": "TestVisualizationResponsePresentationThroughPublicRootAfterLifecycle",
+      "lane": "short",
+      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/response_presentation_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -9037,74 +9117,14 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_visualization/activation_lifecycle_test.go",
-      "package": "you-agent-factory/tests/functional/factory_visualization",
-      "scenario": "TestVisualizationActivatesThroughPublicRootAfterLifecycle",
-      "lane": "short",
-      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/activation_lifecycle_test.go.",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_visualization/inert_construction_test.go",
-      "package": "you-agent-factory/tests/functional/factory_visualization",
-      "scenario": "TestVisualizationRemainsInertThroughRootBuildProcessConstruction",
-      "lane": "short",
-      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/inert_construction_test.go.",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_visualization/observe_live_view_test.go",
-      "package": "you-agent-factory/tests/functional/factory_visualization",
-      "scenario": "TestVisualizationObserveThroughPublicRootAfterLifecycle",
-      "lane": "short",
-      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/observe_live_view_test.go.",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_visualization/peer_import_boundary_test.go",
-      "package": "you-agent-factory/tests/functional/factory_visualization",
-      "scenario": "TestFunctionalProofsImportOnlyPublishedVisualizationSurfaces",
-      "lane": "short",
-      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/peer_import_boundary_test.go.",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_visualization/peer_import_boundary_test.go",
-      "package": "you-agent-factory/tests/functional/factory_visualization",
-      "scenario": "TestProductionPeersReachVisualizationThroughPublishedSurfacesOnly",
-      "lane": "short",
-      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/peer_import_boundary_test.go.",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_visualization/response_presentation_test.go",
-      "package": "you-agent-factory/tests/functional/factory_visualization",
-      "scenario": "TestVisualizationResponsePresentationThroughPublicRootAfterLifecycle",
-      "lane": "short",
-      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/response_presentation_test.go.",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T09:30:00Z",
+  "scanned_at_utc": "2026-07-28T12:00:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 622,
+      "none": 636,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -9116,14 +9136,15 @@
       "bootstrap_portability": 21,
       "cli": 59,
       "events": 5,
-      "factory": 47,
+      "factory": 49,
+      "factory_visualization": 6,
       "guards_batch": 23,
       "models": 25,
       "observability": 9,
       "operator_settings": 10,
       "orchestration": 48,
       "product": 13,
-      "provider_sessions": 12,
+      "provider_sessions": 15,
       "providers": 64,
       "replay_contracts": 23,
       "runtime_api": 105,
@@ -9136,9 +9157,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 890,
+    "customer_top_level_Test_scenarios": 892,
     "lane_functionallong": 95,
-    "lane_short": 795,
+    "lane_short": 797,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 14,
@@ -9156,6 +9177,7 @@
       "you-agent-factory/tests/functional/factory/definition_activation": 3,
       "you-agent-factory/tests/functional/factory/definitions": 6,
       "you-agent-factory/tests/functional/factory/packaged/catalog": 10,
+      "you-agent-factory/tests/functional/factory/packaged/catalog/required_inputs_test": 2,
       "you-agent-factory/tests/functional/factory/packaged/deep_research": 3,
       "you-agent-factory/tests/functional/factory/packaged/fusion": 3,
       "you-agent-factory/tests/functional/factory/packaged/goal": 4,
@@ -9163,6 +9185,7 @@
       "you-agent-factory/tests/functional/factory/packaged/review": 3,
       "you-agent-factory/tests/functional/factory/packaged/subagent": 3,
       "you-agent-factory/tests/functional/factory/packaged/tts": 3,
+      "you-agent-factory/tests/functional/factory_visualization": 6,
       "you-agent-factory/tests/functional/guards_batch": 23,
       "you-agent-factory/tests/functional/models/model_invoke": 4,
       "you-agent-factory/tests/functional/models/model_list": 13,
@@ -9182,7 +9205,7 @@
       "you-agent-factory/tests/functional/product/packaged_factory_guard_failure": 1,
       "you-agent-factory/tests/functional/product/packaged_factory_portability": 1,
       "you-agent-factory/tests/functional/provider_sessions/association": 6,
-      "you-agent-factory/tests/functional/provider_sessions/details": 6,
+      "you-agent-factory/tests/functional/provider_sessions/details": 9,
       "you-agent-factory/tests/functional/providers": 36,
       "you-agent-factory/tests/functional/providers/codex": 7,
       "you-agent-factory/tests/functional/providers/cursor": 8,
@@ -9269,8 +9292,8 @@
   },
   "smoke_workflow_mapping": {
     "mapped_at_utc": "2026-07-24T02:26:56Z",
-    "smoke_scenarios": 86,
-    "workflow_scenarios": 64
+    "smoke_scenarios": 62,
+    "workflow_scenarios": 30
   },
   "guards_bootstrap_replay_mapping": {
     "mapped_at_utc": "2026-07-24T02:29:50Z",

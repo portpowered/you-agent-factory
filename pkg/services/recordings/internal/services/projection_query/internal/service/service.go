@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/events"
+	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events"
 	projectionquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query"
-	"github.com/portpowered/infinite-you/pkg/services/recordings/projections"
-	dashboardprojections "github.com/portpowered/infinite-you/pkg/services/recordings/projections/dashboard"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections"
+	dashboardprojections "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections/dashboard"
 )
 
 // Service keeps the canonical reducer and derived-query implementation behind

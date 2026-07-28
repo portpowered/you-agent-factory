@@ -22,6 +22,9 @@ var operatorSettingsMoveRules = []operatorSettingsMoveRule{
 	{exact: "testproviders", prefix: "testproviders/", subservice: ""},
 	{exact: "testdata", prefix: "testdata/", subservice: ""},
 	{exact: "internal/service", prefix: "internal/service/", subservice: ""},
+	{exact: "internal/construct", prefix: "internal/construct/", subservice: ""},
+	{exact: "internal/testlink", prefix: "internal/testlink/", subservice: ""},
+	{exact: "internal/testproviders", prefix: "internal/testproviders/", subservice: ""},
 }
 
 func operatorSettingsMapping(packagePath string) (PackageRow, bool) {

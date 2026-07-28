@@ -86,15 +86,14 @@ func TestMapPackageRecordingsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/recordings/replay/clocktests",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/recordings/replay/clocktests",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "recordings",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/recordings/internal/services/replay",
-				DeletionCondition: "delete public package after IMP-REC-replay private subservice cutover proof",
-			},
+			path:        "pkg/services/recordings/internal/services/replay/replay",
+			wantRetain:  true,
+			retainOwner: "recordings",
+		},
+		{
+			path:        "pkg/services/recordings/internal/services/replay/replay/clocktests",
+			wantRetain:  true,
+			retainOwner: "recordings",
 		},
 	}
 
