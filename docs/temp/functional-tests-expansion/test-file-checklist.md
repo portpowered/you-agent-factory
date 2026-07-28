@@ -552,7 +552,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestRecordingsBackedWorkReadsMapRichWorldState`.
   - `TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures`.
 
-- [ ] `tests/functional/work/submission/http_test.go`
+- [x] `tests/functional/work/submission/http_test.go`
   - `TestAPISubmitBatchThenListAndGetWork`.
   - `TestAPIUpsertWorkRequestUsesCanonicalIdentity`.
   - `TestAPIUnknownWorkReturnsTypedNotFound`.
@@ -609,7 +609,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ## Wave 2 — sessions
 
-- [ ] `tests/functional/sessions/lifecycle/crud_test.go`
+- [x] `tests/functional/sessions/lifecycle/crud_test.go`
   - `TestFactorySessionCreateListShowDelete`.
   - `TestFactorySessionListMultipleSessions`.
   - `TestFactorySessionMissingShowAndDeleteFail`.
@@ -745,7 +745,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPISaveCurrentFactoryValidatesBeforePersistence`.
   - `TestAPICurrentFactoriesRemainSessionScoped`.
 
-- [ ] `tests/functional/factory/current/prompt_template_test.go`
+- [x] `tests/functional/factory/current/prompt_template_test.go`
   - `TestAPIPromptTemplateContractAndValidationRoundTrip`.
   - `TestAPIInvalidPromptTemplateNamesMissingVariables`.
   - `TestAPITemplateValidationDoesNotMutateCurrentFactory`.

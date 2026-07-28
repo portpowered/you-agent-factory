@@ -19,6 +19,7 @@ type sessionOwnerFixture struct {
 	Interpolation interfaces.InvocationInterpolationService
 	WorkTypes     interfaces.InvocationWorkTypeService
 	InputFiles    fileeffects.InvocationInputReader
+	Work          work.Service
 }
 
 func newTestSessionOwner(fixture sessionOwnerFixture) *SessionOwner {
@@ -34,6 +35,10 @@ func newTestSessionOwner(fixture sessionOwnerFixture) *SessionOwner {
 	if inputFiles == nil {
 		inputFiles = func(string) ([]byte, error) { return nil, nil }
 	}
+	workService := fixture.Work
+	if workService == nil {
+		workService = testInvocationWorkService()
+	}
 	return NewSessionOwner(
 		fixture.FactoryConfig,
 		fixture.SubmitWork,
@@ -44,6 +49,7 @@ func newTestSessionOwner(fixture sessionOwnerFixture) *SessionOwner {
 		interpolation,
 		workTypes,
 		inputFiles,
+		workService,
 	)
 }
 
@@ -69,4 +75,8 @@ func rejectingInvocationInterpolation(parameter string) interfaces.InvocationInt
 			}
 		},
 	}
+}
+
+func testInvocationWorkService() work.Service {
+	return work.NewInvocationPolicyService()
 }

@@ -45,8 +45,9 @@ func newAPIServerFromRoles(
 		DurableExecution: durableExecution, DurableLifecycle: durableLifecycle,
 		DurableListing: durableListing, DurableProjection: durableProjection,
 		DurableLister: durableLister, LiveSessionLister: liveSessionLister,
-		WorkerPrompts: workerPrompts, ContentStaging: contentStaging,
-		RequestPreparation: requestPreparation, SessionRequests: sessionRequests,
+		WorkerPrompts: workerPrompts,
+		WorkService: work.AdmissionContentService(contentStaging, requestPreparation),
+		SessionRequests: sessionRequests,
 	}, logger)
 	return api.NewServer(handler, modelsHTTP, providerSessions, logger)
 }
