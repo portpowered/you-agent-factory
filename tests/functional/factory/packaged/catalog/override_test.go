@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -184,7 +184,7 @@ func packagedUnmaterializedEntries(entries []listEntry) []listEntry {
 func writeInvalidScopedFactory(t *testing.T, root, name string, payload []byte) string {
 	t.Helper()
 
-	factoryDirectory, err := factorynamedpaths.MapDir(root, name)
+	factoryDirectory, err := factorydefinitions.MapDir(root, name)
 	if err != nil {
 		t.Fatalf("MapDir(%q, %q): %v", root, name, err)
 	}
@@ -200,7 +200,7 @@ func writeInvalidScopedFactory(t *testing.T, root, name string, payload []byte) 
 func writeScopedFactory(t *testing.T, root, name, description string) string {
 	t.Helper()
 
-	factoryDirectory, err := factorynamedpaths.MapDir(root, name)
+	factoryDirectory, err := factorydefinitions.MapDir(root, name)
 	if err != nil {
 		t.Fatalf("MapDir(%q, %q): %v", root, name, err)
 	}

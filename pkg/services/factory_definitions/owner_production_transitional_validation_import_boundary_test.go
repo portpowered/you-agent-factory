@@ -119,6 +119,8 @@ func isAllowedOwnerTransitionalValidationImporter(packagePath string) bool {
 
 func isAllowedOwnerValidationInternalsImporter(packagePath string) bool {
 	switch {
+	case packagePath == factoryDefinitionsOwnerPrefix:
+		return true
 	case packagePath == forbiddenOwnerValidationInternalsImport,
 		strings.HasPrefix(packagePath, forbiddenOwnerValidationInternalsImport+"/"):
 		return true
@@ -143,8 +145,8 @@ func isAllowedOwnerValidationInternalsImporter(packagePath string) bool {
 	case packagePath == factoryDefinitionsOwnerPrefix+"/internal",
 		strings.HasPrefix(packagePath, factoryDefinitionsOwnerPrefix+"/internal/"):
 		return true
-	case packagePath == factoryDefinitionsOwnerPrefix+"/workers",
-		strings.HasPrefix(packagePath, factoryDefinitionsOwnerPrefix+"/workers/"):
+	case packagePath == factoryDefinitionsOwnerPrefix+"/internal/services/validation/authoredmodel/workers",
+		strings.HasPrefix(packagePath, factoryDefinitionsOwnerPrefix+"/internal/services/validation/authoredmodel/workers/"):
 		return true
 	default:
 		return false

@@ -10,8 +10,8 @@ import (
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	validationserviceimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/service"
 	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
+	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 )
 
 type stubLoadedSource struct {

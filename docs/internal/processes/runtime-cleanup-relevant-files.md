@@ -829,7 +829,7 @@ fixtures. Owner HTTP/MCP transports and `definition` remain on the singular
 retain temporary deletion-only aliases until a later cutover packet. CLN-DEF-CONTRACTS
 story 007 deletes the public `factory_definitions/contracts` mega-barrel: implementation
 types move to `internal/contracts`, shared `namevalue` moves to
-`pkg/services/factory_definitions/namevalue`, Recordings and Factory Runtime alias
+`pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue`, Recordings and Factory Runtime alias
 from the service root, `cmd/pkgboundarycheck` treats the retired public path as
 prohibited, and `contracts_mega_barrel_boundary_test.go` seals peer cutover.
 parent-private nested validation subservice locks its public surface in
@@ -1208,3 +1208,73 @@ debt with
 Sibling proof tests in `pkg/services/factory_runtime/wire/` and
 `packaged_root_shape_test.go` remain the focused owners for pre-start gates,
 baseline burn-down, and packaged-root shape drift.
+
+## DEL-DEF-RESIDUAL pre-start gates
+
+`DEL-DEF-RESIDUAL` must not begin leased residual transitional package deletion
+or baseline burn-down until residual fold packets and
+`INV-DEF-INVOCATION-POLICY` are Factory-complete and live `DEL-DEF` is terminal
+or no longer owns overlapping deletion leases:
+
+| Gate | Branch | Status artifact |
+| --- | --- | --- |
+| `INV-DEF-INVOCATION-POLICY` | `pss-inv-def-invocation-policy` | merged PR #1605; `internal/services/invocation_policy`; `wire/invocation_policy_test.go` |
+| `CLN-DEF-FOLD-CATALOG` | `pss-cln-def-fold-catalog` | merged PR #1608; `internal/services/catalog` |
+| `CLN-DEF-FOLD-COMPILATION` | `pss-cln-def-fold-compilation` | merged PR #1607; `internal/services/compilation` |
+| `CLN-DEF-FOLD-COMPOSITION` | `pss-cln-def-fold-composition` | merged PR #1606; `internal/lifecycle` |
+| `CLN-DEF-FOLD-VALIDATION` | `pss-cln-def-fold-validation` | merged PR #1610; `internal/services/validation` |
+| `CLN-DEF-FOLD-SNAPSHOTS` | `pss-cln-def-fold-snapshots` | merged PR #1613; `internal/services/snapshots_portability` |
+| `CLN-DEF-FOLD-DISTRIBUTION` | `pss-cln-def-fold-distribution` | merged PR #1611; `internal/services/distribution` |
+| `CLN-DEF-FOLD-INVOCATION-POLICY` | `pss-cln-def-fold-invocation-policy` | merged PR #1615; `internal/services/invocation_policy` |
+| `DEL-DEF` (serialization) | `pss-del-def` | merged PR #1603; overlapping TOPLEVEL paths remain DEL-DEF-owned until that packet deletes them |
+
+Record the operational gate snapshot in
+`docs/internal/processes/del-def-residual-prestart-gates.json` and lock the
+confirmation with
+`pkg/services/factory_definitions/del_def_residual_prerequisite_gate_test.go`.
+While `DEL-DEF` remains in-flight, `deletion_hold_active` is `true` and story
+002+ residual deletion or baseline burn-down must wait.
+
+## DEL-DEF-RESIDUAL baseline burn-down gates
+
+Story 003 lowers structure, ownership, and package-target baselines for the
+deleted residual transitional public packages. Lock the ledger absence proof in
+`pkg/services/factory_definitions/del_def_residual_baseline_gate_test.go` after
+`ownership-inventory.json`, `package-target-manifest.json`, and
+`package-structure-baseline.json` no longer list those deleted paths.
+
+## DEL-DEF-RESIDUAL coverage baseline burn-down
+
+Story 004 removes unit and functional coverage minimum rows for deleted residual
+transitional public import paths and dedupes story-002 retarget duplicates in
+`docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+`docs/internal/baselines/go-functional-coverage-package-minimums.json`. Lock the
+burn-down with coverage subtests in
+`pkg/services/factory_definitions/del_def_residual_baseline_gate_test.go`:
+
+| Ledger | Deleted public import paths (examples) | Proof |
+| --- | --- | --- |
+| `docs/internal/baselines/go-unit-coverage-package-minimums.json` | `github.com/portpowered/infinite-you/pkg/services/factory_definitions/{namedpaths,loading,decisionenvelope,packages,...}` | baseline gate coverage subtests |
+| `docs/internal/baselines/go-functional-coverage-package-minimums.json` | same deleted public import paths, including measurement exceptions | baseline gate coverage subtests |
+
+Internal `internal/services/*` import paths remain canonical coverage debt and
+are not removed by this packet.
+
+## DEL-DEF-RESIDUAL root shape and wire proofs
+
+Story 005 locks the post-deletion packaged-service root shape, wire import
+hygiene, published Service construction, and invocation_policy contract reachability
+after residual transitional public packages are removed:
+
+| Proof | Artifact |
+| --- | --- |
+| Deleted residual and DEL-DEF transitional top-level packages absent | `deleted_residual_transitional_top_level_packages_absent` and `deleted_del_def_transitional_top_level_packages_absent` subtests |
+| Canonical retain children (`internal`, `transports`, `wire`) plus committed move debt only | `canonical_root_directories_present`, `unexpected_children_remain_move_debt_only` |
+| Parent-private `internal/services/*` subservices remain | `internal_services_subservices_remain` |
+| `factory_definitions/wire` avoids deleted transitional imports | `TestDelDefResidualRootShape_WireDoesNotImportDeletedTransitionalPackages` |
+| Published catalog/compile/validate/snapshot surfaces construct through wire | `TestDelDefResidualRootShape_WireConstructsPublishedServiceSurfaces` |
+| Invocation policy contracts reachable through Definitions wire | `TestDelDefResidualRootShape_InvocationPolicyContractThroughDefinitionsWire` |
+
+Deeper fold-behavior preservation across catalog, authoring, validate,
+snapshot/portability, and distribute slices remains in
+`pkg/services/factory_definitions/wire/fold_behavior_preservation_test.go`.

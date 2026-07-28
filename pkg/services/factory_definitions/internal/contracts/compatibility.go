@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	workertaxonomy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy"
 )
 

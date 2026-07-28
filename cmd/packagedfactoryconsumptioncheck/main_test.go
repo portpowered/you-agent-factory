@@ -76,7 +76,7 @@ func fixtureRepository(t *testing.T) string {
 	for _, relative := range []string{
 		"pkg/wire",
 		"pkg/transports/http",
-		"pkg/services/factory_definitions/packages/goal",
+		"pkg/services/factory_definitions/internal/services/distribution/goal",
 		"internal/packagedfactorycatalog",
 		"packages/packaged-factories",
 	} {
@@ -102,7 +102,7 @@ func handlers() error {
 	return err
 }
 `)
-	writeFixture(t, root, "pkg/services/factory_definitions/packages/goal/prompt_drift.go", `package goal
+	writeFixture(t, root, "pkg/services/factory_definitions/internal/services/distribution/goal/prompt_drift.go", `package goal
 
 import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 

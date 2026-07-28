@@ -6,12 +6,11 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 )
 
 var sealedValidationPathPackages = []string{
-	factoryDefinitionsRoot + "/validation",
+	factoryDefinitionsRoot + "/internal/services/validation/impl",
 }
 
 // TestSealedValidationPathPackagesImportNoRuntimeImplementation seals CUT-DEF-RUN
@@ -176,7 +175,7 @@ func sealedValidationPathPetriFactoryConfig() *factorydefinitions.FactoryConfig 
 				{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 			},
 		}},
-		Workers: []workerconfig.Config{{Name: "worker-a"}},
+		Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "worker-a"}},
 		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name:           "process",
 			WorkerTypeName: "worker-a",

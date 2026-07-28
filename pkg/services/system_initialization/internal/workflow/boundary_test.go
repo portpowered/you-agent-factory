@@ -94,7 +94,7 @@ func TestWorkflowPackageBoundary_DoesNotImportInitializerOrStoreOwnershipPackage
 		"github.com/portpowered/infinite-you/pkg/initializer",
 		"github.com/portpowered/infinite-you/pkg/wire",
 		"github.com/portpowered/infinite-you/pkg/transports",
-		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation",
+		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
 		"github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire",
 		"github.com/portpowered/infinite-you/pkg/services/operator_settings/identityinventory",
 		"github.com/portpowered/infinite-you/pkg/services/operator_settings/testlink",

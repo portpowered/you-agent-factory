@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/packageassets"
 	factorydefinitionswirevalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/validation"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"gopkg.in/yaml.v3"
@@ -214,7 +213,7 @@ func decodeCanonicalFactory(
 		}
 	}
 
-	assembled, err := packageassets.Assemble(packageassets.Definition{
+	assembled, err := factorydefinitions.AssemblePackagedFactoryAssets(factorydefinitions.PackagedFactoryAssetDefinition{
 		Package:     slug,
 		FactoryJSON: jsonPayload,
 		Assets:      source,

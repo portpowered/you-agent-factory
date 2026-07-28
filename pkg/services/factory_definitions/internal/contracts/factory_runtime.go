@@ -3,7 +3,7 @@ package factorycontracts
 import (
 	"time"
 
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )

@@ -29,8 +29,8 @@ var compilationForbiddenImportRoots = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/loadedsource",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence",
 }
 
 var compilationAllowedPublicTypeImportPrefixes = []string{

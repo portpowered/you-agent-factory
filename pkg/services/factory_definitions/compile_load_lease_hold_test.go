@@ -13,13 +13,13 @@ const (
 )
 
 var transitionalCompileLoadPublicDirs = []string{
-	"loadedsource",
 	"definition",
 }
 
 var deletedCompileLoadPublicDirs = []string{
 	"loading",
 	"runtimeconfig",
+	"loadedsource",
 }
 
 func TestCompileLoadFold_TransitionalPublicPackagesRemainPresent(t *testing.T) {

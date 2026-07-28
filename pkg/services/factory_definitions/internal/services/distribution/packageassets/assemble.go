@@ -12,7 +12,7 @@ import (
 	"unicode/utf8"
 
 	distributionpromptassets "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/promptassets"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 )
 
 const (
@@ -80,9 +80,9 @@ func discoverSupportedAssets(definition Definition) ([]scriptAsset, error) {
 		targetRoot string
 		fileType   string
 	}{
-		{scriptAssetRoot, scriptTargetRoot, factorydefinitions.BundledFileTypeScript},
-		{docAssetRoot, docTargetRoot, factorydefinitions.BundledFileTypeDoc},
-		{inputAssetRoot, inputTargetRoot, factorydefinitions.BundledFileTypeInput},
+		{scriptAssetRoot, scriptTargetRoot, contracts.BundledFileTypeScript},
+		{docAssetRoot, docTargetRoot, contracts.BundledFileTypeDoc},
+		{inputAssetRoot, inputTargetRoot, contracts.BundledFileTypeInput},
 	} {
 		discovered, err := discoverAssetDirectory(definition, directory.sourceRoot, directory.targetRoot, directory.fileType)
 		if err != nil {
@@ -231,14 +231,14 @@ func existingBundledTargets(packageName string, entries []any) (map[string]struc
 func assetBundledEntry(asset scriptAsset) map[string]any {
 	fileType := asset.fileType
 	if fileType == "" {
-		fileType = factorydefinitions.BundledFileTypeScript
+		fileType = contracts.BundledFileTypeScript
 	}
 	return map[string]any{
 		"id":         asset.targetPath,
 		"type":       fileType,
 		"targetPath": asset.targetPath,
 		"content": map[string]any{
-			"encoding": factorydefinitions.BundledFileEncodingUTF8,
+			"encoding": contracts.BundledFileEncodingUTF8,
 			"inline":   asset.content,
 		},
 	}
@@ -246,9 +246,9 @@ func assetBundledEntry(asset scriptAsset) map[string]any {
 
 func supportedTargetRoot(fileType string) string {
 	return map[string]string{
-		factorydefinitions.BundledFileTypeScript: scriptTargetRoot,
-		factorydefinitions.BundledFileTypeDoc:    docTargetRoot,
-		factorydefinitions.BundledFileTypeInput:  inputTargetRoot,
+		contracts.BundledFileTypeScript: scriptTargetRoot,
+		contracts.BundledFileTypeDoc:    docTargetRoot,
+		contracts.BundledFileTypeInput:  inputTargetRoot,
 	}[fileType]
 }
 

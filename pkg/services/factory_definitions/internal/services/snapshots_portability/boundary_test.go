@@ -21,6 +21,16 @@ var snapshotsPortabilityCompilationFoldAllowedImportRoots = []string{
 	compilationPackageRoot + "/runtimeconfig",
 }
 
+var snapshotsPortabilityValidationFoldAllowedImportRoots = []string{
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
+}
+
+var snapshotsPortabilitySiblingLeaseFoldAllowedImportRoots = []string{
+	snapshotsPortabilityPublicPackage + "/capture",
+	snapshotsPortabilityPublicPackage + "/prepare",
+	snapshotsPortabilityPublicPackage + "/materialize",
+}
+
 var snapshotsPortabilityForbiddenImportRoots = []string{
 	"github.com/portpowered/infinite-you/pkg/wire",
 	"github.com/portpowered/infinite-you/pkg/root",
@@ -37,10 +47,10 @@ var snapshotsPortabilityForbiddenImportRoots = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence",
 }
 
 var snapshotsPortabilityAllowedPublicTypeImportPrefixes = []string{
@@ -65,15 +75,24 @@ func TestPackageBoundary_InternalLeasePackagesDoNotImportForbiddenOwnership(t *t
 		"/capture",
 		"/prepare",
 		"/materialize",
-		"/internal/service",
 	} {
 		assertPackageDirectImportsForbidden(
 			t,
 			snapshotsPortabilityPublicPackage+packageSuffix,
 			snapshotsPortabilityForbiddenImportRoots,
-			snapshotsPortabilityCompilationFoldAllowedImportRoots...,
+			append(snapshotsPortabilityCompilationFoldAllowedImportRoots, snapshotsPortabilityValidationFoldAllowedImportRoots...)...,
 		)
 	}
+
+	assertPackageDirectImportsForbidden(
+		t,
+		snapshotsPortabilityPublicPackage+"/internal/service",
+		snapshotsPortabilityForbiddenImportRoots,
+		append(
+			snapshotsPortabilityCompilationFoldAllowedImportRoots,
+			append(snapshotsPortabilityValidationFoldAllowedImportRoots, snapshotsPortabilitySiblingLeaseFoldAllowedImportRoots...)...,
+		)...,
+	)
 }
 
 func TestPackageBoundary_PublicSurfaceDeclaresOnlyCTRDEFSnapshotVocabulary(t *testing.T) {

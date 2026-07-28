@@ -8,7 +8,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 )
 
 func TestAssemble_DiscoversFlatAndNestedScriptsInTargetOrder(t *testing.T) {
@@ -60,10 +60,10 @@ func TestAssemble_DiscoversPortableDocumentsAndInputsWithExactContent(t *testing
 		t.Fatalf("bundled files = %#v, want document and input", files)
 	}
 	assertBundledEntry(
-		t, files[0], "factory/docs/guide.md", factorydefinitions.BundledFileTypeDoc, "# Guide\n\nExact.\n",
+		t, files[0], "factory/docs/guide.md", contracts.BundledFileTypeDoc, "# Guide\n\nExact.\n",
 	)
 	assertBundledEntry(
-		t, files[1], "factory/inputs/task/default/request.json", factorydefinitions.BundledFileTypeInput,
+		t, files[1], "factory/inputs/task/default/request.json", contracts.BundledFileTypeInput,
 		"{\n  \"input\": \"keep spaces  \"\n}\n",
 	)
 }
@@ -175,13 +175,13 @@ func TestAssemble_RejectsPortableAssetTargetsOutsideCanonicalTypeRoots(t *testin
 	}{
 		{
 			name:       "document",
-			fileType:   factorydefinitions.BundledFileTypeDoc,
+			fileType:   contracts.BundledFileTypeDoc,
 			targetPath: "factory/inputs/guide.md",
 			wantRoot:   "factory/docs/",
 		},
 		{
 			name:       "input",
-			fileType:   factorydefinitions.BundledFileTypeInput,
+			fileType:   contracts.BundledFileTypeInput,
 			targetPath: "factory/docs/request.json",
 			wantRoot:   "factory/inputs/",
 		},

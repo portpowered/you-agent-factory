@@ -1933,19 +1933,19 @@ response-stream output.
   catalog-to-disk installation boundary. Named
   resolution in `pkg/config/layout.go` reads project-local then global disk
   state only; it does not install packages or expose compatibility JSON aliases.
-  `pkg/services/factory_definitions/packages/packageassets` is the shared,
+  `pkg/services/factory_definitions/internal/services/distribution/packageassets` is the shared,
   side-effect-free packaged
   asset assembly entry point: package owners supply the authored `factory.json`
   and an explicit embedded `fs.FS`, and definitions call this assembler before
   their payload enters the catalog. It delegates prompt declarations to
-  `pkg/services/factory_definitions/packages/promptassets` and discovers regular
+  `pkg/services/factory_definitions/internal/services/distribution/promptassets` and discovers regular
   UTF-8 `scripts/**`, `docs/**`, and `inputs/**` assets as deterministic
   `SCRIPT`, `DOC`, and `INPUT` bundled files at matching `factory/**` targets.
   Discovery rejects non-regular, unreadable, or invalid UTF-8 assets, and
   assembly rejects unsafe or duplicate canonical bundled targets before the
   payload can reach config initialization. The assembler attaches exact asset
   bytes but does not install or persist anything.
-  `pkg/services/factory_definitions/packagedinstallation` passes each selected
+  `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation` passes each selected
   detached catalog payload through the injected Factory Definitions
   `Persistence` boundary. Bootstrap and customer selection share this
   materializer. The prepared layout carries an explicit safe root filename so
@@ -1998,7 +1998,7 @@ response-stream output.
   `${input}` from the invocation signature into the workstation prompt body.
   normal initializer startup installs `@you/subagent` under the global
   named-factory root before named invocation can resolve it.
-- `pkg/services/factory_definitions/packages/subagent/` retains only packaged
+- `pkg/services/factory_definitions/internal/services/distribution/subagent/` retains only packaged
   subagent metadata and response-shaping behavior; shared catalog validation,
   installation tests, and public functional outcomes own definition evidence.
 - Packaged `@you/subagent` invocation functional coverage lives in
@@ -2204,7 +2204,7 @@ response-stream output.
   belong in `docs/reference/authoring-factories.md`. Prefer `INFERENCE_WORKER` /
   `INFERENCE_RUN` terminology in retained guidance while documenting
   `MODEL_WORKER` / `MODEL_INVOKE` as migration aliases.
-- `pkg/services/factory_definitions/packages/tts/observability.go` classifies packaged TTS loading,
+- `pkg/services/factory_definitions/internal/services/distribution/tts/observability.go` classifies packaged TTS loading,
   model-not-ready, and generation-failure outcomes and defines stable invocation
   error codes plus packaged-factory metric names.
 - `pkg/transports/cli/run/packaged_tts_invocation.go` logs named-factory resolution context at
@@ -2215,15 +2215,15 @@ response-stream output.
   paths. It must not import `factory_definitions/decisionenvelope` or define
   decision-envelope interpretation symbols; boundary proof lives in
   `internal/decision_envelope_ownership_boundary_test.go`.
-- `pkg/services/factory_definitions/packages/goal/` remains a transitional shim for
+- `pkg/services/factory_definitions/internal/services/distribution/goal/` remains a transitional shim for
   folded asset/metadata modules and for `decision_envelope.go`, which still
   re-exports `factory_definitions/decisionenvelope` until
   `CLN-DEF-FOLD-INVOCATION-POLICY` cutover. This distribution fold does not claim
   invocation-policy or decision-envelope ownership complete.
-- `pkg/services/factory_definitions/decisionenvelope/` implements packaged goal
+- `pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope/` implements packaged goal
   decision-envelope interpretation behind the Definitions root contract and is
   not absorbed into distribution ownership by this packet.
-- `pkg/services/factory_definitions/packages/goal/` transitional metadata constants
+- `pkg/services/factory_definitions/internal/services/distribution/goal/` transitional metadata constants
   (`PackagedFactoryName`, `PackagedInvokeWorkstationName`) delegate to
   distribution-owned goal modules.
 - `packages/packaged-factories/generated/manifest.json` is the single

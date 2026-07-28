@@ -15,7 +15,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -591,17 +590,17 @@ func writeRunWiringPackagedGoalMockWorkersConfig(t *testing.T) string {
 		MockWorkers: []workers.MockWorkerConfig{
 			{
 				WorkerName:      "goal-planner",
-				WorkstationName: goal.PackagedPlanWorkstationName,
+				WorkstationName: interfaces.PackagedGoalPlanWorkstationName,
 				RunType:         workers.MockWorkerRunTypeAccept,
 			},
 			{
 				WorkerName:      "goal-executor",
-				WorkstationName: goal.PackagedExecuteWorkstationName,
+				WorkstationName: interfaces.PackagedGoalExecuteWorkstationName,
 				RunType:         workers.MockWorkerRunTypeAccept,
 			},
 			{
 				WorkerName:      "goal-checker",
-				WorkstationName: goal.PackagedCheckWorkstationName,
+				WorkstationName: interfaces.PackagedGoalCheckWorkstationName,
 				RunType:         workers.MockWorkerRunTypeScript,
 				ScriptConfig: &workers.MockWorkerScriptConfig{
 					Command: "/bin/echo",
@@ -610,7 +609,7 @@ func writeRunWiringPackagedGoalMockWorkersConfig(t *testing.T) string {
 			},
 			{
 				WorkerName:      "goal-reviewer",
-				WorkstationName: goal.PackagedReviewWorkstationName,
+				WorkstationName: interfaces.PackagedGoalReviewWorkstationName,
 				RunType:         workers.MockWorkerRunTypeScript,
 				ScriptConfig: &workers.MockWorkerScriptConfig{
 					Command: "/bin/echo",
