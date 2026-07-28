@@ -1,10 +1,11 @@
 package http
 
 // OwnedHTTPOperationIDs lists the generated OpenAPI operationIds adapted by
-// this package. HTTP-RUN owns Runtime status reads only in the initial binding
-// packet; later stories add control, dispatch-plan, and checkpoint slices
-// without authoring new shared OpenAPI operations.
+// this package. HTTP-RUN adds Runtime control and move-work slices without
+// authoring new shared OpenAPI operations; later stories add dispatch-plan and
+// checkpoint slices.
 var OwnedHTTPOperationIDs = []string{
 	"getStatus",
 	"getStatusBySessionId",
+	"moveWorkBySessionId",
 }

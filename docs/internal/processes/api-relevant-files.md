@@ -52,7 +52,10 @@ Use this map when changing the public REST contract.
   `apisurface.FactoryStatusToAPI`, and route session-scoped reads through an
   injected `SessionObserver` peer binding rather than Runtime datastores.
   Typed observation failures map through `error_mapping.go` before success
-  encoding.
+  encoding. Runtime control (`handlers_control.go`) maps pause, resume, and
+  terminate through `ControlPause`, `ControlResume`, and `ControlTerminate`
+  with published `ControlOutcome` success vocabulary; operator move-work maps
+  `moveWorkBySessionId` through `ControlMoveWork` in `move_work_mapping.go`.
 - Factory Definitions HTTP decoding, generated-contract mapping, service
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_definitions/transports/http`. The top-level

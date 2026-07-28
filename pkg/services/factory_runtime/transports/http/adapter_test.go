@@ -50,18 +50,31 @@ func TestNewAdapter_RejectsNilRoot(t *testing.T) {
 }
 
 type runtimeRootFake struct {
-	observe func(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
+	observe   func(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
+	pause     func(context.Context, factoryruntime.PauseRequest) (factoryruntime.PauseResult, error)
+	resume    func(context.Context, factoryruntime.ResumeRequest) (factoryruntime.ResumeResult, error)
+	terminate func(context.Context, factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error)
+	moveWork  func(context.Context, factoryruntime.MoveWorkRequest) (factoryruntime.MoveWorkResult, error)
 }
 
 var _ factoryruntime.Service = (*runtimeRootFake)(nil)
 
-func (fake *runtimeRootFake) ControlPause(context.Context, factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
+func (fake *runtimeRootFake) ControlPause(ctx context.Context, req factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
+	if fake.pause != nil {
+		return fake.pause(ctx, req)
+	}
 	return factoryruntime.PauseResult{}, nil
 }
-func (fake *runtimeRootFake) ControlResume(context.Context, factoryruntime.ResumeRequest) (factoryruntime.ResumeResult, error) {
+func (fake *runtimeRootFake) ControlResume(ctx context.Context, req factoryruntime.ResumeRequest) (factoryruntime.ResumeResult, error) {
+	if fake.resume != nil {
+		return fake.resume(ctx, req)
+	}
 	return factoryruntime.ResumeResult{}, nil
 }
-func (fake *runtimeRootFake) ControlTerminate(context.Context, factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error) {
+func (fake *runtimeRootFake) ControlTerminate(ctx context.Context, req factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error) {
+	if fake.terminate != nil {
+		return fake.terminate(ctx, req)
+	}
 	return factoryruntime.TerminateResult{}, nil
 }
 func (*runtimeRootFake) ControlWaitToComplete(factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult {
@@ -69,7 +82,10 @@ func (*runtimeRootFake) ControlWaitToComplete(factoryruntime.WaitToCompleteReque
 	close(done)
 	return factoryruntime.WaitToCompleteResult{Done: done}
 }
-func (fake *runtimeRootFake) ControlMoveWork(context.Context, factoryruntime.MoveWorkRequest) (factoryruntime.MoveWorkResult, error) {
+func (fake *runtimeRootFake) ControlMoveWork(ctx context.Context, req factoryruntime.MoveWorkRequest) (factoryruntime.MoveWorkResult, error) {
+	if fake.moveWork != nil {
+		return fake.moveWork(ctx, req)
+	}
 	return factoryruntime.MoveWorkResult{}, nil
 }
 func (fake *runtimeRootFake) Observe(ctx context.Context, req factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
