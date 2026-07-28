@@ -790,6 +790,12 @@ response-stream output.
   remaining request-validation error and `FactoryInvocationResult` session
   result shape stay at their current boundary until Factory Session contracts
   converge; the Factory Session owner constructs that shared result.
+- Factory Sessions production Work imports are sealed by
+  `pkg/services/factory_sessions/work_import_boundary_test.go`
+  (`TestProductionPackagesImportWorkRootOnly`). Mirror
+  `pkg/services/recordings/runtime_import_boundary_test.go` when adding similar
+  CUT consumer-edge import proofs: `go list` every package under the Sessions
+  root and fail on any import outside `pkg/services/work`.
 - Work owner-local Wire at `pkg/services/work/wire` must stay registered under
   destination `work` in
   `docs/internal/packaged-service-structure/package-target-manifest.json`,
