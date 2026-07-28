@@ -3834,6 +3834,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/models/transports/mcp",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/models/wire",
       "disposition": "retain",
       "destination": "models",
