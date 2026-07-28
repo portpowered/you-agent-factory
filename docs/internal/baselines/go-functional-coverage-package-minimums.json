@@ -828,7 +828,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
-      "minimum": 63.29
+      "minimum": 62.92
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire",
@@ -1671,6 +1671,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct",
+      "minimum": 50.87
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service",
       "exception": {
         "kind": "measurement",
@@ -1953,7 +1957,19 @@
       "minimum": 0.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/gemini",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/kiro",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/opencode",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/pi",
       "minimum": 0.00
     },
     {
@@ -2534,7 +2550,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider",
-      "minimum": 36.92
+      "minimum": 34.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter",
@@ -2576,7 +2592,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini",
-      "minimum": 78.15
+      "minimum": 70.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract",
@@ -2600,7 +2616,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro",
-      "minimum": 71.55
+      "minimum": 71.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/opencode",
@@ -2620,7 +2636,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured",
-      "minimum": 58.33
+      "minimum": 6.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/runner",

@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	operatorsettingsservicewire "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
@@ -134,7 +134,7 @@ func assertRuntimePreserved(t *testing.T, got operatorsettings.RuntimeSettings) 
 }
 
 func operatorConfigService() operatorsettings.ConfigDocumentService {
-	return operatorsettingsservicewire.NewConfigDocumentService(
+	return settingswire.NewConfigDocumentService(
 		operatorConfigOS{},
 		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 			return os.CreateTemp(dir, pattern)

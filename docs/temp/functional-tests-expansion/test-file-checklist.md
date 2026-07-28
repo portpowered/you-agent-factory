@@ -784,7 +784,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCursorHistoricalInspectionThroughRootBuildProcess_PropagatesMissingAndContainmentFailures`.
   - `TestCursorHistoricalInspectionThroughRootBuildProcess_DegradesAdverseNativeDataSafely`.
 
-- [ ] `tests/functional/provider_sessions/details/codex_details_test.go`
+- [x] `tests/functional/provider_sessions/details/codex_details_test.go`
   - `TestCodexProviderSessionDetailsLoadFromGoldenMetadata` covers API detail.
   - `TestCodexProviderSessionMissingTranscriptReturnsNotFound` covers absence.
   - `TestCodexProviderSessionCorruptTranscriptReturnsSafeDiagnostic`.
@@ -973,3 +973,6 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/sessions/root_composition/peer_import_seal_test.go`
 - [x] `tests/functional/sessions/root_composition/work_admission_response_stream_test.go`
 - [x] `tests/functional/sessions/root_composition/work_peer_import_seal_test.go`
+- [x] `tests/functional/providers/gemini/process_harness_test.go`
+- [x] `tests/functional/providers/kiro/process_harness_test.go`
+- [x] `tests/functional/providers/pi/process_harness_test.go`

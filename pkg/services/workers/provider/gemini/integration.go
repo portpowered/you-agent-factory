@@ -2,47 +2,39 @@ package gemini
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
-// IntegrationDependencies are the optional execution collaborators used by the
-// registry-backed Gemini Integration on the neutral conductor path.
+// IntegrationDependencies are the Providers collaborators used by Gemini's
+// registry-backed integration on the neutral conductor path.
 type IntegrationDependencies struct {
-	CommandRunner workerprocess.CommandRunner
+	ProvidersService providers.Service
 }
 
-// Integration is Gemini's registry-backed inferencecontract implementation.
-// Factory Sessions and worker executors select it by manifest identity and
-// invoke it through the provider-neutral conductor.
+// Integration routes Gemini through the Providers root execution boundary.
 type Integration struct {
-	runner workerprocess.CommandRunner
+	providers providers.Service
 }
 
-// NewIntegration constructs the Gemini Integration. A nil command runner is
-// reserved for inert registry composition; Invoke requires an injected runner.
+// NewIntegration constructs Gemini's registry-backed integration.
 func NewIntegration(deps ...IntegrationDependencies) *Integration {
 	integration := &Integration{}
 	if len(deps) > 0 {
-		integration.runner = deps[0].CommandRunner
+		integration.providers = deps[0].ProvidersService
 	}
 	return integration
 }
 
-// Identity returns Gemini's stable registry/manifest identity.
 func (*Integration) Identity() inference.Identity {
 	return inference.Identity(modelprovider.ProviderGemini)
 }
 
-// MaximumCapabilities mirrors the authored Gemini manifest maximum.
 func (*Integration) MaximumCapabilities() inference.CapabilitySet {
 	return inference.NewCapabilitySet(
 		inference.CapabilityPromptSubmission,
@@ -50,186 +42,132 @@ func (*Integration) MaximumCapabilities() inference.CapabilitySet {
 	)
 }
 
-// Discover reports Gemini as ready for conductor-routed invocation.
 func (*Integration) Discover(context.Context) (inference.Discovery, error) {
 	return inference.NewDiscovery(inference.ReadinessReady), nil
 }
 
-// Capabilities returns the Gemini maximum set for the request.
 func (i *Integration) Capabilities(context.Context, inference.InvocationRequest) (inference.CapabilitySet, error) {
 	return i.MaximumCapabilities(), nil
 }
 
-// Invoke executes Gemini through provider-owned command construction and
-// publishes one safe terminal outcome through the conductor response writer.
+// Invoke executes Gemini through providers.Service and publishes final-only
+// progress before closing with exactly one terminal outcome.
 func (i *Integration) Invoke(
 	ctx context.Context,
 	request inference.InvocationRequest,
 	writer inference.ResponseWriter,
 ) error {
-	runner := i.commandRunner()
-	providerRequest := providerRequestFromInvocation(request)
-	built, err := NewAdapter().BuildCommand(ctx, adapter.CommandContext{
-		Request:         providerRequest,
-		SkipPermissions: providerRequest.SkipPermissions,
-	})
+	if i == nil || i.providers == nil {
+		failure := inference.NewFailure(inference.FailureInput{
+			Kind:    inference.FailureDependency,
+			Message: "Gemini Providers service is unavailable",
+		})
+		return writer.Close(ctx, inference.FailedCompletion(failure))
+	}
+	result, err := i.providers.Execute(ctx, executeRequestFromInvocation(request))
+	if errors.Is(ctx.Err(), context.Canceled) && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return ctx.Err()
+	}
 	if err != nil {
-		return writer.Close(ctx, inference.FailedCompletion(inference.NewFailure(inference.FailureInput{
-			Kind:    inference.FailureInvalidRequest,
-			Message: err.Error(),
-		})))
+		return writer.Close(ctx, inference.FailedCompletion(failureFromExecuteError(err)))
 	}
-	result, runErr := runner.Run(ctx, built.Request)
-	if errors.Is(runErr, context.Canceled) {
-		return runErr
-	}
-	classified := NewAdapter().ClassifyFailure(ctx, adapter.FailureContext{
-		CommandResult: result,
-		CommandError:  runErr,
-	})
-	if classified.Failure != nil {
-		return writer.Close(ctx, inference.FailedCompletion(failureFromAdapterFacts(*classified.Failure)))
-	}
-	if runErr != nil {
-		return writer.Close(ctx, inference.FailedCompletion(inference.NewFailure(inference.FailureInput{
-			Kind:    inference.FailureUnknown,
-			Message: "Gemini command did not complete successfully.",
-		})))
-	}
-	content := string(result.Stdout)
-	if err := writeFinalOnlyProgress(ctx, writer, request, content); err != nil {
+	if err := writeFinalOnlyProgress(ctx, writer, request.InvocationID(), result.Content); err != nil {
 		return err
 	}
 	return writer.Close(ctx, inference.SuccessfulCompletion(inference.NewResponse(inference.ResponseInput{
-		Content: content,
+		Content: result.Content,
 	})))
 }
 
-func (i *Integration) commandRunner() workerprocess.CommandRunner {
-	if i != nil && i.runner != nil {
-		return i.runner
+func executeRequestFromInvocation(request inference.InvocationRequest) providers.ExecuteRequest {
+	execution := request.Execution()
+	return providers.ExecuteRequest{
+		Provider:           providers.IDGemini,
+		AttemptID:          request.InvocationID(),
+		Model:              request.Model(),
+		SkipPermissions:    execution.SkipPermissions,
+		SystemPrompt:       request.SystemPrompt(),
+		UserMessage:        request.UserMessage(),
+		OutputSchema:       request.OutputSchema(),
+		WorkingDirectory:   execution.WorkingDirectory,
+		Worktree:           execution.Worktree,
+		ProcessEnvironment: append([]string(nil), execution.ProcessEnvironment...),
+		EnvVars:            cloneStringMap(execution.EnvVars),
+		WorkerType:         workerNameFromExecution(execution),
+		WorkstationName:    workstationNameFromExecution(execution),
 	}
-	return workerprocess.CommandRunnerWithLogging(nil, nil, nil)
 }
 
-func providerRequestFromInvocation(request inference.InvocationRequest) workerexecution.ProviderInferenceRequest {
-	providerRequest := request.Execution()
-	if providerRequest.Dispatch.DispatchID == "" {
-		providerRequest.Dispatch.DispatchID = request.InvocationID()
+func workerNameFromExecution(execution workers.ProviderInferenceRequest) string {
+	if execution.WorkerType != "" {
+		return execution.WorkerType
 	}
-	providerRequest.ModelProvider = string(modelprovider.ProviderGemini)
-	providerRequest.Model = request.Model()
-	providerRequest.SystemPrompt = request.SystemPrompt()
-	providerRequest.UserMessage = request.UserMessage()
-	providerRequest.OutputSchema = request.OutputSchema()
-	return providerRequest
+	return execution.Dispatch.WorkerType
 }
 
-func failureFromAdapterFacts(facts adapter.FailureFacts) inference.Failure {
+func workstationNameFromExecution(execution workers.ProviderInferenceRequest) string {
+	if execution.WorkstationType != "" {
+		return execution.WorkstationType
+	}
+	return execution.Dispatch.WorkstationName
+}
+
+func failureFromExecuteError(err error) inference.Failure {
+	var failure providers.ExecuteFailure
+	if errors.As(err, &failure) {
+		return inference.NewFailure(inference.FailureInput{
+			Kind:      executeFailureKind(failure.Kind),
+			Message:   strings.TrimSpace(failure.Message),
+			Retryable: failure.Kind == providers.ExecuteFailureKindThrottled,
+		})
+	}
+	if errors.Is(err, providers.ErrExecuteCancelled) {
+		return inference.NewFailure(inference.FailureInput{
+			Kind:    inference.FailureCanceled,
+			Message: "provider invocation was canceled",
+		})
+	}
+	if errors.Is(err, providers.ErrExecuteTimeout) {
+		return inference.NewFailure(inference.FailureInput{
+			Kind:      inference.FailureTimeout,
+			Message:   "Gemini request timed out.",
+			Retryable: true,
+		})
+	}
 	return inference.NewFailure(inference.FailureInput{
-		Kind:      failureKindFromWorkType(facts.Type),
-		Message:   facts.Message,
-		Retryable: facts.Retry.Retryable,
+		Kind:    inference.FailureUnknown,
+		Message: "Gemini invocation failed.",
 	})
 }
 
-func failureKindFromWorkType(failureType workerexecution.WorkFailureType) inference.FailureKind {
-	switch failureType {
-	case workerexecution.WorkFailureTypeTimeout:
+func executeFailureKind(kind providers.ExecuteFailureKind) inference.FailureKind {
+	switch kind {
+	case providers.ExecuteFailureKindCanceled:
+		return inference.FailureCanceled
+	case providers.ExecuteFailureKindTimeout:
 		return inference.FailureTimeout
-	case workerexecution.WorkFailureTypeThrottled:
-		return inference.FailureThrottled
-	case workerexecution.WorkFailureTypeAuthFailure:
+	case providers.ExecuteFailureKindAuthentication:
 		return inference.FailureAuthentication
-	case workerexecution.WorkFailureTypePermanentBadRequest:
+	case providers.ExecuteFailureKindInvalidRequest:
 		return inference.FailureInvalidRequest
-	case workerexecution.WorkFailureTypeMisconfigured:
+	case providers.ExecuteFailureKindThrottled:
+		return inference.FailureThrottled
+	case providers.ExecuteFailureKindDependency:
 		return inference.FailureDependency
 	default:
 		return inference.FailureUnknown
 	}
 }
 
-func writeFinalOnlyProgress(
-	ctx context.Context,
-	writer inference.ResponseWriter,
-	request inference.InvocationRequest,
-	content string,
-) error {
-	events, err := finalOnlyProgressEvents(request.InvocationID(), content)
-	if err != nil {
-		return err
+func cloneStringMap(values map[string]string) map[string]string {
+	if values == nil {
+		return nil
 	}
-	for _, event := range events {
-		if err := writer.WriteEvent(ctx, event); err != nil {
-			return err
-		}
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
 	}
-	return nil
-}
-
-func finalOnlyProgressEvents(runID, content string) ([]inference.EventDraft, error) {
-	provider := string(modelprovider.ProviderGemini)
-	started, err := finalOnlyRunEvent(runID, provider, workerexecution.PhaseStarted)
-	if err != nil {
-		return nil, err
-	}
-	message, err := finalOnlyMessageEvent(runID, provider, content)
-	if err != nil {
-		return nil, err
-	}
-	completed, err := finalOnlyRunEvent(runID, provider, workerexecution.PhaseCompleted)
-	if err != nil {
-		return nil, err
-	}
-	return []inference.EventDraft{started, message, completed}, nil
-}
-
-func finalOnlyRunEvent(runID, provider string, phase workerexecution.Phase) (inference.EventDraft, error) {
-	payload, err := json.Marshal(workerexecution.RunPayload{Status: string(phase)})
-	if err != nil {
-		return inference.EventDraft{}, fmt.Errorf("marshal Gemini run payload: %w", err)
-	}
-	return inference.NewEventDraft(inference.EventDraftInput{
-		RunID:   runID,
-		Kind:    workerexecution.KindRun,
-		Phase:   phase,
-		Payload: payload,
-		Provenance: workerexecution.Provenance{
-			Delivery:        workerexecution.DeliverySynthesized,
-			Fidelity:        workerexecution.FidelityLifecycleOnly,
-			NativeEventType: "command_completion",
-			Provider:        provider,
-			Representation:  workerexecution.RepresentationNotification,
-		},
-	})
-}
-
-func finalOnlyMessageEvent(runID, provider, content string) (inference.EventDraft, error) {
-	payload, err := json.Marshal(workerexecution.MessagePayload{
-		Role: "assistant",
-		ContentBlocks: []workerexecution.ContentBlock{{
-			Kind: workerexecution.ContentBlockText,
-			Text: strings.Clone(content),
-		}},
-	})
-	if err != nil {
-		return inference.EventDraft{}, fmt.Errorf("marshal Gemini message payload: %w", err)
-	}
-	return inference.NewEventDraft(inference.EventDraftInput{
-		RunID:   runID,
-		Kind:    workerexecution.KindMessage,
-		Phase:   workerexecution.PhaseCompleted,
-		ItemID:  "gemini-final",
-		Payload: payload,
-		Provenance: workerexecution.Provenance{
-			Delivery:        workerexecution.DeliveryNativeFinal,
-			Fidelity:        workerexecution.FidelityFinalOnly,
-			NativeEventType: "final_response",
-			Provider:        provider,
-			Representation:  workerexecution.RepresentationSnapshot,
-		},
-	})
+	return cloned
 }
 
 var _ inference.Integration = (*Integration)(nil)
