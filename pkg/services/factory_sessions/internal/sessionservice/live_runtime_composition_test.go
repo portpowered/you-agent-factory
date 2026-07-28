@@ -178,3 +178,60 @@ func TestService_LiveRegistryPathsDelegateThroughLiveRuntimeOwner(t *testing.T) 
 		t.Fatalf("open calls = %d, want 1", host.openCalls)
 	}
 }
+
+func TestService_ObserveForSessionReturnsNeutralObservationWithoutLegacySnapshot(t *testing.T) {
+	t.Parallel()
+
+	want := factoryruntime.Observation{
+		Status: factoryruntime.ObservationStatusActive,
+		Progress: factoryruntime.ObservationProgress{
+			TickCount:             9,
+			InFlightDispatchCount: 1,
+			TotalWorkCount:        3,
+			WorkCategories: factoryruntime.ObservationWorkCategories{
+				Processing: 1,
+				Terminal:   2,
+			},
+		},
+		Health: factoryruntime.ObservationHealth{
+			FactoryState:           string(interfaces.FactoryStateRunning),
+			LifecycleControlStatus: "RUNNING",
+		},
+	}
+	factory := &gatewayLifecycleFactory{
+		factoryState:     string(interfaces.FactoryStateRunning),
+		useObserveResult: true,
+		observeResult:    want,
+	}
+	session := &livesession.LiveSession{
+		ID: "sess-observe",
+		Runtime: &factorysessions.LiveRuntime{
+			Factory: factory,
+		},
+	}
+	host := &liveRuntimeEffectHost{
+		openTestHost: openTestHost{
+			sessions:       map[string]*livesession.LiveSession{session.ID: session},
+			requireSession: session,
+		},
+		factory: factory,
+	}
+	gateway := newLiveRuntimeCompositionGateway(t, host)
+
+	result, err := gateway.ObserveForSession(
+		context.Background(),
+		session.ID,
+		factoryruntime.ObserveRequest{Scope: factoryruntime.ObservationScopeFull},
+	)
+	if err != nil {
+		t.Fatalf("ObserveForSession: %v", err)
+	}
+	if result.Observation.Status != want.Status ||
+		result.Observation.Progress.TickCount != want.Progress.TickCount ||
+		result.Observation.Health.FactoryState != want.Health.FactoryState {
+		t.Fatalf("observation = %#v, want %#v", result.Observation, want)
+	}
+	if _, ok := any(factory).(factoryruntime.LegacySnapshotProvider); ok {
+		t.Fatal("peer-shaped session runtime must not implement LegacySnapshotProvider")
+	}
+}

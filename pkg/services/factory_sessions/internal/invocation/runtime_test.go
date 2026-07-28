@@ -34,30 +34,33 @@ func newInvocationTestSessionState() *sessionruntime.Service {
 	)
 }
 
-type invocationRuntimeFactory struct {
-	factory.Factory
+type peerShapedInvocationRuntime struct {
 	factory.Service
+	observation factory.Observation
 }
 
-func (invocationRuntimeFactory) Observe(context.Context, factory.ObserveRequest) (factory.ObserveResult, error) {
-	return factory.ObserveResult{
-		Observation: factory.Observation{
-			Status: factory.ObservationStatusIdle,
-			Health: factory.ObservationHealth{
-				FactoryState: string(interfaces.FactoryStateIdle),
-			},
-		},
-	}, nil
+func (runtime peerShapedInvocationRuntime) Observe(
+	_ context.Context,
+	req factory.ObserveRequest,
+) (factory.ObserveResult, error) {
+	if req.Scope == "" {
+		return factory.ObserveResult{}, factory.ErrInvalidObservationScope
+	}
+	return factory.ObserveResult{Observation: runtime.observation}, nil
 }
 
-func (invocationRuntimeFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net], error) {
+func (peerShapedInvocationRuntime) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
+	return nil, nil
+}
+
+type legacyInvocationRuntime struct {
+	peerShapedInvocationRuntime
+}
+
+func (runtime legacyInvocationRuntime) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net], error) {
 	return &interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net]{
 		FactoryState: string(interfaces.FactoryStateIdle),
 	}, nil
-}
-
-func (invocationRuntimeFactory) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
-	return nil, nil
 }
 
 type invocationHostedInstance struct {
@@ -106,9 +109,61 @@ func (handle invocationHostedHandle) RunDoneCh() <-chan struct{} { return handle
 
 var _ factory.HostedHandle = invocationHostedHandle{}
 
-func TestObserveRuntimeUsesRegisteredSessionFactory(t *testing.T) {
+func TestObserveRuntimeUsesServiceObservationWithoutLegacySnapshot(t *testing.T) {
+	t.Parallel()
+
 	sessions := newInvocationTestSessionState()
-	activeFactory := invocationRuntimeFactory{}
+	activeFactory := peerShapedInvocationRuntime{
+		observation: factory.Observation{
+			Status: factory.ObservationStatusIdle,
+			Health: factory.ObservationHealth{
+				FactoryState: string(interfaces.FactoryStateIdle),
+			},
+		},
+	}
+	if _, ok := any(activeFactory).(factory.LegacySnapshotProvider); ok {
+		t.Fatal("peer-shaped invocation runtime must not implement LegacySnapshotProvider")
+	}
+	instance := invocationHostedInstance{service: activeFactory}
+	sessions.Register(sessionruntime.Registration{
+		SessionID: "session-1",
+		Handle: &runtimebinding.SessionState{
+			Instance: instance,
+			Handle:   invocationHostedHandle{instance: instance, done: make(chan struct{})},
+		},
+		Runtime: &factorysessions.LiveRuntime{Factory: activeFactory},
+		Select:  true,
+	})
+
+	observation, err := invocationruntime.Observe(
+		context.Background(), sessions, "session-1",
+		sessioninvocation.SessionInvocationWaitInput{},
+		func(_ []interfaces.FactoryEvent, tick int) (interfaces.FactoryWorldState, error) {
+			return interfaces.FactoryWorldState{Tick: tick}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveRuntime: %v", err)
+	}
+	if observation.FactoryState != string(interfaces.FactoryStateIdle) || observation.ActiveWork {
+		t.Fatalf("observation = %#v, want idle factory state without active work", observation)
+	}
+}
+
+func TestObserveRuntimeUsesLegacySnapshotOnlyForMissingPrimaryClassification(t *testing.T) {
+	t.Parallel()
+
+	sessions := newInvocationTestSessionState()
+	activeFactory := legacyInvocationRuntime{
+		peerShapedInvocationRuntime: peerShapedInvocationRuntime{
+			observation: factory.Observation{
+				Status: factory.ObservationStatusIdle,
+				Health: factory.ObservationHealth{
+					FactoryState: string(interfaces.FactoryStateIdle),
+				},
+			},
+		},
+	}
 	instance := invocationHostedInstance{service: activeFactory}
 	sessions.Register(sessionruntime.Registration{
 		SessionID: "session-1",
@@ -131,6 +186,6 @@ func TestObserveRuntimeUsesRegisteredSessionFactory(t *testing.T) {
 		t.Fatalf("ObserveRuntime: %v", err)
 	}
 	if observation.FactoryState != string(interfaces.FactoryStateIdle) || observation.ActiveWork {
-		t.Fatalf("observation = %#v", observation)
+		t.Fatalf("observation = %#v, want idle factory state without active work", observation)
 	}
 }

@@ -23,10 +23,7 @@ func (h *unifiedLifecycleGatewayHost) DurableExecution() factorysessionexecution
 
 type lifecycleGatewayHost struct {
 	openTestHost
-	factory interface {
-		factory.Factory
-		factory.Service
-	}
+	factory   factory.Service
 	stopCalls []string
 }
 
@@ -41,6 +38,8 @@ func (h *lifecycleGatewayHost) StopLiveSession(sessionID string) error {
 
 type gatewayLifecycleFactory struct {
 	factoryState       string
+	observeResult      factory.Observation
+	useObserveResult   bool
 	subscribeFactoryFn func(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error)
 	pauseCalls         int
 	resumeCalls        int
@@ -87,7 +86,10 @@ func (f *gatewayLifecycleFactory) ControlMoveWork(
 	}, err
 }
 
-func (f *gatewayLifecycleFactory) Observe(context.Context, factory.ObserveRequest) (factory.ObserveResult, error) {
+func (f *gatewayLifecycleFactory) Observe(_ context.Context, _ factory.ObserveRequest) (factory.ObserveResult, error) {
+	if f.useObserveResult {
+		return factory.ObserveResult{Observation: f.observeResult}, nil
+	}
 	return factory.ObserveResult{
 		Observation: factory.Observation{
 			Health: factory.ObservationHealth{FactoryState: f.factoryState},
@@ -191,12 +193,6 @@ func TestService_ProbeFactoryEventsForSession_CancelsOwnedSubscription(t *testin
 	default:
 		t.Fatal("probe-owned subscription context remains active after probe")
 	}
-}
-
-func (f *gatewayLifecycleFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net], error) {
-	return &interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net]{
-		FactoryState: f.factoryState,
-	}, nil
 }
 
 func (f *gatewayLifecycleFactory) MoveWork(context.Context, string, string, work.WorkStateChangeSource, string) (work.OperatorMoveResult, error) {

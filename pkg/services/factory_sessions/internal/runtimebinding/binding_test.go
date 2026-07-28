@@ -194,7 +194,6 @@ func TestShutdownOtherLiveSessionsKeepsExceptAndJoinsFailures(t *testing.T) {
 }
 
 type replacementFactory struct {
-	factory.Factory
 	factory.Service
 }
 
@@ -203,10 +202,12 @@ func (replacementFactory) Run(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (replacementFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net], error) {
-	return &interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net]{
-		RuntimeStatus: interfaces.RuntimeStatusActive,
-		FactoryState:  string(interfaces.FactoryStateRunning),
+func (replacementFactory) Observe(context.Context, factory.ObserveRequest) (factory.ObserveResult, error) {
+	return factory.ObserveResult{
+		Observation: factory.Observation{
+			Status: factory.ObservationStatusActive,
+			Health: factory.ObservationHealth{FactoryState: string(interfaces.FactoryStateRunning)},
+		},
 	}, nil
 }
 

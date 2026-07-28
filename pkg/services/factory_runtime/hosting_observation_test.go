@@ -126,3 +126,48 @@ func TestPeerShapedServiceFakeObservesWithoutLegacySnapshot(t *testing.T) {
 		t.Fatalf("observation = %#v, want %#v", result.Observation, want)
 	}
 }
+
+func TestPeerShapedServiceFakeObserveScopedViewsWithoutPetriMarkings(t *testing.T) {
+	t.Parallel()
+
+	observation := factoryruntime.Observation{
+		Status: factoryruntime.ObservationStatusActive,
+		Progress: factoryruntime.ObservationProgress{
+			TickCount:             12,
+			InFlightDispatchCount: 2,
+			WorkCategories: factoryruntime.ObservationWorkCategories{
+				Processing: 2,
+			},
+		},
+		Health: factoryruntime.ObservationHealth{
+			FactoryState:           "RUNNING",
+			LifecycleControlStatus: "RUNNING",
+			ActiveThrottlePauses: []interfaces.ActiveThrottlePause{{
+				LaneID: "openai/gpt-5",
+			}},
+		},
+	}
+	runtime := &peerShapedRuntimeService{observation: observation}
+
+	progress, err := runtime.Observe(context.Background(), factoryruntime.ObserveRequest{
+		Scope: factoryruntime.ObservationScopeProgress,
+	})
+	if err != nil {
+		t.Fatalf("Observe(PROGRESS): %v", err)
+	}
+	if progress.Observation.Progress.TickCount != 12 || progress.Observation.Progress.InFlightDispatchCount != 2 {
+		t.Fatalf("progress observation = %#v, want tick 12 and two in-flight dispatches", progress.Observation.Progress)
+	}
+
+	health, err := runtime.Observe(context.Background(), factoryruntime.ObserveRequest{
+		Scope: factoryruntime.ObservationScopeHealth,
+	})
+	if err != nil {
+		t.Fatalf("Observe(HEALTH): %v", err)
+	}
+	if health.Observation.Health.FactoryState != "RUNNING" ||
+		len(health.Observation.Health.ActiveThrottlePauses) != 1 ||
+		health.Observation.Health.ActiveThrottlePauses[0].LaneID != "openai/gpt-5" {
+		t.Fatalf("health observation = %#v, want RUNNING with one throttle pause", health.Observation.Health)
+	}
+}

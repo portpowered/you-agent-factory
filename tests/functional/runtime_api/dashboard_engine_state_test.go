@@ -147,17 +147,13 @@ func waitForPublicWorkInPlace(t *testing.T, baseURL, placeID, workID string, tim
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		session := support.GetDefaultSession(t, baseURL)
-		if session.Runtime.Petri != nil {
-			for _, token := range session.Runtime.Petri.Marking {
-				if token.PlaceId == placeID && token.WorkId == workID {
-					return
-				}
-			}
+		listed := support.ListDefaultSessionWork(t, baseURL)
+		if support.HasWorkAtCustomerState(listed, workID, placeID) {
+			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for work %q in %s", workID, placeID)
+	t.Fatalf("timed out waiting for work %q at public location %q", workID, placeID)
 }
 
 type functionalWorldViewProvider struct {
