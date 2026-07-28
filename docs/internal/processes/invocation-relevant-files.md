@@ -635,6 +635,11 @@ response-stream output.
   `io.Writer`, queue capacity, backpressure, or final-write ordering as their
   policy source of truth on that seam. Characterization proof:
   `TestRootContractInvariants_AllSlicesThroughSingularRoot`.
+- Factory Visualization production packages may import Factory Runtime only
+  through `pkg/services/factory_runtime`; nested Runtime implementation,
+  Petri, and legacy helper paths are forbidden. Inventory proof:
+  `pkg/services/factory_visualization/runtime_import_boundary_test.go`
+  (`TestProductionPackagesImportFactoryRuntimeRootOnly`).
 - Shared ordered output serialization and final-once terminal write helpers
   (transport-shaped, non-authority):
   `pkg/services/factory_visualization/factory_event_stream.go`,
