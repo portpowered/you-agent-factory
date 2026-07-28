@@ -127,6 +127,17 @@ func mapRootError(err error) ToolErrorEnvelope {
 			},
 		}
 	}
+	var presErr *factoryvisualization.PresentationError
+	if errors.As(err, &presErr) {
+		return ToolErrorEnvelope{
+			Code:      "factory_visualization.presentation." + strings.ToLower(string(presErr.Kind)),
+			Message:   presErr.Error(),
+			Retryable: false,
+			Details: map[string]any{
+				"kind": string(presErr.Kind),
+			},
+		}
+	}
 	return ToolErrorEnvelope{
 		Code:      errorCodeBadRequest,
 		Message:   strings.TrimSpace(err.Error()),

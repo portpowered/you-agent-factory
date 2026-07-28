@@ -61,6 +61,26 @@ var canonicalToolHandlers = map[string]canonicalToolHandler{
 			return Observe(ctx, root, request)
 		})
 	},
+	ToolOpenPresentation: func(ctx context.Context, root factoryvisualization.Root, input json.RawMessage) (json.RawMessage, error) {
+		return callToolJSON(input, "decode open_presentation input", func(request OpenPresentationInput) ToolResponse[factoryvisualization.OpenPresentationResult] {
+			return OpenPresentation(ctx, root, request)
+		})
+	},
+	ToolPresentProgress: func(ctx context.Context, root factoryvisualization.Root, input json.RawMessage) (json.RawMessage, error) {
+		return callToolJSON(input, "decode present_progress input", func(request PresentProgressInput) ToolResponse[factoryvisualization.PresentProgressResult] {
+			return PresentProgress(ctx, root, request)
+		})
+	},
+	ToolFinalizePresentation: func(ctx context.Context, root factoryvisualization.Root, input json.RawMessage) (json.RawMessage, error) {
+		return callToolJSON(input, "decode finalize_presentation input", func(request FinalizePresentationInput) ToolResponse[factoryvisualization.FinalizePresentationResult] {
+			return FinalizePresentation(ctx, root, request)
+		})
+	},
+	ToolClosePresentation: func(ctx context.Context, root factoryvisualization.Root, input json.RawMessage) (json.RawMessage, error) {
+		return callToolJSON(input, "decode close_presentation input", func(request ClosePresentationInput) ToolResponse[factoryvisualization.ClosePresentationResult] {
+			return ClosePresentation(ctx, root, request)
+		})
+	},
 }
 
 // IsCanonicalToolHandlerRegistered reports whether the live CallTool path
