@@ -134,9 +134,6 @@ func TestNewService_StubMethodsReturnTypedFailuresUntilRelocation(t *testing.T) 
 	}
 
 	ctx := context.Background()
-	if _, err := svc.CaptureFactorySnapshot(ctx, factorydefinitions.CaptureFactorySnapshotRequest{}); err != factorydefinitions.ErrInvalidFactorySnapshotPayload {
-		t.Fatalf("CaptureFactorySnapshot = %v, want ErrInvalidFactorySnapshotPayload", err)
-	}
 	if _, err := svc.PrepareFactorySnapshotImport(ctx, factorydefinitions.PrepareFactorySnapshotImportRequest{}); err != factorydefinitions.ErrInvalidFactorySnapshotPayload {
 		t.Fatalf("PrepareFactorySnapshotImport = %v, want ErrInvalidFactorySnapshotPayload", err)
 	}

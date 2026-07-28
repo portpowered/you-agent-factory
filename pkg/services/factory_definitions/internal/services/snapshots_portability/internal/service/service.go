@@ -1,12 +1,17 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
+	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
 )
 
 // Service is the private nested snapshots_portability implementation behind
@@ -51,7 +56,7 @@ func New(
 
 func (s *Service) CaptureFactorySnapshot(
 	ctx context.Context,
-	_ factorydefinitions.CaptureFactorySnapshotRequest,
+	request factorydefinitions.CaptureFactorySnapshotRequest,
 ) (factorydefinitions.CaptureFactorySnapshotResult, error) {
 	if err := s.requirePorts(); err != nil {
 		return factorydefinitions.CaptureFactorySnapshotResult{}, err
@@ -59,7 +64,45 @@ func (s *Service) CaptureFactorySnapshot(
 	if err := ctx.Err(); err != nil {
 		return factorydefinitions.CaptureFactorySnapshotResult{}, err
 	}
-	return factorydefinitions.CaptureFactorySnapshotResult{}, factorydefinitions.ErrInvalidFactorySnapshotPayload
+	canonical := bytes.TrimSpace(request.Canonical)
+	if len(canonical) == 0 || bytes.Equal(canonical, []byte("{")) {
+		return factorydefinitions.CaptureFactorySnapshotResult{}, factorydefinitions.ErrInvalidFactorySnapshotPayload
+	}
+	if !isJSONObjectCanonical(canonical) {
+		return factorydefinitions.CaptureFactorySnapshotResult{}, factorydefinitions.ErrInvalidFactorySnapshotPayload
+	}
+
+	loaded, err := s.loadCanonical(canonical, nil)
+	if err != nil {
+		return factorydefinitions.CaptureFactorySnapshotResult{}, invalidSnapshotPayloadErr(err)
+	}
+	if loaded == nil || loaded.FactoryConfig() == nil {
+		return factorydefinitions.CaptureFactorySnapshotResult{}, factorydefinitions.ErrInvalidFactorySnapshotPayload
+	}
+
+	factoryDir := strings.TrimSpace(request.FactoryDir)
+	if factoryDir == "" {
+		factoryDir = loaded.FactoryDir()
+	}
+
+	factoryCfg, err := s.preparePortable(factoryDir, loaded.FactoryConfig(), true)
+	if err != nil {
+		return factorydefinitions.CaptureFactorySnapshotResult{}, fmt.Errorf("prepare portable factory config: %w", err)
+	}
+
+	preparedSource := snapshotsportabilitycapture.NewExplicitSource(
+		factoryDir,
+		factoryCfg,
+		loaded,
+	)
+	snapshot, err := s.captureLoaded(preparedSource, factoryDir, nil)
+	if err != nil {
+		return factorydefinitions.CaptureFactorySnapshotResult{}, err
+	}
+	if snapshot == nil {
+		return factorydefinitions.CaptureFactorySnapshotResult{}, factorydefinitions.ErrInvalidFactorySnapshotPayload
+	}
+	return factorydefinitions.CaptureFactorySnapshotResult{Snapshot: snapshot}, nil
 }
 
 func (s *Service) PrepareFactorySnapshotImport(
@@ -86,6 +129,25 @@ func (s *Service) MaterializeFactorySnapshot(
 		return factorydefinitions.MaterializeFactorySnapshotResult{}, err
 	}
 	return factorydefinitions.MaterializeFactorySnapshotResult{}, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize
+}
+
+func isJSONObjectCanonical(canonical []byte) bool {
+	var decoded any
+	if err := json.Unmarshal(canonical, &decoded); err != nil {
+		return false
+	}
+	_, ok := decoded.(map[string]any)
+	return ok
+}
+
+func invalidSnapshotPayloadErr(err error) error {
+	if err == nil {
+		return factorydefinitions.ErrInvalidFactorySnapshotPayload
+	}
+	if errors.Is(err, factorydefinitions.ErrInvalidNamedFactory) {
+		return factorydefinitions.ErrInvalidFactorySnapshotPayload
+	}
+	return err
 }
 
 func (s *Service) requirePorts() error {
