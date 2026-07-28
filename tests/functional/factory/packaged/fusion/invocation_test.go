@@ -83,6 +83,241 @@ func TestPackagedFusionRequiredInputCompletes(t *testing.T) {
 	}
 }
 
+// TestPackagedFusionOptionalInputsReachWorkers proves that optional fusion
+// provider, model, and effort overrides reach the drafter and refiner workers
+// and are observable on public dispatch execution selection and agent-run
+// diagnostics when invoking @you/fusion through the packaged invocation API.
+func TestPackagedFusionOptionalInputsReachWorkers(t *testing.T) {
+	input := fmt.Sprintf(
+		"functional packaged fusion optional overrides %d",
+		time.Now().UnixNano(),
+	)
+
+	factoryDir := support.InstallPackagedFactory(
+		t,
+		t.TempDir(),
+		factorydefinitions.PackagedFusionFactoryName,
+	)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+
+	args := map[string]any{
+		"input":           input,
+		"firstProvider":   "CLAUDE",
+		"secondProvider":  "CODEX",
+		"firstModel":      "claude-sonnet-4-20250514",
+		"secondModel":     "gpt-5",
+		"firstEffort":     "low",
+		"secondEffort":    "high",
+		"output":          "fusion-optional-overrides.md",
+	}
+	response := startPackagedFusionInvocation(
+		t,
+		server,
+		"packaged-fusion-optional-inputs",
+		args,
+	)
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
+	}
+	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+		t.Fatalf("primary result = %#v, want one refined result part", response.PrimaryResult)
+	}
+
+	dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
+	if len(dispatches) != 2 {
+		t.Fatalf("dispatch count = %d, want drafter and refiner dispatches", len(dispatches))
+	}
+	wantWorkstations := []string{"draft-fusion", "refine-fusion"}
+	for index, dispatch := range dispatches {
+		if dispatch.Request.TransitionId != wantWorkstations[index] {
+			t.Fatalf(
+				"dispatch[%d] transition = %q, want %q in documented order",
+				index,
+				dispatch.Request.TransitionId,
+				wantWorkstations[index],
+			)
+		}
+	}
+
+	events := server.GetFactoryEvents(t)
+	modelRequests := modelRequestsByWorker(t, events)
+	assertFusionModelRequest(
+		t,
+		modelRequests,
+		"fusion-drafter",
+		"claude-sonnet-4-20250514",
+	)
+	assertFusionModelRequest(t, modelRequests, "fusion-refiner", "gpt-5")
+
+	providersByDispatch := inferenceProvidersByDispatchID(t, events)
+	assertFusionInferenceProvider(
+		t,
+		providersByDispatch,
+		dispatches[0].DispatchID,
+		"draft-fusion",
+		"claude",
+	)
+	assertFusionInferenceProvider(
+		t,
+		providersByDispatch,
+		dispatches[1].DispatchID,
+		"refine-fusion",
+		"codex",
+	)
+
+	effortByDispatch := agentRunSystemSummariesByDispatchID(t, events)
+	if !strings.Contains(effortByDispatch[dispatches[0].DispatchID], "Reasoning effort: low") {
+		t.Fatalf(
+			"drafter agent-run system summary = %q, want firstEffort override",
+			effortByDispatch[dispatches[0].DispatchID],
+		)
+	}
+	if !strings.Contains(effortByDispatch[dispatches[1].DispatchID], "Reasoning effort: high") {
+		t.Fatalf(
+			"refiner agent-run system summary = %q, want secondEffort override",
+			effortByDispatch[dispatches[1].DispatchID],
+		)
+	}
+}
+
+func modelRequestsByWorker(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+) map[string]factoryapi.ModelRequestEventPayload {
+	t.Helper()
+
+	requests := make(map[string]factoryapi.ModelRequestEventPayload)
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeModelRequest {
+			continue
+		}
+		payload, err := event.Payload.AsModelRequestEventPayload()
+		if err != nil {
+			t.Fatalf("decode MODEL_REQUEST: %v", err)
+		}
+		requests[payload.Worker] = payload
+	}
+	return requests
+}
+
+func inferenceProvidersByDispatchID(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+) map[string]string {
+	t.Helper()
+
+	providers := make(map[string]string)
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+			continue
+		}
+		if event.Context.DispatchId == nil || *event.Context.DispatchId == "" {
+			continue
+		}
+		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode INFERENCE_RESPONSE: %v", err)
+		}
+		if payload.Diagnostics == nil || payload.Diagnostics.Provider == nil ||
+			payload.Diagnostics.Provider.Provider == nil {
+			t.Fatalf(
+				"INFERENCE_RESPONSE for dispatch %q missing provider diagnostics: %#v",
+				*event.Context.DispatchId,
+				payload,
+			)
+		}
+		providers[*event.Context.DispatchId] = *payload.Diagnostics.Provider.Provider
+	}
+	return providers
+}
+
+func agentRunSystemSummariesByDispatchID(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+) map[string]string {
+	t.Helper()
+
+	summaries := make(map[string]string)
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeAgentRunResponse {
+			continue
+		}
+		if event.Context.DispatchId == nil || *event.Context.DispatchId == "" {
+			continue
+		}
+		payload, err := event.Payload.AsAgentRunResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode AGENT_RUN_RESPONSE: %v", err)
+		}
+		if payload.Diagnostics == nil || payload.Diagnostics.AgentRun == nil ||
+			payload.Diagnostics.AgentRun.Transcript == nil {
+			t.Fatalf(
+				"AGENT_RUN_RESPONSE for dispatch %q missing transcript diagnostics: %#v",
+				*event.Context.DispatchId,
+				payload,
+			)
+		}
+		for _, entry := range *payload.Diagnostics.AgentRun.Transcript {
+			if entry.Role != nil && *entry.Role == "system" && entry.Summary != nil {
+				summaries[*event.Context.DispatchId] = *entry.Summary
+				break
+			}
+		}
+	}
+	return summaries
+}
+
+func assertFusionModelRequest(
+	t *testing.T,
+	requests map[string]factoryapi.ModelRequestEventPayload,
+	workerName, wantModel string,
+) {
+	t.Helper()
+
+	payload, ok := requests[workerName]
+	if !ok {
+		t.Fatalf("model requests = %#v, want %q MODEL_REQUEST", requests, workerName)
+	}
+	if payload.Model != wantModel {
+		t.Fatalf(
+			"%s model request model = %q, want override %q",
+			workerName,
+			payload.Model,
+			wantModel,
+		)
+	}
+}
+
+func assertFusionInferenceProvider(
+	t *testing.T,
+	providersByDispatch map[string]string,
+	dispatchID, workstationName, wantProvider string,
+) {
+	t.Helper()
+
+	gotProvider, ok := providersByDispatch[dispatchID]
+	if !ok {
+		t.Fatalf(
+			"inference providers = %#v, want provider diagnostics for %q dispatch %q",
+			providersByDispatch,
+			workstationName,
+			dispatchID,
+		)
+	}
+	if gotProvider != wantProvider {
+		t.Fatalf(
+			"%s inference provider = %q, want override %q",
+			workstationName,
+			gotProvider,
+			wantProvider,
+		)
+	}
+}
+
 func startPackagedFusionInvocation(
 	t *testing.T,
 	server *support.FunctionalAPIServer,
