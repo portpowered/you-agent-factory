@@ -118,10 +118,12 @@
     "pkg/services/factory_definitions/internal/services/distribution/wire",
     "pkg/services/factory_definitions/internal/services/snapshots_portability",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
     "pkg/services/factory_definitions/internal/services/validation",
     "pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
@@ -936,38 +938,48 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability",
-      "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
-      "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
-      "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
-      "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
-      "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
-      "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
-      "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/validation",
@@ -1102,7 +1114,7 @@
     {
       "packagePath": "pkg/services/factory_definitions/replayconfig",
       "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "destination": "factory_definitions/internal/services/snapshots_portability"
     },
     {
       "packagePath": "pkg/services/factory_definitions/resource",

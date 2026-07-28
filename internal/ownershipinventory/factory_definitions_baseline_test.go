@@ -124,6 +124,8 @@ func factoryDefinitionsCanonicalRetainRest(rest string) bool {
 		return true
 	case strings.HasPrefix(rest, "internal/services/distribution"):
 		return true
+	case strings.HasPrefix(rest, "internal/services/snapshots_portability"):
+		return true
 	case strings.HasPrefix(rest, "internal/contracts"):
 		return true
 	case rest == "namevalue" || strings.HasPrefix(rest, "namevalue/"):
