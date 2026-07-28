@@ -26,6 +26,9 @@ func GetCurrent(ctx context.Context, root DefinitionsRoot, input GetCurrentInput
 		envelope := decodeInputErrorEnvelope("get current factory", errMissingRequestContext)
 		return ToolResponse[factoryapi.Factory]{Error: &envelope}
 	}
+	if response, done := requestContextErrorResponse[factoryapi.Factory](ctx); done {
+		return response
+	}
 	if root == nil {
 		envelope := unavailableDefinitionsErrorEnvelope()
 		return ToolResponse[factoryapi.Factory]{Error: &envelope}
@@ -45,6 +48,9 @@ func SaveCurrent(ctx context.Context, root DefinitionsRoot, input SaveCurrentInp
 	if ctx == nil {
 		envelope := decodeInputErrorEnvelope("save current factory", errMissingRequestContext)
 		return ToolResponse[factoryapi.Factory]{Error: &envelope}
+	}
+	if response, done := requestContextErrorResponse[factoryapi.Factory](ctx); done {
+		return response
 	}
 	if root == nil {
 		envelope := unavailableDefinitionsErrorEnvelope()

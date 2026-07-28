@@ -38,6 +38,9 @@ func InstallPackaged(
 		envelope := decodeInputErrorEnvelope("install packaged factory", errMissingRequestContext)
 		return ToolResponse[InstallPackagedResult]{Error: &envelope}
 	}
+	if response, done := requestContextErrorResponse[InstallPackagedResult](ctx); done {
+		return response
+	}
 	if install == nil {
 		envelope := unavailableInstallErrorEnvelope()
 		return ToolResponse[InstallPackagedResult]{Error: &envelope}

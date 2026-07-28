@@ -1,6 +1,7 @@
 package factorydefinition
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -12,6 +13,10 @@ import (
 
 const (
 	errorCodeBadRequest                 = "BAD_REQUEST"
+	errorCodeRequestCanceled            = "factory_definition.request.canceled"
+	errorCodeRequestTimedOut            = "factory_definition.request.timed_out"
+	errorMessageRequestCanceled         = "factory definition request was canceled"
+	errorMessageRequestTimedOut         = "factory definition request timed out"
 	errorCodeInvalidFactory             = "INVALID_FACTORY"
 	errorCodeSessionNotFound            = "factory_definition.session.not_found"
 	errorCodeCurrentFactoryNotFound     = "factory_definition.current_factory.not_found"
@@ -30,6 +35,48 @@ const (
 	invalidFactoryDefinitionMessage   = "Factory payload is not a valid Agent Factory definition."
 	invalidRequestPayloadMessage      = "invalid request payload"
 )
+
+func requestContextErrorResponse[T any](ctx context.Context) (ToolResponse[T], bool) {
+	if envelope, ok := contextRequestErrorEnvelope(ctx.Err()); ok {
+		return ToolResponse[T]{Error: &envelope}, true
+	}
+	return ToolResponse[T]{}, false
+}
+
+func contextRequestErrorEnvelope(err error) (ToolErrorEnvelope, bool) {
+	if err == nil {
+		return ToolErrorEnvelope{}, false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return contextDeadlineExceededErrorEnvelope(), true
+	}
+	if errors.Is(err, context.Canceled) {
+		return contextCanceledErrorEnvelope(), true
+	}
+	return ToolErrorEnvelope{}, false
+}
+
+func contextCanceledErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeRequestCanceled,
+		Message:   errorMessageRequestCanceled,
+		Retryable: false,
+		Details: map[string]any{
+			"reason": "CANCELED",
+		},
+	}
+}
+
+func contextDeadlineExceededErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeRequestTimedOut,
+		Message:   errorMessageRequestTimedOut,
+		Retryable: true,
+		Details: map[string]any{
+			"reason": "TIMED_OUT",
+		},
+	}
+}
 
 func decodeInputErrorEnvelope(operation string, err error) ToolErrorEnvelope {
 	return ToolErrorEnvelope{
@@ -136,6 +183,9 @@ func currentFactoryErrorEnvelope(sessionID string, action string, err error) Too
 	if err == nil {
 		return opaqueCurrentFactoryErrorEnvelope(action)
 	}
+	if envelope, ok := contextRequestErrorEnvelope(err); ok {
+		return envelope
+	}
 	if envelope, ok := validationErrorEnvelope(err); ok {
 		return envelope
 	}
@@ -219,6 +269,9 @@ func missingPackageIdentityErrorEnvelope() ToolErrorEnvelope {
 func installPackagedErrorEnvelope(err error) ToolErrorEnvelope {
 	if err == nil {
 		return opaqueInstallPackagedErrorEnvelope()
+	}
+	if envelope, ok := contextRequestErrorEnvelope(err); ok {
+		return envelope
 	}
 	if envelope, ok := unknownPackagedFactoryErrorEnvelope(err); ok {
 		return envelope

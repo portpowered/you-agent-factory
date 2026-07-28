@@ -20,6 +20,9 @@ func Validate(
 		envelope := decodeInputErrorEnvelope("validate factory definition", errMissingRequestContext)
 		return ToolResponse[factoryapi.FactoryValidationResult]{Error: &envelope}
 	}
+	if response, done := requestContextErrorResponse[factoryapi.FactoryValidationResult](ctx); done {
+		return response
+	}
 	if validation == nil {
 		envelope := unavailableValidationErrorEnvelope()
 		return ToolResponse[factoryapi.FactoryValidationResult]{Error: &envelope}
@@ -27,6 +30,9 @@ func Validate(
 
 	result, err := validationentry.ValidateFactoryAPI(ctx, factory, validation)
 	if err != nil {
+		if envelope, ok := contextRequestErrorEnvelope(err); ok {
+			return ToolResponse[factoryapi.FactoryValidationResult]{Error: &envelope}
+		}
 		if envelope, ok := validationErrorEnvelope(err); ok {
 			return ToolResponse[factoryapi.FactoryValidationResult]{Error: &envelope}
 		}
