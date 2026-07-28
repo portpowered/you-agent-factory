@@ -436,6 +436,113 @@ func TestAPIFactorySessionNotFoundUsesTypedError(t *testing.T) {
 	}
 }
 
+// TestAPIMultipleFactorySessionsRemainIsolated proves the public HTTP Factory Session
+// boundary keeps concurrently open sessions isolated: opening at least two live sessions
+// lists both as distinct entries, and closing one session leaves the other gettable and
+// listable with its original public identity without adopting the closed session's state.
+func TestAPIMultipleFactorySessionsRemainIsolated(t *testing.T) {
+	primaryFactoryDir := support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     primaryFactoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	baseURL := strings.TrimSuffix(server.URL(), "/")
+
+	firstFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-api-factory-a")
+	if err := os.Mkdir(firstFactoryDir, 0o755); err != nil {
+		t.Fatalf("create first factory directory: %v", err)
+	}
+	firstSession := openSessionViaAPI(t, baseURL, firstFactoryDir)
+
+	secondFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-api-factory-b")
+	if err := os.Mkdir(secondFactoryDir, 0o755); err != nil {
+		t.Fatalf("create second factory directory: %v", err)
+	}
+	secondSession := openSessionViaAPI(t, baseURL, secondFactoryDir)
+
+	if firstSession.id == secondSession.id {
+		t.Fatalf("session ids must be distinct: first=%q second=%q", firstSession.id, secondSession.id)
+	}
+
+	listed := support.GetJSON[factoryapi.ListFactorySessionsResponse](t, baseURL+"/factory-sessions")
+	if !sessionListContains(listed.Sessions, firstSession.id, firstFactoryDir) {
+		t.Fatalf("list sessions missing first session %q at %q: %#v", firstSession.id, firstFactoryDir, listed.Sessions)
+	}
+	if !sessionListContains(listed.Sessions, secondSession.id, secondFactoryDir) {
+		t.Fatalf("list sessions missing second session %q at %q: %#v", secondSession.id, secondFactoryDir, listed.Sessions)
+	}
+	assertDistinctSessionListEntries(t, listed.Sessions, firstSession.id, secondSession.id)
+
+	closeSessionViaAPI(t, baseURL, firstSession.id)
+	assertAPISessionNotFound(t, baseURL, firstSession.id)
+
+	afterClose := support.GetJSON[factoryapi.ListFactorySessionsResponse](t, baseURL+"/factory-sessions")
+	if sessionListContains(afterClose.Sessions, firstSession.id, firstFactoryDir) {
+		t.Fatalf("list sessions after close still contains closed session %q at %q: %#v",
+			firstSession.id, firstFactoryDir, afterClose.Sessions)
+	}
+	if !sessionListContains(afterClose.Sessions, secondSession.id, secondFactoryDir) {
+		t.Fatalf("list sessions after close missing surviving session %q at %q: %#v",
+			secondSession.id, secondFactoryDir, afterClose.Sessions)
+	}
+
+	selected := support.GetJSON[factoryapi.FactorySessionGetResponse](
+		t,
+		baseURL+"/factory-sessions/"+secondSession.id,
+	)
+	resolved, err := selected.AsFactorySession()
+	if err != nil {
+		t.Fatalf("decode surviving session get response: %v", err)
+	}
+	if resolved.Id != secondSession.id {
+		t.Fatalf("surviving session get id = %q, want %q", resolved.Id, secondSession.id)
+	}
+	if resolved.Id == firstSession.id {
+		t.Fatalf("surviving session must not adopt closed session id %q", firstSession.id)
+	}
+	if resolved.FolderPath != secondFactoryDir {
+		t.Fatalf("surviving session folder path = %q, want %q", resolved.FolderPath, secondFactoryDir)
+	}
+	if resolved.FolderPath == firstFactoryDir {
+		t.Fatalf("surviving session must not adopt closed session folder %q", firstFactoryDir)
+	}
+	if resolved.Runtime.Status == "" {
+		t.Fatalf("surviving session missing runtime status markers: %#v", resolved)
+	}
+}
+
+type apiOpenedSession struct {
+	id         string
+	folderPath string
+}
+
+func openSessionViaAPI(t *testing.T, baseURL, factoryDir string) apiOpenedSession {
+	t.Helper()
+
+	initNewFactory := true
+	opened := postSessionLifecycleJSON[factoryapi.OpenFactorySessionResponse](
+		t,
+		baseURL+"/factory-sessions",
+		factoryapi.OpenFactorySessionRequest{
+			FolderPath:     factoryDir,
+			InitNewFactory: &initNewFactory,
+		},
+		fmt.Sprintf("open Factory Session at %q", factoryDir),
+	)
+	if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" {
+		t.Fatalf("open session response for %q missing session id: %#v", factoryDir, opened)
+	}
+	if opened.Session.FolderPath != factoryDir {
+		t.Fatalf("open session folder path for %q = %q, want %q", factoryDir, opened.Session.FolderPath, factoryDir)
+	}
+	return apiOpenedSession{
+		id:         opened.Session.Id,
+		folderPath: factoryDir,
+	}
+}
+
 type cliCreatedSession struct {
 	id         string
 	folderPath string
