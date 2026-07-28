@@ -9,7 +9,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	operatorsettingsservicewire "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
@@ -252,7 +252,7 @@ func TestGeneratedLoaderAndConfigDocumentServiceAgreeOnEffectiveConfig(t *testin
 			if err != nil {
 				t.Fatalf("LoadFileConfig() error = %v", err)
 			}
-			document, err := operatorsettingsservicewire.NewConfigDocumentService(
+			document, err := settingswire.NewConfigDocumentService(
 				files,
 				nil,
 				globalconfig.Decode,

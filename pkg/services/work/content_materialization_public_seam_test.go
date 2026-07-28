@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workservice "github.com/portpowered/infinite-you/pkg/services/work/service"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 )
 
@@ -41,7 +40,7 @@ func newPublicWorkRootMaterializer(t *testing.T) work.ContentMaterializer {
 
 func newPublicWorkRootWithMaterialization(t *testing.T) work.Service {
 	t.Helper()
-	return workservice.NewService(nil, nil, nil, newPublicWorkRootMaterializer(t))
+	return workwire.NewRuntimeService(nil, nil, nil, newPublicWorkRootMaterializer(t))
 }
 
 func TestPublicWorkRootMaterializationSeamSuccessLocalFile(t *testing.T) {

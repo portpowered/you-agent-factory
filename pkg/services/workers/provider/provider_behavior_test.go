@@ -18,7 +18,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	geminipkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 )
 
 func TestClaudeProviderBehavior_BuildArgs(t *testing.T) {
@@ -587,7 +586,7 @@ func TestAggregateSurfacesOmitMigratedGeminiBranches(t *testing.T) {
 	t.Run("timeout_failure", func(t *testing.T) {
 		t.Parallel()
 		parsed := parseProviderTimeoutFailure(string(modelprovider.ProviderGemini), CommandResult{})
-		if parsed.Message == geminipkg.TimeoutFailureMessage {
+		if parsed.Message == "Gemini request timed out." {
 			t.Fatal("aggregate still owns Gemini timeout parsing")
 		}
 	})

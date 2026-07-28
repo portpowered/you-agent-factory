@@ -1,0 +1,144 @@
+{
+  "name": "classifier_multi_output_dir",
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "done",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "name": "branch-a",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "done",
+          "type": "TERMINAL"
+        }
+      ]
+    },
+    {
+      "name": "branch-b",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "done",
+          "type": "TERMINAL"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "name": "classifier-worker"
+    },
+    {
+      "name": "branch-a-worker"
+    },
+    {
+      "name": "branch-b-worker"
+    }
+  ],
+  "workstations": [
+    {
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "name": "classifier",
+      "type": "CLASSIFIER_WORKSTATION",
+      "worker": "classifier-worker",
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      },
+      "classificationRoutes": [
+        {
+          "label": "fanout",
+          "outputs": [
+            {
+              "state": "done",
+              "workType": "task"
+            },
+            {
+              "state": "init",
+              "workType": "branch-a"
+            },
+            {
+              "state": "init",
+              "workType": "branch-b"
+            }
+          ]
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ]
+    },
+    {
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "branch-a"
+        }
+      ],
+      "name": "branch-a-complete",
+      "outputs": [
+        {
+          "state": "done",
+          "workType": "branch-a"
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "done",
+          "workType": "branch-a"
+        }
+      ],
+      "worker": "branch-a-worker"
+    },
+    {
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "branch-b"
+        }
+      ],
+      "name": "branch-b-complete",
+      "outputs": [
+        {
+          "state": "done",
+          "workType": "branch-b"
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "done",
+          "workType": "branch-b"
+        }
+      ],
+      "worker": "branch-b-worker"
+    }
+  ]
+}

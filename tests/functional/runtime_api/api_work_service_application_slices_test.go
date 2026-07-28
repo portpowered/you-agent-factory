@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workservice "github.com/portpowered/infinite-you/pkg/services/work/service"
+	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 )
 
 // TestWorkServiceApplicationSlicesExerciseFunctionalLane proves published Work
@@ -17,7 +17,7 @@ func TestWorkServiceApplicationSlicesExerciseFunctionalLane(t *testing.T) {
 
 	ctx := context.Background()
 	runtime := &functionalLaneWorkRuntime{}
-	service := workservice.NewService(
+	service := workwire.NewRuntimeService(
 		functionalLaneRuntimeResolver{runtime: runtime},
 		os.ReadFile,
 		&functionalLaneContentStaging{},

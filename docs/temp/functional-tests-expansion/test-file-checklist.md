@@ -591,7 +591,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestLogicalMovePreservesWorkPayloadAndLineage`.
   - `TestLogicalMoveMultipleOutputsCreatesEveryExpectedWork`.
 
-- [ ] `tests/functional/work/routing/classifier_test.go`
+- [x] `tests/functional/work/routing/classifier_test.go`
   - `TestClassifierRoutesEveryKnownDecision`.
   - `TestClassifierUnknownAndMalformedDecisionFailDistinctly`.
   - `TestClassifierMultiOutputPreservesPayload`.
@@ -655,6 +655,29 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestMCPPauseResumeAndCancelTargetCanonicalFactorySession`.
   - `TestMCPControlledSessionIsReadableThroughAPI`.
   - `TestMCPSynchronousFactorySessionReturnsTerminalResult`.
+
+- [x] `tests/functional/sessions/root_composition/build_process_inert_test.go`
+  - `TestSessionsEffectsRemainInertThroughRootBuildProcessConstruction`.
+
+- [x] `tests/functional/sessions/root_composition/lifecycle_runtime_opening_test.go`
+  - `TestSessionsLifecycleAndRuntimeOpeningActivateThroughRootBuildProcessAfterLifecycle`.
+
+- [x] `tests/functional/sessions/root_composition/packaged_root_shape_test.go`
+  - `TestSessionsPackagedRootShapeMatchesCanonicalServiceLayout`.
+
+- [x] `tests/functional/sessions/root_composition/peer_import_seal_test.go`
+  - `TestSessionsFunctionalProofsDoNotImportOwnerPrivatePackages`.
+  - `TestSessionsProductionPeersReachSessionsThroughPublicSurfacesOnly`.
+  - `TestSessionsRootCompositionConstructsThroughBuildProcess`.
+
+- [x] `tests/functional/sessions/root_composition/work_admission_response_stream_test.go`
+  - `TestSessionsWorkAdmissionAndResponseStreamActivateThroughRootBuildProcessAfterLifecycle`.
+
+- [x] `tests/functional/sessions/root_composition/work_peer_import_seal_test.go`
+  - `TestFactorySessionsProductionPackagesImportWorkRootOnly`.
+  - `TestFactorySessionsProductionPackagesImportWorkersOnlyThroughRoot`.
+  - `TestFactorySessionsProductionPackagesImportFactoryRuntimeOnlyThroughRoot`.
+  - `TestSessionsFunctionalProofsDoNotImportRetiredWorkConsumerEdges`.
   - `TestMCPSynchronousFailureReturnsStructuredFailure`.
   - `TestMCPAsyncFactorySessionCanBePolledToSuccess`.
   - `TestMCPAsyncFactorySessionCanBePolledToFailure`.
@@ -771,12 +794,27 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCodexHistoricalInspectionBoundedWalkThroughRootBuildProcess`.
   - `TestCodexHistoricalInspectionCancelledDiscoveryThroughRootBuildProcess`.
 
+- [x] `tests/functional/providers/gemini/process_harness_test.go`
+  - `TestGeminiConductorSuccessThroughRootBuildProcess`.
+  - `TestGeminiConductorPreservesConfiguredEnvironment`.
+  - `TestGeminiNativeFailureThroughRootBuildProcessIsSafe`.
+  - `TestGeminiCommandCancellationThroughRootBuildProcessIsCanonical`.
+
+- [x] `tests/functional/providers/kiro/process_harness_test.go`
+  - `TestKiroCommandCancellationThroughRootBuildProcessIsCanonical`.
+
+- [x] `tests/functional/providers/pi/process_harness_test.go`
+  - `TestPiStreamingSuccessThroughRootBuildProcess`.
+  - `TestPiResumeContinuityThroughRootBuildProcess`.
+  - `TestPiNativeFailureThroughRootBuildProcessIsSafe`.
+  - `TestPiCommandCancellationThroughRootBuildProcessIsCanonical`.
+
 - [x] `tests/functional/providers/cursor/historical_inspection_root_test.go`
   - `TestCursorHistoricalInspectionThroughRootBuildProcess_ReturnsDeterministicNormalizedDetail`.
   - `TestCursorHistoricalInspectionThroughRootBuildProcess_PropagatesMissingAndContainmentFailures`.
   - `TestCursorHistoricalInspectionThroughRootBuildProcess_DegradesAdverseNativeDataSafely`.
 
-- [ ] `tests/functional/provider_sessions/details/codex_details_test.go`
+- [x] `tests/functional/provider_sessions/details/codex_details_test.go`
   - `TestCodexProviderSessionDetailsLoadFromGoldenMetadata` covers API detail.
   - `TestCodexProviderSessionMissingTranscriptReturnsNotFound` covers absence.
   - `TestCodexProviderSessionCorruptTranscriptReturnsSafeDiagnostic`.

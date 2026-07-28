@@ -151,6 +151,19 @@ func ListDefaultSessionWork(t testing.TB, baseURL string) factoryapi.ListWorkRes
 	return GetJSON[factoryapi.ListWorkResponse](t, DefaultSessionWorkURL(baseURL, "/work"))
 }
 
+// GetDefaultSessionWorkByID reads one public Work item through the same
+// session-scoped GET /work/{id} surface customers use for detail reads.
+func GetDefaultSessionWorkByID(t testing.TB, baseURL, workID string) factoryapi.Work {
+	t.Helper()
+	if strings.TrimSpace(workID) == "" {
+		t.Fatal("workID is empty")
+	}
+	return GetJSON[factoryapi.Work](
+		t,
+		DefaultSessionWorkURL(baseURL, "/work/"+url.PathEscape(workID)),
+	)
+}
+
 // UpsertDefaultSessionWorkRequest submits a canonical batch through the same
 // public session-scoped HTTP edge used by customers.
 func UpsertDefaultSessionWorkRequest(

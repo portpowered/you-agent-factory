@@ -596,31 +596,76 @@ func TestFactoryImpl_CheckpointContracts_DoNotReportFalseSuccess(t *testing.T) {
 	ctx := context.Background()
 	impl.state = interfaces.FactoryStatePaused
 
-	_, err := impl.CaptureCheckpoint(ctx, factory.CaptureCheckpointRequest{CheckpointID: "cp-1"})
-	requireRootErrIs(t, err, factory.ErrCapabilityUnavailable, "CaptureCheckpoint(paused)")
+	captured, err := impl.CaptureCheckpoint(ctx, factory.CaptureCheckpointRequest{CheckpointID: "cp-1"})
+	requireNoRootErr(t, err, "CaptureCheckpoint(paused)")
+	if captured.Outcome != factory.CheckpointOutcomeCaptured {
+		t.Fatalf("CaptureCheckpoint(paused) outcome = %q, want CAPTURED", captured.Outcome)
+	}
+	if captured.Checkpoint.CheckpointID != "cp-1" ||
+		captured.Checkpoint.SchemaVersion <= 0 ||
+		len(captured.Checkpoint.Payload) == 0 {
+		t.Fatalf("CaptureCheckpoint(paused) checkpoint = %#v, want opaque captured checkpoint", captured.Checkpoint)
+	}
 	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{})
 	requireRootErrIs(t, err, factory.ErrCheckpointNotFound, "LoadCheckpoint(empty)")
-	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-1"})
-	requireRootErrIs(t, err, factory.ErrCapabilityUnavailable, "LoadCheckpoint(cp-1)")
-
-	_, err = impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{
-		Checkpoint: factory.Checkpoint{CheckpointID: "cp-1", SchemaVersion: 1, Payload: []byte(`{}`)},
+	loaded, err := impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-1"})
+	requireNoRootErr(t, err, "LoadCheckpoint(cp-1)")
+	if loaded.Outcome != factory.CheckpointOutcomeLoaded {
+		t.Fatalf("LoadCheckpoint(cp-1) outcome = %q, want LOADED", loaded.Outcome)
+	}
+	if loaded.Checkpoint.CheckpointID != "cp-1" ||
+		loaded.Checkpoint.SchemaVersion != captured.Checkpoint.SchemaVersion ||
+		len(loaded.Checkpoint.Payload) == 0 {
+		t.Fatalf("LoadCheckpoint(cp-1) checkpoint = %#v, want stored opaque checkpoint", loaded.Checkpoint)
+	}
+	compatible, err := impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{
+		CheckpointID:          "cp-1",
+		ExpectedSchemaVersion: captured.Checkpoint.SchemaVersion,
 	})
-	requireRootErrIs(t, err, factory.ErrCapabilityUnavailable, "RestoreCheckpoint(paused)")
+	requireNoRootErr(t, err, "LoadCheckpoint(compatible)")
+	if !compatible.Compatible {
+		t.Fatal("LoadCheckpoint(compatible) Compatible = false, want true")
+	}
+	incompatible, err := impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{
+		CheckpointID:          "cp-1",
+		ExpectedSchemaVersion: captured.Checkpoint.SchemaVersion + 1,
+	})
+	requireNoRootErr(t, err, "LoadCheckpoint(incompatible)")
+	if incompatible.Compatible {
+		t.Fatal("LoadCheckpoint(incompatible) Compatible = true, want false")
+	}
+	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "missing"})
+	requireRootErrIs(t, err, factory.ErrCheckpointNotFound, "LoadCheckpoint(missing)")
+
+	restored, err := impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{Checkpoint: captured.Checkpoint})
+	requireNoRootErr(t, err, "RestoreCheckpoint(captured)")
+	if restored.Outcome != factory.CheckpointOutcomeRestored || restored.CheckpointID != "cp-1" {
+		t.Fatalf("RestoreCheckpoint(captured) = %#v, want RESTORED cp-1", restored)
+	}
+	loadedAfterRestore, err := impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-1"})
+	requireNoRootErr(t, err, "LoadCheckpoint(after restore)")
+	if loadedAfterRestore.Checkpoint.CheckpointID != captured.Checkpoint.CheckpointID ||
+		loadedAfterRestore.Checkpoint.SchemaVersion != captured.Checkpoint.SchemaVersion ||
+		string(loadedAfterRestore.Checkpoint.Payload) != string(captured.Checkpoint.Payload) {
+		t.Fatalf("LoadCheckpoint(after restore) checkpoint = %#v, want restored envelope %#v", loadedAfterRestore.Checkpoint, captured.Checkpoint)
+	}
 	_, err = impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{Checkpoint: factory.Checkpoint{CheckpointID: "bad", SchemaVersion: 1}})
 	requireRootErrIs(t, err, factory.ErrCorruptCheckpoint, "RestoreCheckpoint(corrupt)")
 	_, err = impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{
-		Checkpoint: factory.Checkpoint{CheckpointID: "cp-2", SchemaVersion: 2, Payload: []byte(`{}`)},
+		Checkpoint: factory.Checkpoint{CheckpointID: "cp-2", SchemaVersion: 2, Payload: []byte(`{"factoryState":"PAUSED"}`)},
 	})
 	requireRootErrIs(t, err, factory.ErrIncompatibleCheckpoint, "RestoreCheckpoint(incompatible)")
 
 	impl.state = interfaces.FactoryStateCompleted
 	_, err = impl.CaptureCheckpoint(ctx, factory.CaptureCheckpointRequest{CheckpointID: "cp-2"})
 	requireRootErrIs(t, err, factory.ErrNotRunning, "CaptureCheckpoint(completed)")
-	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-2"})
-	requireRootErrIs(t, err, factory.ErrCapabilityUnavailable, "LoadCheckpoint(completed)")
+	loadedAfterComplete, err := impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-1"})
+	requireNoRootErr(t, err, "LoadCheckpoint(completed)")
+	if loadedAfterComplete.Outcome != factory.CheckpointOutcomeLoaded {
+		t.Fatalf("LoadCheckpoint(completed) outcome = %q, want LOADED", loadedAfterComplete.Outcome)
+	}
 	_, err = impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{
-		Checkpoint: factory.Checkpoint{CheckpointID: "cp-2", SchemaVersion: 1, Payload: []byte(`{}`)},
+		Checkpoint: factory.Checkpoint{CheckpointID: "cp-2", SchemaVersion: 1, Payload: []byte(`{"factoryState":"PAUSED"}`)},
 	})
 	requireRootErrIs(t, err, factory.ErrNotRunning, "RestoreCheckpoint(completed)")
 }
