@@ -9,14 +9,7 @@ import (
 	"testing"
 )
 
-const factoryDefinitionsModule = "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-
-var foldedPublicSiblingSuffixes = []string{
-	"/authoredlayout",
-	"/portableconfig",
-	"/loading",
-	"/loadedsource",
-	"/snapshotcapture",
+var distributionFoldedPublicSiblingSuffixes = []string{
 	"/packagedinstallation",
 	"/packages/packageassets",
 	"/packages/promptassets",
@@ -24,27 +17,25 @@ var foldedPublicSiblingSuffixes = []string{
 	"/packages/review",
 	"/packages/subagent",
 	"/packages/tts",
-	"/namedfactories",
 }
 
-var foldSiblingScanRoots = []string{
-	"../wire",
-	".",
+var distributionConsumerScanRoots = []string{
+	"../../../wire",
 }
 
-func TestFoldSiblingBoundary_OwnerPackagesDoNotImportEmptiedPublicSiblings(t *testing.T) {
+func TestDistributionConsumerBoundary_ProcessWireDoesNotImportEmptiedDistributionSiblings(t *testing.T) {
 	t.Parallel()
 
-	for _, root := range foldSiblingScanRoots {
+	for _, root := range distributionConsumerScanRoots {
 		root := root
 		t.Run(root, func(t *testing.T) {
 			t.Parallel()
-			assertDirectoryTreeDoesNotImportFoldedSiblings(t, root)
+			assertDirectoryTreeDoesNotImportDistributionFoldedSiblings(t, root)
 		})
 	}
 }
 
-func assertDirectoryTreeDoesNotImportFoldedSiblings(t *testing.T, root string) {
+func assertDirectoryTreeDoesNotImportDistributionFoldedSiblings(t *testing.T, root string) {
 	t.Helper()
 
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
@@ -52,7 +43,7 @@ func assertDirectoryTreeDoesNotImportFoldedSiblings(t *testing.T, root string) {
 			return walkErr
 		}
 		if entry.IsDir() {
-			if entry.Name() == "testdata" || entry.Name() == "services" {
+			if entry.Name() == "testdata" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -60,7 +51,7 @@ func assertDirectoryTreeDoesNotImportFoldedSiblings(t *testing.T, root string) {
 		if !strings.HasSuffix(path, ".go") {
 			return nil
 		}
-		assertGoFileDoesNotImportFoldedSiblings(t, path)
+		assertGoFileDoesNotImportDistributionFoldedSiblings(t, path)
 		return nil
 	})
 	if err != nil {
@@ -68,7 +59,7 @@ func assertDirectoryTreeDoesNotImportFoldedSiblings(t *testing.T, root string) {
 	}
 }
 
-func assertGoFileDoesNotImportFoldedSiblings(t *testing.T, path string) {
+func assertGoFileDoesNotImportDistributionFoldedSiblings(t *testing.T, path string) {
 	t.Helper()
 
 	fileSet := token.NewFileSet()
@@ -78,11 +69,11 @@ func assertGoFileDoesNotImportFoldedSiblings(t *testing.T, path string) {
 	}
 	for _, importSpec := range file.Imports {
 		importPath := strings.Trim(importSpec.Path.Value, `"`)
-		for _, suffix := range foldedPublicSiblingSuffixes {
+		for _, suffix := range distributionFoldedPublicSiblingSuffixes {
 			if importPath == factoryDefinitionsModule+suffix ||
 				strings.HasPrefix(importPath, factoryDefinitionsModule+suffix+"/") {
 				t.Fatalf(
-					"%s must not import emptied public sibling %s; use internal/services destinations",
+					"%s must not import emptied distribution sibling %s; construct distribute behavior through factory_definitions/service or factory_definitions/wire",
 					path,
 					importPath,
 				)
