@@ -25,8 +25,9 @@ type ContentPreparation interface {
 // available, its original public JSON so Work can enforce canonical aliases
 // and mutually exclusive submission fields without depending on a transport.
 type WorkRequestPreparation struct {
-	Request       WorkRequest
-	CanonicalJSON []byte
+	Request           WorkRequest
+	CanonicalJSON     []byte
+	DefaultWorkTypeID string
 }
 
 // RequestPreparationError is a customer-safe Work Request admission failure.
@@ -105,6 +106,7 @@ func (s requestPreparationService) PrepareWorkRequest(
 	if err != nil {
 		return WorkRequest{}, requestPreparationError(fmt.Errorf("payload: %w", err))
 	}
+	applyDefaultBatchWorkTypes(&request, input.DefaultWorkTypeID)
 	applyStableWorkRequestLineage(&request)
 	for index := range request.Works {
 		request.Works[index].Name = strings.TrimSpace(request.Works[index].Name)
@@ -227,6 +229,18 @@ func validateCanonicalContentMediaType(part WorkContentPart) error {
 		}
 	}
 	return nil
+}
+
+func applyDefaultBatchWorkTypes(request *WorkRequest, defaultWorkTypeID string) {
+	if request == nil || strings.TrimSpace(defaultWorkTypeID) == "" {
+		return
+	}
+	for index := range request.Works {
+		if strings.TrimSpace(request.Works[index].WorkTypeID) != "" {
+			continue
+		}
+		request.Works[index].WorkTypeID = defaultWorkTypeID
+	}
 }
 
 func applyStableWorkRequestLineage(request *WorkRequest) {

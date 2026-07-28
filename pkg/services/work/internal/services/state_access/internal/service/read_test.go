@@ -22,7 +22,7 @@ func TestListWorkReturnsDetachedReadModels(t *testing.T) {
 	t.Parallel()
 
 	adapter := &recordingSessionAdapter{snapshot: querySnapshot()}
-	svc := internalservice.New(stubSessionResolver{adapter: adapter})
+	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil)
 	ctx := context.Background()
 
 	got, err := svc.ListWork(ctx, "session-1", work.ListOptions{WorkTypeName: "bug"})
@@ -46,7 +46,7 @@ func TestListWorkHonorsPaginationNextToken(t *testing.T) {
 		{CursorID: "tok-active-1", WorkID: "work-active-1", Name: "Alpha first", WorkTypeName: "task", State: &work.State{Name: "review", Type: work.StateTypeProcessing}},
 		{CursorID: "tok-active-2", WorkID: "work-active-2", Name: "Alpha second", WorkTypeName: "task", State: &work.State{Name: "review", Type: work.StateTypeProcessing}},
 	}}}
-	svc := internalservice.New(stubSessionResolver{adapter: adapter})
+	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil)
 	ctx := context.Background()
 
 	first, err := svc.ListWork(ctx, "session-1", work.ListOptions{Name: "alpha", MaxResults: 1})
@@ -63,7 +63,7 @@ func TestGetWorkByCursorOrWorkIDAndNotFound(t *testing.T) {
 	t.Parallel()
 
 	adapter := &recordingSessionAdapter{snapshot: querySnapshot()}
-	svc := internalservice.New(stubSessionResolver{adapter: adapter})
+	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil)
 	ctx := context.Background()
 
 	for _, id := range []string{"tok-story", "work-story"} {
@@ -86,7 +86,7 @@ func TestMoveWorkAndReadReturnsDetachedPostMoveReadModel(t *testing.T) {
 		Name:     "one",
 		State:    &work.State{Name: "review", Type: work.StateTypeProcessing},
 	}}}}
-	svc := internalservice.New(stubSessionResolver{adapter: adapter})
+	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil)
 	ctx := context.Background()
 
 	read, err := svc.MoveWorkAndRead(ctx, "session-1", "work-1", "complete", "request-1")
@@ -107,11 +107,50 @@ func TestReadSnapshotUsesSessionAdapterOnly(t *testing.T) {
 	t.Parallel()
 
 	adapter := &recordingSessionAdapter{snapshotErr: errors.New("snapshot unavailable")}
-	svc := internalservice.New(stubSessionResolver{adapter: adapter})
+	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil)
 	ctx := context.Background()
 
 	_, err := svc.ListWork(ctx, "session-1", work.ListOptions{})
 	if err == nil || err.Error() != "read Work snapshot: snapshot unavailable" {
 		t.Fatalf("ListWork error = %v, want wrapped snapshot error", err)
 	}
+}
+
+func TestReadSnapshotFallsBackToRecordingsAdapterWhenSessionUnavailable(t *testing.T) {
+	t.Parallel()
+
+	svc := internalservice.New(
+		stubSessionResolver{},
+		&recordingRecordingsAdapter{snapshot: work.ReadSnapshot{Items: []work.ReadModel{{
+			CursorID:     "work-rec",
+			WorkID:       "work-rec",
+			Name:         "Recorded work",
+			WorkTypeName: "story",
+			State:        &work.State{Name: "review", Type: work.StateTypeProcessing},
+		}}}},
+	)
+	ctx := context.Background()
+
+	got, err := svc.ListWork(ctx, "session-recordings", work.ListOptions{})
+	if err != nil {
+		t.Fatalf("ListWork: %v", err)
+	}
+	if len(got.Results) != 1 || got.Results[0].WorkID != "work-rec" {
+		t.Fatalf("ListWork = %#v, want one recorded work item", got)
+	}
+}
+
+type recordingRecordingsAdapter struct {
+	snapshot work.ReadSnapshot
+	err      error
+}
+
+func (a *recordingRecordingsAdapter) ReadWorkSnapshot(
+	context.Context,
+	string,
+) (work.ReadSnapshot, error) {
+	if a.err != nil {
+		return work.ReadSnapshot{}, a.err
+	}
+	return a.snapshot, nil
 }

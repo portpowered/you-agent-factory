@@ -85,7 +85,7 @@ func TestSubmitWorkRequestForSessionReturnsDetachedResult(t *testing.T) {
 	t.Parallel()
 
 	adapter := &recordingSessionAdapter{}
-	svc := internalservice.New(stubSessionResolver{adapter: adapter})
+	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil)
 	ctx := context.Background()
 	request := work.WorkRequest{RequestID: "request-1"}
 
@@ -105,7 +105,7 @@ func TestMoveWorkForSessionReturnsDetachedResult(t *testing.T) {
 	t.Parallel()
 
 	adapter := &recordingSessionAdapter{}
-	svc := internalservice.New(stubSessionResolver{adapter: adapter})
+	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil)
 	ctx := context.Background()
 
 	result, err := svc.MoveWorkForSession(ctx, "session-1", "work-1", "review", "move-1")
@@ -127,7 +127,7 @@ func TestMoveWorkForSessionPropagatesAlreadyAppliedFailure(t *testing.T) {
 	t.Parallel()
 
 	adapter := &recordingSessionAdapter{moveErr: work.ErrMoveWorkRequestAlreadyApplied}
-	svc := internalservice.New(stubSessionResolver{adapter: adapter})
+	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil)
 	ctx := context.Background()
 
 	_, err := svc.MoveWorkForSession(ctx, "session-1", "work-1", "done", "dup-move")
@@ -140,7 +140,7 @@ func TestResolveSessionResolverError(t *testing.T) {
 	t.Parallel()
 
 	resolverErr := errors.New("session missing")
-	svc := internalservice.New(stubSessionResolver{err: resolverErr})
+	svc := internalservice.New(stubSessionResolver{err: resolverErr}, nil)
 	ctx := context.Background()
 
 	_, err := svc.SubmitWorkRequestForSession(ctx, "missing", work.WorkRequest{})

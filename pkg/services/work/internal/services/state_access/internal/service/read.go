@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
 )
 
 func (s *Service) ListWork(
@@ -114,15 +116,32 @@ func (s *Service) MoveWorkAndRead(
 }
 
 func (s *Service) readSnapshot(ctx context.Context, sessionID string) (work.ReadSnapshot, error) {
-	adapter, err := s.resolveSession(sessionID)
-	if err != nil {
-		return work.ReadSnapshot{}, err
+	if adapter, err := s.tryResolveSession(sessionID); err == nil && adapter != nil {
+		snapshot, err := adapter.ReadWorkSnapshot(ctx)
+		if err != nil {
+			return work.ReadSnapshot{}, fmt.Errorf("read Work snapshot: %w", err)
+		}
+		return snapshot, nil
 	}
-	snapshot, err := adapter.ReadWorkSnapshot(ctx)
+	if s == nil || s.recordings == nil {
+		return work.ReadSnapshot{}, errors.New("Work state access recordings adapter is required")
+	}
+	snapshot, err := s.recordings.ReadWorkSnapshot(ctx, sessionID)
 	if err != nil {
-		return work.ReadSnapshot{}, fmt.Errorf("read Work snapshot: %w", err)
+		return work.ReadSnapshot{}, fmt.Errorf("read Work snapshot from Recordings: %w", err)
 	}
 	return snapshot, nil
+}
+
+func (s *Service) tryResolveSession(sessionID string) (stateaccess.SessionAdapter, error) {
+	if s == nil || s.sessions == nil {
+		return nil, errors.New("Work state access session resolver is required")
+	}
+	adapter, err := s.sessions.ResolveSessionAdapter(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return adapter, nil
 }
 
 func optional(value string) *string {
