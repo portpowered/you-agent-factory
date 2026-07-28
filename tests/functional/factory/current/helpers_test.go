@@ -24,11 +24,8 @@ import (
 
 func startCurrentFactoryServer(t *testing.T, rootDir string) *support.FunctionalAPIServer {
 	t.Helper()
-	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                rootDir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
+	runner := support.NewRecordingCommandRunner("runtime must not execute during current-factory read/save")
+	return startCurrentFactoryServerWithProviderRunner(t, rootDir, runner)
 }
 
 func startCurrentFactoryServerWithProviderRunner(
@@ -603,7 +600,10 @@ func versionDocument(version factoryapi.HybridLogicalTimestamp) map[string]strin
 	}
 }
 
-const factoryValidationCodeDanglingPlaceReference = "factory.route.danglingPlaceReference"
+const (
+	factoryValidationCodeDanglingPlaceReference = "factory.route.danglingPlaceReference"
+	factoryValidationCodePayloadInvalid         = "factory.payload.invalid"
+)
 
 func hasValidationTargetCode(targets []factoryapi.FactoryValidationTarget, code string) bool {
 	for _, target := range targets {
@@ -689,4 +689,540 @@ func promptTemplateValidationHasDiagnosticKind(
 		}
 	}
 	return false
+}
+
+func assertProviderRunnerIdle(t *testing.T, runner *support.RecordingCommandRunner) {
+	t.Helper()
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want 0", runner.CallCount())
+	}
+}
+
+func requireInitialStructurePayload(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.InitialStructureRequestEventPayload {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeInitialStructureRequest {
+			continue
+		}
+		payload, err := event.Payload.AsInitialStructureRequestEventPayload()
+		if err != nil {
+			t.Fatalf("decode initial-structure payload: %v", err)
+		}
+		return payload
+	}
+	t.Fatalf("initial-structure event not found in %d events", len(events))
+	return factoryapi.InitialStructureRequestEventPayload{}
+}
+
+func requireFactoryChangeAfter(t *testing.T, before []factoryapi.FactoryEvent, after []factoryapi.FactoryEvent) factoryapi.FactoryEvent {
+	t.Helper()
+	minSequence := -1
+	for _, event := range before {
+		if event.Context.Sequence > minSequence {
+			minSequence = event.Context.Sequence
+		}
+	}
+	for _, event := range after {
+		if event.Context.Sequence > minSequence && event.Type == factoryapi.FactoryEventTypeFactoryChange {
+			return event
+		}
+	}
+	t.Fatalf("factory-change event not found after save; before=%d after=%d", len(before), len(after))
+	return factoryapi.FactoryEvent{}
+}
+
+func requireLatestFactoryChange(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.FactoryEvent {
+	t.Helper()
+	for i := len(events) - 1; i >= 0; i-- {
+		if events[i].Type == factoryapi.FactoryEventTypeFactoryChange {
+			return events[i]
+		}
+	}
+	t.Fatalf("factory-change event not found; events=%d", len(events))
+	return factoryapi.FactoryEvent{}
+}
+
+func assertFactoryChangeVersion(t *testing.T, eventFactory factoryapi.Factory, saved factoryapi.Factory) {
+	t.Helper()
+	if saved.Version == nil {
+		t.Fatal("saved factory version = nil, want version metadata")
+	}
+	if eventFactory.Version == nil {
+		t.Fatal("factory-change payload version = nil, want saved version metadata")
+	}
+	if eventFactory.Version.Logical != saved.Version.Logical || !eventFactory.Version.Physical.Equal(saved.Version.Physical) {
+		t.Fatalf("factory-change payload version = %#v, want saved version %#v", eventFactory.Version, saved.Version)
+	}
+}
+
+func docBundledFileEntry(targetPath, inline string) map[string]any {
+	return map[string]any{
+		"id":         targetPath,
+		"type":       "DOC",
+		"targetPath": targetPath,
+		"content": map[string]string{
+			"encoding": "utf-8",
+			"inline":   inline,
+		},
+	}
+}
+
+func scriptBundledFileEntry(targetPath, inline string) map[string]any {
+	return map[string]any{
+		"id":         targetPath,
+		"type":       "SCRIPT",
+		"targetPath": targetPath,
+		"content": map[string]string{
+			"encoding": "utf-8",
+			"inline":   inline,
+		},
+	}
+}
+
+func currentFactoryDocumentWithBundledDocs(t *testing.T, current factoryapi.Factory, bundledFiles []map[string]any) string {
+	t.Helper()
+
+	body, err := json.Marshal(current)
+	if err != nil {
+		t.Fatalf("marshal current factory document: %v", err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(body, &document); err != nil {
+		t.Fatalf("decode current factory document: %v", err)
+	}
+	document["version"] = versionDocument(advancedFactoryVersion(t, current.Version))
+	document["supportingFiles"] = map[string]any{
+		"bundledFiles": bundledFiles,
+	}
+	body, err = json.Marshal(document)
+	if err != nil {
+		t.Fatalf("marshal current factory document with bundled docs: %v", err)
+	}
+	return string(body)
+}
+
+func currentFactoryEventDocumentWithBundledFiles(
+	t *testing.T,
+	name string,
+	workType string,
+	bundledFiles []map[string]any,
+) []byte {
+	t.Helper()
+
+	var document map[string]any
+	if err := json.Unmarshal([]byte(functionalNamedFactoryPayloadJSON(name, workType)), &document); err != nil {
+		t.Fatalf("decode factory event bundled-file document: %v", err)
+	}
+	document["supportingFiles"] = map[string]any{
+		"bundledFiles": bundledFiles,
+	}
+	body, err := json.Marshal(document)
+	if err != nil {
+		t.Fatalf("marshal factory event bundled-file document: %v", err)
+	}
+	return body
+}
+
+func findBundledFile(t *testing.T, factory factoryapi.Factory, targetPath string) *factoryapi.BundledFile {
+	t.Helper()
+	if factory.SupportingFiles == nil || factory.SupportingFiles.BundledFiles == nil {
+		return nil
+	}
+	for _, bundledFile := range *factory.SupportingFiles.BundledFiles {
+		if bundledFile.TargetPath == targetPath {
+			copied := bundledFile
+			return &copied
+		}
+	}
+	return nil
+}
+
+func assertDocBundledFileInline(t *testing.T, factory factoryapi.Factory, targetPath, wantInline string) {
+	t.Helper()
+	bundledFile := findBundledFile(t, factory, targetPath)
+	if bundledFile == nil {
+		t.Fatalf("doc bundled file %q missing from %#v", targetPath, factory.SupportingFiles)
+	}
+	if bundledFile.Type != factoryapi.BundledFileTypeDOC {
+		t.Fatalf("bundled file %q type = %q, want DOC", targetPath, bundledFile.Type)
+	}
+	if bundledFile.Id == nil || *bundledFile.Id != targetPath {
+		t.Fatalf("doc bundled file %q id = %#v, want %q", targetPath, bundledFile.Id, targetPath)
+	}
+	if bundledFile.Content.Inline != wantInline {
+		t.Fatalf("doc bundled file %q inline = %q, want %q", targetPath, bundledFile.Content.Inline, wantInline)
+	}
+}
+
+func assertScriptBundledFileInline(t *testing.T, factory factoryapi.Factory, targetPath, wantInline string) {
+	t.Helper()
+	bundledFile := findBundledFile(t, factory, targetPath)
+	if bundledFile == nil {
+		t.Fatalf("script bundled file %q missing from %#v", targetPath, factory.SupportingFiles)
+	}
+	if bundledFile.Type != factoryapi.BundledFileTypeSCRIPT {
+		t.Fatalf("bundled file %q type = %q, want SCRIPT", targetPath, bundledFile.Type)
+	}
+	if bundledFile.Id == nil || *bundledFile.Id != targetPath {
+		t.Fatalf("script bundled file %q id = %#v, want %q", targetPath, bundledFile.Id, targetPath)
+	}
+	if bundledFile.Content.Inline != wantInline {
+		t.Fatalf("script bundled file %q inline = %q, want %q", targetPath, bundledFile.Content.Inline, wantInline)
+	}
+}
+
+func assertPortableFile(t *testing.T, path, want string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	if string(data) != want {
+		t.Fatalf("file %s = %q, want %q", path, string(data), want)
+	}
+}
+
+func assertPersistedFactoryJSONStripsInlineBundledContent(t *testing.T, path string, forbidden ...string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	payload := string(data)
+	for _, snippet := range forbidden {
+		if bytes.Contains(data, []byte(snippet)) {
+			t.Fatalf("persisted factory payload %s still contains inline portable content %q: %s", path, snippet, payload)
+		}
+	}
+}
+
+func functionalDefaultFactorySaveBody(id, workType string, version factoryapi.HybridLogicalTimestamp) string {
+	return `{
+		"name":"UNDEFINED",
+		"id":"` + id + `",
+		"version":{"physical":"` + version.Physical.UTC().Format(time.RFC3339Nano) + `","logical":"` + strconv.FormatInt(version.Logical.Int64(), 10) + `"},
+		"workTypes":[{"name":"` + workType + `","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514","body":"You are the planner."}],
+		"workstations":[{"name":"plan-task","behavior":"STANDARD","type":"MODEL_WORKSTATION","worker":"planner","body":"Plan the work.","inputs":[{"workType":"` + workType + `","state":"init"}],"outputs":[{"workType":"` + workType + `","state":"done"}]}]
+	}`
+}
+
+func assertRawCurrentFactoryLogicalVersionIsString(t *testing.T, serverURL string) {
+	t.Helper()
+	resp, err := http.Get(serverURL + "/factory-sessions/~default/factory")
+	if err != nil {
+		t.Fatalf("GET /factory-sessions/~default/factory: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		t.Fatalf("GET /factory-sessions/~default/factory status = %d, want 200", resp.StatusCode)
+	}
+	var document map[string]any
+	decodeJSONResponse(t, resp, &document, "decode raw current factory response")
+	version, ok := document["version"].(map[string]any)
+	if !ok {
+		t.Fatalf("raw current factory version = %#v, want object", document["version"])
+	}
+	if _, ok := version["logical"].(string); !ok {
+		t.Fatalf("raw current factory version.logical = %#v, want string", version["logical"])
+	}
+}
+
+func assertFunctionalSplitLayoutAtRoot(t *testing.T, rootDir, project string) {
+	t.Helper()
+
+	factoryJSON, err := os.ReadFile(filepath.Join(rootDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	if strings.Contains(string(factoryJSON), "You are the planner.") {
+		t.Fatalf("factory.json should omit inlined planner body after split save, got %s", factoryJSON)
+	}
+
+	agentsPath := filepath.Join(rootDir, interfaces.WorkersDir, "planner", interfaces.FactoryAgentsFileName)
+	if _, err := os.Stat(agentsPath); err != nil {
+		t.Fatalf("expected planner AGENTS.md at %s: %v", agentsPath, err)
+	}
+
+	workstationPath := filepath.Join(rootDir, interfaces.WorkstationsDir, "plan-task", interfaces.FactoryAgentsFileName)
+	if _, err := os.Stat(workstationPath); err != nil {
+		t.Fatalf("expected plan-task AGENTS.md at %s: %v", workstationPath, err)
+	}
+
+	loaded, err := support.LoadedCurrentFactory(t, rootDir)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+	if loaded.Id == nil || *loaded.Id != project {
+		t.Fatalf("factory id = %v, want %q", loaded.Id, project)
+	}
+}
+
+func saveCurrentFactoryDefinitionWithClient(t *testing.T, client *http.Client, serverURL, body string) factoryapi.Factory {
+	t.Helper()
+
+	resp := saveCurrentFactoryDefinitionExpectStatusWithClient(t, client, serverURL, body, http.StatusOK)
+	var saved factoryapi.Factory
+	decodeJSONResponse(t, resp, &saved, "decode current factory save response")
+	return saved
+}
+
+func saveCurrentFactoryDefinitionExpectStatusWithClient(
+	t *testing.T,
+	client *http.Client,
+	serverURL,
+	body string,
+	wantStatus int,
+) *http.Response {
+	t.Helper()
+
+	return putFactoryForSessionRequestExpectStatusWithClient(
+		t,
+		client,
+		serverURL,
+		"/factory-sessions/~default/factory",
+		saveFactoryForSessionRequestBody(body),
+		wantStatus,
+	)
+}
+
+func submitWorkAndExpectStatus(t *testing.T, serverURL, workType, title string, wantStatus int) *http.Response {
+	t.Helper()
+	resp, err := http.Post(
+		support.DefaultSessionWorkURL(serverURL, "/work"),
+		"application/json",
+		bytes.NewBufferString(`{"name":"current-factory-read-save-submit","workTypeName":"`+workType+`","payload":{"title":"`+title+`"}}`),
+	)
+	if err != nil {
+		t.Fatalf("POST /work %s: %v", workType, err)
+	}
+	if resp.StatusCode != wantStatus {
+		resp.Body.Close()
+		t.Fatalf("POST /work %s status = %d, want %d", workType, resp.StatusCode, wantStatus)
+	}
+	return resp
+}
+
+func submitWorkForSessionAndExpectStatus(t *testing.T, serverURL, sessionID, workType, title string, wantStatus int) *http.Response {
+	t.Helper()
+	endpoint := serverURL + "/factory-sessions/" + url.PathEscape(sessionID) + "/work"
+	resp, err := http.Post(
+		endpoint,
+		"application/json",
+		bytes.NewBufferString(`{"name":"current-factory-session-read-save-submit","workTypeName":"`+workType+`","payload":{"title":"`+title+`"}}`),
+	)
+	if err != nil {
+		t.Fatalf("POST /factory-sessions/%s/work %s: %v", sessionID, workType, err)
+	}
+	if resp.StatusCode != wantStatus {
+		resp.Body.Close()
+		t.Fatalf("POST /factory-sessions/%s/work %s status = %d, want %d", sessionID, workType, resp.StatusCode, wantStatus)
+	}
+	return resp
+}
+
+func upsertNamedFactoryFromBody(t *testing.T, serverURL, factoryBody string) factoryapi.Factory {
+	t.Helper()
+	requestBody := upsertNamedFactoryRequestBody(factoryBody)
+	resp := putFactoryForSessionRequestExpectStatusWithClient(
+		t,
+		http.DefaultClient,
+		serverURL,
+		"/factory-sessions/~default/factory",
+		requestBody,
+		http.StatusOK,
+	)
+	var created factoryapi.Factory
+	decodeJSONResponse(t, resp, &created, "decode upsert named factory response")
+	return created
+}
+
+func upsertNamedFactoryRequestBody(factoryJSON string) string {
+	return fmt.Sprintf(`{"mode":"UPSERT_NAMED_AND_ACTIVATE","factory":%s}`, factoryJSON)
+}
+
+func nonDefaultSessionImportBodyWithBundledFiles(
+	t *testing.T,
+	sessionCurrent factoryapi.Factory,
+	workType string,
+) string {
+	t.Helper()
+	if sessionCurrent.Version == nil {
+		t.Fatal("session current factory version = nil, want version metadata for import")
+	}
+
+	body, err := json.Marshal(sessionCurrent)
+	if err != nil {
+		t.Fatalf("marshal session current factory document: %v", err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(body, &document); err != nil {
+		t.Fatalf("decode session current factory document: %v", err)
+	}
+
+	document["version"] = versionDocument(advancedFactoryVersion(t, sessionCurrent.Version))
+	document["workTypes"] = []map[string]any{{
+		"name": workType,
+		"states": []map[string]string{
+			{"name": "init", "type": "INITIAL"},
+			{"name": "done", "type": "TERMINAL"},
+			{"name": "failed", "type": "FAILED"},
+		},
+	}}
+	document["workers"] = []map[string]any{{
+		"body":             "Plan imported work.",
+		"executorProvider": "SCRIPT_WRAP",
+		"model":            "claude-sonnet-4-20250514",
+		"modelProvider":    "CLAUDE",
+		"name":             "planner",
+		"type":             "MODEL_WORKER",
+	}}
+	document["workstations"] = []map[string]any{{
+		"behavior": "STANDARD",
+		"body":     "Plan the imported work.",
+		"inputs":   []map[string]string{{"state": "init", "workType": workType}},
+		"name":     "plan-task",
+		"outputs":  []map[string]string{{"state": "done", "workType": workType}},
+		"type":     "MODEL_WORKSTATION",
+		"worker":   "planner",
+	}}
+	document["supportingFiles"] = map[string]any{
+		"bundledFiles": []map[string]any{
+			{
+				"type":       "ROOT_HELPER",
+				"targetPath": "Makefile",
+				"content": map[string]string{
+					"encoding": "utf-8",
+					"inline":   "test:\n\tgo test ./...\n",
+				},
+			},
+			{
+				"type":       "DOC",
+				"targetPath": "factory/docs/README.md",
+				"content": map[string]string{
+					"encoding": "utf-8",
+					"inline":   "# Session import factory\n",
+				},
+			},
+			{
+				"type":       "SCRIPT",
+				"targetPath": "factory/scripts/session-import.py",
+				"content": map[string]string{
+					"encoding": "utf-8",
+					"inline":   "print('session import script')\n",
+				},
+			},
+		},
+	}
+
+	body, err = json.Marshal(document)
+	if err != nil {
+		t.Fatalf("marshal non-default session import document: %v", err)
+	}
+	return string(body)
+}
+
+type advancedSaveVersionCase struct {
+	name      string
+	version   func(t *testing.T, current factoryapi.HybridLogicalTimestamp) any
+	wantCode  factoryapi.ErrorResponseCode
+	wantState string
+}
+
+func runAdvancedSaveVersionCase(t *testing.T, tc advancedSaveVersionCase) {
+	t.Helper()
+	rootDir := t.TempDir()
+	seedNamedFactoryRoot(t, rootDir, "alpha", "task")
+	server := startCurrentFactoryServer(t, rootDir)
+	defer server.Stop(t)
+	current := getCurrentFactory(t, server.URL())
+	if current.Version == nil {
+		t.Fatal("current factory version = nil, want version metadata")
+	}
+
+	body := currentFactorySaveDocument(t, "alpha", "story", tc.version(t, *current.Version))
+	if tc.wantCode != "" {
+		resp := saveCurrentFactoryDefinitionExpectStatus(t, server.URL(), body, http.StatusConflict)
+		var errResp factoryapi.ErrorResponse
+		decodeJSONResponse(t, resp, &errResp, "decode stale current factory save response")
+		if errResp.Code != tc.wantCode {
+			t.Fatalf("error code = %q, want %q", errResp.Code, tc.wantCode)
+		}
+	} else {
+		saved := saveCurrentFactoryDefinition(t, server.URL(), body)
+		assertFactoryWorkType(t, saved, "story", "saved current factory")
+	}
+
+	reloaded := getCurrentFactory(t, server.URL())
+	assertFactoryWorkType(t, reloaded, tc.wantState, "reloaded current factory after version save")
+}
+
+func advancedSaveVersionCases() []advancedSaveVersionCase {
+	return []advancedSaveVersionCase{
+		staleVersionCase("lower logical lower physical fails", -1, -time.Nanosecond),
+		staleVersionCase("same logical equal physical fails", 0, 0),
+		staleVersionCase("lower logical greater physical fails", -1, time.Second),
+		staleVersionCase("same logical greater physical fails", 0, time.Second),
+		missingVersionCase(),
+		missingLogicalVersionCase(),
+		missingPhysicalVersionCase(),
+		advancedVersionPassCase(),
+	}
+}
+
+func staleVersionCase(name string, logicalDelta int64, physicalDelta time.Duration) advancedSaveVersionCase {
+	return advancedSaveVersionCase{
+		name: name,
+		version: func(t *testing.T, current factoryapi.HybridLogicalTimestamp) any {
+			return versionDocument(factoryapi.HybridLogicalTimestamp{
+				Logical:  apitypes.Int64String(current.Logical.Int64() + logicalDelta),
+				Physical: current.Physical.Add(physicalDelta),
+			})
+		},
+		wantCode:  factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
+		wantState: "task",
+	}
+}
+
+func missingVersionCase() advancedSaveVersionCase {
+	return advancedSaveVersionCase{
+		name: "missing version fails",
+		version: func(t *testing.T, current factoryapi.HybridLogicalTimestamp) any {
+			return nil
+		},
+		wantCode:  factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
+		wantState: "task",
+	}
+}
+
+func missingLogicalVersionCase() advancedSaveVersionCase {
+	return advancedSaveVersionCase{
+		name: "missing logical fails",
+		version: func(t *testing.T, current factoryapi.HybridLogicalTimestamp) any {
+			return map[string]any{"physical": current.Physical.Add(time.Second).UTC().Format(time.RFC3339Nano)}
+		},
+		wantCode:  factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
+		wantState: "task",
+	}
+}
+
+func missingPhysicalVersionCase() advancedSaveVersionCase {
+	return advancedSaveVersionCase{
+		name: "missing physical fails",
+		version: func(t *testing.T, current factoryapi.HybridLogicalTimestamp) any {
+			return map[string]any{"logical": strconv.FormatInt(current.Logical.Int64()+1, 10)}
+		},
+		wantCode:  factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
+		wantState: "task",
+	}
+}
+
+func advancedVersionPassCase() advancedSaveVersionCase {
+	return advancedSaveVersionCase{
+		name: "greater logical and physical passes",
+		version: func(t *testing.T, current factoryapi.HybridLogicalTimestamp) any {
+			return versionDocument(advancedFactoryVersion(t, &current))
+		},
+		wantState: "story",
+	}
 }
