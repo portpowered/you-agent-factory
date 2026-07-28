@@ -28,6 +28,23 @@ func TestRootErrorResponse_MapsLoadValidationFailures(t *testing.T) {
 	}
 }
 
+func TestRootErrorResponse_MapsUpdateValidationFailures(t *testing.T) {
+	t.Parallel()
+
+	status, response, ok := operatorsettingshttp.SettingsRootErrorResponseForTest(
+		operatorsettingshttp.ErrInvalidUpdatePath,
+	)
+	if !ok {
+		t.Fatal("RootErrorResponse = not handled, want typed bad request")
+	}
+	if status != http.StatusBadRequest ||
+		response.Family != factoryapi.ErrorFamilyBadRequest ||
+		response.Code != factoryapi.ErrorResponseCodeBADREQUEST ||
+		response.Message != "invalid operator settings update request" {
+		t.Fatalf("RootErrorResponse = %d %#v, want invalid update request", status, response)
+	}
+}
+
 func TestRootErrorResponse_MapsDocumentMalformedFailures(t *testing.T) {
 	t.Parallel()
 

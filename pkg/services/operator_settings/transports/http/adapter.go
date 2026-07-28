@@ -43,3 +43,12 @@ func (a *Adapter) invokeLoadDocument(
 	}
 	return a.root.LoadDocument(request)
 }
+
+func (a *Adapter) invokeApplyDocumentUpdate(
+	request operatorsettings.ApplyDocumentUpdateRequest,
+) (operatorsettings.ApplyDocumentUpdateResult, error) {
+	if a == nil || a.root == nil {
+		return operatorsettings.ApplyDocumentUpdateResult{}, errors.New("operator settings service is required")
+	}
+	return a.root.ApplyDocumentUpdate(request)
+}

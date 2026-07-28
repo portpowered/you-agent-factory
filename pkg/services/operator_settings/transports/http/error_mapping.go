@@ -10,6 +10,7 @@ import (
 
 const (
 	operatorSettingsInvalidLoadRequestMessage    = "invalid operator settings load request"
+	operatorSettingsInvalidUpdateRequestMessage  = "invalid operator settings update request"
 	operatorSettingsDocumentMalformedMessage     = "operator document is malformed"
 	operatorSettingsDocumentNotFoundMessage      = "operator document not found"
 	operatorSettingsDocumentUnsupportedMessage   = "operator document update is unsupported"
@@ -28,6 +29,9 @@ func RootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 
 	if IsLoadDocumentBadRequest(err) {
 		return badRequestErrorResponse(operatorSettingsInvalidLoadRequestMessage)
+	}
+	if IsApplyDocumentUpdateBadRequest(err) {
+		return badRequestErrorResponse(operatorSettingsInvalidUpdateRequestMessage)
 	}
 
 	switch {
