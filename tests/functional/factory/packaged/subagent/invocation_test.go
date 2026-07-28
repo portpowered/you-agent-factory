@@ -79,6 +79,42 @@ func TestPackagedSubagentStreamsChildResponseEvents(t *testing.T) {
 	assertPackagedSubagentChildResponseEvents(t, responseEvents)
 }
 
+// TestPackagedSubagentChildFailureReturnsStableFailure proves that packaged
+// @you/subagent invocation returns a stable failed public terminal outcome when
+// the child worker rejects, without emitting a success primary result for the
+// failing run.
+func TestPackagedSubagentChildFailureReturnsStableFailure(t *testing.T) {
+	t.Run("CLI JSON returns stable failed terminal outcome", func(t *testing.T) {
+		requestText := fmt.Sprintf("functional-packaged-subagent-failure-%d", time.Now().UnixNano())
+		response, stderr, execErr := runPackagedSubagentCLIJSONFailureInvocation(t, requestText)
+
+		if execErr == nil {
+			t.Fatal("Process.Execute error = nil, want terminal packaged-subagent child failure")
+		}
+		assertPackagedSubagentStableFailureInvocation(t, response)
+		assertPackagedSubagentStableFailureErrorResponse(t, response, stderr)
+		if invocationPrimaryResultPresent(response) {
+			t.Fatalf("primaryResult = %#v, want no success primary result after child worker failure", response.PrimaryResult)
+		}
+		if strings.Contains(invocationResponseJSON(t, response), packagedSubagentChildPrimaryResult) {
+			t.Fatal("failed invocation JSON contained child success primary result text")
+		}
+		if strings.Contains(invocationResponseJSON(t, response), requestText) {
+			t.Fatalf("failed invocation JSON echoed submitted request text %q", requestText)
+		}
+	})
+
+	t.Run("API returns stable failed terminal outcome", func(t *testing.T) {
+		requestText := fmt.Sprintf("functional-packaged-subagent-api-failure-%d", time.Now().UnixNano())
+		response := runPackagedSubagentAPIFailureInvocation(t, requestText)
+
+		assertPackagedSubagentStableFailureInvocation(t, response)
+		if invocationPrimaryResultPresent(response) {
+			t.Fatalf("primaryResult = %#v, want no success primary result after child worker failure", response.PrimaryResult)
+		}
+	})
+}
+
 func runPackagedSubagentAPIInvocationWithResponseEvents(
 	t *testing.T,
 	requestText string,
@@ -274,6 +310,113 @@ func packagedSubagentAcceptMockWorkersConfig() *workers.MockWorkersConfig {
 			RunType:         workers.MockWorkerRunTypeAccept,
 		}},
 	}
+}
+
+func packagedSubagentRejectingMockWorkersConfig() *workers.MockWorkersConfig {
+	exitCode := 7
+	return &workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName:      factorydefinitions.PackagedSubagentWorkerName,
+			WorkstationName: factorydefinitions.PackagedSubagentRunWorkstationName,
+			RunType:         workers.MockWorkerRunTypeReject,
+			RejectConfig: &workers.MockWorkerRejectConfig{
+				Stderr:   "packaged subagent mock worker failure",
+				ExitCode: &exitCode,
+			},
+		}},
+	}
+}
+
+func runPackagedSubagentCLIJSONFailureInvocation(
+	t *testing.T,
+	requestText string,
+) (factoryapi.InvocationResponse, string, error) {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedSubagentFactoryName)
+	mockWorkersPath := support.WriteMockWorkersConfig(t, packagedSubagentRejectingMockWorkersConfig())
+
+	args := []string{
+		"you", "--json", "run",
+		"--named", factorydefinitions.PackagedSubagentFactoryName,
+		"--with-mock-workers", mockWorkersPath,
+		"--no-record",
+		requestText,
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+	execErr := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+
+	var response factoryapi.InvocationResponse
+	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
+		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
+	}
+	return response, inputs.Stderr(), execErr
+}
+
+func runPackagedSubagentAPIFailureInvocation(
+	t *testing.T,
+	requestText string,
+) factoryapi.InvocationResponse {
+	t.Helper()
+
+	factoryDir := support.InstallPackagedFactory(t, t.TempDir(), factorydefinitions.PackagedSubagentFactoryName)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:        factoryDir,
+		UseMockWorkers:    true,
+		MockWorkersConfig: packagedSubagentRejectingMockWorkersConfig(),
+	})
+	return postPackagedSubagentInvocation(t, server.URL(), requestText)
+}
+
+func assertPackagedSubagentStableFailureInvocation(
+	t *testing.T,
+	response factoryapi.InvocationResponse,
+) {
+	t.Helper()
+
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("status = %q, want FAILED; response = %#v", response.Status, response)
+	}
+	if response.ErrorCode == nil || strings.TrimSpace(string(*response.ErrorCode)) == "" {
+		t.Fatalf("errorCode = %#v, want stable public failure code", response.ErrorCode)
+	}
+	if response.Message == nil || strings.TrimSpace(*response.Message) == "" {
+		t.Fatalf("message = %#v, want stable public failure message", response.Message)
+	}
+}
+
+func assertPackagedSubagentStableFailureErrorResponse(
+	t *testing.T,
+	response factoryapi.InvocationResponse,
+	stderr string,
+) {
+	t.Helper()
+
+	decoder := json.NewDecoder(strings.NewReader(stderr))
+	var errorResponse factoryapi.ErrorResponse
+	if err := decoder.Decode(&errorResponse); err != nil {
+		t.Fatalf("decode ErrorResponse: %v\nstderr:\n%s", err, stderr)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		t.Fatalf("stderr contains data after ErrorResponse: %v\nstderr:\n%s", err, stderr)
+	}
+	if errorResponse.Code != factoryapi.ErrorResponseCode(*response.ErrorCode) {
+		t.Fatalf("ErrorResponse code = %q, want %q", errorResponse.Code, *response.ErrorCode)
+	}
+	if errorResponse.Family != factoryapi.ErrorFamilyInternalServerError {
+		t.Fatalf("ErrorResponse family = %q, want INTERNAL_SERVER_ERROR", errorResponse.Family)
+	}
+	if !strings.HasPrefix(errorResponse.Message, *response.Message) {
+		t.Fatalf("ErrorResponse message = %q, want prefix %q", errorResponse.Message, *response.Message)
+	}
+}
+
+func invocationPrimaryResultPresent(response factoryapi.InvocationResponse) bool {
+	return response.PrimaryResult != nil && len(*response.PrimaryResult) > 0
 }
 
 func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationResponse) string {
