@@ -68,7 +68,7 @@ func (r stubRuntimeResolver) ResolveWorkRuntime(string) (work.Runtime, error) {
 func TestNewServiceConstructsStateAccessSubservice(t *testing.T) {
 	t.Parallel()
 
-	if service := NewService(NewRuntimeSessionResolver(stubRuntimeResolver{})); service == nil {
+	if service := NewService(NewRuntimeSessionResolver(stubRuntimeResolver{}), nil); service == nil {
 		t.Fatal("NewService() = nil")
 	}
 }
