@@ -20,6 +20,9 @@ func Move(
 	service work.Service,
 	input MoveInput,
 ) ToolResponse[work.OperatorMoveResult] {
+	if response, done := requestContextErrorResponse[work.OperatorMoveResult](ctx); done {
+		return response
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[work.OperatorMoveResult]{Error: &envelope}

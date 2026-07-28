@@ -18,6 +18,9 @@ func Submit(
 	service work.Service,
 	input SubmitInput,
 ) ToolResponse[work.WorkRequestSubmitResult] {
+	if response, done := requestContextErrorResponse[work.WorkRequestSubmitResult](ctx); done {
+		return response
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[work.WorkRequestSubmitResult]{Error: &envelope}

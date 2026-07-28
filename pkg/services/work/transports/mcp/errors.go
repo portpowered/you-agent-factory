@@ -1,6 +1,7 @@
 package workmcp
 
 import (
+	"context"
 	"errors"
 	"strings"
 
@@ -9,6 +10,10 @@ import (
 
 const (
 	errorCodeBadRequest               = "BAD_REQUEST"
+	errorCodeRequestCanceled          = "work.request.canceled"
+	errorCodeRequestTimedOut          = "work.request.timed_out"
+	errorMessageRequestCanceled       = "work request was canceled"
+	errorMessageRequestTimedOut       = "work request timed out"
 	errorCodeAdmissionInvalid         = "work.admission.invalid"
 	errorCodeAdmissionConflict        = "work.admission.conflict"
 	errorCodeAdmissionRejected        = "work.admission.rejected"
@@ -21,6 +26,48 @@ const (
 	errorMessageStateAccessNotFound       = "Work not found"
 	errorMessageStateAccessAlreadyApplied = "Operator move request was already applied"
 )
+
+func requestContextErrorResponse[T any](ctx context.Context) (ToolResponse[T], bool) {
+	if envelope, ok := contextRequestErrorEnvelope(ctx.Err()); ok {
+		return ToolResponse[T]{Error: &envelope}, true
+	}
+	return ToolResponse[T]{}, false
+}
+
+func contextRequestErrorEnvelope(err error) (ToolErrorEnvelope, bool) {
+	if err == nil {
+		return ToolErrorEnvelope{}, false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return contextDeadlineExceededErrorEnvelope(), true
+	}
+	if errors.Is(err, context.Canceled) {
+		return contextCanceledErrorEnvelope(), true
+	}
+	return ToolErrorEnvelope{}, false
+}
+
+func contextCanceledErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeRequestCanceled,
+		Message:   errorMessageRequestCanceled,
+		Retryable: false,
+		Details: map[string]any{
+			"reason": "CANCELED",
+		},
+	}
+}
+
+func contextDeadlineExceededErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeRequestTimedOut,
+		Message:   errorMessageRequestTimedOut,
+		Retryable: true,
+		Details: map[string]any{
+			"reason": "TIMED_OUT",
+		},
+	}
+}
 
 func decodeInputErrorEnvelope(context string, err error) ToolErrorEnvelope {
 	message := context
@@ -122,6 +169,9 @@ func stateAccessErrorEnvelope(err error) ToolErrorEnvelope {
 }
 
 func executionErrorEnvelope(err error) ToolErrorEnvelope {
+	if envelope, ok := contextRequestErrorEnvelope(err); ok {
+		return envelope
+	}
 	return ToolErrorEnvelope{
 		Code:      errorCodeBadRequest,
 		Message:   strings.TrimSpace(err.Error()),

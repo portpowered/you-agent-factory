@@ -38,6 +38,9 @@ func List(
 	service work.Service,
 	input ListInput,
 ) ToolResponse[work.ListResult] {
+	if response, done := requestContextErrorResponse[work.ListResult](ctx); done {
+		return response
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[work.ListResult]{Error: &envelope}

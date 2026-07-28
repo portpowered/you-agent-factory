@@ -18,6 +18,9 @@ func Get(
 	service work.Service,
 	input GetInput,
 ) ToolResponse[work.ReadModel] {
+	if response, done := requestContextErrorResponse[work.ReadModel](ctx); done {
+		return response
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[work.ReadModel]{Error: &envelope}
