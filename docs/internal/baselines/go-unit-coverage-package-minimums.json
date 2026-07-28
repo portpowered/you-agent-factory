@@ -483,6 +483,10 @@
       "minimum": 90.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/legacysnapshot",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
       "minimum": 79.48
     },
@@ -733,6 +737,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/runtimeadapter",
       "minimum": 44.44
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot",
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession",
