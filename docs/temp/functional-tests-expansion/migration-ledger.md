@@ -460,7 +460,7 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/replay_contracts/short_helpers_contract_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayEventCountCountsMatchingEventTypes | short | wrong-layer: package-integration — package-local replay helper contracts (replayEventCount, factoryRelationsValue) without root.BuildProcess / public transport boundary. Replacement evidence owner: tests/functional/internal/support/deadcode_contract_test.go. | replay_contracts | none | replay_contracts-delete-06-wrong-layer |
 | tests/functional/replay_contracts/worker_public_contract_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFieldsPrivate | functionallong | tests/functional/workers/script/execution_test.go | replay_contracts | artifact-contract-closeout | replay_contracts-delete-05-workers-script |
 
-#### `runtime_api` (106 scenarios, catch_all=`runtime_api`)
+#### `runtime_api` (103 scenarios, catch_all=`runtime_api`)
 
 | source_path | package | scenario | lane | destination | catch_all | specialty_targets | deletion_only_batch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -976,6 +976,15 @@ Batch execution guidance for later move work:
 | tests/functional/runtime_api/factory_transformation/api_session_factory_save_version_test.go | you-agent-factory/tests/functional/runtime_api/factory_transformation | TestSessionFactoryPUT_UpsertReplaceDoesNotReturnAlreadyExists | short | tests/functional/factory/current/read_save_test.go | runtime_api | none | runtime_api-delete-06-factory-current |
 | tests/functional/runtime_api/factory_transformation/api_session_factory_save_version_test.go | you-agent-factory/tests/functional/runtime_api/factory_transformation | TestSessionFactoryPUT_UpsertReplaceRejectsStaleVersion | short | tests/functional/factory/current/read_save_test.go | runtime_api | none | runtime_api-delete-06-factory-current |
 | tests/functional/runtime_api/topology_projection_smoke_long_test.go | you-agent-factory/tests/functional/runtime_api | TestEndToEndTopologyProjectionSmoke_LiveEventsAndReplayConfigMatch | functionallong | tests/functional/events/replay/record_replay_test.go | runtime_api | none | runtime_api-delete-07-events-replay |
+
+### Workstations cron (runtime_api)
+
+Released batch `runtime_api-delete-03-workstations-cron` consumed cron workstation
+scenarios after destination coverage landed in `tests/functional/workstations/cron/clock_test.go`
+(`TestCronDoesNotDoubleFireForOneScheduleBoundary`,
+`TestCronFiresAtInjectedTimeWithoutWallClockSleep`,
+`TestCronImplicitFailureRoutingMovesFailedCronWorkIntoFailedState`) and
+`cron-time-work-smoke` retargeted to the destination package.
 
 ### Wrong-layer approvals (runtime_api)
 
@@ -1735,6 +1744,7 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | --- | --- | ---: | --- | --- |
 | `runtime_api-delete-01-transport-http` | runtime_api | 9 | transport/http, observability/logging | planned |
 | `runtime_api-delete-02-work-submission` | runtime_api | 15 | work/submission, work/recovery, events/factory_events | planned |
+| `runtime_api-delete-03-workstations-cron` | runtime_api | 3 | workstations/cron | released |
 | `runtime_api-delete-04-sessions` | runtime_api | 8 | sessions/execution, sessions/controls | planned |
 | `runtime_api-delete-05-factory-packaged` | runtime_api | 11 | factory/packaged/{deep_research,goal,quorum,review} | planned |
 | `runtime_api-delete-06-factory-current` | runtime_api | 39 | factory/current, factory/definitions | planned |

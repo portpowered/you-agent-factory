@@ -9274,11 +9274,10 @@
   "runtime_api_mapping": {
     "mapped_at": "2026-07-24T02:25:00Z",
     "story": "fnd-007-migration-ledger-003",
-    "scenario_count": 104,
+    "scenario_count": 101,
     "batch_ids": [
       "runtime_api-delete-01-transport-http",
       "runtime_api-delete-02-work-submission",
-      "runtime_api-delete-03-workstations-cron",
       "runtime_api-delete-04-sessions",
       "runtime_api-delete-05-factory-packaged",
       "runtime_api-delete-06-factory-current",
@@ -9350,7 +9349,7 @@
     "lane_short": 757,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
-    "deletion_only_batches": 50,
+    "deletion_only_batches": 49,
     "validator": "go run ./cmd/migrationledgercheck",
     "row_count": 852,
     "short_lane_rows": 757,
