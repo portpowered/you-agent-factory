@@ -380,6 +380,14 @@ type invocationCLIError struct {
 	WorkState string
 }
 
+func (e invocationCLIError) InvocationErrorCode() string {
+	return e.Code
+}
+
+func (e invocationCLIError) InvocationErrorMessage() string {
+	return e.responseMessage()
+}
+
 func (e invocationCLIError) Error() string {
 	contextSuffix := e.contextSuffix()
 	switch {

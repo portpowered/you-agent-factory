@@ -1,216 +1,70 @@
 package run
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
-	"io/fs"
 	"strings"
 
-	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
 )
 
 const (
-	InvocationErrorCodeFailed       = "RUN_INVOCATION_FAILED"
-	InvocationErrorCodeCancelled    = "RUN_INVOCATION_CANCELLED"
-	InvocationErrorCodeTimeout      = "RUN_INVOCATION_TIMEOUT"
-	CurrentFactoryNotFoundCode      = "CURRENT_FACTORY_NOT_FOUND"
-	CurrentFactoryInvalidCode       = "CURRENT_FACTORY_INVALID"
-	InvocationOutputConflictCode    = "INVOCATION_OUTPUT_CONFLICT"
-	InvocationOutputUnsupportedCode = "INVOCATION_OUTPUT_UNSUPPORTED"
-	ServerBindFailedCode            = "SERVER_BIND_FAILED"
+	InvocationErrorCodeFailed       = factoryruntimecli.InvocationErrorCodeFailed
+	InvocationErrorCodeCancelled    = factoryruntimecli.InvocationErrorCodeCancelled
+	InvocationErrorCodeTimeout      = factoryruntimecli.InvocationErrorCodeTimeout
+	CurrentFactoryNotFoundCode      = factoryruntimecli.CurrentFactoryNotFoundCode
+	CurrentFactoryInvalidCode       = factoryruntimecli.CurrentFactoryInvalidCode
+	InvocationOutputConflictCode    = factoryruntimecli.InvocationOutputConflictCode
+	InvocationOutputUnsupportedCode = factoryruntimecli.InvocationOutputUnsupportedCode
+	ServerBindFailedCode            = factoryruntimecli.ServerBindFailedCode
+	InvocationOutputPrimaryResult   = factoryruntimecli.InvocationOutputPrimaryResult
+	InvocationOutputResponseStream  = factoryruntimecli.InvocationOutputResponseStream
 )
 
-type InvocationError struct {
-	Code    string
-	Message string
-	Cause   error
-}
-
-func (e *InvocationError) Error() string {
-	if e == nil {
-		return ""
-	}
-	if strings.TrimSpace(e.Message) == "" {
-		return e.Code
-	}
-	return fmt.Sprintf("%s: %s", e.Code, e.Message)
-}
-
-func (e *InvocationError) Unwrap() error {
-	if e == nil {
-		return nil
-	}
-	return e.Cause
-}
+type InvocationError = factoryruntimecli.InvocationError
 
 // WriteInvocationError renders the stable clean-invocation failure contract to
 // stderr. It returns true when err matched an invocation contract error.
-func WriteInvocationError(w io.Writer, err error, _ bool) bool {
-	payload, ok := invocationErrorResponse(err)
-	if !ok {
-		return false
-	}
-	if w == nil {
-		return true
-	}
-	data, marshalErr := json.Marshal(payload)
-	if marshalErr == nil {
-		_, _ = fmt.Fprintln(w, string(data))
-	}
-	return true
-}
-
-func invocationErrorResponse(err error) (factoryapi.ErrorResponse, bool) {
-	var invocationErr *InvocationError
-	if errors.As(err, &invocationErr) {
-		return newInvocationErrorResponse(invocationErr.Code, invocationErr.Message), true
-	}
-
-	var cliErr invocationCLIError
-	if errors.As(err, &cliErr) {
-		return newInvocationErrorResponse(cliErr.Code, cliErr.responseMessage()), true
-	}
-	return factoryapi.ErrorResponse{}, false
-}
-
-func newInvocationErrorResponse(code, message string) factoryapi.ErrorResponse {
-	code = strings.TrimSpace(code)
-	if code == "" {
-		code = InvocationErrorCodeFailed
-	}
-	family := factoryapi.ErrorFamilyInternalServerError
-	switch code {
-	case CurrentFactoryNotFoundCode:
-		family = factoryapi.ErrorFamilyNotFound
-	case CurrentFactoryInvalidCode, InvocationOutputConflictCode, InvocationOutputUnsupportedCode:
-		family = factoryapi.ErrorFamilyBadRequest
-	}
-	return factoryapi.ErrorResponse{
-		Code:    factoryapi.ErrorResponseCode(code),
-		Family:  family,
-		Message: strings.TrimSpace(message),
-	}
+func WriteInvocationError(w io.Writer, err error, quiet bool) bool {
+	return factoryruntimecli.WriteInvocationError(w, err, quiet)
 }
 
 // MapCurrentFactoryFailure classifies failures from the exact Current Factory
 // selection before they cross the public run-command error boundary.
 func MapCurrentFactoryFailure(err error) error {
-	if err == nil {
-		return nil
-	}
-	if _, ok := invocationErrorResponse(err); ok {
-		return err
-	}
-	code := CurrentFactoryInvalidCode
-	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, factorydefinitions.ErrFactoryLayoutNotFound) {
-		code = CurrentFactoryNotFoundCode
-	}
-	return &InvocationError{Code: code, Message: strings.TrimSpace(err.Error()), Cause: err}
+	return factoryruntimecli.MapCurrentFactoryFailure(err)
 }
 
 // MapServerFailure classifies terminal listener binding failures at the CLI
 // boundary while preserving all other errors for their owning mapper.
 func MapServerFailure(err error) error {
-	if err == nil ||
-		(!platformhttpserver.IsBindError(err) && !cliserver.IsLocalBindError(err)) {
-		return err
-	}
-	return &InvocationError{
-		Code: ServerBindFailedCode, Message: strings.TrimSpace(err.Error()), Cause: err,
-	}
+	return factoryruntimecli.MapServerFailure(err)
 }
 
 // MapInvocationFailure preserves authored invocation errors and classifies
 // pre-terminal failures that occurred before an InvocationResponse existed.
 func MapInvocationFailure(err error) error {
-	if err == nil {
-		return nil
-	}
-	if _, ok := invocationErrorResponse(err); ok {
-		return err
-	}
-	switch {
-	case errors.Is(err, context.DeadlineExceeded):
-		return &InvocationError{Code: InvocationErrorCodeTimeout, Message: "clean invocation timed out", Cause: err}
-	case errors.Is(err, context.Canceled):
-		return &InvocationError{Code: InvocationErrorCodeCancelled, Message: "clean invocation cancelled", Cause: err}
-	default:
-		return &InvocationError{Code: InvocationErrorCodeFailed, Message: strings.TrimSpace(err.Error()), Cause: err}
-	}
+	return factoryruntimecli.MapInvocationFailure(err)
 }
-
-const (
-	// InvocationOutputPrimaryResult is the default one-shot invocation stdout
-	// contract: primary-result-only output with no live progress rendering.
-	InvocationOutputPrimaryResult = ""
-	// invocationOutputPrimaryLiteral is the documented spelling for the default
-	// primary-result-only output mode.
-	invocationOutputPrimaryLiteral = "primary"
-	// InvocationOutputResponseStream enables live internal SessionResponseStream
-	// progress rendering for supported one-shot factory invocations.
-	InvocationOutputResponseStream = "response-stream"
-)
 
 func NormalizeInvocationOutputMode(raw string) (string, error) {
-	return normalizeInvocationOutputMode(raw)
-}
-
-func normalizeInvocationOutputMode(raw string) (string, error) {
-	trimmed := strings.TrimSpace(raw)
-	switch trimmed {
-	case InvocationOutputPrimaryResult, invocationOutputPrimaryLiteral:
-		return InvocationOutputPrimaryResult, nil
-	case InvocationOutputResponseStream:
-		return InvocationOutputResponseStream, nil
-	default:
-		return "", &InvocationError{
-			Code: InvocationOutputUnsupportedCode,
-			Message: fmt.Sprintf(
-				"unsupported --output value %q; supported values are primary (default) and response-stream",
-				trimmed,
-			),
-		}
-	}
+	return factoryruntimecli.NormalizeInvocationOutputMode(raw)
 }
 
 // ValidateInvocationOutputSelection rejects competing public stdout selectors.
 // JSON plus response-stream is one accepted JSON-stream selection; quiet cannot
 // be combined with either global JSON or an explicit --output selection.
 func ValidateInvocationOutputSelection(quiet, jsonOutput, explicitOutput bool) error {
-	if !quiet || (!jsonOutput && !explicitOutput) {
-		return nil
-	}
-	return &InvocationError{
-		Code:    InvocationOutputConflictCode,
-		Message: "--quiet cannot be used with --json or --output",
-	}
+	return factoryruntimecli.ValidateInvocationOutputSelection(quiet, jsonOutput, explicitOutput)
+}
+
+func validateInvocationOutputMode(cfg RunConfig, invocationMode bool) error {
+	return factoryruntimecli.ValidateInvocationOutputMode(factoryruntimecli.ValidateInvocationOutputModeRequest{
+		InvocationOutputMode: cfg.InvocationOutputMode,
+		Continuously:         cfg.Continuously,
+		InvocationMode:       invocationMode,
+	})
 }
 
 func isResponseStreamOutputMode(mode string) bool {
 	return strings.TrimSpace(mode) == InvocationOutputResponseStream
-}
-
-func validateInvocationOutputMode(cfg RunConfig, invocationMode bool) error {
-	if !isResponseStreamOutputMode(cfg.InvocationOutputMode) {
-		return nil
-	}
-	if cfg.Continuously {
-		return &InvocationError{
-			Code:    InvocationOutputUnsupportedCode,
-			Message: "response-stream output is not supported with --continuously",
-		}
-	}
-	if !invocationMode {
-		return &InvocationError{
-			Code:    InvocationOutputUnsupportedCode,
-			Message: "response-stream output requires a one-shot factory invocation such as you run --named or you run --factory with positional text or piped stdin",
-		}
-	}
-	return nil
 }
