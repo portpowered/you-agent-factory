@@ -529,7 +529,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ## Wave 2 — work
 
-- [ ] `tests/functional/work/submission/batch_inputs_test.go`
+- [x] `tests/functional/work/submission/batch_inputs_test.go`
   - `TestWorkBatchAcceptsInlineFileAndStdinShapes`.
   - `TestWorkBatchSelectsDefaultAndExplicitWorkTypes`.
   - `TestWorkBatchRejectsUnknownTypeWithoutPartialMutation`.
