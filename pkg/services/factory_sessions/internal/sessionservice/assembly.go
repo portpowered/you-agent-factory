@@ -319,9 +319,6 @@ func (h definitionHost) ReplaceFactoryLayoutAtDir(
 ) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
 	return h.callbacks().ReplaceFactoryLayoutAtDir(targetDir, prepared)
 }
-func (h definitionHost) AttachFactoryDefinitions(definitions factorydefinitions.Service) factorydefinitions.Service {
-	return h.runtime.AttachFactoryDefinitionService(definitions)
-}
 
 var _ factorysessions.DefinitionActivationGatewayProvider = definitionHost{}
 

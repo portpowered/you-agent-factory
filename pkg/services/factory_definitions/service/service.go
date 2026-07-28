@@ -88,7 +88,7 @@ func New(
 		RequiredToolChecker:   requiredToolChecker,
 		OrchestratorValidator: orchestratorValidator,
 	})
-	definitions := factorydefinition.NewWithCatalogPackagesValidationAndInstallation(
+	return factorydefinition.NewWithCatalogPackagesValidationAndInstallation(
 		host,
 		activationGateway,
 		catalogService,
@@ -97,6 +97,4 @@ func New(
 		packagedInstaller,
 		versionFileSystem,
 	)
-	sessionHost.AttachFactoryDefinitions(definitions)
-	return definitions
 }

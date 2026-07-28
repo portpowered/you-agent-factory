@@ -738,7 +738,9 @@ Definitions-owned activation requester contract; Sessions aliases it from
 exposed from `SessionRuntime.DefinitionActivationGateway()` and
 `definitionHost.DefinitionActivationGateway()`. Definitions save/activate/swap
 paths consume the gateway directly; `SessionHost` no longer carries activation
-ports.
+ports or `AttachFactoryDefinitions`. Runtime opening binds constructed Definitions
+into Sessions through `sessionservice.InstallFactoryDefinitions` after
+`FactoryDefinitionsFactory` returns, preserving a one-way Sessions-owned edge.
 
 When publishing additive CTR-DEF catalog (or later) slices on that root
 `Service`, declare plain request/result value types beside the interface,

@@ -146,7 +146,6 @@ type SessionHost interface {
 	ValidateEditableFactorySnapshot(context.Context, *FactorySnapshot) error
 	GetCurrentFactorySnapshotForSession(context.Context, string) (*FactorySnapshot, error)
 	ReplaceFactoryLayoutAtDir(string, *PreparedFactoryLayoutPayload) (*FactorySplitLayoutReplaceResult, error)
-	AttachFactoryDefinitions(Service) Service
 }
 
 type PortableBundledFileReplacement struct {

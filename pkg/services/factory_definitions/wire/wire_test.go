@@ -224,9 +224,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 			sessionHost.runtimeCalls,
 		)
 	}
-	if sessionHost.attachCalls != 1 {
-		t.Fatalf("AttachFactoryDefinitions calls = %d, want exactly one construction-time wiring call", sessionHost.attachCalls)
-	}
 	if leaked := runtime.NumGoroutine() - baselineGoroutines; leaked > 4 {
 		t.Fatalf(
 			"construction started background goroutines: baseline=%d current=%d delta=%d",
@@ -516,11 +513,6 @@ func (stubSessionHost) SwapPersistedNamedFactoryRuntime(
 ) error {
 	return nil
 }
-func (stubSessionHost) AttachFactoryDefinitions(
-	definitions factorydefinitions.Service,
-) factorydefinitions.Service {
-	return definitions
-}
 
 type stubValidator struct{}
 
@@ -677,7 +669,6 @@ func (c *recordingClock) Now() time.Time {
 
 type recordingSessionHost struct {
 	runtimeCalls int
-	attachCalls  int
 }
 
 func (h *recordingSessionHost) recordRuntimeCall() {
@@ -794,11 +785,4 @@ func (h *recordingSessionHost) SwapPersistedNamedFactoryRuntime(
 ) error {
 	h.recordRuntimeCall()
 	return nil
-}
-
-func (h *recordingSessionHost) AttachFactoryDefinitions(
-	definitions factorydefinitions.Service,
-) factorydefinitions.Service {
-	h.attachCalls++
-	return definitions
 }
