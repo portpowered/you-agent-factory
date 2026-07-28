@@ -14,6 +14,9 @@ var RecordingsThinRootContractFiles = []string{
 	"contracts.go",
 	"contracts_test.go",
 	"metadata.go",
+	"portable_recording.go",
+	"portable_recording_build.go",
+	"portable_recording_validate.go",
 	"runtime_import_boundary_test.go",
 	"runtime_request_boundary_test.go",
 	"service_import_boundary_test.go",
@@ -36,15 +39,7 @@ type RecordingsRootContractFoldTarget struct {
 
 // RecordingsExcessRootContractFolds inventories excess root contract/helper
 // clusters beyond the thin Recordings service root contract.
-var RecordingsExcessRootContractFolds = []RecordingsRootContractFoldTarget{
-	{
-		Cluster: "artifacts",
-		Files: []string{
-			"artifacts_import_boundary_test.go",
-		},
-		Destination: recordingsPackagePrefix + "/internal/services/artifacts_export",
-	},
-}
+var RecordingsExcessRootContractFolds = []RecordingsRootContractFoldTarget{}
 
 // ListRecordingsRootGoFiles returns every live root-level .go file name under
 // pkg/services/recordings/.

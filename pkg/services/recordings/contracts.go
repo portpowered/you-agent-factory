@@ -8,7 +8,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordingworkstation "github.com/portpowered/infinite-you/pkg/services/recordings/projections/workstation"
-	recordingartifacts "github.com/portpowered/infinite-you/pkg/services/recordings/artifacts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -1386,40 +1385,4 @@ type SimpleDashboardSessionData struct {
 	ProviderSessions     []FactoryWorldProviderSessionRecord
 }
 
-// Portable recording aliases remain only for compatibility with existing
-// Factory Session callers. They are not part of the Recordings Service portable
-// artifact seam, whose detached values are defined above.
-type PortableRecording = recordingartifacts.Recording
-type PortableRecordingArtifactSummary = recordingartifacts.ArtifactSummary
-type PortableRecordingAvailability = recordingartifacts.AvailabilityDetail
-type PortableRecordingCanonicalArtifact = recordingartifacts.CanonicalArtifact
-type PortableRecordingCanonicalCheckpoint = recordingartifacts.CanonicalCheckpoint
-type PortableRecordingCanonicalFacts = recordingartifacts.CanonicalFacts
-type PortableRecordingCanonicalResult = recordingartifacts.CanonicalResult
-type PortableRecordingCheckpointSummary = recordingartifacts.CheckpointSummary
-type PortableRecordingDiagnostic = recordingartifacts.Diagnostic
-type PortableRecordingEventSummary = recordingartifacts.EventSummary
-type PortableRecordingFailureSummary = recordingartifacts.FailureSummary
-type PortableRecordingResult = recordingartifacts.ResultProjection
-type PortableRecordingWriter = recordingartifacts.Writer
-type RecordingTemporaryFile = recordingartifacts.TemporaryFile
-type RecordingMakeDirectories = recordingartifacts.MakeDirectories
-type RecordingCreateTemporaryFile = recordingartifacts.CreateTemporaryFile
-type RecordingRemovePath = recordingartifacts.RemovePath
-type RecordingRenamePath = recordingartifacts.RenamePath
-
-const (
-	KindJavaScriptFactorySession        = recordingartifacts.KindJavaScriptFactorySession
-	DivergenceCategoryConfigMismatch    = "config_mismatch"
-	PortableRecordingCodeInvalidDigest  = recordingartifacts.CodeInvalidDigest
-	PortableRecordingCodeInvalidSummary = recordingartifacts.CodeInvalidSummary
-)
-
-// Legacy package-level helpers remain for existing callers. Peers should prefer
-// the plain artifact-export methods on Service as the cross-service source of
-// truth for build/validate/decode outcomes.
-var (
-	BuildPortableRecording    = recordingartifacts.Build
-	DecodePortableRecording   = recordingartifacts.DecodeAndValidate
-	ValidatePortableRecording = recordingartifacts.Validate
-)
+const DivergenceCategoryConfigMismatch = "config_mismatch"

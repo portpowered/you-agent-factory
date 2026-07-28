@@ -29,6 +29,9 @@ fold or delete them.
 | `contracts.go` | Thin committed root contract (keep) | Canonical `Service` interface, append/subscribe, projection/query, lifecycle, replay, and artifact-export slice vocabulary plus typed failure sentinels peers branch on via `errors.Is`. |
 | `contracts_test.go` | Thin committed root contract (keep) | Co-located characterization tests for published `Service` slice contracts. |
 | `metadata.go` | Thin committed root contract (keep) | Factory metadata mismatch warnings for replay-safe inspection at the public boundary. |
+| `portable_recording.go` | Thin committed root contract (keep) | Peer-needed portable JavaScript Factory Session recording vocabulary and writer seams. |
+| `portable_recording_build.go` | Thin committed root contract (keep) | `BuildPortableRecording` maps canonical facts into the portable recording contract. |
+| `portable_recording_validate.go` | Thin committed root contract (keep) | `ValidatePortableRecording` and `DecodePortableRecording` validate detached portable recordings. |
 | `runtime_import_boundary_test.go` | Thin committed root contract (keep) | Runtime import-boundary test proving Factory Runtime peers stay on the published Recordings root seam. |
 | `runtime_request_boundary_test.go` | Thin committed root contract (keep) | Runtime request-boundary test proving runtime dispatch constructs through the Recordings root contract. |
 | `service_import_boundary_test.go` | Thin committed root contract (keep) | Service import-boundary test proving cross-service peers import only the thin Recordings root package. |
@@ -39,10 +42,9 @@ fold or delete them.
 | `service_root_contract_seam_test.go` | Thin committed root contract (keep) | Peer-shaped characterization consumer exercising every published `Service` slice through one root dependency. |
 | `wire_peer_import_boundary_test.go` | Thin committed root contract (keep) | Wire import-boundary test proving `recordings/wire` peers stay on the published root seam. |
 | `workers_root_boundary_test.go` | Thin committed root contract (keep) | Workers import-boundary test proving worker execution stays on the published Recordings root seam. |
-| `artifacts_import_boundary_test.go` | Excess fold/consolidation debt | `artifacts_export` — artifacts import-boundary test (`artifacts` cluster). |
 
-**Totals:** 14 root-level `.go` files — 13 thin committed root contract (keep), 1
-excess fold/consolidation debt.
+**Totals:** 16 root-level `.go` files — all thin committed root contract (keep);
+no excess fold/consolidation debt remains at the public root after CLN-REC-CONTRACT-ROOTS seal.
 
 ## Folded clusters (CLN-REC-CONTRACT-ROOTS)
 
@@ -54,18 +56,18 @@ excess fold/consolidation debt.
 | `workstation_request` | `recordings/internal/services/projection_query` | `workstation_requests.go`, `workstation_requests_content_assert_test.go`, `workstation_requests_test.go` |
 | `replay` | `recordings/internal/services/replay` | `replay_contract.go`, `replay_import_boundary_test.go` |
 | `live_recording_target` | `recordings/internal/services/recording_lifecycle` | `live_recording_target.go`, `live_recording_target_test.go` |
+| `artifacts` | `recordings/internal/services/artifacts_export` | `artifacts_import_boundary_test.go` |
 
-Peer-needed Factory Event, world-state, dispatch, workstation-request, replay, and
-live-recording-target vocabulary remains importable from the thin Recordings root
-(`contracts.go` re-exports from Factory Definitions, `recordings/projections`, or
-defines Recordings-owned slice types directly; private subservices own the folded
-implementation homes and characterization tests).
+Peer-needed Factory Event, world-state, dispatch, workstation-request, replay,
+live-recording-target, and portable-recording vocabulary remains importable from
+the thin Recordings root (`contracts.go`, `portable_recording*.go`, or
+`recordings/projections`); private subservices own the folded implementation
+homes and characterization tests.
 
 ## Excess fold clusters
 
-| Cluster | Destination | Root files |
-| --- | --- | --- |
-| `artifacts` | `recordings/internal/services/artifacts_export` | `artifacts_import_boundary_test.go` |
+None. CLN-REC-CONTRACT-ROOTS sealed the public Recordings root to the committed
+thin contract set.
 
 ## Generator mirror
 

@@ -14,6 +14,9 @@ var recordingsThinRootContractFiles = []string{
 	"contracts.go",
 	"contracts_test.go",
 	"metadata.go",
+	"portable_recording.go",
+	"portable_recording_build.go",
+	"portable_recording_validate.go",
 	"runtime_import_boundary_test.go",
 	"runtime_request_boundary_test.go",
 	"service_import_boundary_test.go",
@@ -34,15 +37,7 @@ type recordingsRootContractFoldTarget struct {
 
 // recordingsExcessRootContractFolds mirrors internal/ownershipinventory
 // RecordingsExcessRootContractFolds for package-target manifest checks.
-var recordingsExcessRootContractFolds = []recordingsRootContractFoldTarget{
-	{
-		cluster: "artifacts",
-		files: []string{
-			"artifacts_import_boundary_test.go",
-		},
-		destination: "pkg/services/recordings/internal/services/artifacts_export",
-	},
-}
+var recordingsExcessRootContractFolds = []recordingsRootContractFoldTarget{}
 
 func listRecordingsRootGoFiles(root string) ([]string, error) {
 	recordingsRoot := filepath.Join(root, filepath.FromSlash(recordingsRootRelative))
