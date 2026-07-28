@@ -9,7 +9,7 @@ import (
 	"reflect"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
+	factorydefinitionswirevalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/validation"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
@@ -146,7 +146,7 @@ func validateArtifactEquivalence(sourcePath string, jsonPayload, yamlJSON []byte
 		)
 	}
 	for format, factory := range map[string]*factorydefinitions.FactoryConfig{"JSON": jsonFactory, "YAML": yamlFactory} {
-		if validation := factorydefinitionswire.ValidateFactoryDefinition(factory); validation.HasBlockingTargets() {
+		if validation := factorydefinitionswirevalidation.ValidateFactoryDefinition(factory); validation.HasBlockingTargets() {
 			var findings []string
 			for _, target := range validation.BlockingTargets() {
 				findings = append(findings, fmt.Sprintf("%s %s: %s", target.Code, target.Path, target.Message))

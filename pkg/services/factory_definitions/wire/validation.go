@@ -2,7 +2,7 @@ package wire
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	validationimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
+	wirevalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/validation"
 )
 
 // NewValidationOperations constructs the owner validation implementation from
@@ -11,12 +11,12 @@ func NewValidationOperations(
 	orchestrators factorydefinitions.OrchestratorDefinitionValidator,
 	loadCanonical ...factorydefinitions.CanonicalFactoryJSONLoader,
 ) factorydefinitions.ValidationOperations {
-	return validationimpl.New(orchestrators, loadCanonical...)
+	return wirevalidation.NewValidationOperations(orchestrators, loadCanonical...)
 }
 
 var (
-	ValidateFactoryDefinition = validationimpl.Validate
-	ValidateBlockingFactoryLoad = validationimpl.ValidateBlockingLoad
-	ValidatePortableResourceManifestOnPathWithSourceResolver = validationimpl.ValidatePortableResourceManifestOnPathWithSourceResolver
-	ValidatePortableBundledFilesForExpandOnPathWithSourceResolver = validationimpl.ValidatePortableBundledFilesForExpandOnPathWithSourceResolver
+	ValidateFactoryDefinition = wirevalidation.ValidateFactoryDefinition
+	ValidateBlockingFactoryLoad = wirevalidation.ValidateBlockingFactoryLoad
+	ValidatePortableResourceManifestOnPathWithSourceResolver = wirevalidation.ValidatePortableResourceManifestOnPathWithSourceResolver
+	ValidatePortableBundledFilesForExpandOnPathWithSourceResolver = wirevalidation.ValidatePortableBundledFilesForExpandOnPathWithSourceResolver
 )
