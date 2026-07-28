@@ -1,10 +1,13 @@
 package subagent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -14,6 +17,7 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -56,6 +60,145 @@ func TestPackagedSubagentReturnsChildResult(t *testing.T) {
 			t.Fatalf("HTTP listener start calls = %d, want 0", listenerStarts)
 		}
 	})
+}
+
+// TestPackagedSubagentStreamsChildResponseEvents proves that packaged
+// @you/subagent invocation publishes child Factory Response Events on the public
+// Factory Session response-event stream, not only the terminal invocation
+// primary result returned by the invocation API.
+func TestPackagedSubagentStreamsChildResponseEvents(t *testing.T) {
+	requestText := fmt.Sprintf("functional-packaged-subagent-stream-%d", time.Now().UnixNano())
+	response, responseEvents := runPackagedSubagentAPIInvocationWithResponseEvents(t, requestText)
+
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
+	}
+	if got := invocationPrimaryResultText(t, response); got != packagedSubagentChildPrimaryResult {
+		t.Fatalf("primaryResult = %q, want %q", got, packagedSubagentChildPrimaryResult)
+	}
+	assertPackagedSubagentChildResponseEvents(t, responseEvents)
+}
+
+func runPackagedSubagentAPIInvocationWithResponseEvents(
+	t *testing.T,
+	requestText string,
+) (factoryapi.InvocationResponse, []factoryapi.FactoryResponseEvent) {
+	t.Helper()
+
+	factoryDir := support.InstallPackagedFactory(t, t.TempDir(), factorydefinitions.PackagedSubagentFactoryName)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:        factoryDir,
+		UseMockWorkers:    true,
+		MockWorkersConfig: packagedSubagentAcceptMockWorkersConfig(),
+	})
+
+	response := postPackagedSubagentInvocation(t, server.URL(), requestText)
+	responseEvents := support.GetFactoryResponseEventsAt(t, server.URL(), factorysessions.DefaultSessionID)
+	return response, responseEvents
+}
+
+func postPackagedSubagentInvocation(
+	t *testing.T,
+	serverURL string,
+	requestText string,
+) factoryapi.InvocationResponse {
+	t.Helper()
+
+	body, err := json.Marshal(packagedSubagentTextInvocationRequest(requestText))
+	if err != nil {
+		t.Fatalf("marshal invocation request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(serverURL, "/") +
+		"/factory-sessions/" + factorysessions.DefaultSessionID + "/invocations"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	payload, readErr := io.ReadAll(response.Body)
+	if readErr != nil {
+		t.Fatalf("read invocation response: %v", readErr)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("POST %s status = %d, want 200: %s", endpoint, response.StatusCode, string(payload))
+	}
+
+	var decoded factoryapi.InvocationResponse
+	if decodeErr := json.Unmarshal(payload, &decoded); decodeErr != nil {
+		t.Fatalf("decode invocation response: %v\npayload:\n%s", decodeErr, string(payload))
+	}
+	return decoded
+}
+
+func packagedSubagentTextInvocationRequest(requestText string) factoryapi.InvocationRequest {
+	var part factoryapi.WorkContentPart
+	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeText,
+		Text: requestText,
+	}); err != nil {
+		panic(fmt.Sprintf("build invocation text content: %v", err))
+	}
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := factoryapi.WorkContent{part}
+	return factoryapi.InvocationRequest{
+		SourceKind: &sourceKind,
+		Content:    &content,
+	}
+}
+
+func assertPackagedSubagentChildResponseEvents(
+	t *testing.T,
+	events []factoryapi.FactoryResponseEvent,
+) {
+	t.Helper()
+
+	if len(events) == 0 {
+		t.Fatal("response events are empty, want child Factory Response Events on the public stream surface")
+	}
+
+	var dispatchID string
+	for index, event := range events {
+		if event.DispatchId == nil || strings.TrimSpace(*event.DispatchId) == "" {
+			t.Fatalf("response event[%d] = %#v, want child dispatch correlation", index, event)
+		}
+		if dispatchID == "" {
+			dispatchID = *event.DispatchId
+		}
+		if *event.DispatchId != dispatchID {
+			t.Fatalf("response event[%d] dispatch = %q, want %q", index, *event.DispatchId, dispatchID)
+		}
+		if event.Kind != factoryapi.FactoryResponseEventKindMessage {
+			t.Fatalf("response event[%d] kind = %q, want MESSAGE child progress", index, event.Kind)
+		}
+		if event.Phase != factoryapi.FactoryResponseEventPhaseCompleted {
+			t.Fatalf("response event[%d] phase = %q, want COMPLETED child message", index, event.Phase)
+		}
+		if event.SchemaVersion == "" || event.EventId == "" {
+			t.Fatalf("response event[%d] = %#v, want public response-event contract fields", index, event)
+		}
+	}
+
+	finalEvent := events[len(events)-1]
+	payload, err := finalEvent.Payload.AsFactoryResponseEventMessagePayload()
+	if err != nil {
+		t.Fatalf("decode final child response event payload: %v", err)
+	}
+	if got := responseEventMessageText(payload); got != packagedSubagentChildPrimaryResult {
+		t.Fatalf("final child response event text = %q, want %q", got, packagedSubagentChildPrimaryResult)
+	}
+}
+
+func responseEventMessageText(payload factoryapi.FactoryResponseEventMessagePayload) string {
+	for _, block := range payload.ContentBlocks {
+		text, err := block.AsFactoryResponseEventTextContentBlock()
+		if err != nil {
+			continue
+		}
+		if text.Text != "" {
+			return text.Text
+		}
+	}
+	return ""
 }
 
 func runPackagedSubagentCLIJSONInvocation(t *testing.T, requestText string) factoryapi.InvocationResponse {
