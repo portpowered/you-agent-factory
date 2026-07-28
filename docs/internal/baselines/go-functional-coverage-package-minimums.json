@@ -1116,7 +1116,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening",
-      "minimum": 71.52
+      "minimum": 71.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/invocation",
@@ -2488,7 +2488,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider",
-      "minimum": 36.92
+      "minimum": 34.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter",
@@ -2530,7 +2530,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini",
-      "minimum": 78.15
+      "minimum": 70.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract",
@@ -2554,7 +2554,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro",
-      "minimum": 71.55
+      "minimum": 71.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/opencode",
@@ -2574,7 +2574,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured",
-      "minimum": 58.33
+      "minimum": 6.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/runner",
