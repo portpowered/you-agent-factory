@@ -7389,36 +7389,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
-      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
-      "scenario": "TestPackagedFusionRequiredInputCompletes",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
-      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
-      "scenario": "TestPackagedFusionOptionalInputsReachWorkers",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
-      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
-      "scenario": "TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/factory/packaged/subagent/invocation_test.go",
       "package": "you-agent-factory/tests/functional/factory/packaged/subagent",
       "scenario": "TestPackagedSubagentReturnsChildResult",
