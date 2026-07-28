@@ -1451,6 +1451,12 @@
     },
     {
       "fromOwner": "recordings",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/recordings/transports/http -\u003e pkg/transports/http/generated"
+    },
+    {
+      "fromOwner": "recordings",
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/services/recordings -\u003e pkg/services/work"
@@ -4123,6 +4129,12 @@
     },
     {
       "packagePath": "pkg/services/recordings/service",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/transports/http",
       "disposition": "retain",
       "destination": "recordings",
       "destinationKind": "owner"

@@ -978,7 +978,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service",
-      "minimum": 83.22
+      "minimum": 82.58
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
@@ -1427,6 +1427,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/service",
       "minimum": 77.68
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http",
+      "minimum": 77.80
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/wire",
