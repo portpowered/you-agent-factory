@@ -435,9 +435,12 @@ primary-result behavior.
   unit-only registration leaves `make test-functional-coverage` red.
   Deleting a measured production package must remove its manifest rows from both
   coverage baselines in the same slice; stale entries fail
-  `gocoveragecheck` with "outside the functional measured package set". Regenerate
-  `ownership-inventory.json` with `go run ./cmd/ownershipinventoryfreeze` when
-  Workers provider integration packages replace deleted adapter subtrees.
+  `gocoveragecheck` with "outside the functional measured package set". When an
+  adapter subtree is replaced by a Workers integration package (for example
+  `provider/opencode`), add the successor package to both manifests in the same
+  slice. Regenerate `ownership-inventory.json` with
+  `go run ./cmd/ownershipinventoryfreeze` when Workers provider integration
+  packages replace deleted adapter subtrees.
 - The authoritative manifest-to-Integration join belongs in
   `pkg/services/workers/provider/registry/`. Catalog registrations name only
   the canonical embedded identity; external registrations carry one detached

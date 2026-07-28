@@ -2253,6 +2253,10 @@
       "minimum": 71.55
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/opencode",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/pi",
       "minimum": 45.03
     },
