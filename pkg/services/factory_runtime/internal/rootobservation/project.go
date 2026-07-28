@@ -3,8 +3,8 @@ package rootobservation
 import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/factorystatus"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/legacysnapshot"
 )
 
 // Project maps a legacy engine snapshot into the published plain observation
@@ -13,14 +13,14 @@ import (
 // factory_runtime/internal so raw engine-snapshot types stay off the public
 // Runtime package surface enforced by pkg-boundary.
 func Project(
-	snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	snap *legacysnapshot.Snapshot,
 	scope factory.ObservationScope,
 ) factory.Observation {
 	if snap == nil {
 		return factory.Observation{}
 	}
 
-	status := factory.NewFactoryStatusProjector().ProjectFactoryStatus(snap)
+	status := factorystatus.ProjectFromSnapshot(snap)
 	full := factory.Observation{
 		Status: observationStatusFromRuntime(snap.RuntimeStatus),
 		Progress: factory.ObservationProgress{
@@ -52,7 +52,7 @@ func Project(
 }
 
 func projectResourceViews(
-	snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	snap *legacysnapshot.Snapshot,
 	resources []factory.FactoryResourceUsage,
 ) []factory.ObservationResourceView {
 	if len(resources) == 0 {

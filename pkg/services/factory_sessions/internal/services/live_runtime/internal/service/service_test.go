@@ -9,6 +9,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
@@ -265,8 +266,8 @@ func (f *testFactoryRuntime) SubmitWorkRequest(context.Context, work.WorkRequest
 func (f *testFactoryRuntime) SubscribeFactoryEvents(context.Context, *factorydefinitions.FactoryEventReconnectCursor, factorydefinitions.FactoryEventReconnectScope) (*factorydefinitions.FactoryEventStream, error) {
 	return nil, nil
 }
-func (f *testFactoryRuntime) GetEngineStateSnapshot(context.Context) (*factoryruntime.StateSnapshot, error) {
-	return &factoryruntime.StateSnapshot{FactoryState: f.state}, nil
+func (f *testFactoryRuntime) GetEngineStateSnapshot(context.Context) (*legacysnapshot.Snapshot, error) {
+	return &legacysnapshot.Snapshot{FactoryState: f.state}, nil
 }
 func (f *testFactoryRuntime) MoveWork(context.Context, string, string, work.WorkStateChangeSource, string) (work.OperatorMoveResult, error) {
 	return work.OperatorMoveResult{}, nil

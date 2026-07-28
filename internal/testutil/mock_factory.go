@@ -635,7 +635,20 @@ func (m *MockFactory) GetEngineStateSnapshot(_ context.Context) (*interfaces.Eng
 	if m.Marking != nil {
 		runtimeState.Marking = *m.Marking
 	}
-	snap := petri.NewEngineStateSnapshot(runtimeState, string(m.State), m.Uptime, m.Net)
+	snap := interfaces.EngineStateSnapshot[petri.PetriMarkingSnapshot, *petri.Net]{
+		RuntimeStatus:        runtimeState.RuntimeStatus,
+		StreamGenerationID:   runtimeState.StreamGenerationID,
+		Marking:              runtimeState.Marking,
+		Dispatches:           runtimeState.Dispatches,
+		InFlightCount:        runtimeState.InFlightCount,
+		Results:              runtimeState.Results,
+		DispatchHistory:      runtimeState.DispatchHistory,
+		ActiveThrottlePauses: runtimeState.ActiveThrottlePauses,
+		TickCount:            runtimeState.TickCount,
+		FactoryState:         string(m.State),
+		Uptime:               m.Uptime,
+		Topology:             m.Net,
+	}
 	return &snap, nil
 }
 

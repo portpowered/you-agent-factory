@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
@@ -72,7 +73,7 @@ func (s *service) Resolve(sessionID string) *livesession.LiveSession {
 	return s.dependencies.GetSession(sessionID)
 }
 
-func (s *service) Snapshot(ctx context.Context, sessionID string) (*factoryruntime.StateSnapshot, error) {
+func (s *service) Snapshot(ctx context.Context, sessionID string) (*legacysnapshot.Snapshot, error) {
 	if s == nil {
 		return nil, fmt.Errorf("live-runtime service is required")
 	}

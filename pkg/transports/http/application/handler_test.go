@@ -55,10 +55,6 @@ type requestPreparationRole struct {
 }
 type statusProjectorRole struct{}
 
-func (statusProjectorRole) ProjectFactoryStatus(*factoryruntime.LegacyEngineObservation) factoryruntime.FactoryStatus {
-	return factoryruntime.FactoryStatus{}
-}
-
 func (statusProjectorRole) ProjectFactoryStatusFromObservation(observation factoryruntime.Observation) factoryruntime.FactoryStatus {
 	return factoryruntime.FactoryStatusFromObservation(observation)
 }

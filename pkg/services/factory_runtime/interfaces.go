@@ -5,20 +5,10 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorycontext "github.com/portpowered/infinite-you/pkg/services/factory_runtime/context"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/scheduler"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
-
-// StateSnapshot is the public Factory Runtime observation returned to service
-// consumers without requiring them to import Runtime implementation packages.
-type StateSnapshot = interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
-
-// LegacyEngineObservation retains the migration-only API and Factory Sessions
-// signature without making that snapshot a member of Service. New peers use
-// Observe and do not need this alias.
-type LegacyEngineObservation = StateSnapshot
 
 // Scheduler is the replaceable Factory Runtime transition-selection policy.
 type Scheduler = scheduler.Scheduler
@@ -48,12 +38,8 @@ type APIFactory interface {
 }
 
 // LegacySnapshotProvider is migration-only Petri snapshot access retained for
-// internal consumers. It is not part of the APIFactory or Service peer contracts.
-type LegacySnapshotProvider interface {
-	// GetEngineStateSnapshot returns the aggregate observability snapshot for
-	// migration-era consumers that still require Petri markings or topology.
-	GetEngineStateSnapshot(ctx context.Context) (*StateSnapshot, error)
-}
+// hosted runtimes. It is not part of the APIFactory or Service peer contracts.
+type LegacySnapshotProvider = legacysnapshot.Provider
 
 // Service is the singular Factory Runtime root contract and the only
 // cross-service runtime authority for control, observation, dispatch-plan, and

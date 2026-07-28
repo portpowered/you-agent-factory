@@ -32,14 +32,9 @@ func CategoryForState(workTypes map[string]*WorkType, workTypeID string, stateNa
 	return state.CategoryForState(workTypes, workTypeID, stateName)
 }
 
-func SnapshotHasActiveWork(snapshot *StateSnapshot) bool {
-	return state.SnapshotHasActiveWork(snapshot)
-}
-
 var PlaceID = state.PlaceID
 var ValidStatesByType = state.ValidStatesByType
 var NormalizeTransitionTopology = state.NormalizeTransitionTopology
-var NewEngineStateSnapshot = state.NewEngineStateSnapshot
 var GenerateResourcePlaces = state.GenerateResourcePlaces
 var ProjectInitialStructure = state.ProjectInitialStructure
 
