@@ -97,6 +97,46 @@ func snapshotObjectMapper(factory *factorydefinitions.FactoryConfig) (map[string
 	return map[string]any{"name": factory.Name}, nil
 }
 
+func fullSnapshotObjectMapper(factory *factorydefinitions.FactoryConfig) (map[string]any, error) {
+	encoded, err := json.Marshal(factory)
+	if err != nil {
+		return nil, err
+	}
+	var object map[string]any
+	if err := json.Unmarshal(encoded, &object); err != nil {
+		return nil, err
+	}
+	return object, nil
+}
+
+func newRoundTripService(t *testing.T) snapshotsportability.Service {
+	t.Helper()
+	fileSystem := platformfilesystem.Local{}
+	svc, err := snapshotsportabilitywire.NewService(snapshotsportability.Dependencies{
+		LoadCanonical:             stubLoadCanonical,
+		CaptureLoaded:             snapshotsportabilitycapture.NewLoaded(fullSnapshotObjectMapper),
+		PreparePortable:           stubPreparePortable,
+		DecodeSnapshot:            stubDecodeSnapshot,
+		MaterializePortableFiles:  snapshotsportabilitymaterialize.NewMaterializer(fileSystem),
+		ValidateMaterializeWrites: snapshotsportabilitymaterialize.NewWritesValidator(fileSystem),
+	})
+	if err != nil {
+		t.Fatalf("snapshotsportabilitywire.NewService: %v", err)
+	}
+	return svc
+}
+
+func roundTripCanonicalPayload() []byte {
+	return []byte(`{
+		"name": "alpha",
+		"resourceManifest": {
+			"bundledFiles": [
+				{"type": "DOC", "targetPath": "factory/docs/README.md", "content": {"inline": "hello", "encoding": "utf-8"}}
+			]
+		}
+	}`)
+}
+
 func TestCaptureFactorySnapshot_SuccessFromCanonicalPayload(t *testing.T) {
 	t.Parallel()
 
@@ -224,6 +264,102 @@ func TestMaterializeFactorySnapshot_SuccessRestoresBundledAssets(t *testing.T) {
 	if materialized.TargetDir != targetDir ||
 		materialized.Portable.FactoryDir != targetDir ||
 		len(materialized.Portable.Assets) == 0 {
+		t.Fatalf("MaterializeFactorySnapshot result = %#v, want portable success facts", materialized)
+	}
+
+	docPath := filepath.Join(targetDir, "docs", "README.md")
+	content, readErr := os.ReadFile(docPath)
+	if readErr != nil {
+		t.Fatalf("read materialized doc: %v", readErr)
+	}
+	if string(content) != "hello" {
+		t.Fatalf("materialized doc content = %q, want hello", content)
+	}
+}
+
+func TestDetachedSnapshot_CapturePrepareImportMaterializeRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	svc := newRoundTripService(t)
+	ctx := context.Background()
+	canonical := roundTripCanonicalPayload()
+	factoryDir := "/factories/alpha"
+
+	captured, err := svc.CaptureFactorySnapshot(
+		ctx,
+		factorydefinitions.CaptureFactorySnapshotRequest{
+			FactoryDir: factoryDir,
+			Canonical:  canonical,
+			Name:       "alpha",
+		},
+	)
+	if err != nil {
+		t.Fatalf("CaptureFactorySnapshot: %v", err)
+	}
+	if captured.Snapshot == nil {
+		t.Fatal("CaptureFactorySnapshot snapshot is nil")
+	}
+
+	detachedPayload, marshalErr := json.Marshal(captured.Snapshot)
+	if marshalErr != nil {
+		t.Fatalf("marshal detached snapshot payload: %v", marshalErr)
+	}
+	if !json.Valid(detachedPayload) || detachedPayload[0] != '{' {
+		t.Fatalf("detached snapshot payload = %s, want JSON object", detachedPayload)
+	}
+
+	var capturedObject map[string]any
+	if decodeErr := captured.Snapshot.Decode(&capturedObject); decodeErr != nil {
+		t.Fatalf("decode captured snapshot: %v", decodeErr)
+	}
+	if capturedObject["name"] != "alpha" {
+		t.Fatalf("captured name = %#v, want alpha", capturedObject["name"])
+	}
+	if capturedObject["factoryDirectory"] != factoryDir {
+		t.Fatalf("captured factoryDirectory = %#v, want %q", capturedObject["factoryDirectory"], factoryDir)
+	}
+	metadata, ok := capturedObject["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("captured metadata type = %T, want map[string]any", capturedObject["metadata"])
+	}
+	if metadata["source_format"] != factorydefinitions.ReplayV1SourceFormat {
+		t.Fatalf("captured source_format = %#v, want %q", metadata["source_format"], factorydefinitions.ReplayV1SourceFormat)
+	}
+	if metadata["factory_hash"] == "" || metadata["runtime_config_hash"] == "" {
+		t.Fatalf("captured replay metadata = %#v, want non-empty portable hashes", metadata)
+	}
+
+	imported, err := svc.PrepareFactorySnapshotImport(
+		ctx,
+		factorydefinitions.PrepareFactorySnapshotImportRequest{Payload: detachedPayload},
+	)
+	if err != nil {
+		t.Fatalf("PrepareFactorySnapshotImport: %v", err)
+	}
+	if imported.Snapshot == nil || imported.Name != "alpha" {
+		t.Fatalf("PrepareFactorySnapshotImport result = %#v, want alpha snapshot facts", imported)
+	}
+	if imported.Portable.FactoryDir != factoryDir ||
+		len(imported.Portable.Assets) == 0 ||
+		imported.Portable.Assets[0].TargetPath != "factory/docs/README.md" {
+		t.Fatalf("PrepareFactorySnapshotImport portable = %#v, want replay-compatible asset facts", imported.Portable)
+	}
+
+	targetDir := t.TempDir()
+	materialized, err := svc.MaterializeFactorySnapshot(
+		ctx,
+		factorydefinitions.MaterializeFactorySnapshotRequest{
+			TargetDir: targetDir,
+			Snapshot:  imported.Snapshot,
+		},
+	)
+	if err != nil {
+		t.Fatalf("MaterializeFactorySnapshot: %v", err)
+	}
+	if materialized.TargetDir != targetDir ||
+		materialized.Portable.FactoryDir != targetDir ||
+		len(materialized.Portable.Assets) == 0 ||
+		materialized.Portable.Assets[0].TargetPath != "factory/docs/README.md" {
 		t.Fatalf("MaterializeFactorySnapshot result = %#v, want portable success facts", materialized)
 	}
 
