@@ -836,6 +836,13 @@ Wave 0 functional-tests-expansion planning authority lives under
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
 
+- `pkg/services/provider_sessions/packaged_root_shape_test.go` and
+  `pkg/services/provider_sessions/service_import_boundary_test.go` seal FUN-provider-sessions
+  packaged-service shape and production peer import boundaries: Provider Sessions
+  ships only `wire/`, `internal/`, and `transports/` package directories plus thin
+  root contracts, `service/` stays absent, and production peers import only the
+  published Provider Sessions root except the documented `pkg/wire` injector seam.
+
 - `tests/functional/provider_sessions/peer_import_boundary_test.go` owns
   Provider Sessions FUN functional import seal: every package under
   `tests/functional/provider_sessions/...` must construct through
