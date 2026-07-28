@@ -150,6 +150,7 @@ func TestClassifierMultiOutputPreservesPayload(t *testing.T) {
 			support.WorkCustomerLocation("branch-a", "init"),
 			support.WorkCustomerLocation("branch-b", "init"),
 		},
+		wantPayload,
 	)
 	assertClassifierRoutingWorkstationDispatches(
 		t,
@@ -555,6 +556,7 @@ func assertClassifierRoutingOutputWorkBranches(
 	t *testing.T,
 	dispatches []support.DispatchEventObservation,
 	wantBranches []string,
+	wantPayload string,
 ) {
 	t.Helper()
 
@@ -569,8 +571,17 @@ func assertClassifierRoutingOutputWorkBranches(
 	seen := make(map[string]bool, len(wantBranches))
 	for _, item := range *response.OutputWork {
 		location := support.WorkItemCustomerLocation(item)
-		if location != "" {
-			seen[location] = true
+		if location == "" {
+			continue
+		}
+		seen[location] = true
+		if got := classifierRoutingPublicWorkText(item); got != wantPayload {
+			t.Fatalf(
+				"classifier outputWork branch %s payload = %q, want %q preserved across fan-out",
+				location,
+				got,
+				wantPayload,
+			)
 		}
 	}
 	for _, location := range wantBranches {
