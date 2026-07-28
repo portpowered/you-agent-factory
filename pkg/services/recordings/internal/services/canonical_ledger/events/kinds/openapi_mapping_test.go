@@ -111,5 +111,5 @@ func bundledOpenAPIPath(t *testing.T) string {
 	if !ok {
 		t.Fatal("resolve test file path")
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "../../../../../api/openapi.yaml"))
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "../../../../../../../../api/openapi.yaml"))
 }

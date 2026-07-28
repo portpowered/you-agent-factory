@@ -41,6 +41,7 @@ var recordingsExcessRootContractFolds = []recordingsRootContractFoldTarget{
 			"event_contract.go",
 			"event_contract_test.go",
 			"event_vocabulary_boundary_test.go",
+			"events_import_boundary_test.go",
 		},
 		destination: "pkg/services/recordings/internal/services/canonical_ledger",
 	},

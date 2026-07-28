@@ -114,6 +114,6 @@ func canonicalFactoryEventFixturePath(t *testing.T) string {
 	}
 	return filepath.Clean(filepath.Join(
 		filepath.Dir(file),
-		"../../../../transports/http/testdata/canonical-event-vocabulary-stream.json",
+		"../../../../../../../transports/http/testdata/canonical-event-vocabulary-stream.json",
 	))
 }

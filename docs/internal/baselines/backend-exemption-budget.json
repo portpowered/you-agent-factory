@@ -789,13 +789,13 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/events/event_history_dispatch_lifecycle.go#FactoryEventHistory.RecordDispatchQueued",
+      "target": "pkg/services/recordings/internal/services/canonical_ledger/events/event_history_dispatch_lifecycle.go#FactoryEventHistory.RecordDispatchQueued",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/events/event_history_lineage_test.go#assertEventHistoryResponseLineage",
+      "target": "pkg/services/recordings/internal/services/canonical_ledger/events/event_history_lineage_test.go#assertEventHistoryResponseLineage",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
