@@ -1,6 +1,6 @@
 {
   "fidelityClass": "final-only",
   "provider": "pi",
-  "providerSessionId": "",
+  "providerSessionId": "pi-session-structured-failure",
   "status": "failed"
 }
