@@ -666,6 +666,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/work/submission/stage_and_submit_test.go`
   - `TestAPIStageAndSubmitFileCreatesExpectedWork`.
 
+- [x] `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
+  - `TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation`.
+  - `TestCLISubmitBatchSuccessHumanAndJSONShapes`.
+  - `TestCLISubmitBatchInvalidJSONFailsBeforeUpsert`.
+  - `TestCLISubmitBatchContractHarnessExecutesThroughRootBuildProcess`.
+
 - [x] `tests/functional/work/relationships/dependencies_test.go`
   - `TestDependentWorkWaitsForPrerequisiteTargetState`.
   - `TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure`.
@@ -834,12 +840,6 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestImportExportPreservesNestedDocsScriptsAndMetadata`.
   - `TestInvalidImportDoesNotReplaceCurrentFactory`.
 
-
-- [x] `tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go`
-  - `TestCLIFactoryValidateRejectsInvalidDefinitionActionably`.
-  - `TestCLIFactoryValidateDoesNotMutateOnFailure`.
-  - `TestCLIFactoryPersistFromFileThenRunSucceeds`.
-
 - [x] `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
   - `TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation`.
   - `TestCLISubmitBatchSuccessHumanAndJSONShapes`.
@@ -879,6 +879,11 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestVisualizationResponsePresentationThroughPublicRootAfterLifecycle`.
 
 ### Factory runtime (service-mirrored Petri depth)
+
+- [x] `tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go`
+  - `TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied`.
+  - `TestPetriParentOrSameNameGuardReleasesExpectedWork`.
+  - `TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState`.
 
 - [x] `tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go`
   - `TestPetriMultiStagePipelineCompletesAtPublicTerminals`.
