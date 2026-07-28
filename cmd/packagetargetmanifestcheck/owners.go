@@ -186,6 +186,9 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 	if owner == "factory_definitions" && rest == "internal" {
 		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionRetain), true
 	}
+	if owner == "factory_definitions" && strings.HasPrefix(rest, "internal/lifecycle") {
+		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionRetain), true
+	}
 
 	// Packages already under the committed private subservice container retain
 	// that nested destination unless the subservice is still transitional IMP debt.

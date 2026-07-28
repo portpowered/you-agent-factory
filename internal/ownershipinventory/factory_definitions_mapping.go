@@ -92,6 +92,8 @@ func isFactoryDefinitionsCanonicalRetain(rest string) bool {
 		return true
 	case strings.HasPrefix(rest, "internal/services/snapshots_portability"):
 		return true
+	case strings.HasPrefix(rest, "internal/lifecycle"):
+		return true
 	case strings.HasPrefix(rest, "internal/contracts"):
 		return true
 	default:

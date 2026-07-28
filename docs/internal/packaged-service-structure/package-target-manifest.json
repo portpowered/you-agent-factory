@@ -91,6 +91,7 @@
     "pkg/services/factory_definitions/editable",
     "pkg/services/factory_definitions/internal",
     "pkg/services/factory_definitions/internal/contracts",
+    "pkg/services/factory_definitions/internal/lifecycle",
     "pkg/services/factory_definitions/internal/services/authoring_layout",
     "pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout",
     "pkg/services/factory_definitions/internal/services/authoring_layout/expand",
@@ -826,6 +827,11 @@
       "packagePath": "pkg/services/factory_definitions/internal/contracts",
       "disposition": "retain",
       "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/lifecycle",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout",
