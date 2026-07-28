@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/callbehavior"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/callbehavior"
 )
 
 func TestCallBehavior_WorkflowFinalInventoryMatchesExecution(t *testing.T) {

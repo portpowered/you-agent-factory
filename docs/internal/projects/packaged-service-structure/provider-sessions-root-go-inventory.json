@@ -9,6 +9,26 @@
       "note": "Peer Service interface plus Inspect/Project/Details request, result, value, and typed-error contracts."
     },
     {
+      "file": "del_pses_baseline_gate_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "DEL-PSES story 003 gate proving structure, ownership, and package-target baselines no longer list the deleted transitional service/ package as retain or move debt."
+    },
+    {
+      "file": "del_pses_deletion_gate_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "DEL-PSES story 002 gate proving transitional service/ deletion, import clearance, and canonical root directory shape after leased deletion."
+    },
+    {
+      "file": "del_pses_prerequisite_gate_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "DEL-PSES story 001 gate proving CLN-PSES-FOLD-SERVICE, CLN-PSES-LEGACY-PACKAGES, and CLN-PSES-CONTRACT-ROOTS tree invariants before leased deletion begins."
+    },
+    {
+      "file": "del_pses_proof_gate_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "DEL-PSES story 005 gate proving structure, ownership, package-target, and pkg-structure verification pass after transitional service/ deletion and baseline burn-down."
+    },
+    {
       "file": "doc.go",
       "classification": "thin_root_contract",
       "note": "Package documentation for the committed thin Provider Sessions root contract surface."
@@ -17,6 +37,11 @@
       "file": "legacy_packages_disposition_test.go",
       "classification": "thin_root_contract_test",
       "note": "INV disposition, zero-extra absence lock, and import-closure guards proving unexpected public siblings beyond service/ stay inventoried and off production import paths for peer and owner public-surface packages including wire/."
+    },
+    {
+      "file": "packaged_root_shape_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "DEL-PSES story 005 seal proving Provider Sessions ships only wire/, internal/, and transports/ package directories plus thin root contract files."
     },
     {
       "file": "providers_import_boundary_test.go",

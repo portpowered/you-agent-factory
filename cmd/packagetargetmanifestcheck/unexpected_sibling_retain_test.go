@@ -16,7 +16,7 @@ func TestRetainToOwnerRootGuardDetectsDeliberateViolations(t *testing.T) {
 	t.Parallel()
 
 	deliberate := PackageMapping{
-		PackagePath: "pkg/services/factory_runtime/engine",
+		PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/engine",
 		Disposition: DispositionRetain,
 		Destination: "factory_runtime",
 	}
@@ -25,7 +25,7 @@ func TestRetainToOwnerRootGuardDetectsDeliberateViolations(t *testing.T) {
 	}
 
 	valid := PackageMapping{
-		PackagePath: "pkg/services/factory_runtime/engine",
+		PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/engine",
 		Disposition: DispositionMove,
 		Destination: "factory_runtime/internal/services/orchestration",
 	}
@@ -41,13 +41,12 @@ func TestDeliberateRetainToOwnerMappingRejectedByInventorySweepGuard(t *testing.
 		owner string
 		child string
 	}{
-		{owner: "factory_runtime", child: "engine"},
+		{owner: "factory_runtime", child: "build"},
 		{owner: "workers", child: "execution"},
 		{owner: "operator_settings", child: "identityinventory"},
 		{owner: "work", child: "stateaccessrecordings"},
 		{owner: "factory_definitions", child: "clonetests"},
 		{owner: "recordings", child: "artifacts"},
-		{owner: "provider_sessions", child: "service"},
 	}
 
 	for _, tc := range cases {

@@ -933,6 +933,21 @@
       "target": "bootstrap_portability"
     },
     {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/orchestrators/petri/routing/doc.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/orchestrators/petri/routing/helpers_test.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go",
+      "target": "factory_runtime"
+    },
+    {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/factory_visualization/activation_lifecycle_test.go",
       "target": "factory_visualization"
@@ -1426,6 +1441,11 @@
       "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/cli/session_resume/resume_smoke_test.go",
       "target": "cli"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
+      "target": "factory_definitions"
     },
     {
       "rule": "functional-test-unclassified-domain",
@@ -2563,6 +2583,46 @@
       "target": "pkg/services/factory_definitions/activation_contract.go:DefinitionActivationGateway,pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutReaderFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutWriterFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:InputInboxSentinelEnsurer,pkg/services/factory_definitions/config_file_operations.go:FactoryConfigPathSource,pkg/services/factory_definitions/decision_envelope_contract.go:DecisionEnvelopeService,pkg/services/factory_definitions/invocation_interpolation_contract.go:InvocationInterpolationService,pkg/services/factory_definitions/invocation_output_contract.go:InvocationOutputShapingService,pkg/services/factory_definitions/invocation_work_type_contract.go:InvocationWorkTypeService,pkg/services/factory_definitions/loading_effects.go:Clock,pkg/services/factory_definitions/loading_effects.go:LoadingFileSystem,pkg/services/factory_definitions/loading_effects.go:VersionFileSystem,pkg/services/factory_definitions/named_catalog_ports.go:NamedFactoryCatalogFileSystem,pkg/services/factory_definitions/named_path_ports.go:NamedPathFileSystem,pkg/services/factory_definitions/named_path_ports.go:NamedPathResolver,pkg/services/factory_definitions/packaged_installation.go:PackagedFactoryInstaller,pkg/services/factory_definitions/packaged_installation_ports.go:PackagedInstallationFileSystem,pkg/services/factory_definitions/packages_contract.go:PackagedGoalPromptFileSystem,pkg/services/factory_definitions/persistence_ports.go:DirectoryReplacementStore,pkg/services/factory_definitions/persistence_ports.go:PersistenceFileSystem,pkg/services/factory_definitions/portable_bundled_validation.go:PortableBundledFileInspection,pkg/services/factory_definitions/quorum_policy_contract.go:QuorumPolicyService,pkg/services/factory_definitions/replay_runtime.go:ReplayRuntimeConfig,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldFileSystem,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldOutput,pkg/services/factory_definitions/service_contract.go:Service,pkg/services/factory_definitions/service_contract.go:SessionHost,pkg/services/factory_definitions/tts_observability_contract.go:TTSObservabilityService,pkg/services/factory_definitions/work_propagation_contract.go:WorkPropagationPolicyService,pkg/services/factory_definitions/workstation_execution_contract.go:WorkstationExecutionPolicyService"
     },
     {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/javascript_catalog_contract.go",
+      "target": "JavaScriptCatalogCallBehaviorParityIssues"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/javascript_catalog_contract.go",
+      "target": "JavaScriptCatalogForbiddenSymbolIssues"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/javascript_catalog_contract.go",
+      "target": "JavaScriptCatalogPathCompletenessIssues"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/javascript_catalog_contract.go",
+      "target": "JavaScriptCatalogSymbolPathsFromDocument"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/javascript_catalog_contract.go",
+      "target": "JavaScriptClassifySurface"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/javascript_catalog_contract.go",
+      "target": "JavaScriptProjectInstalledBindings"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/javascript_catalog_contract.go",
+      "target": "JavaScriptProjectInstalledCallBehavior"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/javascript_catalog_contract.go",
+      "target": "JavaScriptVerifyProjectedInstalledBindings"
+    },
+    {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_runtime",
       "target": "pkg/services/factory_runtime/clock.go:Clock,pkg/services/factory_runtime/clock.go:LogicalClock,pkg/services/factory_runtime/execution_contracts.go:DispatchResultHook,pkg/services/factory_runtime/execution_contracts.go:DispatchResultHookWakeSignaler,pkg/services/factory_runtime/execution_contracts.go:SubmissionHook,pkg/services/factory_runtime/factory_status.go:FactoryStatusProjector,pkg/services/factory_runtime/filesystem.go:InputFileSystem,pkg/services/factory_runtime/filesystem.go:RuntimeDirectoryFileSystem,pkg/services/factory_runtime/filesystem.go:WorkflowSourceFileSystem,pkg/services/factory_runtime/hosting.go:HostedHandle,pkg/services/factory_runtime/hosting.go:HostedInstance,pkg/services/factory_runtime/hosting.go:HostedLedger,pkg/services/factory_runtime/hosting.go:Lifecycle,pkg/services/factory_runtime/hosting.go:ReplacementBuilder,pkg/services/factory_runtime/hosting.go:Sidecars,pkg/services/factory_runtime/interfaces.go:APIFactory,pkg/services/factory_runtime/interfaces.go:Factory,pkg/services/factory_runtime/interfaces.go:Service,pkg/services/factory_runtime/interfaces.go:WorkMover,pkg/services/factory_runtime/interfaces.go:WorkflowContextProvider,pkg/services/factory_runtime/javascript_checkpoint_contract.go:JavaScriptCheckpointStore,pkg/services/factory_runtime/javascript_checkpoint_contract.go:JavaScriptCheckpointSummaries,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptChildValues,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflowDefinitions,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflowRuntime,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflows,pkg/services/factory_runtime/logger.go:Logger,pkg/services/factory_runtime/metrics.go:MetricsEmitter,pkg/services/factory_runtime/orchestration_contract.go:OrchestrationCompilation,pkg/services/factory_runtime/orchestration_contract.go:OrchestrationJavaScriptExecution,pkg/services/factory_runtime/result_types.go:SessionResultProjectionOperation,pkg/services/factory_runtime/runtime_log_sink.go:RuntimeLogSink,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricRecordWriter,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricsSink,pkg/services/factory_runtime/session_build_spec.go:LoadedConfig,pkg/services/factory_runtime/workflow_preview_operation.go:WorkflowPreviewOperation"
@@ -2576,6 +2636,31 @@
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_runtime/internal/services/orchestration",
       "target": "pkg/services/factory_runtime/internal/services/orchestration/service.go:Binding,pkg/services/factory_runtime/internal/services/orchestration/service.go:Service"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/engine",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/scheduler",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/state",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/subsystems",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-interface-count",
@@ -2616,6 +2701,11 @@
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/operator_settings",
       "target": "pkg/services/operator_settings/dependencies.go:FileSystem,pkg/services/operator_settings/dependencies.go:TemporaryFile,pkg/services/operator_settings/document_contract.go:DocumentOwner,pkg/services/operator_settings/service_contract.go:Service"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/provider_sessions",
+      "target": "pkg/services/provider_sessions/construction_ports.go:FileSystem,pkg/services/provider_sessions/contracts.go:Service"
     },
     {
       "rule": "service-root-interface-count",
@@ -2944,23 +3034,18 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/build",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/instance_host/build",
+      "target": "pkg/services/factory_runtime/internal/services/instance_host"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/context",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/context",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/definitionmapping",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/engine",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
@@ -2969,53 +3054,33 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/javascript",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/metrics",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/metrics",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/orchestrationowner",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/orchestratorcontract",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/replayhooks",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/runtime",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/runtimecontract",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/scheduler",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/state",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/subsystems",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/runtimecontract",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
@@ -3029,23 +3094,23 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/throttle",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/throttle",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/token",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/token",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/token_transformer",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/tooling",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/tooling",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
@@ -3071,11 +3136,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/operator_settings/testproviders",
       "target": "pkg/services/operator_settings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/provider_sessions/service",
-      "target": "pkg/services/provider_sessions"
     },
     {
       "rule": "service-root-unexpected-directory",

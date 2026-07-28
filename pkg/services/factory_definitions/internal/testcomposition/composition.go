@@ -17,9 +17,9 @@ import (
 	compilationloadedsource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
-	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
-	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
+	validationimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
+	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
+	catalogpersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence"
 )
 
 type Representation struct {
@@ -138,18 +138,18 @@ func (c Composition) Loader() *compilationloading.Loader {
 			return config, nil
 		},
 		func(factoryDir string, config *factorydefinitions.FactoryConfig) error {
-			return factoryvalidation.ValidatePortableResourceManifestOnPathWithSourceResolver(
+			return validationimpl.ValidatePortableResourceManifestOnPathWithSourceResolver(
 				factoryDir, config, mustSourceResolver(c.fileSystem),
 				c.fileSystem,
 				c.requiredTools,
 			)
 		},
 		func(factoryDir string, config *factorydefinitions.FactoryConfig) error {
-			return factoryvalidation.ValidatePortableBundledFilesForExpandOnPathWithSourceResolver(
+			return validationimpl.ValidatePortableBundledFilesForExpandOnPathWithSourceResolver(
 				factoryDir, config, mustSourceResolver(c.fileSystem), c.fileSystem,
 			)
 		},
-		factoryvalidation.ValidateBlockingLoad,
+		validationimpl.ValidateBlockingLoad,
 		applySupportedFiles,
 		applyStarterWork,
 		materializeFiles,
@@ -221,7 +221,7 @@ func (c Composition) Persistence(
 	copySupportedFiles := func(sourceDir, targetDir string, config *factorydefinitions.FactoryConfig) error {
 		return internalportableconfig.CopySupportedFiles(c.fileSystem, sourceDir, targetDir, config)
 	}
-	persistence, err := factorypersistence.New(
+	persistence, err := catalogpersistence.New(
 		validator,
 		mapInput,
 		func(ctx context.Context, segment string, payload []byte, validator factorydefinitions.Validator) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
@@ -263,8 +263,8 @@ func (c Composition) Persistence(
 	return persistence
 }
 
-func mustNamedPaths(fileSystem factorydefinitions.NamedPathFileSystem) *factorynamedpaths.Resolver {
-	resolver, err := factorynamedpaths.New(fileSystem)
+func mustNamedPaths(fileSystem factorydefinitions.NamedPathFileSystem) *catalognamedpaths.Resolver {
+	resolver, err := catalognamedpaths.New(fileSystem)
 	if err != nil {
 		panic(err)
 	}

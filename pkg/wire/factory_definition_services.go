@@ -20,10 +20,9 @@ import (
 	factoryinvocationoutput "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationoutput"
 	factoryinvocationworktype "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationworktype"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
-	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
-	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryquorumpolicy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/quorumpolicy"
 	factoryttsobservability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/ttsobservability"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
 	factoryworkpropagation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workpropagation"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -219,7 +218,7 @@ func provideFactoryDefinitionNamedPathFileSystem(
 func provideFactoryDefinitionNamedPathResolver(
 	fileSystem factorydefinitions.NamedPathFileSystem,
 ) (factorydefinitions.NamedPathResolver, error) {
-	return factorynamedpaths.New(fileSystem)
+	return factorydefinitionswire.NewPathResolver(fileSystem)
 }
 
 func provideFactoryDefinitionNamedFactoryCatalogFileSystem(

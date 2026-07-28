@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract"
-	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtimecontract"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
+	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtimecontract"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 

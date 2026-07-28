@@ -2,7 +2,7 @@ package factorydefinitions
 
 import (
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
-	resource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
+	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 )
 
@@ -38,7 +38,7 @@ type HostedWorkerAuthConfig = workerconfig.HostedWorkerAuthConfig
 type AgentToolsConfig = workerconfig.AgentToolsConfig
 type ModelOperation = workerconfig.ModelOperation
 type ModelOperationSlot = workerconfig.ModelOperationSlot
-type ResourceConfig = resource.Config
+type ResourceConfig = catalogresource.Config
 type InvocationSignatureConfig = contracts.InvocationSignatureConfig
 type InvocationExampleConfig = contracts.InvocationExampleConfig
 type InvocationExampleArguments = contracts.InvocationExampleArguments
@@ -139,9 +139,9 @@ type DefinitionSession = contracts.DefinitionSession
 
 const (
 	ResourceStateAvailable                               = contracts.ResourceStateAvailable
-	ResourceTypeModel                                    = resource.TypeModel
-	ResourceTypeProviderQuota                            = resource.TypeProviderQuota
-	ResourceTypeInvocationSlot                           = resource.TypeInvocationSlot
+	ResourceTypeModel                                    = catalogresource.TypeModel
+	ResourceTypeProviderQuota                            = catalogresource.TypeProviderQuota
+	ResourceTypeInvocationSlot                           = catalogresource.TypeInvocationSlot
 	WorkerTypeAgent                                      = contracts.WorkerTypeAgent
 	WorkerTypeInference                                  = contracts.WorkerTypeInference
 	WorkerTypeModel                                      = contracts.WorkerTypeModel

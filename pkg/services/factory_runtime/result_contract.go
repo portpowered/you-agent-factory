@@ -1,6 +1,6 @@
 package factory
 
-import runtimecontract "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtimecontract"
+import runtimecontract "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtimecontract"
 
 type (
 	Issue             = runtimecontract.ResultIssue

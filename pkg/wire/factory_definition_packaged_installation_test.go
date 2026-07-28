@@ -11,7 +11,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 )
 
 type packagedInstallationFileSystemStub struct{}
@@ -21,7 +21,7 @@ func (packagedInstallationFileSystemStub) Stat(string) (fs.FileInfo, error) {
 }
 
 func TestProvideNamedFactoryCandidatePathsResolverForwardsOwnerOperation(t *testing.T) {
-	paths, err := factorynamedpaths.New(platformfilesystem.Local{})
+	paths, err := factorydefinitionswire.NewPathResolver(platformfilesystem.Local{})
 	if err != nil {
 		t.Fatalf("build named path resolver: %v", err)
 	}

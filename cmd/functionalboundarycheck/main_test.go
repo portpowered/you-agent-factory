@@ -39,7 +39,7 @@ import "github.com/portpowered/infinite-you/pkg/services/recordings/projections"
 
 func TestCheckSourceRejectsDirectRequestBatchRuntimeInternal(t *testing.T) {
 	for _, importPath := range []string{
-		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime",
+		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime",
 		"github.com/portpowered/infinite-you/pkg/service",
 		"github.com/portpowered/infinite-you/pkg/orchestrators/petri",
 	} {
@@ -209,7 +209,7 @@ func TestCheckFunctionalCompositionTreeRejectsSecondaryCompositionImport(t *test
 		"github.com/portpowered/infinite-you/pkg/platform/runtimeinput",
 		"github.com/portpowered/infinite-you/pkg/initializer/application",
 		"github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state",
+		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state",
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/scaffold",
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
 		"github.com/portpowered/infinite-you/pkg/services/recordings/projections",

@@ -103,6 +103,9 @@
     "pkg/services/factory_definitions/internal/services/catalog",
     "pkg/services/factory_definitions/internal/services/catalog/internal/service",
     "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
+    "pkg/services/factory_definitions/internal/services/catalog/namedpaths",
+    "pkg/services/factory_definitions/internal/services/catalog/persistence",
+    "pkg/services/factory_definitions/internal/services/catalog/resource",
     "pkg/services/factory_definitions/internal/services/catalog/wire",
     "pkg/services/factory_definitions/internal/services/compilation",
     "pkg/services/factory_definitions/internal/services/compilation/canonical",
@@ -133,6 +136,9 @@
     "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
     "pkg/services/factory_definitions/internal/services/validation",
+    "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
+    "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
+    "pkg/services/factory_definitions/internal/services/validation/impl",
     "pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
     "pkg/services/factory_definitions/internal/services/validation/internal/requiredtools",
     "pkg/services/factory_definitions/internal/services/validation/internal/service",
@@ -170,15 +176,12 @@
     "pkg/services/factory_definitions/validation",
     "pkg/services/factory_definitions/wire",
     "pkg/services/factory_definitions/wire/defaultscaffold",
+    "pkg/services/factory_definitions/wire/validation",
     "pkg/services/factory_definitions/workers",
     "pkg/services/factory_definitions/workers/taxonomy",
     "pkg/services/factory_definitions/workpropagation",
     "pkg/services/factory_definitions/workstationexecution",
     "pkg/services/factory_runtime",
-    "pkg/services/factory_runtime/build",
-    "pkg/services/factory_runtime/context",
-    "pkg/services/factory_runtime/definitionmapping",
-    "pkg/services/factory_runtime/engine",
     "pkg/services/factory_runtime/internal",
     "pkg/services/factory_runtime/internal/factorystatus",
     "pkg/services/factory_runtime/internal/host",
@@ -200,30 +203,34 @@
     "pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
     "pkg/services/factory_runtime/internal/services/dispatch_planning/wire",
     "pkg/services/factory_runtime/internal/services/instance_host",
+    "pkg/services/factory_runtime/internal/services/instance_host/build",
     "pkg/services/factory_runtime/internal/services/instance_host/internal/service",
     "pkg/services/factory_runtime/internal/services/instance_host/wire",
     "pkg/services/factory_runtime/internal/services/orchestration",
+    "pkg/services/factory_runtime/internal/services/orchestration/context",
+    "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
+    "pkg/services/factory_runtime/internal/services/orchestration/engine",
     "pkg/services/factory_runtime/internal/services/orchestration/internal/service",
+    "pkg/services/factory_runtime/internal/services/orchestration/javascript",
+    "pkg/services/factory_runtime/internal/services/orchestration/metrics",
+    "pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
+    "pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
+    "pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
+    "pkg/services/factory_runtime/internal/services/orchestration/runtime",
+    "pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
+    "pkg/services/factory_runtime/internal/services/orchestration/runtimecontract",
+    "pkg/services/factory_runtime/internal/services/orchestration/scheduler",
+    "pkg/services/factory_runtime/internal/services/orchestration/state",
+    "pkg/services/factory_runtime/internal/services/orchestration/state/validation",
+    "pkg/services/factory_runtime/internal/services/orchestration/subsystems",
+    "pkg/services/factory_runtime/internal/services/orchestration/throttle",
+    "pkg/services/factory_runtime/internal/services/orchestration/token",
+    "pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
+    "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/callbehavior",
+    "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/catalog",
+    "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/symbolidentity",
     "pkg/services/factory_runtime/internal/services/orchestration/wire",
-    "pkg/services/factory_runtime/javascript",
-    "pkg/services/factory_runtime/metrics",
-    "pkg/services/factory_runtime/orchestrationowner",
-    "pkg/services/factory_runtime/orchestratorcontract",
-    "pkg/services/factory_runtime/replayhooks",
-    "pkg/services/factory_runtime/runtime",
-    "pkg/services/factory_runtime/runtime/buffers",
-    "pkg/services/factory_runtime/runtimecontract",
-    "pkg/services/factory_runtime/scheduler",
-    "pkg/services/factory_runtime/state",
-    "pkg/services/factory_runtime/state/validation",
-    "pkg/services/factory_runtime/subsystems",
     "pkg/services/factory_runtime/testkit",
-    "pkg/services/factory_runtime/throttle",
-    "pkg/services/factory_runtime/token",
-    "pkg/services/factory_runtime/token_transformer",
-    "pkg/services/factory_runtime/tooling/javascript/callbehavior",
-    "pkg/services/factory_runtime/tooling/javascript/catalog",
-    "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
     "pkg/services/factory_runtime/transports/cli",
     "pkg/services/factory_runtime/transports/http",
     "pkg/services/factory_runtime/transports/mcp",
@@ -369,7 +376,6 @@
     "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
     "pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
     "pkg/services/provider_sessions/internal/services/cursor_reader/wire",
-    "pkg/services/provider_sessions/service",
     "pkg/services/provider_sessions/transports/http",
     "pkg/services/provider_sessions/wire",
     "pkg/services/providers",
@@ -890,6 +896,21 @@
       "destination": "factory_definitions/internal/services/catalog"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/namedpaths",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/persistence",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/resource",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/catalog"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog/wire",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/catalog"
@@ -1036,6 +1057,21 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/validation",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/validation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/impl",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/validation"
     },
@@ -1225,6 +1261,11 @@
       "destination": "factory_definitions"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/wire/validation",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/workers",
       "disposition": "move",
       "destination": "factory_definitions/internal/services/validation"
@@ -1250,29 +1291,9 @@
       "destination": "factory_runtime"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/build",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/instance_host"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/context",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/definitionmapping",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/engine",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/internal",
-      "disposition": "move",
-      "destination": "factory_runtime/internal"
+      "disposition": "retain",
+      "destination": "factory_runtime"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
@@ -1281,8 +1302,8 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/host",
-      "disposition": "move",
-      "destination": "factory_runtime/internal"
+      "disposition": "retain",
+      "destination": "factory_runtime"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
@@ -1375,6 +1396,11 @@
       "destination": "factory_runtime/internal/services/instance_host"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/services/instance_host/build",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/instance_host"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/services/instance_host/internal/service",
       "disposition": "retain",
       "destination": "factory_runtime/internal/services/instance_host"
@@ -1390,7 +1416,112 @@
       "destination": "factory_runtime/internal/services/orchestration"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/context",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/engine",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/metrics",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/runtimecontract",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/scheduler",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/state",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/state/validation",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/subsystems",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/throttle",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/token",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/callbehavior",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/catalog",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/symbolidentity",
       "disposition": "retain",
       "destination": "factory_runtime/internal/services/orchestration"
     },
@@ -1400,99 +1531,9 @@
       "destination": "factory_runtime/internal/services/orchestration"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/javascript",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/metrics",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/orchestrationowner",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/orchestratorcontract",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/replayhooks",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/runtime",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/runtime/buffers",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/runtimecontract",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/scheduler",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/state",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/state/validation",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/subsystems",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/testkit",
       "disposition": "move",
       "destination": "factory_runtime/internal"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/throttle",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/token",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/token_transformer",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/tooling/javascript/callbehavior",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/tooling/javascript/catalog",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
     },
     {
       "packagePath": "pkg/services/factory_runtime/transports/cli",
@@ -2218,11 +2259,6 @@
       "packagePath": "pkg/services/provider_sessions/internal/services/cursor_reader/wire",
       "disposition": "retain",
       "destination": "provider_sessions/internal/services/cursor_reader"
-    },
-    {
-      "packagePath": "pkg/services/provider_sessions/service",
-      "disposition": "move",
-      "destination": "provider_sessions/internal"
     },
     {
       "packagePath": "pkg/services/provider_sessions/transports/http",

@@ -19,6 +19,14 @@ primary-result behavior.
   through Catalog's side-effect-free canonical identity resolver, reject aliases
   and unknown IDs before publishing the root, and reserve request-time Catalog
   lookup for live readiness/selectability so construction remains inert.
+- Providers owner-local Wire at `pkg/services/providers/wire` must stay
+  registered under destination `providers` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and both
+  `go-*-coverage-package-minimums.json` baselines; prove registration with
+  `wire/manifest_registration_test.go` rather than re-editing manifests when
+  IMP-PROV already landed the rows. This LWR packet does not introduce
+  `pkg/services/providers/transports/**` protocol adapters.
 - Parent-private Runner implementations that expose subprocess progress should
   consume an injected streaming command capability, serialize publication only
   within each invocation, and build terminal diagnostics from the command
@@ -1957,6 +1965,16 @@ response-stream output.
   Keep usage lines, parameter descriptions, defaults, accepted values, output
   hints, and example rendering derived from `interfaces.InvocationSignatureConfig`
   instead of hard-coding packaged-factory argument inventories in CLI help.
+- Functional ownership for Factory-aware `you run` invocation help belongs in
+  `tests/functional/workers/transports/cli/run/help/invocation_help_test.go`:
+  prove named-Factory signature help, required vs optional parameter distinction,
+  and read-only no-dispatch guarantees through `support.BuildProcess` +
+  `Process.Execute` on `you run --named <factory> --help`; seed factories with
+  `support.ScaffoldFactory` and `support.CreateNamedFactory`; install
+  `testutil.NewProviderCommandRunner` via `serviceedges.Edges` for no-dispatch
+  proofs. Do not place this coverage under root `pkg/transports/cli` or catch-all
+  `tests/functional/cli/`; package-level renderer regressions remain in
+  `pkg/transports/cli/run/run_invocation_test.go`.
 - `docs/reference/run.md` (`you docs run`) owns supported `@you/fusion`
   invocation and signature-aware help. Factory materialization, examples, and
   edit-after-materialize behavior belong in

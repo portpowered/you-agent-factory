@@ -3,7 +3,7 @@ package workflowruntime
 import (
 	"strings"
 
-	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtimecontract"
+	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtimecontract"
 )
 
 func invalidResultFailure(validation workflowresult.ResultValidation) Outcome {
