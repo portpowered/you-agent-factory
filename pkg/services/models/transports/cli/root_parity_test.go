@@ -196,7 +196,30 @@ func TestRootAdapter_InvokeJSONResolvesThroughModelsRootCatalogAndInference(t *t
 				if request.Scope != scope || request.Name != "OMNIVOICE_Q4_K_M" || request.Operation != "TTS" {
 					t.Fatalf("GetCatalogModel request = %#v", request)
 				}
-				return modelinference.GetModelResult{}, nil
+				return modelinference.GetModelResult{
+					Model: modelinference.Detail{
+						Summary: modelinference.Summary{
+							Name:             "OMNIVOICE_Q4_K_M",
+							ProviderLocality: modelinference.LocalityLocal,
+							Operations: []modelinference.Operation{{
+								Name: "TTS",
+								Inputs: []modelinference.OperationSlot{{
+									Name: "text", ContentTypes: []string{"text"},
+								}},
+							}},
+						},
+						Capabilities: []modelinference.Capability{{
+							Worker:           "tts-worker",
+							ProviderLocality: modelinference.LocalityLocal,
+							Operations: []modelinference.Operation{{
+								Name: "TTS",
+								Inputs: []modelinference.OperationSlot{{
+									Name: "text", ContentTypes: []string{"text"},
+								}},
+							}},
+						}},
+					},
+				}, nil
 			},
 			acquireModelLease: func(_ context.Context, request modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error) {
 				gotAcquire = true
@@ -241,7 +264,14 @@ func TestRootAdapter_InvokeJSONResolvesThroughModelsRootCatalogAndInference(t *t
 	if !gotCatalog || !gotAcquire || !gotInvoke {
 		t.Fatalf("invoke path calls: catalog=%v acquire=%v invoke=%v", gotCatalog, gotAcquire, gotInvoke)
 	}
-	for _, want := range []string{"OMNIVOICE_Q4_K_M", `"operation":"TTS"`} {
+	for _, want := range []string{
+		"OMNIVOICE_Q4_K_M",
+		`"operation":"TTS"`,
+		`"worker":"tts-worker"`,
+		`"providerLocality":"LOCAL"`,
+		`"bindings"`,
+		`"text":"hello world"`,
+	} {
 		if !bytes.Contains(out.Bytes(), []byte(want)) {
 			t.Fatalf("Invoke() JSON missing %q:\n%s", want, out.String())
 		}

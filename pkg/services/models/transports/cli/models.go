@@ -94,7 +94,7 @@ type httpService struct {
 // composition collaborators when a Models root is available, with HTTP and
 // bootstrap invoke behavior retained for remote and legacy composition paths.
 func New(httpProtocol clihttp.Protocol, invocation InvocationOperation) Service {
-	return bindCompositionService(httpProtocol, invocation)
+	return bindCompositionService(httpProtocol, adaptCompositionInvocation(invocation))
 }
 
 func (service *httpService) List(cfg ListConfig) error {

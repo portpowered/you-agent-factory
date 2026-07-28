@@ -303,3 +303,102 @@ func TestConfigFromCompositionMapsRepresentativeCommandInputs(t *testing.T) {
 		t.Fatalf("Pull() output = %q, want model name", out.String())
 	}
 }
+
+type factorySessionPresentationInvocation struct {
+	root      modelinference.Service
+	openScope func(context.Context, factorysessions.ModelsPresentationScopeRequest) (factorysessions.ModelsPresentationScope, error)
+}
+
+func (inv factorySessionPresentationInvocation) InvokeModel(
+	context.Context,
+	factorysessions.InvocationTarget,
+	string,
+	modelinference.Request,
+) (modelinference.Result, error) {
+	return modelinference.Result{}, errors.New("composition test does not invoke through bootstrap")
+}
+
+func (inv factorySessionPresentationInvocation) ResolveModelInvocationFactoryDir(string) (string, error) {
+	return "/tmp/factory", nil
+}
+
+func (inv factorySessionPresentationInvocation) ExportModelInvocationArtifact(string, string) error {
+	return nil
+}
+
+func (inv factorySessionPresentationInvocation) ModelsPresentationRoot() modelinference.Service {
+	return inv.root
+}
+
+func (inv factorySessionPresentationInvocation) OpenModelsPresentationScope(
+	ctx context.Context,
+	request factorysessions.ModelsPresentationScopeRequest,
+) (factorysessions.ModelsPresentationScope, error) {
+	if inv.openScope != nil {
+		return inv.openScope(ctx, request)
+	}
+	return factorysessions.ModelsPresentationScope{}, nil
+}
+
+func TestNewActivatesOwnedPathThroughPresentationCollaborator(t *testing.T) {
+	t.Parallel()
+
+	var listed bool
+	root := compositionModelsRoot{
+		listModels: func(context.Context) (modelinference.List, error) {
+			listed = true
+			return modelinference.List{
+				Results: []modelinference.Summary{{Name: "OMNIVOICE_Q4_K_M"}},
+			}, nil
+		},
+	}
+	invocation := factorySessionPresentationInvocation{root: root}
+	if _, ok := modelscli.AdaptCompositionInvocationForTest(invocation).(modelscli.CompositionModelsRoot); !ok {
+		t.Fatal("adapted presentation collaborator must expose CompositionModelsRoot")
+	}
+	service := modelscli.New(compositionHTTPProtocol(t), invocation)
+	if service == nil {
+		t.Fatal("New() = nil, want composition facade")
+	}
+	var out bytes.Buffer
+	if err := service.List(modelscli.ListConfig{
+		Context: context.Background(),
+		Output:  &out,
+	}); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if !listed {
+		t.Fatal("List() did not route through Models-owned adapter path")
+	}
+	if !strings.Contains(out.String(), "OMNIVOICE_Q4_K_M") {
+		t.Fatalf("List() output = %q, want model name", out.String())
+	}
+}
+
+func TestAdaptCompositionInvocationBuildsOwnedServiceFromPresentationCollaborator(t *testing.T) {
+	t.Parallel()
+
+	invocation := factorySessionPresentationInvocation{
+		root: compositionModelsRoot{
+			pullModel: func(_ context.Context, name string) (modelinference.PullResult, error) {
+				return modelinference.PullResult{ModelName: name}, nil
+			},
+		},
+	}
+	service := modelscli.NewService(modelscli.ConfigFromComposition(
+		compositionHTTPProtocol(t),
+		modelscli.AdaptCompositionInvocationForTest(invocation),
+	))
+	if service == nil {
+		t.Fatal("NewService(ConfigFromComposition()) = nil, want owned service")
+	}
+	var out bytes.Buffer
+	if err := service.Pull(modelscli.PullConfig{
+		Context: context.Background(), ModelName: "OMNIVOICE_Q4_K_M", Output: &out,
+	}); err != nil {
+		t.Fatalf("Pull() error = %v", err)
+	}
+	if !strings.Contains(out.String(), "OMNIVOICE_Q4_K_M") {
+		t.Fatalf("Pull() output = %q, want model name", out.String())
+	}
+}

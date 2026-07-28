@@ -48,9 +48,10 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 			_ = scope.Close(cfg.Context)
 		}()
 	}
-	if _, err := service.models.GetCatalogModel(cfg.Context, modelinference.GetModelRequest{
+	catalogResult, err := service.models.GetCatalogModel(cfg.Context, modelinference.GetModelRequest{
 		Scope: scope.Scope, Name: modelName, Operation: operation,
-	}); err != nil {
+	})
+	if err != nil {
 		return mapModelsRootError(err)
 	}
 	leaseResult, err := service.models.AcquireModelLease(cfg.Context, modelinference.AcquireModelLeaseRequest{
@@ -79,7 +80,7 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 		return mapModelsRootError(err)
 	}
 	if cfg.JSON {
-		response := modelInvocationResponseFromInferenceResult(result)
+		response := modelInvocationResponseFromInferenceResult(result, catalogResult.Model, text)
 		return json.NewEncoder(cfg.Output).Encode(response)
 	}
 	outputPath := strings.TrimSpace(cfg.OutputPath)
@@ -97,13 +98,75 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 	return err
 }
 
-func modelInvocationResponseFromInferenceResult(result modelinference.InvokeModelResult) factoryapi.ModelInvocationResponse {
+func modelInvocationResponseFromInferenceResult(
+	result modelinference.InvokeModelResult,
+	catalog modelinference.Detail,
+	inputText string,
+) factoryapi.ModelInvocationResponse {
+	worker, locality := catalogPresentationForOperation(catalog, result.Operation)
+	bindings := resolvedPresentationBindings(catalog, result.Operation, inputText)
 	content := contentcontract.GeneratedPtrFromParts(inferenceContentToWorkParts(result.Content))
 	return factoryapi.ModelInvocationResponse{
-		ModelName: result.ModelName,
-		Operation: result.Operation,
-		Content:   derefGeneratedWorkContent(content),
+		ModelName:        result.ModelName,
+		Worker:           worker,
+		Operation:        result.Operation,
+		ProviderLocality: factoryapi.WorkerModelLocality(locality),
+		Content:          derefGeneratedWorkContent(content),
+		Bindings:         generatedResolvedModelInvocationBindings(bindings),
 	}
+}
+
+func catalogPresentationForOperation(catalog modelinference.Detail, operation string) (string, string) {
+	for _, capability := range catalog.Capabilities {
+		for _, catalogOperation := range capability.Operations {
+			if catalogOperation.Name == operation {
+				return capability.Worker, string(capability.ProviderLocality)
+			}
+		}
+	}
+	return "", string(catalog.ProviderLocality)
+}
+
+func resolvedPresentationBindings(
+	catalog modelinference.Detail,
+	operation string,
+	inputText string,
+) []modelinference.ResolvedModelOperationBinding {
+	operationDetail, ok := catalogOperationForName(catalog, operation)
+	if !ok {
+		return []modelinference.ResolvedModelOperationBinding{}
+	}
+	for _, input := range operationDetail.Inputs {
+		slot := strings.TrimSpace(input.Name)
+		if slot == "" {
+			continue
+		}
+		return []modelinference.ResolvedModelOperationBinding{{
+			Slot:   slot,
+			Source: "INPUT",
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: inputText,
+			}},
+		}}
+	}
+	return []modelinference.ResolvedModelOperationBinding{}
+}
+
+func catalogOperationForName(catalog modelinference.Detail, operation string) (modelinference.Operation, bool) {
+	for _, catalogOperation := range catalog.Operations {
+		if catalogOperation.Name == operation {
+			return catalogOperation, true
+		}
+	}
+	for _, capability := range catalog.Capabilities {
+		for _, catalogOperation := range capability.Operations {
+			if catalogOperation.Name == operation {
+				return catalogOperation, true
+			}
+		}
+	}
+	return modelinference.Operation{}, false
 }
 
 func inferenceContentToWorkParts(content []modelinference.InferenceContent) []work.WorkContentPart {
