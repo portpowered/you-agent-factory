@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -232,18 +231,20 @@ func TestWatcherMixedOutcomesLeaveNoNonTerminalWorkLeak(t *testing.T) {
 	}
 
 	// Pre-load results: succeed, succeed, fail, succeed, fail.
-	runner := testutil.NewProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
-		platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
-		platformprocess.CommandResult{Stderr: []byte("error"), ExitCode: 1},
-		platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
-		platformprocess.CommandResult{Stderr: []byte("error"), ExitCode: 1},
-	)
+	provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
+		"processor": {
+			{Content: "Done. COMPLETE"},
+			{Content: "Done. COMPLETE"},
+			{Error: errors.New("processing failed")},
+			{Content: "Done. COMPLETE"},
+			{Error: errors.New("processing failed")},
+		},
+	})
 
 	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
 		t,
 		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
+		serviceedges.Edges{ProviderOverride: provider},
 		10*time.Second,
 	)
 

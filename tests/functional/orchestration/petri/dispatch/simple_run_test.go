@@ -240,6 +240,144 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		assertQuiescentSession(t, session, 1, 0)
 	})
 
+	t.Run("dispatcher_lifecycle_idea_reaches_archived_terminal", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_lifecycle_dir"))
+		originTraceID := "trace-idea-lifecycle-test"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "idea",
+			TraceID:    originTraceID,
+			Payload:    []byte(`{"title":"improve onboarding flow"}`),
+		})
+
+		provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+			"planner":  {{Content: "success<COMPLETE>"}},
+			"executor": {{Content: "success<COMPLETE>"}},
+			"reviewer": {{Content: "success<COMPLETE>"}},
+			"archiver": {{Content: "success<COMPLETE>"}},
+		})
+		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderOverride: provider,
+		}, 30*time.Second)
+
+		terminal := support.WorkCustomerLocation("code-change", "archived")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			terminal: 1,
+			support.WorkCustomerLocation("idea", "init"):              0,
+			support.WorkCustomerLocation("idea", "failed"):            0,
+			support.WorkCustomerLocation("prd", "init"):               0,
+			support.WorkCustomerLocation("prd", "failed"):             0,
+			support.WorkCustomerLocation("code-change", "init"):       0,
+			support.WorkCustomerLocation("code-change", "approved"):   0,
+			support.WorkCustomerLocation("code-change", "failed"):     0,
+		})
+		assertListedWorkStateTrace(t, listed, "code-change", "archived", originTraceID)
+		assertQuiescentSession(t, session, 1, 0)
+		for _, workerType := range []string{"reviewer", "planner", "executor", "archiver"} {
+			if provider.CallCount(workerType) != 1 {
+				t.Errorf("%s call count = %d, want 1", workerType, provider.CallCount(workerType))
+			}
+		}
+	})
+
+	t.Run("ideation_rejection_loop_reaches_story_complete", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "full_ideation_pipeline"))
+		originTraceID := "trace-rejection-loop-001"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "idea",
+			TraceID:    originTraceID,
+			Payload:    []byte(`{"title":"rejection loop test"}`),
+		})
+
+		provider := testutil.NewMockProvider(
+			workerexecution.InferenceResponse{Content: "PRD created. COMPLETE"},
+			workerexecution.InferenceResponse{Content: "Code written. COMPLETE"},
+			workerexecution.InferenceResponse{Content: "Needs more work. REJECTED"},
+			workerexecution.InferenceResponse{Content: "Code revised. COMPLETE"},
+			workerexecution.InferenceResponse{Content: "Still not right. REJECTED"},
+			workerexecution.InferenceResponse{Content: "Code revised again. COMPLETE"},
+			workerexecution.InferenceResponse{Content: "Looks good now. ACCEPTED"},
+		)
+		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderOverride: provider,
+		}, 30*time.Second)
+
+		terminal := support.WorkCustomerLocation("story", "complete")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			terminal: 1,
+			support.WorkCustomerLocation("idea", "init"):       0,
+			support.WorkCustomerLocation("prd", "init"):        0,
+			support.WorkCustomerLocation("story", "init"):      0,
+			support.WorkCustomerLocation("story", "in-review"): 0,
+		})
+		assertListedWorkStateTrace(t, listed, "story", "complete", originTraceID)
+		assertQuiescentSession(t, session, 1, 0)
+		if provider.CallCount() != 7 {
+			t.Errorf("provider call count = %d, want 7", provider.CallCount())
+		}
+	})
+
+	t.Run("idea_plan_execute_review_reaches_task_complete", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
+		testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",
+			[]byte("# Architecture Review\n\nPlease review the system architecture."))
+
+		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
+			"planner":   {{Content: "Task processed successfully.<COMPLETE>"}},
+			"processor": {{Content: "Task execution failed.<COMPLETE>"}},
+			"reviewer":  {{Content: "Task execution failed.<COMPLETE>"}},
+		})
+		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderOverride:    provider,
+			ScriptCommandRunner: support.NewStaticSuccessCommandRunner("script-output-ok"),
+		}, 15*time.Second)
+
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			support.WorkCustomerLocation("idea", "complete"): 1,
+			support.WorkCustomerLocation("plan", "complete"): 1,
+			support.WorkCustomerLocation("task", "complete"): 1,
+			support.WorkCustomerLocation("idea", "init"):     0,
+			support.WorkCustomerLocation("plan", "init"):     0,
+			support.WorkCustomerLocation("task", "init"):     0,
+			support.WorkCustomerLocation("task", "failed"):   0,
+		})
+		assertQuiescentSession(t, session, 3, 0)
+		if provider.CallCount("planner") != 1 {
+			t.Errorf("planner call count = %d, want 1", provider.CallCount("planner"))
+		}
+	})
+
+	t.Run("idea_to_prd_multiple_ideas_each_reach_terminal", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_to_prd"))
+		trace1 := "trace-idea-multi-1"
+		trace2 := "trace-idea-multi-2"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "idea",
+			TraceID:    trace1,
+			Payload:    []byte(`{"title":"idea one"}`),
+		})
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "idea",
+			TraceID:    trace2,
+			Payload:    []byte(`{"title":"idea two"}`),
+		})
+
+		provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+			"planner":       {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
+			"prd-processor": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
+		})
+		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderOverride: provider,
+		}, 10*time.Second)
+
+		terminal := support.WorkCustomerLocation("prd", "complete")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			terminal: 2,
+			support.WorkCustomerLocation("idea", "init"): 0,
+		})
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{trace1, trace2})
+		assertQuiescentSession(t, session, 2, 0)
+	})
+
 	t.Run("config_driven_happy_path_two_stage_completes", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "happy_path"))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "Config-driven happy path"}`))
@@ -548,6 +686,119 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
 		}
 		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
+	})
+
+	t.Run("idea_to_prd_planner_command_failure_routes_idea_to_failed", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_to_prd"))
+		testutil.WriteSeedFile(t, dir, "idea", []byte(`{"title":"broken idea"}`))
+
+		runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+			Stderr:   []byte("LLM timeout"),
+			ExitCode: 1,
+		})
+		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderCommandRunner: runner,
+		}, 10*time.Second)
+
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			support.WorkCustomerLocation("idea", "failed"):    1,
+			support.WorkCustomerLocation("prd", "init"):       0,
+			support.WorkCustomerLocation("prd", "complete"):   0,
+		})
+		assertQuiescentSession(t, session, 0, 1)
+	})
+
+	t.Run("idea_plan_execute_review_script_failure_routes_plan_to_failed", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
+		testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",
+			[]byte("# Architecture Review\n\nPlease review the system architecture."))
+
+		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
+			"planner": {{Content: "Task processed successfully.<COMPLETE>"}},
+		})
+		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderOverride: provider,
+			ScriptCommandRunner: nonZeroExitScriptCommandRunner{
+				stderr:   "script execution failed",
+				exitCode: 1,
+			},
+		}, 10*time.Second)
+
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			support.WorkCustomerLocation("idea", "complete"): 1,
+			support.WorkCustomerLocation("plan", "failed"):     1,
+			support.WorkCustomerLocation("plan", "complete"): 0,
+			support.WorkCustomerLocation("task", "init"):     0,
+			support.WorkCustomerLocation("task", "failed"):   0,
+			support.WorkCustomerLocation("task", "complete"): 0,
+		})
+		if provider.CallCount("planner") != 1 {
+			t.Errorf("planner call count = %d, want 1", provider.CallCount("planner"))
+		}
+	})
+
+	t.Run("idea_plan_execute_review_planner_failure_routes_idea_to_failed", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
+		testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",
+			[]byte("# Architecture Review\n\nPlease review the system architecture."))
+
+		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
+			"planner": {{Content: "Task processed unsuccessfully.<FAILED>"}},
+		})
+		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderOverride:    provider,
+			ScriptCommandRunner: support.NewStaticSuccessCommandRunner("script-output-ok"),
+		}, 10*time.Second)
+
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			support.WorkCustomerLocation("idea", "failed"):  1,
+			support.WorkCustomerLocation("plan", "init"):    0,
+			support.WorkCustomerLocation("plan", "complete"): 0,
+			support.WorkCustomerLocation("task", "init"):    0,
+		})
+		assertQuiescentSession(t, session, 0, 1)
+	})
+
+	t.Run("idea_plan_execute_review_processor_exhaustion_routes_task_to_failed", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
+		originTraceID := "trace-processor-exhaustion"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "idea",
+			TraceID:    originTraceID,
+			Payload:    []byte(`{"title":"processor exhaustion"}`),
+		})
+
+		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
+			"planner": {
+				{Content: "Task processed successfully.<COMPLETE>"},
+			},
+			"processor": {
+				{Content: "Task execution failed.<FAILED>"},
+			},
+		})
+		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderOverride:    provider,
+			ScriptCommandRunner: support.NewStaticSuccessCommandRunner("script-output-ok"),
+		}, 15*time.Second)
+
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			support.WorkCustomerLocation("idea", "complete"): 1,
+			support.WorkCustomerLocation("plan", "complete"): 1,
+			support.WorkCustomerLocation("task", "failed"):   1,
+			support.WorkCustomerLocation("task", "complete"): 0,
+		})
+		assertListedWorkStateTrace(t, listed, "idea", "complete", originTraceID)
+		assertListedWorkStateTrace(t, listed, "plan", "complete", originTraceID)
+		assertListedWorkStateTrace(t, listed, "task", "failed", originTraceID)
+		if provider.CallCount("planner") != 1 {
+			t.Errorf("planner call count = %d, want 1", provider.CallCount("planner"))
+		}
+		if provider.CallCount("processor") != 5 {
+			t.Errorf("processor call count = %d, want 5 before visit-count exhaustion", provider.CallCount("processor"))
+		}
+		if provider.CallCount("reviewer") != 0 {
+			t.Errorf("reviewer call count = %d, want 0 after processor exhaustion", provider.CallCount("reviewer"))
+		}
 	})
 }
 
@@ -1106,4 +1357,19 @@ func assertQuiescentSession(t *testing.T, session factoryapi.FactorySession, wan
 	if categories.Failed != wantFailed {
 		t.Errorf("session failed count = %d, want %d", categories.Failed, wantFailed)
 	}
+}
+
+type nonZeroExitScriptCommandRunner struct {
+	stderr   string
+	exitCode int
+}
+
+func (r nonZeroExitScriptCommandRunner) Run(
+	_ context.Context,
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{
+		Stderr:   []byte(r.stderr),
+		ExitCode: r.exitCode,
+	}, nil
 }

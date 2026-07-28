@@ -2,9 +2,16 @@ package current
 
 import (
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestAPIPromptTemplateContractAndValidationRoundTrip proves that a Factory Session
@@ -149,5 +156,139 @@ func TestAPITemplateValidationDoesNotMutateCurrentFactory(t *testing.T) {
 	after := getCurrentFactoryForSession(t, server.URL(), sessionID)
 	if !reflect.DeepEqual(before, after) {
 		t.Fatalf("current factory after validation = %#v, want unchanged %#v", after, before)
+	}
+}
+
+// TestProcessWorkNameMapsIntoPromptTemplate proves that a submitted Work name is
+// rendered into the workstation prompt template before provider invocation.
+func TestProcessWorkNameMapsIntoPromptTemplate(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		Name:       "design-doc-review",
+		WorkTypeID: "task",
+		Payload:    []byte(`review the design document`),
+		TraceID:    "trace-prompt-test",
+	})
+
+	provider := testutil.NewMockProvider(
+		workerexecution.InferenceResponse{Content: "Reviewed. COMPLETE"},
+	)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		10*time.Second,
+	)
+	assertCurrentFactoryWorkCustomerStates(t, listed, map[string]int{
+		support.WorkCustomerLocation("task", "complete"): 1,
+	})
+
+	providerCalls := provider.Calls()
+	if len(providerCalls) == 0 {
+		t.Fatal("provider calls = 0, want at least 1")
+	}
+	if userMessage := providerCalls[0].UserMessage; !strings.Contains(userMessage, "Task Name: design-doc-review") {
+		t.Errorf("provider user message = %q, want Task Name: design-doc-review", userMessage)
+	}
+}
+
+// TestProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate proves that seeded
+// markdown Work name and payload content render into the workstation prompt.
+func TestProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
+	testutil.WriteSeedMarkdownFile(t, dir, "task", "architecture-review",
+		[]byte("# Architecture Review\n\nPlease review the system architecture."))
+
+	provider := testutil.NewMockProvider(
+		workerexecution.InferenceResponse{Content: "Reviewed. COMPLETE"},
+	)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		10*time.Second,
+	)
+	assertCurrentFactoryWorkCustomerStates(t, listed, map[string]int{
+		support.WorkCustomerLocation("task", "complete"): 1,
+		support.WorkCustomerLocation("task", "init"):     0,
+	})
+
+	providerCalls := provider.Calls()
+	if len(providerCalls) == 0 {
+		t.Fatal("provider calls = 0, want at least 1")
+	}
+	userMessage := providerCalls[0].UserMessage
+	if !strings.Contains(userMessage, "Task Name: architecture-review") {
+		t.Errorf("provider user message = %q, want Task Name: architecture-review", userMessage)
+	}
+	if !strings.Contains(userMessage, "# Architecture Review") {
+		t.Errorf("provider user message = %q, want markdown payload content", userMessage)
+	}
+	assertCompletedWorkName(t, listed, "task", "architecture-review")
+}
+
+// TestProcessSubmissionTagsReachDispatchInputTokens proves that submission tags
+// remain available on dispatch input tokens for parameterized workstation fields.
+func TestProcessSubmissionTagsReachDispatchInputTokens(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "repeater_workstation"))
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "task",
+		Payload:    []byte(`{}`),
+		Tags:       map[string]string{"branch": "feature-abc"},
+	})
+
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+		"exec-worker":   {{Content: "done COMPLETE"}},
+		"finish-worker": {{Content: "done COMPLETE"}},
+	})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		10*time.Second,
+	)
+	assertCurrentFactoryWorkCustomerStates(t, listed, map[string]int{
+		support.WorkCustomerLocation("task", "complete"): 1,
+	})
+
+	calls := provider.Calls("exec-worker")
+	if len(calls) == 0 {
+		t.Fatal("exec-worker provider calls = 0, want at least 1")
+	}
+	call := calls[0]
+	if call.Dispatch.WorkstationName == "" {
+		t.Error("dispatch workstation name is empty, want populated workstation")
+	}
+	if len(call.Dispatch.InputTokens) == 0 {
+		t.Fatal("dispatch input tokens = 0, want at least 1")
+	}
+	tags := firstDispatchInputToken(call.Dispatch.InputTokens).Color.Tags
+	if tags["branch"] != "feature-abc" {
+		t.Errorf("dispatch input tag branch = %q, want feature-abc", tags["branch"])
+	}
+}
+
+// TestProcessParameterizedTemplateFailureRoutesWorkToFailed proves that an
+// unresolved workstation prompt template routes Work to failed without invoking
+// the provider.
+func TestProcessParameterizedTemplateFailureRoutesWorkToFailed(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "parameterized_failure"))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "unresolved template test"}`))
+
+	provider := testutil.NewMockProvider(
+		workerexecution.InferenceResponse{Content: "Should not reach COMPLETE"},
+	)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		10*time.Second,
+	)
+	assertCurrentFactoryWorkCustomerStates(t, listed, map[string]int{
+		support.WorkCustomerLocation("task", "failed"):   1,
+		support.WorkCustomerLocation("task", "complete"): 0,
+	})
+	if provider.CallCount() != 0 {
+		t.Errorf("provider call count = %d, want 0 before invocation", provider.CallCount())
 	}
 }

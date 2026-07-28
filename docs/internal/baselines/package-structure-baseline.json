@@ -1009,6 +1009,16 @@
     },
     {
       "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/smoke/service_config_override_alignment_long_test.go",
+      "target": "smoke"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/smoke/service_config_override_alignment_test.go",
+      "target": "smoke"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/service_lifecycle_smoke_long_test.go",
       "target": "smoke"
     },
@@ -1029,17 +1039,7 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/code_review_loop_long_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/config_driven_retry_loop_breaker_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/conflict_resolution_test.go",
       "target": "workflow"
     },
     {
@@ -1049,52 +1049,12 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/executor_context_long_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/helpers_test.go",
       "target": "workflow"
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/logical_move_long_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/multi_output_color_propagation_long_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/multi_output_color_propagation_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/name_propagation_long_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/rejection_path_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/repeater_parameterized_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/review_retry_exhaustion_long_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/workflow_modification_long_test.go",
       "target": "workflow"
     },
     {
@@ -2934,6 +2894,11 @@
     },
     {
       "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_runtime/exhaustiontests",
+      "target": "pkg/services/factory_runtime"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_runtime/internal/services/orchestration/engine",
       "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
@@ -2986,6 +2951,11 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_runtime/internal/services/orchestration/subsystems",
       "target": "pkg/services/factory_runtime/internal/services/orchestration"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_runtime/testkit",
+      "target": "pkg/services/factory_runtime"
     },
     {
       "rule": "service-root-unexpected-directory",

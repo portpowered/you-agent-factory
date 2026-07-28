@@ -17,6 +17,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -689,4 +690,57 @@ func promptTemplateValidationHasDiagnosticKind(
 		}
 	}
 	return false
+}
+
+func assertCurrentFactoryWorkCustomerStates(
+	t *testing.T,
+	listed factoryapi.ListWorkResponse,
+	wants map[string]int,
+) {
+	t.Helper()
+	for location, want := range wants {
+		if got := support.CountWorkAtCustomerState(listed, location); got != want {
+			t.Errorf("%s work count = %d, want %d", location, got, want)
+		}
+	}
+}
+
+func assertCompletedWorkName(
+	t *testing.T,
+	listed factoryapi.ListWorkResponse,
+	workType,
+	wantName string,
+) {
+	t.Helper()
+	for _, item := range listed.Results {
+		if item.WorkTypeName != nil && *item.WorkTypeName == workType &&
+			item.State != nil && item.State.Name == "complete" {
+			if item.Name != wantName {
+				t.Errorf("%s:complete name = %q, want %q", workType, item.Name, wantName)
+			}
+			return
+		}
+	}
+	t.Errorf("listed Work missing %s:complete", workType)
+}
+
+func firstDispatchInputToken(rawTokens any) workerexecution.Token {
+	switch tokens := rawTokens.(type) {
+	case []any:
+		if len(tokens) == 0 {
+			return workerexecution.Token{}
+		}
+		tok, ok := tokens[0].(workerexecution.Token)
+		if !ok {
+			return workerexecution.Token{}
+		}
+		return tok
+	case []workerexecution.Token:
+		if len(tokens) == 0 {
+			return workerexecution.Token{}
+		}
+		return tokens[0]
+	default:
+		return workerexecution.Token{}
+	}
 }

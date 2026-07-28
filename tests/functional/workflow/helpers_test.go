@@ -7,6 +7,8 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func assertDispatchHistoryContainsWorkstationRoute(
@@ -115,4 +117,13 @@ func (e *capturingExecutor) Execute(_ context.Context, dispatch work.WorkDispatc
 	result.DispatchID = dispatch.DispatchID
 	result.TransitionID = dispatch.TransitionID
 	return result, nil
+}
+
+func assertWorkflowSessionPlaces(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
+	t.Helper()
+	for placeID, want := range wants {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
 }
