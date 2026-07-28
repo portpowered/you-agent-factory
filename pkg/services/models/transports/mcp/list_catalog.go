@@ -29,7 +29,7 @@ func ListCatalog(
 	}
 	result, err := service.ListCatalog(ctx, models.ListModelsRequest{Scope: scope})
 	if err != nil {
-		envelope := executionErrorEnvelope(err)
+		envelope := listCatalogErrorEnvelope(err)
 		return ToolResponse[models.ListModelsResult]{Error: &envelope}
 	}
 	return ToolResponse[models.ListModelsResult]{Result: &result}
