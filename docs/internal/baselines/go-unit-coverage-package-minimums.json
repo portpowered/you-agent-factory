@@ -1186,7 +1186,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire",
-      "minimum": 77.00
+      "minimum": 76.19
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models",

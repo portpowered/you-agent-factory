@@ -14,6 +14,7 @@ import (
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingsservice "github.com/portpowered/infinite-you/pkg/services/recordings/service"
 )
 
 type wireSourceStub struct {
@@ -139,6 +140,24 @@ func mustNewWireRoot(t *testing.T) factoryvisualization.Root {
 		t.Fatal("NewRoot() returned nil root")
 	}
 	return root
+}
+
+func TestNewRootAdaptsProjectionOnlyPeer(t *testing.T) {
+	t.Parallel()
+
+	root, err := factoryvisualizationwire.NewRoot(
+		wireSourceStub{},
+		recordingsservice.NewProjectionService(),
+		wireClock{},
+		factoryvisualization.SinkFunc(func(factoryvisualization.View) {}),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+	if root == nil {
+		t.Fatal("NewRoot() returned nil root")
+	}
 }
 
 func TestNewRootServesPublishedPeerBehavior(t *testing.T) {
