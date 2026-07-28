@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	validationCodeDanglingWorkerReference      = "factory.worker.danglingReference"
-	validationCodeDanglingPlaceReference       = "factory.route.danglingPlaceReference"
+	validationCodeDuplicateIdentifier        = "factory.duplicateIdentifier"
+	validationCodeDanglingWorkerReference    = "factory.worker.danglingReference"
+	validationCodeDanglingPlaceReference     = "factory.route.danglingPlaceReference"
 	validationCodeLayoutUnknownNodeReference = "factory.layout.unknownNodeReference"
 )
 
@@ -62,6 +63,35 @@ func TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute(t *testing.T) 
 
 	if runner.CallCount() != 0 {
 		t.Fatalf("provider command runner calls = %d, want 0 before validation succeeds", runner.CallCount())
+	}
+}
+
+// TestFactoryValidationReportsAllActionableDefinitionErrors proves public
+// Factory validation reports every independent actionable defect in one CLI
+// outcome instead of stopping after the first error.
+func TestFactoryValidationReportsAllActionableDefinitionErrors(t *testing.T) {
+	runner := support.NewRecordingCommandRunner("runtime must not execute")
+	edges := serviceedges.Edges{ProviderCommandRunner: runner}
+
+	dir := support.ScaffoldFactory(t, multipleActionableDefectsFactoryConfig())
+	assertFactoryValidationRejects(
+		t,
+		dir,
+		edges,
+		"Blocking targets:",
+		validationCodeDuplicateIdentifier,
+		validationCodeDanglingWorkerReference,
+		validationCodeDanglingPlaceReference,
+		`worker-a`,
+		`missing-worker`,
+		`missing-state`,
+		`duplicate worker name "worker-a"`,
+		`references non-existent worker "missing-worker"`,
+		`references non-existent state "missing-state"`,
+	)
+
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want 0 before validation fails", runner.CallCount())
 	}
 }
 
@@ -132,6 +162,42 @@ func missingWorkstationFactoryConfig() map[string]any {
 				{
 					"id":       "workstation:ghost-workstation",
 					"position": map[string]int{"x": 1, "y": 2},
+				},
+			},
+		},
+	}
+}
+
+func multipleActionableDefectsFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "multiple-actionable-defects",
+		"workTypes": []map[string]any{
+			{
+				"name": "story",
+				"states": []map[string]string{
+					{"name": "queued", "type": "INITIAL"},
+					{"name": "queued-dup", "type": "PROCESSING"},
+					{"name": "done", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]string{
+			{"name": "worker-a"},
+			{"name": "worker-a"},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":   "process",
+				"worker": "missing-worker",
+				"inputs": []map[string]string{
+					{"workType": "story", "state": "queued"},
+				},
+				"outputs": []map[string]string{
+					{"workType": "story", "state": "missing-state"},
+				},
+				"onFailure": []map[string]string{
+					{"workType": "story", "state": "failed"},
 				},
 			},
 		},
