@@ -602,7 +602,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIPauseResumeCancelAndTerminateFactorySession`.
   - `TestAPIInvalidLifecycleTransitionReturnsConflict`.
 
-- [ ] `tests/functional/sessions/execution/results_dispatches_test.go`
+- [x] `tests/functional/sessions/execution/results_dispatches_test.go`
   - `TestAPIResultAndResultsExposeTerminalInvocationData`.
   - `TestAPIDispatchListAndDetailExposePublicCorrelation`.
   - `TestAPIPartialResultIsAvailableBeforeTerminalCompletion`.
@@ -629,7 +629,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Definitions
 
-- [ ] `tests/functional/factory/definitions/init_test.go`
+- [x] `tests/functional/factory/definitions/init_test.go`
   - `TestFactoryInitCreatesRunnablePortableScaffold`.
   - `TestFactoryInitIsIdempotent`.
   - `TestFactoryInitFailureRoutingProducesFailedWork`.

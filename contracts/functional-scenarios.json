@@ -249,7 +249,7 @@
       "status": "missing",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "The manifest-owned server command surface is present, but lifecycle behavior remains assigned to its dedicated PRD story and does not yet have qualifying customer-boundary functional evidence."
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
       "stableId": "cli/you.session",
@@ -612,10 +612,15 @@
       "name": "getFactorySessionDispatch",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIDispatchListAndDetailExposePublicCorrelation",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/getFactorySessionPartialResult",
@@ -642,10 +647,15 @@
       "name": "getFactorySessionResults",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/getFactorySessionSyncPreflightBySessionId",
@@ -732,7 +742,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/runtime_api/api_session_invocation_test.go::TestSessionInvocationAPI_ReturnsPrimaryResult",
+          "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData",
           "boundary": "rest"
         }
       ]
@@ -762,10 +772,15 @@
       "name": "listFactorySessionDispatches",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIDispatchListAndDetailExposePublicCorrelation",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/listFactorySessions",

@@ -818,6 +818,7 @@ func (s *JavaScriptRuntimeService) applyRunningRuntimeRecord(sessionID string, r
 			CheckpointState: record.Checkpoint.State,
 			Records:         state.runtimeRecords,
 		})
+		applyRuntimeCheckpointPartialProjection(state, record.Checkpoint)
 	}
 	state.dispatches = cloneDispatchSummaries(projection.Dispatches)
 	state.dispatchJavaScript = cloneDispatchJavaScriptProjections(projection.DispatchJavaScript)

@@ -483,6 +483,12 @@ Wave 0 functional-tests-expansion planning authority lives under
   `migration-ledger-inventory.json`, retarget any specialty Make bindings, and
   refresh `test-file-checklist.md` plus narrowly coupled baselines
   (`package-structure-baseline.json`, `functional-undocumented-tests.json`).
+  `tests/functional/factory/definitions/init_test.go` owns public Factory-init
+  functional coverage through `session create --init-new-factory` against
+  `support.StartFunctionalAPIServer`, with seeded Work run via
+  `support.RunFactoryToCompletionWithEdgesAndWork` and terminal assertions via
+  `support.CountWorkAtCustomerState`; catalog metadata infers domain
+  `factory/definitions`.
   `make pkg-structure` enforces the domain-mirrored functional layout
   `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
   unclassified scenario packages are blocking, while existing nonconforming
