@@ -1471,6 +1471,12 @@
     },
     {
       "fromOwner": "providers",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/providers/transports/http -\u003e pkg/transports/http/generated"
+    },
+    {
+      "fromOwner": "providers",
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/services/workers/provider/adapter -\u003e pkg/services/work"
@@ -4757,6 +4763,12 @@
     },
     {
       "packagePath": "pkg/services/providers/internal/testutil/execution",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/transports/http",
       "disposition": "retain",
       "destination": "providers",
       "destinationKind": "owner"

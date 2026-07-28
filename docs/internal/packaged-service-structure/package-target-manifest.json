@@ -410,6 +410,7 @@
     "pkg/services/providers/internal/services/execution/internal/service",
     "pkg/services/providers/internal/services/execution/wire",
     "pkg/services/providers/internal/testutil/execution",
+    "pkg/services/providers/transports/http",
     "pkg/services/providers/transports/mcp",
     "pkg/services/providers/wire",
     "pkg/services/recordings",
@@ -2464,6 +2465,11 @@
     },
     {
       "packagePath": "pkg/services/providers/internal/testutil/execution",
+      "disposition": "retain",
+      "destination": "providers"
+    },
+    {
+      "packagePath": "pkg/services/providers/transports/http",
       "disposition": "retain",
       "destination": "providers"
     },
