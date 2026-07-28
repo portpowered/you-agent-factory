@@ -388,6 +388,17 @@ Use this map when changing the public REST contract.
   `docs/internal/baselines/ownership-inventory.json`, and the
   `go-*-coverage-package-minimums.json` baselines when adding or moving the
   owner-local transport package.
+- Providers catalog HTTP decoding, adapter-owned response mapping
+  (`catalog_mapping.go`), service invocation (`catalog_operations.go`),
+  typed catalog error mapping (`catalog_error_mapping.go`), and handler entry
+  points (`handlers_catalog.go`) live in
+  `pkg/services/providers/transports/http`. The top-level `pkg/transports/http`
+  server does not register Providers routes until PSS-I02 fan-in; the owner-local
+  adapter consumes `providers.Service` (or a fake root in tests) and must not
+  import `pkg/services/providers/internal/**`. HTTP-PROV uses adapter-owned JSON
+  success shapes (not shared OpenAPI authorship) and maps catalog typed failures
+  (`ErrInvalidID`, `ErrUnknownProvider`, `ErrProviderUnavailable`) to stable HTTP
+  outcomes via `CatalogRootErrorResponse`.
 - Shared filesystem documents represented in OpenAPI should decode and encode
   through the generated model in a focused `pkg/transports/mapping` package,
   then map into domain-owned values. Inject that codec into the service
