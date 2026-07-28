@@ -609,7 +609,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ## Wave 2 — sessions
 
-- [ ] `tests/functional/sessions/lifecycle/crud_test.go`
+- [x] `tests/functional/sessions/lifecycle/crud_test.go`
   - `TestFactorySessionCreateListShowDelete`.
   - `TestFactorySessionListMultipleSessions`.
   - `TestFactorySessionMissingShowAndDeleteFail`.

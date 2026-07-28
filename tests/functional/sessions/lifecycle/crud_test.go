@@ -26,8 +26,9 @@ const sessionLifecycleCRUDMissingSessionID = "dur-sess-missing-999"
 // TestFactorySessionCreateListShowDelete proves the public CLI Factory Session
 // boundary supports a full create → list → show → delete lifecycle: a newly
 // created session returns a stable public session ID, appears in session list
-// and session show with matching folder identity, and session delete removes it
-// so subsequent list/show no longer treat it as an open session.
+// and session show with matching folder identity and live runtime status markers,
+// and session delete removes it so subsequent list/show no longer treat it as
+// an open session participating in the owned runtime lifecycle.
 func TestFactorySessionCreateListShowDelete(t *testing.T) {
 	primaryFactoryDir := support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
