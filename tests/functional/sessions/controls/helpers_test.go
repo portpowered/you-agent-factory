@@ -461,12 +461,12 @@ func assertBufferedWorkDrainedInSubmissionOrder(
 	)
 
 	dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
-	firstDispatch, okFirst := dispatchObservationForWorkAtWorkstation(
+	firstIndex, okFirst := dispatchObservationIndexForWorkAtWorkstation(
 		dispatches,
 		firstWorkID,
 		pauseResumeProcessTaskWorkstation,
 	)
-	secondDispatch, okSecond := dispatchObservationForWorkAtWorkstation(
+	secondIndex, okSecond := dispatchObservationIndexForWorkAtWorkstation(
 		dispatches,
 		secondWorkID,
 		pauseResumeProcessTaskWorkstation,
@@ -480,10 +480,14 @@ func assertBufferedWorkDrainedInSubmissionOrder(
 			dispatches,
 		)
 	}
-	if !firstDispatch.StartedAt.Before(secondDispatch.StartedAt) {
+	if firstIndex >= secondIndex {
+		firstDispatch := dispatches[firstIndex]
+		secondDispatch := dispatches[secondIndex]
 		t.Fatalf(
-			"dispatch start order = first@%s second@%s for works %q then %q; want first buffered work to start before second",
+			"dispatch order = first@%d (%s) second@%d (%s) for works %q then %q; want first buffered work dispatched before second",
+			firstIndex,
 			firstDispatch.StartedAt.UTC(),
+			secondIndex,
 			secondDispatch.StartedAt.UTC(),
 			firstWorkID,
 			secondWorkID,
@@ -491,20 +495,20 @@ func assertBufferedWorkDrainedInSubmissionOrder(
 	}
 }
 
-func dispatchObservationForWorkAtWorkstation(
+func dispatchObservationIndexForWorkAtWorkstation(
 	dispatches []support.DispatchEventObservation,
 	workID string,
 	workstation string,
-) (support.DispatchEventObservation, bool) {
-	for _, dispatch := range dispatches {
+) (int, bool) {
+	for index, dispatch := range dispatches {
 		if dispatch.Request.TransitionId != workstation {
 			continue
 		}
 		if support.DispatchObservationIncludesWork(dispatch, workID) {
-			return dispatch, true
+			return index, true
 		}
 	}
-	return support.DispatchEventObservation{}, false
+	return -1, false
 }
 
 func filterSessionLifecycleControlEvents(events []factoryapi.FactoryEvent) []factoryapi.FactoryEvent {
