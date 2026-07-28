@@ -65,7 +65,7 @@ func TestDelWrkDeleteReadyInventoryGate_CLNWrkPrerequisitesFactoryComplete(t *te
 	}
 }
 
-func TestDelWrkDeleteReadyInventoryGate_ConfirmedDeleteReadyPathsAreShimOnly(t *testing.T) {
+func TestDelWrkDeleteReadyInventoryGate_ConfirmedDeleteReadyPathsAreRemoved(t *testing.T) {
 	t.Parallel()
 
 	manifest := loadDelWrkDeleteReadyInventoryManifest(t)
@@ -77,12 +77,26 @@ func TestDelWrkDeleteReadyInventoryGate_ConfirmedDeleteReadyPathsAreShimOnly(t *
 			t.Parallel()
 
 			packageDir := filepath.Join(workersDir, filepath.FromSlash(relative))
-			goFiles, err := listGoSourceFiles(packageDir)
-			if err != nil {
-				t.Fatalf("list Go sources in %s: %v", relative, err)
+			if relative == "executor" {
+				goFiles, err := listGoSourceFiles(packageDir)
+				if err != nil {
+					if os.IsNotExist(err) {
+						return
+					}
+					t.Fatalf("list Go sources in %s: %v", relative, err)
+				}
+				if len(goFiles) != 0 {
+					t.Fatalf("%s Go sources = %v, want no package files after shim deletion (held-back child packages may remain)", relative, goFiles)
+				}
+				return
 			}
-			if len(goFiles) != 1 || goFiles[0] != "shim.go" {
-				t.Fatalf("%s Go sources = %v, want only shim.go", relative, goFiles)
+
+			_, err := os.Stat(packageDir)
+			if err == nil {
+				t.Fatalf("%s must be deleted after DEL-WRK story 002", relative)
+			}
+			if !os.IsNotExist(err) {
+				t.Fatalf("stat %s: %v", relative, err)
 			}
 		})
 	}
@@ -210,10 +224,7 @@ func TestDelWrkDeleteReadyInventoryGate_InventoryMatchesFoldedLegacyShimDirs(t *
 	t.Parallel()
 
 	manifest := loadDelWrkDeleteReadyInventoryManifest(t)
-	inventoried := append(
-		slices.Clone(manifest.DeleteReadyRelativeDirs),
-		delWrkHeldBackRelativeDirs(manifest.HeldBack)...,
-	)
+	inventoried := delWrkHeldBackRelativeDirs(manifest.HeldBack)
 	slices.Sort(inventoried)
 
 	want := slices.Clone(foldedLegacyShimPackageDirs)
