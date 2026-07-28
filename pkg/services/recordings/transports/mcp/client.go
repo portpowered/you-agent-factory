@@ -60,8 +60,10 @@ type canonicalToolHandler func(
 ) (json.RawMessage, error)
 
 var canonicalToolHandlers = map[string]canonicalToolHandler{
-	ToolQueryStatus: handleQueryStatus,
-	ToolAppendEvent: handleAppendEvent,
+	ToolQueryStatus:          handleQueryStatus,
+	ToolAppendEvent:          handleAppendEvent,
+	ToolLoadReplay:           handleLoadReplay,
+	ToolReadPortableArtifact: handleReadPortableArtifact,
 }
 
 func handleQueryStatus(
@@ -81,6 +83,26 @@ func handleAppendEvent(
 ) (json.RawMessage, error) {
 	return callToolJSON(input, "decode append event input", func(request AppendEventInput) ToolResponse[recordings.AppendRecordedEventResult] {
 		return AppendEvent(ctx, service, request)
+	})
+}
+
+func handleLoadReplay(
+	ctx context.Context,
+	service recordings.Service,
+	input json.RawMessage,
+) (json.RawMessage, error) {
+	return callToolJSON(input, "decode load replay input", func(request LoadReplayInput) ToolResponse[recordings.LoadReplayRecordingResult] {
+		return LoadReplay(ctx, service, request)
+	})
+}
+
+func handleReadPortableArtifact(
+	ctx context.Context,
+	service recordings.Service,
+	input json.RawMessage,
+) (json.RawMessage, error) {
+	return callToolJSON(input, "decode read portable artifact input", func(request ReadPortableArtifactInput) ToolResponse[recordings.ReadPortableArtifactResult] {
+		return ReadPortableArtifact(ctx, service, request)
 	})
 }
 

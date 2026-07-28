@@ -95,9 +95,11 @@ func TestPackageBoundary_DoesNotImportRecordingsInternal(t *testing.T) {
 
 type fakeRecordingsRoot struct {
 	recordings.Service
-	invoked     *bool
-	queryStatus func(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error)
-	appendEvent func(recordings.AppendRecordedEventRequest) (recordings.AppendRecordedEventResult, error)
+	invoked              *bool
+	queryStatus          func(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error)
+	appendEvent          func(recordings.AppendRecordedEventRequest) (recordings.AppendRecordedEventResult, error)
+	loadReplay           func(recordings.LoadReplayRecordingRequest) (recordings.LoadReplayRecordingResult, error)
+	readPortableArtifact func(context.Context, recordings.ReadPortableArtifactRequest) (recordings.ReadPortableArtifactResult, error)
 }
 
 func (fake fakeRecordingsRoot) markInvoked() {
@@ -124,6 +126,27 @@ func (fake fakeRecordingsRoot) Append(
 		panic("unexpected Append on fake recordings root")
 	}
 	return fake.appendEvent(request)
+}
+
+func (fake fakeRecordingsRoot) LoadReplayRecording(
+	request recordings.LoadReplayRecordingRequest,
+) (recordings.LoadReplayRecordingResult, error) {
+	fake.markInvoked()
+	if fake.loadReplay == nil {
+		panic("unexpected LoadReplayRecording on fake recordings root")
+	}
+	return fake.loadReplay(request)
+}
+
+func (fake fakeRecordingsRoot) ReadPortableArtifact(
+	ctx context.Context,
+	request recordings.ReadPortableArtifactRequest,
+) (recordings.ReadPortableArtifactResult, error) {
+	fake.markInvoked()
+	if fake.readPortableArtifact == nil {
+		panic("unexpected ReadPortableArtifact on fake recordings root")
+	}
+	return fake.readPortableArtifact(ctx, request)
 }
 
 func assertPackageDirectImportsForbidden(t *testing.T, packagePath string, forbiddenRoots []string) {

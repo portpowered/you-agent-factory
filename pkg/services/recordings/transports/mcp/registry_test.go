@@ -115,23 +115,12 @@ func TestToolByName_ReturnsCatalogEntryForKnownTools(t *testing.T) {
 	}
 }
 
-func TestIsCanonicalToolHandlerRegistered_ReportsQueryStatusAndAppendEvent(t *testing.T) {
+func TestIsCanonicalToolHandlerRegistered_ReportsAllCanonicalTools(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{
-		mcprecording.ToolQueryStatus,
-		mcprecording.ToolAppendEvent,
-	} {
+	for _, name := range mcprecording.ToolNames() {
 		if !mcprecording.IsCanonicalToolHandlerRegistered(name) {
 			t.Fatalf("handler for %q should be registered", name)
-		}
-	}
-	for _, name := range []string{
-		mcprecording.ToolLoadReplay,
-		mcprecording.ToolReadPortableArtifact,
-	} {
-		if mcprecording.IsCanonicalToolHandlerRegistered(name) {
-			t.Fatalf("handler for %q should not be registered yet", name)
 		}
 	}
 }
