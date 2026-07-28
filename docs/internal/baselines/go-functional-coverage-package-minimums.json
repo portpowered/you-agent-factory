@@ -630,7 +630,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",
-      "minimum": 65.51
+      "exception": {
+        "kind": "migration",
+        "justification": "CUT-DEF-SES requires DefinitionActivationGateway in service composition and removes AttachFactoryDefinitions callback wiring; the functional profile no longer executes the retired construction statements.",
+        "owner": "factory-definition-maintainers",
+        "deadline": "2026-12-31",
+        "removalGate": "Functional coverage for the service composition package is restored through gateway integration tests without reintroducing attach-back construction."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture",
