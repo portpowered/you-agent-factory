@@ -2,10 +2,6 @@
   "format_version": 1,
   "helper_only": [
     {
-      "path": "tests/functional/bootstrap_portability/cli_relative_working_directory_functionallong_helpers_test.go",
-      "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
-    },
-    {
       "path": "tests/functional/bootstrap_portability/export_import_harness_test.go",
       "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
     },
@@ -637,36 +633,6 @@
       "catch_all": "bootstrap_portability",
       "specialty_targets": "none",
       "deletion_only_batch": "bootstrap_portability-delete-02-factory-definitions-validation"
-    },
-    {
-      "source_path": "tests/functional/bootstrap_portability/watcher_current_factory_activation_long_test.go",
-      "package": "you-agent-factory/tests/functional/bootstrap_portability",
-      "scenario": "TestCurrentFactoryActivationFixture_ActivatesSecondPersistedFactoryAndResolvesCurrentFactory",
-      "lane": "functionallong",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "bootstrap_portability",
-      "specialty_targets": "current-factory-watcher-switch-smoke",
-      "deletion_only_batch": "bootstrap_portability-delete-05-factory-current"
-    },
-    {
-      "source_path": "tests/functional/bootstrap_portability/watcher_current_factory_activation_long_test.go",
-      "package": "you-agent-factory/tests/functional/bootstrap_portability",
-      "scenario": "TestCurrentFactoryActivationFixture_LiveAPIReadsFollowActivatedFactory",
-      "lane": "functionallong",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "bootstrap_portability",
-      "specialty_targets": "none",
-      "deletion_only_batch": "bootstrap_portability-delete-05-factory-current"
-    },
-    {
-      "source_path": "tests/functional/bootstrap_portability/watcher_current_factory_activation_long_test.go",
-      "package": "you-agent-factory/tests/functional/bootstrap_portability",
-      "scenario": "TestCurrentFactoryActivationFixture_WatchedFileExecutionFollowsActivatedFactory",
-      "lane": "functionallong",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "bootstrap_portability",
-      "specialty_targets": "none",
-      "deletion_only_batch": "bootstrap_portability-delete-05-factory-current"
     },
     {
       "source_path": "tests/functional/cli/factory_run/output/failure_test.go",
@@ -3516,7 +3482,7 @@
       "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
       "catch_all": "bootstrap_portability",
       "specialty_targets": "none",
-      "deletion_only_batch": "bootstrap_portability-delete-05-factory-current"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/provider_sessions/association/association_test.go",
@@ -9387,12 +9353,52 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_long_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryActivationSwitchesPersistedFactories",
+      "lane": "functionallong",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "current-factory-watcher-switch-smoke",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_long_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryLiveAPIReadsFollowActivatedFactory",
+      "lane": "functionallong",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_long_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryWatchedFileExecutionFollowsActivatedFactory",
+      "lane": "functionallong",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/parameters/working_directory_long_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIProviderExecResolvesWorkdirAgainstFactoryRuntimeRoot",
+      "lane": "functionallong",
+      "destination": "tests/functional/transport/cli/parameters/working_directory_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
   "scanned_at_utc": "2026-07-28T13:53:41Z",
   "summary": {
     "by_catch_all": {
-      "bootstrap_portability": 22,
+      "bootstrap_portability": 19,
       "guards_batch": 15,
       "none": 708,
       "replay_contracts": 23,
@@ -9403,7 +9409,7 @@
     "by_top_level_package": {
       "acceptance": 12,
       "automations": 14,
-      "bootstrap_portability": 21,
+      "bootstrap_portability": 18,
       "cli": 59,
       "events": 5,
       "factory": 59,
@@ -9429,13 +9435,13 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 919,
-    "lane_functionallong": 95,
+    "customer_top_level_Test_scenarios": 920,
+    "lane_functionallong": 96,
     "lane_short": 824,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 14,
-      "you-agent-factory/tests/functional/bootstrap_portability": 19,
+      "you-agent-factory/tests/functional/bootstrap_portability": 16,
       "you-agent-factory/tests/functional/bootstrap_portability/metadata_contract": 2,
       "you-agent-factory/tests/functional/cli/factory_run/output": 2,
       "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity": 3,
@@ -9446,7 +9452,7 @@
       "you-agent-factory/tests/functional/cli/root_discovery": 9,
       "you-agent-factory/tests/functional/cli/session_resume": 6,
       "you-agent-factory/tests/functional/events/factory_events": 5,
-      "you-agent-factory/tests/functional/factory/current": 6,
+      "you-agent-factory/tests/functional/factory/current": 9,
       "you-agent-factory/tests/functional/factory/definition_activation": 3,
       "you-agent-factory/tests/functional/factory/definitions": 14,
       "you-agent-factory/tests/functional/factory/packaged/catalog": 10,
@@ -9508,7 +9514,7 @@
       "you-agent-factory/tests/functional/smoke": 19,
       "you-agent-factory/tests/functional/transport/cli/commands": 25,
       "you-agent-factory/tests/functional/transport/cli/output": 13,
-      "you-agent-factory/tests/functional/transport/cli/parameters": 19,
+      "you-agent-factory/tests/functional/transport/cli/parameters": 20,
       "you-agent-factory/tests/functional/transport/cli/process": 17,
       "you-agent-factory/tests/functional/transport/docs": 1,
       "you-agent-factory/tests/functional/transport/http/server": 14,
@@ -9598,8 +9604,6 @@
       "bootstrap_portability-delete-02-factory-definitions-validation",
       "bootstrap_portability-delete-03-factory-definitions-import-export",
       "bootstrap_portability-delete-04-portable-config",
-      "bootstrap_portability-delete-05-factory-current",
-      "bootstrap_portability-delete-06-transport-cli",
       "replay_contracts-delete-01-events-replay",
       "replay_contracts-delete-02-events-factory-events",
       "replay_contracts-delete-03-events-response-events",
@@ -9626,19 +9630,19 @@
   "completeness_audit": {
     "audited_at_utc": "2026-07-28T14:30:00Z",
     "story": "ft-wave2-factory-definitions-import-export-mergeability-5",
-    "live_customer_scenarios": 919,
-    "ledger_rows": 919,
+    "live_customer_scenarios": 920,
+    "ledger_rows": 920,
     "unmapped_scenarios": 0,
     "checklist_destinations": 442,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
     "lane_short": 824,
-    "lane_functionallong": 95,
+    "lane_functionallong": 96,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 51,
     "validator": "go run ./cmd/migrationledgercheck",
-    "row_count": 919,
+    "row_count": 920,
     "short_lane_rows": 824,
-    "functionallong_lane_rows": 95
+    "functionallong_lane_rows": 96
   }
 }
