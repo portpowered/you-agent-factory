@@ -12,8 +12,8 @@ import (
 	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
+	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 // newRootCompileServiceForPeer attaches private compilation behind the public root
@@ -27,7 +27,7 @@ func newRootCompileServiceForPeer(t *testing.T) factoryroot.Service {
 	compilation, err := compilationwire.NewService(compilationservice.Dependencies{
 		LoadCanonical:      loader.LoadSourceFromCanonicalJSON,
 		LoadFromFactoryDir: loader.LoadSourceFromFactoryDir,
-		EncodeFactory:      factorymapping.MarshalCanonicalFactoryConfig,
+		EncodeFactory:      compilationcanonical.EncodeFactoryPort(),
 	})
 	if err != nil {
 		t.Fatalf("compilationwire.NewService: %v", err)

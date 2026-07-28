@@ -13,6 +13,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
+	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
@@ -75,7 +76,7 @@ func NewService(
 	compilation, err := compilationwire.NewService(compilationservice.Dependencies{
 		LoadCanonical:      loader.LoadSourceFromCanonicalJSON,
 		LoadFromFactoryDir: loader.LoadSourceFromFactoryDir,
-		EncodeFactory:      factorymapping.MarshalCanonicalFactoryConfig,
+		EncodeFactory:      compilationcanonical.EncodeFactoryPort(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("construct Factory Definitions compilation: %w", err)

@@ -786,7 +786,10 @@ Compilation-owned loading/loadedsource/runtimeconfig implementation lives under
 for `pkg/wire` and in-owner callers until peer imports retire in later stories.
 Factory Definitions `wire/wire.go` composes the compilation subservice from the
 nested loader ports and delegates `CompileEffectiveFactorySource` on the returned
-root `Service`.
+root `Service`. Bind compilation canonical encode through
+`internal/services/compilation/canonical` so owner wire does not import
+transport-mapping `factoryconfig` for content identity; authored/canonical decode
+and normalize remain on injected loader ports composed from process wire.
 Snapshot
 slices stay on the singular `Service` via `CaptureFactorySnapshot`,
 `PrepareFactorySnapshotImport`, and `MaterializeFactorySnapshot` returning

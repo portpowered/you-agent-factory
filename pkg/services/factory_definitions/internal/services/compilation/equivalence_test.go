@@ -11,8 +11,8 @@ import (
 	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	factorydefinitiontestcomposition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
+	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 func TestCompilationOwner_AuthoredDirectoryAndCanonicalBytesProduceIdenticalEffectiveOutcome(t *testing.T) {
@@ -161,7 +161,7 @@ func newCompilationServiceFromComposition(
 	compilation, err := compilationwire.NewService(compilationservice.Dependencies{
 		LoadCanonical:      loader.LoadSourceFromCanonicalJSON,
 		LoadFromFactoryDir: loader.LoadSourceFromFactoryDir,
-		EncodeFactory:      factorymapping.MarshalCanonicalFactoryConfig,
+		EncodeFactory:      compilationcanonical.EncodeFactoryPort(),
 	})
 	if err != nil {
 		t.Fatalf("compilationwire.NewService: %v", err)
