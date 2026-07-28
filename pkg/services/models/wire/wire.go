@@ -1,11 +1,17 @@
-// Package wire is the Models service composition boundary. Application Wire
-// uses these constructors without importing Models implementation packages.
+// Package wire is the Models service composition boundary.
+//
+// Wire performs construction only, returns the singular models.Service root
+// interface, and starts no lifecycle components. Parent-private runtime_scopes,
+// catalog, assets, runtime_host, and inference owner wiring stays inside the
+// owner service assembly path; peers depend on models.Service rather than owner
+// internals or construction ports.
 package wire
 
 import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"reflect"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -19,8 +25,8 @@ import (
 	assetswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire"
 	catalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
-	inferencewire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/wire"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
+	inferencewire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/wire"
 	runtimehostwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
@@ -31,7 +37,12 @@ const (
 	defaultAssetAPIBaseURL = "https://huggingface.co/api"
 )
 
-// NewService constructs the inert, process-scoped Models service.
+// NewService constructs an inert Models root from construction and process-edge
+// ports. It composes the accepted root through parent-private runtime_scopes,
+// catalog, assets, runtime_host, and inference owner construction without
+// publishing owner types on the returned peer surface. Missing required
+// construction ports fail with a deterministic construction error and a nil
+// service.
 func NewService(
 	assetPlatform models.AssetHostPlatform,
 	assetHTTP models.AssetHTTPDoer,
@@ -62,6 +73,32 @@ func NewService(
 	hostMetrics models.HostMetricsRecorder,
 	localHooks models.LocalRuntimeHooks,
 ) (models.Service, error) {
+	if err := validateConstructionInputs(
+		assetPlatform,
+		assetHTTP,
+		assetMkdirAll,
+		assetStat,
+		assetHome,
+		assetWriteFile,
+		assetRename,
+		assetRemove,
+		assetReadFile,
+		assetReadDir,
+		assetCreate,
+		assetOpen,
+		processLauncher,
+		hostHTTP,
+		hostClock,
+		runtimeRunner,
+		runtimeHTTP,
+		runtimeInspect,
+		runtimeTempDir,
+		runtimeTempFile,
+		now,
+		issuerEntropy,
+	); err != nil {
+		return nil, err
+	}
 	defaultEndpoints := models.RuntimeAssetEndpoints{
 		BaseURL: defaultAssetBaseURL, APIBaseURL: defaultAssetAPIBaseURL,
 	}
@@ -170,10 +207,94 @@ func newCatalogReadinessQuery(assetService scopedassets.Service) catalog.Readine
 	}
 }
 
-func runtimeScopeIssuerID(entropy platformrandom.Source) (string, error) {
-	if entropy == nil {
-		return "", fmt.Errorf("issuer entropy is required")
+func validateConstructionInputs(
+	assetPlatform models.AssetHostPlatform,
+	assetHTTP models.AssetHTTPDoer,
+	assetMkdirAll models.AssetMakeDirectories,
+	assetStat models.AssetInspectPath,
+	assetHome models.AssetResolveHomeDirectory,
+	assetWriteFile models.AssetWriteFile,
+	assetRename models.AssetRenamePath,
+	assetRemove models.AssetRemovePath,
+	assetReadFile models.AssetReadFile,
+	assetReadDirectory models.AssetReadDirectory,
+	assetCreate models.AssetCreateFile,
+	assetOpen models.AssetOpenFile,
+	processLauncher models.HostProcessLauncher,
+	hostHTTP models.HostHTTPDoer,
+	hostClock models.HostClock,
+	runtimeRunner platformprocess.CommandRunner,
+	runtimeHTTP models.RuntimeHTTPDoer,
+	runtimeInspect models.RuntimeInspectFile,
+	runtimeTempDir models.RuntimeTempDirectory,
+	runtimeTempFile models.RuntimeCreateTempFile,
+	now func() time.Time,
+	issuerEntropy platformrandom.Source,
+) error {
+	switch {
+	case issuerEntropy == nil:
+		return fmt.Errorf("construct Models: issuer entropy is required")
+	case assetPlatform.OperatingSystem == "" || assetPlatform.Architecture == "":
+		return fmt.Errorf("construct Models: asset host platform is required")
+	case isNilDependency(assetHTTP):
+		return fmt.Errorf("construct Models: asset HTTP client is required")
+	case isNilDependency(assetMkdirAll):
+		return fmt.Errorf("construct Models: asset make-directories effect is required")
+	case isNilDependency(assetStat):
+		return fmt.Errorf("construct Models: asset inspect-path effect is required")
+	case isNilDependency(assetHome):
+		return fmt.Errorf("construct Models: asset resolve-home effect is required")
+	case isNilDependency(assetWriteFile):
+		return fmt.Errorf("construct Models: asset write-file effect is required")
+	case isNilDependency(assetRename):
+		return fmt.Errorf("construct Models: asset rename-path effect is required")
+	case isNilDependency(assetRemove):
+		return fmt.Errorf("construct Models: asset remove-path effect is required")
+	case isNilDependency(assetReadFile):
+		return fmt.Errorf("construct Models: asset read-file effect is required")
+	case isNilDependency(assetReadDirectory):
+		return fmt.Errorf("construct Models: asset read-directory effect is required")
+	case isNilDependency(assetCreate):
+		return fmt.Errorf("construct Models: asset create-file effect is required")
+	case isNilDependency(assetOpen):
+		return fmt.Errorf("construct Models: asset open-file effect is required")
+	case isNilDependency(processLauncher):
+		return fmt.Errorf("construct Models: model host process launcher is required")
+	case isNilDependency(hostHTTP):
+		return fmt.Errorf("construct Models: model host HTTP client is required")
+	case isNilDependency(hostClock):
+		return fmt.Errorf("construct Models: model host clock is required")
+	case isNilDependency(runtimeRunner):
+		return fmt.Errorf("construct Models: model runtime command runner is required")
+	case isNilDependency(runtimeHTTP):
+		return fmt.Errorf("construct Models: model runtime HTTP client is required")
+	case isNilDependency(runtimeInspect):
+		return fmt.Errorf("construct Models: model runtime file inspector is required")
+	case isNilDependency(runtimeTempDir):
+		return fmt.Errorf("construct Models: model runtime temporary directory resolver is required")
+	case isNilDependency(runtimeTempFile):
+		return fmt.Errorf("construct Models: model runtime temporary file creator is required")
+	case isNilDependency(now):
+		return fmt.Errorf("construct Models: process clock is required")
+	default:
+		return nil
 	}
+}
+
+func isNilDependency(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
+	}
+}
+
+func runtimeScopeIssuerID(entropy platformrandom.Source) (string, error) {
 	var identity [16]byte
 	for index := range identity {
 		value, err := entropy.Int63n(256)
