@@ -3,8 +3,10 @@ package details
 import (
 	"encoding/json"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
@@ -76,6 +78,71 @@ func TestAPIProviderSessionDetailsUseGoldenExpectedMetadata(t *testing.T) {
 			t.Fatalf("%v", err)
 		}
 		t.Fatalf("compareOrUpdateCodexProviderSessionDetailGolden: %v", err)
+	}
+}
+
+// TestAPIProviderSessionRejectsRawFilesystemPathInput proves the public HTTP/API
+// Provider Session detail endpoint rejects raw filesystem path input instead of
+// treating host paths as session locators or returning fabricated detail from
+// path traversal.
+func TestAPIProviderSessionRejectsRawFilesystemPathInput(t *testing.T) {
+	repoRoot := testutil.MustRepoRoot(t)
+	caseDir := filepath.Join(repoRoot, filepath.FromSlash(support.ProviderSessionFixturePath("codex", "success")))
+	rolloutPath := filepath.Join(caseDir, codexGoldenRolloutFile)
+	rolloutContent, err := os.ReadFile(rolloutPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", codexGoldenRolloutFile, err)
+	}
+
+	homeDir := t.TempDir()
+	validSessionID := "session_fixture_codex_api_path_rejection"
+	writeCodexGoldenRolloutFixture(t, codexSessionsRoot(homeDir), validSessionID, string(rolloutContent))
+	rolloutAbsolutePath := filepath.Join(
+		codexSessionsRoot(homeDir),
+		"2026",
+		"07",
+		"27",
+		"rollout-"+validSessionID+".jsonl",
+	)
+
+	server := startAPIProviderSessionDetailServer(t, homeDir, serviceedges.Edges{})
+	defer server.Stop(t)
+
+	for _, test := range []struct {
+		name string
+		id   string
+	}{
+		{name: "absolute host path", id: "/tmp/rollout-session.jsonl"},
+		{name: "relative traversal", id: "../secret"},
+		{name: "stored rollout absolute path", id: rolloutAbsolutePath},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			body := getCodexProviderSessionDetailErrorBody(
+				t,
+				server.URL(),
+				test.id,
+				http.StatusBadRequest,
+			)
+			if !strings.Contains(body, "path separators") {
+				t.Fatalf("error body = %q, want path-separator rejection diagnostic", body)
+			}
+
+			var failure factoryapi.ErrorResponse
+			if err := json.Unmarshal([]byte(body), &failure); err != nil {
+				t.Fatalf("decode error response: %v", err)
+			}
+			if failure.Code != factoryapi.ErrorResponseCodeBADREQUEST {
+				t.Fatalf("error code = %q, want BAD_REQUEST", failure.Code)
+			}
+			if failure.Message == "" {
+				t.Fatal("error message is empty, want customer-readable validation diagnostic")
+			}
+			if strings.Contains(body, `"transcript"`) || strings.Contains(body, `"providerSession"`) {
+				t.Fatalf("validation error fabricated provider session detail: %s", body)
+			}
+
+			assertCodexProviderSessionErrorBodySafe(t, "api-path-rejection", body, homeDir)
+		})
 	}
 }
 
