@@ -6,10 +6,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+// MockInferenceProvider returns a typed provider override for functional tests
+// without requiring destination packages to import service implementation paths.
+func MockInferenceProvider(contents ...string) workerprovider.Provider {
+	responses := make([]workerexecution.InferenceResponse, len(contents))
+	for index, content := range contents {
+		responses[index] = workerexecution.InferenceResponse{Content: content}
+	}
+	return testutil.NewMockProvider(responses...)
+}
 
 // RunFactoryToCompletion executes the customer daemon command through the
 // canonical root-built process and returns its public default-session

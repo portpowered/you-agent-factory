@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -234,7 +233,7 @@ func TestWorkBatchDependencyOrderingNormalizesRuntimeWork(t *testing.T) {
 
 	stream := support.OpenFactoryEventStreamAt(
 		t,
-		support.SessionEventsURL(server.URL(), factorysessions.DefaultSessionID),
+		support.DefaultSessionEventsURL(server.URL()),
 	)
 	_ = stream.NextEvent(5 * time.Second) // RUN_REQUEST
 	_ = stream.NextEvent(5 * time.Second) // INITIAL_STRUCTURE_REQUEST

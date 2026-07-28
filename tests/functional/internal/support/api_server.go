@@ -18,6 +18,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -35,6 +36,7 @@ type FunctionalAPIServerConfig struct {
 	WaitForServiceModeRuntime bool
 	Args                      []string
 	Env                       []string
+	ProviderOverride          providercontract.Provider
 	Edges                     serviceedges.Edges
 }
 
@@ -61,6 +63,9 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	t.Helper()
 
 	edges := cfg.Edges
+	if cfg.ProviderOverride != nil {
+		edges.ProviderOverride = cfg.ProviderOverride
+	}
 
 	api := NewProcessAPIServer()
 	edges.APIServerStarter = api.Start

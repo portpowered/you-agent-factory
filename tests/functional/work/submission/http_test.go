@@ -13,8 +13,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -39,15 +37,10 @@ func TestAPIPOSTSubmitAndQueryWork(t *testing.T) {
 	}
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
-	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: "Processed. COMPLETE"},
-	)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ProviderOverride: provider,
-		},
+		ProviderOverride:          support.MockInferenceProvider("Processed. COMPLETE"),
 	})
 	defer server.Stop(t)
 
@@ -161,7 +154,7 @@ func TestCLIWorkTypeNameReachesLiveAPIHandler(t *testing.T) {
 		"--payload", payloadPath,
 	})
 	inputs.Input.WorkingDirectory = factoryDir
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := support.ExecuteProcess(t, inputs); err != nil {
 		t.Fatalf(
 			"Process.Execute(you submit --work-type-name) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
