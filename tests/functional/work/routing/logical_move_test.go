@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -44,6 +45,50 @@ func TestLogicalMoveCompletesWithoutWorkerDispatch(t *testing.T) {
 		support.ObserveDispatchEvents(t, events),
 		logicalMoveRouterWorkstation,
 	)
+}
+
+// TestLogicalMovePreservesWorkPayloadAndLineage proves that Work payload and
+// observable lineage identity survive a LOGICAL_MOVE routing step so the next
+// worker-backed workstation still receives the same customer content and Work ID.
+func TestLogicalMovePreservesWorkPayloadAndLineage(t *testing.T) {
+	const wantPayload = "preserved-payload"
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "logical_move_pipeline_dir"))
+	configureLogicalMoveWorkstation(t, dir, logicalMoveRouterWorkstation)
+	testutil.WriteSeedFile(t, dir, "task", []byte(wantPayload))
+
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "done COMPLETE"})
+	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		10*time.Second,
+	)
+
+	assertWorkCustomerStates(t, listed, map[string]int{
+		support.WorkCustomerLocation("task", "done"):    1,
+		support.WorkCustomerLocation("task", "init"):    0,
+		support.WorkCustomerLocation("task", "staging"): 0,
+	})
+
+	calls := provider.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("provider call count = %d, want 1 worker dispatch after logical move", len(calls))
+	}
+	if got := string(support.FirstInputPayload(calls[0].Dispatch.InputTokens)); got != wantPayload {
+		t.Fatalf("worker-bound payload = %q, want %q preserved across logical move", got, wantPayload)
+	}
+	workID := support.FirstInputWorkID(calls[0].Dispatch.InputTokens)
+	if workID == "" {
+		t.Fatal("worker-bound Work ID missing, want observable lineage after logical move")
+	}
+	if !support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation("task", "done")) {
+		t.Fatalf(
+			"listed Work %q missing at task:done, want same Work identity after logical move; listed=%#v",
+			workID,
+			listed,
+		)
+	}
 }
 
 func configureLogicalMoveWorkstation(t *testing.T, dir, workstationName string) {
