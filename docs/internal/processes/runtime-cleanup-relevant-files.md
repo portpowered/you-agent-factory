@@ -856,7 +856,11 @@ Factory Definitions `wire/wire.go` composes the lifecycle host through
 and must not import public `definition/` or transitional `service/` shims;
 `wire/boundary_test.go`, `wire/wire_lifecycle_compose_test.go`, and
 `wire/wire_lifecycle_behavior_test.go` lock that construction path and prove
-Activate/Save/GetCurrent*/version behavior on the published `Service` root. `non_owner_definition_import_boundary_test.go` seals zero
+Activate/Save/GetCurrent*/version behavior on the published `Service` root.
+New measurable owner packages such as `internal/lifecycle` must also be registered
+in both `go-unit-coverage-package-minimums.json` and
+`go-functional-coverage-package-minimums.json` when they first appear in CI profiles.
+`non_owner_definition_import_boundary_test.go` seals zero
 production peer imports of public `definition/` (including peer integration
 tests); peers use `factory_definitions` root or `factory_definitions/wire`.
 `wire/wire.go` also composes the compilation subservice from the
