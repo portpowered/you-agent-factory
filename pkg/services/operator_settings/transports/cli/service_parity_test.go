@@ -13,7 +13,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	operatorsettingsservicewire "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	operatorsettingscli "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
@@ -396,7 +396,7 @@ func TestConstructedService_ConfigureHonorsContextCancellationOnSuppliedProvider
 
 func paritySettingsRoot(t *testing.T) operatorsettings.Service {
 	t.Helper()
-	root, err := operatorsettingsservicewire.NewServiceFromConfigDocument(parityTestConfigService())
+	root, err := settingswire.NewServiceFromConfigDocument(parityTestConfigService())
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
 	}
@@ -404,7 +404,7 @@ func paritySettingsRoot(t *testing.T) operatorsettings.Service {
 }
 
 func parityTestConfigService() operatorsettings.ConfigDocumentService {
-	return operatorsettingsservicewire.NewConfigDocumentService(
+	return settingswire.NewConfigDocumentService(
 		platformfilesystem.Local{},
 		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 			return os.CreateTemp(dir, pattern)

@@ -11,22 +11,22 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/structured"
 )
 
-func TestExecutorSupportsPiOnlyAfterCodexClaudeCutover(t *testing.T) {
+func TestExecutorSupportsNoProvidersAfterPiCutover(t *testing.T) {
 	t.Parallel()
 
 	executor := structured.NewExecutor()
-	if !executor.Supports(string(modelprovider.ProviderPi)) {
-		t.Fatal("Supports(pi) = false, want structured Pi adapter")
-	}
 	for _, provider := range []string{
+		string(modelprovider.ProviderPi),
 		string(modelprovider.ProviderClaude),
 		string(modelprovider.ProviderCodex),
 		string(modelprovider.ProviderCursor),
 		string(modelprovider.ProviderOpenCode),
+		string(modelprovider.ProviderGemini),
+		string(modelprovider.ProviderKiro),
 		"unknown-provider",
 	} {
 		if executor.Supports(provider) {
-			t.Fatalf("Supports(%q) = true, want false after cutover", provider)
+			t.Fatalf("Supports(%q) = true, want false after Pi cutover", provider)
 		}
 	}
 	var nilExecutor *structured.Executor
@@ -46,6 +46,7 @@ func TestExecutorRejectsConductorRoutedProvidersAtScriptWrapBoundary(t *testing.
 		string(modelprovider.ProviderCodex),
 		string(modelprovider.ProviderCursor),
 		string(modelprovider.ProviderOpenCode),
+		string(modelprovider.ProviderPi),
 	} {
 		_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 			Dispatch:      work.WorkDispatch{DispatchID: "dispatch-cutover"},

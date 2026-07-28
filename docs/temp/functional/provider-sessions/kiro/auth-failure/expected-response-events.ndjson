@@ -1,1 +1,1 @@
-{"code":"auth_failure","eventId":"82bbc660-5fc0-45f3-b188-bbf3e0de1bfa","factorySessionId":"963edc46-d68b-49e9-b4df-7d2434b00fed","itemId":"","message":"Kiro authentication failed. Sign in again and retry.","runId":"df894b30-a74e-4de0-9075-6f3cbba3076f","type":"error.failed"}
+{"code":"authentication","eventId":"7a643219-ba80-48b9-bb3c-e4fb2b0415b1","factorySessionId":"81891778-2a3f-4075-9e90-593ef47002ac","itemId":"","message":"Kiro authentication failed. Sign in again and retry.","runId":"5b421306-a471-4fc1-8d90-44c7184fa33f","type":"error.failed"}

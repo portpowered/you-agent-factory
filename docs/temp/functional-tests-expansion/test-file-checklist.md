@@ -557,7 +557,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIUpsertWorkRequestUsesCanonicalIdentity`.
   - `TestAPIUnknownWorkReturnsTypedNotFound`.
 
-- [ ] `tests/functional/work/submission/stage_and_submit_test.go`
+- [x] `tests/functional/work/submission/stage_and_submit_test.go`
   - `TestAPIStageAndSubmitFileCreatesExpectedWork`.
 
 - [x] `tests/functional/work/relationships/dependencies_test.go`
@@ -572,7 +572,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestRecordingsBackedWorkReadsMapRichWorldState`.
   - `TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures`.
 
-- [ ] `tests/functional/work/relationships/parent_child_test.go`
+- [x] `tests/functional/work/relationships/parent_child_test.go`
   - `TestParentChildLineageSurvivesDispatchAndReplay`.
   - `TestChildFailureProjectsToDocumentedParentView`.
 
@@ -581,7 +581,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestLogicalMovePreservesWorkPayloadAndLineage`.
   - `TestLogicalMoveMultipleOutputsCreatesEveryExpectedWork`.
 
-- [ ] `tests/functional/work/routing/classifier_test.go`
+- [x] `tests/functional/work/routing/classifier_test.go`
   - `TestClassifierRoutesEveryKnownDecision`.
   - `TestClassifierUnknownAndMalformedDecisionFailDistinctly`.
   - `TestClassifierMultiOutputPreservesPayload`.
@@ -766,7 +766,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCursorHistoricalInspectionThroughRootBuildProcess_PropagatesMissingAndContainmentFailures`.
   - `TestCursorHistoricalInspectionThroughRootBuildProcess_DegradesAdverseNativeDataSafely`.
 
-- [ ] `tests/functional/provider_sessions/details/codex_details_test.go`
+- [x] `tests/functional/provider_sessions/details/codex_details_test.go`
   - `TestCodexProviderSessionDetailsLoadFromGoldenMetadata` covers API detail.
   - `TestCodexProviderSessionMissingTranscriptReturnsNotFound` covers absence.
   - `TestCodexProviderSessionCorruptTranscriptReturnsSafeDiagnostic`.

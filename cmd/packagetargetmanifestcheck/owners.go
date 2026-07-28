@@ -189,6 +189,10 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 		return mapping, true
 	}
 
+	if owner == "factory_definitions" && rest == "internal" {
+		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionRetain), true
+	}
+
 	// Packages already under the committed private subservice container retain
 	// that nested destination unless the subservice is still transitional IMP debt.
 	if strings.HasPrefix(rest, "internal/services/") {
@@ -297,6 +301,7 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "testlink", prefix: "testlink/", dest: "operator_settings/internal"},
 		{exact: "testproviders", prefix: "testproviders/", dest: "operator_settings/internal"},
 		{exact: "testdata", prefix: "testdata/", dest: "operator_settings/internal"},
+		{exact: "internal/construct", prefix: "internal/construct/", dest: "operator_settings/internal"},
 		{exact: "internal/service", prefix: "internal/service/", dest: "operator_settings/internal"},
 	},
 	"workers": {
@@ -343,7 +348,6 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "namedpaths", prefix: "namedpaths/", dest: "factory_definitions/internal/services/catalog"},
 		{exact: "persistence", prefix: "persistence/", dest: "factory_definitions/internal/services/catalog"},
 		{exact: "resource", prefix: "resource/", dest: "factory_definitions/internal/services/catalog"},
-		{prefix: "internal/namedfactories", dest: "factory_definitions/internal/services/catalog"},
 		{exact: "definition", prefix: "definition/", dest: "factory_definitions/internal/services/compilation"},
 		{exact: "loading", prefix: "loading/", dest: "factory_definitions/internal/services/compilation"},
 		{exact: "loadedsource", prefix: "loadedsource/", dest: "factory_definitions/internal/services/compilation"},

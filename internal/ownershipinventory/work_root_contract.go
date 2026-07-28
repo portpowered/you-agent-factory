@@ -28,10 +28,13 @@ var WorkThinRootContractFiles = []string{
 	"recordings_import_boundary_test.go",
 	"recordings_request_boundary_test.go",
 	"service_contract.go",
+	"service_import_boundary_test.go",
+	"service_peer_bindings.go",
+	"service_peer_bindings_test.go",
 	"service_root_contract_seal_test.go",
 	"service_root_contract_test.go",
-	"service_import_boundary_test.go",
 	"wire_behavioral_proof_test.go",
+	"legacy_packages_disposition_test.go",
 }
 
 // WorkRootContractFoldTarget names one excess root contract/helper cluster for
@@ -71,14 +74,6 @@ var WorkExcessRootContractFolds = []WorkRootContractFoldTarget{
 			"primary_result.go",
 			"primary_result_test.go",
 			"primary_result_regression_test.go",
-		},
-		Destination: workPackagePrefix + "/internal",
-	},
-	{
-		Cluster: "service_peer_bindings",
-		Files: []string{
-			"service_peer_bindings.go",
-			"service_peer_bindings_test.go",
 		},
 		Destination: workPackagePrefix + "/internal",
 	},

@@ -32,6 +32,11 @@ type SinkFunc func(View)
 
 func (f SinkFunc) PresentFactoryView(view View) { f(view) }
 
+// RootObserver receives the published Root composed for one runtime opening.
+// Process-edge functional proofs use this seam to exercise Activate and Join
+// without importing owner-private packages.
+type RootObserver func(Root)
+
 // Clock supplies observation timestamps without hiding process-global time.
 type Clock = liveviewprojection.Clock
 

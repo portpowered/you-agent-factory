@@ -40,10 +40,13 @@ func TestWorkThinRootContractFiles(t *testing.T) {
 		"recordings_import_boundary_test.go",
 		"recordings_request_boundary_test.go",
 		"service_contract.go",
+		"service_import_boundary_test.go",
+		"service_peer_bindings.go",
+		"service_peer_bindings_test.go",
 		"service_root_contract_seal_test.go",
 		"service_root_contract_test.go",
-		"service_import_boundary_test.go",
 		"wire_behavioral_proof_test.go",
+		"legacy_packages_disposition_test.go",
 	}
 	if !slices.Equal(ownershipinventory.WorkThinRootContractFiles, want) {
 		t.Fatalf("WorkThinRootContractFiles = %v, want %v", ownershipinventory.WorkThinRootContractFiles, want)
@@ -66,7 +69,6 @@ func TestWorkExcessRootContractFoldDestinations(t *testing.T) {
 	want := map[string]string{
 		"request_admission":            "pkg/services/work/internal",
 		"invocation_return_policy":     "pkg/services/work/internal",
-		"service_peer_bindings":        "pkg/services/work/internal",
 		"lineage_graph_modules":        "pkg/services/work/internal/services/state_access",
 		"state_access_query":           "pkg/services/work/internal/services/state_access",
 		"content_staging_impl":         "pkg/services/work/internal/services/content_staging",
@@ -103,7 +105,6 @@ func TestWorkExcessRootContractFoldDestinations(t *testing.T) {
 		"invocation_return_policy",
 		"lineage_graph_modules",
 		"request_admission",
-		"service_peer_bindings",
 		"state_access_query",
 	}
 	if !slices.Equal(gotClusters, wantClusters) {

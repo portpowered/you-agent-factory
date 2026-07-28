@@ -89,9 +89,10 @@
     "pkg/services/factory_definitions/decisionenvelope",
     "pkg/services/factory_definitions/definition",
     "pkg/services/factory_definitions/editable",
+    "pkg/services/factory_definitions/internal",
     "pkg/services/factory_definitions/internal/contracts",
-    "pkg/services/factory_definitions/internal/namedfactories",
     "pkg/services/factory_definitions/internal/services/authoring_layout",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout",
     "pkg/services/factory_definitions/internal/services/authoring_layout/expand",
     "pkg/services/factory_definitions/internal/services/authoring_layout/flatten",
     "pkg/services/factory_definitions/internal/services/authoring_layout/internal/service",
@@ -100,6 +101,7 @@
     "pkg/services/factory_definitions/internal/services/authoring_layout/wire",
     "pkg/services/factory_definitions/internal/services/catalog",
     "pkg/services/factory_definitions/internal/services/catalog/internal/service",
+    "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
     "pkg/services/factory_definitions/internal/services/catalog/wire",
     "pkg/services/factory_definitions/internal/services/compilation",
     "pkg/services/factory_definitions/internal/services/compilation/canonical",
@@ -118,6 +120,7 @@
     "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
     "pkg/services/factory_definitions/internal/services/validation",
@@ -329,6 +332,7 @@
     "pkg/services/models/wire",
     "pkg/services/operator_settings",
     "pkg/services/operator_settings/identityinventory",
+    "pkg/services/operator_settings/internal/construct",
     "pkg/services/operator_settings/internal/service",
     "pkg/services/operator_settings/internal/services/document",
     "pkg/services/operator_settings/internal/services/document/internal/service",
@@ -365,7 +369,10 @@
     "pkg/services/providers/internal/services/execution/internal/adapters/codex",
     "pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch",
     "pkg/services/providers/internal/services/execution/internal/adapters/cursor",
+    "pkg/services/providers/internal/services/execution/internal/adapters/gemini",
+    "pkg/services/providers/internal/services/execution/internal/adapters/kiro",
     "pkg/services/providers/internal/services/execution/internal/adapters/opencode",
+    "pkg/services/providers/internal/services/execution/internal/adapters/pi",
     "pkg/services/providers/internal/services/execution/internal/service",
     "pkg/services/providers/internal/services/execution/wire",
     "pkg/services/providers/internal/testutil/execution",
@@ -792,17 +799,22 @@
       "destination": "factory_definitions/internal/services/snapshots_portability"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/contracts",
       "disposition": "retain",
       "destination": "factory_definitions"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/namedfactories",
-      "disposition": "move",
-      "destination": "factory_definitions/internal/services/catalog"
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/authoring_layout"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/authoring_layout"
     },
@@ -843,6 +855,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog/internal/service",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/catalog"
     },
@@ -933,6 +950,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
+      "disposition": "move",
+      "destination": "factory_definitions/internal"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
       "disposition": "move",
       "destination": "factory_definitions/internal"
     },
@@ -1992,6 +2014,11 @@
       "destination": "operator_settings/internal/services/document"
     },
     {
+      "packagePath": "pkg/services/operator_settings/internal/construct",
+      "disposition": "move",
+      "destination": "operator_settings/internal"
+    },
+    {
       "packagePath": "pkg/services/operator_settings/internal/service",
       "disposition": "move",
       "destination": "operator_settings/internal"
@@ -2172,7 +2199,22 @@
       "destination": "providers/internal/services/execution"
     },
     {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/gemini",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/kiro",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
       "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/opencode",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/pi",
       "disposition": "retain",
       "destination": "providers/internal/services/execution"
     },

@@ -865,7 +865,11 @@ response-stream output.
   (`TestProductionPackagesImportWorkRootOnly`). Mirror
   `pkg/services/recordings/runtime_import_boundary_test.go` when adding similar
   CUT consumer-edge import proofs: `go list` every package under the Sessions
-  root and fail on any import outside `pkg/services/work`.
+  root and fail on any import outside `pkg/services/work`. FUN-sessions mirrors
+  the owner-local CUT-SES-WORK / CUT-SES-WRK / CUT-SES-RUN import seals in
+  `tests/functional/sessions/root_composition/work_peer_import_seal_test.go` and
+  walks `tests/functional/sessions` with `go/parser` ImportsOnly to block retired
+  `pkg/work*` and nested `pkg/services/work/*` imports in functional proofs.
 - Factory Sessions invocation input preparation and primary-result selection
   route through `work.Service` (`PrepareInvocationInput`,
   `ResolvePrimaryResult`) injected on `SessionOwner` via
@@ -952,6 +956,18 @@ response-stream output.
   `go-*-coverage-package-minimums.json` baselines; prove registration with
   `wire/manifest_registration_test.go` rather than re-editing manifests when
   IMP-SET already landed the rows.
+- Operator Settings transitional construction (ConfigDocument assembly,
+  home-port defaults resolution, and resolution-service wiring) lives in
+  `pkg/services/operator_settings/internal/construct`; `pkg/services/operator_settings/wire`
+  is the sole public construction bridge returning published peer surfaces; root
+  `pkg/wire` constructs ConfigDocument through `operator_settings/wire` only.
+  `pkg/transports/cli/initsetup` constructs configure roots through
+  `operator_settings/wire` only. `servicewire` retains thin delegation entry
+  points until DEL-SET deletes the path; `wire/servicewire_import_boundary_test.go`
+  fails if production packages outside the owner reintroduce servicewire imports.
+  Fold-preservation behavioral proofs live in `wire/behavioral_preservation_test.go`
+  and construct exclusively through `operator_settings/wire` for document load/update,
+  identity scope preservation, resolve-effective, and defaults-resolution-from-home.
 - Operator Settings top-level directory inventory for INV-SET-TOPLEVEL lives in
   `docs/internal/projects/packaged-service-structure/operator-settings-top-level-inventory.json`
   with drift verification in `internal/ownershipinventory/operator_settings_top_level.go`;
