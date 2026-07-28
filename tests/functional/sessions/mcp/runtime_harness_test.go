@@ -244,6 +244,148 @@ func assertMCPStructuredFailureDetail(
 	}
 }
 
+func startMCPAsyncSucceededSession(
+	t *testing.T,
+	client *stdioMCPClient,
+) (string, factoryapi.FactorySessionExecutionResponse) {
+	t.Helper()
+
+	const workflowName = "simple-final"
+	workflowNamePtr := workflowName
+	args := map[string]any{"subject": "workflows", "count": 2, "prefix": "you"}
+	started := decodeToolResponse[factoryapi.FactorySessionExecutionResponse](
+		t,
+		client.callTool(mcpfactorysession.ToolStartAsync, factoryapi.FactorySessionExecutionRequest{
+			RequestId: "req-sessions-mcp-controls-async-success-001",
+			Source: factoryapi.FactorySessionExecutionSource{
+				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+				WorkflowName: &workflowNamePtr,
+			},
+			Args: &args,
+		}),
+	)
+	if started.Error != nil || started.Result == nil {
+		t.Fatalf("start_async = %#v, want success", started)
+	}
+	sessionID := started.Result.SessionId
+	if sessionID == "" {
+		t.Fatal("sessionId missing from async start response")
+	}
+	if started.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("start_async status = %q, want RUNNING", started.Result.Status)
+	}
+	return sessionID, *started.Result
+}
+
+func pollMCPAsyncSessionToTerminalSuccess(
+	t *testing.T,
+	client *stdioMCPClient,
+	sessionID string,
+	timeout time.Duration,
+) (factoryapi.FactorySessionDurableReadModel, factoryapi.FactorySessionResult) {
+	t.Helper()
+
+	mode := factoryapi.FactorySessionResultModeFinal
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		session := readMCPSessionDurableReadModel(t, client, sessionID)
+		switch session.Status {
+		case factoryapi.FactorySessionDurableLifecycleStatusRunning:
+			if mcpAsyncResultIsFinal(t, client, sessionID, mode) {
+				result := readMCPAsyncTerminalResult(t, client, sessionID, mode)
+				return session, result
+			}
+			assertMCPAsyncRunningResultNotReady(t, client, sessionID, mode)
+		case factoryapi.FactorySessionDurableLifecycleStatusSucceeded:
+			result := readMCPAsyncTerminalResult(t, client, sessionID, mode)
+			return session, result
+		default:
+			t.Fatalf("get status = %q, want RUNNING or SUCCEEDED while polling async success", session.Status)
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+
+	session := readMCPSessionDurableReadModel(t, client, sessionID)
+	t.Fatalf(
+		"session %s status = %q, want SUCCEEDED with terminal result within %s",
+		sessionID,
+		session.Status,
+		timeout,
+	)
+	return session, factoryapi.FactorySessionResult{}
+}
+
+func mcpAsyncResultIsFinal(
+	t *testing.T,
+	client *stdioMCPClient,
+	sessionID string,
+	mode factoryapi.FactorySessionResultMode,
+) bool {
+	t.Helper()
+	response := decodeToolResponse[factoryapi.FactorySessionResult](
+		t,
+		client.callTool(mcpfactorysession.ToolGetResult, map[string]any{
+			"sessionId": sessionID,
+			"mode":      mode,
+		}),
+	)
+	return response.Error == nil &&
+		response.Result != nil &&
+		response.Result.ResultStatus == factoryapi.FactorySessionResultStatusFinal
+}
+
+func assertMCPAsyncRunningResultNotReady(
+	t *testing.T,
+	client *stdioMCPClient,
+	sessionID string,
+	mode factoryapi.FactorySessionResultMode,
+) {
+	t.Helper()
+	response := decodeToolResponse[factoryapi.FactorySessionResult](
+		t,
+		client.callTool(mcpfactorysession.ToolGetResult, map[string]any{
+			"sessionId": sessionID,
+			"mode":      mode,
+		}),
+	)
+	if response.Result != nil && response.Result.ResultStatus == factoryapi.FactorySessionResultStatusFinal {
+		return
+	}
+	if response.Result != nil {
+		t.Fatalf("get_result running = %#v, want not-ready envelope", response.Result)
+	}
+	if response.Error == nil || response.Error.Code != "factory_session.result.not_ready" {
+		t.Fatalf("get_result error = %#v, want factory_session.result.not_ready", response.Error)
+	}
+}
+
+func readMCPAsyncTerminalResult(
+	t *testing.T,
+	client *stdioMCPClient,
+	sessionID string,
+	mode factoryapi.FactorySessionResultMode,
+) factoryapi.FactorySessionResult {
+	t.Helper()
+	response := decodeToolResponse[factoryapi.FactorySessionResult](
+		t,
+		client.callTool(mcpfactorysession.ToolGetResult, map[string]any{
+			"sessionId": sessionID,
+			"mode":      mode,
+		}),
+	)
+	if response.Error != nil || response.Result == nil {
+		t.Fatalf("get_result terminal = %#v, want terminal result", response)
+	}
+	if response.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("resultStatus = %q, want FINAL", response.Result.ResultStatus)
+	}
+	if response.Result.PrimaryResult == nil {
+		t.Fatal("primaryResult missing from terminal async result")
+	}
+	return *response.Result
+}
+
 func startMCPRunningSession(t *testing.T, client *stdioMCPClient) string {
 	t.Helper()
 

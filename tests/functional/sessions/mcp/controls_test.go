@@ -181,6 +181,46 @@ func TestMCPSynchronousFailureReturnsStructuredFailure(t *testing.T) {
 	closeMCPServer(t, nil, serveErr)
 }
 
+// TestMCPAsyncFactorySessionCanBePolledToSuccess proves public MCP
+// you.factory_session.start_async returns a session id and subsequent MCP get
+// and get_result polling observe progress until a terminal success result.
+func TestMCPAsyncFactorySessionCanBePolledToSuccess(t *testing.T) {
+	projectRoot := setupSimpleFinalWorkflowFixture(t)
+	client, shutdown, serveErr := startRootRuntimeMCPServer(t, projectRoot, nil)
+	assertMCPInitialized(t, client)
+
+	toolsResult := client.call("tools/list", map[string]any{})
+	toolNames := toolNamesFromListResult(t, toolsResult.Result)
+	for _, want := range []string{
+		mcpfactorysession.ToolStartAsync,
+		mcpfactorysession.ToolGetSession,
+		mcpfactorysession.ToolGetResult,
+	} {
+		if !containsString(toolNames, want) {
+			t.Fatalf("tools/list missing async poll tool %q; got %#v", want, toolNames)
+		}
+	}
+
+	sessionID, asyncStart := startMCPAsyncSucceededSession(t, client)
+	assertCanonicalSessionID(t, asyncStart.SessionId, sessionID, "async start")
+
+	sessionRead, terminalResult := pollMCPAsyncSessionToTerminalSuccess(t, client, sessionID, 8*time.Second)
+	assertCanonicalSessionID(t, sessionRead.SessionId, sessionID, "async poll session read")
+	if sessionRead.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("async poll session status = %q, want SUCCEEDED", sessionRead.Status)
+	}
+	if sessionRead.ResultSummary == nil ||
+		sessionRead.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("async poll session resultSummary = %#v, want FINAL", sessionRead.ResultSummary)
+	}
+	if terminalResult.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("async poll result status = %q, want FINAL", terminalResult.ResultStatus)
+	}
+
+	shutdown()
+	closeMCPServer(t, nil, serveErr)
+}
+
 func toolNamesFromListResult(t *testing.T, result map[string]any) []string {
 	t.Helper()
 	rawTools, ok := result["tools"].([]any)
