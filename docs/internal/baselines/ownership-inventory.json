@@ -1740,6 +1740,12 @@
       "evidence": "pkg/services/work/service -\u003e pkg/services/factory_sessions"
     },
     {
+      "fromOwner": "work",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/work/transports/cli -\u003e pkg/transports/cli/clihttp"
+    },
+    {
       "fromOwner": "workers",
       "toOwner": "factory_definitions",
       "class": "query",
@@ -4381,6 +4387,12 @@
     },
     {
       "packagePath": "pkg/services/work/service",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/transports/cli",
       "disposition": "retain",
       "destination": "work",
       "destinationKind": "owner"

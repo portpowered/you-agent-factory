@@ -757,7 +757,11 @@ response-stream output.
   `docs/internal/baselines/ownership-inventory.json`, and both
   `go-*-coverage-package-minimums.json` baselines; prove registration with
   `wire/manifest_registration_test.go` rather than re-editing manifests when
-  IMP-WORK already landed the rows.
+  IMP-WORK already landed the rows. The Work CLI adapter at
+  `pkg/services/work/transports/cli` must stay registered under destination
+  `work` in the same shared manifests; prove registration with
+  `transports/cli/manifest_registration_test.go` rather than re-editing
+  manifests when CLI-WORK already landed the rows.
 - `pkg/work/content/contract` translates between generated OpenAPI `WorkContent`
   and the backend-owned `work.WorkContentPart` shape; pure content rules remain
   in `pkg/work/content`.
