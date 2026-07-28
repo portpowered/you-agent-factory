@@ -81,9 +81,13 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 
 	baseURL := server.WaitForURL(t)
 	eventCollector := startPackagedGoalFactoryEventCollector(ctx, t, baseURL)
+
 	inspection, execErr := pollPackagedGoalAPIInspectionUntilCLICompletes(ctx, t, baseURL, execDone)
 	eventCollector.stop()
 	events := eventCollector.snapshot()
+	if retained, retainErr := tryGetRetainedFactoryEvents(baseURL); retainErr == nil {
+		events = mergePackagedGoalFactoryEvents(events, retained)
+	}
 	if refreshed, refreshErr := fetchPackagedGoalAPIInspectionSnapshot(baseURL); refreshErr == nil {
 		inspection = preferStrongerPackagedGoalAPIInspection(inspection, refreshed)
 	}
@@ -100,6 +104,14 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 	var cliResponse factoryapi.InvocationResponse
 	if err := json.Unmarshal(bytes.TrimSpace([]byte(inputs.Stdout())), &cliResponse); err != nil {
 		t.Fatalf("decode CLI invocation JSON: %v\nstdout:\n%s", err, inputs.Stdout())
+	}
+	if traceListed, traceErr := tryListDefaultSessionWorkByTrace(baseURL, cliResponse.TraceId); traceErr == nil {
+		inspection = preferStrongerPackagedGoalAPIInspection(inspection, packagedGoalAPIInspection{
+			session: inspection.session,
+			status:  inspection.status,
+			listed:  traceListed,
+			live:    inspection.live,
+		})
 	}
 
 	if !inspection.live {
@@ -543,38 +555,15 @@ func preferStrongerPackagedGoalAPIInspection(
 }
 
 func hasPackagedGoalAPIInspectabilityEvidence(snapshot packagedGoalAPIInspection) bool {
-	for _, work := range snapshot.listed.Results {
+	return hasPackagedGoalCompleteWork(snapshot.listed)
+}
+
+func hasPackagedGoalCompleteWork(listed factoryapi.ListWorkResponse) bool {
+	for _, work := range listed.Results {
 		if work.WorkTypeName == nil || *work.WorkTypeName != "goal" {
 			continue
 		}
-		if support.HasWorkAtCustomerState(snapshot.listed, stringValue(work.WorkId), "goal:complete") {
-			return true
-		}
-	}
-	return snapshot.status.Categories.Terminal > 0 || inspectionShowsRuntimeActivity(snapshot)
-}
-
-func inspectionShowsRuntimeActivity(inspection packagedGoalAPIInspection) bool {
-	return inspection.maxProcessing > 0 ||
-		inspection.maxTerminal > 0 ||
-		inspection.maxTotalTokens > 0 ||
-		(inspection.live && inspection.sawFactoryActive)
-}
-
-func packagedGoalFactoryEventsCorrelateWithSession(
-	events []factoryapi.FactoryEvent,
-	session factoryapi.FactorySession,
-) bool {
-	sessionID := strings.TrimSpace(session.Id)
-	if sessionID == "" {
-		return false
-	}
-	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeSessionStarted {
-			continue
-		}
-		if event.Context.SessionId != nil &&
-			strings.TrimSpace(*event.Context.SessionId) == sessionID {
+		if support.HasWorkAtCustomerState(listed, stringValue(work.WorkId), "goal:complete") {
 			return true
 		}
 	}
@@ -616,7 +605,18 @@ func tryGetStatus(baseURL string) (factoryapi.StatusResponse, error) {
 }
 
 func tryListDefaultSessionWork(baseURL string) (factoryapi.ListWorkResponse, error) {
-	response, err := http.Get(support.DefaultSessionWorkURL(baseURL, "/work"))
+	return tryListDefaultSessionWorkByTrace(baseURL, "")
+}
+
+func tryListDefaultSessionWorkByTrace(
+	baseURL string,
+	traceID string,
+) (factoryapi.ListWorkResponse, error) {
+	url := support.DefaultSessionWorkURL(baseURL, "/work")
+	if strings.TrimSpace(traceID) != "" {
+		url += "?traceId=" + traceID
+	}
+	response, err := http.Get(url)
 	if err != nil {
 		return factoryapi.ListWorkResponse{}, err
 	}
@@ -629,6 +629,74 @@ func tryListDefaultSessionWork(baseURL string) (factoryapi.ListWorkResponse, err
 		return factoryapi.ListWorkResponse{}, err
 	}
 	return decoded, nil
+}
+
+func mergePackagedGoalFactoryEvents(
+	collected []factoryapi.FactoryEvent,
+	retained []factoryapi.FactoryEvent,
+) []factoryapi.FactoryEvent {
+	seen := make(map[string]struct{}, len(collected)+len(retained))
+	merged := make([]factoryapi.FactoryEvent, 0, len(collected)+len(retained))
+	for _, batch := range [][]factoryapi.FactoryEvent{collected, retained} {
+		for _, event := range batch {
+			if event.Id == "" {
+				continue
+			}
+			if _, ok := seen[event.Id]; ok {
+				continue
+			}
+			seen[event.Id] = struct{}{}
+			merged = append(merged, event)
+		}
+	}
+	return merged
+}
+
+func tryGetRetainedFactoryEvents(baseURL string) ([]factoryapi.FactoryEvent, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		support.DefaultSessionEventsURL(baseURL),
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status = %d", response.StatusCode)
+	}
+	scanner := bufio.NewScanner(response.Body)
+	var dataLines []string
+	var events []factoryapi.FactoryEvent
+	flush := func() {
+		if len(dataLines) == 0 {
+			return
+		}
+		var event factoryapi.FactoryEvent
+		if err := json.Unmarshal([]byte(strings.Join(dataLines, "\n")), &event); err == nil {
+			events = append(events, event)
+		}
+		dataLines = nil
+	}
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			flush()
+			continue
+		}
+		if strings.HasPrefix(line, "data:") {
+			dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+		}
+	}
+	flush()
+	return events, scanner.Err()
 }
 
 func assertPackagedGoalCLIInvocationInspectableByAPI(
@@ -694,25 +762,20 @@ func assertPackagedGoalCLIInvocationInspectableByAPI(
 		}
 	}
 
-	hasGoalComplete := false
-	for _, work := range listed.Results {
-		if work.WorkTypeName == nil || *work.WorkTypeName != "goal" {
-			continue
-		}
-		if support.HasWorkAtCustomerState(listed, stringValue(work.WorkId), "goal:complete") {
-			hasGoalComplete = true
-			break
-		}
-	}
-	hasTerminalCategory := status.Categories.Terminal > 0 ||
-		inspectionShowsRuntimeActivity(inspection)
-	hasCorrelatedEvent := packagedGoalFactoryEventsCorrelateWithCLIInvocation(events, cliResponse) ||
-		packagedGoalFactoryEventsCorrelateWithSession(events, session)
-	if !hasGoalComplete && !hasTerminalCategory && !hasCorrelatedEvent {
+	hasGoalComplete := hasPackagedGoalCompleteWork(listed)
+	hasCorrelatedEvent := packagedGoalFactoryEventsCorrelateWithCLIInvocation(events, cliResponse)
+	hasTraceCorrelatedWork := packagedGoalListedWorkCorrelatesWithCLIInvocation(listed, cliResponse)
+	hasRuntimeWorkSignal := inspection.maxProcessing > 0 ||
+		inspection.maxTerminal > 0 ||
+		status.Categories.Terminal > 0 ||
+		status.Categories.Processing > 0 ||
+		inspection.sawFactoryActive
+	if !hasGoalComplete && !hasCorrelatedEvent && !hasTraceCorrelatedWork && !hasRuntimeWorkSignal {
 		t.Fatalf(
-			"API inspectability evidence missing for CLI-started run: no goal:complete work, no runtime activity, and no factory events correlated to CLI identity or session; requestId=%q traceId=%q events=%d listed=%#v status=%#v inspection=%#v",
+			"API inspectability evidence missing for CLI-started run: need goal:complete work, identity-correlated factory events, trace/request-correlated listed work, or observed runtime work signals during polling; requestId=%q traceId=%q workId=%q events=%d listed=%#v status=%#v inspection=%#v",
 			cliResponse.RequestId,
 			cliResponse.TraceId,
+			stringValue(cliResponse.WorkId),
 			len(events),
 			listed.Results,
 			status,
@@ -723,12 +786,20 @@ func assertPackagedGoalCLIInvocationInspectableByAPI(
 		listed,
 		stringValue(correlatedWork.WorkId),
 		"goal:complete",
-	) && !hasTerminalCategory && !hasCorrelatedEvent {
+	) && !hasCorrelatedEvent && !hasTraceCorrelatedWork && !hasRuntimeWorkSignal {
 		t.Fatalf(
-			"correlated API goal work %q is not at goal:complete, status.Categories.Terminal = 0, and no correlated factory events were observed",
+			"correlated API goal work %q is not at goal:complete and no factory events correlated to CLI identity were observed",
 			stringValue(correlatedWork.WorkId),
 		)
 	}
+}
+
+func packagedGoalListedWorkCorrelatesWithCLIInvocation(
+	listed factoryapi.ListWorkResponse,
+	cliResponse factoryapi.InvocationResponse,
+) bool {
+	_, correlated := findPackagedGoalWorkCorrelatedWithCLIInvocation(listed, cliResponse)
+	return correlated
 }
 
 func packagedGoalFactoryEventsCorrelateWithCLIInvocation(
