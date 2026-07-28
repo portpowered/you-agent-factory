@@ -583,6 +583,18 @@
       "minimum": 0.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl",
+      "minimum": 54.47
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
+      "minimum": 72.22
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
+      "minimum": 54.34
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition",
       "exception": {
         "kind": "measurement",
@@ -801,6 +813,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold",
       "minimum": 66.66
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/validation",
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers",
