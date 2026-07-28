@@ -1493,6 +1493,12 @@
     },
     {
       "fromOwner": "root",
+      "toOwner": "automations",
+      "class": "construction",
+      "evidence": "pkg/root -\u003e pkg/services/automations"
+    },
+    {
+      "fromOwner": "root",
       "toOwner": "edges",
       "class": "construction",
       "architectureException": true,
@@ -4558,7 +4564,25 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/gemini",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/kiro",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/opencode",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/pi",
       "disposition": "retain",
       "destination": "providers",
       "destinationKind": "owner"

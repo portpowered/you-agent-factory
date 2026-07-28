@@ -1,15 +1,13 @@
 package kiro
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"unicode"
 
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 const (
@@ -17,119 +15,57 @@ const (
 	failureMessageBytes = 1024
 )
 
-const TimeoutFailureMessage = "Kiro request timed out."
+const (
+	// TimeoutFailureMessage is the canonical Kiro timeout outcome.
+	TimeoutFailureMessage = "Kiro request timed out."
+)
 
 const (
 	kiroAuthFailureMessage       = "Kiro authentication failed. Sign in again and retry."
 	kiroBadRequestFailureMessage = "Kiro rejected the request as invalid."
 	kiroThrottleFailureMessage   = "Kiro is temporarily unavailable due to usage or capacity limits."
-	kiroTimeoutFailureMessage    = "Kiro request timed out."
+	kiroTimeoutFailureMessage    = TimeoutFailureMessage
 	kiroServerFailureMessage     = "Kiro encountered a temporary service error."
 )
 
-type FailureInput struct {
+type commandFailureInput struct {
 	Stdout   []byte
 	Stderr   []byte
 	ExitCode int
 }
 
-type FailureResult struct {
-	Reason  workerexecution.WorkFailureType
+type parsedFailure struct {
+	Reason  workers.WorkFailureType
 	Message string
 }
 
-func ParseProviderFailure(input FailureInput) FailureResult {
-	return parseProviderFailure(input)
-}
-
-// TimeoutFailureResult returns the canonical Kiro timeout outcome used when
-// the command boundary reports deadline expiration without provider output.
-func TimeoutFailureResult() FailureResult {
-	return knownKiroFailure(workerexecution.WorkFailureTypeTimeout)
-}
-
-// ClassifyFailure translates Kiro subprocess outcomes into the bounded facts
-// consumed by the neutral conductor. Cancellation remains an invocation-level
-// concern and is propagated by Integration.Invoke before classification.
-func (*Adapter) ClassifyFailure(ctx context.Context, input adapter.FailureContext) adapter.FailureResult {
-	if !kiroFailureNeedsClassification(input) {
-		return adapter.FailureResult{}
-	}
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) ||
-		errors.Is(input.CommandError, context.DeadlineExceeded) {
-		return normalizedKiroFailureResult(TimeoutFailureResult(), input.CommandError)
-	}
-	parsed := ParseProviderFailure(FailureInput{
-		Stdout:   input.CommandResult.Stdout,
-		Stderr:   input.CommandResult.Stderr,
-		ExitCode: input.CommandResult.ExitCode,
-	})
-	return normalizedKiroFailureResult(parsed, errors.Join(
-		input.CommandError, input.DecodeError, input.FlushError, input.ParseError,
-	))
-}
-
-func kiroFailureNeedsClassification(input adapter.FailureContext) bool {
-	return input.CommandError != nil ||
-		input.CommandResult.ExitCode != 0 ||
-		input.DecodeError != nil ||
-		input.FlushError != nil ||
-		input.ParseError != nil
-}
-
-func normalizedKiroFailureResult(parsed FailureResult, cause error) adapter.FailureResult {
-	providerErr := workerexecution.NewProviderError(parsed.Reason, parsed.Message, cause)
-	decision := workerexecution.FailureDecisionFromMetadata(&workerexecution.WorkFailureMetadata{
-		Family: providerErr.Family,
-		Type:   providerErr.Type,
-	})
-	return adapter.FailureResult{Failure: &adapter.FailureFacts{
-		Family:  providerErr.Family,
-		Type:    providerErr.Type,
-		Message: providerErr.Message,
-		Retry:   adapter.RetryGuidance{Retryable: decision.Retryable},
-	}}
-}
-
-func tailForErrorScan(output []byte) string {
-	if len(output) <= errorLineScanBytes {
-		return string(output)
-	}
-	return string(output[len(output)-errorLineScanBytes:])
-}
-
-// ParseKiroProviderFailure is the pure Kiro-owned normalization boundary for
-// non-zero CLI exits. It inspects bounded stderr/stdout tails, gives recognized
-// structured records precedence over text, and returns only canonical reasons
-// with product-owned messages for known failures.
-func parseProviderFailure(input FailureInput) FailureResult {
-	result := input
-	if result.ExitCode == 124 {
-		return knownKiroFailure(workerexecution.WorkFailureTypeTimeout)
+func parseCommandFailure(input commandFailureInput) parsedFailure {
+	if input.ExitCode == 124 {
+		return knownKiroFailure(workers.WorkFailureTypeTimeout)
 	}
 	streams := []string{
-		tailForErrorScan(result.Stderr),
-		tailForErrorScan(result.Stdout),
+		tailForErrorScan(input.Stderr),
+		tailForErrorScan(input.Stdout),
 	}
 	if failure, ok := firstKiroStructuredFailure(streams); ok {
 		return failure
 	}
-	if failure, ok := firstKiroTextFailure(streams, result.ExitCode); ok {
+	if failure, ok := firstKiroTextFailure(streams, input.ExitCode); ok {
 		return failure
 	}
 	if message, ok := firstKiroUnknownFailureExcerpt(streams); ok {
-		return FailureResult{
-			Reason:  workerexecution.WorkFailureTypeUnknown,
+		return parsedFailure{
+			Reason:  workers.WorkFailureTypeUnknown,
 			Message: message,
 		}
 	}
-	return FailureResult{
-		Reason:  workerexecution.WorkFailureTypeUnknown,
-		Message: kiroExitFailureMessage(result.ExitCode),
+	return parsedFailure{
+		Reason:  workers.WorkFailureTypeUnknown,
+		Message: kiroExitFailureMessage(input.ExitCode),
 	}
 }
 
-func firstKiroStructuredFailure(streams []string) (FailureResult, bool) {
+func firstKiroStructuredFailure(streams []string) (parsedFailure, bool) {
 	for _, stream := range streams {
 		for _, line := range strings.Split(stream, "\n") {
 			payload := kiroStructuredPayload(line)
@@ -142,7 +78,7 @@ func firstKiroStructuredFailure(streams []string) (FailureResult, bool) {
 			}
 		}
 	}
-	return FailureResult{}, false
+	return parsedFailure{}, false
 }
 
 func kiroStructuredPayload(line string) string {
@@ -156,10 +92,10 @@ func kiroStructuredPayload(line string) string {
 	return trimmed
 }
 
-func decodeKiroStructuredFailure(payload string) (workerexecution.WorkFailureType, bool) {
+func decodeKiroStructuredFailure(payload string) (workers.WorkFailureType, bool) {
 	var envelope map[string]any
 	if err := json.Unmarshal([]byte(payload), &envelope); err != nil {
-		return workerexecution.WorkFailureTypeUnknown, false
+		return workers.WorkFailureTypeUnknown, false
 	}
 
 	signals := kiroStructuredSignals(envelope)
@@ -167,23 +103,23 @@ func decodeKiroStructuredFailure(payload string) (workerexecution.WorkFailureTyp
 		signals = append(kiroStructuredSignals(nested), signals...)
 	}
 	for _, signal := range signals {
-		if reason := classifyKiroSignal(signal); reason != workerexecution.WorkFailureTypeUnknown {
+		if reason := classifyKiroSignal(signal); reason != workers.WorkFailureTypeUnknown {
 			return reason, true
 		}
 	}
 	for _, status := range kiroStructuredStatuses(envelope) {
-		if reason := classifyKiroStatus(status); reason != workerexecution.WorkFailureTypeUnknown {
+		if reason := classifyKiroStatus(status); reason != workers.WorkFailureTypeUnknown {
 			return reason, true
 		}
 	}
 	if nested, ok := envelope["error"].(map[string]any); ok {
 		for _, status := range kiroStructuredStatuses(nested) {
-			if reason := classifyKiroStatus(status); reason != workerexecution.WorkFailureTypeUnknown {
+			if reason := classifyKiroStatus(status); reason != workers.WorkFailureTypeUnknown {
 				return reason, true
 			}
 		}
 	}
-	return workerexecution.WorkFailureTypeUnknown, false
+	return workers.WorkFailureTypeUnknown, false
 }
 
 func kiroStructuredSignals(record map[string]any) []string {
@@ -214,42 +150,42 @@ func kiroStructuredStatuses(record map[string]any) []int {
 	return statuses
 }
 
-func classifyKiroSignal(signal string) workerexecution.WorkFailureType {
+func classifyKiroSignal(signal string) workers.WorkFailureType {
 	normalized := strings.ToLower(strings.TrimSpace(signal))
 	switch {
 	case containsAny(normalized, "authentication", "authorization", "unauthorized", "forbidden", "access_denied", "accessdenied"):
-		return workerexecution.WorkFailureTypeAuthFailure
+		return workers.WorkFailureTypeAuthFailure
 	case containsAny(normalized, "invalid_request", "invalidrequest", "validation", "bad_request", "badrequest", "invalid_argument"):
-		return workerexecution.WorkFailureTypePermanentBadRequest
+		return workers.WorkFailureTypePermanentBadRequest
 	case containsAny(normalized, "rate_limit", "ratelimit", "throttl", "too_many_requests", "capacity", "overloaded"):
-		return workerexecution.WorkFailureTypeThrottled
+		return workers.WorkFailureTypeThrottled
 	case containsAny(normalized, "timeout", "timed_out", "deadline_exceeded"):
-		return workerexecution.WorkFailureTypeTimeout
+		return workers.WorkFailureTypeTimeout
 	case containsAny(normalized, "internal_server", "internalserver", "server_error", "service_unavailable", "serviceunavailable", "api_error"):
-		return workerexecution.WorkFailureTypeInternalServerError
+		return workers.WorkFailureTypeInternalServerError
 	default:
-		return workerexecution.WorkFailureTypeUnknown
+		return workers.WorkFailureTypeUnknown
 	}
 }
 
-func classifyKiroStatus(status int) workerexecution.WorkFailureType {
+func classifyKiroStatus(status int) workers.WorkFailureType {
 	switch {
 	case status == 401 || status == 403:
-		return workerexecution.WorkFailureTypeAuthFailure
+		return workers.WorkFailureTypeAuthFailure
 	case status == 400 || status == 422:
-		return workerexecution.WorkFailureTypePermanentBadRequest
+		return workers.WorkFailureTypePermanentBadRequest
 	case status == 429:
-		return workerexecution.WorkFailureTypeThrottled
+		return workers.WorkFailureTypeThrottled
 	case status == 408 || status == 504:
-		return workerexecution.WorkFailureTypeTimeout
+		return workers.WorkFailureTypeTimeout
 	case status >= 500 && status <= 599:
-		return workerexecution.WorkFailureTypeInternalServerError
+		return workers.WorkFailureTypeInternalServerError
 	default:
-		return workerexecution.WorkFailureTypeUnknown
+		return workers.WorkFailureTypeUnknown
 	}
 }
 
-func firstKiroTextFailure(streams []string, exitCode int) (FailureResult, bool) {
+func firstKiroTextFailure(streams []string, exitCode int) (parsedFailure, bool) {
 	for _, stream := range streams {
 		lines := strings.Split(stream, "\n")
 		for _, line := range lines {
@@ -257,12 +193,12 @@ func firstKiroTextFailure(streams []string, exitCode int) (FailureResult, bool) 
 			if !ok {
 				continue
 			}
-			if reason := classifyKiroTextFailure(message, exitCode); reason != workerexecution.WorkFailureTypeUnknown {
+			if reason := classifyKiroTextFailure(message, exitCode); reason != workers.WorkFailureTypeUnknown {
 				return knownKiroFailure(reason), true
 			}
 		}
 	}
-	return FailureResult{}, false
+	return parsedFailure{}, false
 }
 
 func kiroTextErrorCandidate(line string, singleLine bool) (string, bool) {
@@ -288,11 +224,6 @@ func normalizeKiroText(value string) string {
 	return strings.Join(strings.Fields(value), " ")
 }
 
-// firstKiroUnknownFailureExcerpt considers stderr before stdout and selects the
-// first explicit error record in that stream. This precedence is intentional:
-// Kiro writes invocation failures to stderr, while stdout can contain model
-// output or an echoed prompt. Conservative rejection keeps ambiguous records
-// on the fixed exit-code fallback instead of risking customer-data exposure.
 func firstKiroUnknownFailureExcerpt(streams []string) (string, bool) {
 	for _, stream := range streams {
 		for _, line := range strings.Split(stream, "\n") {
@@ -375,46 +306,53 @@ func truncateKiroFailureMessage(message string) string {
 	return strings.TrimSpace(message[:end])
 }
 
-func classifyKiroTextFailure(message string, exitCode int) workerexecution.WorkFailureType {
+func classifyKiroTextFailure(message string, exitCode int) workers.WorkFailureType {
 	normalized := strings.ToLower(message)
 	switch {
 	case exitCode == 124, containsAny(normalized, "request timed out", "operation timed out", "timeout waiting", "deadline exceeded"):
-		return workerexecution.WorkFailureTypeTimeout
+		return workers.WorkFailureTypeTimeout
 	case containsAny(normalized, "authentication required", "authentication failed", "authorization failed", "not authorized", "unauthorized", "forbidden", "sign in required", "login required"):
-		return workerexecution.WorkFailureTypeAuthFailure
+		return workers.WorkFailureTypeAuthFailure
 	case containsAny(normalized, "invalid request", "invalid input", "invalid argument", "bad request", "validation failed"):
-		return workerexecution.WorkFailureTypePermanentBadRequest
+		return workers.WorkFailureTypePermanentBadRequest
 	case containsAny(normalized, "rate limit", "too many requests", "throttl", "capacity limit", "at capacity", "resource exhausted"):
-		return workerexecution.WorkFailureTypeThrottled
+		return workers.WorkFailureTypeThrottled
 	case containsAny(normalized, "internal server error", "temporary service error", "service unavailable", "unexpected status 500", "unexpected status 502", "unexpected status 503"):
-		return workerexecution.WorkFailureTypeInternalServerError
+		return workers.WorkFailureTypeInternalServerError
 	default:
-		return workerexecution.WorkFailureTypeUnknown
+		return workers.WorkFailureTypeUnknown
 	}
 }
 
-func knownKiroFailure(reason workerexecution.WorkFailureType) FailureResult {
+func knownKiroFailure(reason workers.WorkFailureType) parsedFailure {
 	message := ""
 	switch reason {
-	case workerexecution.WorkFailureTypeAuthFailure:
+	case workers.WorkFailureTypeAuthFailure:
 		message = kiroAuthFailureMessage
-	case workerexecution.WorkFailureTypePermanentBadRequest:
+	case workers.WorkFailureTypePermanentBadRequest:
 		message = kiroBadRequestFailureMessage
-	case workerexecution.WorkFailureTypeThrottled:
+	case workers.WorkFailureTypeThrottled:
 		message = kiroThrottleFailureMessage
-	case workerexecution.WorkFailureTypeTimeout:
+	case workers.WorkFailureTypeTimeout:
 		message = kiroTimeoutFailureMessage
-	case workerexecution.WorkFailureTypeInternalServerError:
+	case workers.WorkFailureTypeInternalServerError:
 		message = kiroServerFailureMessage
 	}
 	if len(message) > failureMessageBytes {
 		message = message[:failureMessageBytes]
 	}
-	return FailureResult{Reason: reason, Message: message}
+	return parsedFailure{Reason: reason, Message: message}
 }
 
 func kiroExitFailureMessage(exitCode int) string {
 	return fmt.Sprintf("kiro-cli exited with code %d", exitCode)
+}
+
+func tailForErrorScan(output []byte) string {
+	if len(output) <= errorLineScanBytes {
+		return string(output)
+	}
+	return string(output[len(output)-errorLineScanBytes:])
 }
 
 func containsAny(haystack string, needles ...string) bool {
@@ -424,4 +362,37 @@ func containsAny(haystack string, needles ...string) bool {
 		}
 	}
 	return false
+}
+
+func exitFailureFromCommandResult(result workers.CommandResult) error {
+	parsed := parseCommandFailure(commandFailureInput{
+		Stdout:   result.Stdout,
+		Stderr:   result.Stderr,
+		ExitCode: result.ExitCode,
+	})
+	return declaredFailureFromParsed(parsed)
+}
+
+func declaredFailureFromParsed(parsed parsedFailure) providers.ExecuteFailure {
+	return providers.ExecuteFailure{
+		Kind:    failureKindFromReason(parsed.Reason),
+		Message: parsed.Message,
+	}
+}
+
+func failureKindFromReason(reason workers.WorkFailureType) providers.ExecuteFailureKind {
+	switch reason {
+	case workers.WorkFailureTypeAuthFailure:
+		return providers.ExecuteFailureKindAuthentication
+	case workers.WorkFailureTypePermanentBadRequest:
+		return providers.ExecuteFailureKindInvalidRequest
+	case workers.WorkFailureTypeThrottled:
+		return providers.ExecuteFailureKindThrottled
+	case workers.WorkFailureTypeTimeout:
+		return providers.ExecuteFailureKindTimeout
+	case workers.WorkFailureTypeInternalServerError:
+		return providers.ExecuteFailureKindDependency
+	default:
+		return providers.ExecuteFailureKindUnknown
+	}
 }

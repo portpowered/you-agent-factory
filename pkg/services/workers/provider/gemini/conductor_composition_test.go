@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
-	geminipkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )
@@ -39,7 +39,7 @@ func TestBuiltInRegistrySelectsGeminiThroughAuthoritativeManifestIdentity(t *tes
 	if providers.UsesNativeRunner("gemini") {
 		t.Fatal("UsesNativeRunner(gemini) = true, want conductor route for migrated Gemini")
 	}
-	if providers.UsesNativeRunner(workers.RunnerIDCodex) || providers.UsesNativeRunner("claude") {
+	if providers.UsesNativeRunner("codex") || providers.UsesNativeRunner("claude") {
 		t.Fatal("UsesNativeRunner(codex/claude) = true, want conductor route for migrated built-ins")
 	}
 }
@@ -47,7 +47,7 @@ func TestBuiltInRegistrySelectsGeminiThroughAuthoritativeManifestIdentity(t *tes
 func TestConductorInvokesGeminiWithoutConcreteProviderSwitch(t *testing.T) {
 	t.Parallel()
 
-	runner := &recordingCommandRunner{result: workerprocess.CommandResult{Stdout: []byte("gemini conductor answer")}}
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("gemini conductor answer")})
 	providers := newGeminiRegistryWithRunner(t, runner)
 	destination := &recordingDestination{}
 
@@ -71,24 +71,25 @@ func TestConductorInvokesGeminiWithoutConcreteProviderSwitch(t *testing.T) {
 	if got := destination.completion.Response().Content(); got != "gemini conductor answer" {
 		t.Fatalf("response content = %q, want gemini conductor answer", got)
 	}
-	if runner.calls != 1 {
-		t.Fatalf("command runner calls = %d, want 1", runner.calls)
+	if runner.CallCount() != 1 {
+		t.Fatalf("command runner calls = %d, want 1", runner.CallCount())
 	}
-	if runner.request.Command != "gemini" {
-		t.Fatalf("command = %q, want gemini", runner.request.Command)
+	request := runner.LastRequest()
+	if request.Command != "gemini" {
+		t.Fatalf("command = %q, want gemini", request.Command)
 	}
-	if !containsArgPair(runner.request.Args, "--prompt", "say hello") {
-		t.Fatalf("args = %#v, want --prompt say hello", runner.request.Args)
+	if !containsArgPair(request.Args, "--prompt", "say hello") {
+		t.Fatalf("args = %#v, want --prompt say hello", request.Args)
 	}
-	if !containsArgPair(runner.request.Args, "--model", "gemini-2.5-pro") {
-		t.Fatalf("args = %#v, want --model gemini-2.5-pro", runner.request.Args)
+	if !containsArgPair(request.Args, "--model", "gemini-2.5-pro") {
+		t.Fatalf("args = %#v, want --model gemini-2.5-pro", request.Args)
 	}
 }
 
 func TestConductorRejectsGeminiCapabilityEscalationBeforeProviderIO(t *testing.T) {
 	t.Parallel()
 
-	runner := &recordingCommandRunner{result: workerprocess.CommandResult{Stdout: []byte("should-not-run")}}
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("should-not-run")})
 	providers := newGeminiRegistryWithRunner(t, runner)
 	destination := &recordingDestination{}
 
@@ -118,8 +119,8 @@ func TestConductorRejectsGeminiCapabilityEscalationBeforeProviderIO(t *testing.T
 	if rejection.Capability() != string(inference.CapabilitySessionResume) {
 		t.Fatalf("Capability() = %q, want session_resume", rejection.Capability())
 	}
-	if runner.calls != 0 {
-		t.Fatalf("provider I/O occurred: command runner calls = %d", runner.calls)
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider I/O occurred: command runner calls = %d", runner.CallCount())
 	}
 	if destination.completion != nil {
 		t.Fatalf("destination received completion %#v despite preflight rejection", destination.completion)
@@ -129,10 +130,10 @@ func TestConductorRejectsGeminiCapabilityEscalationBeforeProviderIO(t *testing.T
 func TestConductorClassifiesGeminiNativeFailureSafely(t *testing.T) {
 	t.Parallel()
 
-	runner := &recordingCommandRunner{result: workerprocess.CommandResult{
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 		ExitCode: 1,
 		Stderr:   []byte(`{"error":{"status":"RESOURCE_EXHAUSTED","message":"quota path /tmp/secret-key leaked"}}`),
-	}}
+	})
 	providers := newGeminiRegistryWithRunner(t, runner)
 	destination := &recordingDestination{}
 
@@ -190,7 +191,7 @@ func TestConductorPublishesOnlyCanonicalGeminiFailureMessages(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			runner := &recordingCommandRunner{result: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte(tc.stderr)}}
+			runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{ExitCode: 1, Stderr: []byte(tc.stderr)})
 			destination := &recordingDestination{}
 			err := conductor.New(newGeminiRegistryWithRunner(t, runner)).Invoke(
 				context.Background(),
@@ -222,9 +223,10 @@ func TestConductorNormalizesGeminiCommandCancellation(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	runner := &cancelingCommandRunner{cancel: cancel}
+	runner := &cancelingPlatformCommandRunner{cancel: cancel}
+	providers := newGeminiRegistryWithRunner(t, runner)
 	destination := &recordingDestination{}
-	err := conductor.New(newGeminiRegistryWithRunner(t, runner)).Invoke(
+	err := conductor.New(providers).Invoke(
 		ctx,
 		"gemini",
 		inference.NewInvocationRequest(inference.InvocationInput{
@@ -237,8 +239,8 @@ func TestConductorNormalizesGeminiCommandCancellation(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("conductor.Invoke() error = %v, want context.Canceled", err)
 	}
-	if runner.calls != 1 {
-		t.Fatalf("command runner calls = %d, want 1", runner.calls)
+	if runner.CallCount() != 1 {
+		t.Fatalf("command runner calls = %d, want 1", runner.CallCount())
 	}
 	failure := destination.completion.Failure()
 	if failure == nil ||
@@ -262,49 +264,23 @@ func newProductionGeminiRegistry(t *testing.T) *registry.Registry {
 	return providers
 }
 
-func newGeminiRegistryWithRunner(t *testing.T, runner workerprocess.CommandRunner) *registry.Registry {
+func newGeminiRegistryWithRunner(t *testing.T, runner platformprocess.CommandRunner) *registry.Registry {
 	t.Helper()
-	registrations, err := registry.BuiltInRegistrations()
+	providersService, err := providerswire.NewService(providerswire.WithCommandRunner(runner))
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	registrations, err := registry.BuiltInRegistrations(registry.BuiltInDependencies{
+		ProvidersService: providersService,
+	})
 	if err != nil {
 		t.Fatalf("BuiltInRegistrations() error = %v", err)
 	}
-	replaced, err := registry.ReplaceCatalogIntegration(
-		registrations,
-		"gemini",
-		geminipkg.NewIntegration(geminipkg.IntegrationDependencies{CommandRunner: runner}),
-	)
-	if err != nil {
-		t.Fatalf("ReplaceCatalogIntegration() error = %v", err)
-	}
-	providers, err := registry.New(replaced...)
+	providers, err := registry.New(registrations...)
 	if err != nil {
 		t.Fatalf("registry.New() error = %v", err)
 	}
 	return providers
-}
-
-type recordingCommandRunner struct {
-	calls   int
-	request workerprocess.CommandRequest
-	result  workerprocess.CommandResult
-	err     error
-}
-
-type cancelingCommandRunner struct {
-	cancel context.CancelFunc
-	calls  int
-}
-
-func (r *cancelingCommandRunner) Run(ctx context.Context, _ workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
-	r.calls++
-	r.cancel()
-	return workerprocess.CommandResult{}, ctx.Err()
-}
-
-func (r *recordingCommandRunner) Run(_ context.Context, request workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
-	r.calls++
-	r.request = request
-	return r.result, r.err
 }
 
 type recordingDestination struct {
@@ -330,4 +306,19 @@ func containsArgPair(args []string, flag, value string) bool {
 		}
 	}
 	return false
+}
+
+type cancelingPlatformCommandRunner struct {
+	cancel context.CancelFunc
+	calls  int
+}
+
+func (r *cancelingPlatformCommandRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	r.calls++
+	r.cancel()
+	return platformprocess.CommandResult{}, ctx.Err()
+}
+
+func (r *cancelingPlatformCommandRunner) CallCount() int {
+	return r.calls
 }

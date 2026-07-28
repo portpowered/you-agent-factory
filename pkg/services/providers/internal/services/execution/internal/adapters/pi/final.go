@@ -5,14 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// FinalResult is the authoritative Pi terminal response.
+// FinalResult is the authoritative Pi terminal response derived from stdout.
 type FinalResult struct {
-	Content         string
-	ProviderSession *workerexecution.ProviderSessionMetadata
+	Content   string
+	SessionID string
 }
 
 type nativeRecord struct {
@@ -21,6 +19,11 @@ type nativeRecord struct {
 	Message  *nativeMessage  `json:"message"`
 	Messages []nativeMessage `json:"messages"`
 }
+
+
+type piTerminalError struct{ message string }
+
+func (e *piTerminalError) Error() string { return e.message }
 
 // parseFinalOutput derives the authoritative response independently from streamed observations.
 func parseFinalOutput(stdout []byte) (FinalResult, error) {
@@ -32,8 +35,8 @@ func parseFinalOutput(stdout []byte) (FinalResult, error) {
 		}
 		switch record.Type {
 		case "session":
-			if session := providerSession(record.ID); session != nil {
-				result.ProviderSession = session
+			if id := strings.TrimSpace(record.ID); id != "" {
+				result.SessionID = id
 			}
 		case "message_end":
 			if record.Message != nil && strings.EqualFold(strings.TrimSpace(record.Message.Role), "assistant") {
@@ -48,6 +51,9 @@ func parseFinalOutput(stdout []byte) (FinalResult, error) {
 		}
 	})
 	if strings.TrimSpace(result.Content) == "" {
+		if failure := parseTerminalFailure(stdout); failure != nil {
+			return FinalResult{}, failure
+		}
 		return FinalResult{}, errors.New("Pi JSONL output did not contain a completed assistant message")
 	}
 	return result, nil
@@ -81,10 +87,6 @@ func parseTerminalFailure(stdout []byte) error {
 	}
 	return &piTerminalError{message: failureMessage}
 }
-
-type piTerminalError struct{ message string }
-
-func (e *piTerminalError) Error() string { return e.message }
 
 func forEachRecord(output []byte, visit func([]byte)) {
 	normalized := bytes.ReplaceAll(output, []byte("\r\n"), []byte("\n"))

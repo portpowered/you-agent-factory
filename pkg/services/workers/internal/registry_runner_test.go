@@ -16,7 +16,6 @@ import (
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )
@@ -485,8 +484,12 @@ func TestConductorInvocationRunnerPreservesKiroResumeSessionWithoutReplacement(t
 	commandRunner := &builtInConductorCommandRunner{
 		result: workers.CommandResult{Stdout: []byte("kiro resumed via conductor")},
 	}
+	providersService, err := providerswire.NewService(providerswire.WithWorkersCommandRunner(commandRunner))
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
 	registrations, err := providerregistry.BuiltInRegistrations(
-		providerregistry.BuiltInDependencies{CommandRunner: commandRunner},
+		providerregistry.BuiltInDependencies{ProvidersService: providersService},
 	)
 	if err != nil {
 		t.Fatalf("BuiltInRegistrations() error = %v", err)
@@ -532,6 +535,47 @@ func TestConductorInvocationRunnerPreservesKiroResumeSessionWithoutReplacement(t
 		result.ProviderSession.Kind != "session_id" ||
 		result.ProviderSession.ID != sessionID {
 		t.Fatalf("Kiro provider session = %#v, want preserved kiro/session_id/%s", result.ProviderSession, sessionID)
+	}
+}
+
+func TestConductorInvocationRunnerRoutesMigratedPiThroughConductor(t *testing.T) {
+	t.Parallel()
+
+	stdout := []byte(
+		`{"type":"session","id":"pi-session-conductor"}` + "\n" +
+			`{"type":"message_start","message":{"id":"msg-pi","role":"assistant","content":[]}}` + "\n" +
+			`{"type":"message_end","message":{"id":"msg-pi","role":"assistant","content":[{"type":"text","text":"pi via conductor"}],"stopReason":"stop"}}` + "\n",
+	)
+	platformRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: stdout})
+	providers := cursorConductorRegistryWithRunner(t, platformRunner)
+	native := &conductorRouteRecordingRunner{}
+	runner := conductorInvocationRunner{
+		next:      native,
+		conductor: conductor.New(providers),
+		providers: providers,
+	}
+
+	result, err := runner.Execute(context.Background(), workers.RunnerExecutionRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-pi-conductor"},
+		RunnerID:      workers.RunnerIDPi,
+		ModelProvider: workers.RunnerIDPi,
+		Model:         "pi-test-model",
+		UserMessage:   "hello pi",
+	})
+	if err != nil {
+		t.Fatalf("Execute(pi) error = %v", err)
+	}
+	if result.Content != "pi via conductor" {
+		t.Fatalf("Execute(pi) content = %q, want pi via conductor", result.Content)
+	}
+	if native.calls != 0 {
+		t.Fatalf("native runner calls = %d, want 0 for migrated Pi", native.calls)
+	}
+	if platformRunner.CallCount() != 1 || platformRunner.LastRequest().Command != "pi" {
+		t.Fatalf("Pi command calls = %d request = %#v", platformRunner.CallCount(), platformRunner.LastRequest())
+	}
+	if providers.UsesNativeRunner(workers.RunnerIDPi) {
+		t.Fatal("UsesNativeRunner(pi) = true, want conductor route")
 	}
 }
 
@@ -720,19 +764,17 @@ func cursorConductorRegistryWithRunner(
 
 func geminiConductorRegistry(t *testing.T, runner workers.CommandRunner) *providerregistry.Registry {
 	t.Helper()
-	builtIns, err := providerregistry.BuiltInRegistrations()
+	providersService, err := providerswire.NewService(providerswire.WithWorkersCommandRunner(runner))
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
+	builtIns, err := providerregistry.BuiltInRegistrations(providerregistry.BuiltInDependencies{
+		ProvidersService: providersService,
+	})
 	if err != nil {
 		t.Fatalf("BuiltInRegistrations() error = %v", err)
 	}
-	replaced, err := providerregistry.ReplaceCatalogIntegration(
-		builtIns,
-		"gemini",
-		gemini.NewIntegration(gemini.IntegrationDependencies{CommandRunner: runner}),
-	)
-	if err != nil {
-		t.Fatalf("ReplaceCatalogIntegration(gemini) error = %v", err)
-	}
-	providers, err := providerregistry.New(replaced...)
+	providers, err := providerregistry.New(builtIns...)
 	if err != nil {
 		t.Fatalf("registry.New() error = %v", err)
 	}

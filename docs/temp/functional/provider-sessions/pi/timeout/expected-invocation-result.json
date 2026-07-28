@@ -1,5 +1,5 @@
 {
-  "content": "Pi execution timed out.",
+  "content": "provider invocation timed out",
   "finishReason": "error",
   "ok": false
 }

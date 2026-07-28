@@ -1,1 +1,1 @@
-{"code":"permanent_bad_request","eventId":"d7594dc4-c129-47e7-b921-056dd4e34c36","factorySessionId":"4a1ed106-1eb3-425f-b608-91648990a993","itemId":"","message":"Kiro rejected the request as invalid.","runId":"d9f2e478-8e86-48a5-a0cc-9e273d5cde35","type":"error.failed"}
+{"code":"invalid_request","eventId":"23628c4d-572b-43d8-90d9-622c6cc03496","factorySessionId":"7c0a75d9-6edd-4807-a43d-8fa4942a792d","itemId":"","message":"Kiro rejected the request as invalid.","runId":"5dd7c338-7291-4749-b2bc-3310b1694013","type":"error.failed"}

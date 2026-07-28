@@ -296,8 +296,8 @@ func TestPiGoldenTimeout(t *testing.T) {
 	if inferencePayload.FailureDetail.Reason != factoryapi.WorkFailureTypeTimeout {
 		t.Fatalf("failure reason = %q, want TIMEOUT (runner calls=%d)", inferencePayload.FailureDetail.Reason, runner.CallCount())
 	}
-	if inferencePayload.FailureDetail.Message != "Pi execution timed out." {
-		t.Fatalf("failure message = %q, want Pi execution timed out.", inferencePayload.FailureDetail.Message)
+	if inferencePayload.FailureDetail.Message != "provider invocation timed out" {
+		t.Fatalf("failure message = %q, want provider invocation timed out", inferencePayload.FailureDetail.Message)
 	}
 
 	observed := support.ProviderSessionObservedGoldens{

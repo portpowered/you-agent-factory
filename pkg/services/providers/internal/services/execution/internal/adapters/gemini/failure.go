@@ -1,14 +1,12 @@
 package gemini
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"unicode"
 
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 const (
@@ -19,28 +17,40 @@ const (
 	authFailureMessage     = "Gemini authentication failed."
 	badRequestMessage      = "Gemini rejected the request."
 	throttleFailureMessage = "The provider is rate limited; retry after capacity becomes available."
-	TimeoutFailureMessage  = "Gemini request timed out."
-	timeoutFailureMessage  = TimeoutFailureMessage
+	// TimeoutFailureMessage is the canonical Gemini timeout outcome.
+	TimeoutFailureMessage = "Gemini request timed out."
+	timeoutFailureMessage   = TimeoutFailureMessage
 	serverFailureMessage   = "Gemini encountered a temporary server error."
 	unknownFailureMessage  = "Gemini invocation failed."
 )
+
+type failureReason string
+
+const (
+	failureReasonAuth       failureReason = "authentication"
+	failureReasonBadRequest failureReason = "invalid_request"
+	failureReasonThrottled  failureReason = "throttled"
+	failureReasonTimeout    failureReason = "timeout"
+	failureReasonDependency failureReason = "dependency"
+	failureReasonUnknown    failureReason = "unknown"
+)
+
+type commandFailureInput struct {
+	Stdout   []byte
+	Stderr   []byte
+	ExitCode int
+}
+
+type parsedFailure struct {
+	Reason  failureReason
+	Message string
+}
 
 func tailForFailureScan(output []byte) string {
 	if len(output) <= failureScanBytes {
 		return string(output)
 	}
 	return string(output[len(output)-failureScanBytes:])
-}
-
-type FailureInput struct {
-	Stdout   []byte
-	Stderr   []byte
-	ExitCode int
-}
-
-type FailureResult struct {
-	Reason  workerexecution.WorkFailureType
-	Message string
 }
 
 type geminiStructuredFailure struct {
@@ -50,91 +60,32 @@ type geminiStructuredFailure struct {
 	Message string
 }
 
-func ParseProviderFailure(input FailureInput) FailureResult {
-	return parseProviderFailure(input)
-}
-
-// TimeoutFailureResult returns the canonical Gemini timeout outcome used by the
-// conductor path and by the temporary aggregate timeout bridge.
-func TimeoutFailureResult() FailureResult {
-	return geminiFailureResult(workerexecution.WorkFailureTypeTimeout)
-}
-
-// ClassifyFailure maps Gemini native subprocess outcomes into conductor-compatible
-// normalized failure facts. ParseProviderFailure remains the authoritative parser
-// for structured and text exit failures; command-deadline timeouts are owned here
-// so cancel/timeout outranks competing stream detail.
-func (*Adapter) ClassifyFailure(_ context.Context, input adapter.FailureContext) adapter.FailureResult {
-	if !geminiFailureNeedsClassification(input) {
-		return adapter.FailureResult{}
-	}
-	if errors.Is(input.CommandError, context.DeadlineExceeded) {
-		return normalizedFailureResult(TimeoutFailureResult(), input.CommandError)
-	}
-	parsed := ParseProviderFailure(FailureInput{
-		Stdout:   input.CommandResult.Stdout,
-		Stderr:   input.CommandResult.Stderr,
-		ExitCode: input.CommandResult.ExitCode,
-	})
-	return normalizedFailureResult(parsed, errors.Join(
-		input.CommandError, input.DecodeError, input.FlushError, input.ParseError,
-	))
-}
-
-func geminiFailureNeedsClassification(input adapter.FailureContext) bool {
-	return input.CommandError != nil ||
-		input.CommandResult.ExitCode != 0 ||
-		input.DecodeError != nil ||
-		input.FlushError != nil ||
-		input.ParseError != nil
-}
-
-func normalizedFailureResult(parsed FailureResult, cause error) adapter.FailureResult {
-	providerErr := workerexecution.NewProviderError(parsed.Reason, parsed.Message, cause)
-	decision := workerexecution.FailureDecisionFromMetadata(&workerexecution.WorkFailureMetadata{
-		Family: providerErr.Family,
-		Type:   providerErr.Type,
-	})
-	return adapter.FailureResult{Failure: &adapter.FailureFacts{
-		Family:  providerErr.Family,
-		Type:    providerErr.Type,
-		Message: providerErr.Message,
-		Retry:   adapter.RetryGuidance{Retryable: decision.Retryable},
-	}}
-}
-
-// ParseGeminiProviderFailure converts Gemini-owned structured and text failure
-// shapes into one canonical reason/message pair. The final valid structured
-// record wins (stderr is the deterministic cross-stream tie-breaker), followed
-// by recognized stderr text and recognized stdout text. Provider-controlled
-// detail is used only for classification; published messages are canonical.
-func parseProviderFailure(input FailureInput) FailureResult {
-	result := input
+func parseCommandFailure(input commandFailureInput) parsedFailure {
 	streams := []string{
-		tailForFailureScan(result.Stdout),
-		tailForFailureScan(result.Stderr),
+		tailForFailureScan(input.Stdout),
+		tailForFailureScan(input.Stderr),
 	}
 	if failure, ok := lastGeminiStructuredFailure(streams); ok {
 		return failure
 	}
-	if result.ExitCode == 124 {
-		return TimeoutFailureResult()
+	if input.ExitCode == 124 {
+		return timeoutFailureResult()
 	}
-	stderr := tailForFailureScan(result.Stderr)
+	stderr := tailForFailureScan(input.Stderr)
 	if failure, ok := lastGeminiTextFailure(stderr); ok {
 		return failure
 	}
-	stdout := tailForFailureScan(result.Stdout)
+	stdout := tailForFailureScan(input.Stdout)
 	if failure, ok := lastGeminiTextFailure(stdout); ok {
 		return failure
 	}
-	return FailureResult{
-		Reason:  workerexecution.WorkFailureTypeUnknown,
+	return parsedFailure{
+		Reason:  failureReasonUnknown,
 		Message: unknownFailureMessage,
 	}
 }
 
-func lastGeminiStructuredFailure(streams []string) (FailureResult, bool) {
+func lastGeminiStructuredFailure(streams []string) (parsedFailure, bool) {
 	var last geminiStructuredFailure
 	var found bool
 	for _, stream := range streams {
@@ -148,14 +99,14 @@ func lastGeminiStructuredFailure(streams []string) (FailureResult, bool) {
 		}
 	}
 	if !found {
-		return FailureResult{}, false
+		return parsedFailure{}, false
 	}
 	reason := classifyGeminiFailureSignal(last.Type, last.Status, last.Code, last.Message)
-	if reason != workerexecution.WorkFailureTypeUnknown {
-		return geminiFailureResult(reason), true
+	if reason != failureReasonUnknown {
+		return failureResult(reason), true
 	}
-	return FailureResult{
-		Reason:  workerexecution.WorkFailureTypeUnknown,
+	return parsedFailure{
+		Reason:  failureReasonUnknown,
 		Message: unknownFailureMessage,
 	}, true
 }
@@ -228,8 +179,8 @@ func geminiJSONScalar(raw json.RawMessage) string {
 	return strings.TrimSpace(string(raw))
 }
 
-func lastGeminiTextFailure(stream string) (FailureResult, bool) {
-	var last FailureResult
+func lastGeminiTextFailure(stream string) (parsedFailure, bool) {
+	var last parsedFailure
 	var found bool
 	for _, line := range strings.Split(stream, "\n") {
 		message := safeGeminiTextCandidate(line)
@@ -237,16 +188,16 @@ func lastGeminiTextFailure(stream string) (FailureResult, bool) {
 			continue
 		}
 		reason := classifyGeminiFailureSignal("", "", "", message)
-		if reason == workerexecution.WorkFailureTypeUnknown {
+		if reason == failureReasonUnknown {
 			continue
 		}
-		last = geminiFailureResult(reason)
+		last = failureResult(reason)
 		found = true
 	}
 	return last, found
 }
 
-func classifyGeminiFailureSignal(errorType, status, code, message string) workerexecution.WorkFailureType {
+func classifyGeminiFailureSignal(errorType, status, code, message string) failureReason {
 	structuredSignals := []string{
 		strings.ToLower(strings.TrimSpace(errorType)),
 		strings.ToLower(strings.TrimSpace(status)),
@@ -255,15 +206,15 @@ func classifyGeminiFailureSignal(errorType, status, code, message string) worker
 	for _, signal := range structuredSignals {
 		switch signal {
 		case "fatalauthenticationerror", "authenticationerror", "unauthenticated", "permission_denied", "401", "403":
-			return workerexecution.WorkFailureTypeAuthFailure
+			return failureReasonAuth
 		case "badrequesterror", "invalid_argument", "400":
-			return workerexecution.WorkFailureTypePermanentBadRequest
+			return failureReasonBadRequest
 		case "resource_exhausted", "ratelimitexceeded", "429":
-			return workerexecution.WorkFailureTypeThrottled
+			return failureReasonThrottled
 		case "deadline_exceeded", "124", "408":
-			return workerexecution.WorkFailureTypeTimeout
+			return failureReasonTimeout
 		case "internal", "unavailable", "500", "502", "503", "504":
-			return workerexecution.WorkFailureTypeInternalServerError
+			return failureReasonDependency
 		}
 	}
 
@@ -274,26 +225,26 @@ func classifyGeminiFailureSignal(errorType, status, code, message string) worker
 		"permission denied", "http 401", "status 401", "code 401",
 		"http 403", "status 403", "code 403", "authentication failed",
 		"unauthorized", "forbidden"):
-		return workerexecution.WorkFailureTypeAuthFailure
+		return failureReasonAuth
 	case containsAny(normalized,
 		"badrequesterror", "invalid_argument", "invalid argument", "invalid request",
 		"bad request", "http 400", "status 400", "code 400"):
-		return workerexecution.WorkFailureTypePermanentBadRequest
+		return failureReasonBadRequest
 	case containsAny(normalized,
 		"resource_exhausted", "resource exhausted", "ratelimitexceeded", "rate limit",
 		"quota exceeded", "too many requests", "http 429", "status 429", "code 429"):
-		return workerexecution.WorkFailureTypeThrottled
+		return failureReasonThrottled
 	case containsAny(normalized,
 		"deadline_exceeded", "deadline exceeded", "request timed out", "request timeout",
 		"command timed out", "provider timed out"):
-		return workerexecution.WorkFailureTypeTimeout
+		return failureReasonTimeout
 	case containsAny(normalized,
 		"internal server error", "service unavailable", "upstream unavailable",
 		"http 500", "status 500", "code 500", "http 502", "status 502", "code 502",
 		"http 503", "status 503", "code 503", "http 504", "status 504", "code 504"):
-		return workerexecution.WorkFailureTypeInternalServerError
+		return failureReasonDependency
 	default:
-		return workerexecution.WorkFailureTypeUnknown
+		return failureReasonUnknown
 	}
 }
 
@@ -327,21 +278,25 @@ func isGeminiErrorSignal(normalized string) bool {
 		"invalid request", "bad request", "service unavailable", "upstream unavailable")
 }
 
-func geminiFailureResult(reason workerexecution.WorkFailureType) FailureResult {
-	return FailureResult{Reason: reason, Message: geminiFixedFailureMessage(reason)}
+func failureResult(reason failureReason) parsedFailure {
+	return parsedFailure{Reason: reason, Message: fixedFailureMessage(reason)}
 }
 
-func geminiFixedFailureMessage(reason workerexecution.WorkFailureType) string {
+func timeoutFailureResult() parsedFailure {
+	return failureResult(failureReasonTimeout)
+}
+
+func fixedFailureMessage(reason failureReason) string {
 	switch reason {
-	case workerexecution.WorkFailureTypeAuthFailure:
+	case failureReasonAuth:
 		return authFailureMessage
-	case workerexecution.WorkFailureTypePermanentBadRequest:
+	case failureReasonBadRequest:
 		return badRequestMessage
-	case workerexecution.WorkFailureTypeThrottled:
+	case failureReasonThrottled:
 		return throttleFailureMessage
-	case workerexecution.WorkFailureTypeTimeout:
+	case failureReasonTimeout:
 		return timeoutFailureMessage
-	case workerexecution.WorkFailureTypeInternalServerError:
+	case failureReasonDependency:
 		return serverFailureMessage
 	default:
 		return unknownFailureMessage
@@ -378,4 +333,37 @@ func containsAny(haystack string, needles ...string) bool {
 		}
 	}
 	return false
+}
+
+func exitFailureFromCommandResult(result workers.CommandResult) error {
+	parsed := parseCommandFailure(commandFailureInput{
+		Stdout:   result.Stdout,
+		Stderr:   result.Stderr,
+		ExitCode: result.ExitCode,
+	})
+	return declaredFailureFromParsed(parsed)
+}
+
+func declaredFailureFromParsed(parsed parsedFailure) providers.ExecuteFailure {
+	return providers.ExecuteFailure{
+		Kind:    failureKindFromReason(parsed.Reason),
+		Message: parsed.Message,
+	}
+}
+
+func failureKindFromReason(reason failureReason) providers.ExecuteFailureKind {
+	switch reason {
+	case failureReasonAuth:
+		return providers.ExecuteFailureKindAuthentication
+	case failureReasonBadRequest:
+		return providers.ExecuteFailureKindInvalidRequest
+	case failureReasonThrottled:
+		return providers.ExecuteFailureKindThrottled
+	case failureReasonTimeout:
+		return providers.ExecuteFailureKindTimeout
+	case failureReasonDependency:
+		return providers.ExecuteFailureKindDependency
+	default:
+		return providers.ExecuteFailureKindUnknown
+	}
 }

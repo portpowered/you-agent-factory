@@ -15,7 +15,6 @@ import (
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
-	piadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/pi"
 )
 
 // Executor owns the registered structured provider adapters.
@@ -25,7 +24,7 @@ type Executor struct {
 
 // NewExecutor constructs the production structured adapter registry.
 func NewExecutor() *Executor {
-	registry, err := adapter.NewRegistry(piadapter.NewAdapter())
+	registry, err := adapter.NewRegistry()
 	if err != nil {
 		panic(fmt.Sprintf("register structured provider adapters: %v", err))
 	}
