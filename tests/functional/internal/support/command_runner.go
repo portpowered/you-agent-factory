@@ -3,8 +3,10 @@ package support
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 )
@@ -23,12 +25,33 @@ func NewStaticSuccessCommandRunner(stdout string) platformprocess.CommandRunner 
 	return &staticSuccessCommandRunner{stdout: []byte(stdout)}
 }
 
+// NewShapedProviderCommandRunner wraps the shared test runner so Codex and Claude
+// stdout is emitted in provider-native JSONL after conductor cutover.
+func NewShapedProviderCommandRunner(results ...platformprocess.CommandResult) *ShapedProviderCommandRunner {
+	return &ShapedProviderCommandRunner{
+		ProviderCommandRunner: testutil.NewProviderCommandRunner(results...),
+	}
+}
+
+type ShapedProviderCommandRunner struct {
+	*testutil.ProviderCommandRunner
+}
+
+func (r *ShapedProviderCommandRunner) Run(ctx context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	result, err := r.ProviderCommandRunner.Run(ctx, req)
+	if err != nil {
+		return result, err
+	}
+	result.Stdout = shapedProviderCommandStdout(req.Command, result.Stdout)
+	return result, nil
+}
+
 func NewRecordingCommandRunner(stdout string) *RecordingCommandRunner {
 	return &RecordingCommandRunner{stdout: []byte(stdout)}
 }
 
-func (r *staticSuccessCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	return platformprocess.CommandResult{Stdout: append([]byte(nil), r.stdout...)}, nil
+func (r *staticSuccessCommandRunner) Run(_ context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{Stdout: shapedProviderCommandStdout(req.Command, r.stdout)}, nil
 }
 
 func (r *RecordingCommandRunner) Run(_ context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -36,7 +59,7 @@ func (r *RecordingCommandRunner) Run(_ context.Context, req platformprocess.Comm
 	defer r.mu.Unlock()
 
 	r.requests = append(r.requests, cloneProcessCommandRequest(req))
-	return platformprocess.CommandResult{Stdout: append([]byte(nil), r.stdout...)}, nil
+	return platformprocess.CommandResult{Stdout: shapedProviderCommandStdout(req.Command, r.stdout)}, nil
 }
 
 func (r *RecordingCommandRunner) CallCount() int {
@@ -72,5 +95,18 @@ func cloneProcessCommandRequest(request platformprocess.CommandRequest) platform
 	return request
 }
 
+func shapedProviderCommandStdout(command string, stdout []byte) []byte {
+	text := string(stdout)
+	switch strings.ToLower(strings.TrimSpace(command)) {
+	case string(modelprovider.ProviderCodex):
+		return CodexSuccessStdout(text)
+	case string(modelprovider.ProviderClaude):
+		return ClaudeSuccessStdout(text)
+	default:
+		return append([]byte(nil), stdout...)
+	}
+}
+
 var _ platformprocess.CommandRunner = (*RecordingCommandRunner)(nil)
 var _ platformprocess.CommandRunner = (*staticSuccessCommandRunner)(nil)
+var _ platformprocess.CommandRunner = (*ShapedProviderCommandRunner)(nil)

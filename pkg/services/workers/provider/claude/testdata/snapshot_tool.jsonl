@@ -1,7 +1,0 @@
-{"type":"stream_event","session_id":"claude-session-snapshot","event":{"type":"message_start","message":{"id":"msg_tool","role":"assistant","content":[]}}}
-{"type":"stream_event","session_id":"claude-session-snapshot","event":{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_snapshot","name":"weather","input":{}}}}
-{"type":"stream_event","session_id":"claude-session-snapshot","event":{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"city\":\"Oslo\"}"}}}
-{"type":"stream_event","session_id":"claude-session-snapshot","event":{"type":"content_block_stop","index":0}}
-{"type":"stream_event","session_id":"claude-session-snapshot","event":{"type":"message_stop"}}
-{"type":"assistant","session_id":"claude-session-snapshot","message":{"id":"msg_tool","role":"assistant","content":[{"type":"tool_use","id":"toolu_snapshot","name":"weather","input":{"city":"Bergen","api_token":"snapshot-secret"}}]}}
-{"type":"assistant","session_id":"claude-session-snapshot","message":{"id":"msg_tool","role":"assistant","content":[{"type":"tool_use","id":"toolu_snapshot","name":"weather","input":{"city":"Bergen","api_token":"snapshot-secret"}}]}}

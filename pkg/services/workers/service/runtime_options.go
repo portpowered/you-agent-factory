@@ -14,6 +14,7 @@ import (
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
 	"github.com/portpowered/infinite-you/pkg/services/workers/skippermissions"
 )
@@ -51,6 +52,9 @@ func (s *Service) BuildRuntimeExecutors(
 	}
 	if logger == nil {
 		logger = logging.NoopLogger{}
+	}
+	if err := s.rebindProvidersCommandRunner(logger); err != nil {
+		return nil, err
 	}
 	now := clock
 	if now == nil {
@@ -112,6 +116,22 @@ func (s *Service) BuildRuntimeExecutors(
 		executors[workstation.Name] = result.Dispatch
 	}
 	return executors, nil
+}
+
+func (s *Service) rebindProvidersCommandRunner(logger logging.Logger) error {
+	if s == nil || !s.providerCommandInjected || s.providerCommandRunner == nil || s.providerRegistryRebinder == nil {
+		return nil
+	}
+	providersRunner := workerprocess.CommandRunnerWithLogging(
+		s.providerCommandRunner,
+		logging.EnsureLogger(logger),
+		serviceCommandClock(s),
+	)
+	reboundRegistry, err := rebindProviderRegistry(s.providerRegistry, providersRunner, s.providerRegistryRebinder)
+	if err != nil {
+		return fmt.Errorf("rebind provider registry for session command logging: %w", err)
+	}
+	return applyReboundProviderRegistry(s, reboundRegistry)
 }
 
 func (s *Service) runtimeRunnerDecorators(

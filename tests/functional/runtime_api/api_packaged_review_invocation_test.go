@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -14,7 +13,7 @@ import (
 )
 
 func TestSessionInvocationAPI_PackagedReviewReturnsApprovedCandidate(t *testing.T) {
-	runner := testutil.NewProviderCommandRunner(
+	runner := support.NewShapedProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte("candidate work")},
 		platformprocess.CommandResult{Stdout: []byte(`{"decision":"ACCEPTED","output":"approved candidate work"}`)},
 	)
@@ -27,7 +26,7 @@ func TestSessionInvocationAPI_PackagedReviewReturnsApprovedCandidate(t *testing.
 }
 
 func TestSessionInvocationAPI_PackagedReviewRejectsThenApprovesRevision(t *testing.T) {
-	runner := testutil.NewProviderCommandRunner(
+	runner := support.NewShapedProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte("first candidate")},
 		platformprocess.CommandResult{Stdout: []byte(`{"decision":"REJECTED","feedback":"add the missing release date"}`)},
 		platformprocess.CommandResult{Stdout: []byte("revised candidate")},

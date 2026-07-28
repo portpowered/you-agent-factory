@@ -228,6 +228,7 @@ func assertPublishedOpenCodeDraft(t *testing.T, fragments []InferenceProgressFra
 }
 
 func TestScriptWrapProvider_Infer_ClaudeCompletionPublisherPreservesFinalResponse(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	req := workerexecution.ProviderInferenceRequest{
 		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-claude-success"},
