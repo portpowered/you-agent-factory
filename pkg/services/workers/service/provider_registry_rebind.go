@@ -43,7 +43,8 @@ func applyReboundProviderRegistry(service *Service, registry *providerregistry.R
 	if builder, ok := service.executorBuilder.(*workerconstruction.Service); ok {
 		service.executorBuilder = builder.
 			WithRunnerSelection(registry.ResolveRunnerSelection).
-			WithProviderIdentityResolution(registry.CanonicalIdentity)
+			WithProviderIdentityResolution(registry.CanonicalIdentity).
+			WithProviderRegistry(registry)
 	}
 	return nil
 }
