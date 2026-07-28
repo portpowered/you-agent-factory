@@ -1867,6 +1867,14 @@
       "minimum": 85.86
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli",
+      "minimum": 82.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/http",
+      "minimum": 88.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/mcp",
       "minimum": 75.00
     },
@@ -2116,14 +2124,6 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire",
-      "minimum": 100.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
-      "minimum": 33.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/work/stateaccessrecordings",
       "minimum": 100.00
     },
     {

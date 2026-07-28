@@ -2317,6 +2317,26 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/http",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/mcp",
       "exception": {
         "kind": "measurement",
@@ -2657,26 +2677,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire",
       "minimum": 76.90
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The transitional work/service compile shim delegates to work/internal and has no functional coverage profile statements until DEL-WORK removes the path.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or the transitional path is deleted."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/work/stateaccessrecordings",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The transitional stateaccessrecordings compile shim delegates to work/internal/services/state_access/wire and has no functional coverage profile statements after peer proofs retargeted to work/wire.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or DEL-WORK deletes the shim."
-      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli",

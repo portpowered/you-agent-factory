@@ -21,6 +21,59 @@ import (
 	"go.uber.org/zap"
 )
 
+func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T) {
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+
+	loaded, err := loadedFactoryFixture(dir)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "runtime-recordings-root"}
+	var capturedSource recordings.InitialStructureSource
+	ledgerFactory := factory.RuntimeLedgerFactory(func(
+		source recordings.InitialStructureSource,
+		_ func() time.Time,
+		_ interfaces.RuntimeDefinitionLookup,
+	) recordings.RuntimeEventLedger {
+		capturedSource = source
+		return ledger
+	})
+	recorder := &runtimeRecordingsRecorderStub{}
+
+	bundle, err := testRuntimeFactory().Build(
+		context.Background(), dir, dir, "~default",
+		"", interfaces.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
+		"", factory.RuntimeLogStorageConfig{},
+		factoryinternal.RuntimeFileLoggingPolicyDisabled,
+		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
+		loaded, zap.NewNop(), "runtime-recordings-root", "", clockwork.NewFakeClock(),
+		"/recordings/session.json", recorder, nil, nil, nil, nil, nil,
+		ledgerFactory,
+		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
+			return nil, nil
+		},
+		testRuntimeWorkers{},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if capturedSource == nil {
+		t.Fatal("ledger factory InitialStructureSource = nil")
+	}
+	if bundle.RecordingLedger() != ledger {
+		t.Fatalf("RecordingLedger = %T, want injected root ledger", bundle.RecordingLedger())
+	}
+	if bundle.Recording != recorder {
+		t.Fatalf("Recording = %T, want injected RuntimeRecorder", bundle.Recording)
+	}
+	if bundle.StreamGeneration() != "runtime-recordings-root" {
+		t.Fatalf("stream generation = %q, want runtime-recordings-root", bundle.StreamGeneration())
+	}
+}
+
 func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
@@ -269,3 +322,23 @@ func testRuntimeMetricsFactory(root string) factory.RuntimeMetricsSinkFactory {
 		}}, nil
 	}
 }
+
+type runtimeRecordingsRecorderStub struct{}
+
+func (*runtimeRecordingsRecorderStub) BindRecordingService(
+	recordings.Service,
+	recordings.CanonicalEventScope,
+) error {
+	return nil
+}
+
+func (*runtimeRecordingsRecorderStub) Start(context.Context)               {}
+func (*runtimeRecordingsRecorderStub) Stop()                               {}
+func (*runtimeRecordingsRecorderStub) RecordEvent(interfaces.FactoryEvent) {}
+func (*runtimeRecordingsRecorderStub) RecordError(error)                   {}
+func (*runtimeRecordingsRecorderStub) Finish(time.Time)                    {}
+func (*runtimeRecordingsRecorderStub) Flush() error                        { return nil }
+func (*runtimeRecordingsRecorderStub) Err() error                          { return nil }
+func (*runtimeRecordingsRecorderStub) Finalize(time.Time) error            { return nil }
+
+var _ recordings.RuntimeRecorder = (*runtimeRecordingsRecorderStub)(nil)

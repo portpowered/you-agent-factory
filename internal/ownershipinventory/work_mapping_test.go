@@ -37,28 +37,6 @@ func TestMapPackageWorkMoveDestinations(t *testing.T) {
 			retainOwner: "work",
 		},
 		{
-			path: "pkg/services/work/service",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/work/service",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "work",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/work/internal",
-				DeletionCondition: "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes",
-			},
-		},
-		{
-			path: "pkg/services/work/stateaccessrecordings",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/work/stateaccessrecordings",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "work",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/work/internal/services/state_access",
-				DeletionCondition: "delete public package after IMP-WORK-state_access private subservice cutover proof",
-			},
-		},
-		{
 			path: "pkg/services/work/testdata/primary_result_regression",
 			wantMove: &ownershipinventory.PackageRow{
 				PackagePath:       "pkg/services/work/testdata/primary_result_regression",
@@ -108,9 +86,7 @@ func TestWorkTopLevelUnexpectedMoveDestinationsMatchInventory(t *testing.T) {
 	}
 
 	wantSuccessor := map[string]string{
-		"service":               "pkg/services/work/internal",
-		"stateaccessrecordings": "pkg/services/work/internal/services/state_access",
-		"testdata":              "pkg/services/work/internal",
+		"testdata": "pkg/services/work/internal",
 	}
 	if len(spec.Unexpected) != len(wantSuccessor) {
 		t.Fatalf("unexpected inventory drift: got %v, want keys %v", spec.Unexpected, wantSuccessor)
@@ -149,14 +125,6 @@ func TestWorkUnexpectedSiblingMoveDestinationsLocked(t *testing.T) {
 		path          string
 		wantSuccessor string
 	}{
-		{
-			path:          "pkg/services/work/service",
-			wantSuccessor: "pkg/services/work/internal",
-		},
-		{
-			path:          "pkg/services/work/stateaccessrecordings",
-			wantSuccessor: "pkg/services/work/internal/services/state_access",
-		},
 		{
 			path:          "pkg/services/work/testdata",
 			wantSuccessor: "pkg/services/work/internal",

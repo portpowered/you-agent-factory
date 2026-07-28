@@ -140,10 +140,6 @@
     },
     {
       "file": "cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
-      "name": "TestPackagedFactoryJSONAndYAMLValidateFlattenAndRunParity"
-    },
-    {
-      "file": "cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
       "name": "TestPublicBlockingValidationRetainsJSONAndYAMLSourceContext"
     },
     {
@@ -152,15 +148,7 @@
     },
     {
       "file": "cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
-      "name": "TestRejectedAuthoredSourcesFailBeforeRuntimeExecution"
-    },
-    {
-      "file": "cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
       "name": "TestRuntimeMappingFailureRetainsSelectedSourceContext"
-    },
-    {
-      "file": "cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
-      "name": "TestYAMLCreateAndUpdateRemainRunnableAfterCanonicalPersistence"
     },
     {
       "file": "cli/input_contract/canonical_input_contract_test.go",
