@@ -1304,16 +1304,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/service_config_override_alignment_long_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/service_config_override_alignment_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/service_lifecycle_smoke_long_test.go",
       "target": "smoke"
     },

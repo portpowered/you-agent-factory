@@ -311,15 +311,18 @@
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
   Mock-worker replacement functional coverage belongs in
-  `tests/functional/workers/mock/replacement_test.go`: prove named-only
-  `--with-mock-workers` replacement through
+  `tests/functional/workers/mock/`: prove named-only `--with-mock-workers`
+  replacement through
   `tests/functional/internal/support.StartFunctionalAPIServer` with
   `MockWorkersConfig`, `UnmatchedDispatchPolicy: passthrough`, and an injected
   `edges.Edges.ProviderCommandRunner`; prove invalid override contract failures
-  through `support.BuildProcess` + `process.Execute` before dispatch; and prove
+  through `support.BuildProcess` + `process.Execute` before dispatch; prove
   configured mock rejection with stable public `WorkOutcomeFailed` /
   `WorkFailureTypeUnknown` dispatch responses without live provider credentials
-  or leaking configured reject stdout/stderr on customer-visible surfaces.
+  or leaking configured reject stdout/stderr on customer-visible surfaces; and
+  prove customer-process service-config override alignment when script and
+  provider dispatches share one replaced command-runner edge or route through a
+  replaced `ScriptCommandRunner` on legacy fixture script workers.
   Catalog metadata infers domain `workers` and subsection `mock` from the path;
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.

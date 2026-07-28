@@ -1155,10 +1155,6 @@
       "name": "TestIntegrationSmoke_GuardedLoopBreakerExampleRejectsRetiredExhaustionRulesAtBoundary"
     },
     {
-      "file": "smoke/service_config_override_alignment_long_test.go",
-      "name": "TestServiceConfigOverrideAlignment_CustomerProcessScriptCommandRunner"
-    },
-    {
       "file": "smoke/service_lifecycle_smoke_long_test.go",
       "name": "TestServiceLifecycle_CopyFixtureDirParallelCopiesStayIsolated"
     },
