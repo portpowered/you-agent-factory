@@ -1129,3 +1129,24 @@ Story 003 moves unexpected public Runtime root test-support into `internal/`:
 | `pkg/services/factory_runtime/exhaustiontests` | `pkg/services/factory_runtime/internal/exhaustiontests` | same proof test; Makefile unit lane uses internal path |
 
 After internalization, update `owner_top_level` unexpected lists (only `testdata` remains at the Runtime root), extend `factoryRuntimeCanonicalRetainRest` / `isFactoryRuntimeCanonicalRetain` for `internal/testkit` and `internal/exhaustiontests`, and refresh ownership inventory + package-target manifest via `go run ./cmd/ownershipinventoryfreeze` and `go run ./cmd/packagetargetmanifestcheck -write-inventory -write-owner-packages`. Consumer tests import `pkg/services/factory_runtime/internal/testkit`.
+
+## DEL-RUN-ENGINE-PIPELINE structure / ownership / package-target baseline burn-down
+
+Story 004 removes deleted public engine/pipeline package paths from the three
+structure ledgers and locks the burn-down with
+`pkg/services/factory_runtime/wire/engine_pipeline_baseline_gate_test.go`:
+
+| Ledger | Deleted public paths (examples) | Proof |
+| --- | --- | --- |
+| `docs/internal/baselines/ownership-inventory.json` | `pkg/services/factory_runtime/{build,engine,javascript,runtime,...}` | baseline gate + `engine_pipeline_deletion_proof_test.go` |
+| `docs/internal/packaged-service-structure/package-target-manifest.json` | same top-level fold set | baseline gate |
+| `docs/internal/baselines/package-structure-baseline.json` | `service-root-unexpected-directory` rows for the same public dirs | baseline gate |
+
+Regenerate ownership inventory and package-target manifest with
+`go run ./cmd/ownershipinventoryfreeze` and
+`go run ./cmd/packagetargetmanifestcheck -write-inventory -write-owner-packages`
+when reconciling shared dual-ledger rows after fold merge. Internalized pipeline
+implementation under `internal/services/orchestration` and
+`internal/services/instance_host` remains canonical retain debt and is not
+removed by this packet. Coverage minimum burn-down for deleted import paths is
+owned by story 005.
