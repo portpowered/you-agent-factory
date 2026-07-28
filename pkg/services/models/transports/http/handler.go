@@ -35,8 +35,7 @@ func NewHandler(adapter *Adapter, logger *zap.Logger) *Handler {
 func (h *Handler) ListModels(w http.ResponseWriter, r *http.Request) {
 	response, err := h.adapter.ListModels(r.Context())
 	if err != nil {
-		h.logger.Error("list models failed", zap.Error(err))
-		h.writeError(w, http.StatusInternalServerError, "failed to list models", "INTERNAL_ERROR")
+		h.writeCatalogError(w, err, catalogListFailedMessage)
 		return
 	}
 	h.writeJSON(w, http.StatusOK, response)
@@ -45,12 +44,7 @@ func (h *Handler) ListModels(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetModel(w http.ResponseWriter, r *http.Request, modelName string) {
 	model, err := h.adapter.GetModel(r.Context(), modelName)
 	if err != nil {
-		if errors.Is(err, modelinference.ErrNotFound) {
-			h.writeError(w, http.StatusNotFound, "model not found", "NOT_FOUND")
-			return
-		}
-		h.logger.Error("get model failed", zap.Error(err), zap.String("model_name", modelName))
-		h.writeError(w, http.StatusInternalServerError, "failed to load model", "INTERNAL_ERROR")
+		h.writeCatalogError(w, err, catalogGetFailedMessage)
 		return
 	}
 	h.writeJSON(w, http.StatusOK, model)

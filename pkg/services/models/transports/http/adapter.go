@@ -12,6 +12,11 @@ import (
 	workerinferencemapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerinference"
 )
 
+var (
+	errModelsServiceRequired           = errors.New("Models service is required")
+	errModelInvocationServicesRequired = errors.New("model invocation and Work content preparation services are required")
+)
+
 // Adapter maps Models service values at the outward HTTP boundary.
 type Adapter struct {
 	models  models.Service
@@ -45,50 +50,9 @@ func (a *Adapter) Root() models.Service {
 	return a.models
 }
 
-func (a *Adapter) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
-	if a == nil || a.models == nil {
-		return factoryapi.ListModelsResponse{}, errors.New("Models service is required")
-	}
-	var listed models.List
-	var err error
-	if a.scope.IsZero() {
-		listed, err = a.models.ListModels(ctx)
-	} else {
-		var scoped models.ListModelsResult
-		scoped, err = a.models.ListCatalog(ctx, models.ListModelsRequest{Scope: a.scope})
-		listed.Results = scoped.Models
-	}
-	if err != nil {
-		return factoryapi.ListModelsResponse{}, err
-	}
-	return listToGenerated(listed), nil
-}
-
-func (a *Adapter) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
-	if a == nil || a.models == nil {
-		return factoryapi.ModelDetail{}, errors.New("Models service is required")
-	}
-	var detail models.Detail
-	var err error
-	if a.scope.IsZero() {
-		detail, err = a.models.GetModel(ctx, modelName)
-	} else {
-		var scoped models.GetModelResult
-		scoped, err = a.models.GetCatalogModel(ctx, models.GetModelRequest{
-			Scope: a.scope,
-			Name:  modelName,
-		})
-		detail = scoped.Model
-	}
-	if err != nil {
-		return factoryapi.ModelDetail{}, err
-	}
-	return detailToGenerated(detail), nil
-}
-
 func (a *Adapter) PullModel(ctx context.Context, modelName string) (models.PullResult, error) {
 	if a == nil || a.models == nil {
-		return models.PullResult{}, errors.New("Models service is required")
+		return models.PullResult{}, errModelsServiceRequired
 	}
 	if !a.scope.IsZero() {
 		return a.models.PullModelForScope(ctx, models.PullModelRequest{
@@ -105,7 +69,7 @@ func (a *Adapter) InvokeModel(
 	request factoryapi.ModelInvocationRequest,
 ) (models.Result, error) {
 	if a == nil || a.invoker == nil || a.content == nil {
-		return models.Result{}, errors.New("model invocation and Work content preparation services are required")
+		return models.Result{}, errModelInvocationServicesRequired
 	}
 	mapped := invocationRequestFromGenerated(request)
 	prepared, err := a.content.PrepareWorkContent(ctx, mapped.Content)
