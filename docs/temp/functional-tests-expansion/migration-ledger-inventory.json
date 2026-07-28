@@ -2599,6 +2599,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/provider_sessions/association/response_exec_metadata_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions/association",
+      "scenario": "TestResponseExecGoldenMetadataSurvivesAPIResponseEvents",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/association/response_exec_metadata_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/provider_sessions/association/response_exec_metadata_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions/association",
+      "scenario": "TestResponseExecGoldenMetadataSurvivesCLIProjection",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/association/response_exec_metadata_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/provider_sessions/association/response_exec_metadata_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions/association",
+      "scenario": "TestResponseExecGoldenMetadataSurvivesReplay",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/association/response_exec_metadata_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/providers/cli_script_executor_test.go",
       "package": "you-agent-factory/tests/functional/providers",
       "scenario": "TestScriptExecutor_ArgTemplating",
@@ -7912,7 +7942,7 @@
       "operator_settings": 10,
       "orchestration": 48,
       "product": 13,
-      "provider_sessions": 3,
+      "provider_sessions": 6,
       "providers": 55,
       "replay_contracts": 23,
       "runtime_api": 95,
@@ -7965,7 +7995,7 @@
       "you-agent-factory/tests/functional/product/init_setup": 11,
       "you-agent-factory/tests/functional/product/packaged_factory_guard_failure": 1,
       "you-agent-factory/tests/functional/product/packaged_factory_portability": 1,
-      "you-agent-factory/tests/functional/provider_sessions/association": 3,
+      "you-agent-factory/tests/functional/provider_sessions/association": 6,
       "you-agent-factory/tests/functional/providers": 36,
       "you-agent-factory/tests/functional/providers/codex": 7,
       "you-agent-factory/tests/functional/providers/cursor": 8,
