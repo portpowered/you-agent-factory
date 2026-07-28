@@ -12,6 +12,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 )
 
 // TestVisualizationConsumerObservationExercisesRuntimeRoot proves CUT-VIS-RUN story 004:
@@ -48,7 +49,7 @@ func TestVisualizationConsumerObservationExercisesRuntimeRoot(t *testing.T) {
 	emitted := make([]View, 0, 2)
 	service, err := New(
 		NewCurrentRuntimeSource(reader),
-		projectionStub{},
+		&recordingsstub.Service{},
 		fixedClock{now: now},
 		SinkFunc(func(view View) {
 			emitted = append(emitted, view)
@@ -176,7 +177,7 @@ func TestVisualizationConsumerDetachedObservePropagatesRootObserveFailure(t *tes
 	}
 	service, err := New(
 		NewCurrentRuntimeSource(reader),
-		projectionStub{},
+		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) {}),
 		nil,
