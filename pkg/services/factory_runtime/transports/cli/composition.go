@@ -7,6 +7,14 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
+// BindService returns the composition-facing Factory Runtime CLI adapter Service
+// constructed from accepted Runtime-root collaborators. Wire and other
+// composition roots inject the returned Service without constructing adapter
+// behavior at the composition boundary.
+func BindService(cfg Config) Service {
+	return New(cfg)
+}
+
 // NormalizeInvocationOutputMode delegates invocation output normalization to the
 // Runtime-owned CLI adapter Service.
 func NormalizeInvocationOutputMode(raw string) (string, error) {

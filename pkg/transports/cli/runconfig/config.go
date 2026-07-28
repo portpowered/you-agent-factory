@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -62,6 +63,7 @@ type Config struct {
 	DisableDefaultRecording       bool
 	RecordingTargetPlanner        recordings.LiveRecordingTargetPlanner
 	RecordingsCLI                 recordingscli.Adapter
+	RuntimeCLI                    factoryruntimecli.Service
 	Clock                         recordings.RecordingClock
 	RuntimeLogDir                 string
 	RuntimeLogConfig              logging.RuntimeLogConfig

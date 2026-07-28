@@ -58,7 +58,7 @@ func ValidateInvocationOutputSelection(quiet, jsonOutput, explicitOutput bool) e
 }
 
 func validateInvocationOutputMode(cfg RunConfig, invocationMode bool) error {
-	return factoryruntimecli.ValidateInvocationOutputMode(factoryruntimecli.ValidateInvocationOutputModeRequest{
+	return runtimeCLIService(cfg).ValidateInvocationOutputMode(factoryruntimecli.ValidateInvocationOutputModeRequest{
 		InvocationOutputMode: cfg.InvocationOutputMode,
 		Continuously:         cfg.Continuously,
 		InvocationMode:       invocationMode,
