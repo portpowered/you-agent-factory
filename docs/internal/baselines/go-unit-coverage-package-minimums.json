@@ -1155,6 +1155,10 @@
       "minimum": 94.44
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http",
+      "minimum": 92.30
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire",
       "minimum": 100.00
     },

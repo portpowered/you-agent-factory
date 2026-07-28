@@ -33,6 +33,10 @@ Use this map when changing the public REST contract.
   `504` / `PROVIDER_SESSION_INSPECTION_TIMEOUT` / `provider session inspection timed out`
   respectively; thread `r.Context()` through the adapter and use a goroutine/select
   seam because the root `Details` slice does not accept request context.
+  Register the adapter package in `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and the
+  `go-*-coverage-package-minimums.json` baselines when adding or moving the
+  owner-local transport package.
 - Shared filesystem documents represented in OpenAPI should decode and encode
   through the generated model in a focused `pkg/transports/mapping` package,
   then map into domain-owned values. Inject that codec into the service
