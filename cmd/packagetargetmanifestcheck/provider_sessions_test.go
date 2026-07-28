@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
@@ -116,6 +117,53 @@ func TestProviderSessionsDualLedgerAgreeOnServiceMoveDestination(t *testing.T) {
 	}
 	if ownershipRow.Successor != providerSessionsServiceOwnershipSuccessor {
 		t.Fatalf("ownership successor = %q, want %s", ownershipRow.Successor, providerSessionsServiceOwnershipSuccessor)
+	}
+}
+
+func TestVerifyProviderSessionsDualLedgerAlignmentPassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	if err := ownershipinventory.VerifyProviderSessionsDualLedgerAlignment(repoRoot); err != nil {
+		t.Fatalf("VerifyProviderSessionsDualLedgerAlignment() error = %v", err)
+	}
+}
+
+func TestProviderSessionsCommittedBaselinesAlignMoveDestinations(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
+	if err != nil {
+		t.Fatalf("loadManifest() error = %v", err)
+	}
+	ownership, err := ownershipinventory.Load(repoRoot)
+	if err != nil {
+		t.Fatalf("ownershipinventory.Load() error = %v", err)
+	}
+
+	ownershipByPath := make(map[string]ownershipinventory.PackageRow, len(ownership.Packages))
+	for _, row := range ownership.Packages {
+		ownershipByPath[row.PackagePath] = row
+	}
+
+	const ownerPrefix = "pkg/services/provider_sessions/"
+	for _, row := range manifest.Packages {
+		if row.PackagePath != "pkg/services/provider_sessions" && !strings.HasPrefix(row.PackagePath, ownerPrefix) {
+			continue
+		}
+		if row.Disposition != DispositionMove {
+			continue
+		}
+		ownershipRow, ok := ownershipByPath[row.PackagePath]
+		if !ok {
+			t.Fatalf("ownership inventory missing committed manifest move row %q", row.PackagePath)
+		}
+		wantSuccessor := "pkg/services/" + row.Destination
+		if ownershipRow.Successor != wantSuccessor {
+			t.Fatalf("dual-ledger drift for %q: manifest destination %q => successor %q, ownership has %q",
+				row.PackagePath, row.Destination, wantSuccessor, ownershipRow.Successor)
+		}
 	}
 }
 
