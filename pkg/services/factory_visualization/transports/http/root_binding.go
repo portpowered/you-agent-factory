@@ -85,3 +85,51 @@ func (a *Adapter) Observe(
 	}
 	return root.Observe(ctx, req)
 }
+
+// OpenPresentation invokes the Visualization root OpenPresentation slice.
+func (a *Adapter) OpenPresentation(
+	ctx context.Context,
+	req factoryvisualization.OpenPresentationRequest,
+) (factoryvisualization.OpenPresentationResult, error) {
+	root, err := a.requireVisualizationRoot()
+	if err != nil {
+		return factoryvisualization.OpenPresentationResult{}, err
+	}
+	return root.OpenPresentation(ctx, req)
+}
+
+// PresentProgress invokes the Visualization root PresentProgress slice.
+func (a *Adapter) PresentProgress(
+	ctx context.Context,
+	req factoryvisualization.PresentProgressRequest,
+) (factoryvisualization.PresentProgressResult, error) {
+	root, err := a.requireVisualizationRoot()
+	if err != nil {
+		return factoryvisualization.PresentProgressResult{}, err
+	}
+	return root.PresentProgress(ctx, req)
+}
+
+// FinalizePresentation invokes the Visualization root FinalizePresentation slice.
+func (a *Adapter) FinalizePresentation(
+	ctx context.Context,
+	req factoryvisualization.FinalizePresentationRequest,
+) (factoryvisualization.FinalizePresentationResult, error) {
+	root, err := a.requireVisualizationRoot()
+	if err != nil {
+		return factoryvisualization.FinalizePresentationResult{}, err
+	}
+	return root.FinalizePresentation(ctx, req)
+}
+
+// ClosePresentation invokes the Visualization root ClosePresentation slice.
+func (a *Adapter) ClosePresentation(
+	ctx context.Context,
+	req factoryvisualization.ClosePresentationRequest,
+) (factoryvisualization.ClosePresentationResult, error) {
+	root, err := a.requireVisualizationRoot()
+	if err != nil {
+		return factoryvisualization.ClosePresentationResult{}, err
+	}
+	return root.ClosePresentation(ctx, req)
+}
