@@ -654,7 +654,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedDeepResearchOptionalInputsReachWorkers` covers overrides.
   - `TestPackagedDeepResearchWorkerFailureReturnsFailedOutcome` covers failure.
 
-- [ ] `tests/functional/factory/packaged/fusion/invocation_test.go`
+- [x] `tests/functional/factory/packaged/fusion/invocation_test.go`
   - `TestPackagedFusionRequiredInputCompletes` verifies its multi-worker merge.
   - `TestPackagedFusionOptionalInputsReachWorkers` covers supported options.
   - `TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome` covers error.
