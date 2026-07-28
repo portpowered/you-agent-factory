@@ -263,18 +263,6 @@
       "name": "TestNewCommandTreeRejectsRepeatedScalarArgumentValueTypes"
     },
     {
-      "file": "cli/mcp_resume/resume_non_regression_test.go",
-      "name": "TestMCPResumeSmokeLane_ResumeControlStaysOnCanonicalFactorySessionTools"
-    },
-    {
-      "file": "cli/mcp_resume/resume_non_regression_test.go",
-      "name": "TestMCPResumeSmokeLane_ResumeReadModelsUseSharedFactorySessionVocabulary"
-    },
-    {
-      "file": "cli/mcp_resume/resume_non_regression_test.go",
-      "name": "TestMCPResumeSmokeLane_RuntimeBackedAsyncServeRegression"
-    },
-    {
       "file": "cli/mcp_resume/serve_runtime_resume_smoke_test.go",
       "name": "TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDispatchesWithoutReplay"
     },
@@ -1273,10 +1261,6 @@
     {
       "file": "smoke/verify_fast_command_smoke_test.go",
       "name": "TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers"
-    },
-    {
-      "file": "work/visualization/dependency_graph_test.go",
-      "name": "TestDependencyGraphVisualization_RendersCompleteEscapedFlowchart"
     },
     {
       "file": "workflow/code_review_loop_long_test.go",

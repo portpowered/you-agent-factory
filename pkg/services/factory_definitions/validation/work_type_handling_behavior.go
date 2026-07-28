@@ -3,7 +3,7 @@ package validation
 import (
 	"fmt"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // WorkTypeHandlingBehaviorOptions configures optional handling-behavior validation.
@@ -12,7 +12,7 @@ type WorkTypeHandlingBehaviorOptions struct {
 }
 
 // WorkTypeHandlingBehaviorTargets validates handlingBehavior markers on work types.
-func WorkTypeHandlingBehaviorTargets(cfg *interfaces.FactoryConfig, opts WorkTypeHandlingBehaviorOptions) []Target {
+func WorkTypeHandlingBehaviorTargets(cfg *factorydefinitions.FactoryConfig, opts WorkTypeHandlingBehaviorOptions) []Target {
 	if cfg == nil {
 		return nil
 	}
@@ -25,7 +25,7 @@ func WorkTypeHandlingBehaviorTargets(cfg *interfaces.FactoryConfig, opts WorkTyp
 		workTypeDeclaresDefault := false
 		for behaviorIndex, behavior := range workType.HandlingBehavior {
 			behaviorPath := fmt.Sprintf("%s.handlingBehavior[%d]", basePath, behaviorIndex)
-			canonical := interfaces.StrictPublicWorkTypeHandlingBehavior(behavior)
+			canonical := factorydefinitions.StrictPublicWorkTypeHandlingBehavior(behavior)
 			if canonical == "" {
 				targets = append(targets, Target{
 					Code:     CodeWorkTypeHandlingBehaviorValue,
@@ -33,7 +33,7 @@ func WorkTypeHandlingBehaviorTargets(cfg *interfaces.FactoryConfig, opts WorkTyp
 					Message:  fmt.Sprintf("unsupported handlingBehavior value %q", behavior),
 					Subject: Subject{
 						Type:     SubjectTypeWorkType,
-						ID:       interfaces.CanonicalFactoryGraphWorkTypeID(workType),
+						ID:       factorydefinitions.CanonicalFactoryGraphWorkTypeID(workType),
 						Location: SubjectLocationDefinition,
 					},
 					Path: behaviorPath,
@@ -47,7 +47,7 @@ func WorkTypeHandlingBehaviorTargets(cfg *interfaces.FactoryConfig, opts WorkTyp
 					Message:  fmt.Sprintf("duplicate handlingBehavior value %q on the same work type", canonical),
 					Subject: Subject{
 						Type:     SubjectTypeWorkType,
-						ID:       interfaces.CanonicalFactoryGraphWorkTypeID(workType),
+						ID:       factorydefinitions.CanonicalFactoryGraphWorkTypeID(workType),
 						Location: SubjectLocationDefinition,
 					},
 					Path: behaviorPath,
@@ -55,7 +55,7 @@ func WorkTypeHandlingBehaviorTargets(cfg *interfaces.FactoryConfig, opts WorkTyp
 				continue
 			}
 			seenBehaviors[canonical] = true
-			if canonical == interfaces.WorkTypeHandlingBehaviorDefault {
+			if canonical == factorydefinitions.WorkTypeHandlingBehaviorDefault {
 				workTypeDeclaresDefault = true
 			}
 		}

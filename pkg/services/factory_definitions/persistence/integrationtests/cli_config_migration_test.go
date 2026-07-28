@@ -14,7 +14,7 @@ import (
 
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
@@ -293,7 +293,7 @@ func TestExpandFactoryConfig_WritesPromptFileFromBodyWhenPromptTemplateMissing(t
 
 func TestExpandFactoryConfig_ReportsReplacedPortableBundledFiles(t *testing.T) {
 	dir := t.TempDir()
-	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
+	factoryPath := filepath.Join(dir, factorydefinitions.FactoryConfigFile)
 	writeCLITestFile(t, factoryPath, `{
 		"name":"expand-config-portable-replacement",
 		"supportingFiles":{
@@ -640,8 +640,8 @@ func assertExpandDidNotWriteSplitRuntimeFiles(t *testing.T, dir string) {
 	t.Helper()
 
 	for _, path := range []string{
-		filepath.Join(dir, "workers", "executor", interfaces.FactoryAgentsFileName),
-		filepath.Join(dir, "workstations", "execute-story", interfaces.FactoryAgentsFileName),
+		filepath.Join(dir, "workers", "executor", factorydefinitions.FactoryAgentsFileName),
+		filepath.Join(dir, "workstations", "execute-story", factorydefinitions.FactoryAgentsFileName),
 	} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("expected expand validation failure to avoid writing %s, stat err = %v", path, err)
@@ -815,7 +815,7 @@ func assertExistingSplitDefinitionsPreserved(t *testing.T, dir, inputPath, worke
 	if !ok {
 		t.Fatal("expected runtime worker definition")
 	}
-	if workerDef.Type != interfaces.WorkerTypeScript || workerDef.Command != "powershell" || workerDef.Timeout != "45m" {
+	if workerDef.Type != factorydefinitions.WorkerTypeScript || workerDef.Command != "powershell" || workerDef.Timeout != "45m" {
 		t.Fatalf("expected existing worker definition to be preserved, got %#v", workerDef)
 	}
 	workstationDef, ok := loaded.Workstation("execute-story")

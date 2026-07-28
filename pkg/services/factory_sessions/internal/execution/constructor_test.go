@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
 var executionTestSessionIdentity atomic.Uint64
@@ -49,7 +48,7 @@ func (c constructorWorkflowContracts) ResumeJavaScript(
 type serviceConfig struct {
 	ProjectRoot       string
 	ChildExecutorMode string
-	Provider          workerprovider.Provider
+	Provider          workers.Provider
 	ProviderExecutor  workers.InvocationExecutor
 	FakeScenarios     []FakeScenario
 	Persistence       PersistenceChoice
@@ -93,7 +92,7 @@ func newExecutionService(provider ExecutionProvider, config serviceConfig) (Serv
 	}
 }
 
-func firstInvocationExecutor(executor workers.InvocationExecutor, provider workerprovider.Provider) workers.InvocationExecutor {
+func firstInvocationExecutor(executor workers.InvocationExecutor, provider workers.Provider) workers.InvocationExecutor {
 	if executor != nil {
 		return executor
 	}

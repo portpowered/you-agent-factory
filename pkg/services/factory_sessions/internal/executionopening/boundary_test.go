@@ -15,7 +15,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	"go.uber.org/zap"
 )
 
@@ -126,11 +125,11 @@ func TestNewFactoryRequiresRuntimeArtifactRootResolver(t *testing.T) {
 		&runtimeopening.Factory{},
 		runtimeopening.ExternalEffects{},
 		executionOpeningCommandRunner{},
-		&agypty.MockAllocator{},
+		&workers.MockPTYAllocator{},
 		func(factorysessions.ExecutionProvider, string, string, string, workers.InvocationExecutor, factoryruntime.Clock) (factorysessions.ExecutionService, error) {
 			return nil, nil
 		},
-		func(workers.CommandRunner, agypty.PTYAllocator) (workers.InvocationExecutor, error) {
+		func(workers.CommandRunner, workers.PTYAllocator) (workers.InvocationExecutor, error) {
 			return nil, nil
 		},
 		func(factoryruntime.Clock) factoryruntime.Clock { return nil },
@@ -151,11 +150,11 @@ func TestNewFactoryRequiresExecutionOpeningFileSystem(t *testing.T) {
 		&runtimeopening.Factory{},
 		runtimeopening.ExternalEffects{},
 		executionOpeningCommandRunner{},
-		&agypty.MockAllocator{},
+		&workers.MockPTYAllocator{},
 		func(factorysessions.ExecutionProvider, string, string, string, workers.InvocationExecutor, factoryruntime.Clock) (factorysessions.ExecutionService, error) {
 			return nil, nil
 		},
-		func(workers.CommandRunner, agypty.PTYAllocator) (workers.InvocationExecutor, error) {
+		func(workers.CommandRunner, workers.PTYAllocator) (workers.InvocationExecutor, error) {
 			return nil, nil
 		},
 		func(factoryruntime.Clock) factoryruntime.Clock { return nil },

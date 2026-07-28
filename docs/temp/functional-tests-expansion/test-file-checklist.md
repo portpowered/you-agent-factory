@@ -279,10 +279,8 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCodexGoldenTimeoutHasNoFalseTerminalMessage` covers timeout.
 
 - [x] `tests/functional/workers/inference/codex/conductor_test.go`
-  - `TestCodexConductorSuccessThroughRootBuildProcess` proves successful Codex
-    execution through the product graph.
-  - `TestCodexCommandCancellationThroughRootBuildProcessIsCanonical` proves
-    cancellation through the product graph.
+  - `TestCodexConductorSuccessThroughRootBuildProcess` proves successful Codex execution through the product graph.
+  - `TestCodexCommandCancellationThroughRootBuildProcessIsCanonical` proves cancellation through the canonical conductor path.
 
 - [x] `tests/functional/workers/inference/claude/golden_success_test.go`
   - `TestClaudeGoldenFullStreamTextSuccess` covers deltas and final snapshot.
@@ -293,10 +291,8 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestClaudeGoldenTimeoutClosesResponseStream` covers terminal closure.
 
 - [x] `tests/functional/workers/inference/claude/conductor_test.go`
-  - `TestClaudeConductorSuccessThroughRootBuildProcess` proves successful Claude
-    execution through the product graph.
-  - `TestClaudeCommandCancellationThroughRootBuildProcessIsCanonical` proves
-    cancellation through the product graph.
+  - `TestClaudeConductorSuccessThroughRootBuildProcess` proves successful Claude execution through the product graph.
+  - `TestClaudeCommandCancellationThroughRootBuildProcessIsCanonical` proves cancellation through the canonical conductor path.
 
 - [x] `tests/functional/workers/inference/cursor/golden_success_test.go`
   - `TestCursorGoldenTextSuccessAndSessionIdentity` covers public metadata.
@@ -533,10 +529,16 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ## Wave 2 — work
 
-- [ ] `tests/functional/work/submission/batch_inputs_test.go`
+- [x] `tests/functional/work/submission/batch_inputs_test.go`
   - `TestWorkBatchAcceptsInlineFileAndStdinShapes`.
   - `TestWorkBatchSelectsDefaultAndExplicitWorkTypes`.
   - `TestWorkBatchRejectsUnknownTypeWithoutPartialMutation`.
+
+- [x] `tests/functional/work/recordings/recordings_read_test.go`
+  - `TestRecordingsBackedWorkReadsUseRecordingsRootContract` covers recordings-root reads.
+  - `TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot` covers service-root routing.
+  - `TestRecordingsBackedWorkReadsMapRichWorldState` covers rich world-state projection.
+  - `TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures` covers typed failures.
 
 - [ ] `tests/functional/work/submission/http_test.go`
   - `TestAPISubmitBatchThenListAndGetWork`.
@@ -571,7 +573,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIMoveWorkResumesRecoverableFlow`.
   - `TestAPIInvalidMoveReturnsConflictWithoutMutation`.
 
-- [ ] `tests/functional/work/visualization/dependency_graph_test.go`
+- [x] `tests/functional/work/visualization/dependency_graph_test.go`
   - `TestWorkVisualizeProducesDeterministicGraph`.
 
 ## Wave 2 — sessions
@@ -587,14 +589,14 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [ ] `tests/functional/sessions/live_runtime_build_process_test.go`
   - `TestBuildProcessRoutesLiveOpenListControlAndCloseThroughFactorySessionsRoot`.
 
-- [ ] `tests/functional/sessions/controls/pause_resume_test.go`
+- [x] `tests/functional/sessions/controls/pause_resume_test.go`
   - `TestPausedFactorySessionBuffersSubmittedWork`.
   - `TestResumedFactorySessionDrainsBufferedWorkInOrder`.
   - `TestPauseResumeEmitsDurableLifecycleEvents`.
   - `TestAPIPauseResumeCancelAndTerminateFactorySession`.
   - `TestAPIInvalidLifecycleTransitionReturnsConflict`.
 
-- [ ] `tests/functional/sessions/execution/results_dispatches_test.go`
+- [x] `tests/functional/sessions/execution/results_dispatches_test.go`
   - `TestAPIResultAndResultsExposeTerminalInvocationData`.
   - `TestAPIDispatchListAndDetailExposePublicCorrelation`.
   - `TestAPIPartialResultIsAvailableBeforeTerminalCompletion`.
@@ -608,7 +610,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestFactorySessionResumeDoesNotRepeatCompletedDispatch`.
   - `TestFactorySessionHistoryRemainsReadableAfterRestart`.
 
-- [ ] `tests/functional/sessions/mcp/controls_test.go`
+- [x] `tests/functional/sessions/mcp/controls_test.go`
   - `TestMCPPauseResumeAndCancelTargetCanonicalFactorySession`.
   - `TestMCPControlledSessionIsReadableThroughAPI`.
   - `TestMCPSynchronousFactorySessionReturnsTerminalResult`.
@@ -621,7 +623,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Definitions
 
-- [ ] `tests/functional/factory/definitions/init_test.go`
+- [x] `tests/functional/factory/definitions/init_test.go`
   - `TestFactoryInitCreatesRunnablePortableScaffold`.
   - `TestFactoryInitIsIdempotent`.
   - `TestFactoryInitFailureRoutingProducesFailedWork`.
@@ -645,7 +647,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Packaged factories
 
-- [ ] `tests/functional/factory/packaged/catalog/discovery_test.go`
+- [x] `tests/functional/factory/packaged/catalog/discovery_test.go`
   - `TestPackagedFactoryCatalogListsEveryEmbeddedFactory` compares runtime
     discovery with the embedded package inventory.
   - `TestPackagedFactoryCatalogHasUniqueStableNames` rejects collisions.
@@ -666,12 +668,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedDeepResearchOptionalInputsReachWorkers` covers overrides.
   - `TestPackagedDeepResearchWorkerFailureReturnsFailedOutcome` covers failure.
 
-- [ ] `tests/functional/factory/packaged/fusion/invocation_test.go`
+- [x] `tests/functional/factory/packaged/fusion/invocation_test.go`
   - `TestPackagedFusionRequiredInputCompletes` verifies its multi-worker merge.
   - `TestPackagedFusionOptionalInputsReachWorkers` covers supported options.
   - `TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome` covers error.
 
-- [ ] `tests/functional/factory/packaged/goal/invocation_test.go`
+- [x] `tests/functional/factory/packaged/goal/invocation_test.go`
   - `TestPackagedGoalAcceptCompletesWithSummary` covers accepted routing.
   - `TestPackagedGoalRejectRepeatsThenCompletes` covers feedback propagation.
   - `TestPackagedGoalUnknownDecisionFails` covers classifier failure.
@@ -688,7 +690,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedReviewRejectionCarriesFeedback` covers retry context.
   - `TestPackagedReviewRetryExhaustionFails` covers bounded failure.
 
-- [ ] `tests/functional/factory/packaged/subagent/invocation_test.go`
+- [x] `tests/functional/factory/packaged/subagent/invocation_test.go`
   - `TestPackagedSubagentReturnsChildResult` covers basic dispatch.
   - `TestPackagedSubagentStreamsChildResponseEvents` covers observation.
   - `TestPackagedSubagentChildFailureReturnsStableFailure` covers error.
@@ -750,7 +752,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIProviderSessionRejectsRawFilesystemPathInput`.
   - `TestAPIUnsupportedProviderSessionKindReturnsTypedError`.
 
-- [ ] `tests/functional/provider_sessions/association/association_test.go`
+- [x] `tests/functional/provider_sessions/association/association_test.go`
   - `TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession`.
   - `TestAbsentProviderSessionIsNotFabricated`.
   - `TestMultipleDispatchesKeepDistinctProviderSessionRefs`.
@@ -875,6 +877,19 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [ ] `tests/functional/resilience/platform/unix_process_test.go`
   - `TestUnixProviderTimeoutTerminatesProcessGroup`.
   - `TestUnixSignalsMapToInterruptedPublicOutcome`.
+
+## Wave 3 — operator settings
+
+- [x] `tests/functional/operator_settings/servicewire/servicewire_composition_test.go`
+  - `TestServiceWireCompositionRootServesDocumentAndResolutionOperations`.
+  - `TestServiceFromHomePortsConstructsSettingsRoot`.
+  - `TestServiceFromHomePortsRejectsMissingPorts`.
+  - `TestServiceFromConfigDocumentConstructsFromDocumentPorts`.
+  - `TestServiceFromConfigDocumentRejectsMissingDocumentPorts`.
+  - `TestResolveFromHomeUsesSettingsAdapterOwnershipPath`.
+  - `TestResolveFromHomeRejectsMissingFilesystemPorts`.
+  - `TestResolveFromHomeFallbackPreservesAcceptedSemantics`.
+  - `TestRegisterDefaultsResolutionFromHomeRestoresAdapterOwnership`.
 
 ## Completion audit
 

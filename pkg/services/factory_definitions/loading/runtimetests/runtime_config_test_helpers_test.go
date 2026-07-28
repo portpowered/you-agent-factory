@@ -13,7 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout"
 	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
@@ -29,11 +29,11 @@ func legacyEncodedNamedFactorySegment(name string) string {
 
 const generatedFactoryBoundaryErrorPrefix = "decode factory generated-schema boundary"
 
-func ownerFactoryDefinitionValidator() interfaces.Validator {
+func ownerFactoryDefinitionValidator() factorydefinitions.Validator {
 	return factoryvalidation.New(nil)
 }
 
-func ownerFactoryDefinitionPersistence() interfaces.Persistence {
+func ownerFactoryDefinitionPersistence() factorydefinitions.Persistence {
 	validator := ownerFactoryDefinitionValidator()
 	mapper := factorymapping.NewFactoryConfigMapper()
 	fileSystem := platformfilesystem.Local{}
@@ -49,15 +49,15 @@ func ownerFactoryDefinitionPersistence() interfaces.Persistence {
 	)
 	persistence, err := factorypersistence.New(
 		validator,
-		func(payload []byte) (interfaces.DefinitionValidationRequest, error) {
+		func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			return validationentry.MapFactoryJSONForPersistence(payload, factorydefinitioncomposition.LoadCanonicalJSON)
 		},
 		func(
 			ctx context.Context,
 			segment string,
 			payload []byte,
-			validator interfaces.Validator,
-		) (*interfaces.PreparedFactoryLayoutPayload, error) {
+			validator factorydefinitions.Validator,
+		) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
 			return factoryauthoredlayout.Prepare(
 				ctx,
 				segment,
@@ -70,7 +70,7 @@ func ownerFactoryDefinitionPersistence() interfaces.Persistence {
 		},
 		func(
 			targetDir string,
-			prepared *interfaces.PreparedFactoryLayoutPayload,
+			prepared *factorydefinitions.PreparedFactoryLayoutPayload,
 			sourcePath string,
 		) error {
 			return writer.WritePrepared(
@@ -98,21 +98,21 @@ func ownerFactoryDefinitionPersistence() interfaces.Persistence {
 	return persistence
 }
 
-func assertCanonicalRuntimeConfigLookupFactoryDir(t *testing.T, lookup interfaces.RuntimeConfigLookup, want string) {
+func assertCanonicalRuntimeConfigLookupFactoryDir(t *testing.T, lookup factorydefinitions.RuntimeConfigLookup, want string) {
 	t.Helper()
 	if lookup.FactoryDir() != want {
 		t.Fatalf("FactoryDir = %q, want %q", lookup.FactoryDir(), want)
 	}
 }
 
-func assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t *testing.T, lookup interfaces.RuntimeConfigLookup, want string) {
+func assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t *testing.T, lookup factorydefinitions.RuntimeConfigLookup, want string) {
 	t.Helper()
 	if lookup.RuntimeBaseDir() != want {
 		t.Fatalf("RuntimeBaseDir = %q, want %q", lookup.RuntimeBaseDir(), want)
 	}
 }
 
-func assertCanonicalRuntimeDefinitionLookupByName(t *testing.T, lookup interfaces.RuntimeDefinitionLookup, workerName string, workstationName string) {
+func assertCanonicalRuntimeDefinitionLookupByName(t *testing.T, lookup factorydefinitions.RuntimeDefinitionLookup, workerName string, workstationName string) {
 	t.Helper()
 	worker, ok := lookup.Worker(workerName)
 	if !ok || worker == nil {
@@ -124,7 +124,7 @@ func assertCanonicalRuntimeDefinitionLookupByName(t *testing.T, lookup interface
 	}
 }
 
-func assertRuntimeDefinitionLookupMissesByName(t *testing.T, lookup interfaces.RuntimeDefinitionLookup, workerName string, workstationName string) {
+func assertRuntimeDefinitionLookupMissesByName(t *testing.T, lookup factorydefinitions.RuntimeDefinitionLookup, workerName string, workstationName string) {
 	t.Helper()
 	worker, ok := lookup.Worker(workerName)
 	if ok || worker != nil {
@@ -136,47 +136,47 @@ func assertRuntimeDefinitionLookupMissesByName(t *testing.T, lookup interfaces.R
 	}
 }
 
-func canonicalMergeFactoryConfig() *interfaces.FactoryConfig {
-	return &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
+func canonicalMergeFactoryConfig() *factorydefinitions.FactoryConfig {
+	return &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "story",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "ready", Type: interfaces.StateTypeProcessing},
-				{Name: "approved", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "ready", Type: factorydefinitions.StateTypeProcessing},
+				{Name: "approved", Type: factorydefinitions.StateTypeTerminal},
+				{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.FactoryWorkerConfig{{
+		Workers: []factorydefinitions.FactoryWorkerConfig{{
 			Name:      "executor",
-			Type:      interfaces.WorkerTypeModel,
+			Type:      factorydefinitions.WorkerTypeModel,
 			Model:     "canonical-model",
 			StopToken: "CANONICAL_STOP",
 			Timeout:   "20m",
 		}},
-		Workstations: []interfaces.FactoryWorkstationConfig{canonicalMergeWorkstation()},
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{canonicalMergeWorkstation()},
 	}
 }
 
-func canonicalMergeRuntimeDefinitions() interfaces.RuntimeDefinitionLookup {
+func canonicalMergeRuntimeDefinitions() factorydefinitions.RuntimeDefinitionLookup {
 	runtimeDefs := testRuntimeDefinitionLookup{
-		workers:      map[string]*interfaces.FactoryWorkerConfig{},
-		workstations: map[string]*interfaces.FactoryWorkstationConfig{},
+		workers:      map[string]*factorydefinitions.FactoryWorkerConfig{},
+		workstations: map[string]*factorydefinitions.FactoryWorkstationConfig{},
 	}
-	runtimeDefs.workers["executor"] = &interfaces.FactoryWorkerConfig{
-		Type:        interfaces.WorkerTypeScript,
+	runtimeDefs.workers["executor"] = &factorydefinitions.FactoryWorkerConfig{
+		Type:        factorydefinitions.WorkerTypeScript,
 		Command:     "go",
 		Args:        []string{"test", "./..."},
 		Concurrency: 3,
 		Body:        "runtime worker body",
 	}
-	runtimeDefs.workstations["review"] = &interfaces.FactoryWorkstationConfig{
-		Type:           interfaces.WorkstationTypeModel,
+	runtimeDefs.workstations["review"] = &factorydefinitions.FactoryWorkstationConfig{
+		Type:           factorydefinitions.WorkstationTypeModel,
 		WorkerTypeName: "runtime-worker",
-		Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "ready"}},
-		Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "approved"}},
+		Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "ready"}},
+		Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "approved"}},
 		Timeout:        "5m",
-		Limits:         interfaces.WorkstationLimits{MaxRetries: 3},
+		Limits:         factorydefinitions.WorkstationLimits{MaxRetries: 3},
 		StopWords:      []string{"RUNTIME"},
 		PromptTemplate: "Runtime prompt.",
 		Env:            map[string]string{"SHARED": "runtime", "RUNTIME_ONLY": "true"},
@@ -184,44 +184,44 @@ func canonicalMergeRuntimeDefinitions() interfaces.RuntimeDefinitionLookup {
 	return runtimeDefs
 }
 
-func emptyRuntimeDefinitionLookup() interfaces.RuntimeDefinitionLookup {
+func emptyRuntimeDefinitionLookup() factorydefinitions.RuntimeDefinitionLookup {
 	return testRuntimeDefinitionLookup{
-		workers:      map[string]*interfaces.FactoryWorkerConfig{},
-		workstations: map[string]*interfaces.FactoryWorkstationConfig{},
+		workers:      map[string]*factorydefinitions.FactoryWorkerConfig{},
+		workstations: map[string]*factorydefinitions.FactoryWorkstationConfig{},
 	}
 }
 
 type testRuntimeDefinitionLookup struct {
-	workers      map[string]*interfaces.FactoryWorkerConfig
-	workstations map[string]*interfaces.FactoryWorkstationConfig
+	workers      map[string]*factorydefinitions.FactoryWorkerConfig
+	workstations map[string]*factorydefinitions.FactoryWorkstationConfig
 }
 
-func (lookup testRuntimeDefinitionLookup) Worker(name string) (*interfaces.FactoryWorkerConfig, bool) {
+func (lookup testRuntimeDefinitionLookup) Worker(name string) (*factorydefinitions.FactoryWorkerConfig, bool) {
 	worker, ok := lookup.workers[name]
 	return worker, ok
 }
 
-func (lookup testRuntimeDefinitionLookup) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
+func (lookup testRuntimeDefinitionLookup) Workstation(name string) (*factorydefinitions.FactoryWorkstationConfig, bool) {
 	workstation, ok := lookup.workstations[name]
 	return workstation, ok
 }
 
-func canonicalMergeWorkstation() interfaces.FactoryWorkstationConfig {
-	return interfaces.FactoryWorkstationConfig{
+func canonicalMergeWorkstation() factorydefinitions.FactoryWorkstationConfig {
+	return factorydefinitions.FactoryWorkstationConfig{
 		ID:               "review-id",
 		Name:             "review",
-		Kind:             interfaces.WorkstationKindCron,
-		Type:             interfaces.WorkstationTypeLogical,
+		Kind:             factorydefinitions.WorkstationKindCron,
+		Type:             factorydefinitions.WorkstationTypeLogical,
 		WorkerTypeName:   "executor",
-		Cron:             &interfaces.CronConfig{Schedule: "*/5 * * * *"},
-		Inputs:           []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
-		Outputs:          []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
-		OnFailure:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
-		Resources:        []interfaces.ResourceConfig{{Name: "agent-slot", Capacity: 1}},
+		Cron:             &factorydefinitions.CronConfig{Schedule: "*/5 * * * *"},
+		Inputs:           []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+		Outputs:          []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
+		OnFailure:        []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
+		Resources:        []factorydefinitions.ResourceConfig{{Name: "agent-slot", Capacity: 1}},
 		StopWords:        []string{"CANONICAL"},
 		PromptTemplate:   "Canonical prompt.",
 		Timeout:          "30m",
-		Limits:           interfaces.WorkstationLimits{MaxRetries: 1, MaxExecutionTime: "40m"},
+		Limits:           factorydefinitions.WorkstationLimits{MaxRetries: 1, MaxExecutionTime: "40m"},
 		WorkingDirectory: "/repo/canonical",
 		Env:              map[string]string{"CANONICAL_ONLY": "true", "SHARED": "canonical"},
 	}
@@ -233,7 +233,7 @@ func assertMergedWorker(t *testing.T, loaded *LoadedFactoryConfig) {
 	if !ok {
 		t.Fatal("expected merged worker")
 	}
-	if worker.Type != interfaces.WorkerTypeScript || worker.Command != "go" || worker.Concurrency != 3 {
+	if worker.Type != factorydefinitions.WorkerTypeScript || worker.Command != "go" || worker.Concurrency != 3 {
 		t.Fatalf("runtime worker fields did not override canonical fields: %#v", worker)
 	}
 	if worker.Model != "canonical-model" || worker.StopToken != "CANONICAL_STOP" || worker.Timeout != "20m" {
@@ -241,13 +241,13 @@ func assertMergedWorker(t *testing.T, loaded *LoadedFactoryConfig) {
 	}
 }
 
-func assertMergedWorkerConfig(t *testing.T, cfg *interfaces.FactoryConfig) {
+func assertMergedWorkerConfig(t *testing.T, cfg *factorydefinitions.FactoryConfig) {
 	t.Helper()
 	if cfg == nil || len(cfg.Workers) == 0 {
 		t.Fatalf("expected merged worker config, got %#v", cfg)
 	}
 	worker := cfg.Workers[0]
-	if worker.Type != interfaces.WorkerTypeScript || worker.Command != "go" || worker.Concurrency != 3 {
+	if worker.Type != factorydefinitions.WorkerTypeScript || worker.Command != "go" || worker.Concurrency != 3 {
 		t.Fatalf("runtime worker fields did not override canonical fields: %#v", worker)
 	}
 	if worker.Model != "canonical-model" || worker.StopToken != "CANONICAL_STOP" || worker.Timeout != "20m" {
@@ -264,7 +264,7 @@ func assertMergedWorkstation(t *testing.T, loaded *LoadedFactoryConfig) {
 	if workstation.Inputs[0].StateName != "ready" || workstation.Outputs[0].StateName != "approved" {
 		t.Fatalf("runtime workstation states did not override canonical states: %#v", workstation)
 	}
-	if workstation.ID != "review-id" || workstation.Kind != interfaces.WorkstationKindCron || workstation.Cron.Schedule != "*/5 * * * *" {
+	if workstation.ID != "review-id" || workstation.Kind != factorydefinitions.WorkstationKindCron || workstation.Cron.Schedule != "*/5 * * * *" {
 		t.Fatalf("canonical workstation topology fields were not preserved: %#v", workstation)
 	}
 	if workstation.Limits.MaxRetries != 3 || workstation.Limits.MaxExecutionTime != "5m" {
@@ -278,7 +278,7 @@ func assertMergedWorkstation(t *testing.T, loaded *LoadedFactoryConfig) {
 	}
 }
 
-func assertMergedWorkstationConfig(t *testing.T, cfg *interfaces.FactoryConfig) {
+func assertMergedWorkstationConfig(t *testing.T, cfg *factorydefinitions.FactoryConfig) {
 	t.Helper()
 	if cfg == nil || len(cfg.Workstations) == 0 {
 		t.Fatalf("expected merged workstation config, got %#v", cfg)
@@ -287,7 +287,7 @@ func assertMergedWorkstationConfig(t *testing.T, cfg *interfaces.FactoryConfig) 
 	if workstation.Inputs[0].StateName != "ready" || workstation.Outputs[0].StateName != "approved" {
 		t.Fatalf("runtime workstation states did not override canonical states: %#v", workstation)
 	}
-	if workstation.ID != "review-id" || workstation.Kind != interfaces.WorkstationKindCron || workstation.Cron.Schedule != "*/5 * * * *" {
+	if workstation.ID != "review-id" || workstation.Kind != factorydefinitions.WorkstationKindCron || workstation.Cron.Schedule != "*/5 * * * *" {
 		t.Fatalf("canonical workstation topology fields were not preserved: %#v", workstation)
 	}
 	if workstation.Limits.MaxRetries != 3 || workstation.Limits.MaxExecutionTime != "5m" {
@@ -301,18 +301,18 @@ func assertMergedWorkstationConfig(t *testing.T, cfg *interfaces.FactoryConfig) 
 	}
 }
 
-func assertCanonicalMergeWorkerConfig(t *testing.T, cfg *interfaces.FactoryConfig) {
+func assertCanonicalMergeWorkerConfig(t *testing.T, cfg *factorydefinitions.FactoryConfig) {
 	t.Helper()
 	if cfg == nil || len(cfg.Workers) == 0 {
 		t.Fatalf("expected canonical worker config, got %#v", cfg)
 	}
 	worker := cfg.Workers[0]
-	if worker.Type != interfaces.WorkerTypeModel || worker.Model != "canonical-model" {
+	if worker.Type != factorydefinitions.WorkerTypeModel || worker.Model != "canonical-model" {
 		t.Fatalf("canonical worker fields were not preserved: %#v", worker)
 	}
 }
 
-func assertCanonicalMergeWorkstation(t *testing.T, lookup interfaces.RuntimeDefinitionLookup) {
+func assertCanonicalMergeWorkstation(t *testing.T, lookup factorydefinitions.RuntimeDefinitionLookup) {
 	t.Helper()
 	workstation, ok := lookup.Workstation("review")
 	if !ok {
@@ -326,7 +326,7 @@ func assertCanonicalMergeWorkstation(t *testing.T, lookup interfaces.RuntimeDefi
 	}
 }
 
-func assertCanonicalMergeWorkstationConfig(t *testing.T, cfg *interfaces.FactoryConfig) {
+func assertCanonicalMergeWorkstationConfig(t *testing.T, cfg *factorydefinitions.FactoryConfig) {
 	t.Helper()
 	if cfg == nil || len(cfg.Workstations) == 0 {
 		t.Fatalf("expected canonical workstation config, got %#v", cfg)
@@ -350,15 +350,15 @@ func assertCanonicalInlineWorkstation(t *testing.T, loaded *LoadedFactoryConfig)
 	if !ok || secondLookup != workstation {
 		t.Fatal("expected runtime lookup to return a stable canonical workstation entry")
 	}
-	if workstation.ID != "execute-story-id" || workstation.Kind != interfaces.WorkstationKindStandard {
+	if workstation.ID != "execute-story-id" || workstation.Kind != factorydefinitions.WorkstationKindStandard {
 		t.Fatalf("expected topology fields on canonical workstation, got %#v", workstation)
 	}
 	assertCanonicalInlineRuntimeFields(t, workstation)
 }
 
-func assertCanonicalInlineRuntimeFields(t *testing.T, workstation *interfaces.FactoryWorkstationConfig) {
+func assertCanonicalInlineRuntimeFields(t *testing.T, workstation *factorydefinitions.FactoryWorkstationConfig) {
 	t.Helper()
-	if workstation.Type != interfaces.WorkstationTypeModel {
+	if workstation.Type != factorydefinitions.WorkstationTypeModel {
 		t.Fatalf("expected type MODEL_WORKSTATION, got %q", workstation.Type)
 	}
 	if workstation.WorkerTypeName != "executor" {
@@ -432,7 +432,7 @@ func writeRuntimeFactoryJSON(t *testing.T, factoryDir string, cfg map[string]any
 	if err != nil {
 		t.Fatalf("MarshalIndent: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile), data, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
 }
@@ -722,7 +722,7 @@ func namedFactoryPayloadWithPortableLayout(t *testing.T, project string) []byte 
 	return updated
 }
 
-func assertLoadedPortableLayoutConfig(t *testing.T, cfg *interfaces.FactoryConfig, wantNodeID string) {
+func assertLoadedPortableLayoutConfig(t *testing.T, cfg *factorydefinitions.FactoryConfig, wantNodeID string) {
 	t.Helper()
 
 	layout := requirePortableLayoutFixture(t, cfg)
@@ -732,7 +732,7 @@ func assertLoadedPortableLayoutConfig(t *testing.T, cfg *interfaces.FactoryConfi
 	assertPortableLayoutFixtureViewportPreferences(t, layout)
 }
 
-func requirePortableLayoutFixture(t *testing.T, cfg *interfaces.FactoryConfig) *interfaces.FactoryLayoutConfig {
+func requirePortableLayoutFixture(t *testing.T, cfg *factorydefinitions.FactoryConfig) *factorydefinitions.FactoryLayoutConfig {
 	t.Helper()
 
 	if cfg == nil || cfg.Layout == nil {
@@ -744,7 +744,7 @@ func requirePortableLayoutFixture(t *testing.T, cfg *interfaces.FactoryConfig) *
 	return cfg.Layout
 }
 
-func assertPortableLayoutFixtureNode(t *testing.T, layout *interfaces.FactoryLayoutConfig, wantNodeID string) {
+func assertPortableLayoutFixtureNode(t *testing.T, layout *factorydefinitions.FactoryLayoutConfig, wantNodeID string) {
 	t.Helper()
 
 	if len(layout.Nodes) != 1 || layout.Nodes[0].ID != wantNodeID {
@@ -755,7 +755,7 @@ func assertPortableLayoutFixtureNode(t *testing.T, layout *interfaces.FactoryLay
 	}
 }
 
-func assertPortableLayoutFixtureEdge(t *testing.T, layout *interfaces.FactoryLayoutConfig) {
+func assertPortableLayoutFixtureEdge(t *testing.T, layout *factorydefinitions.FactoryLayoutConfig) {
 	t.Helper()
 
 	if len(layout.Edges) != 1 || layout.Edges[0].ID == "" {
@@ -769,7 +769,7 @@ func assertPortableLayoutFixtureEdge(t *testing.T, layout *interfaces.FactoryLay
 	}
 }
 
-func assertPortableLayoutFixtureGroup(t *testing.T, layout *interfaces.FactoryLayoutConfig, wantNodeID string) {
+func assertPortableLayoutFixtureGroup(t *testing.T, layout *factorydefinitions.FactoryLayoutConfig, wantNodeID string) {
 	t.Helper()
 
 	if len(layout.Groups) != 1 || layout.Groups[0].ID != "group-1" {
@@ -780,7 +780,7 @@ func assertPortableLayoutFixtureGroup(t *testing.T, layout *interfaces.FactoryLa
 	}
 }
 
-func assertPortableLayoutFixtureViewportPreferences(t *testing.T, layout *interfaces.FactoryLayoutConfig) {
+func assertPortableLayoutFixtureViewportPreferences(t *testing.T, layout *factorydefinitions.FactoryLayoutConfig) {
 	t.Helper()
 
 	if layout.Viewport == nil || math.Abs(layout.Viewport.Zoom-0.9) > 1e-6 {

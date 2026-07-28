@@ -17,8 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	"go.uber.org/zap"
 )
 
@@ -383,8 +381,8 @@ func (failure *openingCoordinatorFailure) openWorkerExecution(
 	*zap.Logger,
 	workers.CommandRunner,
 	workers.CommandRunner,
-	agypty.PTYAllocator,
-	workerprovider.Provider,
+	workers.PTYAllocator,
+	workers.Provider,
 	roles.CurrentRuntimeResolver,
 	models.Service,
 	models.RuntimeScopeRef,
@@ -400,7 +398,7 @@ func openingCoordinatorDurableExecution(
 	_ factorysessions.SessionRuntimeOpeningRequest,
 	_ RuntimeRoot,
 	_ factoryruntime.Clock,
-	_ workerprovider.Provider,
+	_ workers.Provider,
 	_ *workers.MockWorkersConfig,
 	_ FactorySessionExecutionFactory,
 	_ factorysessions.ProviderIdentityResolver,

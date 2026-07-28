@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestInvocationPrimaryResult_ReturnsApprovedWorkOnly(t *testing.T) {
@@ -14,11 +14,11 @@ func TestInvocationPrimaryResult_ReturnsApprovedWorkOnly(t *testing.T) {
 	approved := submitted
 	approved.State, approved.PlaceID = PackagedInvocationReturnTerminalState, PackagedWorkTypeName+":"+PackagedInvocationReturnTerminalState
 	approved.Content = []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "approved candidate work"}}
-	state := interfaces.FactoryWorldState{PayloadLineage: work.WorkPayloadLineageProjection{}, WorkRequestsByID: map[string]interfaces.WorkRequestPayload{requestID: {RequestID: requestID, WorkItems: []work.FactoryWorkItem{submitted}}}, TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{workID: {WorkItem: approved, Status: "TERMINAL"}}}
+	state := factorydefinitions.FactoryWorldState{PayloadLineage: work.WorkPayloadLineageProjection{}, WorkRequestsByID: map[string]factorydefinitions.WorkRequestPayload{requestID: {RequestID: requestID, WorkItems: []work.FactoryWorkItem{submitted}}}, TerminalWorkByID: map[string]factorydefinitions.FactoryTerminalWork{workID: {WorkItem: approved, Status: "TERMINAL"}}}
 	state.PayloadLineage.RecordWorkRequestSnapshot(1, requestID, submitted)
 	state.PayloadLineage.RecordConsumedInputSnapshot("execute", submitted)
 	state.PayloadLineage.RecordDispatchOutputSnapshot(2, "review", []work.FactoryWorkItem{submitted}, approved, 0)
-	selection, err := work.ResolvePrimaryResult(work.PrimaryResultSelectionInput{RequestID: requestID, InvocationReturn: &interfaces.InvocationReturnConfig{Policy: "EXPLICIT", WorkTypeName: PackagedWorkTypeName, TerminalState: PackagedInvocationReturnTerminalState}, WorldState: state})
+	selection, err := work.ResolvePrimaryResult(work.PrimaryResultSelectionInput{RequestID: requestID, InvocationReturn: &factorydefinitions.InvocationReturnConfig{Policy: "EXPLICIT", WorkTypeName: PackagedWorkTypeName, TerminalState: PackagedInvocationReturnTerminalState}, WorldState: state})
 	if err != nil {
 		t.Fatalf("ResolvePrimaryResult: %v", err)
 	}
@@ -28,8 +28,8 @@ func TestInvocationPrimaryResult_ReturnsApprovedWorkOnly(t *testing.T) {
 }
 
 func TestInvocationPrimaryResult_DoesNotSelectFailedWork(t *testing.T) {
-	state := interfaces.FactoryWorldState{TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{"failed": {WorkItem: work.FactoryWorkItem{ID: "failed", WorkTypeID: PackagedWorkTypeName, State: "failed", TraceID: "req"}, Status: "FAILED"}}}
-	_, err := work.ResolvePrimaryResult(work.PrimaryResultSelectionInput{RequestID: "req", InvocationReturn: &interfaces.InvocationReturnConfig{Policy: "EXPLICIT", WorkTypeName: PackagedWorkTypeName, TerminalState: PackagedInvocationReturnTerminalState}, WorldState: state})
+	state := factorydefinitions.FactoryWorldState{TerminalWorkByID: map[string]factorydefinitions.FactoryTerminalWork{"failed": {WorkItem: work.FactoryWorkItem{ID: "failed", WorkTypeID: PackagedWorkTypeName, State: "failed", TraceID: "req"}, Status: "FAILED"}}}
+	_, err := work.ResolvePrimaryResult(work.PrimaryResultSelectionInput{RequestID: "req", InvocationReturn: &factorydefinitions.InvocationReturnConfig{Policy: "EXPLICIT", WorkTypeName: PackagedWorkTypeName, TerminalState: PackagedInvocationReturnTerminalState}, WorldState: state})
 	var selectionErr *work.PrimaryResultError
 	if !errors.As(err, &selectionErr) || selectionErr.Code != work.PrimaryResultErrorCodeUnresolved {
 		t.Fatalf("error = %v", err)

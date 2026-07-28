@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -175,7 +174,7 @@ func workstationHasAgentOutputRole(
 		Kind:           workstation.Kind,
 		WorkerTypeName: workstation.WorkerTypeName,
 	}) {
-	case contracts.WorkstationTypeModel, contracts.WorkstationTypeAgent:
+	case factorydefinitions.WorkstationTypeModel, factorydefinitions.WorkstationTypeAgent:
 		return true
 	default:
 		return false

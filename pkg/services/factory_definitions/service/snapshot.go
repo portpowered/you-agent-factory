@@ -3,7 +3,7 @@ package service
 import (
 	"fmt"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // CaptureInitialSnapshot captures the portable Factory Definition stored with

@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 type PathResolver interface {
@@ -113,14 +113,14 @@ func ResolveCurrent(paths PathResolver, rootDir string) (string, error) {
 		return "", fmt.Errorf(
 			"resolve current factory in %s: %w",
 			rootDir,
-			factorycontracts.ErrFactoryLayoutNotFound,
+			factorydefinitions.ErrFactoryLayoutNotFound,
 		)
 	}
 	if errors.Is(err, namedfactorypath.ErrInvalidName) {
 		return "", &invalidNameError{name: "", err: err}
 	}
 	if errors.Is(err, namedfactorypath.ErrNotFound) {
-		return "", fmt.Errorf("%w: %w", factorycontracts.ErrNamedFactoryNotFound, err)
+		return "", fmt.Errorf("%w: %w", factorydefinitions.ErrNamedFactoryNotFound, err)
 	}
 	return "", err
 }
@@ -148,7 +148,7 @@ func WriteCurrentPointer(paths PathResolver, rootDir, name string) error {
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
-func List(paths PathResolver, fileSystem FileSystem, rootDir string) ([]factorycontracts.NamedFactoryListEntry, error) {
+func List(paths PathResolver, fileSystem FileSystem, rootDir string) ([]factorydefinitions.NamedFactoryListEntry, error) {
 	if paths == nil {
 		return nil, fmt.Errorf("named Factory path resolver is required")
 	}
@@ -167,14 +167,14 @@ func List(paths PathResolver, fileSystem FileSystem, rootDir string) ([]factoryc
 		return nil, fmt.Errorf("read factory root %s: %w", rootDir, err)
 	}
 
-	entries := make([]factorycontracts.NamedFactoryListEntry, 0, len(children))
+	entries := make([]factorydefinitions.NamedFactoryListEntry, 0, len(children))
 	seen := make(map[string]struct{}, len(children))
 	appendEntry := func(name, factoryDir string) {
 		if _, exists := seen[name]; exists {
 			return
 		}
 		seen[name] = struct{}{}
-		entries = append(entries, factorycontracts.NamedFactoryListEntry{
+		entries = append(entries, factorydefinitions.NamedFactoryListEntry{
 			Name:       name,
 			FactoryDir: factoryDir,
 			Current:    name == currentName,
@@ -260,7 +260,7 @@ func Delete(paths PathResolver, fileSystem FileSystem, rootDir, name string) err
 		return fmt.Errorf(
 			"delete factory %q: %w: switch .current-factory to another factory first",
 			canonicalName,
-			factorycontracts.ErrNamedFactoryIsCurrent,
+			factorydefinitions.ErrNamedFactoryIsCurrent,
 		)
 	}
 	if err := fileSystem.RemoveAll(factoryDir); err != nil {
@@ -274,7 +274,7 @@ func ResolveAcrossRoots(
 	projectRoot string,
 	globalRoot string,
 	name string,
-) (*factorycontracts.NamedFactoryResolution, error) {
+) (*factorydefinitions.NamedFactoryResolution, error) {
 	if paths == nil {
 		return nil, fmt.Errorf("named Factory path resolver is required")
 	}
@@ -294,14 +294,14 @@ func ResolveAcrossRoots(
 	if factoryDir, found, resolveErr := resolveCandidate(paths, projectRoot, canonicalName); resolveErr != nil {
 		return nil, resolveErr
 	} else if found {
-		precedence := factorycontracts.NamedFactoryPrecedenceDecisionNone
+		precedence := factorydefinitions.NamedFactoryPrecedenceDecisionNone
 		if _, globalFound, _ := resolveCandidate(paths, globalRoot, canonicalName); globalFound {
-			precedence = factorycontracts.NamedFactoryPrecedenceDecisionProjectOverGlobal
+			precedence = factorydefinitions.NamedFactoryPrecedenceDecisionProjectOverGlobal
 		}
-		return &factorycontracts.NamedFactoryResolution{
+		return &factorydefinitions.NamedFactoryResolution{
 			Name:               canonicalName,
 			FactoryDir:         factoryDir,
-			Source:             factorycontracts.NamedFactoryResolutionSourceProjectLocal,
+			Source:             factorydefinitions.NamedFactoryResolutionSourceProjectLocal,
 			ProjectRoot:        projectRoot,
 			GlobalRoot:         globalRoot,
 			PrecedenceDecision: precedence,
@@ -310,13 +310,13 @@ func ResolveAcrossRoots(
 	if factoryDir, found, resolveErr := resolveCandidate(paths, globalRoot, canonicalName); resolveErr != nil {
 		return nil, resolveErr
 	} else if found {
-		return &factorycontracts.NamedFactoryResolution{
+		return &factorydefinitions.NamedFactoryResolution{
 			Name:               canonicalName,
 			FactoryDir:         factoryDir,
-			Source:             factorycontracts.NamedFactoryResolutionSourceGlobal,
+			Source:             factorydefinitions.NamedFactoryResolutionSourceGlobal,
 			ProjectRoot:        projectRoot,
 			GlobalRoot:         globalRoot,
-			PrecedenceDecision: factorycontracts.NamedFactoryPrecedenceDecisionNone,
+			PrecedenceDecision: factorydefinitions.NamedFactoryPrecedenceDecisionNone,
 		}, nil
 	}
 	return nil, fmt.Errorf(
@@ -342,7 +342,7 @@ func (e *invalidNameError) Error() string {
 }
 
 func (e *invalidNameError) Unwrap() []error {
-	return []error{factorycontracts.ErrInvalidNamedFactoryName, e.err}
+	return []error{factorydefinitions.ErrInvalidNamedFactoryName, e.err}
 }
 
 func (e *notFoundError) Error() string {
@@ -350,7 +350,7 @@ func (e *notFoundError) Error() string {
 }
 
 func (e *notFoundError) Unwrap() []error {
-	return []error{factorycontracts.ErrNamedFactoryNotFound, os.ErrNotExist}
+	return []error{factorydefinitions.ErrNamedFactoryNotFound, os.ErrNotExist}
 }
 
 func canonicalName(name string) (string, error) {
@@ -405,9 +405,9 @@ func readOptionalCurrent(paths PathResolver, rootDir string) (string, error) {
 }
 
 func skipRootChild(name string) bool {
-	return name == factorycontracts.InputsDir ||
-		name == factorycontracts.WorkersDir ||
-		name == factorycontracts.WorkstationsDir ||
+	return name == factorydefinitions.InputsDir ||
+		name == factorydefinitions.WorkersDir ||
+		name == factorydefinitions.WorkstationsDir ||
 		isStagingDir(name) ||
 		strings.Contains(name, "%2F")
 }
@@ -417,6 +417,6 @@ func isStagingDir(name string) bool {
 }
 
 func isFactoryDir(fileSystem FileSystem, factoryDir string) bool {
-	info, err := fileSystem.Stat(filepath.Join(factoryDir, factorycontracts.FactoryConfigFile))
+	info, err := fileSystem.Stat(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile))
 	return err == nil && info.Mode().IsRegular()
 }

@@ -6,51 +6,51 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-func validLayoutFactoryConfig() *interfaces.FactoryConfig {
-	return &interfaces.FactoryConfig{
-		ResourceManifest: &interfaces.PortableResourceManifestConfig{
-			BundledFiles: []interfaces.BundledFileConfig{{
-				Type:       interfaces.BundledFileTypeDoc,
+func validLayoutFactoryConfig() *factorydefinitions.FactoryConfig {
+	return &factorydefinitions.FactoryConfig{
+		ResourceManifest: &factorydefinitions.PortableResourceManifestConfig{
+			BundledFiles: []factorydefinitions.BundledFileConfig{{
+				Type:       factorydefinitions.BundledFileTypeDoc,
 				TargetPath: "factory/docs/guide.md",
 			}},
 		},
-		WorkTypes: []interfaces.WorkTypeConfig{{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "story",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "done", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "done", Type: factorydefinitions.StateTypeTerminal},
+				{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 			},
 		}},
 		Workers: []workerconfig.Config{{Name: "executor"}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			ID:             "plan-task",
 			Name:           "plan-task",
 			WorkerTypeName: "executor",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "done"}},
-			OnFailure:      []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
+			Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+			Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "done"}},
+			OnFailure:      []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
 		}},
-		Layout: &interfaces.FactoryLayoutConfig{
-			SchemaVersion: interfaces.SupportedFactoryLayoutSchemaVersion,
-			Nodes: []interfaces.FactoryLayoutNodeConfig{{
+		Layout: &factorydefinitions.FactoryLayoutConfig{
+			SchemaVersion: factorydefinitions.SupportedFactoryLayoutSchemaVersion,
+			Nodes: []factorydefinitions.FactoryLayoutNodeConfig{{
 				ID:       "workstation:plan-task",
-				Position: interfaces.FactoryLayoutPointConfig{X: 128, Y: 256},
+				Position: factorydefinitions.FactoryLayoutPointConfig{X: 128, Y: 256},
 			}},
-			Edges: []interfaces.FactoryLayoutEdgeConfig{{
+			Edges: []factorydefinitions.FactoryLayoutEdgeConfig{{
 				ID: "workstation-output:workstation:plan-task->work-state:story:done",
 			}},
-			Groups: []interfaces.FactoryLayoutGroupConfig{{
+			Groups: []factorydefinitions.FactoryLayoutGroupConfig{{
 				ID:      "group-1",
 				NodeIDs: []string{"workstation:plan-task"},
-				Bounds:  interfaces.FactoryLayoutBoundsConfig{X: 10, Y: 20, Width: 100, Height: 80},
+				Bounds:  factorydefinitions.FactoryLayoutBoundsConfig{X: 10, Y: 20, Width: 100, Height: 80},
 			}},
-			Viewport: &interfaces.FactoryLayoutViewportConfig{X: 0, Y: 0, Zoom: 1},
+			Viewport: &factorydefinitions.FactoryLayoutViewportConfig{X: 0, Y: 0, Zoom: 1},
 		},
 	}
 }
@@ -59,16 +59,16 @@ func TestValidateLayout_UnknownReferencesAreRecoverableWarnings(t *testing.T) {
 	t.Parallel()
 
 	cfg := validLayoutFactoryConfig()
-	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, factorydefinitions.FactoryLayoutNodeConfig{
 		ID:       "workstation:missing",
-		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
+		Position: factorydefinitions.FactoryLayoutPointConfig{X: 1, Y: 2},
 	})
-	cfg.Layout.Edges = append(cfg.Layout.Edges, interfaces.FactoryLayoutEdgeConfig{
+	cfg.Layout.Edges = append(cfg.Layout.Edges, factorydefinitions.FactoryLayoutEdgeConfig{
 		ID: "workstation-output:workstation:missing->work-state:story:done",
 	})
 	cfg.Layout.Groups[0].NodeIDs = append(cfg.Layout.Groups[0].NodeIDs, "workstation:missing")
 
-	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	topology := factorydefinitions.BuildPendingFactoryGraphTopology(cfg)
 	result := factoryvalidation.ValidateLayout(cfg, topology)
 
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutUnknownNodeReference)
@@ -87,7 +87,7 @@ func TestValidateLayout_UnsupportedSchemaVersionIsRecoverableWarning(t *testing.
 	cfg := validLayoutFactoryConfig()
 	cfg.Layout.SchemaVersion = 99
 
-	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	topology := factorydefinitions.BuildPendingFactoryGraphTopology(cfg)
 	result := factoryvalidation.ValidateLayout(cfg, topology)
 
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutUnsupportedSchemaVersion)
@@ -102,7 +102,7 @@ func TestLayoutSaveOutcomes_IncludesUnsupportedSchemaVersionAfterPrune(t *testin
 	cfg := validLayoutFactoryConfig()
 	cfg.Layout.SchemaVersion = 99
 
-	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	topology := factorydefinitions.BuildPendingFactoryGraphTopology(cfg)
 	result := factoryvalidation.LayoutSaveOutcomes(cfg, topology)
 
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutUnsupportedSchemaVersion)
@@ -114,7 +114,7 @@ func TestLayoutSaveOutcomes_PrefersPruneOutcomeForDuplicateCodeAndPath(t *testin
 	cfg := validLayoutFactoryConfig()
 	cfg.Layout.Groups[0].Bounds.Width = math.NaN()
 
-	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	topology := factorydefinitions.BuildPendingFactoryGraphTopology(cfg)
 	result := factoryvalidation.LayoutSaveOutcomes(cfg, topology)
 
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
@@ -137,7 +137,7 @@ func TestValidateLayout_InvalidGeometryIdentifiesAffectedLayoutObject(t *testing
 	cfg := validLayoutFactoryConfig()
 	cfg.Layout.Nodes[0].Position.X = math.NaN()
 
-	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	topology := factorydefinitions.BuildPendingFactoryGraphTopology(cfg)
 	result := factoryvalidation.ValidateLayout(cfg, topology)
 
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
@@ -152,9 +152,9 @@ func TestValidate_LayoutWarningsDoNotBlockTopologyValidation(t *testing.T) {
 	t.Parallel()
 
 	cfg := validLayoutFactoryConfig()
-	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, factorydefinitions.FactoryLayoutNodeConfig{
 		ID:       "workstation:stale",
-		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
+		Position: factorydefinitions.FactoryLayoutPointConfig{X: 1, Y: 2},
 	})
 
 	result := factoryvalidation.Validate(cfg)
@@ -170,9 +170,9 @@ func TestValidate_UnknownBundledDocLayoutNodeBlocksTopologyValidation(t *testing
 	t.Parallel()
 
 	cfg := validLayoutFactoryConfig()
-	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, factorydefinitions.FactoryLayoutNodeConfig{
 		ID:       "doc:factory/docs/missing.md",
-		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
+		Position: factorydefinitions.FactoryLayoutPointConfig{X: 1, Y: 2},
 	})
 
 	result := factoryvalidation.Validate(cfg)
@@ -186,10 +186,10 @@ func TestValidate_EmptyStateRequiresCanonicalTopologyNode(t *testing.T) {
 	t.Parallel()
 
 	cfg := validLayoutFactoryConfig()
-	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, factorydefinitions.FactoryLayoutNodeConfig{
 		ID:       "workstation:missing",
-		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
-		EmptyState: &interfaces.FactoryLayoutEmptyStateConfig{
+		Position: factorydefinitions.FactoryLayoutPointConfig{X: 1, Y: 2},
+		EmptyState: &factorydefinitions.FactoryLayoutEmptyStateConfig{
 			Text: "No activity yet.",
 		},
 	})
@@ -207,9 +207,9 @@ func TestValidate_EmptyStateRequiresNonEmptyCanonicalTopologyNodeID(t *testing.T
 	t.Parallel()
 
 	cfg := validLayoutFactoryConfig()
-	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
-		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
-		EmptyState: &interfaces.FactoryLayoutEmptyStateConfig{
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, factorydefinitions.FactoryLayoutNodeConfig{
+		Position: factorydefinitions.FactoryLayoutPointConfig{X: 1, Y: 2},
+		EmptyState: &factorydefinitions.FactoryLayoutEmptyStateConfig{
 			Text: "No activity yet.",
 		},
 	})
@@ -227,13 +227,13 @@ func TestValidate_LegacyBundledScriptDocLayoutNodeMatchesPendingTopology(t *test
 	t.Parallel()
 
 	cfg := validLayoutFactoryConfig()
-	cfg.ResourceManifest.BundledFiles = append(cfg.ResourceManifest.BundledFiles, interfaces.BundledFileConfig{
-		Type:       interfaces.BundledFileTypeScript,
+	cfg.ResourceManifest.BundledFiles = append(cfg.ResourceManifest.BundledFiles, factorydefinitions.BundledFileConfig{
+		Type:       factorydefinitions.BundledFileTypeScript,
 		TargetPath: "factory/scripts/setup-workspace.py",
 	})
-	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, factorydefinitions.FactoryLayoutNodeConfig{
 		ID:       "doc:factory/scripts/setup-workspace.py",
-		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
+		Position: factorydefinitions.FactoryLayoutPointConfig{X: 1, Y: 2},
 	})
 
 	result := factoryvalidation.Validate(cfg)
@@ -247,9 +247,9 @@ func TestValidate_InvalidTopologyStillReportsBlockingTargetsSeparatelyFromLayout
 
 	cfg := validLayoutFactoryConfig()
 	cfg.Workstations[0].WorkerTypeName = "missing-worker"
-	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, factorydefinitions.FactoryLayoutNodeConfig{
 		ID:       "workstation:stale",
-		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
+		Position: factorydefinitions.FactoryLayoutPointConfig{X: 1, Y: 2},
 	})
 
 	result := factoryvalidation.Validate(cfg)
@@ -264,21 +264,21 @@ func TestPruneLayout_RemovesStaleNodeEdgeAndGroupMemberReferences(t *testing.T) 
 	t.Parallel()
 
 	cfg := validLayoutFactoryConfig()
-	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, factorydefinitions.FactoryLayoutNodeConfig{
 		ID:       "workstation:missing",
-		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
+		Position: factorydefinitions.FactoryLayoutPointConfig{X: 1, Y: 2},
 	})
-	cfg.Layout.Edges = append(cfg.Layout.Edges, interfaces.FactoryLayoutEdgeConfig{
+	cfg.Layout.Edges = append(cfg.Layout.Edges, factorydefinitions.FactoryLayoutEdgeConfig{
 		ID: "workstation-output:workstation:missing->work-state:story:done",
 	})
-	cfg.Layout.Groups = append(cfg.Layout.Groups, interfaces.FactoryLayoutGroupConfig{
+	cfg.Layout.Groups = append(cfg.Layout.Groups, factorydefinitions.FactoryLayoutGroupConfig{
 		ID:      "group-empty",
 		NodeIDs: []string{"workstation:missing"},
-		Bounds:  interfaces.FactoryLayoutBoundsConfig{X: 0, Y: 0, Width: 10, Height: 10},
+		Bounds:  factorydefinitions.FactoryLayoutBoundsConfig{X: 0, Y: 0, Width: 10, Height: 10},
 	})
 	cfg.Layout.Groups[0].NodeIDs = append(cfg.Layout.Groups[0].NodeIDs, "workstation:missing")
 
-	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	topology := factorydefinitions.BuildPendingFactoryGraphTopology(cfg)
 	result := factoryvalidation.PruneLayout(cfg, topology)
 
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutUnknownNodeReference)
@@ -305,15 +305,15 @@ func TestPruneLayout_RejectsEmptyStateForUnknownCanonicalNode(t *testing.T) {
 	t.Parallel()
 
 	cfg := validLayoutFactoryConfig()
-	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, factorydefinitions.FactoryLayoutNodeConfig{
 		ID:       "workstation:missing",
-		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
-		EmptyState: &interfaces.FactoryLayoutEmptyStateConfig{
+		Position: factorydefinitions.FactoryLayoutPointConfig{X: 1, Y: 2},
+		EmptyState: &factorydefinitions.FactoryLayoutEmptyStateConfig{
 			Text: "No activity yet.",
 		},
 	})
 
-	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	topology := factorydefinitions.BuildPendingFactoryGraphTopology(cfg)
 	result := factoryvalidation.PruneLayout(cfg, topology)
 
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutEmptyStateUnknownNodeReference)
@@ -331,14 +331,14 @@ func TestPruneLayout_RejectsEmptyStateForEmptyCanonicalNodeID(t *testing.T) {
 	t.Parallel()
 
 	cfg := validLayoutFactoryConfig()
-	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
-		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
-		EmptyState: &interfaces.FactoryLayoutEmptyStateConfig{
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, factorydefinitions.FactoryLayoutNodeConfig{
+		Position: factorydefinitions.FactoryLayoutPointConfig{X: 1, Y: 2},
+		EmptyState: &factorydefinitions.FactoryLayoutEmptyStateConfig{
 			Text: "No activity yet.",
 		},
 	})
 
-	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	topology := factorydefinitions.BuildPendingFactoryGraphTopology(cfg)
 	result := factoryvalidation.PruneLayout(cfg, topology)
 
 	validationassert.HasDomainTargetCode(t, result.BlockingTargets(), factoryvalidation.CodeLayoutEmptyStateUnknownNodeReference)
@@ -356,16 +356,16 @@ func TestPruneLayout_PreservesLegacyBundledScriptDocLayoutNode(t *testing.T) {
 	t.Parallel()
 
 	cfg := validLayoutFactoryConfig()
-	cfg.ResourceManifest.BundledFiles = append(cfg.ResourceManifest.BundledFiles, interfaces.BundledFileConfig{
-		Type:       interfaces.BundledFileTypeScript,
+	cfg.ResourceManifest.BundledFiles = append(cfg.ResourceManifest.BundledFiles, factorydefinitions.BundledFileConfig{
+		Type:       factorydefinitions.BundledFileTypeScript,
 		TargetPath: "factory/scripts/setup-workspace.py",
 	})
-	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, factorydefinitions.FactoryLayoutNodeConfig{
 		ID:       "doc:factory/scripts/setup-workspace.py",
-		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
+		Position: factorydefinitions.FactoryLayoutPointConfig{X: 1, Y: 2},
 	})
 
-	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	topology := factorydefinitions.BuildPendingFactoryGraphTopology(cfg)
 	result := factoryvalidation.PruneLayout(cfg, topology)
 
 	if result.HasTargets() {
@@ -382,7 +382,7 @@ func TestPruneLayout_RejectsNonFiniteGeometryConsistently(t *testing.T) {
 	cfg := validLayoutFactoryConfig()
 	cfg.Layout.Nodes[0].Position.X = math.NaN()
 
-	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	topology := factorydefinitions.BuildPendingFactoryGraphTopology(cfg)
 	result := factoryvalidation.PruneLayout(cfg, topology)
 
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
@@ -397,7 +397,7 @@ func TestPruneLayout_RejectsInvalidViewportGeometry(t *testing.T) {
 	cfg := validLayoutFactoryConfig()
 	cfg.Layout.Viewport.Zoom = math.Inf(1)
 
-	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	topology := factorydefinitions.BuildPendingFactoryGraphTopology(cfg)
 	result := factoryvalidation.PruneLayout(cfg, topology)
 
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
@@ -412,7 +412,7 @@ func TestPruneLayout_RejectsInvalidGroupBoundsGeometry(t *testing.T) {
 	cfg := validLayoutFactoryConfig()
 	cfg.Layout.Groups[0].Bounds.Width = math.NaN()
 
-	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	topology := factorydefinitions.BuildPendingFactoryGraphTopology(cfg)
 	result := factoryvalidation.PruneLayout(cfg, topology)
 
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
@@ -426,19 +426,19 @@ func TestPruneLayout_EsotericFailureModes(t *testing.T) {
 
 	cases := []struct {
 		name   string
-		mutate func(cfg *interfaces.FactoryConfig)
-		assert func(t *testing.T, cfg *interfaces.FactoryConfig, result factoryvalidation.Result)
+		mutate func(cfg *factorydefinitions.FactoryConfig)
+		assert func(t *testing.T, cfg *factorydefinitions.FactoryConfig, result factoryvalidation.Result)
 	}{
 		{
 			name: "invalid bundled doc node size rejects only the poisoned document node",
-			mutate: func(cfg *interfaces.FactoryConfig) {
-				cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+			mutate: func(cfg *factorydefinitions.FactoryConfig) {
+				cfg.Layout.Nodes = append(cfg.Layout.Nodes, factorydefinitions.FactoryLayoutNodeConfig{
 					ID:       "doc:factory/docs/guide.md",
-					Position: interfaces.FactoryLayoutPointConfig{X: 40, Y: 80},
-					Size:     &interfaces.FactoryLayoutSizeConfig{Width: math.NaN(), Height: 120},
+					Position: factorydefinitions.FactoryLayoutPointConfig{X: 40, Y: 80},
+					Size:     &factorydefinitions.FactoryLayoutSizeConfig{Width: math.NaN(), Height: 120},
 				})
 			},
-			assert: func(t *testing.T, cfg *interfaces.FactoryConfig, result factoryvalidation.Result) {
+			assert: func(t *testing.T, cfg *factorydefinitions.FactoryConfig, result factoryvalidation.Result) {
 				t.Helper()
 				validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
 				if len(cfg.Layout.Nodes) != 1 || cfg.Layout.Nodes[0].ID != "workstation:plan-task" {
@@ -448,11 +448,11 @@ func TestPruneLayout_EsotericFailureModes(t *testing.T) {
 		},
 		{
 			name: "valid edge with finite waypoints but non-finite label position is rejected wholesale",
-			mutate: func(cfg *interfaces.FactoryConfig) {
-				cfg.Layout.Edges[0].Waypoints = []interfaces.FactoryLayoutPointConfig{{X: 10, Y: 20}}
-				cfg.Layout.Edges[0].LabelPosition = &interfaces.FactoryLayoutPointConfig{X: math.Inf(1), Y: 30}
+			mutate: func(cfg *factorydefinitions.FactoryConfig) {
+				cfg.Layout.Edges[0].Waypoints = []factorydefinitions.FactoryLayoutPointConfig{{X: 10, Y: 20}}
+				cfg.Layout.Edges[0].LabelPosition = &factorydefinitions.FactoryLayoutPointConfig{X: math.Inf(1), Y: 30}
 			},
-			assert: func(t *testing.T, cfg *interfaces.FactoryConfig, result factoryvalidation.Result) {
+			assert: func(t *testing.T, cfg *factorydefinitions.FactoryConfig, result factoryvalidation.Result) {
 				t.Helper()
 				validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
 				if len(cfg.Layout.Edges) != 0 {
@@ -462,7 +462,7 @@ func TestPruneLayout_EsotericFailureModes(t *testing.T) {
 		},
 		{
 			name: "group member pruning preserves duplicate valid members while removing blanks and unknowns",
-			mutate: func(cfg *interfaces.FactoryConfig) {
+			mutate: func(cfg *factorydefinitions.FactoryConfig) {
 				cfg.Layout.Groups[0].NodeIDs = []string{
 					"workstation:plan-task",
 					"",
@@ -470,7 +470,7 @@ func TestPruneLayout_EsotericFailureModes(t *testing.T) {
 					"workstation:plan-task",
 				}
 			},
-			assert: func(t *testing.T, cfg *interfaces.FactoryConfig, result factoryvalidation.Result) {
+			assert: func(t *testing.T, cfg *factorydefinitions.FactoryConfig, result factoryvalidation.Result) {
 				t.Helper()
 				validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutUnknownGroupMemberReference)
 				want := []string{"workstation:plan-task", "workstation:plan-task"}
@@ -481,14 +481,14 @@ func TestPruneLayout_EsotericFailureModes(t *testing.T) {
 		},
 		{
 			name: "viewport rejection leaves otherwise valid layout entities intact",
-			mutate: func(cfg *interfaces.FactoryConfig) {
-				cfg.Layout.Viewport = &interfaces.FactoryLayoutViewportConfig{X: 0, Y: 0, Zoom: math.NaN()}
-				cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+			mutate: func(cfg *factorydefinitions.FactoryConfig) {
+				cfg.Layout.Viewport = &factorydefinitions.FactoryLayoutViewportConfig{X: 0, Y: 0, Zoom: math.NaN()}
+				cfg.Layout.Nodes = append(cfg.Layout.Nodes, factorydefinitions.FactoryLayoutNodeConfig{
 					ID:       "doc:factory/docs/guide.md",
-					Position: interfaces.FactoryLayoutPointConfig{X: 12, Y: 24},
+					Position: factorydefinitions.FactoryLayoutPointConfig{X: 12, Y: 24},
 				})
 			},
-			assert: func(t *testing.T, cfg *interfaces.FactoryConfig, result factoryvalidation.Result) {
+			assert: func(t *testing.T, cfg *factorydefinitions.FactoryConfig, result factoryvalidation.Result) {
 				t.Helper()
 				validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
 				if cfg.Layout.Viewport != nil {
@@ -511,7 +511,7 @@ func TestPruneLayout_EsotericFailureModes(t *testing.T) {
 			cfg := validLayoutFactoryConfig()
 			tc.mutate(cfg)
 
-			topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+			topology := factorydefinitions.BuildPendingFactoryGraphTopology(cfg)
 			result := factoryvalidation.PruneLayout(cfg, topology)
 
 			tc.assert(t, cfg, result)

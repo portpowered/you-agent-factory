@@ -20,7 +20,6 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -2941,6 +2940,106 @@ func TestValidateCheckpointSummaryForResume_RejectsInvalidMetadata(t *testing.T)
 	}
 }
 
+func TestApplyRuntimeCheckpointPartialProjection_SurfacesPartialResultWhileRunning(t *testing.T) {
+	t.Parallel()
+	const sessionID = "dur-sess-checkpoint-partial-001"
+	state := &runtimeSessionState{
+		session: SessionReadResult{
+			SessionID: sessionID,
+			Status:    LifecycleStatusRunning,
+		},
+		artifacts: []ArtifactSummary{{ID: "artifact-checkpoint-1", Kind: "text"}},
+	}
+	checkpoint := &factory.JavaScriptCheckpointRecord{
+		ID:    "checkpoint-1",
+		Label: "after-step-one",
+		State: map[string]any{"text": "checkpoint partial output"},
+	}
+
+	applyRuntimeCheckpointPartialProjection(state, checkpoint)
+
+	if state.session.ResultSummary == nil || state.session.ResultSummary.ResultStatus != string(ResultStatusPartial) {
+		t.Fatalf("result summary = %#v, want PARTIAL", state.session.ResultSummary)
+	}
+	if state.result.ResultStatus != ResultStatusPartial {
+		t.Fatalf("result status = %q, want PARTIAL", state.result.ResultStatus)
+	}
+	if state.result.Mode != ResultModePartial {
+		t.Fatalf("result mode = %q, want partial", state.result.Mode)
+	}
+	if state.result.SessionStatus != LifecycleStatusRunning {
+		t.Fatalf("session status = %q, want RUNNING", state.result.SessionStatus)
+	}
+	if len(state.result.PrimaryResult) == 0 {
+		t.Fatal("primary result missing")
+	}
+	if len(state.result.ArtifactIDs) != 1 || state.result.ArtifactIDs[0] != "artifact-checkpoint-1" {
+		t.Fatalf("artifact IDs = %#v, want checkpoint artifact", state.result.ArtifactIDs)
+	}
+}
+
+func TestApplyRuntimeCheckpointPartialProjection_NoopsForTerminalOrEmptyCheckpoint(t *testing.T) {
+	t.Parallel()
+	checkpoint := &factory.JavaScriptCheckpointRecord{
+		ID:    "checkpoint-1",
+		Label: "after-step-one",
+		State: map[string]any{"text": "checkpoint partial output"},
+	}
+	running := &runtimeSessionState{
+		session: SessionReadResult{SessionID: "dur-sess-checkpoint-partial-002", Status: LifecycleStatusRunning},
+		result:  ResultReadResult{SessionID: "dur-sess-checkpoint-partial-002", ResultStatus: ResultStatusNotReady},
+	}
+	terminal := &runtimeSessionState{
+		session: SessionReadResult{SessionID: "dur-sess-checkpoint-partial-003", Status: LifecycleStatusSucceeded},
+		result:  ResultReadResult{SessionID: "dur-sess-checkpoint-partial-003", ResultStatus: ResultStatusFinal},
+	}
+
+	applyRuntimeCheckpointPartialProjection(nil, checkpoint)
+	applyRuntimeCheckpointPartialProjection(running, nil)
+	applyRuntimeCheckpointPartialProjection(terminal, checkpoint)
+	applyRuntimeCheckpointPartialProjection(running, &factory.JavaScriptCheckpointRecord{ID: "checkpoint-empty"})
+
+	if running.result.ResultStatus != ResultStatusNotReady {
+		t.Fatalf("running result status = %q, want NOT_READY", running.result.ResultStatus)
+	}
+	if terminal.result.ResultStatus != ResultStatusFinal {
+		t.Fatalf("terminal result status = %q, want FINAL", terminal.result.ResultStatus)
+	}
+}
+
+func TestJavaScriptRuntimeService_ApplyRunningRuntimeRecord_CheckpointProjectsPartialResult(t *testing.T) {
+	t.Parallel()
+	const sessionID = "dur-sess-checkpoint-running-record-001"
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{ProjectRoot: t.TempDir()})
+	if err := seedRuntimeSessionWithRunningDispatch(service, sessionID, "dispatch-1", "step-one"); err != nil {
+		t.Fatalf("seedRuntimeSessionWithRunningDispatch: %v", err)
+	}
+
+	service.applyRunningRuntimeRecord(sessionID, factory.JavaScriptRuntimeRecord{
+		Sequence: 2,
+		Kind:     factory.JavaScriptRecordKindCheckpoint,
+		Checkpoint: &factory.JavaScriptCheckpointRecord{
+			ID:    "checkpoint-1",
+			Label: "after-step-one",
+			State: map[string]any{"text": "checkpoint partial output"},
+		},
+	})
+
+	result, err := service.GetResult(context.Background(), sessionID, ResultRequest{Mode: ResultModePartial})
+	if err != nil {
+		t.Fatalf("GetResult partial: %v", err)
+	}
+	if result.ResultStatus != ResultStatusPartial {
+		t.Fatalf("partial status = %q, want PARTIAL", result.ResultStatus)
+	}
+	if len(result.PrimaryResult) == 0 {
+		t.Fatal("partial primaryResult missing")
+	}
+	if result.SessionStatus != LifecycleStatusRunning {
+		t.Fatalf("session status = %q, want RUNNING", result.SessionStatus)
+	}
+}
+
 func TestFinalizeInterruptedTerminalSession_PreservesPartialAndUnavailableResults(t *testing.T) {
 	t.Parallel()
 	sessionID := "dur-sess-interrupted-finalize-001"
@@ -3813,7 +3912,7 @@ return { ok: true };`
 		t.Fatalf("unmarshal default policy: %v", err)
 	}
 
-	workflows := realJavaScriptWorkflowsForExecutionTest(t)
+	workflows := policyDeniedModelWorkflows(workflowSource)
 	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
 		ProjectRoot:       projectRoot,
 		ChildExecutorMode: ChildExecutorModeFake,
@@ -3859,21 +3958,49 @@ return { ok: true };`
 	}
 }
 
-func realJavaScriptWorkflowsForExecutionTest(t *testing.T) factory.JavaScriptWorkflows {
-	t.Helper()
-	return factoryruntimejavascript.New(localWorkflowSourceFilesForExecutionTest{}, os.UserHomeDir, filepath.EvalSymlinks)
-}
-
-type localWorkflowSourceFilesForExecutionTest struct{}
-
-func (localWorkflowSourceFilesForExecutionTest) ReadDir(path string) ([]os.DirEntry, error) {
-	return os.ReadDir(path)
-}
-func (localWorkflowSourceFilesForExecutionTest) ReadFile(path string) ([]byte, error) {
-	return os.ReadFile(path)
-}
-func (localWorkflowSourceFilesForExecutionTest) Stat(path string) (os.FileInfo, error) {
-	return os.Stat(path)
+func policyDeniedModelWorkflows(workflowSource string) factory.JavaScriptWorkflows {
+	policyMessage := `policy denied: model "gpt-denied" is not listed in allowedModels`
+	return factoryruntimefixtures.ScriptedJavaScriptWorkflows{
+		ResolveSourceFunc: func(
+			request factory.WorkflowSourceRequest,
+			_ factory.WorkflowSourceContext,
+		) factory.WorkflowSourceResolution {
+			return factory.WorkflowSourceResolution{
+				RequestKind:  request.Kind,
+				RequestValue: request.Value,
+				ResolvedKind: request.Kind,
+				SourceRef:    request.Value,
+				SourceHash:   "sha256:policy-denied",
+				Dialect:      "you-workflow-v1",
+				Content:      workflowSource,
+				Found:        true,
+			}
+		},
+		LoadSourceFunc: func(request factory.WorkflowValidationLoadRequest) (
+			factory.WorkflowValidationLoadedSource,
+			[]factory.WorkflowValidationIssue,
+		) {
+			return factory.WorkflowValidationLoadedSource{
+				SourceRef:        request.SourceRef,
+				SourceHash:       "sha256:policy-denied",
+				Format:           factory.WorkflowValidationFormatJavaScript,
+				AuthoredSource:   request.Content,
+				ExecutableSource: request.Content,
+			}, nil
+		},
+		RunFunc: func(
+			context.Context,
+			factory.JavaScriptRuntimeRequest,
+			factory.JavaScriptRuntimeHooks,
+		) (factory.JavaScriptRuntimeOutcome, error) {
+			return factory.JavaScriptRuntimeOutcome{
+				Failure: factory.JavaScriptRuntimeFailure{
+					Code:    factory.JavaScriptRuntimeCodeScriptError,
+					Message: policyMessage,
+				},
+			}, nil
+		},
+	}
 }
 
 type orchestrationJavaScriptAdapter struct {

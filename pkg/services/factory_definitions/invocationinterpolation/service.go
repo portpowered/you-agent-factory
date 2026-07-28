@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -51,7 +50,7 @@ func (Service) InterpolateWorkstationConfig(
 // ValidateInvocationInterpolation verifies that runtime-supported invocation
 // interpolation can resolve the authored worker and workstation fields for the
 // supplied normalized argument set without mutating the canonical runtime config.
-func ValidateInvocationInterpolation(cfg *interfaces.FactoryConfig, args *work.InvocationArguments, readFile factorydefinitions.FileReader) error {
+func ValidateInvocationInterpolation(cfg *factorydefinitions.FactoryConfig, args *work.InvocationArguments, readFile factorydefinitions.FileReader) error {
 	if cfg == nil || args == nil {
 		return nil
 	}
@@ -115,50 +114,50 @@ func InterpolateWorkerConfig(worker workerconfig.Config, args *work.InvocationAr
 
 // InterpolateWorkstationConfig resolves supported `${parameter}` placeholders on
 // one effective workstation definition using runtime invocation arguments.
-func InterpolateWorkstationConfig(workstation interfaces.FactoryWorkstationConfig, args *work.InvocationArguments, readFile factorydefinitions.FileReader) (interfaces.FactoryWorkstationConfig, error) {
+func InterpolateWorkstationConfig(workstation factorydefinitions.FactoryWorkstationConfig, args *work.InvocationArguments, readFile factorydefinitions.FileReader) (factorydefinitions.FactoryWorkstationConfig, error) {
 	next := cloneWorkstationForInterpolation(workstation)
 	var err error
 	if next.WorkerTypeName, err = interpolateInvocationField(next.WorkerTypeName, args, "workstation.worker", false, readFile); err != nil {
-		return interfaces.FactoryWorkstationConfig{}, err
+		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}
 	if next.Runner, err = interpolateInvocationField(next.Runner, args, "workstation.runner", false, readFile); err != nil {
-		return interfaces.FactoryWorkstationConfig{}, err
+		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}
 	if next.OpenCodeAgent, err = interpolateInvocationField(next.OpenCodeAgent, args, "workstation.openCodeAgent", false, readFile); err != nil {
-		return interfaces.FactoryWorkstationConfig{}, err
+		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}
 	if next.PromptFile, err = interpolateInvocationField(next.PromptFile, args, "workstation.promptFile", false, readFile); err != nil {
-		return interfaces.FactoryWorkstationConfig{}, err
+		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}
 	if next.OutputSchema, err = interpolateInvocationField(next.OutputSchema, args, "workstation.outputSchema", false, readFile); err != nil {
-		return interfaces.FactoryWorkstationConfig{}, err
+		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}
 	if next.Timeout, err = interpolateInvocationField(next.Timeout, args, "workstation.timeout", false, readFile); err != nil {
-		return interfaces.FactoryWorkstationConfig{}, err
+		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}
 	if next.Body, err = interpolateInvocationField(next.Body, args, "workstation prompt body", false, readFile); err != nil {
-		return interfaces.FactoryWorkstationConfig{}, err
+		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}
 	if next.PromptTemplate, err = interpolateInvocationField(next.PromptTemplate, args, "workstation.promptTemplate", false, readFile); err != nil {
-		return interfaces.FactoryWorkstationConfig{}, err
+		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}
 	if next.WorkingDirectory, err = interpolateInvocationField(next.WorkingDirectory, args, "workstation.workingDirectory", false, readFile); err != nil {
-		return interfaces.FactoryWorkstationConfig{}, err
+		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}
 	if next.Worktree, err = interpolateInvocationField(next.Worktree, args, "workstation.worktree", false, readFile); err != nil {
-		return interfaces.FactoryWorkstationConfig{}, err
+		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}
 	for key, value := range next.Env {
 		resolved, err := interpolateInvocationField(value, args, fmt.Sprintf("workstation.env[%q]", key), false, readFile)
 		if err != nil {
-			return interfaces.FactoryWorkstationConfig{}, err
+			return factorydefinitions.FactoryWorkstationConfig{}, err
 		}
 		next.Env[key] = resolved
 	}
 	if len(next.OperationBindings) > 0 {
 		bindings, err := interpolateModelOperationBindings(next.OperationBindings, args, readFile)
 		if err != nil {
-			return interfaces.FactoryWorkstationConfig{}, err
+			return factorydefinitions.FactoryWorkstationConfig{}, err
 		}
 		next.OperationBindings = bindings
 	}
@@ -166,14 +165,14 @@ func InterpolateWorkstationConfig(workstation interfaces.FactoryWorkstationConfi
 }
 
 func interpolateModelOperationBindings(
-	bindings []interfaces.ModelOperationBinding,
+	bindings []factorydefinitions.ModelOperationBinding,
 	args *work.InvocationArguments,
 	readFile factorydefinitions.FileReader,
-) ([]interfaces.ModelOperationBinding, error) {
+) ([]factorydefinitions.ModelOperationBinding, error) {
 	if len(bindings) == 0 {
 		return bindings, nil
 	}
-	next := make([]interfaces.ModelOperationBinding, len(bindings))
+	next := make([]factorydefinitions.ModelOperationBinding, len(bindings))
 	for index, binding := range bindings {
 		next[index] = binding
 		pathPrefix := fmt.Sprintf("workstations.operationBindings[%d](%s)", index, binding.Slot)
@@ -366,7 +365,7 @@ func cloneWorkerForInterpolation(worker workerconfig.Config) workerconfig.Config
 	return worker
 }
 
-func cloneWorkstationForInterpolation(workstation interfaces.FactoryWorkstationConfig) interfaces.FactoryWorkstationConfig {
+func cloneWorkstationForInterpolation(workstation factorydefinitions.FactoryWorkstationConfig) factorydefinitions.FactoryWorkstationConfig {
 	if workstation.Env != nil {
 		env := make(map[string]string, len(workstation.Env))
 		for key, value := range workstation.Env {

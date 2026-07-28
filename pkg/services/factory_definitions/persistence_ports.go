@@ -4,7 +4,7 @@ import (
 	"io/fs"
 )
 
-import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 
 type CurrentFactoryPointerReader = contracts.CurrentFactoryPointerReader
 type CurrentFactoryPointerWriter = contracts.CurrentFactoryPointerWriter
@@ -36,6 +36,7 @@ type FactoryLayoutReplacer = contracts.FactoryLayoutReplacer
 type FactoryLayoutFlattener = contracts.FactoryLayoutFlattener
 type FactoryLayoutExpander = contracts.FactoryLayoutExpander
 type FactoryConfigJSONDecoder = contracts.FactoryConfigJSONDecoder
+type FactoryConfigJSONEncoder = contracts.FactoryConfigJSONEncoder
 type CanonicalFactoryJSONLoader = contracts.CanonicalFactoryJSONLoader
 type PortableFactoryConfigPreparer = contracts.PortableFactoryConfigPreparer
 type FactoryConfigCloner = contracts.FactoryConfigCloner

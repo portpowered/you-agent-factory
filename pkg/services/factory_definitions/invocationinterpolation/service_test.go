@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -31,8 +30,8 @@ func TestInterpolateWorkerConfig_OmitsExactOptionalParameter(t *testing.T) {
 }
 
 func TestInterpolateWorkstationConfig_ResolvesOperationBindingConfigFromInvocationArgs(t *testing.T) {
-	workstation, err := InterpolateWorkstationConfig(interfaces.FactoryWorkstationConfig{
-		OperationBindings: []interfaces.ModelOperationBinding{{
+	workstation, err := InterpolateWorkstationConfig(factorydefinitions.FactoryWorkstationConfig{
+		OperationBindings: []factorydefinitions.ModelOperationBinding{{
 			Slot: "voice",
 			Config: []work.WorkContentPart{{
 				Type: work.WorkContentPartTypeJSON,
@@ -68,7 +67,7 @@ func TestInterpolateWorkstationConfig_ResolvesOperationBindingConfigFromInvocati
 }
 
 func TestInterpolateWorkstationConfig_RejectsMissingEmbeddedParameter(t *testing.T) {
-	_, err := InterpolateWorkstationConfig(interfaces.FactoryWorkstationConfig{
+	_, err := InterpolateWorkstationConfig(factorydefinitions.FactoryWorkstationConfig{
 		PromptTemplate: "Use ${missing} now",
 	}, &work.InvocationArguments{}, nil)
 	if err == nil {

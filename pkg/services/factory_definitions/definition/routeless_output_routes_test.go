@@ -6,9 +6,9 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestValidateEditableFactoryTopology_RoutelessCronAndLogicalMove_InvalidFactoryTargets(t *testing.T) {
@@ -46,21 +46,21 @@ func TestValidateEditableFactoryTopology_RoutelessCronAndLogicalMove_InvalidFact
 			}
 
 			saveErr := validateEditableFactoryTopology(factory, nil)
-			var topologyErr *interfaces.ValidationTopologyError
+			var topologyErr *factorydefinitions.ValidationTopologyError
 			if !errors.As(saveErr, &topologyErr) {
 				t.Fatalf("validateEditableFactoryTopology error = %v, want topology validation error", saveErr)
 			}
 
 			validationassert.HasDomainTargetCode(t, topologyErr.Targets, factoryvalidation.CodeWorkstationMissingOutputRoutes)
-			validationassert.HasDomainTargetSubject(t, topologyErr.Targets, interfaces.ValidationSubject{
-				Type: interfaces.ValidationSubjectTypeWorkstation, ID: tc.workstation,
-				Location: interfaces.ValidationSubjectLocationOutputs,
+			validationassert.HasDomainTargetSubject(t, topologyErr.Targets, factorydefinitions.ValidationSubject{
+				Type: factorydefinitions.ValidationSubjectTypeWorkstation, ID: tc.workstation,
+				Location: factorydefinitions.ValidationSubjectLocationOutputs,
 			})
 			for _, target := range topologyErr.Targets {
 				if target.Code == factoryvalidation.CodeWorkstationMissingFailureRoute &&
-					target.Subject.Type == interfaces.ValidationSubjectTypeWorkstation &&
+					target.Subject.Type == factorydefinitions.ValidationSubjectTypeWorkstation &&
 					target.Subject.ID == tc.workstation &&
-					target.Subject.Location == interfaces.ValidationSubjectLocationOnFailure {
+					target.Subject.Location == factorydefinitions.ValidationSubjectLocationOnFailure {
 					t.Fatalf("targets = %#v, want no missingFailureRoute at ON_FAILURE for routeless workstation", topologyErr.Targets)
 				}
 			}
@@ -77,14 +77,14 @@ func TestValidateUpsertNamedFactoryRequest_RoutelessLogicalMove_InvalidFactoryTa
 	}
 
 	saveErr := validateUpsertNamedFactoryRequest(factory, nil)
-	var topologyErr *interfaces.ValidationTopologyError
+	var topologyErr *factorydefinitions.ValidationTopologyError
 	if !errors.As(saveErr, &topologyErr) {
 		t.Fatalf("validateUpsertNamedFactoryRequest error = %v, want topology validation error", saveErr)
 	}
 
 	validationassert.HasDomainTargetCode(t, topologyErr.Targets, factoryvalidation.CodeWorkstationMissingOutputRoutes)
-	validationassert.HasDomainTargetSubject(t, topologyErr.Targets, interfaces.ValidationSubject{
-		Type: interfaces.ValidationSubjectTypeWorkstation, ID: "router",
-		Location: interfaces.ValidationSubjectLocationOutputs,
+	validationassert.HasDomainTargetSubject(t, topologyErr.Targets, factorydefinitions.ValidationSubject{
+		Type: factorydefinitions.ValidationSubjectTypeWorkstation, ID: "router",
+		Location: factorydefinitions.ValidationSubjectLocationOutputs,
 	})
 }
