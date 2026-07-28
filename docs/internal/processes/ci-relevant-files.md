@@ -840,3 +840,15 @@ Wave 0 functional-tests-expansion planning authority lives under
   `wire.AutomationsRootFromEdges`) and assert converged or created reconcile
   outcomes without importing `automations/internal`, `automations/wire`, or deleted
   `automations/service`.
+
+- `pkg/services/automations/packaged_root_shape_test.go` and
+  `pkg/services/automations/peer_import_boundary_test.go` seal FUN-automations
+  packaged-service shape and production peer import boundaries: Automations ships
+  only `wire/`, `internal/`, and `transports/` package directories plus thin root
+  contracts, `service/` stays absent, and production peers import only the
+  published Automations root except the documented `pkg/wire` injector seam.
+
+- `tests/functional/automations/peer_import_boundary_test.go` seals FUN-scoped
+  functional proofs against `automations/internal`, `automations/wire`, and deleted
+  `automations/service` imports while allowing `support.BuildProcess`,
+  `support.AutomationsRootFromProcessEdges`, and published `automations` contracts.
