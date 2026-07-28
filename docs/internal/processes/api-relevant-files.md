@@ -64,6 +64,21 @@ Use this map when changing the public REST contract.
   Prove registration with `manifest_registration_test.go`; do not edit
   `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, or
   other services' HTTP adapters when reconciling manifest churn.
+- Automations HTTP decoding, transport-local DTO mapping, accepted root
+  invocation, typed error mapping, and cancel/timeout handling live in
+  `pkg/services/automations/transports/http`. The top-level `pkg/transports/http`
+  server composes injected service-owned adapters when PSS-I02 fans routes in;
+  HTTP-AUTO proves fake-root parity at the adapter edge without importing
+  Automations internals or authoring shared OpenAPI. Lifecycle decode/encode lives
+  in `lifecycle_mapping.go` / `lifecycle_operations.go`; reconcile/status/cursor
+  mapping lives in `convergence_mapping.go` / `convergence_operations.go`;
+  typed root failures map through `error_mapping.go`; request-context outcomes
+  map through `request_context.go`. Package-boundary tests must prove the adapter
+  does not import `pkg/services/automations/internal/**`. Register the package in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and the
+  `go-*-coverage-package-minimums.json` baselines; prove registration with
+  `manifest_registration_test.go`.
 - Factory Session CLI request construction, rendering, diagnostics, and
   operation handlers live under
   `pkg/services/factory_sessions/transports/cli`; Factory Session MCP tool

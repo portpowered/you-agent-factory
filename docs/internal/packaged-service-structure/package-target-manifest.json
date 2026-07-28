@@ -81,6 +81,7 @@
     "pkg/services/automations/internal/services/script_pollers/internal/service",
     "pkg/services/automations/internal/services/script_pollers/wire",
     "pkg/services/automations/service",
+    "pkg/services/automations/transports/http",
     "pkg/services/automations/wire",
     "pkg/services/edges",
     "pkg/services/factory_definitions",
@@ -683,6 +684,11 @@
     },
     {
       "packagePath": "pkg/services/automations/service",
+      "disposition": "retain",
+      "destination": "automations"
+    },
+    {
+      "packagePath": "pkg/services/automations/transports/http",
       "disposition": "retain",
       "destination": "automations"
     },
