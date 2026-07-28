@@ -40,7 +40,7 @@ import (
 	providersessionsservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingartifacts "github.com/portpowered/infinite-you/pkg/services/recordings/artifacts"
-	recordingsservice "github.com/portpowered/infinite-you/pkg/services/recordings/service"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
@@ -622,13 +622,13 @@ func provideFactorySessionSyncWaitScheduler() factorysessionwire.SyncWaitSchedul
 }
 
 func provideRecordingsProjectionFactory() factorysessionwire.RecordingsProjectionFactory {
-	return recordingsservice.NewProjectionService
+	return recordingswire.NewProjectionService
 }
 
 func provideRuntimeLedgerFactory() factorysessionwire.RuntimeLedgerFactory {
 	return func() factoryruntime.RuntimeLedgerFactory {
 		return func(topology recordings.InitialStructureSource, now func() time.Time, definitions factorydefinitions.RuntimeDefinitionLookup) recordings.RuntimeEventLedger {
-			return recordingsservice.NewRuntimeLedger(topology, now, uuid.NewString(), definitions)
+			return recordingswire.NewRuntimeLedger(topology, now, uuid.NewString(), definitions)
 		}
 	}
 }
@@ -668,7 +668,7 @@ func provideRuntimeRecorderFactory(
 		now func() time.Time,
 		recordPath string,
 	) (recordings.RuntimeRecorder, error) {
-		return recordingsservice.NewLifecycleRuntimeRecorder(
+		return recordingswire.NewLifecycleRuntimeRecorder(
 			flushInterval,
 			loaded,
 			now,
@@ -679,7 +679,7 @@ func provideRuntimeRecorderFactory(
 }
 
 func provideReplayClockFactory() factorysessionwire.ReplayClockFactory {
-	return recordingsservice.NewReplayClock
+	return recordingswire.NewReplayClock
 }
 
 func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
@@ -692,7 +692,7 @@ func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
 		recordings.CompletionDeliveryPlanner,
 		error,
 	) {
-		return recordingsservice.NewReplayExecution(
+		return recordingswire.NewReplayExecution(
 			artifact,
 			wirefactorydefinitions.FactorySnapshotJSONDecoder(),
 			wirefactorydefinitions.ReplayRuntimeConfigDecoder(),

@@ -30,23 +30,11 @@ func NewService(
 	if writeFile == nil {
 		return nil, fmt.Errorf("construct Recordings: snapshot write function is required")
 	}
-	writer := recordingsinternal.NewReplayRecordingSnapshotWriter(writeFile)
-	tickers := recordingsinternal.NewRecordingFlushTickerFactory()
-	publication, err := recordingsinternal.NewPortableArtifactPublication()
-	if err != nil {
-		return nil, err
-	}
-	service := recordingsinternal.NewServiceWithLifecycleEffects(
+	return NewServiceWithProjection(
 		ledger,
 		recordingsinternal.NewProjectionService(),
 		targets,
-		writer,
-		tickers,
-		publication,
+		writeFile,
 		clocks...,
 	)
-	if service == nil {
-		return nil, fmt.Errorf("construct Recordings: implementation rejected its dependencies")
-	}
-	return service, nil
 }
