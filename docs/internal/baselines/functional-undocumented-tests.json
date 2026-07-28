@@ -515,10 +515,6 @@
       "name": "TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies"
     },
     {
-      "file": "replay_contracts/canonical_topology_snapshot_projection_test.go",
-      "name": "TestCanonicalTopologySnapshotsPreservePublicIdentityAndResourceEvidence"
-    },
-    {
       "file": "replay_contracts/replay_event_stream_artifact_smoke_long_test.go",
       "name": "TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifact"
     },
@@ -529,10 +525,6 @@
     {
       "file": "replay_contracts/replay_factory_only_serialization_smoke_long_test.go",
       "name": "TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPayload"
-    },
-    {
-      "file": "replay_contracts/replay_legacy_unary_retirement_smoke_long_test.go",
-      "name": "TestLegacyUnaryRetirementSmoke_ReplaySubmitsCanonicalBatchWorkRequests"
     },
     {
       "file": "replay_contracts/replay_record_end_to_end_long_test.go",

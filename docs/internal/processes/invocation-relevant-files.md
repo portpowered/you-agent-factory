@@ -550,7 +550,15 @@ primary-result behavior.
   `tests/functional/workers/script/execution_test.go`; drive them through
   `support.RunFactoryToCompletionWithEdgesAndObservations` with a replaced
   `ScriptCommandRunner` and assert on Work customer states plus dispatch
-  response events via the shared `helpers_test.go` assertions. Provider process
+  response events via the shared `helpers_test.go` assertions. Script-wrap
+  worker public-contract replay proofs (canonical provider command capture,
+  flattened and recorded factory JSON privacy, and terminal Work completion)
+  belong in `tests/functional/workers/script/execution_long_test.go`; drive
+  them through `support.StartFunctionalAPIServer` with
+  `serviceedges.Edges{ProviderCommandRunner: ...}` and `--record`, then assert
+  on provider-process requests plus public Factory Event / worker payloads
+  only. `make artifact-contract-closeout` selects
+  `TestWorkerPublicContractSmoke_` from this cell. Provider process
   and companion cleanup (timeout process-tree termination, cancellation
   companion teardown, and success-path process/stream closure) belongs in
   `tests/functional/workers/inference/process_cleanup_test.go` with
