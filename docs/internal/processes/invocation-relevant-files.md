@@ -1025,14 +1025,24 @@ response-stream output.
   in `pkg/services/system_initialization/internal/workflow` and must not import
   `pkg/initializer`, transports, `pkg/wire`, or Settings/Definitions store
   surfaces such as `factory_definitions/packagedinstallation`; boundary proof
-  lives in `internal/workflow/boundary_test.go` and `wire/boundary_test.go`.
+  lives in `boundary_test.go`, `internal/workflow/boundary_test.go`, and
+  `wire/boundary_test.go`.
   Bootstrap owner-local Wire at `pkg/services/system_initialization/wire` must
   stay registered under destination `system_initialization` in
   `docs/internal/packaged-service-structure/package-target-manifest.json`,
   `docs/internal/baselines/ownership-inventory.json`, and both
   `go-*-coverage-package-minimums.json` baselines; prove registration with
   `wire/manifest_registration_test.go` rather than re-editing manifests when
-  IMP-BOOT already landed the rows. The Bootstrap CLI adapter at
+  IMP-BOOT already landed the rows. Bootstrap composition at
+  `pkg/wire/profiles.go` must construct the packaged ensure-installer for
+  `provideSystemInitializationService` through
+  `factorydefinitionsservice.NewPackagedFactoryInstaller`, not
+  `factory_definitions/packagedinstallation`; composed initialize proofs live in
+  `pkg/wire/system_initialization_composition_test.go`. Focused initialize/scaffold
+  proofs through injected Definitions root catalog and ensure-installer collaborators
+  live in `initialize_definitions_root_boundary_test.go` (created/skipped outcomes,
+  customer-owned Factory preservation, partial-failure rollback facts, and
+  AttachFactoryDefinitions absence). The Bootstrap CLI adapter at
   `pkg/services/system_initialization/transports/cli` must stay registered under
   destination `system_initialization` in the same shared manifests; prove
   registration with `transports/cli/manifest_registration_test.go` rather than
