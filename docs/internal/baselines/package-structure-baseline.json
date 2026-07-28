@@ -3124,11 +3124,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/provider_sessions/service",
-      "target": "pkg/services/provider_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/recordings/artifacts",
       "target": "pkg/services/recordings"
     },

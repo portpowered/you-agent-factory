@@ -47,7 +47,6 @@ func TestDeliberateRetainToOwnerMappingRejectedByInventorySweepGuard(t *testing.
 		{owner: "work", child: "stateaccessrecordings"},
 		{owner: "factory_definitions", child: "clonetests"},
 		{owner: "recordings", child: "artifacts"},
-		{owner: "provider_sessions", child: "service"},
 	}
 
 	for _, tc := range cases {
