@@ -1083,9 +1083,9 @@ response-stream output.
   `docs/internal/baselines/ownership-inventory.json`, and both
   `go-*-coverage-package-minimums.json` baselines; prove registration with
   `wire/manifest_registration_test.go` rather than re-editing manifests when
-  IMP-BOOT already landed the rows. Bootstrap composition at
-  `pkg/wire/profiles.go` must construct the packaged ensure-installer for
-  `provideSystemInitializationService` through
+  IMP-BOOT already landed the rows.   Bootstrap composition at
+  `pkg/wire/profiles.go` must construct packaged install/scaffold behavior through
+  `factorydefinitionsservice.NewPackagedFactoryInstallationService` and
   `factorydefinitionsservice.NewPackagedFactoryInstaller`, not
   `factory_definitions/packagedinstallation`; composed initialize proofs live in
   `pkg/wire/system_initialization_composition_test.go`. Focused initialize/scaffold
