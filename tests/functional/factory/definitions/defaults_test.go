@@ -17,6 +17,8 @@ import (
 const (
 	globalDefaultsProviderAlias = "codex"
 	globalDefaultsModel         = "operator-default-model"
+	factoryOverrideProvider     = modelprovider.ProviderClaude
+	factoryOverrideModel        = "factory-authored-model"
 )
 
 // TestGlobalConfigSuppliesDefaultProviderAndModel proves workers that omit
@@ -60,6 +62,55 @@ Process the input task.
 		t.Fatalf("command = %q, want global default provider %q", call.Command, modelprovider.ProviderCodex)
 	}
 	support.AssertArgsContainSequence(t, call.Args, []string{"--model", globalDefaultsModel})
+}
+
+// TestExplicitFactoryConfigOverridesGlobalDefaults proves Factory-authored
+// provider and model on a worker win over operator global defaults at run time
+// and dispatch through the resolved provider-process edge with the authored
+// model selection.
+func TestExplicitFactoryConfigOverridesGlobalDefaults(t *testing.T) {
+	dir := support.ScaffoldFactory(t, defaultsFactoryConfig())
+	support.WriteAgentConfig(
+		t,
+		dir,
+		"worker-a",
+		support.BuildModelWorkerConfig(factoryOverrideProvider, factoryOverrideModel),
+	)
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"explicit factory config overrides global defaults"}`))
+
+	homeDir := writeOperatorGlobalDefaultsConfig(t, globalDefaultsProviderAlias, globalDefaultsModel)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: support.ClaudeSuccessStdout("Done. COMPLETE"),
+	})
+
+	_, listed := runFactoryWithOperatorHome(
+		t,
+		dir,
+		homeDir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		15*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 1 {
+		t.Fatalf("completed work tokens = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
+		t.Fatalf("failed work tokens = %d, want 0", got)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want 1", runner.CallCount())
+	}
+
+	call := runner.LastRequest()
+	if call.Command != string(factoryOverrideProvider) {
+		t.Fatalf(
+			"command = %q, want factory-authored provider %q (not global default %q)",
+			call.Command,
+			factoryOverrideProvider,
+			modelprovider.ProviderCodex,
+		)
+	}
+	support.AssertArgsContainSequence(t, call.Args, []string{"--model", factoryOverrideModel})
 }
 
 func defaultsFactoryConfig() map[string]any {
