@@ -10,6 +10,7 @@ package wire
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
@@ -22,7 +23,9 @@ import (
 // NewService constructs an inert Workers root from construction ports. It
 // composes the accepted root through parent-private runtime_assembly,
 // workstations, and runners (agent/script/inference) owner construction
-// without publishing owner types on the returned peer surface.
+// without publishing owner types on the returned peer surface. Missing required
+// construction ports fail with a deterministic construction error and a nil
+// service.
 func NewService(
 	agentDependencies runners.AgentDependencies,
 	scriptConfig runners.ScriptConfig,
@@ -30,6 +33,15 @@ func NewService(
 	inferenceConfig runners.InferenceConfig,
 	inferenceDependencies runners.InferenceDependencies,
 ) (workers.Service, error) {
+	if err := validateConstructionPorts(
+		agentDependencies,
+		scriptConfig,
+		scriptDependencies,
+		inferenceConfig,
+		inferenceDependencies,
+	); err != nil {
+		return nil, err
+	}
 	agentRegistry, err := runnerswire.NewAgentRegistry(agentDependencies)
 	if err != nil {
 		return nil, fmt.Errorf("construct Workers: %w", err)
@@ -51,6 +63,46 @@ func NewService(
 		return nil, err
 	}
 	return workerservice.NewRoot(runtimeAssembly, workstationswire.NewService())
+}
+
+func validateConstructionPorts(
+	agentDependencies runners.AgentDependencies,
+	scriptConfig runners.ScriptConfig,
+	scriptDependencies runners.ScriptDependencies,
+	inferenceConfig runners.InferenceConfig,
+	inferenceDependencies runners.InferenceDependencies,
+) error {
+	if agentDependencies.Providers == nil {
+		return fmt.Errorf("construct Workers: agent Providers service is required")
+	}
+	if agentDependencies.Publish == nil {
+		return fmt.Errorf("construct Workers: agent progress publisher is required")
+	}
+	if strings.TrimSpace(scriptConfig.Command) == "" {
+		return fmt.Errorf("construct Workers: script command is required")
+	}
+	if scriptDependencies.CommandRunner == nil {
+		return fmt.Errorf("construct Workers: script command runner is required")
+	}
+	if scriptDependencies.FactoryDocs == nil {
+		return fmt.Errorf("construct Workers: script Factory docs loader is required")
+	}
+	if scriptDependencies.Now == nil {
+		return fmt.Errorf("construct Workers: script clock is required")
+	}
+	if scriptDependencies.Publish == nil {
+		return fmt.Errorf("construct Workers: script progress publisher is required")
+	}
+	if scriptDependencies.Record == nil {
+		return fmt.Errorf("construct Workers: script event recorder is required")
+	}
+	if strings.TrimSpace(inferenceConfig.Worker.Name) == "" {
+		return fmt.Errorf("construct Workers: inference worker name is required")
+	}
+	if inferenceDependencies.Models == nil {
+		return fmt.Errorf("construct Workers: inference Models service is required")
+	}
+	return nil
 }
 
 func combineRunnerRegistries(

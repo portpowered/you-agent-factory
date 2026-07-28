@@ -99,6 +99,136 @@ func TestNewServiceRejectsUnknownRunnerSelection(t *testing.T) {
 	}
 }
 
+func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
+	t.Parallel()
+
+	valid := validNewServiceInputs()
+	tests := []struct {
+		name   string
+		mutate func(*newServiceInputs)
+		want   string
+	}{
+		{
+			name: "agent Providers root",
+			mutate: func(in *newServiceInputs) {
+				in.agentDependencies.Providers = nil
+			},
+			want: "construct Workers: agent Providers service is required",
+		},
+		{
+			name: "agent progress publisher",
+			mutate: func(in *newServiceInputs) {
+				in.agentDependencies.Publish = nil
+			},
+			want: "construct Workers: agent progress publisher is required",
+		},
+		{
+			name: "script command",
+			mutate: func(in *newServiceInputs) {
+				in.scriptConfig = runners.ScriptConfig{}
+			},
+			want: "construct Workers: script command is required",
+		},
+		{
+			name: "script command runner",
+			mutate: func(in *newServiceInputs) {
+				in.scriptDependencies.CommandRunner = nil
+			},
+			want: "construct Workers: script command runner is required",
+		},
+		{
+			name: "script Factory docs loader",
+			mutate: func(in *newServiceInputs) {
+				in.scriptDependencies.FactoryDocs = nil
+			},
+			want: "construct Workers: script Factory docs loader is required",
+		},
+		{
+			name: "script clock",
+			mutate: func(in *newServiceInputs) {
+				in.scriptDependencies.Now = nil
+			},
+			want: "construct Workers: script clock is required",
+		},
+		{
+			name: "script progress publisher",
+			mutate: func(in *newServiceInputs) {
+				in.scriptDependencies.Publish = nil
+			},
+			want: "construct Workers: script progress publisher is required",
+		},
+		{
+			name: "script event recorder",
+			mutate: func(in *newServiceInputs) {
+				in.scriptDependencies.Record = nil
+			},
+			want: "construct Workers: script event recorder is required",
+		},
+		{
+			name: "inference worker",
+			mutate: func(in *newServiceInputs) {
+				in.inferenceConfig = runners.InferenceConfig{}
+			},
+			want: "construct Workers: inference worker name is required",
+		},
+		{
+			name: "inference Models service",
+			mutate: func(in *newServiceInputs) {
+				in.inferenceDependencies.Models = nil
+			},
+			want: "construct Workers: inference Models service is required",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			inputs := valid
+			test.mutate(&inputs)
+			service, err := inputs.callNewService()
+			if err == nil {
+				t.Fatalf("NewService() error = nil, want missing %s dependency", test.name)
+			}
+			if err.Error() != test.want {
+				t.Fatalf("NewService() error = %q, want %q", err.Error(), test.want)
+			}
+			if service != nil {
+				t.Fatalf("NewService() = %#v, want nil service", service)
+			}
+		})
+	}
+}
+
+func TestNewServiceFailedConstructionStartsNothing(t *testing.T) {
+	t.Parallel()
+
+	providers := &wireProvidersFake{}
+	models := &wireInferenceInvoker{}
+	command := &recordingWireCommandRunner{}
+	inputs := validNewServiceInputs()
+	inputs.agentDependencies.Providers = providers
+	inputs.scriptDependencies.CommandRunner = command
+	inputs.inferenceDependencies.Models = models
+	inputs.inferenceConfig = runners.InferenceConfig{}
+
+	service, err := inputs.callNewService()
+	if err == nil {
+		t.Fatal("NewService() error = nil, want missing inference worker")
+	}
+	if service != nil {
+		t.Fatalf("NewService() = %#v, want nil service", service)
+	}
+	if providers.calls.Load() != 0 {
+		t.Fatalf("Providers.Execute calls = %d, want no construction activity", providers.calls.Load())
+	}
+	if command.calls.Load() != 0 {
+		t.Fatalf("command runner calls = %d, want no construction activity", command.calls.Load())
+	}
+	if models.calls.Load() != 0 {
+		t.Fatalf("Models.InvokeLocal calls = %d, want no construction activity", models.calls.Load())
+	}
+}
+
 func TestNewServiceDoesNotRegisterHostedRunner(t *testing.T) {
 	t.Parallel()
 
@@ -198,6 +328,27 @@ func (*wireProvidersFake) GetProvider(
 }
 
 type wireStreamingCommandRunner struct{}
+
+type recordingWireCommandRunner struct {
+	calls atomic.Int32
+}
+
+func (runner *recordingWireCommandRunner) Run(
+	context.Context,
+	workers.CommandRequest,
+) (workers.CommandResult, error) {
+	runner.calls.Add(1)
+	panic("command runner invoked during failed construction")
+}
+
+func (runner *recordingWireCommandRunner) RunStreaming(
+	context.Context,
+	workers.CommandRequest,
+	platformprocess.OutputChunkObserver,
+) (workers.CommandResult, error) {
+	runner.calls.Add(1)
+	panic("command runner invoked during failed construction")
+}
 
 func (*wireStreamingCommandRunner) Run(
 	context.Context,
