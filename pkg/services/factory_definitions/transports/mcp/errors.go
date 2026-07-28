@@ -3,6 +3,7 @@ package factorydefinition
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -10,10 +11,18 @@ import (
 )
 
 const (
-	errorCodeBadRequest             = "BAD_REQUEST"
-	errorCodeInvalidFactory         = "INVALID_FACTORY"
-	invalidFactoryDefinitionMessage = "Factory payload is not a valid Agent Factory definition."
-	invalidRequestPayloadMessage    = "invalid request payload"
+	errorCodeBadRequest               = "BAD_REQUEST"
+	errorCodeInvalidFactory           = "INVALID_FACTORY"
+	errorCodeSessionNotFound          = "factory_definition.session.not_found"
+	errorCodeCurrentFactoryNotFound   = "factory_definition.current_factory.not_found"
+	errorCodeStaleFactoryVersion      = "STALE_FACTORY_VERSION"
+	errorCodeInternalCurrentFactory   = "factory_definition.current_factory.internal"
+	errorMessageSessionNotFound       = "factory session not found"
+	errorMessageCurrentFactoryNotFound  = "Current factory not found."
+	errorMessageStaleFactoryVersion     = "Current factory definition is stale. Refresh the graph before saving."
+	errorMessageInternalCurrentFactory  = "failed to load current factory"
+	invalidFactoryDefinitionMessage   = "Factory payload is not a valid Agent Factory definition."
+	invalidRequestPayloadMessage      = "invalid request payload"
 )
 
 func decodeInputErrorEnvelope(operation string, err error) ToolErrorEnvelope {
@@ -105,6 +114,82 @@ func opaqueValidationErrorEnvelope() ToolErrorEnvelope {
 	return ToolErrorEnvelope{
 		Code:      errorCodeBadRequest,
 		Message:   invalidRequestPayloadMessage,
+		Retryable: false,
+	}
+}
+
+func unavailableDefinitionsErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      "factory_definition.service.unavailable",
+		Message:   "factory definition service is unavailable",
+		Retryable: false,
+	}
+}
+
+func currentFactoryErrorEnvelope(sessionID string, action string, err error) ToolErrorEnvelope {
+	if err == nil {
+		return opaqueCurrentFactoryErrorEnvelope(action)
+	}
+	if envelope, ok := validationErrorEnvelope(err); ok {
+		return envelope
+	}
+	if envelope, ok := invalidFactoryDefinitionPayloadErrorEnvelope(err); ok {
+		return envelope
+	}
+	switch {
+	case errors.Is(err, apisurface.ErrFactorySessionNotFound):
+		return sessionNotFoundErrorEnvelope(sessionID)
+	case errors.Is(err, apisurface.ErrCurrentFactoryNotFound):
+		return currentFactoryNotFoundErrorEnvelope()
+	case errors.Is(err, apisurface.ErrFactoryVersionStale):
+		return staleFactoryVersionErrorEnvelope()
+	default:
+		return opaqueCurrentFactoryErrorEnvelope(action)
+	}
+}
+
+func sessionNotFoundErrorEnvelope(sessionID string) ToolErrorEnvelope {
+	details := map[string]any{}
+	if trimmed := strings.TrimSpace(sessionID); trimmed != "" {
+		details["sessionId"] = trimmed
+	}
+	return ToolErrorEnvelope{
+		Code:      errorCodeSessionNotFound,
+		Message:   errorMessageSessionNotFound,
+		Retryable: false,
+		Details:   details,
+	}
+}
+
+func currentFactoryNotFoundErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeCurrentFactoryNotFound,
+		Message:   errorMessageCurrentFactoryNotFound,
+		Retryable: false,
+	}
+}
+
+func staleFactoryVersionErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeStaleFactoryVersion,
+		Message:   errorMessageStaleFactoryVersion,
+		Retryable: false,
+		Details: map[string]any{
+			"targets": []factoryapi.FactoryValidationTarget{
+				apisurface.FactoryValidationTargetToAPI(factorydefinitions.StaleFactoryVersionValidationTarget()),
+			},
+		},
+	}
+}
+
+func opaqueCurrentFactoryErrorEnvelope(action string) ToolErrorEnvelope {
+	message := errorMessageInternalCurrentFactory
+	if action == "save" {
+		message = "failed to save current factory"
+	}
+	return ToolErrorEnvelope{
+		Code:      errorCodeInternalCurrentFactory,
+		Message:   message,
 		Retryable: false,
 	}
 }

@@ -28,7 +28,9 @@ func Bind(binding RootBinding) ToolOperation {
 type toolHandler func(context.Context, RootBinding, json.RawMessage) (json.RawMessage, error)
 
 var registeredToolHandlers = map[string]toolHandler{
-	ToolValidate: callValidateTool,
+	ToolValidate:    callValidateTool,
+	ToolGetCurrent:  callGetCurrentTool,
+	ToolSaveCurrent: callSaveCurrentTool,
 }
 
 // CallTool invokes one Factory Definition tool against explicitly supplied
@@ -66,4 +68,30 @@ func callValidateTool(
 		return json.Marshal(ToolResponse[factoryapi.FactoryValidationResult]{Error: &envelope})
 	}
 	return json.Marshal(Validate(ctx, validation, factory))
+}
+
+func callGetCurrentTool(
+	ctx context.Context,
+	binding RootBinding,
+	input json.RawMessage,
+) (json.RawMessage, error) {
+	var request GetCurrentInput
+	if err := json.Unmarshal(input, &request); err != nil {
+		envelope := decodeInputErrorEnvelope("decode get current input", err)
+		return json.Marshal(ToolResponse[factoryapi.Factory]{Error: &envelope})
+	}
+	return json.Marshal(GetCurrent(ctx, binding.Definitions, request))
+}
+
+func callSaveCurrentTool(
+	ctx context.Context,
+	binding RootBinding,
+	input json.RawMessage,
+) (json.RawMessage, error) {
+	var request SaveCurrentInput
+	if err := json.Unmarshal(input, &request); err != nil {
+		envelope := decodeInputErrorEnvelope("decode save current input", err)
+		return json.Marshal(ToolResponse[factoryapi.Factory]{Error: &envelope})
+	}
+	return json.Marshal(SaveCurrent(ctx, binding.Definitions, request))
 }
