@@ -55,6 +55,10 @@
       "name": "TestBuildProcessRemainsFilesystemWatcherInertBeforeRuntimeLifecycle"
     },
     {
+      "file": "automations/hosted_sources_root_composition_test.go",
+      "name": "TestBuildProcessRemainsHostedSourcesInertBeforeRuntimeLifecycle"
+    },
+    {
       "file": "bootstrap_portability/agent_factory_export_import_fixture_test.go",
       "name": "TestAgentFactoryExportImportFixture_AuthoredLayoutInterpolatesProjectSpecificPromptContent"
     },

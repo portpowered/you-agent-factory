@@ -118,7 +118,7 @@ func applyReviewedEvidence(scenario *Scenario) {
 	case "cli/you.work.move":
 		markCovered(scenario, LaneLong, "tests/functional/transport/cli/commands/work_wiring_test.go::TestCLIWorkMoveChangesState", InterfaceCLI)
 	case "rest/submitWorkBySessionId", "rest/listWorkBySessionId", "rest/getStatusBySessionId":
-		markCovered(scenario, LaneLong, "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned", InterfaceREST)
+		markCovered(scenario, LaneLong, "tests/functional/transport/http/server/generated_client_test.go::TestGeneratedClientAndServerSchemaStayAligned", InterfaceREST)
 	case "rest/upsertWorkRequestBySessionId":
 		markCovered(scenario, LaneLong, "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent", InterfaceREST)
 	case "rest/moveWorkBySessionId":
@@ -129,7 +129,7 @@ func applyReviewedEvidence(scenario *Scenario) {
 		scenario.Status = StatusPartial
 		scenario.Lane = LaneLong
 		scenario.ReviewedReason = ""
-		scenario.Evidence = []Evidence{{Test: "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned", Boundary: InterfaceREST}}
+		scenario.Evidence = []Evidence{{Test: "tests/functional/transport/http/server/generated_client_test.go::TestGeneratedClientAndServerSchemaStayAligned", Boundary: InterfaceREST}}
 		scenario.Gap = "The generated REST boundary opens and observes canonical session Factory Events, but malformed-JSON recovery is not proven."
 	case sessionEventsStableID:
 		scenario.Status = StatusPartial
