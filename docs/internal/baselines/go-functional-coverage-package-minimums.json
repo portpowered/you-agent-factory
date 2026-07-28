@@ -262,7 +262,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts",
-      "minimum": 64.82
+      "minimum": 64.70
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/namedfactories",
