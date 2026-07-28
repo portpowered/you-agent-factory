@@ -151,11 +151,16 @@ func TestToolByName_ReturnsCatalogEntryForKnownTools(t *testing.T) {
 	}
 }
 
-func TestIsCanonicalToolHandlerRegistered_ReportsListCatalogTool(t *testing.T) {
+func TestIsCanonicalToolHandlerRegistered_ReportsLiveTools(t *testing.T) {
 	t.Parallel()
 
-	if !modelmcp.IsCanonicalToolHandlerRegistered(modelmcp.ToolListCatalog) {
-		t.Fatalf("handler for %q should be registered", modelmcp.ToolListCatalog)
+	for _, toolName := range []string{
+		modelmcp.ToolListCatalog,
+		modelmcp.ToolPrepareAssets,
+	} {
+		if !modelmcp.IsCanonicalToolHandlerRegistered(toolName) {
+			t.Fatalf("handler for %q should be registered", toolName)
+		}
 	}
 }
 

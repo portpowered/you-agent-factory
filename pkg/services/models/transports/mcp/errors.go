@@ -2,10 +2,13 @@ package modelmcp
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 )
+
+var errEmptyModelName = fmt.Errorf("%w: empty model name", models.ErrNotFound)
 
 const (
 	errorCodeBadRequest            = "BAD_REQUEST"
@@ -13,14 +16,22 @@ const (
 	errorCodeRuntimeScopeStale     = "model.runtime_scope.stale"
 	errorCodeRuntimeScopeForeign   = "model.runtime_scope.foreign"
 	errorCodeRuntimeScopeClosed    = "model.runtime_scope.closed"
-	errorCodeCatalogUnavailable    = "model.catalog.unavailable"
-	errorCodeInternalExecution     = "model.execution.internal"
+	errorCodeCatalogUnavailable           = "model.catalog.unavailable"
+	errorCodeAssetSourceMissing           = "model.asset.source_missing"
+	errorCodeAssetSourceUnsupported       = "model.asset.source_unsupported"
+	errorCodeAssetIntegrityFailed         = "model.asset.integrity_failed"
+	errorCodeAssetPreparationInterrupted  = "model.asset.preparation_interrupted"
+	errorCodeInternalExecution            = "model.execution.internal"
 	errorMessageRuntimeScopeInvalid = "models runtime scope is invalid"
 	errorMessageRuntimeScopeStale   = "models runtime scope is stale"
 	errorMessageRuntimeScopeForeign = "models runtime scope is foreign"
 	errorMessageRuntimeScopeClosed  = "models runtime scope is closed"
-	errorMessageCatalogUnavailable  = "models catalog is unavailable"
-	errorMessageInternalExecution   = "models execution failed"
+	errorMessageCatalogUnavailable          = "models catalog is unavailable"
+	errorMessageAssetSourceMissing          = "models asset source is missing"
+	errorMessageAssetSourceUnsupported      = "models asset source is unsupported"
+	errorMessageAssetIntegrityFailed        = "models asset integrity verification failed"
+	errorMessageAssetPreparationInterrupted = "models asset preparation was interrupted"
+	errorMessageInternalExecution           = "models execution failed"
 )
 
 func decodeInputErrorEnvelope(context string, err error) ToolErrorEnvelope {
@@ -45,6 +56,52 @@ func unavailableServiceErrorEnvelope() ToolErrorEnvelope {
 		Code:      "model.service.unavailable",
 		Message:   "models service is unavailable",
 		Retryable: false,
+	}
+}
+
+func prepareAssetsErrorEnvelope(err error) ToolErrorEnvelope {
+	if envelope, ok := runtimeScopeErrorEnvelope(err); ok {
+		return envelope
+	}
+	switch {
+	case errors.Is(err, models.ErrAssetSourceMissing):
+		return ToolErrorEnvelope{
+			Code:      errorCodeAssetSourceMissing,
+			Message:   errorMessageAssetSourceMissing,
+			Retryable: false,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, models.ErrAssetSourceUnsupported):
+		return ToolErrorEnvelope{
+			Code:      errorCodeAssetSourceUnsupported,
+			Message:   errorMessageAssetSourceUnsupported,
+			Retryable: false,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, models.ErrAssetIntegrityFailed):
+		return ToolErrorEnvelope{
+			Code:      errorCodeAssetIntegrityFailed,
+			Message:   errorMessageAssetIntegrityFailed,
+			Retryable: false,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, models.ErrAssetPreparationInterrupted):
+		return ToolErrorEnvelope{
+			Code:      errorCodeAssetPreparationInterrupted,
+			Message:   errorMessageAssetPreparationInterrupted,
+			Retryable: true,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	default:
+		return executionErrorEnvelope(err)
 	}
 }
 

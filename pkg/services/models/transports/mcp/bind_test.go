@@ -116,8 +116,9 @@ func TestPackageBoundary_DoesNotImportModelsInternal(t *testing.T) {
 
 type fakeModelsRoot struct {
 	models.Service
-	invoked     *bool
-	listCatalog func(context.Context, models.ListModelsRequest) (models.ListModelsResult, error)
+	invoked            *bool
+	listCatalog        func(context.Context, models.ListModelsRequest) (models.ListModelsResult, error)
+	prepareModelAssets func(context.Context, models.PrepareModelAssetsRequest) (models.PrepareModelAssetsResult, error)
 }
 
 func (fake fakeModelsRoot) markInvoked() {
@@ -135,6 +136,17 @@ func (fake fakeModelsRoot) ListCatalog(
 		panic("unexpected ListCatalog on fake models root")
 	}
 	return fake.listCatalog(ctx, request)
+}
+
+func (fake fakeModelsRoot) PrepareModelAssets(
+	ctx context.Context,
+	request models.PrepareModelAssetsRequest,
+) (models.PrepareModelAssetsResult, error) {
+	fake.markInvoked()
+	if fake.prepareModelAssets == nil {
+		panic("unexpected PrepareModelAssets on fake models root")
+	}
+	return fake.prepareModelAssets(ctx, request)
 }
 
 func assertPackageDirectImportsForbidden(t *testing.T, packagePath string, forbiddenRoots []string) {
