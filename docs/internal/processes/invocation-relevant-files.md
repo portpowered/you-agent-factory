@@ -835,6 +835,14 @@ response-stream output.
   current semantic defaults, maps EOF to an explicit cancellation outcome, and
   delegates successful input to the same context-aware load/merge/persist
   operation used by pre-supplied values.
+- The Operator Settings CLI adapter at
+  `pkg/services/operator_settings/transports/cli` must stay registered under
+  destination `operator_settings` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and both
+  `go-*-coverage-package-minimums.json` baselines; prove registration with
+  `transports/cli/manifest_registration_test.go` rather than re-editing manifests
+  when CLI-SET already landed the rows.
 - Public provider/model setup enters through the manifest-derived `you init`
   handler in `pkg/transports/cli/commandregistry`, which translates stable
   `you.init.flag.provider` and `you.init.flag.model` inputs into the narrow
