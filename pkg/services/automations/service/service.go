@@ -13,6 +13,8 @@ import (
 	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
+	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
+	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -36,6 +38,7 @@ type Service struct {
 	resolveTemplates  workers.TemplateFieldResolver
 	executionPolicy   factorydefinitions.WorkstationExecutionPolicyService
 	reconciler        reconciliation.Service
+	scriptPollers     scriptpollers.Service
 	cron              cron.Service
 	filesystemWatchers filesystemwatchers.Service
 	schedulerMu       sync.Mutex
@@ -66,9 +69,21 @@ func New(
 		schedulerSources:  make(map[automations.SourceIdentity]*schedulerSource),
 	}
 	service.reconciler = service.newSchedulerReconciler()
+	service.scriptPollers = service.newScriptPollers()
 	service.cron = cronwire.NewService()
 	service.filesystemWatchers = fswire.NewService()
 	return service
+}
+
+func (s *Service) newScriptPollers() scriptpollers.Service {
+	return scriptpollerswire.NewService(scriptpollers.Dependencies{
+		Logger:           s.pollerLogger,
+		Clock:            s.supervisorClock,
+		CommandRunner:    s.commandRunner,
+		ResolveTemplates: s.resolveTemplates,
+		ExecutionPolicy:  s.executionPolicy,
+		CursorRecorder:   scriptpollers.NewMemoryCursorRecorder(),
+	})
 }
 
 // NewService constructs the Automations root contract for composition.
@@ -149,6 +164,9 @@ func (s *Service) GetCursor(
 	ctx context.Context,
 	request automations.GetCursorRequest,
 ) (automations.GetCursorResult, error) {
+	if s != nil && s.scriptPollers != nil && scriptpollers.IsScriptPollerInstanceID(request.InstanceID) {
+		return s.scriptPollers.GetCursor(ctx, request)
+	}
 	return s.reconciler.GetCursor(ctx, request)
 }
 
