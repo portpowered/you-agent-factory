@@ -557,7 +557,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIUpsertWorkRequestUsesCanonicalIdentity`.
   - `TestAPIUnknownWorkReturnsTypedNotFound`.
 
-- [ ] `tests/functional/work/submission/stage_and_submit_test.go`
+- [x] `tests/functional/work/submission/stage_and_submit_test.go`
   - `TestAPIStageAndSubmitFileCreatesExpectedWork`.
 
 - [x] `tests/functional/work/relationships/dependencies_test.go`

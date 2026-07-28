@@ -26,6 +26,7 @@ const (
 var workSubmissionScenarioPaths = []string{
 	"tests/functional/work/submission/batch_inputs_test.go",
 	"tests/functional/work/submission/http_test.go",
+	"tests/functional/work/submission/stage_and_submit_test.go",
 }
 
 var forbiddenRequestBatchImports = []string{
