@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -601,8 +602,9 @@ func versionDocument(version factoryapi.HybridLogicalTimestamp) map[string]strin
 }
 
 const (
-	factoryValidationCodeDanglingPlaceReference = "factory.route.danglingPlaceReference"
-	factoryValidationCodePayloadInvalid         = "factory.payload.invalid"
+	factoryValidationCodeDanglingPlaceReference     = "factory.route.danglingPlaceReference"
+	factoryValidationCodePayloadInvalid             = "factory.payload.invalid"
+	factoryValidationCodeLayoutUnknownNodeReference = "factory.layout.unknownNodeReference"
 )
 
 func hasValidationTargetCode(targets []factoryapi.FactoryValidationTarget, code string) bool {
@@ -1224,5 +1226,564 @@ func advancedVersionPassCase() advancedSaveVersionCase {
 			return versionDocument(advancedFactoryVersion(t, &current))
 		},
 		wantState: "story",
+	}
+}
+
+func currentFactoryDocumentWithBundledDocsAndLayout(
+	t *testing.T,
+	current factoryapi.Factory,
+	bundledFiles []map[string]any,
+	layout map[string]any,
+) string {
+	t.Helper()
+
+	body, err := json.Marshal(current)
+	if err != nil {
+		t.Fatalf("marshal current factory document: %v", err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(body, &document); err != nil {
+		t.Fatalf("decode current factory document: %v", err)
+	}
+	document["version"] = versionDocument(advancedFactoryVersion(t, current.Version))
+	document["supportingFiles"] = map[string]any{
+		"bundledFiles": bundledFiles,
+	}
+	document["layout"] = layout
+	body, err = json.Marshal(document)
+	if err != nil {
+		t.Fatalf("marshal current factory document with bundled docs and layout: %v", err)
+	}
+	return string(body)
+}
+
+type factoryEventLayoutExpectation struct {
+	nodeX       float32
+	nodeY       float32
+	nodeWidth   float32
+	nodeHeight  float32
+	nodeLocked  bool
+	waypoints   []factoryapi.FactoryLayoutPoint
+	labelX      float32
+	labelY      float32
+	groupLabel  string
+	groupColor  string
+	groupLocked bool
+	viewportX   float32
+	viewportY   float32
+	zoom        float32
+	direction   factoryapi.FactoryLayoutPreferencesDirection
+}
+
+func functionalFactoryEventLayoutDocument(
+	t *testing.T,
+	name string,
+	workType string,
+	version any,
+	layout map[string]any,
+) []byte {
+	t.Helper()
+	id := name
+	if name == "UNDEFINED" {
+		id = "root-runtime"
+	}
+	document := map[string]any{
+		"name":   name,
+		"id":     id,
+		"layout": layout,
+		"workTypes": []map[string]any{{
+			"name": workType,
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "done", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name":             "planner",
+			"type":             "MODEL_WORKER",
+			"modelProvider":    "CLAUDE",
+			"executorProvider": "SCRIPT_WRAP",
+			"model":            "claude-sonnet-4-20250514",
+		}},
+		"workstations": []map[string]any{{
+			"name":     "plan-task",
+			"behavior": "STANDARD",
+			"type":     "MODEL_WORKSTATION",
+			"worker":   "planner",
+			"inputs":   []map[string]string{{"workType": workType, "state": "init"}},
+			"outputs":  []map[string]string{{"workType": workType, "state": "done"}},
+		}},
+	}
+	if version != nil {
+		document["version"] = version
+	}
+	body, err := json.Marshal(document)
+	if err != nil {
+		t.Fatalf("marshal factory event layout document: %v", err)
+	}
+	return body
+}
+
+func initialFactoryEventLayout() map[string]any {
+	return factoryEventLayout(
+		144,
+		288,
+		320,
+		180,
+		true,
+		[]map[string]any{{"x": 200, "y": 300}},
+		220,
+		280,
+		"Planning",
+		"#ddeeff",
+		true,
+		40,
+		60,
+		0.85,
+		"RIGHT",
+	)
+}
+
+func modifiedFactoryEventLayout() map[string]any {
+	return factoryEventLayout(
+		344,
+		488,
+		360,
+		210,
+		false,
+		[]map[string]any{{"x": 260, "y": 340}, {"x": 300, "y": 360}},
+		275,
+		325,
+		"Execution",
+		"#ccddee",
+		false,
+		80,
+		90,
+		1.1,
+		"DOWN",
+	)
+}
+
+func factoryEventLayout(
+	nodeX float64,
+	nodeY float64,
+	nodeWidth float64,
+	nodeHeight float64,
+	nodeLocked bool,
+	waypoints []map[string]any,
+	labelX float64,
+	labelY float64,
+	groupLabel string,
+	groupColor string,
+	groupLocked bool,
+	viewportX float64,
+	viewportY float64,
+	zoom float64,
+	direction string,
+) map[string]any {
+	return map[string]any{
+		"schemaVersion": 1,
+		"nodes": []map[string]any{{
+			"id":       "workstation:plan-task",
+			"position": map[string]any{"x": nodeX, "y": nodeY},
+			"size":     map[string]any{"width": nodeWidth, "height": nodeHeight},
+			"locked":   nodeLocked,
+		}},
+		"edges": []map[string]any{{
+			"id":            "workstation-output:workstation:plan-task->work-state:story:done",
+			"waypoints":     waypoints,
+			"labelPosition": map[string]any{"x": labelX, "y": labelY},
+		}},
+		"groups": []map[string]any{{
+			"id":            "group-1",
+			"label":         groupLabel,
+			"nodeIds":       []string{"workstation:plan-task"},
+			"bounds":        map[string]any{"x": 100, "y": 220, "width": 420, "height": 240},
+			"parentGroupId": "group-root",
+			"color":         groupColor,
+			"locked":        groupLocked,
+		}},
+		"viewport":    map[string]any{"x": viewportX, "y": viewportY, "zoom": zoom},
+		"preferences": map[string]any{"direction": direction},
+	}
+}
+
+func assertFactoryEventLayout(t *testing.T, layout *factoryapi.FactoryLayout, want factoryEventLayoutExpectation) {
+	t.Helper()
+	if layout == nil {
+		t.Fatal("factory event layout = nil, want portable layout")
+	}
+	if layout.SchemaVersion != 1 {
+		t.Fatalf("factory event layout schemaVersion = %d, want 1", layout.SchemaVersion)
+	}
+	if layout.Nodes == nil || len(*layout.Nodes) != 1 {
+		t.Fatalf("factory event layout nodes = %#v, want one node", layout.Nodes)
+	}
+	node := (*layout.Nodes)[0]
+	if node.Id != "workstation:plan-task" ||
+		node.Position.X != want.nodeX ||
+		node.Position.Y != want.nodeY ||
+		node.Size == nil ||
+		node.Size.Width != want.nodeWidth ||
+		node.Size.Height != want.nodeHeight ||
+		node.Locked == nil ||
+		*node.Locked != want.nodeLocked {
+		t.Fatalf("factory event layout node = %#v, want position/size/locked expectation %#v", node, want)
+	}
+
+	if layout.Edges == nil || len(*layout.Edges) != 1 {
+		t.Fatalf("factory event layout edges = %#v, want one edge", layout.Edges)
+	}
+	edge := (*layout.Edges)[0]
+	if edge.Id != "workstation-output:workstation:plan-task->work-state:story:done" {
+		t.Fatalf("factory event layout edge id = %q, want plan-task output edge", edge.Id)
+	}
+	if edge.Waypoints == nil || len(*edge.Waypoints) != len(want.waypoints) {
+		t.Fatalf("factory event layout edge waypoints = %#v, want %#v", edge.Waypoints, want.waypoints)
+	}
+	for i, waypoint := range *edge.Waypoints {
+		if waypoint != want.waypoints[i] {
+			t.Fatalf("factory event layout waypoint[%d] = %#v, want %#v", i, waypoint, want.waypoints[i])
+		}
+	}
+	if edge.LabelPosition == nil || edge.LabelPosition.X != want.labelX || edge.LabelPosition.Y != want.labelY {
+		t.Fatalf("factory event layout labelPosition = %#v, want %v,%v", edge.LabelPosition, want.labelX, want.labelY)
+	}
+
+	if layout.Groups == nil || len(*layout.Groups) != 1 {
+		t.Fatalf("factory event layout groups = %#v, want one group", layout.Groups)
+	}
+	group := (*layout.Groups)[0]
+	if group.Id != "group-1" ||
+		group.Label == nil ||
+		*group.Label != want.groupLabel ||
+		len(group.NodeIds) != 1 ||
+		group.NodeIds[0] != "workstation:plan-task" ||
+		group.ParentGroupId == nil ||
+		*group.ParentGroupId != "group-root" ||
+		group.Color == nil ||
+		*group.Color != want.groupColor ||
+		group.Locked == nil ||
+		*group.Locked != want.groupLocked {
+		t.Fatalf("factory event layout group = %#v, want group expectation %#v", group, want)
+	}
+
+	if layout.Viewport == nil ||
+		layout.Viewport.X != want.viewportX ||
+		layout.Viewport.Y != want.viewportY ||
+		math.Abs(float64(layout.Viewport.Zoom-want.zoom)) > 1e-6 {
+		t.Fatalf("factory event layout viewport = %#v, want x=%v y=%v zoom=%v", layout.Viewport, want.viewportX, want.viewportY, want.zoom)
+	}
+	if layout.Preferences == nil ||
+		layout.Preferences.Direction == nil ||
+		*layout.Preferences.Direction != want.direction {
+		t.Fatalf("factory event layout preferences = %#v, want direction %s", layout.Preferences, want.direction)
+	}
+}
+
+func assertPortableLayoutResponse(t *testing.T, layout *factoryapi.FactoryLayout) {
+	t.Helper()
+
+	if layout == nil {
+		t.Fatal("expected current-factory response layout")
+	}
+	if layout.SchemaVersion != 1 {
+		t.Fatalf("layout schemaVersion = %d, want 1", layout.SchemaVersion)
+	}
+	if layout.Nodes == nil || len(*layout.Nodes) != 1 || (*layout.Nodes)[0].Id != "workstation:plan-task" {
+		t.Fatalf("layout nodes = %#v, want workstation:plan-task", layout.Nodes)
+	}
+	if (*layout.Nodes)[0].Position.X != 144 || (*layout.Nodes)[0].Position.Y != 288 {
+		t.Fatalf("layout node position = %#v, want x=144 y=288", (*layout.Nodes)[0].Position)
+	}
+	if layout.Edges == nil || len(*layout.Edges) != 1 || (*layout.Edges)[0].Id != "workstation-output:workstation:plan-task->work-state:story:done" {
+		t.Fatalf("layout edges = %#v, want plan-task output edge", layout.Edges)
+	}
+	waypoints := (*layout.Edges)[0].Waypoints
+	if waypoints == nil || len(*waypoints) != 1 || (*waypoints)[0].X != 200 {
+		t.Fatalf("layout edge waypoints = %#v, want one waypoint at x=200", waypoints)
+	}
+	if layout.Groups == nil || len(*layout.Groups) != 1 || (*layout.Groups)[0].Id != "group-1" {
+		t.Fatalf("layout groups = %#v, want group-1", layout.Groups)
+	}
+	if len((*layout.Groups)[0].NodeIds) != 1 || (*layout.Groups)[0].NodeIds[0] != "workstation:plan-task" {
+		t.Fatalf("layout group nodeIds = %#v, want workstation:plan-task", (*layout.Groups)[0].NodeIds)
+	}
+	if layout.Viewport == nil || math.Abs(float64(layout.Viewport.Zoom)-0.85) > 1e-6 {
+		t.Fatalf("layout viewport = %#v, want zoom 0.85", layout.Viewport)
+	}
+	if layout.Preferences == nil || layout.Preferences.Direction == nil || *layout.Preferences.Direction != factoryapi.RIGHT {
+		t.Fatalf("layout preferences = %#v, want RIGHT", layout.Preferences)
+	}
+}
+
+func assertPortableLayoutPayload(t *testing.T, value any) {
+	t.Helper()
+
+	layout, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("persisted layout = %#v, want object", value)
+	}
+	if got := layout["schemaVersion"]; got != float64(1) {
+		t.Fatalf("persisted layout schemaVersion = %#v, want 1", got)
+	}
+	nodes, ok := layout["nodes"].([]any)
+	if !ok || len(nodes) != 1 {
+		t.Fatalf("persisted layout nodes = %#v, want one node", layout["nodes"])
+	}
+	node, ok := nodes[0].(map[string]any)
+	if !ok || node["id"] != "workstation:plan-task" {
+		t.Fatalf("persisted layout node = %#v, want workstation:plan-task", nodes[0])
+	}
+	edges, ok := layout["edges"].([]any)
+	if !ok || len(edges) != 1 {
+		t.Fatalf("persisted layout edges = %#v, want one edge", layout["edges"])
+	}
+	groups, ok := layout["groups"].([]any)
+	if !ok || len(groups) != 1 {
+		t.Fatalf("persisted layout groups = %#v, want one group", layout["groups"])
+	}
+	viewport, ok := layout["viewport"].(map[string]any)
+	if !ok || viewport["zoom"] != 0.85 {
+		t.Fatalf("persisted layout viewport = %#v, want zoom 0.85", layout["viewport"])
+	}
+	preferences, ok := layout["preferences"].(map[string]any)
+	if !ok || preferences["direction"] != "RIGHT" {
+		t.Fatalf("persisted layout preferences = %#v, want RIGHT", layout["preferences"])
+	}
+}
+
+func staleLayoutPruningFactorySaveBody(t *testing.T, current factoryapi.Factory) map[string]any {
+	t.Helper()
+
+	return map[string]any{
+		"name":    "UNDEFINED",
+		"id":      "root-runtime",
+		"version": versionDocument(advancedFactoryVersion(t, current.Version)),
+		"layout": map[string]any{
+			"schemaVersion": 1,
+			"nodes": []map[string]any{{
+				"id":       "workstation:plan-task",
+				"position": map[string]any{"x": 144, "y": 288},
+				"size":     map[string]any{"width": 320, "height": 180},
+			}, {
+				"id":       "workstation:removed-node",
+				"position": map[string]any{"x": 10, "y": 20},
+				"size":     map[string]any{"width": 100, "height": 80},
+			}},
+			"edges": []map[string]any{{
+				"id": "workstation-output:workstation:plan-task->work-state:story:done",
+			}, {
+				"id": "workstation-output:workstation:removed-node->work-state:story:done",
+			}},
+			"groups": []map[string]any{{
+				"id":      "group-1",
+				"nodeIds": []string{"workstation:plan-task", "workstation:removed-node"},
+				"bounds":  map[string]any{"x": 0, "y": 0, "width": 100, "height": 80},
+			}, {
+				"id":      "group-empty",
+				"nodeIds": []string{"workstation:removed-node"},
+				"bounds":  map[string]any{"x": 0, "y": 0, "width": 50, "height": 50},
+			}},
+			"viewport": map[string]any{"x": 0, "y": 0, "zoom": 1},
+		},
+		"workTypes": []map[string]any{{
+			"name": "story",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "done", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name":             "planner",
+			"type":             "MODEL_WORKER",
+			"modelProvider":    "CLAUDE",
+			"executorProvider": "SCRIPT_WRAP",
+			"model":            "claude-sonnet-4-20250514",
+			"body":             "You are the planner.",
+		}},
+		"workstations": []map[string]any{{
+			"name":     "plan-task",
+			"behavior": "STANDARD",
+			"type":     "MODEL_WORKSTATION",
+			"worker":   "planner",
+			"body":     "Plan the work.",
+			"inputs":   []map[string]string{{"workType": "story", "state": "init"}},
+			"outputs":  []map[string]string{{"workType": "story", "state": "done"}},
+		}},
+	}
+}
+
+func assertStaleLayoutPrunedOnDisk(t *testing.T, rootDir string) {
+	t.Helper()
+
+	factoryJSON, err := os.ReadFile(filepath.Join(rootDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	var persisted map[string]any
+	if err := json.Unmarshal(factoryJSON, &persisted); err != nil {
+		t.Fatalf("Unmarshal(factory.json): %v", err)
+	}
+	layout, ok := persisted["layout"].(map[string]any)
+	if !ok {
+		t.Fatalf("persisted layout = %#v, want object", persisted["layout"])
+	}
+	nodes, ok := layout["nodes"].([]any)
+	if !ok || len(nodes) != 1 {
+		t.Fatalf("persisted layout nodes = %#v, want one pruned node", layout["nodes"])
+	}
+	node, ok := nodes[0].(map[string]any)
+	if !ok || node["id"] != "workstation:plan-task" {
+		t.Fatalf("persisted layout node = %#v, want workstation:plan-task", nodes[0])
+	}
+	groups, ok := layout["groups"].([]any)
+	if !ok || len(groups) != 2 {
+		t.Fatalf("persisted layout groups = %#v, want empty group preserved", layout["groups"])
+	}
+}
+
+type portableLayoutVariantExpectation struct {
+	nodes               []map[string]any
+	edges               []map[string]any
+	assertSavedLayout   func(t *testing.T, layout *factoryapi.FactoryLayout)
+	assertPersistedBody func(t *testing.T, layout map[string]any)
+}
+
+func runCurrentFactoryPUTPortableLayoutVariant(t *testing.T, variant portableLayoutVariantExpectation) {
+	t.Helper()
+
+	rootDir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(rootDir, interfaces.FactoryConfigFile),
+		functionalNamedFactoryPayloadWithWorkType(t, "root-runtime", "root-task"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write default factory config: %v", err)
+	}
+
+	server := startCurrentFactoryServer(t, rootDir)
+	defer server.Stop(t)
+	current := getCurrentFactory(t, server.URL())
+	body, err := json.Marshal(layoutVariantFactorySaveBody(t, current, variant.nodes, variant.edges))
+	if err != nil {
+		t.Fatalf("marshal current factory save with layout variant: %v", err)
+	}
+
+	saved := saveCurrentFactoryDefinition(t, server.URL(), string(body))
+	variant.assertSavedLayout(t, saved.Layout)
+
+	reloaded := getCurrentFactory(t, server.URL())
+	variant.assertSavedLayout(t, reloaded.Layout)
+
+	factoryJSON, err := os.ReadFile(filepath.Join(rootDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	var persisted map[string]any
+	if err := json.Unmarshal(factoryJSON, &persisted); err != nil {
+		t.Fatalf("Unmarshal(factory.json): %v", err)
+	}
+	layout := persisted["layout"].(map[string]any)
+	variant.assertPersistedBody(t, layout)
+}
+
+func layoutVariantSizedNodes() []map[string]any {
+	return []map[string]any{
+		{
+			"id":       "workstation:plan-task",
+			"position": map[string]any{"x": 144, "y": 288},
+			"size":     map[string]any{"width": 320, "height": 180},
+		},
+		{
+			"id":       "workstation:review-task",
+			"position": map[string]any{"x": 544, "y": 288},
+			"size":     map[string]any{"width": 300, "height": 160},
+		},
+	}
+}
+
+func assertPersistedWaypointCount(t *testing.T, layout map[string]any, want int) {
+	t.Helper()
+
+	edges := layout["edges"].([]any)
+	waypoints := edges[0].(map[string]any)["waypoints"].([]any)
+	if len(waypoints) != want {
+		t.Fatalf("persisted waypoints = %#v, want %d", waypoints, want)
+	}
+}
+
+func layoutVariantFactorySaveBody(
+	t *testing.T,
+	current factoryapi.Factory,
+	nodes []map[string]any,
+	edges []map[string]any,
+) map[string]any {
+	t.Helper()
+
+	return map[string]any{
+		"name":    "UNDEFINED",
+		"id":      "root-runtime",
+		"version": versionDocument(advancedFactoryVersion(t, current.Version)),
+		"layout": map[string]any{
+			"schemaVersion": 1,
+			"nodes":         nodes,
+			"edges":         edges,
+			"viewport":      map[string]any{"x": 40, "y": 60, "zoom": 0.85},
+			"preferences":   map[string]any{"direction": "RIGHT"},
+		},
+		"workTypes": []map[string]any{{
+			"name": "story",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "draft", "type": "PROCESSING"},
+				{"name": "done", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": layoutVariantWorkers(),
+		"workstations": []map[string]any{
+			{
+				"name":     "plan-task",
+				"behavior": "STANDARD",
+				"type":     "MODEL_WORKSTATION",
+				"worker":   "planner",
+				"body":     "Plan the work.",
+				"inputs":   []map[string]string{{"workType": "story", "state": "init"}},
+				"outputs":  []map[string]string{{"workType": "story", "state": "draft"}},
+			},
+			{
+				"name":     "review-task",
+				"behavior": "STANDARD",
+				"type":     "MODEL_WORKSTATION",
+				"worker":   "reviewer",
+				"body":     "Review the work.",
+				"inputs":   []map[string]string{{"workType": "story", "state": "draft"}},
+				"outputs":  []map[string]string{{"workType": "story", "state": "done"}},
+			},
+		},
+	}
+}
+
+func layoutVariantWorkers() []map[string]any {
+	return []map[string]any{
+		{
+			"name":             "planner",
+			"type":             "MODEL_WORKER",
+			"modelProvider":    "CLAUDE",
+			"executorProvider": "SCRIPT_WRAP",
+			"model":            "claude-sonnet-4-20250514",
+			"body":             "You are the planner.",
+		},
+		{
+			"name":             "reviewer",
+			"type":             "MODEL_WORKER",
+			"modelProvider":    "CLAUDE",
+			"executorProvider": "SCRIPT_WRAP",
+			"model":            "claude-sonnet-4-20250514",
+			"body":             "You are the reviewer.",
+		},
 	}
 }
