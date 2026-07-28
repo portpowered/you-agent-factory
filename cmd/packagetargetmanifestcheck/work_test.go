@@ -110,9 +110,7 @@ func TestWorkTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
 
 	spec := productOwnerTopLevelSpecs["work"]
 	wantDestination := map[string]string{
-		"service":               "work/internal",
-		"stateaccessrecordings": "work/internal/services/state_access",
-		"testdata":              "work/internal",
+		"testdata": "work/internal",
 	}
 	if len(spec.unexpected) != len(wantDestination) {
 		t.Fatalf("unexpected inventory drift: got %v, want keys %v", spec.unexpected, wantDestination)

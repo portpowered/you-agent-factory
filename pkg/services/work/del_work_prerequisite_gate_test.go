@@ -52,32 +52,6 @@ func TestDelWorkPrerequisiteGate_AllFoldPacketsFactoryComplete(t *testing.T) {
 		}
 	})
 
-	t.Run("CLN-WORK-FOLD-SERVICE_transitional_service_shim_retained_for_del", func(t *testing.T) {
-		t.Parallel()
-		_, err := os.Stat(filepath.Join(serviceRoot, "service", "service.go"))
-		if err != nil {
-			t.Fatalf("service/service.go transitional shim must remain for DEL-WORK: %v", err)
-		}
-	})
-
-	t.Run("CLN-WORK-LEGACY-PACKAGES_transitional_public_dirs_retained", func(t *testing.T) {
-		t.Parallel()
-		for _, dir := range workTransitionalPublicDirsRetainedForDelWork {
-			path := filepath.Join(root, filepath.FromSlash(dir))
-			info, err := os.Stat(path)
-			if err != nil {
-				t.Fatalf("transitional public dir %q must remain for DEL-WORK: %v", dir, err)
-			}
-			if !info.IsDir() {
-				t.Fatalf("transitional public path %q is not a directory", dir)
-			}
-		}
-		_, err := os.Stat(filepath.Join(serviceRoot, "service"))
-		if err != nil {
-			t.Fatalf("service/ transitional public dir must remain for DEL-WORK: %v", err)
-		}
-	})
-
 	t.Run("CLN-WORK-LEGACY-PACKAGES_private_subservices_present", func(t *testing.T) {
 		t.Parallel()
 		wantSubservices := []string{"content_materialization", "content_staging", "state_access"}

@@ -100,10 +100,14 @@ Use this map when changing the public REST contract.
   CLN-WORK-LEGACY-PACKAGES, and CLN-WORK-CONTRACT-ROOTS are Factory-complete
   before leased deletion begins. Observable gate proofs live in
   `pkg/services/work/del_work_prerequisite_gate_test.go` (tree invariants from
-  CLN-WORK-FOLD-SERVICE internal fold and transitional `service/` shim retention,
-  CLN-WORK-LEGACY-PACKAGES transitional public siblings and private subservices,
-  and CLN-WORK-CONTRACT-ROOTS thin root contract seal). Fold behavioral proofs
-  live in sibling boundary tests under `pkg/services/work/`.
+  CLN-WORK-FOLD-SERVICE internal fold, CLN-WORK-LEGACY-PACKAGES private
+  subservices, and CLN-WORK-CONTRACT-ROOTS thin root contract seal). Fold
+  behavioral proofs live in sibling boundary tests under `pkg/services/work/`.
+- DEL-WORK story 002 (`pss-del-work-002`) deletes emptied transitional `service/`
+  and `stateaccessrecordings/` public paths and clears production/test imports.
+  Observable deletion gate proofs live in
+  `pkg/services/work/del_work_deletion_gate_test.go`; wire behavioral proofs
+  remain in `wire_behavioral_proof_test.go` and `wire/recordings_state_access_test.go`.
 - Factory Runtime HTTP decoding, generated-contract mapping, Runtime root
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_runtime/transports/http`. The adapter consumes the

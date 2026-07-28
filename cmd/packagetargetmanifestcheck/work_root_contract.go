@@ -21,6 +21,8 @@ var workThinRootContractFiles = []string{
 	"content_staging_contract.go",
 	"content_staging_public_seam_test.go",
 	"contracts.go",
+	"del_work_deletion_gate_test.go",
+	"del_work_prerequisite_gate_test.go",
 	"input.go",
 	"input_test.go",
 	"invocation_return_policy_contract.go",

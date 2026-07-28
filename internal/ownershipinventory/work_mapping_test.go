@@ -108,9 +108,7 @@ func TestWorkTopLevelUnexpectedMoveDestinationsMatchInventory(t *testing.T) {
 	}
 
 	wantSuccessor := map[string]string{
-		"service":               "pkg/services/work/internal",
-		"stateaccessrecordings": "pkg/services/work/internal/services/state_access",
-		"testdata":              "pkg/services/work/internal",
+		"testdata": "pkg/services/work/internal",
 	}
 	if len(spec.Unexpected) != len(wantSuccessor) {
 		t.Fatalf("unexpected inventory drift: got %v, want keys %v", spec.Unexpected, wantSuccessor)
