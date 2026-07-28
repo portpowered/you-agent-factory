@@ -28,7 +28,7 @@ var parallelOperationAllowedPackages = []string{
 var parallelOperationPreferredPeerPackages = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mcp",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle",
 }
 
 func TestParallelOperationPreferredPeers_DoNotReferenceLegacyCatalogAuthority(t *testing.T) {

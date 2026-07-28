@@ -147,6 +147,7 @@ func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
 }
 
 func TestOpenApplicationPrefersEdgeInjectedVisualizationSink(t *testing.T) {
+
 	t.Parallel()
 
 	type markerSink struct {

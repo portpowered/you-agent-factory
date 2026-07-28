@@ -10,10 +10,6 @@
       "classification": "canonical_retain"
     },
     {
-      "directory": "service",
-      "classification": "unexpected_public_sibling"
-    },
-    {
       "directory": "transports",
       "classification": "canonical_retain"
     },

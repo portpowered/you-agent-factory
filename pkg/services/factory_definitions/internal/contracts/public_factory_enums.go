@@ -5,7 +5,7 @@ import (
 
 	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
-	workertaxonomy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers/taxonomy"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )

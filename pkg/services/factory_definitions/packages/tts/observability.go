@@ -1,37 +1,29 @@
 package tts
 
-import (
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/ttsobservability"
-)
+import distributiontts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/tts"
 
 const (
-	PackagedFactoryName                    = factorydefinitions.PackagedTTSFactoryName
-	InvocationErrorCodeModelNotReady       = factorydefinitions.TTSInvocationErrorCodeModelNotReady
-	InvocationErrorCodeGenerationFailed    = factorydefinitions.TTSInvocationErrorCodeGenerationFailed
-	FailureClassModelNotReady              = factorydefinitions.TTSFailureClassModelNotReady
-	FailureClassGenerationFailed           = factorydefinitions.TTSFailureClassGenerationFailed
-	FailureClassLoading                    = factorydefinitions.TTSFailureClassLoading
-	FailureClassSuccess                    = factorydefinitions.TTSFailureClassSuccess
-	MetricPackagedFactoryAttempts          = factorydefinitions.TTSMetricPackagedFactoryAttempts
-	MetricPackagedFactorySuccess           = factorydefinitions.TTSMetricPackagedFactorySuccess
-	MetricPackagedFactoryFailure           = factorydefinitions.TTSMetricPackagedFactoryFailure
-	MetricPackagedFactoryNotReady          = factorydefinitions.TTSMetricPackagedFactoryNotReady
-	InvocationWaitOutcomeLoading           = factorydefinitions.TTSInvocationWaitOutcomeLoading
-	InvocationWaitOutcomeModelNotReady     = factorydefinitions.TTSInvocationWaitOutcomeModelNotReady
-	InvocationWaitOutcomeGenerationFailed  = factorydefinitions.TTSInvocationWaitOutcomeGenerationFailed
-	InvocationWaitOutcomeUnresolvedFailure = factorydefinitions.TTSInvocationWaitOutcomeUnresolvedFailure
+	InvocationErrorCodeModelNotReady       = distributiontts.InvocationErrorCodeModelNotReady
+	InvocationErrorCodeGenerationFailed    = distributiontts.InvocationErrorCodeGenerationFailed
+	FailureClassModelNotReady              = distributiontts.FailureClassModelNotReady
+	FailureClassGenerationFailed           = distributiontts.FailureClassGenerationFailed
+	FailureClassLoading                    = distributiontts.FailureClassLoading
+	FailureClassSuccess                    = distributiontts.FailureClassSuccess
+	MetricPackagedFactoryAttempts          = distributiontts.MetricPackagedFactoryAttempts
+	MetricPackagedFactorySuccess           = distributiontts.MetricPackagedFactorySuccess
+	MetricPackagedFactoryFailure           = distributiontts.MetricPackagedFactoryFailure
+	MetricPackagedFactoryNotReady          = distributiontts.MetricPackagedFactoryNotReady
+	InvocationWaitOutcomeLoading           = distributiontts.InvocationWaitOutcomeLoading
+	InvocationWaitOutcomeModelNotReady     = distributiontts.InvocationWaitOutcomeModelNotReady
+	InvocationWaitOutcomeGenerationFailed  = distributiontts.InvocationWaitOutcomeGenerationFailed
+	InvocationWaitOutcomeUnresolvedFailure = distributiontts.InvocationWaitOutcomeUnresolvedFailure
 )
 
-type InvocationWaitOutcome = factorydefinitions.TTSInvocationWaitOutcome
-type InvocationFailure = factorydefinitions.TTSInvocationFailure
+type InvocationWaitOutcome = distributiontts.InvocationWaitOutcome
+type InvocationFailure = distributiontts.InvocationFailure
 
 var (
-	IsPackagedFactory      = ttsobservability.IsPackagedTTSFactory
-	BackendRuntimeLabel    = ttsobservability.TTSBackendRuntimeLabel
-	ClassifyInvocationWait = ttsobservability.ClassifyTTSInvocationWait
+	IsPackagedFactory      = distributiontts.IsPackagedFactory
+	BackendRuntimeLabel    = distributiontts.BackendRuntimeLabel
+	ClassifyInvocationWait = distributiontts.ClassifyInvocationWait
 )
-
-func isModelNotReadyFailure(message string) bool {
-	return ttsobservability.IsTTSModelNotReadyFailure(message)
-}

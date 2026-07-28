@@ -1459,6 +1459,56 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/definitions/validation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestAPIPreviewDoesNotStartWorkersOrSessions",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/validation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestAPIPreviewFactoryReturnsPublicTopology",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/validation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/validation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/validation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestFactoryValidationReportsAllActionableDefinitionErrors",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/validation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/packaged/catalog/discovery_test.go",
       "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
       "scenario": "TestFactoryListHonorsPreCanceledContextAtomically",
@@ -9117,14 +9167,34 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/cross/package_cli_api_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/cross",
+      "scenario": "TestPackagedFactoryInvokedByCLICanBeInspectedByAPI",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/cross/package_cli_api_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/cross/package_cli_api_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/cross",
+      "scenario": "TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/cross/package_cli_api_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T12:00:00Z",
+  "scanned_at_utc": "2026-07-28T12:30:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 636,
+      "none": 643,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -9136,7 +9206,7 @@
       "bootstrap_portability": 21,
       "cli": 59,
       "events": 5,
-      "factory": 49,
+      "factory": 56,
       "factory_visualization": 6,
       "guards_batch": 23,
       "models": 25,
@@ -9157,9 +9227,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 892,
+    "customer_top_level_Test_scenarios": 899,
     "lane_functionallong": 95,
-    "lane_short": 797,
+    "lane_short": 804,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 14,
@@ -9175,7 +9245,7 @@
       "you-agent-factory/tests/functional/events/factory_events": 5,
       "you-agent-factory/tests/functional/factory/current": 6,
       "you-agent-factory/tests/functional/factory/definition_activation": 3,
-      "you-agent-factory/tests/functional/factory/definitions": 6,
+      "you-agent-factory/tests/functional/factory/definitions": 11,
       "you-agent-factory/tests/functional/factory/packaged/catalog": 10,
       "you-agent-factory/tests/functional/factory/packaged/catalog/required_inputs_test": 2,
       "you-agent-factory/tests/functional/factory/packaged/deep_research": 3,

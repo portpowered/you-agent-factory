@@ -9,12 +9,12 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
-func TestBuiltInRegistrationsSelectDistinctCodexClaudeCursorGeminiKiroAndOpenCodeAdapters(t *testing.T) {
+func TestBuiltInRegistrationsSelectDistinctAgyCodexClaudeCursorGeminiKiroAndOpenCodeAdapters(t *testing.T) {
 	t.Parallel()
 
 	registrations := BuiltInRegistrations()
-	if len(registrations) != 7 {
-		t.Fatalf("registration count = %d, want 7", len(registrations))
+	if len(registrations) != 8 {
+		t.Fatalf("registration count = %d, want 8", len(registrations))
 	}
 
 	byID := make(map[providers.ID]string, len(registrations))
@@ -51,5 +51,8 @@ func TestBuiltInRegistrationsSelectDistinctCodexClaudeCursorGeminiKiroAndOpenCod
 	}
 	if !strings.Contains(byID[providers.IDPi], "Pi") {
 		t.Fatalf("Pi adapter message = %q", byID[providers.IDPi])
+	}
+	if !strings.Contains(byID[providers.IDAgy], "Agy") {
+		t.Fatalf("Agy adapter message = %q", byID[providers.IDAgy])
 	}
 }

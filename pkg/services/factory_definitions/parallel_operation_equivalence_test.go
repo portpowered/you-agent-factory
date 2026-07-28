@@ -9,7 +9,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 	factorynamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories"
@@ -155,7 +155,7 @@ func newParallelOperationCatalogPair(
 	if err != nil {
 		t.Fatalf("catalogwire.NewService: %v", err)
 	}
-	return legacyCatalog, factorydefinition.NewWithCatalog(nil, factorydefinition.StubActivationGateway(), catalogService), paths
+	return legacyCatalog, lifecycle.NewWithCatalog(nil, lifecycle.StubActivationGateway(), catalogService), paths
 }
 
 func writeParallelOperationNamedFactory(t *testing.T, rootDir, name string) string {

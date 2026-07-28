@@ -45,31 +45,19 @@ func RunTerminal(ctx context.Context, fixture Fixture) (TerminalResult, error) {
 }
 
 func runAgyTerminal(_ context.Context, fixture Fixture, transcript []byte) (TerminalResult, error) {
-	factoryRoot, err := os.MkdirTemp("", "parity-agy-*")
+	response, capabilities, drafts, err := agy.ParityTerminal(
+		"run-parity-"+fixture.ID,
+		fixture.Request.Dispatch.DispatchID,
+		transcript,
+	)
 	if err != nil {
-		return TerminalResult{}, fmt.Errorf("agy temp dir: %w", err)
-	}
-	defer os.RemoveAll(factoryRoot)
-
-	providerAdapter := agy.NewAdapterWithExecutable(factoryRoot, "agy")
-	reported, err := providerAdapter.Capabilities(context.Background(), adapter.CapabilityContext{Request: fixture.Request})
-	if err != nil {
-		return TerminalResult{}, fmt.Errorf("agy capabilities: %w", err)
-	}
-	parsed, err := providerAdapter.ParseFinal(context.Background(), adapter.FinalParseContext{
-		RunID:         "run-parity-" + fixture.ID,
-		DispatchID:    fixture.Request.Dispatch.DispatchID,
-		CommandResult: workerprocess.CommandResult{Stdout: transcript},
-		FlushReason:   adapter.FlushReasonCompleted,
-	})
-	if err != nil {
-		return TerminalResult{}, fmt.Errorf("agy parse final: %w", err)
+		return TerminalResult{}, err
 	}
 	return TerminalResult{
 		Outcome:      adapter.CommandOutcomeCompleted,
-		Response:     parsed.Response,
-		Capabilities: reported.Capabilities,
-		Drafts:       parsed.Drafts,
+		Response:     response,
+		Capabilities: capabilities,
+		Drafts:       drafts,
 	}, nil
 }
 

@@ -22,7 +22,6 @@ import (
 	factoryeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factoryworkstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workstationexecution"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
@@ -57,8 +56,13 @@ func provideProvidersService(edges serviceedges.Edges) (providers.Service, error
 		OperatingSystem: string(resolveWorkersOperatingSystem(edges)),
 		TemporaryFiles:  provideWorkersProviderTemporaryFileSystem(edges),
 	}
+	agyPTYPlatform, err := provideProvidersAgyPTYPlatform(edges)
+	if err != nil {
+		return nil, err
+	}
 	options := []providerswire.Option{
 		providerswire.WithCursorPlatform(cursorPlatform),
+		providerswire.WithAgyPTY(agyPTYPlatform),
 	}
 	if edges.ProviderCommandRunner != nil {
 		options = append(options, providerswire.WithCommandRunner(edges.ProviderCommandRunner))
@@ -111,6 +115,10 @@ func provideProviderRegistryRebinder(
 ) (workerswire.ProviderRegistryRebinder, error) {
 	operatingSystem := string(resolveWorkersOperatingSystem(edges))
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
+	agyPTYPlatform, err := provideProvidersAgyPTYPlatform(edges)
+	if err != nil {
+		return nil, err
+	}
 	externalRegistrations := append(
 		[]providerregistry.Registration(nil),
 		externalProviderRegistrations(edges)...,
@@ -129,6 +137,7 @@ func provideProviderRegistryRebinder(
 				OperatingSystem: operatingSystem,
 				TemporaryFiles:  temporaryFiles,
 			}),
+			providerswire.WithAgyPTY(agyPTYPlatform),
 		)
 		if err != nil {
 			return nil, err
@@ -310,27 +319,28 @@ func provideFactoryDefinitionValidationService(
 	workflows factoryruntime.JavaScriptWorkflows,
 	loader *factorydefinitionswire.DefinitionLoader,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
-) *factoryvalidation.Service {
-	return factoryvalidation.New(
+) factorydefinitions.ValidationOperations {
+	_ = workflows
+	return factorydefinitionswire.NewValidationOperations(
 		orchestratorValidator,
 		loader.LoadSourceFromCanonicalJSON,
 	)
 }
 
 func provideFactoryDefinitionValidator(
-	service *factoryvalidation.Service,
+	service factorydefinitions.ValidationOperations,
 ) factorydefinitions.Validator {
 	return service
 }
 
 func provideDefinitionValidationOperation(
-	service *factoryvalidation.Service,
+	service factorydefinitions.ValidationOperations,
 ) factorydefinitions.DefinitionValidationOperation {
 	return service
 }
 
 func provideSubmittedDefinitionValidationOperation(
-	service *factoryvalidation.Service,
+	service factorydefinitions.ValidationOperations,
 ) factorydefinitions.SubmittedDefinitionValidationOperation {
 	return service
 }
@@ -864,6 +874,26 @@ func provideWorkersProviderTemporaryFileSystem(edges serviceedges.Edges) platfor
 		return edges.WorkersProviderTemporaryFileSystem
 	}
 	return platformfilesystem.Local{}
+}
+
+func provideProvidersAgyPTYPlatform(edges serviceedges.Edges) (providerswire.AgyPTYPlatformDependencies, error) {
+	allocator, err := provideAgyPTYAllocator(edges)
+	if err != nil {
+		return providerswire.AgyPTYPlatformDependencies{}, err
+	}
+	executableLocator := edges.WorkersExecutableLocator
+	if executableLocator == nil {
+		executableLocator = platformprocess.HostExecutableLocator{}
+	}
+	executableInspector := edges.WorkersExecutablePathInspector
+	if executableInspector == nil {
+		executableInspector = platformfilesystem.Local{}
+	}
+	return providerswire.AgyPTYPlatformDependencies{
+		Allocator: allocator,
+		Locator:   executableLocator,
+		Inspector: executableInspector,
+	}, nil
 }
 
 func provideWorkersFactoryDocsFileSystem(edges serviceedges.Edges) platformfilesystem.ReadFileTree {

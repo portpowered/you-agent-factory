@@ -9,7 +9,6 @@ import (
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 )
 
@@ -65,7 +64,7 @@ func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.Persis
 	persistenceFileSystem := provideFactoryDefinitionPersistenceFileSystem(edges)
 	directoryReplacementStore := provideFactoryDefinitionDirectoryReplacementStore(edges)
 	persistence, err := provideFactoryDefinitionPersistence(
-		factoryvalidation.New(nil),
+		factorydefinitionswire.NewValidationOperations(nil, loader.LoadSourceFromCanonicalJSON),
 		loader,
 		pruneRemovedDocs,
 		materializer,

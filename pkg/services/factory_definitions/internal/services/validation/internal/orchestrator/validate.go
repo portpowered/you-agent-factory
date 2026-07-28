@@ -5,7 +5,7 @@ package orchestrator
 import (
 	"context"
 
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
@@ -18,7 +18,7 @@ func Validate(
 	validator factorydefinitions.OrchestratorDefinitionValidator,
 	workflowSourceReader factorydefinitions.WorkflowSourceReader,
 ) factorydefinitions.ValidationResult {
-	result := factoryvalidation.ValidateOrchestratorTargets(cfg)
+	result := impl.ValidateOrchestratorTargets(cfg)
 	if validator == nil || cfg == nil || cfg.Orchestrator == nil || cfg.Orchestrator.JavaScript == nil {
 		return factorydefinitions.ValidationResult{Targets: append([]factorydefinitions.ValidationTarget(nil), result.Targets...)}
 	}

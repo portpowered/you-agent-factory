@@ -39,7 +39,7 @@ func TestExecutorRejectsConductorRoutedProvidersAtScriptWrapBoundary(t *testing.
 	t.Parallel()
 
 	provider := workerprovider.NewScriptWrapProviderWithDependencies(
-		false, nil, &recordingRunner{}, nil, nil, structured.NewExecutor(), "", nil, nil,
+		false, nil, &recordingRunner{}, nil, nil, structured.NewExecutor(), nil,
 	)
 	for _, modelProvider := range []string{
 		string(modelprovider.ProviderClaude),

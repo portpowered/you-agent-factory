@@ -1084,9 +1084,9 @@ response-stream output.
   `docs/internal/baselines/ownership-inventory.json`, and both
   `go-*-coverage-package-minimums.json` baselines; prove registration with
   `wire/manifest_registration_test.go` rather than re-editing manifests when
-  IMP-BOOT already landed the rows. Bootstrap composition at
-  `pkg/wire/profiles.go` must construct the packaged ensure-installer for
-  `provideSystemInitializationService` through
+  IMP-BOOT already landed the rows.   Bootstrap composition at
+  `pkg/wire/profiles.go` must construct packaged install/scaffold behavior through
+  `factorydefinitionsservice.NewPackagedFactoryInstallationService` and
   `factorydefinitionsservice.NewPackagedFactoryInstaller`, not
   `factory_definitions/packagedinstallation`; composed initialize proofs live in
   `pkg/wire/system_initialization_composition_test.go`. Focused initialize/scaffold
@@ -1579,7 +1579,10 @@ response-stream output.
   `support.RunFactoryToCompletionWithEdges` without importing provider package
   internals. `providers` is an approved deep functional domain; aggregate files
   directly under `tests/functional/providers` remain shallow deletion-only
-  debt. Prove each migrated
+  debt. Agy functional harness tests under `tests/functional/providers/agy`
+  inject `serviceedges.Edges{AgyPTYHost, AgyPTYClock, WorkersExecutableLocator,
+  WorkersResolveSymlinks}` rather than `ProviderCommandRunner` because Agy
+  executes through the Providers PTY adapter. Prove each migrated
   Integration against the shared inference contract through
   `inferencecontract.ExecuteInvocation` for the success and failure postures
   that apply to that provider's authored support/capability set (for Gemini:
@@ -1954,6 +1957,16 @@ response-stream output.
   Keep usage lines, parameter descriptions, defaults, accepted values, output
   hints, and example rendering derived from `interfaces.InvocationSignatureConfig`
   instead of hard-coding packaged-factory argument inventories in CLI help.
+- Functional ownership for Factory-aware `you run` invocation help belongs in
+  `tests/functional/workers/transports/cli/run/help/invocation_help_test.go`:
+  prove named-Factory signature help, required vs optional parameter distinction,
+  and read-only no-dispatch guarantees through `support.BuildProcess` +
+  `Process.Execute` on `you run --named <factory> --help`; seed factories with
+  `support.ScaffoldFactory` and `support.CreateNamedFactory`; install
+  `testutil.NewProviderCommandRunner` via `serviceedges.Edges` for no-dispatch
+  proofs. Do not place this coverage under root `pkg/transports/cli` or catch-all
+  `tests/functional/cli/`; package-level renderer regressions remain in
+  `pkg/transports/cli/run/run_invocation_test.go`.
 - `docs/reference/run.md` (`you docs run`) owns supported `@you/fusion`
   invocation and signature-aware help. Factory materialization, examples, and
   edit-after-materialize behavior belong in
@@ -2012,13 +2025,38 @@ response-stream output.
   (`TestNoServerNamedInvocationIntegrationAndEquivalenceProof`), combining
   hermetic `@you/goal` success without a TCP listener with shared input-resolution
   and primary-result equivalence on the real bootstrap path.
-- CLI/API invocation parity for packaged `@you/goal` lives in
-  `tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go`,
-  comparing live session invocation API responses with real CLI `--json` output
-  for positional, stdin, and named-factory success paths plus representative
-  empty-input and unresolved-primary-result failures. Reuse
-  `scaffoldPackagedGoalInvocationFactoryForSmoke`, `buildYouCLIBinary`, and
-  `support.StartFunctionalAPIServer` when extending parity coverage.
+- CLI/API invocation parity for packaged `@you/goal` is owned by
+  `tests/functional/factory/packaged/cross/package_cli_api_test.go`
+  (`TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree`). The legacy smoke
+  catch-all `tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go`
+  remains only until `smoke-delete-06-factory-packaged-cross` retires it.
+- Packaged `@you/goal` CLI-started run inspectability through the public API
+  lives in `tests/functional/factory/packaged/cross/package_cli_api_test.go`
+  (`TestPackagedFactoryInvokedByCLICanBeInspectedByAPI`). Drive the built CLI
+  through `you run --with-server --json` on a `support.NewProcessAPIServer`
+  harness, poll `GET /factory-sessions/~default`, `GET /status`, and
+  `GET /factory-sessions/~default/work` while the run-scoped server is live
+  until goal:complete work, identity-correlated factory events, trace/request-
+  correlated listed work, or peak runtime work signals appear during polling;
+  refresh the snapshot after CLI completion when the server is still live (best-
+  effort retained-event read); collect default-session factory events while the
+  run-scoped server is live; and compare the returned session/status/work/event
+  facts with the CLI `InvocationResponse` identity and primary-result fields using
+  fail-closed assertions. Do not treat uncorrelated `SessionStarted`, bare
+  `RUNNING`, or peak `/status` categories alone as sufficient inspectability proof.
+  Hosted `--with-server` one-shot runs must invoke on the opened API-server
+  session via `HostedLiveInvocation` so `GET /work` and factory events reflect
+  the same CLI-started run.
+- Packaged `@you/goal` CLI/API primary-outcome shape agreement lives in the same
+  cross cell (`TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree`). Compare
+  independent API `POST /factory-sessions/~default/invocations` responses with
+  root-built `you run --json --server …` CLI envelopes for positional, stdin,
+  and named-factory success, plus empty-input, source-conflict, and unresolved
+  primary-result failures. Drive CLI cases through `support.BuildProcess` +
+  `support.FakeInputs` rather than `exec.Command`. For
+  `INVOCATION_PRIMARY_RESULT_UNRESOLVED`, scaffold a goal factory whose
+  `invocationReturn` targets a never-produced `summary` work type (not a script
+  mock worker that fails the goal pipeline).
 - Final `@you/goal` decision-routing smoke coverage lives in
   `tests/functional/smoke/cli_named_goal_routing_smoke_test.go`, exercising
   named-factory CLI `--json` outcomes for accepted, blocked, needs-human, and
@@ -2107,8 +2145,22 @@ response-stream output.
 - `pkg/transports/cli/run/packaged_tts_invocation.go` logs named-factory resolution context at
   the CLI boundary without recording packaged-factory metrics or logging submitted
   text or generated artifact bodies.
-- `pkg/services/factory_definitions/packages/goal/` owns packaged `@you/goal` factory metadata
-  constants (`PackagedFactoryName`, `PackagedInvokeWorkstationName`).
+- `pkg/services/factory_definitions/internal/services/distribution/goal/` owns packaged
+  `@you/goal` asset/materialize/metadata modules used by distribute install/catalog
+  paths. It must not import `factory_definitions/decisionenvelope` or define
+  decision-envelope interpretation symbols; boundary proof lives in
+  `internal/decision_envelope_ownership_boundary_test.go`.
+- `pkg/services/factory_definitions/packages/goal/` remains a transitional shim for
+  folded asset/metadata modules and for `decision_envelope.go`, which still
+  re-exports `factory_definitions/decisionenvelope` until
+  `CLN-DEF-FOLD-INVOCATION-POLICY` cutover. This distribution fold does not claim
+  invocation-policy or decision-envelope ownership complete.
+- `pkg/services/factory_definitions/decisionenvelope/` implements packaged goal
+  decision-envelope interpretation behind the Definitions root contract and is
+  not absorbed into distribution ownership by this packet.
+- `pkg/services/factory_definitions/packages/goal/` transitional metadata constants
+  (`PackagedFactoryName`, `PackagedInvokeWorkstationName`) delegate to
+  distribution-owned goal modules.
 - `packages/packaged-factories/generated/manifest.json` is the single
   registration point for shipped named Factories. Regeneration derives it from
   authored Factory directories, and normal initializer startup materializes every

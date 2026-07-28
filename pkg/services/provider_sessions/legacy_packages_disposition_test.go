@@ -40,9 +40,6 @@ func TestProviderSessionsZeroExtraPublicSiblingAbsenceLocked(t *testing.T) {
 
 	var unexpected []string
 	for _, child := range inventory.Children {
-		if child.Directory == "service" {
-			continue
-		}
 		if child.Classification == ownershipinventory.ProviderSessionsTopLevelUnexpectedPublicSibling ||
 			child.Classification == ownershipinventory.ProviderSessionsTopLevelINVUnexpectedPublicSibling {
 			unexpected = append(unexpected, child.Directory)
@@ -79,12 +76,10 @@ func TestProviderSessionsINVDispositionBeyondServiceConsumesZeroExtraPath(t *tes
 
 // providerSessionsProductionPublicSurfacePackages are owner production packages
 // outside INV-recorded private destinations. They must depend only on the
-// committed public surface (thin root, wire/, transports/, and transitional
-// service/ while FOLD-SERVICE owns it), not unexpected public siblings beyond
-// service/.
+// committed public surface (thin root, wire/, and transports/), not unexpected
+// public siblings.
 var providerSessionsProductionPublicSurfacePackages = []string{
 	"github.com/portpowered/infinite-you/pkg/services/provider_sessions",
-	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/service",
 	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire",
 	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http",
 }

@@ -24,5 +24,5 @@
 //
 // The public contracts mega-barrel was deleted in CLN-DEF story 007; implementation
 // types live in pkg/services/factory_definitions/internal/contracts and shared
-// namevalue helpers in pkg/services/factory_definitions/namevalue.
+// namevalue helpers in internal/services/validation/authoredmodel/namevalue.
 package factorydefinitions

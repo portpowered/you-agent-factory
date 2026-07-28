@@ -47,6 +47,9 @@ func TestSessionInvocationAPI_ReturnsPrimaryResult(t *testing.T) {
 	recorder.assertContainsMetric(t, "invocation.result_type", map[string]string{"input_source": "COMPATIBILITY_CONTENT", "result_type": "text"})
 }
 
+// TestSessionInvocationAPI_AcceptsStructuredArgsWithActiveSignature proves the
+// public session invocation API accepts structured args when an active signature
+// is configured and returns the completed primary result text.
 func TestSessionInvocationAPI_AcceptsStructuredArgsWithActiveSignature(t *testing.T) {
 	dir := scaffoldStructuredArgsInvocationFactory(t)
 	server := startFunctionalServerWithArgs(t, dir, false, nil, withWorkerCommands(support.NewStaticSuccessCommandRunner("structured primary COMPLETE"), nil))

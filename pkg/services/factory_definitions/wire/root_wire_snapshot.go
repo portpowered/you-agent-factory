@@ -6,6 +6,7 @@ import (
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
+	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
@@ -63,4 +64,12 @@ func FactorySnapshotDirectoryLoader(
 			nil,
 		)
 	}
+}
+
+// PrepareFactorySnapshotImport decodes one detached snapshot payload through
+// snapshots_portability-owned prepare-import logic.
+func PrepareFactorySnapshotImport(
+	payload []byte,
+) (contracts.PrepareFactorySnapshotImportResult, error) {
+	return snapshotsportabilityprepare.Import(payload, FactorySnapshotJSONDecoder())
 }
