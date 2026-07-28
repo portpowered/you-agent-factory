@@ -64,13 +64,48 @@ history and replay authority stay with Recordings.
 internals. Session lifecycle and resume admission do not take a direct
 dependency on `checkpoint_recovery` package paths.
 
+### IMP-RUN-04 may start now (CheckpointStore port)
+
+**IMP-RUN-04 is authorized to proceed now** against a Runtime-owned opaque
+**CheckpointStore** port inside `checkpoint_recovery`. The port is the stable
+seam between capture/load/restore logic and byte persistence; peers interact
+through Runtime root contracts and do not import CheckpointStore types or
+checkpoint bytes.
+
+For IMP-RUN-04 admission and proof obligations:
+
+- A **process-local / default CheckpointStore adapter** (in-process or
+  otherwise process-scoped default storage sufficient for the packet) is
+  **sufficient** to prove **compatible restore** and **corrupt-checkpoint**
+  handling.
+- **Recordings durable-log completion is not a gate** for starting IMP-RUN-04.
+  Opaque checkpoint capture, codec selection, compatibility policy, and restore
+  proofs may land before Recordings durable log, cursor, or retention exist.
+
+### Recordings-backed durable checkpoint storage (follow-on)
+
+A **Recordings-backed durable CheckpointStore adapter** is explicitly
+**deferred** until **after** Recordings durable log, cursor, and retention
+exist. That adapter persists opaque checkpoint bytes through Recordings durable
+artifact authority; codec selection and compatibility remain Runtime-owned.
+
+| Phase | Scope | Recordings durable-log gate? |
+| --- | --- | --- |
+| **Start now** (IMP-RUN-04) | Runtime opaque CheckpointStore port + process-local/default adapter; compatible-restore and corrupt-checkpoint proofs | **No** — may proceed without Recordings durable log |
+| **Follow-on** | Recordings-backed durable CheckpointStore adapter for checkpoint byte persistence | **Yes** — requires Recordings durable log/cursor/retention first |
+
+Maintainers reading only this decision should treat **IMP-RUN-04 may start now**
+and **Recordings-backed durable checkpoint bytes are follow-on** as distinct,
+non-interchangeable phases.
+
 ## Ownership summary
 
 | Concern | Owner | Notes |
 | --- | --- | --- |
 | Opaque checkpoint capture/load/compatibility/restore | Runtime `checkpoint_recovery` | Versioned opaque blobs; Runtime-owned codec |
 | Canonical event history and replay artifacts | Recordings | Durable history authority |
-| Future durable checkpoint byte persistence | Recordings (storage) + Runtime (codec/compatibility) | Follow-on adapter; not a gate for starting opaque Runtime checkpoint work |
+| CheckpointStore port (opaque persistence seam) | Runtime `checkpoint_recovery` | IMP-RUN-04 may start with process-local/default adapter |
+| Future durable checkpoint byte persistence | Recordings (storage) + Runtime (codec/compatibility) | Recordings-backed CheckpointStore adapter; follow-on after durable log/cursor/retention |
 | Resume identity coordination | Sessions via Recordings + Runtime roots | No checkpoint-internals import on Sessions |
 | Top-level Checkpoint service | **Excluded** | Checkpoint/Recovery stays a Runtime nested subservice |
 
