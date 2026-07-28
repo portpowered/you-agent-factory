@@ -1429,6 +1429,11 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_definitions/transports/cli/yaml_parity/yaml_parity_test.go",
+      "target": "factory_definitions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/internal/restclient/adapter.go",
       "target": "internal"
     },
@@ -3131,16 +3136,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/recordings/service",
       "target": "pkg/services/recordings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/work/service",
-      "target": "pkg/services/work"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/work/stateaccessrecordings",
-      "target": "pkg/services/work"
     },
     {
       "rule": "service-root-unexpected-directory",

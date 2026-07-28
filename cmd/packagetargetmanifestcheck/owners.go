@@ -313,9 +313,11 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "token_transformer", prefix: "token_transformer/", dest: "factory_runtime/internal/services/orchestration"},
 	},
 	"work": {
+		{exact: "internal/contenturl", prefix: "internal/contenturl/", dest: "work/internal"},
+		{exact: "internal/invocationreturnpolicy", prefix: "internal/invocationreturnpolicy/", dest: "work/internal"},
+		{exact: "internal/requestadmission", prefix: "internal/requestadmission/", dest: "work/internal"},
 		{exact: "internal/service", prefix: "internal/service/", dest: "work/internal"},
 		{exact: "materialize", prefix: "materialize/", dest: "work/internal/services/content_materialization"},
-		{exact: "stateaccessrecordings", prefix: "stateaccessrecordings/", dest: "work/internal/services/state_access"},
 		{exact: "testdata", prefix: "testdata/", dest: "work/internal"},
 	},
 	"operator_settings": {
@@ -324,7 +326,9 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "testlink", prefix: "testlink/", dest: "operator_settings/internal"},
 		{exact: "testproviders", prefix: "testproviders/", dest: "operator_settings/internal"},
 		{exact: "testdata", prefix: "testdata/", dest: "operator_settings/internal"},
+		{exact: "internal", dest: "operator_settings/internal"},
 		{exact: "internal/construct", prefix: "internal/construct/", dest: "operator_settings/internal"},
+		{exact: "internal/identityinputinventory", prefix: "internal/identityinputinventory/", dest: "operator_settings/internal"},
 		{exact: "internal/service", prefix: "internal/service/", dest: "operator_settings/internal"},
 		{exact: "internal/testlink", prefix: "internal/testlink/", dest: "operator_settings/internal"},
 		{exact: "internal/testproviders", prefix: "internal/testproviders/", dest: "operator_settings/internal"},

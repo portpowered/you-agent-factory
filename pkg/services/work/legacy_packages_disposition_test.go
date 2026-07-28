@@ -11,11 +11,9 @@ import (
 
 // workProductionPublicSurfacePackages are owner production packages outside
 // INV-recorded private destinations. They must depend only on the committed
-// public surface (thin root, wire/, transports/, and transitional service/
-// while FOLD-SERVICE owns it), not unexpected public siblings.
+// public surface (thin root, wire/, and transports/), not unexpected public siblings.
 var workProductionPublicSurfacePackages = []string{
 	"github.com/portpowered/infinite-you/pkg/services/work",
-	"github.com/portpowered/infinite-you/pkg/services/work/service",
 	"github.com/portpowered/infinite-you/pkg/services/work/wire",
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/http",
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli",
@@ -32,15 +30,13 @@ var workRootBehaviorProofFiles = []string{
 	"recordings_request_boundary_test.go",
 }
 
-// workTransitionalPublicDirsRetainedForDelWork lists emptied transitional
-// public siblings that DEL-WORK owns deletion for; this packet retains them.
-var workTransitionalPublicDirsRetainedForDelWork = []string{
-	"pkg/services/work/stateaccessrecordings",
+// workLegitimateTestFixtureDirsRetained lists test-only fixture directories
+// that remain at the Work root after DEL-WORK transitional public deletion.
+var workLegitimateTestFixtureDirsRetained = []string{
 	"pkg/services/work/testdata",
 }
 
 var workUnexpectedPublicSiblingImportPrefixes = []string{
-	workOwnerPrefix + "/stateaccessrecordings",
 	workOwnerPrefix + "/testdata",
 }
 
@@ -96,20 +92,20 @@ func TestWorkRootBehaviorPreserved(t *testing.T) {
 	}
 }
 
-// TestWorkTransitionalPublicDirsRetainedForDelWork seals pss-cln-work-legacy-packages-004:
-// emptied transitional public siblings remain on disk for DEL-WORK deletion.
-func TestWorkTransitionalPublicDirsRetainedForDelWork(t *testing.T) {
+// TestWorkLegitimateTestFixtureDirsRetained seals DEL-WORK story 002:
+// legitimate test-only fixture directories remain after transitional public deletion.
+func TestWorkLegitimateTestFixtureDirsRetained(t *testing.T) {
 	t.Parallel()
 
 	root := repositoryRoot(t)
-	for _, dir := range workTransitionalPublicDirsRetainedForDelWork {
+	for _, dir := range workLegitimateTestFixtureDirsRetained {
 		path := filepath.Join(root, filepath.FromSlash(dir))
 		info, err := os.Stat(path)
 		if err != nil {
-			t.Fatalf("transitional public dir %q must remain for DEL-WORK: %v", dir, err)
+			t.Fatalf("legitimate test fixture dir %q must remain: %v", dir, err)
 		}
 		if !info.IsDir() {
-			t.Fatalf("transitional public path %q is not a directory", dir)
+			t.Fatalf("test fixture path %q is not a directory", dir)
 		}
 	}
 }
@@ -137,20 +133,12 @@ func listWorkOwnerProductionPackagesOutsideTransitionalDestinations(t *testing.T
 		if strings.HasSuffix(packagePath, "_test") {
 			continue
 		}
-		if isWorkTransitionalShimPackage(packagePath) {
-			continue
-		}
 		if isWorkTransitionalPrivateDestination(packagePath) {
 			continue
 		}
 		packages = append(packages, packagePath)
 	}
 	return packages
-}
-
-func isWorkTransitionalShimPackage(packagePath string) bool {
-	return packagePath == workOwnerPrefix+"/stateaccessrecordings" ||
-		strings.HasPrefix(packagePath, workOwnerPrefix+"/stateaccessrecordings/")
 }
 
 func isWorkTransitionalPrivateDestination(packagePath string) bool {
@@ -187,7 +175,7 @@ func matchesForbiddenUnexpectedPublicSiblingImport(dep, forbidden string) bool {
 func TestMatchesForbiddenUnexpectedPublicSiblingImport(t *testing.T) {
 	t.Parallel()
 
-	forbidden := workOwnerPrefix + "/stateaccessrecordings"
+	forbidden := workOwnerPrefix + "/testdata"
 	tests := []struct {
 		dep  string
 		want bool

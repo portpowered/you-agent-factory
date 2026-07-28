@@ -6,16 +6,16 @@ import (
 )
 
 var (
-	BuildFactoryWorldView                        = projectionimpl.BuildFactoryWorldView
+	BuildFactoryWorldView                         = projectionimpl.BuildFactoryWorldView
 	BuildFactoryWorldViewWithActiveThrottlePauses = projectionimpl.BuildFactoryWorldViewWithActiveThrottlePauses
-	BuildSimpleDashboardProjection               = projectionimpl.BuildSimpleDashboardProjection
-	ProjectActiveThrottlePauses                  = projectionimpl.ProjectActiveThrottlePauses
-	ReconstructCanonicalFactoryWorldState        = projectionimpl.ReconstructCanonicalFactoryWorldState
+	BuildSimpleDashboardProjection                = projectionimpl.BuildSimpleDashboardProjection
+	ProjectActiveThrottlePauses                   = projectionimpl.ProjectActiveThrottlePauses
+	ReconstructCanonicalFactoryWorldState         = projectionimpl.ReconstructCanonicalFactoryWorldState
 )
 
 type (
-	SimpleDashboardProjection             = projectionimpl.SimpleDashboardProjection
-	SimpleDashboardRuntimeProjection      = projectionimpl.SimpleDashboardRuntimeProjection
+	SimpleDashboardProjection                = projectionimpl.SimpleDashboardProjection
+	SimpleDashboardRuntimeProjection         = projectionimpl.SimpleDashboardRuntimeProjection
 	SimpleDashboardWorkstationNodeProjection = projectionimpl.SimpleDashboardWorkstationNodeProjection
 )
 
