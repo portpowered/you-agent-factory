@@ -654,6 +654,12 @@ response-stream output.
   not import Factory Runtime. Proof:
   `pkg/services/factory_visualization/transports/cli/presentation_runtime_snapshot_boundary_test.go`
   (`TestPresentationSinkUsesVisualizationOwnedRuntimeFacts`).
+- CUT-VIS-RUN story 004 consumer-edge proofs exercise session-bound
+  activation, detached `Observe`, and snapshot-fact reads only through root
+  `Service.Observe`, fail closed without Petri snapshot helpers, and propagate
+  typed observe failures. Behavioral proof:
+  `pkg/services/factory_visualization/runtime_consumer_boundary_test.go`
+  (`TestVisualizationConsumerObservationExercisesRuntimeRoot`).
 - Shared ordered output serialization and final-once terminal write helpers
   (transport-shaped, non-authority):
   `pkg/services/factory_visualization/factory_event_stream.go`,
