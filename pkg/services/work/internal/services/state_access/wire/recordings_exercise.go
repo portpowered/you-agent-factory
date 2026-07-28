@@ -8,7 +8,9 @@ import (
 	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
 )
 
-func newRecordingsRootService(root recordings.Service) stateaccess.Service {
+// NewRecordingsRootService constructs the private state_access subservice for
+// Recordings-backed reads when no live session adapter is available.
+func NewRecordingsRootService(root recordings.Service) stateaccess.Service {
 	return NewService(
 		nilSessionResolver{},
 		NewRecordingsAdapter(root),
@@ -23,7 +25,7 @@ func ListWorkFromRecordingsRoot(
 	root recordings.Service,
 	options work.ListOptions,
 ) (work.ListResult, error) {
-	return newRecordingsRootService(root).ListWork(ctx, sessionID, options)
+	return NewRecordingsRootService(root).ListWork(ctx, sessionID, options)
 }
 
 // GetWorkFromRecordingsRoot exercises Recordings-backed Work get reads through
@@ -34,7 +36,7 @@ func GetWorkFromRecordingsRoot(
 	workID string,
 	root recordings.Service,
 ) (work.ReadModel, error) {
-	return newRecordingsRootService(root).GetWork(ctx, sessionID, workID)
+	return NewRecordingsRootService(root).GetWork(ctx, sessionID, workID)
 }
 
 type nilSessionResolver struct{}
