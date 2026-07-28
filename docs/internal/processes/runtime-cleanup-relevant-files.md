@@ -999,7 +999,13 @@ production Recordings imports to the service root only via
 proof in `pkg/services/factory_runtime/recordings_request_boundary_test.go`
 (`TestRuntimeConstructsRecordingsCapabilitiesThroughRoot`) plus
 `pkg/services/factory_runtime/internal/build_test.go`
-(`TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities`); mirror
+(`TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities`); behavior
+preservation after the cut is locked in
+`pkg/services/factory_runtime/recordings_consumer_behavior_preservation_test.go`
+(`TestRuntimeRecordingsConsumerBehaviorPreserved`) alongside existing host,
+assembly, replay, and execution suites under `internal/host`,
+`internal/build_test.go`, `internal/services/instance_host/internal/service`,
+and `internal/services/orchestration/runtime`; mirror
 `pkg/services/work/recordings_import_boundary_test.go` and
 `pkg/services/recordings/runtime_import_boundary_test.go` for the reverse edge.
 After DEL-RUN-SERVICE deletes the
