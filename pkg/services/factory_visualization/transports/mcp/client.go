@@ -48,6 +48,13 @@ var canonicalToolHandlers = map[string]canonicalToolHandler{
 	},
 }
 
+// IsCanonicalToolHandlerRegistered reports whether the live CallTool path
+// registers a handler for one canonical Factory Visualization tool name.
+func IsCanonicalToolHandlerRegistered(name string) bool {
+	_, ok := canonicalToolHandlers[name]
+	return ok
+}
+
 // CallTool invokes one Factory Visualization tool against an explicitly
 // supplied root. Protocol servers receive the bound ToolOperation rather than
 // choosing between construction paths.
