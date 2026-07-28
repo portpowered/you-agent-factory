@@ -18,6 +18,8 @@ const (
 	reconciliationSourceKind   = "schedule"
 )
 
+// TestBuildProcessRemainsReconciliationInertBeforeExplicitRootInvocation proves
+// BuildProcess does not reconcile automation sources before explicit Root invocation.
 func TestBuildProcessRemainsReconciliationInertBeforeExplicitRootInvocation(t *testing.T) {
 	t.Parallel()
 
@@ -43,6 +45,8 @@ func TestBuildProcessRemainsReconciliationInertBeforeExplicitRootInvocation(t *t
 	}
 }
 
+// TestAutomationsReconciliationAdmitsThroughPublishedRootAfterComposition proves
+// published Automations Root reconciliation converges matching observed instances.
 func TestAutomationsReconciliationAdmitsThroughPublishedRootAfterComposition(t *testing.T) {
 	t.Parallel()
 
@@ -87,6 +91,8 @@ func TestAutomationsReconciliationAdmitsThroughPublishedRootAfterComposition(t *
 	}
 }
 
+// TestAutomationsReconcileAdmitsAbsentSourceThroughPublishedRootAfterComposition proves
+// published Automations Root reconciliation admits absent desired sources safely.
 func TestAutomationsReconcileAdmitsAbsentSourceThroughPublishedRootAfterComposition(t *testing.T) {
 	t.Parallel()
 
