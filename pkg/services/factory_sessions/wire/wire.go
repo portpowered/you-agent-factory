@@ -55,6 +55,7 @@ func NewService(
 	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
 	ttsObservability factorydefinitions.TTSObservabilityService,
 	eventIDs factorysessions.ResponseEventIDGenerator,
+	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directoryInspection DirectoryInspection,
@@ -91,7 +92,7 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
-	responseStreams, err := responsestreamwire.NewService(eventIDs)
+	responseStreams, err := responsestreamwire.NewService(eventIDs, responseEventRetentionLimits)
 	if err != nil {
 		return nil, err
 	}
@@ -139,8 +140,9 @@ func NewDurableExecution(
 	generateSessionID factorysessions.SessionIDGenerator,
 	liveChildInvocation factorysessionexecution.LiveChildInvocationFactory,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
+	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 ) (factorysessions.ExecutionService, error) {
-	responseStreams, err := responsestreamwire.NewService(generateResponseEventID)
+	responseStreams, err := responsestreamwire.NewService(generateResponseEventID, responseEventRetentionLimits)
 	if err != nil {
 		return nil, err
 	}

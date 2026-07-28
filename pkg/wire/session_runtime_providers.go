@@ -493,12 +493,19 @@ func provideAutomationFactory(
 	}
 }
 
+func provideFactorySessionResponseEventRetentionLimits(
+	edges serviceedges.Edges,
+) *factorysessions.ResponseEventRetentionLimits {
+	return edges.FactorySessionResponseEventRetentionLimits
+}
+
 func provideFactorySessionsService(
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
 	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
 	ttsObservability factorydefinitions.TTSObservabilityService,
 	eventIDs factorysessions.ResponseEventIDGenerator,
+	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directories factorysessionwire.DirectoryInspection,
@@ -509,7 +516,7 @@ func provideFactorySessionsService(
 ) (factorysessions.Service, error) {
 	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
-	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks)
+	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks)
 }
 
 func provideOrchestrationJavaScriptExecution(
@@ -534,6 +541,7 @@ func provideFactorySessionExecutionFactory(
 	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
 	responseEventIDs factorysessions.ResponseEventIDGenerator,
+	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	invocationWithProgress factorysessionwire.WorkerInvocationWithProgressFactory,
 	allocator agypty.PTYAllocator,
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
@@ -600,6 +608,7 @@ func provideFactorySessionExecutionFactory(
 			sessionIDs,
 			liveChildInvocation,
 			responseEventIDs,
+			responseEventRetentionLimits,
 		)
 	}
 }

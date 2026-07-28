@@ -140,6 +140,9 @@ func (api *DurableAPI) SubscribeDurableFactoryResponseEvents(
 			if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
 				return nil, apisurface.ErrFactorySessionNotFound
 			}
+			if errors.Is(err, factorysessionexecution.ErrResponseEventStoreExpired) {
+				return nil, fmt.Errorf("%w: %s", apisurface.ErrFactoryResponseEventStreamExpired, request.SessionID)
+			}
 			return nil, err
 		}
 		return NewResponseEventSubscription(cursor), nil
@@ -158,6 +161,9 @@ func (api *DurableAPI) SubscribeDurableFactoryResponseEvents(
 	if err != nil {
 		if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
 			return nil, apisurface.ErrFactorySessionNotFound
+		}
+		if errors.Is(err, factorysessionexecution.ErrResponseEventStoreExpired) {
+			return nil, fmt.Errorf("%w: %s", apisurface.ErrFactoryResponseEventStreamExpired, request.SessionID)
 		}
 		return nil, err
 	}

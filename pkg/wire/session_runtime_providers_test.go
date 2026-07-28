@@ -108,6 +108,7 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 	syncWaits := provideFactorySessionSyncWaitScheduler()
 	sessionIDs := provideFactorySessionIDGenerator(edges)
 	responseEventIDs := provideFactorySessionResponseEventIDGenerator(edges)
+	responseEventRetentionLimits := provideFactorySessionResponseEventRetentionLimits(edges)
 	invocationWithProgress := provideWorkerInvocationWithProgressFactory(edges)
 	allocator, err := provideAgyPTYAllocator(edges)
 	if err != nil {
@@ -124,6 +125,7 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 		syncWaits,
 		sessionIDs,
 		responseEventIDs,
+		responseEventRetentionLimits,
 		invocationWithProgress,
 		allocator,
 		adaptRunner,

@@ -112,7 +112,6 @@ var ExpectedDeletionOnlyBatches = []string{
 	"bootstrap_portability-delete-03-factory-definitions-import-export",
 	"bootstrap_portability-delete-04-portable-config",
 	"replay_contracts-delete-01-events-replay",
-	"replay_contracts-delete-03-events-response-events",
 }
 
 // Check validates ledger completeness against the live functional tree.

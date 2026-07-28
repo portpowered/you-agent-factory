@@ -95,6 +95,7 @@ func TestFactorySessionsServiceRequiresRuntimeClockBinding(t *testing.T) {
 		nil,
 		nil,
 		func() string { return "response-event-test-id" },
+		nil,
 		func() string { return "session-test-id" },
 		func() (string, error) { return t.TempDir(), nil },
 		platformfilesystem.Local{},

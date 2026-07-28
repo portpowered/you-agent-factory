@@ -666,6 +666,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/work/submission/stage_and_submit_test.go`
   - `TestAPIStageAndSubmitFileCreatesExpectedWork`.
 
+- [x] `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
+  - `TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation`.
+  - `TestCLISubmitBatchSuccessHumanAndJSONShapes`.
+  - `TestCLISubmitBatchInvalidJSONFailsBeforeUpsert`.
+  - `TestCLISubmitBatchContractHarnessExecutesThroughRootBuildProcess`.
+
 - [x] `tests/functional/work/relationships/dependencies_test.go`
   - `TestDependentWorkWaitsForPrerequisiteTargetState`.
   - `TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure`.
@@ -834,12 +840,6 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestImportExportPreservesNestedDocsScriptsAndMetadata`.
   - `TestInvalidImportDoesNotReplaceCurrentFactory`.
 
-
-- [x] `tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go`
-  - `TestCLIFactoryValidateRejectsInvalidDefinitionActionably`.
-  - `TestCLIFactoryValidateDoesNotMutateOnFailure`.
-  - `TestCLIFactoryPersistFromFileThenRunSucceeds`.
-
 - [x] `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
   - `TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation`.
   - `TestCLISubmitBatchSuccessHumanAndJSONShapes`.
@@ -859,6 +859,11 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/workers/transports/cli/run/modes/output_modes_test.go`
   - `TestCLIRunSuccessPrimaryResultTextJSONAndNDJSON`.
   - `TestCLIRunFailureOmitsFalseSuccessPrimaryResult`.
+
+- [x] `tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go`
+  - `TestCLIRunCleanInvocationCompletesWithoutDashboardStartup`.
+  - `TestCLIRunCleanInvocationFailurePreservesPublicError`.
+  - `TestCLIRunServerAttachedInvocationTargetsExistingFactorySession`.
 
 ### Factory visualization
 
@@ -880,16 +885,6 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Factory runtime (service-mirrored Petri depth)
 
-- [x] `tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go`
-  - `TestPetriMultiStagePipelineCompletesAtPublicTerminals`.
-  - `TestPetriFailureRoutesToDocumentedFailedPlace`.
-  - `TestPetriMultiTransitionPreservesWorkCorrelation`.
-
-- [x] `tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go`
-  - `TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied`.
-  - `TestPetriParentOrSameNameGuardReleasesExpectedWork`.
-  - `TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState`.
-
 - [x] `tests/functional/factory_runtime/peer_import_boundary_test.go`
   - `TestFunctionalFactoryRuntimePackageUsesPublicProcessImportsOnly`.
   - `TestProductionPeersReachFactoryRuntimeThroughPublishedSurfacesOnly`.
@@ -906,6 +901,21 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/factory_runtime/root_composition/workflow_orchestration_activation_test.go`
   - `TestFactoryRuntimeJavaScriptWorkflowActivatesThroughRootBuildProcessAfterLifecycle`.
   - `TestFactoryRuntimePetriOrchestrationActivatesThroughRootBuildProcessAfterLifecycle`.
+
+- [x] `tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go`
+  - `TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied`.
+  - `TestPetriParentOrSameNameGuardReleasesExpectedWork`.
+  - `TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState`.
+
+- [x] `tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go`
+  - `TestPetriMultiStagePipelineCompletesAtPublicTerminals`.
+  - `TestPetriFailureRoutesToDocumentedFailedPlace`.
+  - `TestPetriMultiTransitionPreservesWorkCorrelation`.
+
+- [x] `tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go`
+  - `TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied`.
+  - `TestPetriParentOrSameNameGuardReleasesExpectedWork`.
+  - `TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState`.
 
 ### Packaged factories
 
@@ -1115,7 +1125,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestFactoryEventStreamIsOrderedAndClosesAtSessionTermination`.
   - `TestFactoryEventStreamReconnectHasNoGapOrDuplicate`.
 
-- [ ] `tests/functional/events/response_events/stream_test.go`
+- [x] `tests/functional/events/response_events/stream_test.go`
   - `TestAPIResponseEventSSEStreamsRetainedThenLiveEvents`.
   - `TestAPIResponseEventCursorGapEmitsStreamGap`.
   - `TestAPIResponseEventSessionExpiryReturnsTypedGone`.

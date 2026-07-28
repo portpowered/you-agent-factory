@@ -155,13 +155,14 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	invocationWorkTypeService := provideInvocationWorkTypeService(invocationPolicyPorts)
 	ttsObservabilityService := provideTTSObservabilityService(invocationPolicyPorts)
 	responseEventIDGenerator := provideFactorySessionResponseEventIDGenerator(edges2)
+	responseEventRetentionLimits := provideFactorySessionResponseEventRetentionLimits(edges2)
 	v18 := provideFactorySessionIDGenerator(edges2)
 	homeDirectoryResolver := provideFactorySessionResolveHomeDirectory(edges2)
 	v19 := provideFactorySessionDirectoryInspection(edges2)
 	v20 := provideFactorySessionInvocationInputReader(edges2)
 	v21 := provideFactorySessionInitialWorkReader(edges2)
 	logicalTargetResolveSymlinks := provideFactorySessionResolveLogicalTargetSymlinks(edges2)
-	factorysessionsService, err := provideFactorySessionsService(sessionResultProjectionOperation, invocationInterpolationService, invocationWorkTypeService, ttsObservabilityService, responseEventIDGenerator, v18, homeDirectoryResolver, v19, namedPathResolver, v20, v21, logicalTargetResolveSymlinks)
+	factorysessionsService, err := provideFactorySessionsService(sessionResultProjectionOperation, invocationInterpolationService, invocationWorkTypeService, ttsObservabilityService, responseEventIDGenerator, responseEventRetentionLimits, v18, homeDirectoryResolver, v19, namedPathResolver, v20, v21, logicalTargetResolveSymlinks)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +195,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	workersMockCommandRunnerFactory := provideWorkersMockCommandRunnerFactory()
 	v28 := provideConductorInvocationWithProgressFactory(edges2)
-	v29 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, portableRecordingWriter, v23, v24, v18, responseEventIDGenerator, v25, ptyAllocator, v26, registry, v27, workersMockCommandRunnerFactory, v28, edges2)
+	v29 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, portableRecordingWriter, v23, v24, v18, responseEventIDGenerator, responseEventRetentionLimits, v25, ptyAllocator, v26, registry, v27, workersMockCommandRunnerFactory, v28, edges2)
 	v30 := provideRecordingsProjectionFactory()
 	storage := provideReplayArtifactStorage()
 	v31 := provideRecordingsFactory(liveRecordingTargetPlanner, storage)
@@ -600,6 +601,7 @@ var servicesSet = wire3.NewSet(
 	provideFactorySessionIDGenerator,
 	provideFactorySessionRuntimeInstanceIDGenerator,
 	provideFactorySessionResponseEventIDGenerator,
+	provideFactorySessionResponseEventRetentionLimits,
 	provideFactorySessionCursorPersistenceFileSystem,
 	provideFactorySessionCursorCreateTemporaryFile,
 	provideFactorySessionCursorStoreFactory,
