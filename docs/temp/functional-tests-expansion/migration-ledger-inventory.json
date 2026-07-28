@@ -7487,6 +7487,36 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/provider_sessions/association/association_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions/association",
+      "scenario": "TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/association/association_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/provider_sessions/association/association_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions/association",
+      "scenario": "TestAbsentProviderSessionIsNotFabricated",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/association/association_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/provider_sessions/association/association_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions/association",
+      "scenario": "TestMultipleDispatchesKeepDistinctProviderSessionRefs",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/association/association_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
   "scanned_at_utc": "2026-07-28T05:00:00Z",
@@ -7494,7 +7524,7 @@
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 460,
+      "none": 463,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -7513,6 +7543,7 @@
       "orchestration": 48,
       "product": 13,
       "providers": 55,
+      "provider_sessions": 3,
       "replay_contracts": 23,
       "runtime_api": 95,
       "sessionparity": 13,
@@ -7524,9 +7555,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 729,
+    "customer_top_level_Test_scenarios": 732,
     "lane_functionallong": 95,
-    "lane_short": 634,
+    "lane_short": 637,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -7567,6 +7598,7 @@
       "you-agent-factory/tests/functional/providers/codex": 7,
       "you-agent-factory/tests/functional/providers/cursor": 8,
       "you-agent-factory/tests/functional/providers/kiro": 4,
+      "you-agent-factory/tests/functional/provider_sessions/association": 3,
       "you-agent-factory/tests/functional/replay_contracts": 23,
       "you-agent-factory/tests/functional/runtime_api": 56,
       "you-agent-factory/tests/functional/runtime_api/factory_transformation": 39,
@@ -7610,7 +7642,7 @@
       "you-agent-factory/tests/functional/workstations/watcher": 9,
       "you-agent-factory/tests/functional/sessions/mcp": 7
     },
-    "files_with_customer_Test": 235,
+    "files_with_customer_Test": 238,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,

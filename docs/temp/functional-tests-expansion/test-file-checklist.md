@@ -746,7 +746,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIProviderSessionRejectsRawFilesystemPathInput`.
   - `TestAPIUnsupportedProviderSessionKindReturnsTypedError`.
 
-- [ ] `tests/functional/provider_sessions/association/association_test.go`
+- [x] `tests/functional/provider_sessions/association/association_test.go`
   - `TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession`.
   - `TestAbsentProviderSessionIsNotFabricated`.
   - `TestMultipleDispatchesKeepDistinctProviderSessionRefs`.
