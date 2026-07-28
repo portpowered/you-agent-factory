@@ -164,23 +164,3 @@ func dereferenceGlobalConfigValue(value *string) string {
 	return *value
 }
 
-func TestConfigDrivenExecution_AddWorkType(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_work_type"))
-
-	testutil.WriteSeedFile(t, dir, "request", []byte(`{"title": "New request"}`))
-	testutil.WriteSeedFile(t, dir, "review", []byte(`{"title": "New review"}`))
-
-	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: "Request handled. COMPLETE"},
-		workerexecution.InferenceResponse{Content: "Review handled. COMPLETE"},
-	)
-
-	status := runFactoryThroughCustomerProcess(t, dir, provider)
-	if status.Categories.Terminal != 2 || status.Categories.Failed != 0 {
-		t.Fatalf("status categories = %+v, want two terminal work items", status.Categories)
-	}
-
-	if provider.CallCount() != 2 {
-		t.Errorf("expected provider called 2 times, got %d", provider.CallCount())
-	}
-}

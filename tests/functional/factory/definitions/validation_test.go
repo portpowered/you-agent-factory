@@ -9,8 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -21,6 +25,76 @@ const (
 	validationCodeDanglingPlaceReference     = "factory.route.danglingPlaceReference"
 	validationCodeLayoutUnknownNodeReference = "factory.layout.unknownNodeReference"
 )
+
+// TestFactoryValidationAcceptsMultiWorkTypeExecutableTopology proves a
+// multi-work-type Factory definition is accepted as valid executable topology
+// and both Work types reach terminal success through the public process
+// boundary with asserted provider-process edge captures.
+func TestFactoryValidationAcceptsMultiWorkTypeExecutableTopology(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_work_type"))
+	support.WriteAgentConfig(
+		t,
+		dir,
+		"request-handler",
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"),
+	)
+	support.WriteAgentConfig(
+		t,
+		dir,
+		"review-handler",
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"),
+	)
+
+	testutil.WriteSeedFile(t, dir, "request", []byte(`{"title": "New request"}`))
+	testutil.WriteSeedFile(t, dir, "review", []byte(`{"title": "New review"}`))
+
+	validateRunner := support.NewRecordingCommandRunner("runtime must not execute during validate")
+	assertFactoryValidationAccepts(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: validateRunner},
+	)
+	if validateRunner.CallCount() != 0 {
+		t.Fatalf(
+			"provider command runner calls during validate = %d, want 0",
+			validateRunner.CallCount(),
+		)
+	}
+
+	runner := support.NewShapedProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("Request handled. COMPLETE")},
+		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("Review handled. COMPLETE")},
+	)
+
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		15*time.Second,
+	)
+
+	if session.Runtime.Progress.Categories.Terminal != 2 || session.Runtime.Progress.Categories.Failed != 0 {
+		t.Fatalf(
+			"session progress categories = %+v, want two terminal and zero failed",
+			session.Runtime.Progress.Categories,
+		)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "request:complete"); got != 1 {
+		t.Fatalf("request:complete count = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "review:complete"); got != 1 {
+		t.Fatalf("review:complete count = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "request:init"); got != 0 {
+		t.Fatalf("request:init count = %d, want 0 after completion", got)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "review:init"); got != 0 {
+		t.Fatalf("review:init count = %d, want 0 after completion", got)
+	}
+	if runner.CallCount() != 2 {
+		t.Fatalf("provider command runner calls = %d, want 2", runner.CallCount())
+	}
+}
 
 // TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute proves public
 // Factory validation rejects authored definitions that reference missing workers,
@@ -651,6 +725,35 @@ func hasValidationTargetCode(targets []factoryapi.FactoryValidationTarget, code 
 		}
 	}
 	return false
+}
+
+func assertFactoryValidationAccepts(
+	t *testing.T,
+	factoryDir string,
+	edges serviceedges.Edges,
+) {
+	t.Helper()
+
+	factoryPath := filepath.Join(factoryDir, "factory.json")
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "factory", "config", "validate", factoryPath,
+	})
+	inputs.Input.WorkingDirectory = factoryDir
+
+	err := support.BuildProcess(t, edges).Execute(inputs.Input)
+	if err != nil {
+		t.Fatalf(
+			"Process.Execute(factory config validate) error = %v, want validation success; stdout=%q stderr=%q",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+
+	diagnostic := inputs.Stdout() + "\n" + inputs.Stderr()
+	if !strings.Contains(diagnostic, "Factory validation passed.") {
+		t.Fatalf("diagnostic missing validation success marker:\n%s", diagnostic)
+	}
 }
 
 func assertFactoryValidationRejects(
