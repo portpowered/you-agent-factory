@@ -21,7 +21,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
-	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -436,7 +435,7 @@ func provideInitialFactorySnapshotFactory(
 	return func(
 		loaded factorydefinitions.LoadedFactorySource,
 	) (*factorydefinitions.FactorySnapshot, error) {
-		return factorydefinitionsservice.CaptureInitialSnapshot(
+		return factorydefinitionswire.CaptureInitialSnapshot(
 			loaded,
 			factorydefinitionswire.PortableFactoryConfigPreparer(
 				applySupportedFiles,
