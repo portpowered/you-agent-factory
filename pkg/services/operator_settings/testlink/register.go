@@ -1,30 +1,14 @@
-// Package testlink registers the nested document owner constructor for
-// Operator Settings unit tests without creating an import cycle.
+// Package testlink is a transitional shim over internal test registration helpers.
+// Implementation lives under operator_settings/internal/testlink.
 package testlink
 
-import (
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	settingsconstruct "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct"
-	"github.com/portpowered/infinite-you/pkg/services/operator_settings/testproviders"
-	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-)
+import internaltestlink "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testlink"
 
-// RegisterDocumentOwner wires the nested document owner into Operator Settings
-// unit tests.
-func RegisterDocumentOwner() {
-	operatorsettings.ConfigureDocumentOwnerConstructor(settingsconstruct.NewDocumentOwner)
-}
+// RegisterDocumentOwner wires the nested document owner into Operator Settings unit tests.
+var RegisterDocumentOwner = internaltestlink.RegisterDocumentOwner
 
-// RegisterProvidersRoot wires the Providers root constructor used by transitional
-// servicewire composition in tests that do not load pkg/wire.
-func RegisterProvidersRoot() {
-	operatorsettings.ConfigureProvidersRootConstructor(func() (providers.Service, error) {
-		return testproviders.StandardCatalog(), nil
-	})
-}
+// RegisterProvidersRoot wires the Providers root constructor used by transitional tests.
+var RegisterProvidersRoot = internaltestlink.RegisterProvidersRoot
 
 // RegisterComposition wires transitional Settings composition hooks for tests.
-func RegisterComposition() {
-	RegisterDocumentOwner()
-	RegisterProvidersRoot()
-}
+var RegisterComposition = internaltestlink.RegisterComposition

@@ -9,7 +9,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"github.com/portpowered/infinite-you/pkg/services/operator_settings/testproviders"
+	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
@@ -105,7 +105,7 @@ func TestNewServicePreservesDocumentPersistAndEffectiveResolution(t *testing.T) 
 func newPreservationWireService(t *testing.T) operatorsettings.Service {
 	t.Helper()
 
-	providersRoot := testproviders.StandardCatalog()
+	providersRoot := internaltestproviders.StandardCatalog()
 	service, err := settingswire.NewService(
 		platformfilesystem.Local{},
 		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {

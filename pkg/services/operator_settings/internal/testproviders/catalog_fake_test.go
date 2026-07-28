@@ -4,14 +4,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/operator_settings/testproviders"
+	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 func TestStandardCatalog_GetProviderResolvesAlias(t *testing.T) {
 	t.Parallel()
 
-	result, err := testproviders.StandardCatalog().GetProvider(
+	result, err := internaltestproviders.StandardCatalog().GetProvider(
 		context.Background(),
 		providers.GetProviderRequest{ID: "cursor"},
 	)
@@ -26,7 +26,7 @@ func TestStandardCatalog_GetProviderResolvesAlias(t *testing.T) {
 func TestCatalogFake_ListProvidersReturnsDetachedEntries(t *testing.T) {
 	t.Parallel()
 
-	fake := testproviders.NewCatalogFake(
+	fake := internaltestproviders.NewCatalogFake(
 		providers.Descriptor{ID: providers.IDCodex, Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady},
 	)
 	result, err := fake.ListProviders(context.Background(), providers.ListProvidersRequest{})
@@ -41,7 +41,7 @@ func TestCatalogFake_ListProvidersReturnsDetachedEntries(t *testing.T) {
 func TestCatalogFake_GetProviderRejectsInvalidRequest(t *testing.T) {
 	t.Parallel()
 
-	_, err := testproviders.StandardCatalog().GetProvider(
+	_, err := internaltestproviders.StandardCatalog().GetProvider(
 		context.Background(),
 		providers.GetProviderRequest{},
 	)
@@ -53,7 +53,7 @@ func TestCatalogFake_GetProviderRejectsInvalidRequest(t *testing.T) {
 func TestCatalogFake_ExecuteIsNotImplemented(t *testing.T) {
 	t.Parallel()
 
-	_, err := testproviders.StandardCatalog().Execute(
+	_, err := internaltestproviders.StandardCatalog().Execute(
 		context.Background(),
 		providers.ExecuteRequest{},
 	)
