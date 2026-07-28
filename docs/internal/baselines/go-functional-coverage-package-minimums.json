@@ -1049,6 +1049,10 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli",
+      "minimum": 55.09
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire",
       "exception": {
         "kind": "measurement",
