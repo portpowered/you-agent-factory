@@ -1,9 +1,13 @@
 package definitions
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +19,12 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+const globalDefaultsPresetWorkflow = `return (async function () {
+  const defaults = await agent.run({prompt: "use operator defaults", label: "defaults"});
+  const preset = await agent.run({prompt: "use configured preset", label: "preset", preset: "careful-review"});
+  return {defaults, preset};
+})();`
 
 const (
 	globalDefaultsProviderAlias = "codex"
@@ -115,6 +125,46 @@ func TestExplicitFactoryConfigOverridesGlobalDefaults(t *testing.T) {
 	support.AssertArgsContainSequence(t, call.Args, []string{"--model", factoryOverrideModel})
 }
 
+// TestOperatorGlobalDefaultsAndWorkerPresetResolveAtProviderEdge proves
+// operator global defaults and named worker presets supply observable
+// provider/model selection at the public process and provider-edge boundary
+// through a JavaScript workflow executed against a root-built API server.
+func TestOperatorGlobalDefaultsAndWorkerPresetResolveAtProviderEdge(t *testing.T) {
+	dir := support.ScaffoldFactory(t, defaultsFactoryConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
+	homeDir := writeOperatorGlobalDefaultsAndPresetsConfig(t)
+
+	runner := support.NewShapedProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("defaults complete")},
+		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("preset complete")},
+	)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+		Env: append(os.Environ(),
+			"HOME="+homeDir,
+			"USERPROFILE="+homeDir,
+		),
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	started := startDefaultsPresetWorkflow(t, server.URL())
+	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
+	}
+	if runner.CallCount() != 2 {
+		t.Fatalf("provider command runner calls = %d, want 2", runner.CallCount())
+	}
+
+	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
+		t,
+		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
+	)
+	assertGlobalDefaultsPresetDispatches(t, dispatches.Dispatches)
+	assertGlobalDefaultsPresetProviderCommands(t, runner.Requests())
+}
+
 // TestSingleDiscoveredProviderIsUsedWhenNoDefaultExists proves that when no
 // operator or Factory default provider is configured and exactly one supported
 // provider is discoverable, model-backed Work dispatches through that provider.
@@ -193,6 +243,142 @@ func defaultsFactoryConfig() map[string]any {
 			},
 		},
 	}
+}
+
+func writeOperatorGlobalDefaultsAndPresetsConfig(t *testing.T) string {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	configDir := filepath.Join(homeDir, ".you-agent-factory")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatalf("mkdir global config directory: %v", err)
+	}
+	config := []byte(`{
+  "defaults": {"workerModelProvider": "openai", "workerModel": "default-model"},
+  "workerPresets": [{
+    "id": "careful-review",
+    "modelProvider": "codex",
+    "model": "preset-model",
+    "reasoningEffort": "medium"
+  }]
+}`)
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), config, 0o600); err != nil {
+		t.Fatalf("write global config: %v", err)
+	}
+	return homeDir
+}
+
+func startDefaultsPresetWorkflow(
+	t *testing.T,
+	serverURL string,
+) factoryapi.FactorySessionSyncExecutionResponse {
+	t.Helper()
+
+	dialect := "you-workflow-v1"
+	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
+		RequestId: "global-config-runtime-selection",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
+			InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
+				Dialect: &dialect,
+				InlineSource: factoryapi.FactoryOrchestratorJavaScriptInlineSource{
+					Encoding: factoryapi.FactoryOrchestratorJavaScriptInlineSourceEncodingUtf8,
+					Inline:   globalDefaultsPresetWorkflow,
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal global defaults preset workflow request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build global defaults preset workflow request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("start global defaults preset workflow: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		var body bytes.Buffer
+		_, _ = body.ReadFrom(response.Body)
+		t.Fatalf("start global defaults preset workflow status = %d: %s", response.StatusCode, body.String())
+	}
+	var started factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
+		t.Fatalf("decode global defaults preset workflow response: %v", err)
+	}
+	return started
+}
+
+func assertGlobalDefaultsPresetDispatches(
+	t *testing.T,
+	dispatches []factoryapi.FactorySessionDispatchSummary,
+) {
+	t.Helper()
+
+	if len(dispatches) != 2 {
+		t.Fatalf("dispatch count = %d, want 2", len(dispatches))
+	}
+	assertGlobalDefaultsPresetDispatch(t, dispatches[0], "", "CODEX", "default-model", "")
+	assertGlobalDefaultsPresetDispatch(t, dispatches[1], "careful-review", "CODEX", "preset-model", "medium")
+}
+
+func assertGlobalDefaultsPresetDispatch(
+	t *testing.T,
+	dispatch factoryapi.FactorySessionDispatchSummary,
+	wantPreset, wantProvider, wantModel, wantEffort string,
+) {
+	t.Helper()
+
+	gotPreset := dereferenceDefaultsValue(dispatch.PresetId)
+	gotProvider := dereferenceDefaultsValue(dispatch.ModelProvider)
+	gotModel := dereferenceDefaultsValue(dispatch.Model)
+	gotEffort := dereferenceDefaultsValue(dispatch.ReasoningEffort)
+	if gotPreset != wantPreset || gotProvider != wantProvider || gotModel != wantModel || gotEffort != wantEffort {
+		t.Fatalf(
+			"dispatch selection = preset=%q provider=%q model=%q effort=%q, want preset=%q provider=%q model=%q effort=%q",
+			gotPreset, gotProvider, gotModel, gotEffort,
+			wantPreset, wantProvider, wantModel, wantEffort,
+		)
+	}
+}
+
+func assertGlobalDefaultsPresetProviderCommands(
+	t *testing.T,
+	requests []platformprocess.CommandRequest,
+) {
+	t.Helper()
+
+	if len(requests) != 2 {
+		t.Fatalf("provider command count = %d, want 2", len(requests))
+	}
+	if requests[0].Command != string(modelprovider.ProviderCodex) {
+		t.Fatalf(
+			"default provider command = %q, want %q",
+			requests[0].Command,
+			modelprovider.ProviderCodex,
+		)
+	}
+	support.AssertArgsContainSequence(t, requests[0].Args, []string{"--model", "default-model"})
+	if requests[1].Command != string(modelprovider.ProviderCodex) {
+		t.Fatalf(
+			"preset provider command = %q, want %q",
+			requests[1].Command,
+			modelprovider.ProviderCodex,
+		)
+	}
+	support.AssertArgsContainSequence(t, requests[1].Args, []string{"--model", "preset-model"})
+}
+
+func dereferenceDefaultsValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func writeOperatorGlobalDefaultsConfig(t *testing.T, providerAlias, model string) string {

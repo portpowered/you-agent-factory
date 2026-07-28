@@ -150,3 +150,23 @@ func TestCLISubmitUnaryStructuredFailurePreservesPublicMessage(t *testing.T) {
 	assertRequest(t)
 	assertUnarySubmitStructuredFailurePreservesPublicMessage(t, inputs)
 }
+
+// TestCLISubmitUnaryContractHarnessExecutesThroughRootBuildProcess proves the
+// Work-owned unary_contract cell constructs a customer process through
+// root.BuildProcess, invokes public you submit through Process.Execute, and
+// replaces external effects only through edges.Edges.
+func TestCLISubmitUnaryContractHarnessExecutesThroughRootBuildProcess(t *testing.T) {
+	server, assertRequest := newUnaryStructuredFailureServer(t)
+	process := buildUnaryContractProcess(t, serviceedges.Edges{})
+	payloadPath := writeUnaryContractPayloadFile(t, "# Harness\n\nStructured failure.")
+
+	inputs := executeUnarySubmitExpectingFailure(
+		t,
+		process,
+		server.URL,
+		unaryContractStructuredFailureWorkName,
+		payloadPath,
+	)
+	assertRequest(t)
+	assertUnarySubmitStructuredFailurePreservesPublicMessage(t, inputs)
+}

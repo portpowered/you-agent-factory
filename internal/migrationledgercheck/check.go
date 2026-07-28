@@ -98,8 +98,6 @@ var ExpectedDeletionOnlyBatches = []string{
 	"runtime_api-delete-09-workers-resilience",
 	"runtime_api-delete-10-observability-product",
 	"runtime_api-delete-11-wrong-layer",
-	"smoke-delete-03-factory-definitions",
-	"smoke-delete-06-factory-packaged-cross",
 	"smoke-delete-09-guards",
 	"smoke-delete-11-resilience-process",
 	"smoke-delete-12-product-docs",

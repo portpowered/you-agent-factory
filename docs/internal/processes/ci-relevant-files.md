@@ -658,6 +658,11 @@ Wave 0 functional-tests-expansion planning authority lives under
   introduced by parallel closeout work (duplicate provider harness entries) and
   add inventory/checklist cells for any new live scenarios landing from `main`
   before pushing.
+  Held destination-cleared smoke batches `smoke-delete-03-factory-definitions` and
+  `smoke-delete-06-factory-packaged-cross` follow the same release pattern after
+  stories 001–003 migrate/delete: add destination-owned rows (including
+  `defaults_loaded_config_long_test.go` checklist cell), remove stale smoke source
+  rows, and mark both batches `released`.
   `tests/functional/factory/definitions/init_test.go` owns public Factory-init
   functional coverage through `session create --init-new-factory` against
   `support.StartFunctionalAPIServer`, with seeded Work run via
@@ -1068,6 +1073,17 @@ Wave 0 functional-tests-expansion planning authority lives under
   infers domain `provider_sessions` and subsection `root_composition`; every
   top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
   stays viz-compatible.
+
+- `tests/functional/work/peer_import_boundary_test.go` owns Work FUN functional
+  import seal (pss-fun-work-005): every package under `tests/functional/work/...`
+  must not import `pkg/services/work/internal`, deleted transitional Work packages
+  (`service/`, `stateaccessrecordings/`), or legacy `pkg/work*` consumer edges.
+  Named production peers must reach Work only through `pkg/services/work` or
+  `pkg/services/work/transports/*`. Use exact `isWorkServiceImport` matching
+  (`work` root or `work/` subpath) so `pkg/services/workers` is not mistaken for
+  Work. Complements `tests/functional/work/root_composition/*` behavioral proofs;
+  recordings-root contract proofs under `tests/functional/work/recordings` may
+  still import `pkg/services/work/wire`.
 
 - `tests/functional/provider_sessions/build_process_inert_test.go` owns
   Provider Sessions inert-construction proof through `support.BuildProcess` /
