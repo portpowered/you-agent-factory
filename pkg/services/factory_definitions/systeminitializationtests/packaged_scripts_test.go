@@ -16,11 +16,12 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout"
-	distributionpackageassets "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packageassets"
-	distributionpackagedinstallation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation"
+	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
+	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/packageassets"
 	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
@@ -58,7 +59,7 @@ func packagedScriptsTestPersistence() factorydefinitions.Persistence {
 			payload []byte,
 			validator factorydefinitions.Validator,
 		) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
-			return factoryauthoredlayout.Prepare(
+			return authoringlayoutprepare.FactoryLayout(
 				ctx,
 				segment,
 				payload,
@@ -156,7 +157,7 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 
 	definition := assembledScriptPackageDefinition(t)
 	homeDir := t.TempDir()
-	created, err := distributionpackagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}).
+	created, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}).
 		EnsurePackagedFactories(
 			t.Context(),
 			factorydefinitions.NamedFactoriesRoot(homeDir),
@@ -184,7 +185,7 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 	}
 	beforeRerun := snapshotDirectoryContents(t, factoryDir)
 
-	skipped, err := distributionpackagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}).
+	skipped, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}).
 		EnsurePackagedFactories(
 			t.Context(),
 			factorydefinitions.NamedFactoriesRoot(homeDir),
@@ -202,7 +203,7 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 func assembledScriptPackageDefinition(t *testing.T) factorydefinitions.PackagedDefinition {
 	t.Helper()
 
-	payload, err := distributionpackageassets.Assemble(distributionpackageassets.Definition{
+	payload, err := packageassets.Assemble(packageassets.Definition{
 		Package: "@test/scripts",
 		FactoryJSON: []byte(`{
   "name":"packaged-script-fixture",

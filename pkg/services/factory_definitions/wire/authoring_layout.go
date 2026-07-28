@@ -94,3 +94,11 @@ func NewAuthoringLayoutService(
 		Directories:          deps.Directories,
 	})
 }
+
+// AuthoredFactorySourceLoader supplies the Factory Definitions-owned authored
+// source resolver to transport operations without exposing its implementation.
+func AuthoredFactorySourceLoader(
+	fileSystem factorydefinitions.AuthoredLayoutReaderFileSystem,
+) factorydefinitions.AuthoredFactorySourceLoader {
+	return internalauthoredlayout.NewFactorySourceLoader(fileSystem)
+}
