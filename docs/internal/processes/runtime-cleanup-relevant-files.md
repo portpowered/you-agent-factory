@@ -758,7 +758,12 @@ peer-facing loader); publish distinct `ErrInvalidAuthoredFactorySource` vs
 `ValidationResult` success shapes (not a peer-facing nested `Validator`
 interface); publish distinct `ErrInvalidFactoryDefinitionPayload` vs
 `FactoryDefinitionValidationFailure` (`ErrFactoryDefinitionValidationFailed`
-with blocking `ValidationTarget` findings and no Petri vocabulary). The
+with blocking `ValidationTarget` findings and no Petri vocabulary). CLN-DEF-CONTRACTS
+story 001 seals owned catalog and validate peer exercise in
+`service_root_contract_invariants_test.go` (`peerOwnedDefinitionsConsumer` uses
+only `pkg/services/factory_definitions` imports) and documents the owned vs
+foreign split in `owned_contract.go` plus the foreign-vocabulary marker in
+`contracts_root.go`. The
 parent-private nested validation subservice locks its public surface in
 `internal/services/validation/boundary_test.go`: `service.go` exports only
 `Service` and `Dependencies` with factory_definitions root request/result

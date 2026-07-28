@@ -191,6 +191,10 @@ var IsKnownAgentToolPolicy = workerconfig.IsKnownAgentToolPolicy
 var NormalizeAgentToolPolicy = workerconfig.NormalizeAgentToolPolicy
 var CloneWorkerConfig = workerconfig.Clone
 
+// Foreign-vocabulary deletion-only aliases below are retained until
+// CLN-DEF-CONTRACTS stories 003-005 rehome them toward Recordings, Runtime,
+// Work, Workers, and Providers ownership.
+
 type (
 	ActiveThrottlePause                              = contracts.ActiveThrottlePause
 	ArcMode                                          = contracts.ArcMode
