@@ -4524,18 +4524,18 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/work/stateaccessrecordings",
-      "disposition": "retain",
-      "destination": "work",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/work/service",
       "disposition": "move",
       "destination": "work",
       "destinationKind": "owner",
       "successor": "pkg/services/work/internal",
       "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
+    },
+    {
+      "packagePath": "pkg/services/work/stateaccessrecordings",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/work/transports/cli",
