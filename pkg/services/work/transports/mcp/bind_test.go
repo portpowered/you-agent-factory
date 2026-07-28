@@ -98,6 +98,7 @@ type fakeWorkRoot struct {
 	work.Service
 	invoked                     *bool
 	getWork                     func(context.Context, string, string) (work.ReadModel, error)
+	listWork                    func(context.Context, string, work.ListOptions) (work.ListResult, error)
 	submitWorkRequestForSession func(context.Context, string, work.WorkRequest) (work.WorkRequestSubmitResult, error)
 }
 
@@ -117,6 +118,18 @@ func (fake fakeWorkRoot) GetWork(
 		panic("unexpected GetWork on fake Work root")
 	}
 	return fake.getWork(ctx, sessionID, workID)
+}
+
+func (fake fakeWorkRoot) ListWork(
+	ctx context.Context,
+	sessionID string,
+	options work.ListOptions,
+) (work.ListResult, error) {
+	fake.markInvoked()
+	if fake.listWork == nil {
+		panic("unexpected ListWork on fake Work root")
+	}
+	return fake.listWork(ctx, sessionID, options)
 }
 
 func (fake fakeWorkRoot) SubmitWorkRequestForSession(

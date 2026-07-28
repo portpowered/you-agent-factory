@@ -8,13 +8,16 @@ import (
 )
 
 const (
-	errorCodeBadRequest          = "BAD_REQUEST"
-	errorCodeAdmissionInvalid    = "work.admission.invalid"
-	errorCodeAdmissionConflict   = "work.admission.conflict"
-	errorCodeAdmissionRejected   = "work.admission.rejected"
-	errorMessageAdmissionInvalid = "invalid Work Request"
-	errorMessageAdmissionConflict = "Work Request admission conflict"
-	errorMessageAdmissionRejected = "Work Request rejected"
+	errorCodeBadRequest               = "BAD_REQUEST"
+	errorCodeAdmissionInvalid         = "work.admission.invalid"
+	errorCodeAdmissionConflict        = "work.admission.conflict"
+	errorCodeAdmissionRejected        = "work.admission.rejected"
+	errorCodeStateAccessNotFound      = "work.state_access.not_found"
+	errorCodeStateAccessInvalid       = "work.state_access.invalid"
+	errorMessageAdmissionInvalid      = "invalid Work Request"
+	errorMessageAdmissionConflict     = "Work Request admission conflict"
+	errorMessageAdmissionRejected     = "Work Request rejected"
+	errorMessageStateAccessNotFound = "Work not found"
 )
 
 func decodeInputErrorEnvelope(context string, err error) ToolErrorEnvelope {
@@ -72,6 +75,37 @@ func submitErrorEnvelope(err error) ToolErrorEnvelope {
 			},
 		}
 	default:
+		return executionErrorEnvelope(err)
+	}
+}
+
+func stateAccessErrorEnvelope(err error) ToolErrorEnvelope {
+	switch {
+	case errors.Is(err, work.ErrWorkNotFound):
+		return ToolErrorEnvelope{
+			Code:      errorCodeStateAccessNotFound,
+			Message:   errorMessageStateAccessNotFound,
+			Retryable: false,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	default:
+		var validationErr *work.ValidationError
+		if errors.As(err, &validationErr) {
+			details := map[string]any{
+				"reason": err.Error(),
+			}
+			if field := strings.TrimSpace(validationErr.Field); field != "" {
+				details["field"] = field
+			}
+			return ToolErrorEnvelope{
+				Code:      errorCodeStateAccessInvalid,
+				Message:   strings.TrimSpace(validationErr.Error()),
+				Retryable: false,
+				Details:   details,
+			}
+		}
 		return executionErrorEnvelope(err)
 	}
 }

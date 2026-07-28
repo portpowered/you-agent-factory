@@ -24,7 +24,7 @@ func Get(
 	}
 	result, err := service.GetWork(ctx, input.SessionID, input.WorkID)
 	if err != nil {
-		envelope := executionErrorEnvelope(err)
+		envelope := stateAccessErrorEnvelope(err)
 		return ToolResponse[work.ReadModel]{Error: &envelope}
 	}
 	return ToolResponse[work.ReadModel]{Result: &result}
