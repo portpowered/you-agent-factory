@@ -298,8 +298,8 @@ func pollMCPAsyncSessionToTerminalSuccess(
 		switch session.Status {
 		case factoryapi.FactorySessionDurableLifecycleStatusRunning:
 			if mcpAsyncResultIsFinal(t, client, sessionID, mode) {
-				result := readMCPAsyncTerminalResult(t, client, sessionID, mode)
-				return session, result
+				// Result can reach FINAL before durable session status catches up.
+				break
 			}
 			assertMCPAsyncRunningResultNotReady(t, client, sessionID, mode)
 		case factoryapi.FactorySessionDurableLifecycleStatusSucceeded:
@@ -414,8 +414,8 @@ func pollMCPAsyncSessionToTerminalFailure(
 		switch session.Status {
 		case factoryapi.FactorySessionDurableLifecycleStatusRunning:
 			if mcpAsyncResultIsUnavailableFailure(t, client, sessionID, mode) {
-				result := readMCPAsyncTerminalFailureResult(t, client, sessionID, mode)
-				return session, result
+				// Result can reach terminal failure before durable session status catches up.
+				break
 			}
 			assertMCPAsyncRunningResultNotReady(t, client, sessionID, mode)
 		case factoryapi.FactorySessionDurableLifecycleStatusFailed:
