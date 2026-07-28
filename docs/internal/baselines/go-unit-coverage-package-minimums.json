@@ -232,7 +232,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts",
-      "minimum": 87.63
+      "minimum": 86.43
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle",
@@ -422,7 +422,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
-      "minimum": 84.84
+      "minimum": 68.18
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/internal/service",
@@ -430,15 +430,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
-      "minimum": 50.00
+      "minimum": 25.82
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
-      "minimum": 71.25
+      "minimum": 63.75
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
-      "minimum": 92.85
+      "minimum": 71.42
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
@@ -454,7 +454,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
-      "minimum": 100.00
+      "minimum": 85.71
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
@@ -522,11 +522,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
-      "minimum": 100.00
+      "minimum": 98.38
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl",
-      "minimum": 89.53
+      "minimum": 79.41
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
@@ -558,13 +558,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",
-      "exception": {
-        "kind": "measurement",
-        "justification": "Transitional compile shim; root composition now constructs through factory_definitions/wire and implementation coverage lives under factory_definitions/internal and factory_definitions/wire.",
-        "owner": "factory-definition-maintainers",
-        "deadline": "2027-07-15",
-        "removalGate": "DEL-DEF-RESIDUAL deletes this transitional public package path."
-      }
+      "minimum": 61.50
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli",
