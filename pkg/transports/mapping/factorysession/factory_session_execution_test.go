@@ -576,6 +576,46 @@ func TestDurableAPIResponseEvents_DirectExecutionPathMapsSessionNotFound(t *test
 	}
 }
 
+func TestDurableAPIResponseEvents_DurableExecutionPathMapsStoreExpired(t *testing.T) {
+	t.Parallel()
+
+	api := factorysession.NewDurableAPI(durableResponseEventsExecutionFake{
+		subscribeDurable: func(_ context.Context, request factorysessionexecution.ResponseEventSubscriptionRequest) (*factorysessionexecution.ResponseEventCursor, error) {
+			if request.SessionID != "dur-sess-expired" {
+				t.Fatalf("subscribe request = %#v", request)
+			}
+			return nil, factorysessionexecution.ErrResponseEventStoreExpired
+		},
+	}, nil)
+
+	_, err := api.SubscribeDurableFactoryResponseEvents(context.Background(), factorysessionexecution.ResponseEventSubscriptionRequest{
+		SessionID: "dur-sess-expired",
+	})
+	if !errors.Is(err, apisurface.ErrFactoryResponseEventStreamExpired) {
+		t.Fatalf("SubscribeDurableFactoryResponseEvents error = %v, want ErrFactoryResponseEventStreamExpired", err)
+	}
+}
+
+func TestDurableAPIResponseEvents_DirectExecutionPathMapsStoreExpired(t *testing.T) {
+	t.Parallel()
+
+	api := factorysession.NewDurableAPI(directResponseEventsExecutionFake{
+		subscribeDirect: func(_ context.Context, sessionID string, request factorysessionexecution.ResponseEventSubscriptionRequest) (*factorysessionexecution.ResponseEventCursor, error) {
+			if sessionID != "dur-sess-expired" || request.SessionID != "dur-sess-expired" {
+				t.Fatalf("direct subscribe = session %q request %#v", sessionID, request)
+			}
+			return nil, factorysessionexecution.ErrResponseEventStoreExpired
+		},
+	}, nil)
+
+	_, err := api.SubscribeDurableFactoryResponseEvents(context.Background(), factorysessionexecution.ResponseEventSubscriptionRequest{
+		SessionID: "dur-sess-expired",
+	})
+	if !errors.Is(err, apisurface.ErrFactoryResponseEventStreamExpired) {
+		t.Fatalf("SubscribeDurableFactoryResponseEvents error = %v, want ErrFactoryResponseEventStreamExpired", err)
+	}
+}
+
 func TestNewResponseEventSubscription_SerializesPublishedEvents(t *testing.T) {
 	t.Parallel()
 

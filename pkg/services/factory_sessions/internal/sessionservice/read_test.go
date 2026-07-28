@@ -17,7 +17,7 @@ import (
 
 func newResponseServiceTestGateway(t *testing.T, host *openTestHost) *factorysessionservice.Service {
 	t.Helper()
-	responseService, err := responsestreamwire.NewService(func() string { return "response-event-test-id" })
+	responseService, err := responsestreamwire.NewService(func() string { return "response-event-test-id" }, nil)
 	if err != nil {
 		t.Fatalf("construct response-stream service: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestService_SubscribeFactoryResponseEvents_RequiresInjectedResponseOwner(t 
 
 func TestService_SubscribeFactoryResponseEvents_DelegatesReconnectPolicyToPrivateService(t *testing.T) {
 	t.Parallel()
-	responseService, err := responsestreamwire.NewService(func() string { return "response-event-outer" })
+	responseService, err := responsestreamwire.NewService(func() string { return "response-event-outer" }, nil)
 	if err != nil {
 		t.Fatalf("construct response-stream service: %v", err)
 	}

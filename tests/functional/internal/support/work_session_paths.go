@@ -43,6 +43,24 @@ func SessionEventsURL(baseURL, sessionID string) string {
 	return strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/events"
 }
 
+// SessionResponseEventsURL joins baseURL with the canonical Response Event SSE
+// stream for one Factory Session.
+func SessionResponseEventsURL(baseURL, sessionID string) string {
+	return strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/response-events"
+}
+
+// SessionResponseEventsURLWithAfterSequence joins baseURL with one session-scoped
+// Response Event stream that resumes after an acknowledged response sequence.
+func SessionResponseEventsURLWithAfterSequence(baseURL, sessionID string, afterSequence int64) string {
+	endpoint := SessionResponseEventsURL(baseURL, sessionID)
+	if afterSequence > 0 {
+		params := url.Values{}
+		params.Set("after_sequence", strconv.FormatInt(afterSequence, 10))
+		endpoint += "?" + params.Encode()
+	}
+	return endpoint
+}
+
 // SessionEventsURLWithCursor joins baseURL with one session-scoped Factory Event
 // stream endpoint that resumes after an acknowledged reconnect cursor.
 func SessionEventsURLWithCursor(baseURL, sessionID string, cursor FactoryEventReadCursor) string {

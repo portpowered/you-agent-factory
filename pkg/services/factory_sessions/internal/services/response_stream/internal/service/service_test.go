@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
@@ -42,7 +43,7 @@ func newService(t *testing.T) responsestreamservice.Service {
 	var next atomic.Uint64
 	service, err := responsestreamwire.NewService(func() string {
 		return fmt.Sprintf("response-event-%d", next.Add(1))
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -158,9 +159,34 @@ func TestService_CancellationAndSlowSubscribersStayBounded(t *testing.T) {
 	}
 }
 
+func TestService_NewEventStoreAppliesConfiguredRetentionLimits(t *testing.T) {
+	t.Parallel()
+
+	wantLimits := &factorysessions.ResponseEventRetentionLimits{
+		MaxEvents:                42,
+		MaxBytes:                 8192,
+		CompletedRetentionWindow: time.Minute,
+	}
+	service, err := responsestreamwire.NewService(func() string { return "response-event-1" }, wantLimits)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	store, err := service.NewEventStore("session-1", &fixedClock{now: time.Date(2026, 7, 22, 20, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatalf("NewEventStore: %v", err)
+	}
+	got := store.RetentionLimits()
+	if got.MaxEvents != wantLimits.MaxEvents ||
+		got.MaxBytes != wantLimits.MaxBytes ||
+		got.CompletedRetentionWindow != wantLimits.CompletedRetentionWindow {
+		t.Fatalf("RetentionLimits = %#v, want max events %d max bytes %d completed window %s",
+			got, wantLimits.MaxEvents, wantLimits.MaxBytes, wantLimits.CompletedRetentionWindow)
+	}
+}
+
 func TestService_ConstructionIsInertAndRejectsMissingEffects(t *testing.T) {
 	t.Parallel()
-	if service, err := responsestreamwire.NewService(nil); err == nil || service != nil {
+	if service, err := responsestreamwire.NewService(nil, nil); err == nil || service != nil {
 		t.Fatalf("NewService(nil) = %#v, %v; want deterministic dependency error", service, err)
 	}
 	service := newService(t)

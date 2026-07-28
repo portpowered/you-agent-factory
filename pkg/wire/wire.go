@@ -102,6 +102,7 @@ var servicesSet = wire.NewSet(
 	provideFactorySessionIDGenerator,
 	provideFactorySessionRuntimeInstanceIDGenerator,
 	provideFactorySessionResponseEventIDGenerator,
+	provideFactorySessionResponseEventRetentionLimits,
 	provideFactorySessionCursorPersistenceFileSystem,
 	provideFactorySessionCursorCreateTemporaryFile,
 	provideFactorySessionCursorStoreFactory,

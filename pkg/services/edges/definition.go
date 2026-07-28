@@ -79,6 +79,7 @@ type Edges struct {
 	FactorySessionIDGenerator                       factorysessions.SessionIDGenerator
 	FactorySessionRuntimeInstanceIDGenerator        factorysessions.RuntimeInstanceIDGenerator
 	FactorySessionResponseEventIDGenerator          factorysessions.ResponseEventIDGenerator
+	FactorySessionResponseEventRetentionLimits      *factorysessions.ResponseEventRetentionLimits
 	FactorySessionCursorPersistenceFileSystem       factorysessions.CursorPersistenceFileSystem
 	FactorySessionCursorCreateTemporaryFile         factorysessions.CursorPersistenceCreateTemporaryFile
 	FactorySessionRuntimePersistenceFileSystem      factorysessions.RuntimePersistenceFileSystem
@@ -307,6 +308,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.FactorySessionResponseEventIDGenerator != nil {
 		defaults.FactorySessionResponseEventIDGenerator = replacements.FactorySessionResponseEventIDGenerator
+	}
+	if replacements.FactorySessionResponseEventRetentionLimits != nil {
+		defaults.FactorySessionResponseEventRetentionLimits = replacements.FactorySessionResponseEventRetentionLimits
 	}
 	if replacements.FactorySessionCursorPersistenceFileSystem != nil {
 		defaults.FactorySessionCursorPersistenceFileSystem = replacements.FactorySessionCursorPersistenceFileSystem

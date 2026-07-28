@@ -34,6 +34,7 @@ type FunctionalAPIServerConfig struct {
 	UseMockWorkers            bool
 	MockWorkersConfig         *workers.MockWorkersConfig
 	WaitForServiceModeRuntime bool
+	ResponseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits
 	Args                      []string
 	Env                       []string
 	ProviderOverride          providercontract.Provider
@@ -65,6 +66,9 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	edges := cfg.Edges
 	if cfg.ProviderOverride != nil {
 		edges.ProviderOverride = cfg.ProviderOverride
+	}
+	if cfg.ResponseEventRetentionLimits != nil {
+		edges.FactorySessionResponseEventRetentionLimits = cfg.ResponseEventRetentionLimits
 	}
 
 	api := NewProcessAPIServer()

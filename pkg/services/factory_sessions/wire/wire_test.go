@@ -208,6 +208,7 @@ type newServiceInputs struct {
 	invocationWorkTypes          factorydefinitions.InvocationWorkTypeService
 	ttsObservability             factorydefinitions.TTSObservabilityService
 	eventIDs                     factorysessions.ResponseEventIDGenerator
+	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits
 	sessionIDs                   factorysessions.SessionIDGenerator
 	resolveHome                  factorysessions.HomeDirectoryResolver
 	directoryInspection          DirectoryInspection
@@ -239,6 +240,7 @@ func (in newServiceInputs) callNewService() (factorysessions.Service, error) {
 		in.invocationWorkTypes,
 		in.ttsObservability,
 		in.eventIDs,
+		in.responseEventRetentionLimits,
 		in.sessionIDs,
 		in.resolveHome,
 		in.directoryInspection,

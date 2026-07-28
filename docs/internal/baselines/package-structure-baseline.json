@@ -44,11 +44,6 @@
     },
     {
       "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_inference_events_thin_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_javascript_sync_structured_input_test.go",
       "target": "tests/functional/runtime_api"
     },
@@ -265,17 +260,7 @@
     {
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_inference_events_test.go",
-      "target": "TestInferenceEvents_HTTPStreamAndPublicWorkCorrelateRetryAttempts"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_inference_events_test.go",
       "target": "TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_inference_events_test.go",
-      "target": "TestInferenceEvents_ThinEventSmoke_CapturesThinnedDispatchInferenceSequenceAndReconstructsViews"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -925,11 +910,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/replay_contracts/replay_runtime_config_smoke_long_test.go",
-      "target": "replay_contracts"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/replay_contracts/replay_script_boundary_events_test.go",
       "target": "replay_contracts"
     },
     {
@@ -3227,5 +3207,6 @@
       "filePath": "pkg/services/workers/worktree",
       "target": "pkg/services/workers"
     }
-  ]
+  ],
+  "violations": []
 }
