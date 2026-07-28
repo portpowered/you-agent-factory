@@ -745,10 +745,36 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIFactoryValidateDoesNotMutateOnFailure`.
   - `TestCLIFactoryPersistFromFileThenRunSucceeds`.
 
-- [ ] `tests/functional/factory/definitions/import_export_test.go`
+- [x] `tests/functional/factory/definitions/import_export_test.go`
   - `TestExportedFactoryCanBeImportedAndRun`.
   - `TestImportExportPreservesNestedDocsScriptsAndMetadata`.
   - `TestInvalidImportDoesNotReplaceCurrentFactory`.
+
+
+- [x] `tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go`
+  - `TestCLIFactoryValidateRejectsInvalidDefinitionActionably`.
+  - `TestCLIFactoryValidateDoesNotMutateOnFailure`.
+  - `TestCLIFactoryPersistFromFileThenRunSucceeds`.
+
+- [x] `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
+  - `TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation`.
+  - `TestCLISubmitBatchSuccessHumanAndJSONShapes`.
+  - `TestCLISubmitBatchInvalidJSONFailsBeforeUpsert`.
+  - `TestCLISubmitBatchContractHarnessExecutesThroughRootBuildProcess`.
+
+- [x] `tests/functional/work/transports/cli/submit/unary_contract/unary_contract_test.go`
+  - `TestCLISubmitUnaryFileAndStdinReachWork`.
+  - `TestCLISubmitUnaryDefaultAndExplicitSessionTargeting`.
+  - `TestCLISubmitUnaryStructuredFailurePreservesPublicMessage`.
+
+- [x] `tests/functional/workers/transports/cli/run/help/invocation_help_test.go`
+  - `TestCLIRunHelpShowsInvocationSignatureForNamedFactory`.
+  - `TestCLIRunHelpDistinguishesRequiredAndOptionalParameters`.
+  - `TestCLIRunHelpDoesNotDispatchExternalWork`.
+
+- [x] `tests/functional/workers/transports/cli/run/modes/output_modes_test.go`
+  - `TestCLIRunSuccessPrimaryResultTextJSONAndNDJSON`.
+  - `TestCLIRunFailureOmitsFalseSuccessPrimaryResult`.
 
 ### Factory visualization
 
@@ -913,6 +939,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCursorHistoricalInspectionThroughRootBuildProcess_ReturnsDeterministicNormalizedDetail`.
   - `TestCursorHistoricalInspectionThroughRootBuildProcess_PropagatesMissingAndContainmentFailures`.
   - `TestCursorHistoricalInspectionThroughRootBuildProcess_DegradesAdverseNativeDataSafely`.
+
+- [x] `tests/functional/provider_sessions/build_process_inert_test.go`
+  - `TestProviderSessionsRemainInertThroughRootBuildProcessConstruction`.
+
+- [x] `tests/functional/provider_sessions/peer_import_boundary_test.go`
+  - `TestFunctionalProviderSessionsPackageUsesPublicProcessImportsOnly`.
 
 - [x] `tests/functional/provider_sessions/details/codex_details_test.go`
   - `TestCodexProviderSessionDetailsLoadFromGoldenMetadata` covers API detail.
