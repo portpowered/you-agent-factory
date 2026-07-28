@@ -38,6 +38,7 @@ var reviewedTransportRootProcessTests = map[string]struct{}{
 
 const (
 	factoryDefinitionsImportPath = repositoryImportPrefix + "pkg/services/factory_definitions"
+	factoryDefinitionsInternalContractsImportPath = repositoryImportPrefix + "pkg/services/factory_definitions/internal/contracts"
 	factoryNamedPathsImportPath  = repositoryImportPrefix + "pkg/services/factory_definitions/namedpaths"
 	operatorSettingsImportPath   = repositoryImportPrefix + "pkg/services/operator_settings"
 	workersImportPath            = repositoryImportPrefix + "pkg/services/workers"

@@ -345,7 +345,7 @@ func provideSystemInitializationService(
 			Ensure: ensureOperatorBackendScope,
 		},
 		packagedCatalog,
-		packagedinstallation.New(persistence, packagedInstallationFileSystem),
+		factorydefinitionsservice.NewPackagedFactoryInstaller(persistence, packagedInstallationFileSystem),
 		inspectPath,
 		migrationFiles,
 	)

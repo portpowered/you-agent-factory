@@ -227,6 +227,54 @@ func TestStructuredInvocationContentRequiresOnePrimaryPositionalValue(t *testing
 	}
 }
 
+func TestSessionOwner_ReturnsArgumentErrorFromPrepareInvocationInput(t *testing.T) {
+	owner := newTestSessionOwner(sessionOwnerFixture{
+		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return sessionOwnerFactoryConfig(), nil },
+		SubmitWork: func(context.Context, string, workdomain.SubmitRequest) (workdomain.WorkRequestSubmitResult, error) {
+			return workdomain.WorkRequestSubmitResult{}, nil
+		},
+		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			return SessionInvocationObservation{}, nil
+		},
+	})
+
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
+		Args: &map[string]any{"input": "hello"},
+	}))
+	var argumentErr *work.ArgumentError
+	if !errors.As(err, &argumentErr) || argumentErr.Code != work.ArgumentErrorCodeInvalidActiveSignature {
+		t.Fatalf("error = %v, want INVALID_ACTIVE_SIGNATURE", err)
+	}
+}
+
+func TestSessionOwner_RejectsWhitespaceOnlyCompatibilityTextBeforeSubmittingWork(t *testing.T) {
+	textKind := factoryapi.InvocationInputSourceKindText
+	content := sessionOwnerTextContent(t, "   ")
+	submitCalls := 0
+	owner := newTestSessionOwner(sessionOwnerFixture{
+		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return sessionOwnerFactoryConfig(), nil },
+		SubmitWork: func(context.Context, string, workdomain.SubmitRequest) (workdomain.WorkRequestSubmitResult, error) {
+			submitCalls++
+			return workdomain.WorkRequestSubmitResult{}, nil
+		},
+		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			return SessionInvocationObservation{}, nil
+		},
+	})
+
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
+		SourceKind: &textKind,
+		Content:    &content,
+	}))
+	var inputErr *work.InputError
+	if !errors.As(err, &inputErr) || inputErr.Code != work.InputErrorCodeEmpty {
+		t.Fatalf("error = %v, want INVOCATION_INPUT_EMPTY", err)
+	}
+	if submitCalls != 0 {
+		t.Fatalf("submit calls = %d, want 0", submitCalls)
+	}
+}
+
 func TestSessionOwner_RejectsInvalidInputsBeforeSubmittingWork(t *testing.T) {
 	textKind := factoryapi.InvocationInputSourceKindText
 	fileKind := factoryapi.InvocationInputSourceKindFileRef

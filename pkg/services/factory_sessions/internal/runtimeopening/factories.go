@@ -129,6 +129,6 @@ type WorkerExecutionFactory func(
 	roles.CurrentRuntimeResolver,
 	models.Service,
 	models.RuntimeScopeRef,
-	work.ContentMaterializer,
+	work.Service,
 	WorkersRuntimeFactory,
 ) (workers.RuntimeService, error)

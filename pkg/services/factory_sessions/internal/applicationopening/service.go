@@ -103,6 +103,9 @@ func (service *Service) OpenApplication(
 	if err != nil {
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application runtime: %w", err)
 	}
+	if ports.RuntimeHTTPServicesBound != nil {
+		ports.RuntimeHTTPServicesBound(opened.HTTP)
+	}
 	effectiveSink := visualizationSink
 	if inputs.Effects.FactoryVisualizationSink != nil {
 		effectiveSink = inputs.Effects.FactoryVisualizationSink

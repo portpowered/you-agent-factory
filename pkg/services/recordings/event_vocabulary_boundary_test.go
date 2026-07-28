@@ -21,7 +21,7 @@ var worldStateVocabularyConsumerPackages = []string{
 }
 
 var replayVocabularyConsumerPackages = []string{
-	"github.com/portpowered/infinite-you/pkg/services/recordings/service",
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal",
 }
 
 const factoryRuntimeRootImport = "github.com/portpowered/infinite-you/pkg/services/factory_runtime"

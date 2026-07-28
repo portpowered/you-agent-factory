@@ -6,7 +6,7 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service/host"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 )
 
 func (h *Host) Replace(req instancehost.ReplaceRequest) (factoryruntime.HostedHandle, error) {

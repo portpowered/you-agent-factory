@@ -12,7 +12,7 @@ import (
 	edges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryruntimeservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service"
+	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -190,9 +190,9 @@ var servicesSet = wire.NewSet(
 	provideFactoryScaffoldInitializer,
 	provideEditableFactoryValidator,
 	provideInitialFactorySnapshotFactory,
-	factoryruntimeservice.NewRuntimeFactory,
-	factoryruntimeservice.NewAssembly,
-	wire.Bind(new(factorysessionwire.FactoryRuntimeAssembler), new(*factoryruntimeservice.Assembly)),
+	factoryruntimewire.NewRuntimeFactory,
+	factoryruntimewire.NewAssembly,
+	wire.Bind(new(factorysessionwire.FactoryRuntimeAssembler), new(*factoryruntimewire.Assembly)),
 	wire.Struct(new(factorysessionwire.RuntimeOpeningDependencies), "*"),
 	provideLoadedFactorySourceFactory,
 	provideLoadedFactoryLoader,

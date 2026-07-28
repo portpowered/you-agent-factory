@@ -78,8 +78,12 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 		DurableListing: mapped.Durable, DurableProjection: mapped.Durable,
 		DurableLister:     opened.SessionExecution,
 		LiveSessionLister: factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.FactorySessions},
-		WorkerPrompts:     opened.WorkerPrompts, ContentStaging: handler.contentStaging,
-		RequestPreparation: handler.requestPreparation, SessionRequests: handler.sessionRequests,
+		WorkerPrompts: opened.WorkerPrompts,
+		WorkService: work.AdmissionContentService(
+			handler.contentStaging,
+			handler.requestPreparation,
+		),
+		SessionRequests: handler.sessionRequests,
 	}, opened.Logger)
 	server := transporthttp.NewServer(sessionsHandler, modelsHandler, opened.ProviderSessions, opened.Logger)
 	return server.Handler(), nil
@@ -101,7 +105,10 @@ func (handler *Handler) BindDurableExecution(
 		DurableExecution: durable, DurableLifecycle: durable,
 		DurableListing: durable, DurableProjection: durable,
 		DurableLister: execution, FactoryValidation: handler.validation,
-		ContentStaging: handler.contentStaging, RequestPreparation: handler.requestPreparation,
+		WorkService: work.AdmissionContentService(
+			handler.contentStaging,
+			handler.requestPreparation,
+		),
 		SessionRequests: handler.sessionRequests,
 	}, logger)
 	return transporthttp.NewServer(sessionsHandler, nil, nil, logger).Handler(), nil

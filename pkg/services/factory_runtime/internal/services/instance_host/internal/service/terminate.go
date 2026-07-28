@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service/host"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 )
 
 func (h *Host) Stop(handle factoryruntime.HostedHandle) error {

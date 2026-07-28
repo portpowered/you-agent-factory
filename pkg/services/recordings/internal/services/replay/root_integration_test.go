@@ -6,7 +6,7 @@ import (
 	"time"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingsservice "github.com/portpowered/infinite-you/pkg/services/recordings/service"
+	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
 )
 
 type unusedLedger struct {
@@ -16,9 +16,9 @@ type unusedLedger struct {
 func TestAcceptedRecordingsRootUsesPrivateReplay(t *testing.T) {
 	t.Parallel()
 
-	root := recordingsservice.NewService(
+	root := recordingsinternal.NewService(
 		&unusedLedger{},
-		recordingsservice.NewProjectionService(),
+		recordingsinternal.NewProjectionService(),
 	)
 	recording := recordings.ReplayRecordingFacts{
 		RecordingID: "recording-root-replay",

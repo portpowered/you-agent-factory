@@ -56,7 +56,7 @@ func (o *SessionOwner) waitForResult(
 			}
 			loggedActive = true
 		}
-		if result, done, err := o.resolveObservation(sessionID, input, observation, packaged); done {
+		if result, done, err := o.resolveObservation(ctx, sessionID, input, observation, packaged); done {
 			return result, err
 		}
 		if err := o.waitNext(waitCtx); err != nil {
@@ -66,6 +66,7 @@ func (o *SessionOwner) waitForResult(
 }
 
 func (o *SessionOwner) resolveObservation(
+	ctx context.Context,
 	sessionID string,
 	input SessionInvocationWaitInput,
 	observation SessionInvocationObservation,
@@ -74,7 +75,7 @@ func (o *SessionOwner) resolveObservation(
 	selectionInput := work.PrimaryResultSelectionInput{
 		RequestID: input.RequestID, InvocationReturn: input.InvocationReturn, WorldState: observation.WorldState,
 	}
-	selection, err := work.ResolvePrimaryResult(selectionInput)
+	selection, err := o.workService.ResolvePrimaryResult(ctx, selectionInput)
 	if err == nil {
 		if packaged {
 			if telemetry, ok := o.telemetry.(SessionInvocationPackagedTelemetry); ok {
@@ -82,6 +83,10 @@ func (o *SessionOwner) resolveObservation(
 			}
 		}
 		return o.completedResult(sessionID, input, selection), true, nil
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		result, waitErr := o.waitErrorResult(sessionID, input, err)
+		return result, true, waitErr
 	}
 	primaryErr, ok := err.(*work.PrimaryResultError)
 	if !ok {

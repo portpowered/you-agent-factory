@@ -8,14 +8,14 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingsservice "github.com/portpowered/infinite-you/pkg/services/recordings/service"
+	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
 )
 
 func TestAcceptedRecordingsRootUsesPrivateCanonicalLedger(t *testing.T) {
 	t.Parallel()
 
 	ledger := &stubLedger{}
-	root := recordingsservice.NewService(ledger, recordingsservice.NewProjectionService())
+	root := recordingsinternal.NewService(ledger, recordingsinternal.NewProjectionService())
 	if root == nil {
 		t.Fatal("NewService returned nil")
 	}

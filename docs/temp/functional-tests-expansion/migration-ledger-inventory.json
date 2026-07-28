@@ -1219,6 +1219,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/packaged/catalog/override_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestInvalidLocalOverrideDoesNotFallBackSilently",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/override_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/override_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestLocalFactoryOverridesPackagedFactoryWithSameName",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/override_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/override_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestUnrelatedLocalFactoryDoesNotHidePackagedFactories",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/override_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/definitions/init_test.go",
       "package": "you-agent-factory/tests/functional/factory/definitions",
       "scenario": "TestFactoryInitCreatesRunnablePortableScaffold",
@@ -4609,6 +4639,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/sessions/execution/visibility_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/execution",
+      "scenario": "TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads",
+      "lane": "short",
+      "destination": "tests/functional/sessions/execution/visibility_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/execution/visibility_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/execution",
+      "scenario": "TestAPIInvocationResultMatchesCLICompatibleFacts",
+      "lane": "short",
+      "destination": "tests/functional/sessions/execution/visibility_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/sessions/live_runtime_build_process_test.go",
       "package": "you-agent-factory/tests/functional/sessions",
       "scenario": "TestBuildProcessRoutesLiveOpenListControlAndCloseThroughFactorySessionsRoot",
@@ -6579,6 +6629,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/work/submission/http_test.go",
+      "package": "you-agent-factory/tests/functional/work/submission",
+      "scenario": "TestAPISubmitBatchThenListAndGetWork",
+      "lane": "short",
+      "destination": "tests/functional/work/submission/http_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/submission/http_test.go",
+      "package": "you-agent-factory/tests/functional/work/submission",
+      "scenario": "TestAPIUpsertWorkRequestUsesCanonicalIdentity",
+      "lane": "short",
+      "destination": "tests/functional/work/submission/http_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/submission/http_test.go",
+      "package": "you-agent-factory/tests/functional/work/submission",
+      "scenario": "TestAPIUnknownWorkReturnsTypedNotFound",
+      "lane": "short",
+      "destination": "tests/functional/work/submission/http_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/work/visualization/dependency_graph_test.go",
       "package": "you-agent-factory/tests/functional/work/visualization",
       "scenario": "TestWorkVisualizeProducesDeterministicGraph",
@@ -8117,14 +8197,404 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/prompt_template_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestAPIPromptTemplateContractAndValidationRoundTrip",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/prompt_template_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/prompt_template_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestAPIInvalidPromptTemplateNamesMissingVariables",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/prompt_template_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/prompt_template_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestAPITemplateValidationDoesNotMutateCurrentFactory",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/prompt_template_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definition_activation/gateway_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definition_activation",
+      "scenario": "TestDefinitionActivationGatewayDefaultRootSave",
+      "lane": "short",
+      "destination": "wrong-layer: pss-cut-def-ses definition activation gateway wiring not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory/definition_activation/gateway_wiring_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definition_activation/gateway_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definition_activation",
+      "scenario": "TestDefinitionActivationGatewaySaveAndNamedSwap",
+      "lane": "short",
+      "destination": "wrong-layer: pss-cut-def-ses definition activation gateway wiring not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory/definition_activation/gateway_wiring_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definition_activation/gateway_wiring_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definition_activation",
+      "scenario": "TestDefinitionActivationGatewayUpsertReplaceAndSwitch",
+      "lane": "short",
+      "destination": "wrong-layer: pss-cut-def-ses definition activation gateway wiring not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory/definition_activation/gateway_wiring_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/model_invoke/http_workcontent_coverage_test.go",
+      "package": "you-agent-factory/tests/functional/models/model_invoke",
+      "scenario": "TestHTTPModelInvocationMapsAudioWorkContent",
+      "lane": "short",
+      "destination": "wrong-layer: models invoke HTTP workcontent coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/model_invoke/http_workcontent_coverage_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/model_list/adapter_owned_coverage_test.go",
+      "package": "you-agent-factory/tests/functional/models/model_list",
+      "scenario": "TestFunctionalModelsCompositionFacade_RoutesOwnedListThroughModelsRoot",
+      "lane": "short",
+      "destination": "wrong-layer: models list adapter-owned coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/model_list/adapter_owned_coverage_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/model_list/adapter_owned_coverage_test.go",
+      "package": "you-agent-factory/tests/functional/models/model_list",
+      "scenario": "TestFunctionalModelsOwnedAdapter_InvokeResolvesThroughModelsRoot",
+      "lane": "short",
+      "destination": "wrong-layer: models list adapter-owned coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/model_list/adapter_owned_coverage_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/model_list/adapter_owned_coverage_test.go",
+      "package": "you-agent-factory/tests/functional/models/model_list",
+      "scenario": "TestFunctionalModelsOwnedAdapter_ListInspectPullPreserveAcceptedOutput",
+      "lane": "short",
+      "destination": "wrong-layer: models list adapter-owned coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/model_list/adapter_owned_coverage_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/model_list/cli_test.go",
+      "package": "you-agent-factory/tests/functional/models/model_list",
+      "scenario": "TestProcessModelsInspect_ReturnsHumanReadableDetail",
+      "lane": "short",
+      "destination": "wrong-layer: models list CLI human-readable coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/model_list/cli_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/model_list/cli_test.go",
+      "package": "you-agent-factory/tests/functional/models/model_list",
+      "scenario": "TestProcessModelsList_ReturnsHumanReadableCatalog",
+      "lane": "short",
+      "destination": "wrong-layer: models list CLI human-readable coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/model_list/cli_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/model_list/cli_test.go",
+      "package": "you-agent-factory/tests/functional/models/model_list",
+      "scenario": "TestProcessModelsPull_UsesServerFlagAndReturnsPullJSON",
+      "lane": "short",
+      "destination": "wrong-layer: models list CLI human-readable coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/model_list/cli_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/model_list/presentation_collaborator_coverage_test.go",
+      "package": "you-agent-factory/tests/functional/models/model_list",
+      "scenario": "TestProcessModelsInspect_RoutesThroughPresentationCollaboratorWithoutServer",
+      "lane": "short",
+      "destination": "wrong-layer: models list presentation-collaborator coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/model_list/presentation_collaborator_coverage_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/model_list/presentation_collaborator_coverage_test.go",
+      "package": "you-agent-factory/tests/functional/models/model_list",
+      "scenario": "TestProcessModelsInvokeJSON_RoutesThroughPresentationCollaboratorWithoutServer",
+      "lane": "short",
+      "destination": "wrong-layer: models list presentation-collaborator coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/model_list/presentation_collaborator_coverage_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/model_list/presentation_collaborator_coverage_test.go",
+      "package": "you-agent-factory/tests/functional/models/model_list",
+      "scenario": "TestProcessModelsList_ReusesCatalogScopeAcrossCommands",
+      "lane": "short",
+      "destination": "wrong-layer: models list presentation-collaborator coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/model_list/presentation_collaborator_coverage_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/model_list/presentation_collaborator_coverage_test.go",
+      "package": "you-agent-factory/tests/functional/models/model_list",
+      "scenario": "TestProcessModelsList_RoutesThroughPresentationCollaboratorWithoutServer",
+      "lane": "short",
+      "destination": "wrong-layer: models list presentation-collaborator coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/model_list/presentation_collaborator_coverage_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/model_list/presentation_collaborator_coverage_test.go",
+      "package": "you-agent-factory/tests/functional/models/model_list",
+      "scenario": "TestProcessModelsPull_RoutesThroughPresentationCollaboratorWithoutServer",
+      "lane": "short",
+      "destination": "wrong-layer: models list presentation-collaborator coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/model_list/presentation_collaborator_coverage_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/build_process_inert_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsEffectsRemainInertThroughRootBuildProcessConstruction",
+      "lane": "short",
+      "destination": "wrong-layer: models root composition coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/build_process_inert_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsCatalogDiscoveryActivatesThroughRootBuildProcessAfterLifecycle",
+      "lane": "short",
+      "destination": "wrong-layer: models root composition coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/catalog_discovery_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/inference_invoke_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsInferenceInvokeActivatesThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "wrong-layer: models root composition coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/inference_invoke_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/peer_import_seal_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsFunctionalProofsDoNotImportOwnerPrivatePackages",
+      "lane": "short",
+      "destination": "wrong-layer: models root composition coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/peer_import_seal_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/peer_import_seal_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsPackagedRootShapeMatchesCanonicalServiceLayout",
+      "lane": "short",
+      "destination": "wrong-layer: models root composition coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/peer_import_seal_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/peer_import_seal_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsProductionPeersReachModelsThroughPublicSurfacesOnly",
+      "lane": "short",
+      "destination": "wrong-layer: models root composition coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/peer_import_seal_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/readiness_assets_host_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsReadinessAssetsHostActivateThroughRootBuildProcessAfterLifecycle",
+      "lane": "short",
+      "destination": "wrong-layer: models root composition coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/readiness_assets_host_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/readiness_assets_host_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsReadinessAssetsHostEffectsRemainInertThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "wrong-layer: models root composition coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/readiness_assets_host_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/runtime_api/api_javascript_sync_structured_input_test.go",
+      "package": "you-agent-factory/tests/functional/runtime_api",
+      "scenario": "TestJavaScriptSyncExecutionResolvesStructuredInvocationInput",
+      "lane": "short",
+      "destination": "wrong-layer: runtime API javascript structured-input coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/runtime_api/api_javascript_sync_structured_input_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/runtime_api/api_javascript_sync_structured_input_test.go",
+      "package": "you-agent-factory/tests/functional/runtime_api",
+      "scenario": "TestNamedJavaScriptFactoryRunResolvesInvocationInputThroughCLI",
+      "lane": "short",
+      "destination": "wrong-layer: runtime API javascript structured-input coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/runtime_api/api_javascript_sync_structured_input_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/runtime_api/api_multi_work_dispatch_smoke_test.go",
+      "package": "you-agent-factory/tests/functional/runtime_api",
+      "scenario": "TestSubmitMultipleRuntimeWorkItemsCompletes",
+      "lane": "short",
+      "destination": "wrong-layer: runtime API multi-work dispatch smoke not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/runtime_api/api_multi_work_dispatch_smoke_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/runtime_api/api_session_invocation_test.go",
+      "package": "you-agent-factory/tests/functional/runtime_api",
+      "scenario": "TestSessionInvocationAPI_AcceptsStructuredArgsWithActiveSignature",
+      "lane": "short",
+      "destination": "wrong-layer: runtime API session invocation coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/runtime_api/api_session_invocation_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
+      "package": "you-agent-factory/tests/functional/runtime_api",
+      "scenario": "TestWorkRootPolicyServicePrepareInvocationInputAcceptsDirectArgs",
+      "lane": "short",
+      "destination": "wrong-layer: runtime API work-root policy slices not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/runtime_api/api_work_root_policy_slices_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
+      "package": "you-agent-factory/tests/functional/runtime_api",
+      "scenario": "TestWorkRootPolicyServicePrepareInvocationInputRejectsWhitespaceOnlyText",
+      "lane": "short",
+      "destination": "wrong-layer: runtime API work-root policy slices not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/runtime_api/api_work_root_policy_slices_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
+      "package": "you-agent-factory/tests/functional/runtime_api",
+      "scenario": "TestWorkRootPolicyServiceResolvePrimaryResultHonorsCanceledContext",
+      "lane": "short",
+      "destination": "wrong-layer: runtime API work-root policy slices not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/runtime_api/api_work_root_policy_slices_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
+      "package": "you-agent-factory/tests/functional/runtime_api",
+      "scenario": "TestWorkRootPolicyServiceResolvePrimaryResultSubmittedTerminalSuccess",
+      "lane": "short",
+      "destination": "wrong-layer: runtime API work-root policy slices not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/runtime_api/api_work_root_policy_slices_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
+      "package": "you-agent-factory/tests/functional/runtime_api",
+      "scenario": "TestWorkRootPolicySlicesRejectUnsupportedOperations",
+      "lane": "short",
+      "destination": "wrong-layer: runtime API work-root policy slices not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/runtime_api/api_work_root_policy_slices_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/runtime_api/api_work_service_application_slices_test.go",
+      "package": "you-agent-factory/tests/functional/runtime_api",
+      "scenario": "TestWorkServiceApplicationSlicesExerciseFunctionalLane",
+      "lane": "short",
+      "destination": "wrong-layer: runtime API work-service application slices not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/runtime_api/api_work_service_application_slices_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/cursor/conductor_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/cursor",
+      "scenario": "TestCursorCommandCancellationThroughRootBuildProcessIsCanonical",
+      "lane": "short",
+      "destination": "wrong-layer: pss-imp-prov-04 cursor conductor coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/workers/inference/cursor/conductor_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/opencode/conductor_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/opencode",
+      "scenario": "TestOpenCodeCommandCancellationThroughRootBuildProcessIsCanonical",
+      "lane": "short",
+      "destination": "wrong-layer: pss-imp-prov-04 opencode conductor coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/workers/inference/opencode/conductor_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/opencode/conductor_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/opencode",
+      "scenario": "TestOpenCodeConductorSuccessThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "wrong-layer: pss-imp-prov-04 opencode conductor coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/workers/inference/opencode/conductor_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T07:03:39Z",
+  "scanned_at_utc": "2026-07-28T09:30:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 528,
+      "none": 534,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -8135,7 +8605,7 @@
       "automations": 7,
       "bootstrap_portability": 21,
       "cli": 59,
-      "factory": 33,
+      "factory": 36,
       "guards_batch": 23,
       "models": 5,
       "observability": 9,
@@ -8150,15 +8620,15 @@
       "sessions": 27,
       "smoke": 62,
       "transport": 106,
-      "work": 20,
+      "work": 23,
       "workers": 74,
       "workflow": 30,
       "workstations": 34,
       "events": 32
     },
-    "customer_top_level_Test_scenarios": 784,
+    "customer_top_level_Test_scenarios": 837,
     "lane_functionallong": 95,
-    "lane_short": 689,
+    "lane_short": 742,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -8171,9 +8641,9 @@
       "you-agent-factory/tests/functional/cli/named_invocation": 6,
       "you-agent-factory/tests/functional/cli/root_discovery": 9,
       "you-agent-factory/tests/functional/cli/session_resume": 6,
-      "you-agent-factory/tests/functional/factory/current": 3,
+      "you-agent-factory/tests/functional/factory/current": 6,
       "you-agent-factory/tests/functional/factory/definitions": 6,
-      "you-agent-factory/tests/functional/factory/packaged/catalog": 7,
+      "you-agent-factory/tests/functional/factory/packaged/catalog": 10,
       "you-agent-factory/tests/functional/factory/packaged/deep_research": 3,
       "you-agent-factory/tests/functional/factory/packaged/fusion": 3,
       "you-agent-factory/tests/functional/factory/packaged/goal": 4,
@@ -8208,7 +8678,7 @@
       "you-agent-factory/tests/functional/sessions": 1,
       "you-agent-factory/tests/functional/sessions/cli": 2,
       "you-agent-factory/tests/functional/sessions/controls": 5,
-      "you-agent-factory/tests/functional/sessions/execution": 3,
+      "you-agent-factory/tests/functional/sessions/execution": 5,
       "you-agent-factory/tests/functional/sessions/mcp": 7,
       "you-agent-factory/tests/functional/sessions/lifecycle": 6,
       "you-agent-factory/tests/functional/sessions/restart": 3,
@@ -8231,7 +8701,7 @@
       "you-agent-factory/tests/functional/work/recovery": 4,
       "you-agent-factory/tests/functional/work/relationships": 4,
       "you-agent-factory/tests/functional/work/routing": 3,
-      "you-agent-factory/tests/functional/work/submission": 3,
+      "you-agent-factory/tests/functional/work/submission": 6,
       "you-agent-factory/tests/functional/work/visualization": 1,
       "you-agent-factory/tests/functional/workers/agent": 1,
       "you-agent-factory/tests/functional/workers/inference": 16,

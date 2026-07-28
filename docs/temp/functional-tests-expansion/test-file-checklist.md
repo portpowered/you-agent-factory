@@ -552,7 +552,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestRecordingsBackedWorkReadsMapRichWorldState`.
   - `TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures`.
 
-- [ ] `tests/functional/work/submission/http_test.go`
+- [x] `tests/functional/work/submission/http_test.go`
   - `TestAPISubmitBatchThenListAndGetWork`.
   - `TestAPIUpsertWorkRequestUsesCanonicalIdentity`.
   - `TestAPIUnknownWorkReturnsTypedNotFound`.
@@ -632,7 +632,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIDispatchListAndDetailExposePublicCorrelation`.
   - `TestAPIPartialResultIsAvailableBeforeTerminalCompletion`.
 
-- [ ] `tests/functional/sessions/execution/visibility_test.go`
+- [x] `tests/functional/sessions/execution/visibility_test.go`
   - `TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads`.
   - `TestAPIInvocationResultMatchesCLICompatibleFacts`.
 
@@ -684,7 +684,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedFactoryCatalogHasUniqueStableNames` rejects collisions.
   - `TestNewEmbeddedFactoryRequiresFunctionalMatrixEntry` prevents drift.
 
-- [ ] `tests/functional/factory/packaged/catalog/override_test.go`
+- [x] `tests/functional/factory/packaged/catalog/override_test.go`
   - `TestLocalFactoryOverridesPackagedFactoryWithSameName` covers precedence.
   - `TestInvalidLocalOverrideDoesNotFallBackSilently` covers misconfiguration.
   - `TestUnrelatedLocalFactoryDoesNotHidePackagedFactories` covers enumeration.
@@ -745,7 +745,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPISaveCurrentFactoryValidatesBeforePersistence`.
   - `TestAPICurrentFactoriesRemainSessionScoped`.
 
-- [ ] `tests/functional/factory/current/prompt_template_test.go`
+- [x] `tests/functional/factory/current/prompt_template_test.go`
   - `TestAPIPromptTemplateContractAndValidationRoundTrip`.
   - `TestAPIInvalidPromptTemplateNamesMissingVariables`.
   - `TestAPITemplateValidationDoesNotMutateCurrentFactory`.

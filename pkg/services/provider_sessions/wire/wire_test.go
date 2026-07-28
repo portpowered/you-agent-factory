@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -14,6 +15,94 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
+
+const (
+	modulePrefix                    = "github.com/portpowered/infinite-you/"
+	providerSessionsWirePackage     = modulePrefix + "pkg/services/provider_sessions/wire"
+	providerSessionsOwnerImportPath = modulePrefix + "pkg/services/provider_sessions"
+)
+
+// TestWireDoesNotImportUnexpectedPublicSiblingsBeyondService seals
+// pss-cln-pses-legacy-packages-003: provider_sessions/wire composition must not
+// introduce or retain imports of unexpected public sibling packages beyond
+// service/.
+func TestWireDoesNotImportUnexpectedPublicSiblingsBeyondService(t *testing.T) {
+	t.Parallel()
+
+	for _, dep := range listNonStandardDeps(t, providerSessionsWirePackage) {
+		if !isUnexpectedPublicSiblingBeyondServiceImport(dep) {
+			continue
+		}
+		t.Fatalf(
+			"%s must not depend on unexpected public sibling %s beyond service/; found dependency %s",
+			providerSessionsWirePackage,
+			dep,
+			dep,
+		)
+	}
+}
+
+func isUnexpectedPublicSiblingBeyondServiceImport(importPath string) bool {
+	if !strings.HasPrefix(importPath, providerSessionsOwnerImportPath+"/") {
+		return false
+	}
+	remainder := strings.TrimPrefix(importPath, providerSessionsOwnerImportPath+"/")
+	if remainder == "" {
+		return false
+	}
+	topLevel := strings.SplitN(remainder, "/", 2)[0]
+	switch topLevel {
+	case "internal", "service", "transports", "wire":
+		return false
+	default:
+		return true
+	}
+}
+
+func TestIsUnexpectedPublicSiblingBeyondServiceImport(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		importPath string
+		want       bool
+	}{
+		{providerSessionsOwnerImportPath, false},
+		{providerSessionsOwnerImportPath + "/wire", false},
+		{providerSessionsOwnerImportPath + "/service", false},
+		{providerSessionsOwnerImportPath + "/internal/service", false},
+		{providerSessionsOwnerImportPath + "/transports/http", false},
+		{providerSessionsOwnerImportPath + "/legacy_shim", true},
+		{providerSessionsOwnerImportPath + "/legacy_shim/sub", true},
+		{modulePrefix + "pkg/services/providers", false},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.importPath, func(t *testing.T) {
+			t.Parallel()
+			if got := isUnexpectedPublicSiblingBeyondServiceImport(test.importPath); got != test.want {
+				t.Fatalf("isUnexpectedPublicSiblingBeyondServiceImport(%q) = %t, want %t", test.importPath, got, test.want)
+			}
+		})
+	}
+}
+
+func listNonStandardDeps(t *testing.T, packagePath string) []string {
+	t.Helper()
+
+	cmd := exec.Command(
+		"go",
+		"list",
+		"-deps",
+		"-f",
+		"{{if not .Standard}}{{.ImportPath}}{{end}}",
+		packagePath,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list deps for %s: %v\n%s", packagePath, err, output)
+	}
+	return strings.Fields(string(output))
+}
 
 func TestNewForRootsConstructsInertRoot(t *testing.T) {
 	t.Parallel()

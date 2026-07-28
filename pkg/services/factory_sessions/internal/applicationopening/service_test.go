@@ -411,3 +411,63 @@ func TestOpenApplicationStopsAtResolveAndOpenFailures(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenApplicationInvokesRuntimeHTTPServicesBound(t *testing.T) {
+	t.Parallel()
+
+	var bound bool
+	service, err := New(
+		func(
+			context.Context,
+			*factorysessions.RuntimeOpeningRequest,
+			roles.ApplicationOpeningPorts,
+			*zap.Logger,
+		) (RuntimeInputs, error) {
+			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}, Logger: zap.NewNop()}, nil
+		},
+		runtimeOpenerFunc(func(
+			context.Context,
+			*factorysessions.RuntimeOpeningRequest,
+			runtimeopening.ExternalEffects,
+			*zap.Logger,
+		) (roles.OpenedApplicationRuntime, error) {
+			return roles.OpenedApplicationRuntime{
+				HTTP: roles.RuntimeHTTPServices{},
+			}, nil
+		}),
+		func(
+			roles.OpenedApplicationRuntime,
+			runtimeopening.ExternalEffects,
+			factoryvisualization.Sink,
+		) (factorysessions.BoundProcessComponents, error) {
+			return factorysessions.BoundProcessComponents{}, nil
+		},
+		func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
+			return lifecycle.Plan{}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+
+	ports := roles.ApplicationOpeningPorts{
+		RuntimeHTTPServicesBound: func(roles.RuntimeHTTPServices) {
+			bound = true
+		},
+	}
+	_, err = service.OpenApplication(
+		context.Background(),
+		roles.ApplicationOpeningRequest{
+			Runtime: &factorysessions.RuntimeOpeningRequest{},
+			Ports:   ports,
+		},
+		zap.NewNop(),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("OpenApplication(): %v", err)
+	}
+	if !bound {
+		t.Fatal("RuntimeHTTPServicesBound was not invoked")
+	}
+}
