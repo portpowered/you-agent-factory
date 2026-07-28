@@ -38,6 +38,8 @@ func NewService(
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
+	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) (factorydefinitions.Service, error) {
 	if err := validateDependencies(
 		sessionHost,
@@ -71,6 +73,7 @@ func NewService(
 		clock,
 		versionFileSystem,
 		validator,
+		loader.LoadSourceFromCanonicalJSON,
 		func(
 			factoryDir string,
 			workstationLoader factorydefinitions.WorkstationLoader,
@@ -95,6 +98,8 @@ func NewService(
 		namedFactoryCatalogFileSystem,
 		packagedCatalog,
 		packagedInstaller,
+		requiredToolChecker,
+		orchestratorValidator,
 	)
 	if definitions == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: implementation rejected its dependencies")
