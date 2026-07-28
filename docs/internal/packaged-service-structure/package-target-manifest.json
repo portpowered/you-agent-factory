@@ -634,7 +634,7 @@
     {
       "packagePath": "pkg/services/automations/internal",
       "disposition": "retain",
-      "destination": "automations/internal"
+      "destination": "automations"
     },
     {
       "packagePath": "pkg/services/automations/internal/services/cron",
@@ -793,37 +793,37 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/canonical",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/internal/service",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/loadedsource",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/loading",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/wire",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
@@ -2263,38 +2263,38 @@
     },
     {
       "packagePath": "pkg/services/workers/construction",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/runtime_assembly"
     },
     {
       "packagePath": "pkg/services/workers/diagnostics",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal"
     },
     {
       "packagePath": "pkg/services/workers/execution",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/execution/recording",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/executor",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/executor/agentrun",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/interface",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal"
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",
@@ -2373,18 +2373,18 @@
     },
     {
       "packagePath": "pkg/services/workers/invocation",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/process",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/runners"
     },
     {
       "packagePath": "pkg/services/workers/prompting",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/provider",
@@ -2478,8 +2478,8 @@
     },
     {
       "packagePath": "pkg/services/workers/runner",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/runners"
     },
     {
       "packagePath": "pkg/services/workers/service",
@@ -2498,8 +2498,8 @@
     },
     {
       "packagePath": "pkg/services/workers/skippermissions",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/wire",
@@ -2508,8 +2508,8 @@
     },
     {
       "packagePath": "pkg/services/workers/worktree",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/transports/cli",

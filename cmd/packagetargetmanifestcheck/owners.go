@@ -182,13 +182,20 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 		return mapping, true
 	}
 
-	// Packages already under the committed private subservice container retain
-	// that nested destination.
+	// Packages already under the committed private subservice container map to
+	// that nested destination. Workers retain at the nested plan path; factory
+	// definitions keeps catalog/validation canonical retain and marks other
+	// committed subservices move until CLN cutover.
 	if strings.HasPrefix(rest, "internal/services/") {
 		sub := strings.TrimPrefix(rest, "internal/services/")
 		subservice, _, _ := strings.Cut(sub, "/")
 		if subservice != "" && isCommittedNestedSubservice(owner, subservice) {
-			return moveOrRetainMapping(packagePath, owner+"/internal/services/"+subservice, DispositionRetain), true
+			destination := owner + "/internal/services/" + subservice
+			disposition := DispositionRetain
+			if owner == "factory_definitions" && subservice != "catalog" && subservice != "validation" {
+				disposition = DispositionMove
+			}
+			return moveOrRetainMapping(packagePath, destination, disposition), true
 		}
 	}
 

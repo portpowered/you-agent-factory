@@ -60,6 +60,12 @@ func factoryDefinitionsMapping(packagePath string) (PackageRow, bool) {
 	}
 	subservice, ok := factoryDefinitionsMoveSubservice(rest)
 	if !ok {
+		if nestedSubservice, nestedOK := factoryDefinitionsNestedMoveSubservice(rest); nestedOK {
+			subservice = nestedSubservice
+			ok = true
+		}
+	}
+	if !ok {
 		subservice = ""
 	}
 	return moveRow(
@@ -92,6 +98,23 @@ func factoryDefinitionsMoveSubservice(rest string) (subservice string, ok bool) 
 		}
 	}
 	return "", false
+}
+
+func factoryDefinitionsNestedMoveSubservice(rest string) (subservice string, ok bool) {
+	if !strings.HasPrefix(rest, "internal/services/") {
+		return "", false
+	}
+	sub := strings.TrimPrefix(rest, "internal/services/")
+	subservice, _, _ = strings.Cut(sub, "/")
+	if subservice == "" || subservice == "catalog" || subservice == "validation" {
+		return "", false
+	}
+	switch subservice {
+	case "authoring_layout", "compilation", "snapshots_portability", "distribution":
+		return subservice, true
+	default:
+		return "", false
+	}
 }
 
 func factoryDefinitionsSuccessor(subservice string) string {
