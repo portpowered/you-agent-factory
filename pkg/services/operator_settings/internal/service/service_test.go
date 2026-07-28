@@ -1,10 +1,12 @@
 package service_test
 
 import (
+	"io/fs"
 	"testing"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
+	documentwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/wire"
 	resolutionwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
@@ -16,11 +18,18 @@ func TestRootDelegatesResolveEffectiveToPrivateOwner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("providerswire.NewService() = %v", err)
 	}
+	documentService := documentwire.NewService(
+		&rootTestFileSystem{},
+		rootTestCreateTemporaryFile,
+		rootTestConfigDecoder,
+		rootTestConfigEncoder,
+		rootTestProviderCatalog,
+	)
 	resolutionService, err := resolutionwire.NewService(providersRoot)
 	if err != nil {
 		t.Fatalf("resolutionwire.NewService() = %v", err)
 	}
-	root, err := operatorservice.New(resolutionService)
+	root, err := operatorservice.New(documentService, resolutionService)
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -48,11 +57,75 @@ func TestRootDelegatesResolveEffectiveToPrivateOwner(t *testing.T) {
 	}
 }
 
+func TestNew_RejectsNilDocument(t *testing.T) {
+	t.Parallel()
+
+	providersRoot, err := providerswire.NewService()
+	if err != nil {
+		t.Fatalf("providerswire.NewService() = %v", err)
+	}
+	resolutionService, err := resolutionwire.NewService(providersRoot)
+	if err != nil {
+		t.Fatalf("resolutionwire.NewService() = %v", err)
+	}
+
+	service, err := operatorservice.New(nil, resolutionService)
+	if err == nil || service != nil {
+		t.Fatalf("New(nil, resolution) = (%v, %v), want error", service, err)
+	}
+}
+
 func TestNew_RejectsNilResolution(t *testing.T) {
 	t.Parallel()
 
-	service, err := operatorservice.New(nil)
+	documentService := documentwire.NewService(
+		&rootTestFileSystem{},
+		rootTestCreateTemporaryFile,
+		rootTestConfigDecoder,
+		rootTestConfigEncoder,
+		rootTestProviderCatalog,
+	)
+
+	service, err := operatorservice.New(documentService, nil)
 	if err == nil || service != nil {
-		t.Fatalf("New(nil) = (%v, %v), want error", service, err)
+		t.Fatalf("New(document, nil) = (%v, %v), want error", service, err)
 	}
+}
+
+type rootTestFileSystem struct{}
+
+func (rootTestFileSystem) ReadFile(string) ([]byte, error) {
+	panic("filesystem read during root service test")
+}
+
+func (rootTestFileSystem) MkdirAll(string, fs.FileMode) error {
+	panic("filesystem mkdir during root service test")
+}
+
+func (rootTestFileSystem) Remove(string) error {
+	panic("filesystem remove during root service test")
+}
+
+func (rootTestFileSystem) Chmod(string, fs.FileMode) error {
+	panic("filesystem chmod during root service test")
+}
+
+func (rootTestFileSystem) Rename(string, string) error {
+	panic("filesystem rename during root service test")
+}
+
+func rootTestCreateTemporaryFile(string, string) (operatorsettings.TemporaryFile, error) {
+	panic("temp-file creation during root service test")
+}
+
+func rootTestConfigDecoder([]byte) (operatorsettings.Config, error) {
+	panic("config decode during root service test")
+}
+
+func rootTestConfigEncoder(operatorsettings.Config) ([]byte, error) {
+	panic("config encode during root service test")
+}
+
+func rootTestProviderCatalog(string) (string, bool) {
+	panic("provider catalog during root service test")
 }
