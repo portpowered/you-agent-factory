@@ -25,10 +25,7 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
-	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode"
 )
-
-type fixedOpenCodeIdentifier struct{ executable string }
 
 func testProviderExecRunner(t testing.TB) CommandRunner {
 	t.Helper()
@@ -39,46 +36,10 @@ func testProviderExecRunner(t testing.TB) CommandRunner {
 	return workerprocess.AdaptCommandRunner(effect)
 }
 
-func (i fixedOpenCodeIdentifier) Identify(context.Context, string) (opencodeadapter.Installation, error) {
-	executable := i.executable
-	if executable == "" {
-		executable = "opencode"
-	}
-	return opencodeadapter.Installation{Executable: executable, Fingerprint: "test-installation"}, nil
-}
-
-type fixedOpenCodeDiscoverer struct{ mode opencodeadapter.Mode }
-
-func (d fixedOpenCodeDiscoverer) Discover(context.Context, opencodeadapter.Installation) (opencodeadapter.Decision, error) {
-	return opencodeadapter.Decision{Version: "1.2.3", Mode: d.mode}, nil
-}
-
-func openCodeResolverForTest(t *testing.T, mode opencodeadapter.Mode) *opencodeadapter.Resolver {
-	return openCodeResolverForExecutable(t, mode, "")
-}
-
-func openCodeResolverForExecutable(t *testing.T, mode opencodeadapter.Mode, executable string) *opencodeadapter.Resolver {
+func newScriptWrapProviderForTest(t *testing.T, runner CommandRunner, _ string) *ScriptWrapProvider {
 	t.Helper()
-	resolver, err := opencodeadapter.NewResolver(
-		fixedOpenCodeIdentifier{executable: executable},
-		fixedOpenCodeDiscoverer{mode: mode},
-		0,
-		0,
-	)
-	if err != nil {
-		t.Fatalf("NewResolver() error = %v", err)
-	}
-	return resolver
-}
-
-func newScriptWrapProviderForTest(t *testing.T, runner CommandRunner, modelProvider string) *ScriptWrapProvider {
-	t.Helper()
-	var resolver *opencodeadapter.Resolver
-	if modelProvider == string(modelprovider.ProviderOpenCode) {
-		resolver = openCodeResolverForTest(t, opencodeadapter.ModeFinalOnly)
-	}
 	return NewScriptWrapProviderWithDependencies(
-		false, nil, runner, resolver, nil, nil, "", nil, nil,
+		false, nil, runner, nil, nil, nil, "", nil, nil,
 	)
 }
 

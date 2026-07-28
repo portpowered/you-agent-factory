@@ -9,6 +9,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -20,7 +21,7 @@ func TestNewRejectsMissingDependencies(t *testing.T) {
 
 	clock := fixedClock{now: time.Unix(1, 0)}
 	sink := SinkFunc(func(View) {})
-	projections := projectionStub{}
+	projections := &recordingsstub.Service{}
 	source := &sourceStub{}
 	tests := []struct {
 		name string
@@ -69,13 +70,27 @@ func TestServiceProjectsRetainedAndLiveFactoryEvents(t *testing.T) {
 		snapshot: visualizationSnapshotFacts(3),
 	}
 	projected := make(chan []factorydefinitions.FactoryEvent, 2)
-	projections := projectionStub{
-		reconstruct: func(events []factorydefinitions.FactoryEvent, tick int) (factorydefinitions.FactoryWorldState, error) {
-			if tick != 3 {
-				t.Fatalf("projection tick = %d, want 3", tick)
+	projections := &recordingsstub.Service{
+		ReconstructWorldStateFn: func(request recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error) {
+			if request.SelectedTick != 3 {
+				t.Fatalf("projection tick = %d, want 3", request.SelectedTick)
 			}
-			projected <- append([]factorydefinitions.FactoryEvent(nil), events...)
-			return factorydefinitions.FactoryWorldState{}, nil
+			events := make([]factorydefinitions.FactoryEvent, len(request.Events))
+			for index, event := range request.Events {
+				events[index] = factorydefinitions.FactoryEvent{
+					Id: string(event.ID),
+					Context: factorydefinitions.FactoryEventContext{
+						Sequence: int(event.Sequence),
+					},
+				}
+			}
+			projected <- events
+			return recordings.ReconstructWorldStateResult{
+				WorldState: recordings.WorldStateView{
+					SchemaVersion: recordings.WorldStateViewSchemaV1,
+					Payload:       `{"topology":{}}`,
+				},
+			}, nil
 		},
 	}
 	rendered := make(chan View, 2)
@@ -133,7 +148,7 @@ func TestServiceReportsProjectionReadFailureWithoutStoppingSubscription(t *testi
 			stream:      &factorydefinitions.FactoryEventStream{Events: live},
 			snapshotErr: readFailure,
 		},
-		projectionStub{},
+		&recordingsstub.Service{},
 		fixedClock{},
 		SinkFunc(func(View) { t.Fatal("sink called after snapshot failure") }),
 		func(err error) { reported <- err },
@@ -175,7 +190,7 @@ func TestServiceRootLifecycleInertConstructionAndTypedActivate(t *testing.T) {
 	presentCalls := 0
 	service, err := New(
 		source,
-		projectionStub{},
+		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) { presentCalls++ }),
 		nil,
@@ -243,7 +258,7 @@ func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
 	}
 	service, err := New(
 		source,
-		projectionStub{},
+		&recordingsstub.Service{},
 		fixedClock{now: now},
 		SinkFunc(func(View) {}),
 		nil,
@@ -268,9 +283,9 @@ func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
 	source.snapshot = visualizationSnapshotFacts(9)
 	service, err = New(
 		source,
-		projectionStub{
-			reconstruct: func([]factorydefinitions.FactoryEvent, int) (factorydefinitions.FactoryWorldState, error) {
-				return factorydefinitions.FactoryWorldState{}, errors.New("reconstruct boom")
+		&recordingsstub.Service{
+			ReconstructWorldStateFn: func(recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error) {
+				return recordings.ReconstructWorldStateResult{}, errors.New("reconstruct boom")
 			},
 		},
 		fixedClock{now: now},
@@ -288,7 +303,7 @@ func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
 
 	service, err = New(
 		source,
-		projectionStub{},
+		&recordingsstub.Service{},
 		fixedClock{now: now},
 		SinkFunc(func(View) {}),
 		nil,
@@ -347,7 +362,7 @@ func mustNewRootPresentationService(t *testing.T) *Service {
 			stream:   &factorydefinitions.FactoryEventStream{Events: live},
 			snapshot: visualizationSnapshotFacts(1),
 		},
-		projectionStub{},
+		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) {}),
 		nil,
@@ -501,47 +516,6 @@ func visualizationSnapshotFacts(tick int) *liveviewprojection.RuntimeSnapshotFac
 	return &liveviewprojection.RuntimeSnapshotFacts{
 		RuntimeObservation: liveviewprojection.RuntimeObservation{TickCount: tick},
 	}
-}
-
-type projectionStub struct {
-	reconstruct func([]factorydefinitions.FactoryEvent, int) (factorydefinitions.FactoryWorldState, error)
-}
-
-func (p projectionStub) ReconstructFactoryWorldState(
-	events []factorydefinitions.FactoryEvent,
-	tick int,
-) (factorydefinitions.FactoryWorldState, error) {
-	if p.reconstruct != nil {
-		return p.reconstruct(events, tick)
-	}
-	return factorydefinitions.FactoryWorldState{}, nil
-}
-
-func (projectionStub) SimpleDashboardRenderData(
-	factorydefinitions.FactoryWorldState,
-) recordings.SimpleDashboardRenderData {
-	return recordings.SimpleDashboardRenderData{}
-}
-
-func (projectionStub) ProjectActiveThrottlePauses(
-	factorydefinitions.InitialStructurePayload,
-	[]factorydefinitions.ActiveThrottlePause,
-) []factorydefinitions.FactoryWorldThrottlePause {
-	return nil
-}
-
-func (projectionStub) ProjectWorkstationRequests(
-	factorydefinitions.FactoryWorldState,
-) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice {
-	return recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{}
-}
-
-func (projectionStub) ValidateReconnectReplay(
-	[]factorydefinitions.FactoryEvent,
-	factorydefinitions.FactoryEventReconnectCursor,
-	factorydefinitions.FactoryEventReconnectScope,
-) error {
-	return nil
 }
 
 type fixedClock struct{ now time.Time }

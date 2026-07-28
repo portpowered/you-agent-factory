@@ -99,6 +99,7 @@ type WorkersLocalRuntimeHooksFactory = func() models.LocalRuntimeHooks
 
 type FactoryDefinitionsFactory = func(
 	factorysessions.DefinitionHost,
+	factorydefinitions.DefinitionActivationGateway,
 	factorydefinitions.Validator,
 ) factorydefinitions.Service
 

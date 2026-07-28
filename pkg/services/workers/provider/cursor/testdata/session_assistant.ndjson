@@ -1,4 +1,0 @@
-{"type":"system","subtype":"init","session_id":"cursor-session-123","future_capability":true}
-{"type":"assistant","timestamp_ms":1,"message":{"role":"assistant","content":[{"type":"text","text":"Plan "},{"type":"reasoning","text":"must not be inferred"}]},"session_id":"cursor-session-123","future_field":{"accepted":true}}
-{"type":"assistant","timestamp_ms":2,"model_call_id":"native-model-call","message":{"role":"assistant","content":[{"type":"text","text":"Plan "}]},"session_id":"cursor-session-123"}
-{"type":"assistant","timestamp_ms":3,"message":{"role":"assistant","content":[{"type":"text","text":"done"}]},"session_id":"cursor-session-123"}

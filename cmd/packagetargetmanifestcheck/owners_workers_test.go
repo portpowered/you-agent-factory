@@ -34,7 +34,7 @@ func TestMapCommittedOwnerPackageWorkersTransitionalDebtMoves(t *testing.T) {
 			want: PackageMapping{
 				PackagePath: "pkg/services/workers/diagnostics",
 				Disposition: DispositionMove,
-				Destination: "workers/internal",
+				Destination: "workers/internal/services/runners",
 			},
 		},
 		{
@@ -42,7 +42,7 @@ func TestMapCommittedOwnerPackageWorkersTransitionalDebtMoves(t *testing.T) {
 			want: PackageMapping{
 				PackagePath: "pkg/services/workers/interface",
 				Disposition: DispositionMove,
-				Destination: "workers/internal",
+				Destination: "workers/internal/services/runners",
 			},
 		},
 		{
@@ -50,7 +50,7 @@ func TestMapCommittedOwnerPackageWorkersTransitionalDebtMoves(t *testing.T) {
 			want: PackageMapping{
 				PackagePath: "pkg/services/workers/execution",
 				Disposition: DispositionMove,
-				Destination: "workers/internal/services/workstations",
+				Destination: "workers/internal/services/runners",
 			},
 		},
 		{
@@ -58,7 +58,7 @@ func TestMapCommittedOwnerPackageWorkersTransitionalDebtMoves(t *testing.T) {
 			want: PackageMapping{
 				PackagePath: "pkg/services/workers/execution/recording",
 				Disposition: DispositionMove,
-				Destination: "workers/internal/services/workstations",
+				Destination: "workers/internal/services/runners",
 			},
 		},
 		{
@@ -66,7 +66,7 @@ func TestMapCommittedOwnerPackageWorkersTransitionalDebtMoves(t *testing.T) {
 			want: PackageMapping{
 				PackagePath: "pkg/services/workers/executor",
 				Disposition: DispositionMove,
-				Destination: "workers/internal/services/workstations",
+				Destination: "workers/internal/services/runners",
 			},
 		},
 		{
@@ -74,7 +74,7 @@ func TestMapCommittedOwnerPackageWorkersTransitionalDebtMoves(t *testing.T) {
 			want: PackageMapping{
 				PackagePath: "pkg/services/workers/executor/agentrun",
 				Disposition: DispositionMove,
-				Destination: "workers/internal/services/workstations",
+				Destination: "workers/internal/services/runners",
 			},
 		},
 		{
@@ -82,7 +82,7 @@ func TestMapCommittedOwnerPackageWorkersTransitionalDebtMoves(t *testing.T) {
 			want: PackageMapping{
 				PackagePath: "pkg/services/workers/invocation",
 				Disposition: DispositionMove,
-				Destination: "workers/internal/services/workstations",
+				Destination: "workers/internal/services/runners",
 			},
 		},
 		{

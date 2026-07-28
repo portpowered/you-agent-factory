@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 )
 
 // EditableFactory carries one detached Factory definition and the optimistic-
@@ -21,7 +21,7 @@ func (s *Service) SaveReplaceCurrentSnapshotForSession(
 	sessionID string,
 	request EditableFactory,
 ) (*factorydefinitions.FactorySnapshot, error) {
-	if s == nil || s.host == nil {
+	if s == nil || s.host == nil || s.activationGateway == nil {
 		return nil, fmt.Errorf("factory definition service is required")
 	}
 	if request.Snapshot == nil {
@@ -98,8 +98,8 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 		return nil, fmt.Errorf("read editable factory snapshot identity: %w", err)
 	}
 	var saved *factorydefinitions.FactorySnapshot
-	err = s.host.WithActivationLock(func() error {
-		if err := s.host.RequireIdleRuntimeForSession(ctx, sessionID); err != nil {
+	err = s.activationGateway.WithActivationLock(func() error {
+		if err := s.activationGateway.RequireIdleRuntimeForSession(ctx, sessionID); err != nil {
 			return err
 		}
 		currentVersion, err := s.currentFactoryDefinitionVersionAtRoot(sessionRootDir, currentName)
@@ -109,7 +109,7 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 		if err := s.RequireFreshEditableFactoryVersion(request.Version, currentVersion); err != nil {
 			return err
 		}
-		nextVersion := s.NextEditableFactoryVersion(&currentVersion, s.host.SaveNow())
+		nextVersion := s.NextEditableFactoryVersion(&currentVersion, s.activationGateway.SaveNow())
 		prepared, err := s.PreparePersistedFactoryPayload(currentName, sanitized, nextVersion)
 		if err != nil {
 			return err
@@ -120,7 +120,7 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 			return err
 		}
 
-		if err := s.host.ActivateSessionEditableFactory(
+		if err := s.activationGateway.ActivateSessionEditableFactory(
 			ctx,
 			session,
 			sessionID,

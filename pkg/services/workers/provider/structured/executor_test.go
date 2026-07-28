@@ -21,6 +21,8 @@ func TestExecutorSupportsPiOnlyAfterCodexClaudeCutover(t *testing.T) {
 	for _, provider := range []string{
 		string(modelprovider.ProviderClaude),
 		string(modelprovider.ProviderCodex),
+		string(modelprovider.ProviderCursor),
+		string(modelprovider.ProviderOpenCode),
 		"unknown-provider",
 	} {
 		if executor.Supports(provider) {
@@ -42,6 +44,8 @@ func TestExecutorRejectsConductorRoutedProvidersAtScriptWrapBoundary(t *testing.
 	for _, modelProvider := range []string{
 		string(modelprovider.ProviderClaude),
 		string(modelprovider.ProviderCodex),
+		string(modelprovider.ProviderCursor),
+		string(modelprovider.ProviderOpenCode),
 	} {
 		_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 			Dispatch:      work.WorkDispatch{DispatchID: "dispatch-cutover"},
