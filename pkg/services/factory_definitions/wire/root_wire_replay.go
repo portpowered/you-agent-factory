@@ -1,4 +1,4 @@
-package factorydefinitions
+package wire
 
 import (
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"

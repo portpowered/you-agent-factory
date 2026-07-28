@@ -161,6 +161,16 @@ Use this map when changing the public REST contract.
   `pkg/services/system_initialization/initialize_definitions_root_boundary_test.go`.
   Do not delete transitional top-level packages or lower baselines until story
   001 passes.
+  DEL-DEF story 002 (`pss-del-def-002`) deletes emptied transitional DEF
+  top-level packages (`authoredlayout`, `portableconfig`, `loading`,
+  `runtimeconfig`, `namedfactories`) and retargets owner imports to
+  `internal/services/*` destinations. The `service/` compile shim remains under
+  the Automations-leased `pkg/wire` hold. Import-clearing proof is
+  `pkg/services/factory_definitions/del_def_transitional_deletion_test.go`;
+  deletion/absence proofs are in `del_def_prerequisite_gate_test.go`. Root
+  `pkg/wire` composition ports moved to public exports under
+  `pkg/services/factory_definitions/wire/root_wire_*.go` so root wire does not
+  import `internal/**` illegally.
   CUT-DEF-RUN seals Factory Definitions production imports of Factory Runtime to
   the service root only (`pkg/services/factory_runtime`) for orchestration
   semantic-validation edges; the lease-wide guard is

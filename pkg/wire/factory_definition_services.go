@@ -19,9 +19,8 @@ import (
 	factoryinvocationinterpolation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationinterpolation"
 	factoryinvocationoutput "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationoutput"
 	factoryinvocationworktype "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationworktype"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryquorumpolicy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/quorumpolicy"
 	factoryttsobservability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/ttsobservability"
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
@@ -30,7 +29,6 @@ import (
 	recordingreplay "github.com/portpowered/infinite-you/pkg/services/recordings/replay"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
-	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
 )
 
 func provideWorkContentHostPlatform(edges serviceedges.Edges) work.ContentHostPlatform {
@@ -186,7 +184,7 @@ func provideFactoryDefinitionRequiredToolChecker(
 	lookPath factorydefinitions.RequiredToolPathLookup,
 	versionProbe factorydefinitions.RequiredToolVersionProbe,
 ) (factorydefinitions.RequiredToolChecker, error) {
-	return factoryloading.NewPathRequiredToolChecker(lookPath, versionProbe)
+	return factorydefinitionswire.NewPathRequiredToolChecker(lookPath, versionProbe)
 }
 
 func provideFactoryDefinitionPersistenceFileSystem(
@@ -290,19 +288,19 @@ func provideFactoryDefinitionInputInboxSentinelEnsurer(
 }
 
 func providePortableBundledFilesMaterializer(fileSystem portablefiles.FileSystem) factorydefinitions.PortableBundledFilesMaterializer {
-	return portableconfig.NewMaterializer(fileSystem)
+	return factorydefinitionswire.NewPortableBundledFilesMaterializer(fileSystem)
 }
 
 func providePortableBundledFileWritesValidator(fileSystem portablefiles.FileSystem) factorydefinitions.PortableBundledFileWritesValidator {
-	return portableconfig.NewWritesValidator(fileSystem)
+	return factorydefinitionswire.NewPortableBundledFileWritesValidator(fileSystem)
 }
 
 func providePortableBundledFilesCopier(fileSystem portablefiles.FileSystem) factorydefinitions.PortableBundledFilesCopier {
-	return portableconfig.NewFilesCopier(fileSystem)
+	return factorydefinitionswire.NewPortableBundledFilesCopier(fileSystem)
 }
 
 func providePortableBundledFileSourceResolver(fileSystem portablefiles.FileSystem) (factorydefinitions.PortableBundledFileSourceResolver, error) {
-	return portableconfig.NewSupportedSourceResolver(fileSystem)
+	return factorydefinitionswire.NewPortableBundledFileSourceResolver(fileSystem)
 }
 
 func provideFactoryDefinitionLoader(
@@ -315,8 +313,8 @@ func provideFactoryDefinitionLoader(
 	sourceResolver factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factorydefinitions.PortableBundledFileInspection,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
-) *factoryloading.Loader {
-	return wirefactorydefinitions.Loader(
+) *factorydefinitionswire.DefinitionLoader {
+	return factorydefinitionswire.Loader(
 		applySupportedFiles,
 		applyStarterWork,
 		materializeFiles,
@@ -332,11 +330,11 @@ func provideFactoryDefinitionLoader(
 func provideAuthoredFactorySourceLoader(
 	fileSystem factorydefinitions.AuthoredLayoutReaderFileSystem,
 ) factorydefinitions.AuthoredFactorySourceLoader {
-	return wirefactorydefinitions.AuthoredFactorySourceLoader(fileSystem)
+	return factorydefinitionswire.AuthoredFactorySourceLoader(fileSystem)
 }
 
 func provideLoadedFactoryLoader(
-	loader *factoryloading.Loader,
+	loader *factorydefinitionswire.DefinitionLoader,
 ) factorydefinitions.LoadedFactoryLoader {
 	return func(factoryDir string, workstationLoader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		return loader.LoadSourceFromFactoryDir(factoryDir, workstationLoader)
@@ -349,10 +347,10 @@ func provideReplayArtifactStorage() platformreplay.Storage {
 
 func provideReplayArtifactLoader(storage platformreplay.Storage) recordings.ReplayArtifactLoader {
 	return func(path string) (*factorydefinitions.ReplayArtifact, error) {
-		return recordingreplay.Load(storage, path, wirefactorydefinitions.FactorySnapshotJSONDecoder())
+		return recordingreplay.Load(storage, path, factorydefinitionswire.FactorySnapshotJSONDecoder())
 	}
 }
 
 func provideReplayRuntimeConfigDecoder() factorydefinitions.ReplayRuntimeConfigDecoder {
-	return wirefactorydefinitions.ReplayRuntimeConfigDecoder()
+	return factorydefinitionswire.ReplayRuntimeConfigDecoder()
 }

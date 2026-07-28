@@ -29,9 +29,8 @@ var authoringLayoutForbiddenImportRoots = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence",
 }
 
@@ -266,20 +265,3 @@ func TestPackageBoundary_InternalLeasePackagesDoNotImportForbiddenOwnership(t *t
 	}
 }
 
-func TestPackageBoundary_TransitionalAuthoringPackagesRemainPresent(t *testing.T) {
-	t.Parallel()
-
-	for _, relativeDir := range []string{
-		"../../../authoredlayout",
-		"../../../definition",
-		"../../../persistence",
-	} {
-		info, err := os.Stat(relativeDir)
-		if err != nil {
-			t.Fatalf("transitional authoring package %s must remain present until DEL-DEF: %v", relativeDir, err)
-		}
-		if !info.IsDir() {
-			t.Fatalf("transitional authoring path %s must remain a directory until DEL-DEF", relativeDir)
-		}
-	}
-}

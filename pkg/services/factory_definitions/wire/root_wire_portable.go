@@ -1,9 +1,9 @@
-package factorydefinitions
+package wire
 
 import (
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
-	portableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
+	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
+	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
 )
 
 // FactoryLayoutFlattener binds the concrete Factory Definitions loader selected
@@ -20,7 +20,7 @@ func PortableFactoryConfigPreparer(
 	applySupportedFiles contracts.PortableBundledFilesApplier,
 	applyStarterWork contracts.FactoryStarterWorkApplier,
 ) contracts.PortableFactoryConfigPreparer {
-	return portableconfig.NewPreparer(
+	return snapshotsportabilityprepare.NewPreparer(
 		contracts.CloneFactoryConfig,
 		applySupportedFiles,
 		applyStarterWork,

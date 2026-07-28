@@ -1,10 +1,10 @@
-// Package factorydefinitions contains Wire-owned bindings for concrete Factory
+// package wire contains Wire-owned bindings for concrete Factory
 // Definitions implementations. It is composition code, not a service API.
-package factorydefinitions
+package wire
 
 import (
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryloadedsource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loadedsource"
+	factoryloadedsource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource"
 )
 
 // LoadedFactorySourceFactory binds the effective-source implementation to the

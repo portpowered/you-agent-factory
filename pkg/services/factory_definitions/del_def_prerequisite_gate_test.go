@@ -85,27 +85,31 @@ func TestDelDefPrerequisiteGate_AllPrerequisitePacketsFactoryComplete(t *testing
 		}
 	})
 
-	t.Run("CLN-DEF-FOLD-TOPLEVEL_transitional_packages_remain_for_DEL", func(t *testing.T) {
+	t.Run("DEL-DEF-002_deleted_transitional_packages_absent", func(t *testing.T) {
 		t.Parallel()
-		wantTransitional := []string{
-			"service",
+		deletedTransitional := []string{
 			"authoredlayout",
 			"portableconfig",
 			"loading",
 			"namedfactories",
+			"runtimeconfig",
 		}
-		for _, relativeDir := range wantTransitional {
-			info, err := os.Stat(filepath.Join(serviceRoot, relativeDir))
-			if err != nil {
-				t.Fatalf(
-					"transitional package %s must remain until DEL-DEF deletes it; stat = %v",
-					relativeDir,
-					err,
-				)
+		for _, relativeDir := range deletedTransitional {
+			_, err := os.Stat(filepath.Join(serviceRoot, relativeDir))
+			if !os.IsNotExist(err) {
+				t.Fatalf("transitional package %s must be deleted by DEL-DEF story 002; stat = %v", relativeDir, err)
 			}
-			if !info.IsDir() {
-				t.Fatalf("transitional path %s must remain a directory until DEL-DEF", relativeDir)
-			}
+		}
+	})
+
+	t.Run("DEL-DEF-002_service_shim_held_under_root_wire_lease", func(t *testing.T) {
+		t.Parallel()
+		info, err := os.Stat(filepath.Join(serviceRoot, "service"))
+		if err != nil {
+			t.Fatalf("service compile shim must remain while root pkg/wire holds Automations lease; stat = %v", err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("service path must remain a directory while root pkg/wire holds Automations lease")
 		}
 	})
 

@@ -1,11 +1,12 @@
-package factorydefinitions
+package wire
 
 import (
 	"context"
 
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
+	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
+	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
+	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
@@ -48,7 +49,7 @@ func Persistence(
 			payload []byte,
 			validator contracts.Validator,
 		) (*contracts.PreparedFactoryLayoutPayload, error) {
-			return factoryauthoredlayout.Prepare(
+			return authoringlayoutprepare.FactoryLayout(
 				ctx,
 				segment,
 				payload,

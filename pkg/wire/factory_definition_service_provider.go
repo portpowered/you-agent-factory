@@ -4,16 +4,15 @@ import (
 	"context"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
-	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
 )
 
 func provideFactoryDefinitionsFactory(
 	persistence factorydefinitions.Persistence,
-	loader *factoryloading.Loader,
+	loader *factorydefinitionswire.DefinitionLoader,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
@@ -55,11 +54,11 @@ func provideFactoryDefinitionsFactory(
 			},
 			persistence.CreateNamedFactory,
 			namedPaths.WriteCurrentPointer,
-			wirefactorydefinitions.PortableFactoryConfigPreparer(
+			factorydefinitionswire.PortableFactoryConfigPreparer(
 				applySupportedFiles,
 				applyStarterWork,
 			),
-			wirefactorydefinitions.FactorySnapshotCapturer(),
+			factorydefinitionswire.FactorySnapshotCapturer(),
 			persistence.ReplaceFactoryLayout,
 			namedPaths,
 			namedFactoryCatalogFileSystem,

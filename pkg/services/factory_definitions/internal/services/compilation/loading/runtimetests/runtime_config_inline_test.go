@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntimeconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/runtimeconfig"
+	factoryruntimeconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/runtimeconfig"
 )
 
 func TestLoadRuntimeConfig_LoadsCronWorkstationConfig(t *testing.T) {

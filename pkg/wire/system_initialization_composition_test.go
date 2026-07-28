@@ -6,7 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
@@ -18,11 +18,11 @@ func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.Persis
 
 	edges := serviceedges.Edges{}
 	portableFileSystem := provideFactoryDefinitionPortableFileSystem(edges)
-	applier, err := portableconfig.NewPortableBundledFilesApplier(portableFileSystem)
+	applier, err := factorydefinitionswire.NewPortableBundledFilesApplier(portableFileSystem)
 	if err != nil {
 		t.Fatalf("NewPortableBundledFilesApplier() error = %v", err)
 	}
-	starterWork, err := portableconfig.NewFactoryStarterWorkApplier(portableFileSystem)
+	starterWork, err := factorydefinitionswire.NewFactoryStarterWorkApplier(portableFileSystem)
 	if err != nil {
 		t.Fatalf("NewFactoryStarterWorkApplier() error = %v", err)
 	}
@@ -56,7 +56,7 @@ func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.Persis
 		inspection,
 		requiredToolChecker,
 	)
-	pruneRemovedDocs, err := portableconfig.NewPortableBundledDocsPruner(portableFileSystem)
+	pruneRemovedDocs, err := factorydefinitionswire.NewPortableBundledDocsPruner(portableFileSystem)
 	if err != nil {
 		t.Fatalf("NewPortableBundledDocsPruner() error = %v", err)
 	}

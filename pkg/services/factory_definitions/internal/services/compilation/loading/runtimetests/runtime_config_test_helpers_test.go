@@ -14,9 +14,10 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout"
+	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
+	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
 	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
@@ -58,7 +59,7 @@ func ownerFactoryDefinitionPersistence() factorydefinitions.Persistence {
 			payload []byte,
 			validator factorydefinitions.Validator,
 		) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
-			return factoryauthoredlayout.Prepare(
+			return authoringlayoutprepare.FactoryLayout(
 				ctx,
 				segment,
 				payload,
