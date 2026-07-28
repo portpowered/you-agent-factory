@@ -288,9 +288,14 @@
     "pkg/services/operator_settings",
     "pkg/services/operator_settings/identityinventory",
     "pkg/services/operator_settings/internal/service",
+    "pkg/services/operator_settings/internal/services/document",
+    "pkg/services/operator_settings/internal/services/document/internal/service",
+    "pkg/services/operator_settings/internal/services/document/wire",
     "pkg/services/operator_settings/internal/services/resolution",
     "pkg/services/operator_settings/internal/services/resolution/internal/service",
     "pkg/services/operator_settings/internal/services/resolution/wire",
+    "pkg/services/operator_settings/servicewire",
+    "pkg/services/operator_settings/testlink",
     "pkg/services/operator_settings/wire",
     "pkg/services/provider_sessions",
     "pkg/services/provider_sessions/internal/services/codex_reader",
@@ -1726,6 +1731,21 @@
       "destination": "operator_settings"
     },
     {
+      "packagePath": "pkg/services/operator_settings/internal/services/document",
+      "disposition": "retain",
+      "destination": "operator_settings/internal/services/document"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/services/document/internal/service",
+      "disposition": "retain",
+      "destination": "operator_settings/internal/services/document"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/services/document/wire",
+      "disposition": "retain",
+      "destination": "operator_settings/internal/services/document"
+    },
+    {
       "packagePath": "pkg/services/operator_settings/internal/services/resolution",
       "disposition": "retain",
       "destination": "operator_settings/internal/services/resolution"
@@ -1739,6 +1759,16 @@
       "packagePath": "pkg/services/operator_settings/internal/services/resolution/wire",
       "disposition": "retain",
       "destination": "operator_settings/internal/services/resolution"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/servicewire",
+      "disposition": "retain",
+      "destination": "operator_settings"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/testlink",
+      "disposition": "retain",
+      "destination": "operator_settings"
     },
     {
       "packagePath": "pkg/services/operator_settings/wire",

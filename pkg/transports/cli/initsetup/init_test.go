@@ -14,6 +14,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	operatorsettingsservicewire "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
@@ -54,16 +55,7 @@ func TestConfigurerRejectsEmptySuppliedModelBeforePersistence(t *testing.T) {
 func TestConfigurerReportsCanonicalPersistedDefaults(t *testing.T) {
 	var output bytes.Buffer
 	model := "  free-form/model:v1  "
-	service := operatorsettings.ConfigDocumentService{
-		Files: platformfilesystem.Local{},
-		CreateTemp: func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		Providers:       testProviderCatalog,
-		Decoder:         globalconfigmapping.Decode,
-		Encoder:         globalconfigmapping.Encode,
-		PersistenceLock: &sync.Mutex{},
-	}
+	service := testConfigService()
 	homeDir := t.TempDir()
 	err := initsetup.NewConfigurer(service, testLineReaderFactory)(initsetup.Config{
 		Context:  context.Background(),
@@ -202,16 +194,16 @@ func TestConfigurerRejectsPromptedInvalidProviderWithoutPersisting(t *testing.T)
 }
 
 func testConfigService() operatorsettings.ConfigDocumentService {
-	return operatorsettings.ConfigDocumentService{
-		Files: platformfilesystem.Local{},
-		CreateTemp: func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
+	return operatorsettingsservicewire.NewConfigDocumentService(
+		platformfilesystem.Local{},
+		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 			return os.CreateTemp(dir, pattern)
 		},
-		Providers:       testProviderCatalog,
-		Decoder:         globalconfigmapping.Decode,
-		Encoder:         globalconfigmapping.Encode,
-		PersistenceLock: &sync.Mutex{},
-	}
+		globalconfigmapping.Decode,
+		globalconfigmapping.Encode,
+		testProviderCatalog,
+		&sync.Mutex{},
+	)
 }
 
 type testLineReader struct {

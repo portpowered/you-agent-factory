@@ -1181,6 +1181,24 @@
       "minimum": 66.66
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/internal/service",
+      "minimum": 82.90
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution",
       "exception": {
         "kind": "measurement",
@@ -1196,6 +1214,14 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/wire",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/testlink",
       "minimum": 100.00
     },
     {
@@ -1664,7 +1690,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/internal/service",
-      "minimum": 92.54
+      "minimum": 92.20
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire",

@@ -1,6 +1,7 @@
 package operatorsettings
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -228,4 +229,28 @@ type ApplyDocumentUpdateResult struct {
 	Document  Document
 	Path      string
 	Persisted bool
+}
+
+// PersistDocumentRequest atomically publishes one complete validated operator
+// document at Path.
+type PersistDocumentRequest struct {
+	Path     string
+	Document Document
+}
+
+// DocumentOwner is the parent-private document capability consumed by
+// ConfigDocumentService. Wire injects the nested document owner implementation.
+type DocumentOwner interface {
+	LoadDocument(LoadDocumentRequest) (LoadDocumentResult, error)
+	MergeDocumentProviderModel(Document, DocumentProviderModelUpdate) (Document, error)
+	ApplyDocumentUpdate(ApplyDocumentUpdateRequest) (ApplyDocumentUpdateResult, error)
+	PersistDocument(context.Context, PersistDocumentRequest) error
+}
+
+// Validate checks request fields whose validity does not depend on storage state.
+func (request PersistDocumentRequest) Validate() error {
+	if strings.TrimSpace(request.Path) == "" {
+		return fmt.Errorf("%w: path is required", ErrDocumentMalformed)
+	}
+	return nil
 }
