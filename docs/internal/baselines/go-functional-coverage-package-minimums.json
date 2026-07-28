@@ -932,7 +932,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session",
-      "minimum": 30.06
+      "minimum": 27.34
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution",
@@ -1240,7 +1240,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/wire",
-      "minimum": 69.64
+      "minimum": 69.48
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings",
@@ -2288,7 +2288,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
-      "minimum": 83.25
+      "minimum": 83.22
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions",
