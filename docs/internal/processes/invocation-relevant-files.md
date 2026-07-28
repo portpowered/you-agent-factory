@@ -865,7 +865,11 @@ response-stream output.
   (`TestProductionPackagesImportWorkRootOnly`). Mirror
   `pkg/services/recordings/runtime_import_boundary_test.go` when adding similar
   CUT consumer-edge import proofs: `go list` every package under the Sessions
-  root and fail on any import outside `pkg/services/work`.
+  root and fail on any import outside `pkg/services/work`. FUN-sessions mirrors
+  the owner-local CUT-SES-WORK / CUT-SES-WRK / CUT-SES-RUN import seals in
+  `tests/functional/sessions/root_composition/work_peer_import_seal_test.go` and
+  walks `tests/functional/sessions` with `go/parser` ImportsOnly to block retired
+  `pkg/work*` and nested `pkg/services/work/*` imports in functional proofs.
 - Factory Sessions invocation input preparation and primary-result selection
   route through `work.Service` (`PrepareInvocationInput`,
   `ResolvePrimaryResult`) injected on `SessionOwner` via
