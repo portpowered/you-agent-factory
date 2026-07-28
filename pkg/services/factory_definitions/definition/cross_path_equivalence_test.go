@@ -216,6 +216,79 @@ func peerExerciseRootCatalogTypedFailures(t *testing.T, service factoryroot.Serv
 	}
 }
 
+// peerExerciseRootCatalogDeleteResolveAndCurrent proves a peer-shaped consumer can
+// drive delete, resolve, and current-factory lookup through the attached private
+// implementation while depending only on the root Service vocabulary.
+func peerExerciseRootCatalogDeleteResolveAndCurrent(
+	t *testing.T,
+	service factoryroot.Service,
+	projectRoot,
+	globalRoot,
+	factoryDir string,
+) {
+	t.Helper()
+	ctx := context.Background()
+
+	resolved, err := service.ResolveNamedFactory(
+		ctx,
+		factoryroot.ResolveNamedFactoryRequest{
+			ProjectRoot: projectRoot,
+			GlobalRoot:  globalRoot,
+			Name:        "alpha",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ResolveNamedFactory: %v", err)
+	}
+	if resolved.Resolution.Name != "alpha" || resolved.Resolution.FactoryDir != factoryDir {
+		t.Fatalf("ResolveNamedFactory result = %#v, want alpha at %q", resolved, factoryDir)
+	}
+
+	if _, err := service.SetCurrentFactoryPointer(
+		ctx,
+		factoryroot.SetCurrentFactoryPointerRequest{RootDir: projectRoot, Name: "alpha"},
+	); err != nil {
+		t.Fatalf("SetCurrentFactoryPointer: %v", err)
+	}
+
+	currentDir, err := factoryroot.ResolveCurrentFactoryDirectory(ctx, service, projectRoot)
+	if err != nil {
+		t.Fatalf("ResolveCurrentFactoryDirectory: %v", err)
+	}
+	if currentDir != factoryDir {
+		t.Fatalf("ResolveCurrentFactoryDirectory = %q, want %q", currentDir, factoryDir)
+	}
+
+	if _, err := service.SetCurrentFactoryPointer(
+		ctx,
+		factoryroot.SetCurrentFactoryPointerRequest{RootDir: projectRoot, Name: "beta"},
+	); err != nil {
+		t.Fatalf("SetCurrentFactoryPointer(beta): %v", err)
+	}
+
+	deleted, err := service.DeleteNamedFactory(
+		ctx,
+		factoryroot.DeleteNamedFactoryRequest{RootDir: projectRoot, Name: "alpha"},
+	)
+	if err != nil {
+		t.Fatalf("DeleteNamedFactory: %v", err)
+	}
+	if deleted.Name != "alpha" || deleted.FactoryDir != factoryDir {
+		t.Fatalf("DeleteNamedFactory result = %#v, want alpha at %q", deleted, factoryDir)
+	}
+
+	listed, err := service.ListNamedFactories(
+		ctx,
+		factoryroot.ListNamedFactoriesRequest{RootDir: projectRoot},
+	)
+	if err != nil {
+		t.Fatalf("ListNamedFactories after delete: %v", err)
+	}
+	if len(listed.Entries) != 1 || listed.Entries[0].Name != "beta" {
+		t.Fatalf("ListNamedFactories after delete = %#v, want only beta", listed.Entries)
+	}
+}
+
 func TestRootCatalogEquivalence_CTRDEFSuccessThroughPrivateImplementation(t *testing.T) {
 	t.Parallel()
 
@@ -250,4 +323,17 @@ func TestRootCatalogEquivalence_PeerExercisesRootWithoutCatalogImport(t *testing
 	failureRoot := t.TempDir()
 	failureService := newRootCatalogServiceForPeer(t)
 	peerExerciseRootCatalogTypedFailures(t, failureService, failureRoot)
+}
+
+func TestRootCatalogEquivalence_DeleteResolveAndCurrentThroughPrivateImplementation(t *testing.T) {
+	t.Parallel()
+
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+	factoryDir := writeEquivalenceNamedFactory(t, projectRoot, "alpha")
+	_ = writeEquivalenceNamedFactory(t, projectRoot, "beta")
+	_ = writeEquivalenceNamedFactory(t, globalRoot, "alpha")
+	service := newRootCatalogServiceForPeer(t)
+
+	peerExerciseRootCatalogDeleteResolveAndCurrent(t, service, projectRoot, globalRoot, factoryDir)
 }

@@ -793,7 +793,17 @@ CLN-DEF-CONTRACTS story 005 publishes worker execution vocabulary at
 and `recordings/workers_root_boundary_test.go` prove replay and diagnostics
 consumers import Workers root ports instead of `factory_definitions/contracts`.
 Temporary worker execution deletion-only aliases remain in
-`worker_provider_deletion_aliases.go`. The
+`worker_provider_deletion_aliases.go`. CLN-DEF-CONTRACTS story 006 demotes
+`NamedFactoryCatalog` and `CurrentFactoryDirectoryResolver` to deletion-only
+aliases in `parallel_operation_deletion_aliases.go`; peers use root
+`Service.ListNamedFactories`, `ResolveNamedFactory`, `DeleteNamedFactory`,
+`GetCurrentFactoryPointer`, and `ResolveCurrentFactoryDirectory` instead.
+`parallel_operation_equivalence_test.go` and
+`definition/cross_path_equivalence_test.go` prove list/delete/resolve/current
+outcomes through root Service match the legacy catalog operations for unchanged
+fixtures. Owner HTTP/MCP transports and `definition` remain on the singular
+`Service` binding; `pkg/wire` and process-edge CLI/Factory Sessions construction
+retain temporary deletion-only aliases until a later cutover packet. The
 parent-private nested validation subservice locks its public surface in
 `internal/services/validation/boundary_test.go`: `service.go` exports only
 `Service` and `Dependencies` with factory_definitions root request/result

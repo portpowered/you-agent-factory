@@ -9,8 +9,6 @@ type NamedFactoryListEntry = contracts.NamedFactoryListEntry
 type NamedFactoryResolution = contracts.NamedFactoryResolution
 type NamedFactoryResolutionSource = contracts.NamedFactoryResolutionSource
 type NamedFactoryPrecedenceDecision = contracts.NamedFactoryPrecedenceDecision
-type NamedFactoryCatalog = contracts.NamedFactoryCatalog
-type CurrentFactoryDirectoryResolver = contracts.CurrentFactoryDirectoryResolver
 type Persistence = contracts.Persistence
 
 const (
