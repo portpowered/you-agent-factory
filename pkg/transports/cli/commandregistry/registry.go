@@ -223,6 +223,7 @@ func unarySubmitConfig(
 		Name:         name,
 		WorkTypeName: workType,
 		Payload:      payload,
+		Stdin:        cmd.InOrStdin(),
 		Server:       server,
 		SessionID:    sessionID,
 		JSON:         jsonOutput,
