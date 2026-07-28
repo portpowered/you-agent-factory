@@ -50,7 +50,7 @@ import (
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
-	workersservice "github.com/portpowered/infinite-you/pkg/services/workers/service"
+	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	workerworktree "github.com/portpowered/infinite-you/pkg/services/workers/worktree"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
@@ -104,7 +104,7 @@ func buildProviderRegistry(
 
 func provideProviderRegistryRebinder(
 	edges serviceedges.Edges,
-) (workersservice.ProviderRegistryRebinder, error) {
+) (workerswire.ProviderRegistryRebinder, error) {
 	operatingSystem := string(resolveWorkersOperatingSystem(edges))
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
 	externalRegistrations := append(
@@ -466,7 +466,7 @@ func provideAutomationFactory(edges serviceedges.Edges) factorysessionwire.Autom
 			nil,
 			nil,
 			"",
-			workersservice.ResolveTemplateFields,
+			workerswire.ResolveTemplateFields,
 			factoryworkstationexecution.NewService(),
 		)
 		if err != nil {
@@ -521,7 +521,7 @@ func provideFactorySessionExecutionFactory(
 	allocator agypty.PTYAllocator,
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
 	registry *providerregistry.Registry,
-	registryRebinder workersservice.ProviderRegistryRebinder,
+	registryRebinder workerswire.ProviderRegistryRebinder,
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	conductorInvocationWithProgress factorysessionwire.ConductorInvocationWithProgressFactory,
 	edges serviceedges.Edges,
@@ -714,7 +714,7 @@ func provideWorkersRuntimeFactory(
 	defaultAllocator agypty.PTYAllocator,
 	edges serviceedges.Edges,
 	providerRegistry *providerregistry.Registry,
-	providerRegistryRebinder workersservice.ProviderRegistryRebinder,
+	providerRegistryRebinder workerswire.ProviderRegistryRebinder,
 ) (factorysessionwire.WorkersRuntimeFactory, error) {
 	if defaultAllocator == nil {
 		return nil, agypty.ErrHostRequired
@@ -793,7 +793,7 @@ func provideWorkersRuntimeFactory(
 		if allocator == nil {
 			allocator = defaultAllocator
 		}
-		return workersservice.NewRuntimeWithSelection(
+		return workerswire.NewRuntimeWithSelection(
 			sessions,
 			modelService,
 			modelsScope,
@@ -875,15 +875,15 @@ func provideWorkerCurrentWorkingDirectory() func() (string, error) {
 }
 
 func provideWorkersRuntimeExecutorsFactory() factoryruntime.WorkersRuntimeExecutorsFactory {
-	return workersservice.BuildRuntimeExecutors
+	return workerswire.BuildRuntimeExecutors
 }
 
 func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandRunnerFactory {
-	return workersservice.NewMockCommandRunner
+	return workerswire.NewMockCommandRunner
 }
 
 func provideWorkersLocalRuntimeHooksFactory() factorysessionwire.WorkersLocalRuntimeHooksFactory {
-	return workersservice.LocalRuntimeHooks
+	return workerswire.LocalRuntimeHooks
 }
 
 func provideWorkerInvocationWithProgressFactory(edges serviceedges.Edges) factorysessionwire.WorkerInvocationWithProgressFactory {
@@ -910,7 +910,7 @@ func provideWorkerInvocationWithProgressFactory(edges serviceedges.Edges) factor
 	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
 	return func(runner workers.CommandRunner, allocator agypty.PTYAllocator, publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
-		return workersservice.NewInvocationWithProgress(
+		return workerswire.NewInvocationWithProgress(
 			runner, commandClock, allocator, resolveSymlinks,
 			executableLocator, executableInspector, executableFiles, operatingSystem, publisher, temporaryFiles,
 		)
@@ -941,7 +941,7 @@ func provideWorkerInvocationFactory(edges serviceedges.Edges) factorysessionwire
 	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
 	return func(runner workers.CommandRunner, allocator agypty.PTYAllocator) (workers.InvocationExecutor, error) {
-		return workersservice.NewInvocation(
+		return workerswire.NewInvocation(
 			runner, commandClock, allocator, resolveSymlinks,
 			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,
 		)
@@ -985,7 +985,7 @@ func provideConductorInvocationWithProgressFactory(edges serviceedges.Edges) fac
 			}
 			concreteRegistry = typed
 		}
-		return workersservice.NewConductorInvocationWithProgress(
+		return workerswire.NewConductorInvocationWithProgress(
 			concreteRegistry,
 			runner,
 			commandClock,
@@ -1028,7 +1028,7 @@ func provideProviderFromCommandRunnerFactory(
 	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
 	return func(runner workers.CommandRunner) (workerprovider.Provider, error) {
-		return workersservice.NewProviderFromCommandRunner(
+		return workerswire.NewProviderFromCommandRunner(
 			runner, commandClock, allocator, resolveSymlinks,
 			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,
 		)
