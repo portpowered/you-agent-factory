@@ -39,10 +39,7 @@ func (a *Adapter) invokeControlPause(w http.ResponseWriter, ctx context.Context)
 	}
 	result, err := root.ControlPause(ctx, factoryruntime.PauseRequest{})
 	if err != nil {
-		if a.writeControlError(w, err) {
-			return
-		}
-		a.writeError(w, http.StatusInternalServerError, "failed to pause factory runtime", "INTERNAL_ERROR")
+		a.writeRootOrInternalError(w, runtimeHTTPOperationControl, "failed to pause factory runtime", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, controlResponseFromPauseResult(result))
@@ -56,10 +53,7 @@ func (a *Adapter) invokeControlResume(w http.ResponseWriter, ctx context.Context
 	}
 	result, err := root.ControlResume(ctx, factoryruntime.ResumeRequest{})
 	if err != nil {
-		if a.writeControlError(w, err) {
-			return
-		}
-		a.writeError(w, http.StatusInternalServerError, "failed to resume factory runtime", "INTERNAL_ERROR")
+		a.writeRootOrInternalError(w, runtimeHTTPOperationControl, "failed to resume factory runtime", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, controlResponseFromResumeResult(result))
@@ -77,10 +71,7 @@ func (a *Adapter) invokeControlTerminate(
 	}
 	result, err := root.ControlTerminate(ctx, req)
 	if err != nil {
-		if a.writeControlError(w, err) {
-			return
-		}
-		a.writeError(w, http.StatusInternalServerError, "failed to terminate factory runtime", "INTERNAL_ERROR")
+		a.writeRootOrInternalError(w, runtimeHTTPOperationControl, "failed to terminate factory runtime", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, controlResponseFromTerminateResult(result))
@@ -143,77 +134,8 @@ func (a *Adapter) MoveWorkBySessionId(
 	}
 	result, err := root.ControlMoveWork(r.Context(), moveReq)
 	if err != nil {
-		if a.writeMoveWorkError(w, err) {
-			return
-		}
-		a.writeError(w, http.StatusInternalServerError, "failed to move work", "INTERNAL_ERROR")
+		a.writeRootOrInternalError(w, runtimeHTTPOperationMoveWork, "failed to move work", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, workResponseFromMoveResult(result))
-}
-
-func (a *Adapter) writeControlError(w http.ResponseWriter, err error) bool {
-	if status, response, ok := controlErrorResponse(err); ok {
-		a.writeJSON(w, status, response)
-		return true
-	}
-	return false
-}
-
-func (a *Adapter) writeMoveWorkError(w http.ResponseWriter, err error) bool {
-	if status, response, ok := moveWorkErrorResponse(err); ok {
-		a.writeJSON(w, status, response)
-		return true
-	}
-	return false
-}
-
-func moveWorkErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
-	if err == nil {
-		return 0, factoryapi.ErrorResponse{}, false
-	}
-	switch {
-	case errors.Is(err, factoryruntime.ErrMoveWorkNotFound):
-		return notFoundErrorResponse("work not found")
-	case errors.Is(err, factoryruntime.ErrMoveWorkInvalidState):
-		return badRequestErrorResponse("invalid target state for work type")
-	case errors.Is(err, factoryruntime.ErrMoveWorkInFlightDispatch):
-		return badRequestErrorResponse("work is in an active dispatch")
-	case errors.Is(err, factoryruntime.ErrMoveWorkEngineTerminated):
-		return badRequestErrorResponse("engine has terminated")
-	case errors.Is(err, factoryruntime.ErrMoveWorkRequestConflict):
-		return http.StatusConflict, factoryapi.ErrorResponse{
-			Message: "Operator move request was already applied.",
-			Family:  factoryapi.ErrorFamilyConflict,
-			Code:    factoryapi.ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED,
-		}, true
-	case errors.Is(err, factoryruntime.ErrNotRunning):
-		return serviceUnavailableErrorResponse("factory runtime is not running")
-	default:
-		return 0, factoryapi.ErrorResponse{}, false
-	}
-}
-
-func controlErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
-	if err == nil {
-		return 0, factoryapi.ErrorResponse{}, false
-	}
-	switch {
-	case errors.Is(err, factoryruntime.ErrNotRunning):
-		return serviceUnavailableErrorResponse("factory runtime is not running")
-	case errors.Is(err, factoryruntime.ErrAlreadyStopped):
-		return conflictErrorResponse("factory runtime is already stopped")
-	case errors.Is(err, factoryruntime.ErrInvalidLifecycleTransition):
-		return badRequestErrorResponse("factory runtime invalid lifecycle transition")
-	default:
-		return 0, factoryapi.ErrorResponse{}, false
-	}
-}
-
-func conflictErrorResponse(message string) (int, factoryapi.ErrorResponse, bool) {
-	return http.StatusConflict, factoryapi.ErrorResponse{
-		Message: message,
-		Family:  factoryapi.ErrorFamilyConflict,
-		Code:    factoryapi.ErrorResponseCode("CONFLICT"),
-	}, true
 }

@@ -26,10 +26,7 @@ func (a *Adapter) GetStatusBySessionId(
 func (a *Adapter) getStatus(w http.ResponseWriter, r *http.Request, sessionID string) {
 	result, err := a.observeStatus(r.Context(), sessionID)
 	if err != nil {
-		if a.writeObserveError(w, err) {
-			return
-		}
-		a.writeError(w, http.StatusInternalServerError, "failed to observe factory runtime status", "INTERNAL_ERROR")
+		a.writeRootOrInternalError(w, runtimeHTTPOperationObserve, "failed to observe factory runtime status", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, statusResponseFromObservation(result.Observation))

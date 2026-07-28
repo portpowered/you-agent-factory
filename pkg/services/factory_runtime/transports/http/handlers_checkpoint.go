@@ -2,11 +2,9 @@ package http
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // CaptureCheckpoint handles Runtime root checkpoint capture through the
@@ -54,10 +52,7 @@ func (a *Adapter) invokeCaptureCheckpoint(
 	}
 	result, err := root.CaptureCheckpoint(ctx, req)
 	if err != nil {
-		if a.writeCheckpointError(w, err) {
-			return
-		}
-		a.writeError(w, http.StatusInternalServerError, "failed to capture checkpoint", "INTERNAL_ERROR")
+		a.writeRootOrInternalError(w, runtimeHTTPOperationCheckpoint, "failed to capture checkpoint", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, captureCheckpointResponseFromResult(result))
@@ -75,10 +70,7 @@ func (a *Adapter) invokeLoadCheckpoint(
 	}
 	result, err := root.LoadCheckpoint(ctx, req)
 	if err != nil {
-		if a.writeCheckpointError(w, err) {
-			return
-		}
-		a.writeError(w, http.StatusInternalServerError, "failed to load checkpoint", "INTERNAL_ERROR")
+		a.writeRootOrInternalError(w, runtimeHTTPOperationCheckpoint, "failed to load checkpoint", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, loadCheckpointResponseFromResult(result))
@@ -96,41 +88,9 @@ func (a *Adapter) invokeRestoreCheckpoint(
 	}
 	result, err := root.RestoreCheckpoint(ctx, req)
 	if err != nil {
-		if a.writeCheckpointError(w, err) {
-			return
-		}
-		a.writeError(w, http.StatusInternalServerError, "failed to restore checkpoint", "INTERNAL_ERROR")
+		a.writeRootOrInternalError(w, runtimeHTTPOperationCheckpoint, "failed to restore checkpoint", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, restoreCheckpointResponseFromResult(result))
 }
 
-func (a *Adapter) writeCheckpointError(w http.ResponseWriter, err error) bool {
-	if status, response, ok := checkpointErrorResponse(err); ok {
-		a.writeJSON(w, status, response)
-		return true
-	}
-	return false
-}
-
-func checkpointErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
-	if err == nil {
-		return 0, factoryapi.ErrorResponse{}, false
-	}
-	switch {
-	case errors.Is(err, factoryruntime.ErrCheckpointNotFound):
-		return notFoundErrorResponse("factory runtime checkpoint not found")
-	case errors.Is(err, factoryruntime.ErrCorruptCheckpoint):
-		return badRequestErrorResponse("factory runtime checkpoint is corrupt")
-	case errors.Is(err, factoryruntime.ErrIncompatibleCheckpoint):
-		return conflictErrorResponse("factory runtime checkpoint is incompatible")
-	case errors.Is(err, factoryruntime.ErrNotFound):
-		return notFoundErrorResponse("factory runtime target not found")
-	case errors.Is(err, factoryruntime.ErrNotRunning):
-		return serviceUnavailableErrorResponse("factory runtime is not running")
-	case errors.Is(err, factoryruntime.ErrCapabilityUnavailable):
-		return serviceUnavailableErrorResponse("factory runtime capability is unavailable")
-	default:
-		return 0, factoryapi.ErrorResponse{}, false
-	}
-}

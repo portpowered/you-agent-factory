@@ -51,21 +51,21 @@ Use this map when changing the public REST contract.
   `ObservationScopeFull`, project success via `FactoryStatusFromObservation` +
   `apisurface.FactoryStatusToAPI`, and route session-scoped reads through an
   injected `SessionObserver` peer binding rather than Runtime datastores.
-  Typed observation failures map through `error_mapping.go` before success
-  encoding. Runtime control (`handlers_control.go`) maps pause, resume, and
-  terminate through `ControlPause`, `ControlResume`, and `ControlTerminate`
-  with published `ControlOutcome` success vocabulary; operator move-work maps
+  Published Runtime root sentinel failures map through centralized
+  `error_mapping.go` (`RootErrorResponse`) into public `ErrorResponse` bodies
+  with stable status, family, and code; unmapped failures use sanitized
+  internal messages via `writeRootOrInternalError`. Runtime control
+  (`handlers_control.go`) maps pause, resume, and terminate through
+  `ControlPause`, `ControlResume`, and `ControlTerminate` with published
+  `ControlOutcome` success vocabulary; operator move-work maps
   `moveWorkBySessionId` through `ControlMoveWork` in `move_work_mapping.go`.
   Dispatch-plan adaptation (`handlers_dispatch_plan.go`) maps plan-dispatch and
   accept-dispatch-result through `PlanDispatch` and `AcceptDispatchResult` with
   published `DispatchPlanOutcome` success vocabulary in
-  `dispatch_plan_mapping.go`; typed dispatch-plan failures map at the adapter
-  edge before story 006 centralizes the full sentinel set. Checkpoint adaptation
-  (`handlers_checkpoint.go`) maps capture/load/restore through
-  `CaptureCheckpoint`, `LoadCheckpoint`, and `RestoreCheckpoint` with published
-  `CheckpointOutcome` success vocabulary in `checkpoint_mapping.go`; typed
-  checkpoint failures map at the adapter edge before story 006 centralizes the
-  full sentinel set.
+  `dispatch_plan_mapping.go`. Checkpoint adaptation (`handlers_checkpoint.go`)
+  maps capture/load/restore through `CaptureCheckpoint`, `LoadCheckpoint`, and
+  `RestoreCheckpoint` with published `CheckpointOutcome` success vocabulary in
+  `checkpoint_mapping.go`.
 - Factory Definitions HTTP decoding, generated-contract mapping, service
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_definitions/transports/http`. The top-level
