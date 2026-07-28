@@ -1944,18 +1944,8 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/live_recording_target.go",
-      "target": "NewLiveRecordingTargetPlanner"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/recordings/metadata.go",
       "target": "FactoryMetadataWarnings"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/workstation_requests.go",
-      "target": "BuildFactoryWorldWorkstationRequestProjectionSlice"
     },
     {
       "rule": "service-root-exported-function",
@@ -2685,7 +2675,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/recordings",
-      "target": "pkg/services/recordings/contracts.go:Clock,pkg/services/recordings/contracts.go:CompletionDeliveryPlanner,pkg/services/recordings/contracts.go:InitialStructureSource,pkg/services/recordings/contracts.go:Ledger,pkg/services/recordings/contracts.go:ProjectionService,pkg/services/recordings/contracts.go:ReplayHook,pkg/services/recordings/contracts.go:RuntimeEventLedger,pkg/services/recordings/contracts.go:RuntimeLedger,pkg/services/recordings/contracts.go:RuntimeRecorder,pkg/services/recordings/contracts.go:Service,pkg/services/recordings/contracts.go:WorkerEventRecorder,pkg/services/recordings/contracts.go:WorkstationRequestProjector,pkg/services/recordings/live_recording_target.go:LiveRecordingTargetPlanner,pkg/services/recordings/live_recording_target.go:RecordingClock"
+      "target": "pkg/services/recordings/contracts.go:Clock,pkg/services/recordings/contracts.go:CompletionDeliveryPlanner,pkg/services/recordings/contracts.go:InitialStructureSource,pkg/services/recordings/contracts.go:Ledger,pkg/services/recordings/contracts.go:LiveRecordingTargetPlanner,pkg/services/recordings/contracts.go:ProjectionService,pkg/services/recordings/contracts.go:RecordingClock,pkg/services/recordings/contracts.go:ReplayHook,pkg/services/recordings/contracts.go:RuntimeEventLedger,pkg/services/recordings/contracts.go:RuntimeLedger,pkg/services/recordings/contracts.go:RuntimeRecorder,pkg/services/recordings/contracts.go:Service,pkg/services/recordings/contracts.go:WorkerEventRecorder,pkg/services/recordings/contracts.go:WorkstationRequestProjector,pkg/services/recordings/portable_recording.go:PortableRecordingWriter,pkg/services/recordings/portable_recording.go:RecordingTemporaryFile"
     },
     {
       "rule": "service-root-interface-count",
@@ -3101,31 +3091,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/operator_settings/testproviders",
       "target": "pkg/services/operator_settings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/artifacts",
-      "target": "pkg/services/recordings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/events",
-      "target": "pkg/services/recordings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/projections",
-      "target": "pkg/services/recordings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/replay",
-      "target": "pkg/services/recordings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/service",
-      "target": "pkg/services/recordings"
     },
     {
       "rule": "service-root-unexpected-directory",

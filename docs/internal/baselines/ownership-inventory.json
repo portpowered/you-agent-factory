@@ -2023,9 +2023,9 @@
     {
       "id": "replay:recordings-replay",
       "kind": "replay",
-      "surfacePath": "pkg/services/recordings/replay",
+      "surfacePath": "pkg/services/recordings/wire",
       "replacementOwner": "recordings",
-      "note": "Replay and artifact reconstruction remain Recordings-owned public surfaces."
+      "note": "Replay and artifact reconstruction remain Recordings-owned public surfaces through recordings/wire after DEL-REC removed the transitional replay/ shim."
     },
     {
       "id": "visualization:factory-visualization",
