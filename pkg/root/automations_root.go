@@ -1,8 +1,6 @@
 package root
 
 import (
-	"fmt"
-
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/wire"
@@ -15,9 +13,5 @@ func AutomationsRootFromEdges(
 	workflowID string,
 	defaultFactoryDir string,
 ) (automations.Root, error) {
-	root, err := wire.AutomationsRootFromEdges(edges, workflowID, defaultFactoryDir)
-	if err != nil {
-		return automations.Root{}, fmt.Errorf("build automations root: %w", err)
-	}
-	return root, nil
+	return wire.AutomationsRootFromEdges(edges, workflowID, defaultFactoryDir)
 }
