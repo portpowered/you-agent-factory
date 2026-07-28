@@ -5,7 +5,9 @@ package wire
 import (
 	"fmt"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
+	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 	catalogservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/internal/service"
 )
 
@@ -25,4 +27,12 @@ func NewService(deps catalog.Dependencies) (catalog.Service, error) {
 		return nil, fmt.Errorf("construct Factory Definitions catalog: implementation rejected its dependencies")
 	}
 	return service, nil
+}
+
+// NewPathResolver constructs the catalog-owned named-path resolver from the
+// exact filesystem port used by catalog composition.
+func NewPathResolver(
+	fileSystem factorydefinitions.NamedPathFileSystem,
+) (factorydefinitions.NamedPathResolver, error) {
+	return catalognamedpaths.New(fileSystem)
 }

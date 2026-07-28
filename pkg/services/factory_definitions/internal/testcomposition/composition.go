@@ -18,7 +18,7 @@ import (
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	validationimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
-	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
+	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence"
 )
 
@@ -263,8 +263,8 @@ func (c Composition) Persistence(
 	return persistence
 }
 
-func mustNamedPaths(fileSystem factorydefinitions.NamedPathFileSystem) *factorynamedpaths.Resolver {
-	resolver, err := factorynamedpaths.New(fileSystem)
+func mustNamedPaths(fileSystem factorydefinitions.NamedPathFileSystem) *catalognamedpaths.Resolver {
+	resolver, err := catalognamedpaths.New(fileSystem)
 	if err != nil {
 		panic(err)
 	}

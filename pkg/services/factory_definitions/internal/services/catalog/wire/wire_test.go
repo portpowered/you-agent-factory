@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
@@ -224,5 +225,59 @@ func TestNewService_HostEffectsComeOnlyFromInjectedPorts(t *testing.T) {
 	}
 	if paths.currentName != "alpha" {
 		t.Fatalf("current pointer = %q, want alpha written through injected port", paths.currentName)
+	}
+}
+
+func TestNewPathResolverAndCatalogWireResolveNamedFactoryAndCurrentPointer(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	factoryDir := filepath.Join(rootDir, "alpha")
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "factory.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+
+	fileSystem := platformfilesystem.Local{}
+	paths, err := catalogwire.NewPathResolver(fileSystem)
+	if err != nil {
+		t.Fatalf("NewPathResolver: %v", err)
+	}
+	svc, err := catalogwire.NewService(catalog.Dependencies{
+		Paths:      paths,
+		FileSystem: fileSystem,
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	ctx := context.Background()
+	got, err := svc.GetNamedFactory(ctx, factorydefinitions.GetNamedFactoryRequest{
+		RootDir: rootDir,
+		Name:    "alpha",
+	})
+	if err != nil {
+		t.Fatalf("GetNamedFactory: %v", err)
+	}
+	if got.Entry.FactoryDir != factoryDir {
+		t.Fatalf("factoryDir = %q, want %q", got.Entry.FactoryDir, factoryDir)
+	}
+
+	if _, err := svc.SetCurrentFactoryPointer(ctx, factorydefinitions.SetCurrentFactoryPointerRequest{
+		RootDir: rootDir,
+		Name:    "alpha",
+	}); err != nil {
+		t.Fatalf("SetCurrentFactoryPointer: %v", err)
+	}
+	pointer, err := svc.GetCurrentFactoryPointer(ctx, factorydefinitions.GetCurrentFactoryPointerRequest{
+		RootDir: rootDir,
+	})
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryPointer: %v", err)
+	}
+	if pointer.Name != "alpha" || pointer.FactoryDir != factoryDir {
+		t.Fatalf("pointer = %#v, want alpha at %q", pointer, factoryDir)
 	}
 }
