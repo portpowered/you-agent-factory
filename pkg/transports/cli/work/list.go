@@ -13,7 +13,7 @@ func NewList(
 	transport clihttp.Protocol,
 	prepare workdomain.ListRequestPreparation,
 ) func(ListConfig) error {
-	return workcli.NewList(transport, prepare)
+	return workcli.BindList(transport, prepare)
 }
 
 func List(prepare workdomain.ListRequestPreparation, cfg ListConfig) error {

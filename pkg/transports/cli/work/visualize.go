@@ -9,7 +9,7 @@ import (
 type VisualizeConfig = workcli.VisualizeConfig
 
 func NewVisualize(visualize workdomain.VisualizationOperation) func(VisualizeConfig) error {
-	return workcli.NewVisualize(visualize)
+	return workcli.BindVisualize(visualize)
 }
 
 func Visualize(visualize workdomain.VisualizationOperation, cfg VisualizeConfig) error {

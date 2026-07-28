@@ -9,7 +9,7 @@ import (
 type ShowConfig = workcli.ShowConfig
 
 func NewShow(transport clihttp.Protocol) func(ShowConfig) error {
-	return workcli.NewShow(transport)
+	return workcli.BindShow(transport)
 }
 
 func Show(cfg ShowConfig) error {
