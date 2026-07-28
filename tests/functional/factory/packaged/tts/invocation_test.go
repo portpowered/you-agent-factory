@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -154,6 +155,58 @@ func TestPackagedTTSOptionalVoiceAndFormatReachModel(t *testing.T) {
 	}
 }
 
+// TestPackagedTTSModelFailureReturnsNoFalseArtifact proves that a forced model
+// failure during packaged @you/tts invocation returns a failed public terminal
+// outcome without success-shaped TTS audio artifact metadata in the primary
+// result for that run.
+func TestPackagedTTSModelFailureReturnsNoFalseArtifact(t *testing.T) {
+	text := fmt.Sprintf(
+		"functional packaged tts model failure %d",
+		time.Now().UnixNano(),
+	)
+
+	homeDir := t.TempDir()
+	factoryDir := support.InstallPackagedFactory(
+		t,
+		homeDir,
+		factorydefinitions.PackagedTTSFactoryName,
+	)
+	overwritePackagedTTSFactoryWithProviderFakeTopology(t, factoryDir)
+
+	fakeProvider := newPackagedTTSFailingFakeProvider("omnivoice invoke failed: exit status 1")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+		Env: []string{
+			"HOME=" + homeDir,
+			"USERPROFILE=" + homeDir,
+		},
+		Edges: serviceedges.Edges{
+			ProviderOverride: fakeProvider,
+		},
+	})
+
+	response := postPackagedTTSInvocation(t, server, text)
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED; response = %#v", response.Status, response)
+	}
+	if response.ErrorCode == nil || *response.ErrorCode != factoryapi.INVOCATIONTTSGENERATIONFAILED {
+		t.Fatalf(
+			"invocation errorCode = %#v, want INVOCATION_TTS_GENERATION_FAILED",
+			response.ErrorCode,
+		)
+	}
+	if primaryResultContainsTTSArtifactMetadata(t, response.PrimaryResult) {
+		t.Fatalf(
+			"primary result = %#v, want no success-shaped TTS audio artifact metadata on model failure",
+			response.PrimaryResult,
+		)
+	}
+	if fakeProvider.callCount() == 0 {
+		t.Fatal("fake provider Infer was not called, want packaged factory inference to reach the fake model edge")
+	}
+}
+
 type packagedTTSFakeProvider struct {
 	mu    sync.Mutex
 	audio []byte
@@ -221,6 +274,46 @@ func (provider *packagedTTSFakeProvider) Infer(
 }
 
 var _ providercontract.Provider = (*packagedTTSFakeProvider)(nil)
+
+type packagedTTSFailingFakeProvider struct {
+	mu          sync.Mutex
+	calls       int
+	last        *workerexecution.ProviderInferenceRequest
+	failMessage string
+}
+
+func newPackagedTTSFailingFakeProvider(message string) *packagedTTSFailingFakeProvider {
+	return &packagedTTSFailingFakeProvider{failMessage: message}
+}
+
+func (provider *packagedTTSFailingFakeProvider) callCount() int {
+	if provider == nil {
+		return 0
+	}
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	return provider.calls
+}
+
+func (provider *packagedTTSFailingFakeProvider) Infer(
+	_ context.Context,
+	request workerexecution.ProviderInferenceRequest,
+) (workerexecution.InferenceResponse, error) {
+	provider.mu.Lock()
+	provider.calls++
+	cloned := workerexecution.CloneProviderInferenceRequest(request)
+	provider.last = &cloned
+	provider.mu.Unlock()
+	if strings.TrimSpace(request.ModelOperation) != "TTS" {
+		return workerexecution.InferenceResponse{}, fmt.Errorf(
+			"packaged tts failing fake provider unexpected operation %q",
+			request.ModelOperation,
+		)
+	}
+	return workerexecution.InferenceResponse{}, errors.New(provider.failMessage)
+}
+
+var _ providercontract.Provider = (*packagedTTSFailingFakeProvider)(nil)
 
 // overwritePackagedTTSFactoryWithProviderFakeTopology keeps the installed
 // @you/tts layout but replaces authored topology with a cloud-backed inference
@@ -570,4 +663,28 @@ func invocationTextContentPtr(text string) *factoryapi.WorkContent {
 	}
 	content := factoryapi.WorkContent{part}
 	return &content
+}
+
+func primaryResultContainsTTSArtifactMetadata(
+	t *testing.T,
+	primaryResult *factoryapi.WorkContent,
+) bool {
+	t.Helper()
+	if primaryResult == nil || len(*primaryResult) == 0 {
+		return false
+	}
+	for _, part := range *primaryResult {
+		textPart, err := part.AsWorkTextContentPart()
+		if err != nil {
+			continue
+		}
+		var metadata factorydefinitions.TTSInvocationMetadata
+		if err := json.Unmarshal([]byte(textPart.Text), &metadata); err != nil {
+			continue
+		}
+		if strings.TrimSpace(metadata.ArtifactPath) != "" && metadata.MediaType != "" {
+			return true
+		}
+	}
+	return false
 }
