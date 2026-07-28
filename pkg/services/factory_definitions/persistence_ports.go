@@ -36,6 +36,7 @@ type FactoryLayoutReplacer = contracts.FactoryLayoutReplacer
 type FactoryLayoutFlattener = contracts.FactoryLayoutFlattener
 type FactoryLayoutExpander = contracts.FactoryLayoutExpander
 type FactoryConfigJSONDecoder = contracts.FactoryConfigJSONDecoder
+type FactoryConfigJSONEncoder = contracts.FactoryConfigJSONEncoder
 type CanonicalFactoryJSONLoader = contracts.CanonicalFactoryJSONLoader
 type PortableFactoryConfigPreparer = contracts.PortableFactoryConfigPreparer
 type FactoryConfigCloner = contracts.FactoryConfigCloner

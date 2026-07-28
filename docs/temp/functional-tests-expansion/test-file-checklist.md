@@ -278,6 +278,10 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCodexGoldenStructuredFailure` replays a non-zero structured failure.
   - `TestCodexGoldenTimeoutHasNoFalseTerminalMessage` covers timeout.
 
+- [x] `tests/functional/workers/inference/codex/conductor_test.go`
+  - `TestCodexConductorSuccessThroughRootBuildProcess` proves successful Codex execution through the product graph.
+  - `TestCodexCommandCancellationThroughRootBuildProcessIsCanonical` proves cancellation through the canonical conductor path.
+
 - [x] `tests/functional/workers/inference/claude/golden_success_test.go`
   - `TestClaudeGoldenFullStreamTextSuccess` covers deltas and final snapshot.
   - `TestClaudeGoldenToolLifecycleAndSessionIdentity` covers tools/session.
@@ -285,6 +289,10 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/workers/inference/claude/golden_failure_test.go`
   - `TestClaudeGoldenStructuredFailure` covers normalized error metadata.
   - `TestClaudeGoldenTimeoutClosesResponseStream` covers terminal closure.
+
+- [x] `tests/functional/workers/inference/claude/conductor_test.go`
+  - `TestClaudeConductorSuccessThroughRootBuildProcess` proves successful Claude execution through the product graph.
+  - `TestClaudeCommandCancellationThroughRootBuildProcessIsCanonical` proves cancellation through the canonical conductor path.
 
 - [x] `tests/functional/workers/inference/cursor/golden_success_test.go`
   - `TestCursorGoldenTextSuccessAndSessionIdentity` covers public metadata.
@@ -559,7 +567,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIMoveWorkResumesRecoverableFlow`.
   - `TestAPIInvalidMoveReturnsConflictWithoutMutation`.
 
-- [ ] `tests/functional/work/visualization/dependency_graph_test.go`
+- [x] `tests/functional/work/visualization/dependency_graph_test.go`
   - `TestWorkVisualizeProducesDeterministicGraph`.
 
 ## Wave 2 — sessions
@@ -596,7 +604,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestFactorySessionResumeDoesNotRepeatCompletedDispatch`.
   - `TestFactorySessionHistoryRemainsReadableAfterRestart`.
 
-- [ ] `tests/functional/sessions/mcp/controls_test.go`
+- [x] `tests/functional/sessions/mcp/controls_test.go`
   - `TestMCPPauseResumeAndCancelTargetCanonicalFactorySession`.
   - `TestMCPControlledSessionIsReadableThroughAPI`.
   - `TestMCPSynchronousFactorySessionReturnsTerminalResult`.
@@ -609,7 +617,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Definitions
 
-- [ ] `tests/functional/factory/definitions/init_test.go`
+- [x] `tests/functional/factory/definitions/init_test.go`
   - `TestFactoryInitCreatesRunnablePortableScaffold`.
   - `TestFactoryInitIsIdempotent`.
   - `TestFactoryInitFailureRoutingProducesFailedWork`.
@@ -633,7 +641,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Packaged factories
 
-- [ ] `tests/functional/factory/packaged/catalog/discovery_test.go`
+- [x] `tests/functional/factory/packaged/catalog/discovery_test.go`
   - `TestPackagedFactoryCatalogListsEveryEmbeddedFactory` compares runtime
     discovery with the embedded package inventory.
   - `TestPackagedFactoryCatalogHasUniqueStableNames` rejects collisions.
@@ -654,12 +662,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedDeepResearchOptionalInputsReachWorkers` covers overrides.
   - `TestPackagedDeepResearchWorkerFailureReturnsFailedOutcome` covers failure.
 
-- [ ] `tests/functional/factory/packaged/fusion/invocation_test.go`
+- [x] `tests/functional/factory/packaged/fusion/invocation_test.go`
   - `TestPackagedFusionRequiredInputCompletes` verifies its multi-worker merge.
   - `TestPackagedFusionOptionalInputsReachWorkers` covers supported options.
   - `TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome` covers error.
 
-- [ ] `tests/functional/factory/packaged/goal/invocation_test.go`
+- [x] `tests/functional/factory/packaged/goal/invocation_test.go`
   - `TestPackagedGoalAcceptCompletesWithSummary` covers accepted routing.
   - `TestPackagedGoalRejectRepeatsThenCompletes` covers feedback propagation.
   - `TestPackagedGoalUnknownDecisionFails` covers classifier failure.
@@ -676,7 +684,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedReviewRejectionCarriesFeedback` covers retry context.
   - `TestPackagedReviewRetryExhaustionFails` covers bounded failure.
 
-- [ ] `tests/functional/factory/packaged/subagent/invocation_test.go`
+- [x] `tests/functional/factory/packaged/subagent/invocation_test.go`
   - `TestPackagedSubagentReturnsChildResult` covers basic dispatch.
   - `TestPackagedSubagentStreamsChildResponseEvents` covers observation.
   - `TestPackagedSubagentChildFailureReturnsStableFailure` covers error.

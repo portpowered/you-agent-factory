@@ -306,6 +306,17 @@
   Catalog metadata infers domain `workers` and subsection `mock` from the path;
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+  Packaged `@you/subagent` invocation functional coverage belongs in
+  `tests/functional/factory/packaged/subagent/invocation_test.go`: prove child
+  primary-result return through public CLI JSON and hermetic no-server named
+  invocation, child Factory Response Event streaming on
+  `GET /factory-sessions/~default/response-events`, and stable child failure
+  through CLI JSON plus API invocation with rejecting mock workers. Drive proofs
+  through `support.InstallPackagedFactory`, `support.WriteMockWorkersConfig`,
+  `support.BuildProcess`, and `support.StartFunctionalAPIServer` without
+  service-internal Petri imports. Catalog metadata infers domain `factory` and
+  subsection `packaged/subagent` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
   CLI single-JSON result functional coverage belongs in
   `tests/functional/transport/cli/output/json_result_test.go`: invoke
   `support.BuildProcess(t, serviceedges.Edges{}).Execute` with global `--json`
@@ -472,6 +483,12 @@ Wave 0 functional-tests-expansion planning authority lives under
   `migration-ledger-inventory.json`, retarget any specialty Make bindings, and
   refresh `test-file-checklist.md` plus narrowly coupled baselines
   (`package-structure-baseline.json`, `functional-undocumented-tests.json`).
+  `tests/functional/factory/definitions/init_test.go` owns public Factory-init
+  functional coverage through `session create --init-new-factory` against
+  `support.StartFunctionalAPIServer`, with seeded Work run via
+  `support.RunFactoryToCompletionWithEdgesAndWork` and terminal assertions via
+  `support.CountWorkAtCustomerState`; catalog metadata infers domain
+  `factory/definitions`.
   `make pkg-structure` enforces the domain-mirrored functional layout
   `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
   unclassified scenario packages are blocking, while existing nonconforming
