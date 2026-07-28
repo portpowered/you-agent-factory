@@ -28,7 +28,7 @@ Use this map when changing the public REST contract.
   vocabulary is published through
   `pkg/services/factory_runtime/observation_projection_contracts.go` and proven
   by
-  `pkg/services/recordings/projections/projection_observation_boundary_test.go`.
+  `pkg/services/recordings/internal/services/projection_query/projections/projection_observation_boundary_test.go`.
   Runtime root request construction for control, observation, and dispatch-plan
   handoff is published through
   `pkg/services/factory_runtime/internal/services/orchestration/runtime_request_contracts.go` and proven by

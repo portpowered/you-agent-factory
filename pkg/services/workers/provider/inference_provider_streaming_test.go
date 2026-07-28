@@ -2,15 +2,12 @@ package provider
 
 import (
 	"context"
-	"io/fs"
 	"reflect"
 	"testing"
 
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	agyadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 )
 
 func TestScriptWrapProvider_Infer_ClaudeCompletionPublisherPreservesFinalResponse(t *testing.T) {
@@ -26,7 +23,7 @@ func TestScriptWrapProvider_Infer_ClaudeCompletionPublisherPreservesFinalRespons
 
 	withoutPublisher := NewScriptWrapProviderWithDependencies(false, nil, &recordingProviderExec{
 		result: CommandResult{Stdout: []byte("claude output")},
-	}, nil, nil, nil, "", nil, nil)
+	}, nil, nil, nil, nil)
 
 	want, err := withoutPublisher.Infer(context.Background(), req)
 	if err != nil {
@@ -38,7 +35,7 @@ func TestScriptWrapProvider_Infer_ClaudeCompletionPublisherPreservesFinalRespons
 		result: CommandResult{Stdout: []byte("claude output")},
 	}, nil, func(fragment InferenceProgressFragment) {
 		published = append(published, fragment)
-	}, nil, "", nil, nil)
+	}, nil, nil)
 
 	got, err := withPublisher.Infer(context.Background(), req)
 	if err != nil {
@@ -107,77 +104,4 @@ func assertEquivalentCommandDiagnostic(t *testing.T, got, want *workerexecution.
 		got.WorkingDir != want.WorkingDir {
 		t.Fatalf("command diagnostics = %#v, want %#v", got, want)
 	}
-}
-
-func TestScriptWrapProviderExecuteAgyTimeoutWithPartialDoesNotReturnSuccessOrCompletedRun(t *testing.T) {
-	t.Parallel()
-
-	factoryRoot := t.TempDir()
-	mock := &agyInferenceStubAllocator{result: agypty.SessionResult{
-		ExitCode: 124, TimedOut: true, CleanedText: "partial answer before timeout",
-	}}
-	var published []InferenceProgressFragment
-	provider := NewScriptWrapProviderWithDependencies(false, nil, nil, nil, func(fragment InferenceProgressFragment) {
-		published = append(published, fragment)
-	}, nil, factoryRoot, mock, nil)
-	provider.agyExecutableDependencies = missingAgyExecutableDependencies()
-
-	_, err := provider.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
-		Dispatch:         work.WorkDispatch{DispatchID: "dispatch-agy-timeout"},
-		ModelProvider:    string(modelprovider.ProviderAgy),
-		WorkingDirectory: ".",
-		UserMessage:      "plan the goal",
-	})
-	if err == nil {
-		t.Fatal("Execute() error = nil, want timeout failure")
-	}
-	for _, fragment := range published {
-		if fragment.Kind == CompletedFragmentKind {
-			t.Fatalf("published completed fragment on timeout: %#v", published)
-		}
-		if fragment.Kind == FailedFragmentKind && !fragment.CanonicalEventAlreadyPublished {
-			t.Fatalf("published duplicate legacy failure after canonical timeout drafts: %#v", published)
-		}
-	}
-	if !agyTimeoutPartialDraftPublished(published) {
-		t.Fatalf("published fragments = %#v, want partial timeout canonical draft", published)
-	}
-}
-
-func TestScriptWrapProviderExecuteAgyUsesPTYAdapterPath(t *testing.T) {
-	t.Parallel()
-
-	factoryRoot := t.TempDir()
-	mock := &agyInferenceStubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "final answer"}}
-	provider := NewScriptWrapProviderWithDependencies(false, nil, nil, nil, nil, nil, factoryRoot, mock, nil)
-	provider.agyExecutableDependencies = missingAgyExecutableDependencies()
-
-	response, err := provider.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
-		Dispatch:         work.WorkDispatch{DispatchID: "dispatch-agy-cli"},
-		ModelProvider:    string(modelprovider.ProviderAgy),
-		WorkingDirectory: ".",
-		UserMessage:      "plan the goal",
-	})
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if response.Content != "final answer" {
-		t.Fatalf("content = %q, want final answer", response.Content)
-	}
-	if len(mock.sessions) != 1 {
-		t.Fatalf("pty sessions = %d, want 1", len(mock.sessions))
-	}
-	if err := agypty.ValidateArgv(mock.sessions[0].launch.Argv); err != nil {
-		t.Fatalf("ValidateArgv() error = %v", err)
-	}
-}
-
-type missingAgyExecutableEffects struct{}
-
-func (missingAgyExecutableEffects) LookPath(string) (string, error)  { return "", fs.ErrNotExist }
-func (missingAgyExecutableEffects) Stat(string) (fs.FileInfo, error) { return nil, fs.ErrNotExist }
-
-func missingAgyExecutableDependencies() agyadapter.ExecutableDependencies {
-	effects := missingAgyExecutableEffects{}
-	return agyadapter.ExecutableDependencies{Locator: effects, Inspector: effects}
 }

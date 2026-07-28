@@ -22,6 +22,7 @@ var recordingsThinRootContractFiles = []string{
 	"service_root_contract_lifecycle_test.go",
 	"service_root_contract_replay_test.go",
 	"service_root_contract_seam_test.go",
+	"wire_peer_import_boundary_test.go",
 	"workers_root_boundary_test.go",
 }
 
@@ -41,6 +42,7 @@ var recordingsExcessRootContractFolds = []recordingsRootContractFoldTarget{
 			"event_contract.go",
 			"event_contract_test.go",
 			"event_vocabulary_boundary_test.go",
+			"events_import_boundary_test.go",
 		},
 		destination: "pkg/services/recordings/internal/services/canonical_ledger",
 	},
@@ -49,13 +51,22 @@ var recordingsExcessRootContractFolds = []recordingsRootContractFoldTarget{
 		files: []string{
 			"world_state_contract.go",
 			"world_state_contract_test.go",
+			"projections_import_boundary_test.go",
 		},
 		destination: "pkg/services/recordings/internal/services/projection_query",
+	},
+	{
+		cluster: "artifacts",
+		files: []string{
+			"artifacts_import_boundary_test.go",
+		},
+		destination: "pkg/services/recordings/internal/services/artifacts_export",
 	},
 	{
 		cluster: "replay",
 		files: []string{
 			"replay_contract.go",
+			"replay_import_boundary_test.go",
 		},
 		destination: "pkg/services/recordings/internal/services/replay",
 	},

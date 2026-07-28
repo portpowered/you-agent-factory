@@ -17,8 +17,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/packageassets"
+	distributionpackageassets "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packageassets"
+	distributionpackagedinstallation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation"
 	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
@@ -156,7 +156,7 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 
 	definition := assembledScriptPackageDefinition(t)
 	homeDir := t.TempDir()
-	created, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}).
+	created, err := distributionpackagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}).
 		EnsurePackagedFactories(
 			t.Context(),
 			factorydefinitions.NamedFactoriesRoot(homeDir),
@@ -184,7 +184,7 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 	}
 	beforeRerun := snapshotDirectoryContents(t, factoryDir)
 
-	skipped, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}).
+	skipped, err := distributionpackagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}).
 		EnsurePackagedFactories(
 			t.Context(),
 			factorydefinitions.NamedFactoriesRoot(homeDir),
@@ -202,7 +202,7 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 func assembledScriptPackageDefinition(t *testing.T) factorydefinitions.PackagedDefinition {
 	t.Helper()
 
-	payload, err := packageassets.Assemble(packageassets.Definition{
+	payload, err := distributionpackageassets.Assemble(distributionpackageassets.Definition{
 		Package: "@test/scripts",
 		FactoryJSON: []byte(`{
   "name":"packaged-script-fixture",

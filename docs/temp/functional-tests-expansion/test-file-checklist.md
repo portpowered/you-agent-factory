@@ -478,9 +478,19 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAutomationsFilesystemWatcherPreseedsThroughRuntimeLifecycle`.
 - [x] `tests/functional/automations/hosted_sources_root_composition_test.go`
   - `TestBuildProcessRemainsHostedSourcesInertBeforeRuntimeLifecycle`.
+  - `TestAutomationsHostedSourcesActivateThroughRuntimeLifecycle`.
 
-- [x] `tests/functional/automations/hosted_sources_root_composition_test.go`
-  - `TestBuildProcessRemainsHostedSourcesInertBeforeRuntimeLifecycle`.
+- [x] `tests/functional/automations/peer_import_boundary_test.go`
+  - `TestFunctionalAutomationsPackageUsesPublicProcessImportsOnly`.
+
+- [x] `tests/functional/automations/reconciliation_root_composition_test.go`
+  - `TestBuildProcessRemainsReconciliationInertBeforeExplicitRootInvocation`.
+  - `TestAutomationsReconciliationAdmitsThroughPublishedRootAfterComposition`.
+  - `TestAutomationsReconcileAdmitsAbsentSourceThroughPublishedRootAfterComposition`.
+
+- [x] `tests/functional/automations/script_poller_root_composition_test.go`
+  - `TestBuildProcessRemainsScriptPollerInertBeforeRuntimeLifecycle`.
+  - `TestAutomationsScriptPollerAdmitsWorkThroughRuntimeLifecycle`.
 
 ## Wave 1 — workstations
 
@@ -645,6 +655,29 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestMCPPauseResumeAndCancelTargetCanonicalFactorySession`.
   - `TestMCPControlledSessionIsReadableThroughAPI`.
   - `TestMCPSynchronousFactorySessionReturnsTerminalResult`.
+
+- [x] `tests/functional/sessions/root_composition/build_process_inert_test.go`
+  - `TestSessionsEffectsRemainInertThroughRootBuildProcessConstruction`.
+
+- [x] `tests/functional/sessions/root_composition/lifecycle_runtime_opening_test.go`
+  - `TestSessionsLifecycleAndRuntimeOpeningActivateThroughRootBuildProcessAfterLifecycle`.
+
+- [x] `tests/functional/sessions/root_composition/packaged_root_shape_test.go`
+  - `TestSessionsPackagedRootShapeMatchesCanonicalServiceLayout`.
+
+- [x] `tests/functional/sessions/root_composition/peer_import_seal_test.go`
+  - `TestSessionsFunctionalProofsDoNotImportOwnerPrivatePackages`.
+  - `TestSessionsProductionPeersReachSessionsThroughPublicSurfacesOnly`.
+  - `TestSessionsRootCompositionConstructsThroughBuildProcess`.
+
+- [x] `tests/functional/sessions/root_composition/work_admission_response_stream_test.go`
+  - `TestSessionsWorkAdmissionAndResponseStreamActivateThroughRootBuildProcessAfterLifecycle`.
+
+- [x] `tests/functional/sessions/root_composition/work_peer_import_seal_test.go`
+  - `TestFactorySessionsProductionPackagesImportWorkRootOnly`.
+  - `TestFactorySessionsProductionPackagesImportWorkersOnlyThroughRoot`.
+  - `TestFactorySessionsProductionPackagesImportFactoryRuntimeOnlyThroughRoot`.
+  - `TestSessionsFunctionalProofsDoNotImportRetiredWorkConsumerEdges`.
   - `TestMCPSynchronousFailureReturnsStructuredFailure`.
   - `TestMCPAsyncFactorySessionCanBePolledToSuccess`.
   - `TestMCPAsyncFactorySessionCanBePolledToFailure`.
@@ -659,7 +692,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestFactoryInitIsIdempotent`.
   - `TestFactoryInitFailureRoutingProducesFailedWork`.
 
-- [ ] `tests/functional/factory/definitions/validation_test.go`
+- [x] `tests/functional/factory/definitions/validation_test.go`
   - `TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute`.
   - `TestFactoryValidationReportsAllActionableDefinitionErrors`.
   - `TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions`.
@@ -676,6 +709,24 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestImportExportPreservesNestedDocsScriptsAndMetadata`.
   - `TestInvalidImportDoesNotReplaceCurrentFactory`.
 
+### Factory visualization
+
+- [x] `tests/functional/factory_visualization/activation_lifecycle_test.go`
+  - `TestVisualizationActivatesThroughPublicRootAfterLifecycle`.
+
+- [x] `tests/functional/factory_visualization/inert_construction_test.go`
+  - `TestVisualizationRemainsInertThroughRootBuildProcessConstruction`.
+
+- [x] `tests/functional/factory_visualization/observe_live_view_test.go`
+  - `TestVisualizationObserveThroughPublicRootAfterLifecycle`.
+
+- [x] `tests/functional/factory_visualization/peer_import_boundary_test.go`
+  - `TestFunctionalProofsImportOnlyPublishedVisualizationSurfaces`.
+  - `TestProductionPeersReachVisualizationThroughPublishedSurfacesOnly`.
+
+- [x] `tests/functional/factory_visualization/response_presentation_test.go`
+  - `TestVisualizationResponsePresentationThroughPublicRootAfterLifecycle`.
+
 ### Packaged factories
 
 - [x] `tests/functional/factory/packaged/catalog/discovery_test.go`
@@ -689,7 +740,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestInvalidLocalOverrideDoesNotFallBackSilently` covers misconfiguration.
   - `TestUnrelatedLocalFactoryDoesNotHidePackagedFactories` covers enumeration.
 
-- [ ] `tests/functional/factory/packaged/catalog/required_inputs_test.go`
+- [x] `tests/functional/factory/packaged/catalog/required_inputs_test.go`
   - `TestPackagedFactoriesRejectMissingRequiredInputs` runs the package matrix.
   - `TestPackagedFactoriesNameMissingInputAndFactory` verifies diagnostics.
 
@@ -750,7 +801,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedTTSOptionalVoiceAndFormatReachModel` covers options.
   - `TestPackagedTTSModelFailureReturnsNoFalseArtifact` covers failure.
 
-- [ ] `tests/functional/factory/packaged/cross/package_cli_api_test.go`
+- [x] `tests/functional/factory/packaged/cross/package_cli_api_test.go`
   - `TestPackagedFactoryInvokedByCLICanBeInspectedByAPI` owns this package
     cross-surface state check.
   - `TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree` compares only
@@ -779,6 +830,21 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCodexHistoricalInspectionBoundedWalkThroughRootBuildProcess`.
   - `TestCodexHistoricalInspectionCancelledDiscoveryThroughRootBuildProcess`.
 
+- [x] `tests/functional/providers/gemini/process_harness_test.go`
+  - `TestGeminiConductorSuccessThroughRootBuildProcess`.
+  - `TestGeminiConductorPreservesConfiguredEnvironment`.
+  - `TestGeminiNativeFailureThroughRootBuildProcessIsSafe`.
+  - `TestGeminiCommandCancellationThroughRootBuildProcessIsCanonical`.
+
+- [x] `tests/functional/providers/kiro/process_harness_test.go`
+  - `TestKiroCommandCancellationThroughRootBuildProcessIsCanonical`.
+
+- [x] `tests/functional/providers/pi/process_harness_test.go`
+  - `TestPiStreamingSuccessThroughRootBuildProcess`.
+  - `TestPiResumeContinuityThroughRootBuildProcess`.
+  - `TestPiNativeFailureThroughRootBuildProcessIsSafe`.
+  - `TestPiCommandCancellationThroughRootBuildProcessIsCanonical`.
+
 - [x] `tests/functional/providers/cursor/historical_inspection_root_test.go`
   - `TestCursorHistoricalInspectionThroughRootBuildProcess_ReturnsDeterministicNormalizedDetail`.
   - `TestCursorHistoricalInspectionThroughRootBuildProcess_PropagatesMissingAndContainmentFailures`.
@@ -796,7 +862,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     partial data.
   - `TestCursorProviderSessionMissingIDReturnsNotFound`.
 
-- [ ] `tests/functional/provider_sessions/details/http_test.go`
+- [x] `tests/functional/provider_sessions/details/http_test.go`
   - `TestAPIProviderSessionDetailsUseGoldenExpectedMetadata`.
   - `TestAPIProviderSessionRejectsRawFilesystemPathInput`.
   - `TestAPIUnsupportedProviderSessionKindReturnsTypedError`.

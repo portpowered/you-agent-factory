@@ -8,7 +8,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
+	factorylifecycle "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 )
 
@@ -29,7 +29,7 @@ func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.
 
 	root := factoryinternal.NewWithAuthoringLayout(
 		rootSurfaceSessionHost{},
-		factorydefinition.StubActivationGateway(),
+		factorylifecycle.StubActivationGateway(),
 		staticClock{instant: time.Unix(0, 0)},
 		platformfilesystem.Local{},
 		rootSurfaceValidator{},

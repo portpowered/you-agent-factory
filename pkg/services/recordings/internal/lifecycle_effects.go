@@ -8,7 +8,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
-	"github.com/portpowered/infinite-you/pkg/services/recordings/replay"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay"
 )
 
 // NewRecordingSnapshotWriter adapts policy-free byte persistence to the
@@ -59,8 +59,8 @@ func NewReplayRecordingSnapshotWriter(
 		if snapshot.Status.FinalizedAt != nil {
 			wallClock.FinishedAt = snapshot.Status.FinalizedAt.UTC()
 		}
-		data, err := replay.MarshalArtifact(&recordings.ReplayArtifact{
-			SchemaVersion: replay.CurrentSchemaVersion,
+		data, err := replayimpl.MarshalArtifact(&recordings.ReplayArtifact{
+			SchemaVersion: replayimpl.CurrentSchemaVersion,
 			RecordedAt:    recordedAt,
 			Events:        events,
 			WallClock:     wallClock,

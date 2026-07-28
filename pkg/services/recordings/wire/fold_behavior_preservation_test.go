@@ -221,6 +221,27 @@ func TestWireFoldPreservesSubscriptionCursorOrderThroughPublishedRoot(t *testing
 			t.Fatalf("subscription cursor generation = %q, want %q", outcome.Event.Cursor.StreamGenerationID, generationID)
 		}
 	}
+
+	reconnectCursor := recordings.CanonicalEventCursor{
+		StreamGenerationID: generationID,
+		Sequence:           0,
+	}
+	reconnected, err := root.SubscribeFrom(context.Background(), recordings.SubscribeRequest{
+		Cursor: &reconnectCursor,
+		Scope:  scope,
+	})
+	if err != nil {
+		t.Fatalf("SubscribeFrom() reconnect cursor = %v", err)
+	}
+	for sequence := 1; sequence < eventCount; sequence++ {
+		outcome := reconnected.Subscription.Next(context.Background())
+		if outcome.Kind != recordings.SubscriptionEvent {
+			t.Fatalf("reconnect outcome at %d = %#v, want event", sequence, outcome)
+		}
+		if outcome.Event.Sequence != recordings.CanonicalEventSequence(sequence) {
+			t.Fatalf("reconnect sequence at %d = %d, want %d", sequence, outcome.Event.Sequence, sequence)
+		}
+	}
 }
 
 func TestWireFoldPreservesReplayLoadValidationAndProjectionThroughPublishedRoot(t *testing.T) {

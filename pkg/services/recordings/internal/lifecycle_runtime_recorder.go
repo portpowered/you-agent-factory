@@ -11,7 +11,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	canonicalpkg "github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
-	"github.com/portpowered/infinite-you/pkg/services/recordings/replay"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay"
 )
 
 // lifecycleRuntimeRecorder adapts Factory Runtime's focused recording port to
@@ -66,7 +66,7 @@ func NewLifecycleRuntimeRecorder(
 	if err != nil {
 		return nil, fmt.Errorf("build replay artifact config: %w", err)
 	}
-	artifact, err := replay.NewEventLogArtifact(
+	artifact, err := replayimpl.NewEventLogArtifact(
 		recordedAt,
 		snapshot,
 		&recordings.ReplayWallClockMetadata{StartedAt: recordedAt},

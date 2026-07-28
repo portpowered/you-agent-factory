@@ -9,7 +9,7 @@ import (
 	"time"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"github.com/portpowered/infinite-you/pkg/services/operator_settings/testproviders"
+	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
@@ -17,7 +17,7 @@ import (
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
-	providersRoot := testproviders.StandardCatalog()
+	providersRoot := internaltestproviders.StandardCatalog()
 
 	service, err := settingswire.NewService(
 		&stubFileSystem{},
@@ -43,7 +43,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 	t.Parallel()
 
-	providersRoot := testproviders.StandardCatalog()
+	providersRoot := internaltestproviders.StandardCatalog()
 
 	service, err := settingswire.NewService(
 		&stubFileSystem{},
@@ -183,7 +183,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 func TestNewServiceRejectsMissingRequiredPorts(t *testing.T) {
 	t.Parallel()
 
-	providersRoot := testproviders.StandardCatalog()
+	providersRoot := internaltestproviders.StandardCatalog()
 
 	tests := []struct {
 		name string

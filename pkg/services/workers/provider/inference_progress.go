@@ -9,13 +9,10 @@ import (
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	factoryresponseevents "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
-	agyadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy"
 )
 
 const (
@@ -184,102 +181,6 @@ func NewInferenceProgressPublishingCommandRunnerWithRunner(
 	logger logging.Logger,
 ) CommandRunner {
 	return InferenceProgressPublishingCommandRunner{Runner: runner, Publisher: publisher, Logger: logger}
-}
-
-func (p *ScriptWrapProvider) executeAgy(
-	ctx context.Context,
-	req workerexecution.ProviderInferenceRequest,
-	logger logging.Logger,
-) (workerexecution.InferenceResponse, error) {
-	factoryRoot := strings.TrimSpace(p.agyFactoryRoot)
-	if factoryRoot == "" {
-		return workerexecution.InferenceResponse{}, p.agyRequestValidationError(req, errors.New("Agy factory root is unavailable"))
-	}
-	providerAdapter := agyadapter.NewAdapterWithDependencies(
-		factoryRoot, p.agyAllocator, "", agypty.SessionConfig{}, p.agyExecutableDependencies,
-	)
-	registry, err := adapter.NewRegistry(providerAdapter)
-	if err != nil {
-		return workerexecution.InferenceResponse{}, p.agyRequestValidationError(req, err)
-	}
-	runner, err := providerAdapter.PTYRunner()
-	if err != nil {
-		return workerexecution.InferenceResponse{}, p.agyRequestValidationError(req, err)
-	}
-	started := p.providerNow()
-	result, executeErr := adapter.Execute(ctx, registry, runner, adapter.ExecuteInput{
-		Provider: providerAdapter.Identity(),
-		Command:  adapter.CommandContext{Request: req, SkipPermissions: p.SkipPermissions, ContentMaterializer: p.ContentMaterializer},
-		Decoder:  adapter.DecoderContext{RunID: req.Dispatch.DispatchID, DispatchID: req.Dispatch.DispatchID},
-		ObserveDraft: func(draft factoryresponseevents.Draft) {
-			if p.progressPublisher != nil {
-				p.progressPublisher(CanonicalDraftFragment(draft.DispatchID, draft))
-			}
-		},
-	})
-	duration := p.providerNow().Sub(started)
-	diagnostics := commandDiagnostics(result.Request, result.Command, duration, result.Outcome == adapter.CommandOutcomeCanceled)
-	if result.Failure != nil {
-		providerErr := agyProviderErrorWithSession(req, providerErrorFromAdapterFailure(result.Failure, executeErr, diagnostics))
-		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result.Command, duration)...)
-		p.publishFailureFragmentWithCanonicalState(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr, len(result.Drafts) > 0)
-		return workerexecution.InferenceResponse{}, providerErr
-	}
-	if executeErr != nil {
-		if orchestrated := agyadapter.ClassifyOrchestrationError(executeErr); orchestrated.Failure != nil {
-			providerErr := agyProviderErrorWithSession(req, providerErrorFromAdapterFailure(orchestrated.Failure, executeErr, diagnostics))
-			logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result.Command, duration)...)
-			p.publishFailureFragmentWithCanonicalState(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr, len(result.Drafts) > 0)
-			return workerexecution.InferenceResponse{}, providerErr
-		}
-		providerErr := agyProviderErrorWithSession(req, normalizeProviderExecutionError(req.ModelProvider, result.Command, executeErr, result.Response.ProviderSession, diagnostics))
-		p.publishFailureFragmentWithCanonicalState(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr, len(result.Drafts) > 0)
-		return workerexecution.InferenceResponse{}, providerErr
-	}
-	response := result.Response
-	response.ProviderSession = agyEffectiveProviderSession(req, response.ProviderSession)
-	response.Diagnostics = diagnostics
-	logger.Info("inferencer: request completed",
-		appendProviderSessionLogFields(providerLogFields(req, "output_len", len(response.Content)), response.ProviderSession)...)
-	p.publishCompletedFragment(req.Dispatch.DispatchID, response.ProviderSession)
-	return response, nil
-}
-
-func agyEffectiveProviderSession(
-	req workerexecution.ProviderInferenceRequest,
-	existing *workerexecution.ProviderSessionMetadata,
-) *workerexecution.ProviderSessionMetadata {
-	if existing != nil && strings.TrimSpace(existing.Provider) != "" {
-		return existing
-	}
-	session := &workerexecution.ProviderSessionMetadata{
-		Provider: workerexecution.CanonicalProviderSessionProvider(req.ModelProvider),
-		Kind:     providerSessionKindSessionID,
-	}
-	if sessionID := strings.TrimSpace(req.SessionID); sessionID != "" {
-		session.ID = sessionID
-	}
-	return session
-}
-
-func agyProviderErrorWithSession(req workerexecution.ProviderInferenceRequest, err *ProviderError) *ProviderError {
-	if err == nil {
-		return nil
-	}
-	err.ProviderSession = agyEffectiveProviderSession(req, err.ProviderSession)
-	return err
-}
-
-func (p *ScriptWrapProvider) agyRequestValidationError(req workerexecution.ProviderInferenceRequest, err error) *ProviderError {
-	providerErr := newProviderErrorWithDiagnostics(
-		workerexecution.WorkFailureTypePermanentBadRequest,
-		err.Error(),
-		err,
-		nil,
-		workDiagnosticsForInferenceRequest(req),
-	)
-	p.publishFailureFragment(req.Dispatch.DispatchID, nil, providerErr)
-	return providerErr
 }
 
 type progressStreamObserver interface {
