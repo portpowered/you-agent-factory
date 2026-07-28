@@ -37,7 +37,7 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	providersessionsservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service"
+	providersessionswire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingartifacts "github.com/portpowered/infinite-you/pkg/services/recordings/artifacts"
 	recordingsservice "github.com/portpowered/infinite-you/pkg/services/recordings/service"
@@ -224,7 +224,7 @@ func provideProviderSessions(edges serviceedges.Edges) (providersessions.Service
 	if operatingSystem == "" {
 		operatingSystem = providersessions.OperatingSystem(runtime.GOOS)
 	}
-	return providersessionsservice.New(
+	return providersessionswire.NewService(
 		files,
 		resolveHome,
 		codexWalkDirectory,

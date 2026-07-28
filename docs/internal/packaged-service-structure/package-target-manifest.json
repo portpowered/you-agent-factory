@@ -338,6 +338,7 @@
     "pkg/services/operator_settings/transports/mcp",
     "pkg/services/operator_settings/wire",
     "pkg/services/provider_sessions",
+    "pkg/services/provider_sessions/internal/service",
     "pkg/services/provider_sessions/internal/services/codex_reader",
     "pkg/services/provider_sessions/internal/services/codex_reader/internal/service",
     "pkg/services/provider_sessions/internal/services/codex_reader/wire",
@@ -2023,6 +2024,11 @@
     },
     {
       "packagePath": "pkg/services/provider_sessions",
+      "disposition": "retain",
+      "destination": "provider_sessions"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/service",
       "disposition": "retain",
       "destination": "provider_sessions"
     },

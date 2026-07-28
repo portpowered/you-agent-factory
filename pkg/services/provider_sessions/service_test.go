@@ -14,7 +14,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	providersessionsservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service"
+	providersessionswire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -170,7 +170,7 @@ func assertRootCursorFacts(t *testing.T, summary providersessions.ParseSummary) 
 
 func TestInspectValidatesCanonicalProviderSessionRefBeforeOpeningNativeContent(t *testing.T) {
 	files := &openRecordingFileSystem{base: platformfilesystem.Local{}}
-	svc, err := providersessionsservice.NewForRoots(
+	svc, err := providersessionswire.NewForRoots(
 		files,
 		filepath.WalkDir,
 		filepath.EvalSymlinks,
@@ -411,7 +411,7 @@ func TestNewRejectsMissingProcessEdges(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := providersessionsservice.New(test.files, test.home, test.codexWalk, test.codexSymlinks, test.cursorWalk, test.cursorSymlinks, test.cursorDatabase, test.cursorOperatingSystem)
+			_, err := providersessionswire.NewService(test.files, test.home, test.codexWalk, test.codexSymlinks, test.cursorWalk, test.cursorSymlinks, test.cursorDatabase, test.cursorOperatingSystem)
 			if err == nil {
 				t.Fatalf("New() error = nil, want missing %s dependency", test.name)
 			}
@@ -420,7 +420,7 @@ func TestNewRejectsMissingProcessEdges(t *testing.T) {
 }
 
 func TestNewPropagatesHomeResolverFailure(t *testing.T) {
-	_, err := providersessionsservice.New(
+	_, err := providersessionswire.NewService(
 		platformfilesystem.Local{},
 		func() (string, error) { return "", errors.New("home unavailable") },
 		filepath.WalkDir,
@@ -436,7 +436,7 @@ func TestNewPropagatesHomeResolverFailure(t *testing.T) {
 }
 
 func TestNewRejectsEmptyHomeDirectory(t *testing.T) {
-	_, err := providersessionsservice.New(
+	_, err := providersessionswire.NewService(
 		platformfilesystem.Local{},
 		func() (string, error) { return "   ", nil },
 		filepath.WalkDir,
@@ -475,7 +475,7 @@ func TestNewConstructsServiceWithValidDependencies(t *testing.T) {
 		t.Fatalf("mkdir cursor chats: %v", err)
 	}
 	resolveHome := providersessions.ResolveHomeDirectory(func() (string, error) { return home, nil })
-	svc, err := providersessionsservice.New(
+	svc, err := providersessionswire.NewService(
 		platformfilesystem.Local{},
 		resolveHome,
 		filepath.WalkDir,
@@ -501,7 +501,7 @@ func TestNewConstructsServiceWithValidDependencies(t *testing.T) {
 }
 
 func TestNewForRootsRejectsMissingProcessEdges(t *testing.T) {
-	_, err := providersessionsservice.NewForRoots(
+	_, err := providersessionswire.NewForRoots(
 		nil,
 		filepath.WalkDir,
 		filepath.EvalSymlinks,
@@ -581,7 +581,7 @@ func writeRichCodexSessionFixture(t *testing.T, sessionID string) string {
 
 func newServiceForRoots(t *testing.T, codexRoot, cursorRoot string) providersessions.Service {
 	t.Helper()
-	service, err := providersessionsservice.NewForRoots(
+	service, err := providersessionswire.NewForRoots(
 		platformfilesystem.Local{},
 		providersessions.CodexWalkDirectory(filepath.WalkDir),
 		providersessions.CodexResolveSymlinks(filepath.EvalSymlinks),
