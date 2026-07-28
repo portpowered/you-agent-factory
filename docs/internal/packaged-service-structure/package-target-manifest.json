@@ -696,8 +696,8 @@
     },
     {
       "packagePath": "pkg/services/automations/service",
-      "disposition": "retain",
-      "destination": "automations"
+      "disposition": "move",
+      "destination": "automations/internal"
     },
     {
       "packagePath": "pkg/services/automations/transports/http",
@@ -911,8 +911,8 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/service",
-      "disposition": "retain",
-      "destination": "factory_definitions"
+      "disposition": "move",
+      "destination": "factory_definitions/internal"
     },
     {
       "packagePath": "pkg/services/factory_definitions/snapshotcapture",
@@ -1136,13 +1136,13 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/service",
-      "disposition": "retain",
-      "destination": "factory_runtime"
+      "disposition": "move",
+      "destination": "factory_runtime/internal"
     },
     {
       "packagePath": "pkg/services/factory_runtime/service/host",
-      "disposition": "retain",
-      "destination": "factory_runtime"
+      "disposition": "move",
+      "destination": "factory_runtime/internal"
     },
     {
       "packagePath": "pkg/services/factory_runtime/state",
@@ -1836,8 +1836,8 @@
     },
     {
       "packagePath": "pkg/services/provider_sessions/service",
-      "disposition": "retain",
-      "destination": "provider_sessions"
+      "disposition": "move",
+      "destination": "provider_sessions/internal"
     },
     {
       "packagePath": "pkg/services/provider_sessions/transports/http",
@@ -2021,8 +2021,8 @@
     },
     {
       "packagePath": "pkg/services/recordings/service",
-      "disposition": "retain",
-      "destination": "recordings"
+      "disposition": "move",
+      "destination": "recordings/internal"
     },
     {
       "packagePath": "pkg/services/recordings/transports/cli",
@@ -2116,8 +2116,8 @@
     },
     {
       "packagePath": "pkg/services/work/service",
-      "disposition": "retain",
-      "destination": "work"
+      "disposition": "move",
+      "destination": "work/internal"
     },
     {
       "packagePath": "pkg/services/work/wire",
@@ -2381,8 +2381,8 @@
     },
     {
       "packagePath": "pkg/services/workers/service",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal"
     },
     {
       "packagePath": "pkg/services/workers/services/inference",
