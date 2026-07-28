@@ -247,3 +247,39 @@ func TestPackageBoundary_WireSurfaceDoesNotConstructRuntimeOrSelectSiblingLeases
 	wirePackage := authoringLayoutPublicPackage + "/wire"
 	assertPackageDirectImportsForbidden(t, wirePackage, authoringLayoutForbiddenImportRoots)
 }
+
+func TestPackageBoundary_InternalLeasePackagesDoNotImportForbiddenOwnership(t *testing.T) {
+	t.Parallel()
+
+	for _, packageSuffix := range []string{
+		"/internal/service",
+		"/prepare",
+		"/persist",
+		"/flatten",
+		"/expand",
+	} {
+		assertPackageDirectImportsForbidden(
+			t,
+			authoringLayoutPublicPackage+packageSuffix,
+			authoringLayoutForbiddenImportRoots,
+		)
+	}
+}
+
+func TestPackageBoundary_TransitionalAuthoringPackagesRemainPresent(t *testing.T) {
+	t.Parallel()
+
+	for _, relativeDir := range []string{
+		"../../../authoredlayout",
+		"../../../definition",
+		"../../../persistence",
+	} {
+		info, err := os.Stat(relativeDir)
+		if err != nil {
+			t.Fatalf("transitional authoring package %s must remain present until DEL-DEF: %v", relativeDir, err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("transitional authoring path %s must remain a directory until DEL-DEF", relativeDir)
+		}
+	}
+}
