@@ -1673,6 +1673,10 @@
       "minimum": 26.12
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/wire",
       "exception": {
         "kind": "measurement",
