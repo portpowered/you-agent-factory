@@ -3,7 +3,9 @@ package details
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -144,6 +146,98 @@ func TestAPIProviderSessionRejectsRawFilesystemPathInput(t *testing.T) {
 			assertCodexProviderSessionErrorBodySafe(t, "api-path-rejection", body, homeDir)
 		})
 	}
+}
+
+// TestAPIUnsupportedProviderSessionKindReturnsTypedError proves the public HTTP/API
+// Provider Session detail endpoint rejects unsupported provider session kinds with
+// a typed BAD_REQUEST error instead of opaque server failures or fabricated detail
+// bodies that invent session identity or transcript content.
+func TestAPIUnsupportedProviderSessionKindReturnsTypedError(t *testing.T) {
+	homeDir := t.TempDir()
+	server := startAPIProviderSessionDetailServer(t, homeDir, serviceedges.Edges{})
+	defer server.Stop(t)
+
+	for _, test := range []struct {
+		name     string
+		provider string
+		kind     string
+		id       string
+	}{
+		{
+			name:     "codex unsupported kind",
+			provider: string(factoryapi.Codex),
+			kind:     "path",
+			id:       "sess-unsupported-kind-codex",
+		},
+		{
+			name:     "cursor unsupported kind",
+			provider: string(factoryapi.Cursor),
+			kind:     "path",
+			id:       "sess-unsupported-kind-cursor",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			body := getAPIProviderSessionDetailErrorBody(
+				t,
+				server.URL(),
+				test.provider,
+				test.kind,
+				test.id,
+				http.StatusBadRequest,
+			)
+
+			var failure factoryapi.ErrorResponse
+			if err := json.Unmarshal([]byte(body), &failure); err != nil {
+				t.Fatalf("decode error response: %v", err)
+			}
+			if failure.Code != factoryapi.ErrorResponseCodeBADREQUEST {
+				t.Fatalf("error code = %q, want BAD_REQUEST", failure.Code)
+			}
+			if failure.Message == "" {
+				t.Fatal("error message is empty, want customer-readable validation diagnostic")
+			}
+			if strings.Contains(body, `"transcript"`) || strings.Contains(body, `"providerSession"`) {
+				t.Fatalf("unsupported kind error fabricated provider session detail: %s", body)
+			}
+
+			assertCodexProviderSessionErrorBodySafe(t, "api-unsupported-kind", body, homeDir)
+		})
+	}
+}
+
+func providerSessionDetailURL(baseURL, provider, kind, id string) string {
+	query := url.Values{}
+	query.Set("provider", provider)
+	query.Set("kind", kind)
+	query.Set("id", id)
+	return strings.TrimSuffix(baseURL, "/") + "/provider-sessions/detail?" + query.Encode()
+}
+
+func getAPIProviderSessionDetailErrorBody(
+	t *testing.T,
+	baseURL, provider, kind, id string,
+	wantStatus int,
+) string {
+	t.Helper()
+
+	response, err := http.Get(providerSessionDetailURL(baseURL, provider, kind, id))
+	if err != nil {
+		t.Fatalf("GET provider session detail: %v", err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read provider session detail body: %v", err)
+	}
+	if response.StatusCode != wantStatus {
+		t.Fatalf(
+			"GET provider session detail status = %d, want %d: %s",
+			response.StatusCode,
+			wantStatus,
+			strings.TrimSpace(string(body)),
+		)
+	}
+	return string(body)
 }
 
 func startAPIProviderSessionDetailServer(
