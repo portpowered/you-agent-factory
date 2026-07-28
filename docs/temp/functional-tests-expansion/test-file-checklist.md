@@ -692,7 +692,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestFactoryInitIsIdempotent`.
   - `TestFactoryInitFailureRoutingProducesFailedWork`.
 
-- [ ] `tests/functional/factory/definitions/validation_test.go`
+- [x] `tests/functional/factory/definitions/validation_test.go`
   - `TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute`.
   - `TestFactoryValidationReportsAllActionableDefinitionErrors`.
   - `TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions`.
