@@ -1095,6 +1095,13 @@
     },
     {
       "fromOwner": "edges",
+      "toOwner": "factory_visualization",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -\u003e pkg/services/factory_visualization"
+    },
+    {
+      "fromOwner": "edges",
       "toOwner": "models",
       "class": "external_effect",
       "architectureException": true,
