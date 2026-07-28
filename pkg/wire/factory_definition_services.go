@@ -15,8 +15,6 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
-	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
@@ -204,7 +202,7 @@ func provideFactoryDefinitionRequiredToolChecker(
 	lookPath factorydefinitions.RequiredToolPathLookup,
 	versionProbe factorydefinitions.RequiredToolVersionProbe,
 ) (factorydefinitions.RequiredToolChecker, error) {
-	return factoryloading.NewPathRequiredToolChecker(lookPath, versionProbe)
+	return factorydefinitionswire.NewPathRequiredToolChecker(lookPath, versionProbe)
 }
 
 func provideFactoryDefinitionPersistenceFileSystem(
@@ -237,7 +235,7 @@ func provideFactoryDefinitionNamedPathFileSystem(
 func provideFactoryDefinitionNamedPathResolver(
 	fileSystem factorydefinitions.NamedPathFileSystem,
 ) (factorydefinitions.NamedPathResolver, error) {
-	return factorynamedpaths.New(fileSystem)
+	return factorydefinitionswire.NewPathResolver(fileSystem)
 }
 
 func provideFactoryDefinitionNamedFactoryCatalogFileSystem(
@@ -351,7 +349,7 @@ func provideFactoryDefinitionLoader(
 	sourceResolver factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factorydefinitions.PortableBundledFileInspection,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
-) *factoryloading.Loader {
+) *factorydefinitionswire.Loader {
 	return wirefactorydefinitions.Loader(
 		applySupportedFiles,
 		applyStarterWork,
@@ -372,7 +370,7 @@ func provideAuthoredFactorySourceLoader(
 }
 
 func provideLoadedFactoryLoader(
-	loader *factoryloading.Loader,
+	loader *factorydefinitionswire.Loader,
 ) factorydefinitions.LoadedFactoryLoader {
 	return func(factoryDir string, workstationLoader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		return loader.LoadSourceFromFactoryDir(factoryDir, workstationLoader)

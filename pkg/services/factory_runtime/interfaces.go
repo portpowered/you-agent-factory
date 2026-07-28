@@ -4,9 +4,9 @@ import (
 	"context"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontext "github.com/portpowered/infinite-you/pkg/services/factory_runtime/context"
+	factorycontext "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/legacysnapshot"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/scheduler"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 

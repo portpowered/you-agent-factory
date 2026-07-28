@@ -13,8 +13,8 @@ func TestRunAllowsCanonicalDomainAndInternalTestSupportImports(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/runtime/contracts.go", "runtime", "github.com/portpowered/infinite-you/pkg/services/factory_definitions")
-	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/runtime/runtime_test.go", "runtime", "github.com/portpowered/infinite-you/internal/testutil")
+	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/internal/services/orchestration/runtime/contracts.go", "runtime", "github.com/portpowered/infinite-you/pkg/services/factory_definitions")
+	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/internal/services/orchestration/runtime/runtime_test.go", "runtime", "github.com/portpowered/infinite-you/internal/testutil")
 
 	stderr := &bytes.Buffer{}
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
@@ -86,8 +86,7 @@ func TestRunAllowsPeerServicesToImportExactProviderInferenceContract(t *testing.
 		pkgName string
 	}{
 		{path: "factory_runtime", pkgName: "factory"},
-		{path: "factory_runtime/build", pkgName: "runtimebuild"},
-		{path: "factory_runtime/build", pkgName: "runtimebuild"},
+		{path: "factory_runtime/internal/services/instance_host/build", pkgName: "runtimebuild"},
 		{path: "recordings", pkgName: "recordings"},
 		{path: "recordings/internal/services/artifacts_export/artifacts", pkgName: "artifacts"},
 		{path: "recordings/internal/services/replay/replay", pkgName: "replay"},
@@ -421,7 +420,7 @@ func TestPeerServiceImportBaselineRejectsWildcardAndUnrecognizedMigrationContrac
 		t.Fatalf("validate wildcard error = %v, want wildcard rejection", err)
 	}
 
-	entry.ImportPath = "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime"
+	entry.ImportPath = "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	entry.FilePath = "pkg/services/factory_sessions/internal/sessionservice.go"
 	entry.Stage = "unreviewed migration"
 	if err := validatePeerServiceImportBaselineEntry(entry); err == nil || !strings.Contains(err.Error(), "recognized peer-service migration contract") {

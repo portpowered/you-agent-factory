@@ -10,7 +10,7 @@ func TestRunRejectsProtectedDomainTransportImports(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/runtime/transport.go", "runtime", "github.com/portpowered/infinite-you/pkg/transports/mapping")
+	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/internal/services/orchestration/runtime/transport.go", "runtime", "github.com/portpowered/infinite-you/pkg/transports/mapping")
 	writeGoImportFile(t, repoRoot, "pkg/services/models/catalog/transport.go", "catalog", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
 	writeGoImportFile(t, repoRoot, "pkg/services/work/generated.go", "content", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
 	writeGoImportFile(t, repoRoot, "pkg/services/workers/inference/generated.go", "inference", "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent")
@@ -22,8 +22,8 @@ func TestRunRejectsProtectedDomainTransportImports(t *testing.T) {
 		t.Fatal("run() error = nil, want reverse Factory-to-transport import rejected")
 	}
 	for _, want := range []string{
-		"prohibited domain transport import: github.com/portpowered/infinite-you/pkg/transports/mapping (pkg/services/factory_runtime/runtime/transport.go)",
-		"domain owner: pkg/services/factory_runtime/runtime",
+		"prohibited domain transport import: github.com/portpowered/infinite-you/pkg/transports/mapping (pkg/services/factory_runtime/internal/services/orchestration/runtime/transport.go)",
+		"domain owner: pkg/services/factory_runtime/internal/services/orchestration/runtime",
 		"prohibited domain transport import: github.com/portpowered/infinite-you/pkg/transports/http/generated (pkg/services/models/catalog/transport.go)",
 		"domain owner: pkg/services/models/catalog",
 		"prohibited domain transport import: github.com/portpowered/infinite-you/pkg/transports/http/generated (pkg/services/work/generated.go)",
@@ -43,7 +43,7 @@ func TestRunAllowsProtectedDomainTransportImportsOnlyForTests(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/runtime/runtime_test.go", "runtime", "github.com/portpowered/infinite-you/pkg/transports/mapping")
+	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/internal/services/orchestration/runtime/runtime_test.go", "runtime", "github.com/portpowered/infinite-you/pkg/transports/mapping")
 	writeGoImportFile(t, repoRoot, "pkg/services/models/host/contract_test.go", "modelhost", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
 	writeGoImportFile(t, repoRoot, "pkg/services/work/content_test.go", "content", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
 	writeGoImportFile(t, repoRoot, "pkg/services/workers/inference/inference_test.go", "inference", "github.com/portpowered/infinite-you/pkg/transports/http/generated")

@@ -353,6 +353,10 @@
         {
           "test": "tests/functional/transport/cli/commands/submit_wiring_test.go::TestCLISubmitBatchFile",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go::TestCLISubmitBatchSuccessHumanAndJSONShapes",
+          "boundary": "cli"
         }
       ]
     },

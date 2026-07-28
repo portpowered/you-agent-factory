@@ -20,7 +20,7 @@ const deletedServiceImportPrefix = "github.com/portpowered/infinite-you/pkg/serv
 
 // DEL-RUN-SERVICE proof tests verify the transitional factory_runtime/service
 // public tree is gone, wire still constructs the published Service root, and
-// engine/pipeline public packages remain for DEL-RUN-ENGINE-PIPELINE.
+// engine/pipeline public packages are folded under orchestration/instance_host.
 
 func TestServiceDeletionProof_NoPublicServiceDirectory(t *testing.T) {
 	t.Parallel()
@@ -110,7 +110,7 @@ func TestServiceDeletionProof_WireConstructsPublishedControlObservationDispatch(
 	}
 }
 
-func TestServiceDeletionProof_PipelinePublicPackagesRemain(t *testing.T) {
+func TestServiceDeletionProof_PipelinePublicPackagesFolded(t *testing.T) {
 	t.Parallel()
 
 	root := serviceDeletionRepoRoot(t)
@@ -119,12 +119,10 @@ func TestServiceDeletionProof_PipelinePublicPackagesRemain(t *testing.T) {
 		"build", "engine", "javascript", "runtime", "scheduler", "state", "subsystems", "token",
 	} {
 		path := filepath.Join(runtimeRoot, name)
-		info, err := os.Stat(path)
-		if err != nil {
-			t.Fatalf("pipeline public package %q missing: %v", name, err)
-		}
-		if !info.IsDir() {
-			t.Fatalf("pipeline public package %q is not a directory", name)
+		if _, err := os.Stat(path); err == nil {
+			t.Fatalf("folded pipeline public package %q still exists at %s", name, path)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat %s: %v", path, err)
 		}
 	}
 }

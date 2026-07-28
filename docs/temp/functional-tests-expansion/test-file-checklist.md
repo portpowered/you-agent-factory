@@ -727,6 +727,13 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/factory_visualization/response_presentation_test.go`
   - `TestVisualizationResponsePresentationThroughPublicRootAfterLifecycle`.
 
+### Factory runtime (service-mirrored Petri depth)
+
+- [x] `tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go`
+  - `TestPetriMultiStagePipelineCompletesAtPublicTerminals`.
+  - `TestPetriFailureRoutesToDocumentedFailedPlace`.
+  - `TestPetriMultiTransitionPreservesWorkCorrelation`.
+
 ### Packaged factories
 
 - [x] `tests/functional/factory/packaged/catalog/discovery_test.go`
@@ -821,6 +828,11 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ## Wave 2 — provider sessions
 
+- [x] `tests/functional/providers/agy/process_harness_test.go`
+  - `TestAgyConductorSuccessThroughRootBuildProcess`.
+  - `TestAgyNativeFailureThroughRootBuildProcessIsSafe`.
+  - `TestAgyTimeoutFailureThroughRootBuildProcess`.
+  - `TestAgyCommandCancellationThroughRootBuildProcessIsCanonical`.
 - [x] `tests/functional/providers/codex/process_harness_test.go`
   - `TestCodexHistoricalInspectionSuccessThroughRootBuildProcess`.
   - `TestCodexHistoricalInspectionDetachedRepeatedRunsThroughRootBuildProcess`.

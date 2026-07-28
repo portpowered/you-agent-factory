@@ -1,6 +1,6 @@
 package workflowpreview
 
-import workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract"
+import workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 
 // DefaultResultConstraints returns the shared structured-result contract metadata.
 func DefaultResultConstraints() ResultConstraints {

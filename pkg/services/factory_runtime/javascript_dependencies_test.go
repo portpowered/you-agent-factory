@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript"
+	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript"
 )
 
 type localWorkflowSourceFiles struct{}

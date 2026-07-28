@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/dop251/goja"
-	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 )
 
 func (g *runtimeGlobals) bindAgentAPI() error {

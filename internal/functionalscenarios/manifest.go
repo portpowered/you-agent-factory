@@ -114,7 +114,13 @@ func applyReviewedEvidence(scenario *Scenario) {
 	case "cli/you.run":
 		markCovered(scenario, LaneShort, "tests/functional/transport/cli/commands/run_wiring_test.go::TestCLIRunFactoryByPath", InterfaceCLI)
 	case "cli/you.submit.batch":
-		markCovered(scenario, LaneLong, "tests/functional/transport/cli/commands/submit_wiring_test.go::TestCLISubmitBatchFile", InterfaceCLI)
+		scenario.Status = StatusCovered
+		scenario.Lane = LaneLong
+		scenario.ReviewedReason = ""
+		scenario.Evidence = []Evidence{
+			{Test: "tests/functional/transport/cli/commands/submit_wiring_test.go::TestCLISubmitBatchFile", Boundary: InterfaceCLI},
+			{Test: "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go::TestCLISubmitBatchSuccessHumanAndJSONShapes", Boundary: InterfaceCLI},
+		}
 	case "cli/you.work.move":
 		markCovered(scenario, LaneLong, "tests/functional/transport/cli/commands/work_wiring_test.go::TestCLIWorkMoveChangesState", InterfaceCLI)
 	case "rest/submitWorkBySessionId", "rest/listWorkBySessionId", "rest/getStatusBySessionId":

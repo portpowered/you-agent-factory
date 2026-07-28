@@ -20,13 +20,9 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
-	factorynamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
-	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript"
-	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestrationowner"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -295,7 +291,7 @@ func provideJavaScriptWorkflows(
 	resolveHome factoryruntime.WorkflowHomeResolver,
 	resolveSymlinks factoryruntime.WorkflowSourceResolveSymlinks,
 ) factoryruntime.JavaScriptWorkflows {
-	return factoryruntimejavascript.New(files, resolveHome, resolveSymlinks)
+	return factoryruntimewire.NewJavaScriptWorkflows(files, resolveHome, resolveSymlinks)
 }
 
 func provideJavaScriptWorkflowDefinitions(
@@ -318,7 +314,7 @@ func provideOrchestratorDefinitionValidator(
 
 func provideFactoryDefinitionValidationService(
 	workflows factoryruntime.JavaScriptWorkflows,
-	loader *factoryloading.Loader,
+	loader *factorydefinitionswire.Loader,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) factorydefinitions.ValidationOperations {
 	_ = workflows
@@ -354,12 +350,12 @@ func provideNamedFactoryCatalog(
 	namedPaths factorydefinitions.NamedPathResolver,
 	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
 ) (factorydefinitions.NamedFactoryCatalog, error) {
-	return factorynamedfactories.New(namedPaths, fileSystem)
+	return factorydefinitionswire.NewNamedFactoryCatalog(namedPaths, fileSystem)
 }
 
 func provideFactoryDefinitionPersistence(
 	validator factorydefinitions.Validator,
-	loader *factoryloading.Loader,
+	loader *factorydefinitionswire.Loader,
 	pruneRemovedDocs factorydefinitions.PortableBundledDocsPruner,
 	materializeFiles factorydefinitions.PortableBundledFilesMaterializer,
 	validateWrites factorydefinitions.PortableBundledFileWritesValidator,
@@ -407,7 +403,7 @@ func provideFactoryScaffoldInitializer(
 
 func provideEditableFactoryValidator(
 	validator factorydefinitions.DefinitionValidationOperation,
-	loader *factoryloading.Loader,
+	loader *factorydefinitionswire.Loader,
 ) factorysessions.EditableFactoryValidator {
 	return func(
 		ctx context.Context,
@@ -521,14 +517,14 @@ func provideOrchestrationJavaScriptExecution(
 	newID factoryruntime.IDGenerator,
 	workflows factoryruntime.JavaScriptWorkflows,
 ) factoryruntime.OrchestrationJavaScriptExecution {
-	return factoryruntimeorchestrationowner.New(newID, workflows)
+	return factoryruntimewire.NewOrchestrationJavaScriptExecution(newID, workflows)
 }
 
 func provideOrchestrationCompilation(
 	newID factoryruntime.IDGenerator,
 	workflows factoryruntime.JavaScriptWorkflows,
 ) factoryruntime.OrchestrationCompilation {
-	return factoryruntimeorchestrationowner.NewCompilation(newID, workflows, workflows)
+	return factoryruntimewire.NewOrchestrationCompilation(newID, workflows)
 }
 
 func provideFactorySessionExecutionFactory(

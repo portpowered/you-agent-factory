@@ -17,6 +17,7 @@ var foldedPublicSiblingSuffixes = []string{
 	"/portableconfig",
 	"/loading",
 	"/loadedsource",
+	"/runtimeconfig",
 	"/snapshotcapture",
 	"/packagedinstallation",
 	"/packages/packageassets",
@@ -26,6 +27,7 @@ var foldedPublicSiblingSuffixes = []string{
 	"/packages/subagent",
 	"/packages/tts",
 	"/namedfactories",
+	"/resource",
 }
 
 var foldSiblingScanRoots = []string{
