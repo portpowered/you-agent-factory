@@ -94,6 +94,111 @@ func TestDefinitionActivationGatewaySaveAndNamedSwap(t *testing.T) {
 	}
 }
 
+// TestDefinitionActivationGatewayUpsertReplaceAndSwitch covers named upsert
+// replace and switching the session current factory between persisted names.
+func TestDefinitionActivationGatewayUpsertReplaceAndSwitch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow definition activation gateway wiring")
+	}
+
+	rootDir := t.TempDir()
+	sourceDir := t.TempDir()
+	sourcePath := filepath.Join(sourceDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(
+		sourcePath,
+		[]byte(definitionActivationFactoryBody("alpha", "alpha-task", nil)),
+		0o600,
+	); err != nil {
+		t.Fatalf("write alpha source: %v", err)
+	}
+	support.CreateAndActivateNamedFactoryAtRoot(t, sourceDir, rootDir, "alpha", sourcePath)
+	betaDir := support.CreateNamedFactoryAtRoot(t, sourceDir, rootDir, "beta", sourcePath)
+
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                rootDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+	baseURL := server.URL()
+	support.WaitForRuntimeIdle(t, baseURL, 10*time.Second)
+
+	activatedBeta := upsertDefinitionActivationNamedFactory(
+		t,
+		baseURL,
+		definitionActivationFactoryBody("beta", "beta-task", nil),
+	)
+	if activatedBeta.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("activated beta name = %q, want beta", activatedBeta.Name)
+	}
+
+	replacedBeta := upsertDefinitionActivationNamedFactory(
+		t,
+		baseURL,
+		definitionActivationFactoryBody("beta", "story", nil),
+	)
+	if replacedBeta.WorkTypes == nil || len(*replacedBeta.WorkTypes) != 1 || (*replacedBeta.WorkTypes)[0].Name != "story" {
+		t.Fatalf("replaced beta work types = %#v, want story", replacedBeta.WorkTypes)
+	}
+
+	activatedAlpha := upsertDefinitionActivationNamedFactory(
+		t,
+		baseURL,
+		definitionActivationFactoryBody("alpha", "alpha-task", nil),
+	)
+	if activatedAlpha.Name != factoryapi.FactoryName("alpha") {
+		t.Fatalf("activated alpha name = %q, want alpha", activatedAlpha.Name)
+	}
+
+	current := getDefinitionActivationCurrentFactory(t, baseURL)
+	if current.Name != factoryapi.FactoryName("alpha") {
+		t.Fatalf("current factory = %q, want alpha", current.Name)
+	}
+	if _, err := os.Stat(filepath.Join(betaDir, interfaces.FactoryConfigFile)); err != nil {
+		t.Fatalf("beta factory.json missing after switch: %v", err)
+	}
+}
+
+// TestDefinitionActivationGatewayDefaultRootSave exercises replace-current saves
+// against the default root factory before a durable current pointer exists.
+func TestDefinitionActivationGatewayDefaultRootSave(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow definition activation gateway wiring")
+	}
+
+	rootDir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(rootDir, interfaces.FactoryConfigFile),
+		[]byte(definitionActivationFactoryBody("root-runtime", "root-task", nil)),
+		0o644,
+	); err != nil {
+		t.Fatalf("write default factory config: %v", err)
+	}
+
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                rootDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+	baseURL := server.URL()
+	support.WaitForRuntimeIdle(t, baseURL, 10*time.Second)
+
+	current := getDefinitionActivationCurrentFactory(t, baseURL)
+	if current.Name != "UNDEFINED" {
+		t.Fatalf("default current factory name = %q, want UNDEFINED", current.Name)
+	}
+
+	saved := saveDefinitionActivationCurrentFactory(
+		t,
+		baseURL,
+		definitionActivationDefaultFactorySaveBody("root-runtime", "story", current.Version),
+	)
+	if saved.WorkTypes == nil || len(*saved.WorkTypes) != 1 || (*saved.WorkTypes)[0].Name != "story" {
+		t.Fatalf("saved default factory work types = %#v, want story", saved.WorkTypes)
+	}
+}
+
 func seedDefinitionActivationFactory(t *testing.T, rootDir, name, workType string) {
 	t.Helper()
 
@@ -225,6 +330,54 @@ func definitionActivationFactoryBody(
 	document := map[string]any{
 		"name": name,
 		"id":   name,
+		"workTypes": []map[string]any{{
+			"name": workType,
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "done", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]string{{
+			"name":             "planner",
+			"type":             "MODEL_WORKER",
+			"modelProvider":    "CLAUDE",
+			"executorProvider": "SCRIPT_WRAP",
+			"model":            "claude-sonnet-4-20250514",
+		}},
+		"workstations": []map[string]any{{
+			"name":     "plan-task",
+			"behavior": "STANDARD",
+			"type":     "MODEL_WORKSTATION",
+			"worker":   "planner",
+			"inputs": []map[string]string{
+				{"workType": workType, "state": "init"},
+			},
+			"outputs": []map[string]string{
+				{"workType": workType, "state": "done"},
+			},
+		}},
+	}
+	if version != nil {
+		document["version"] = map[string]any{
+			"logical":  strconv.FormatInt(version.Logical.Int64(), 10),
+			"physical": version.Physical.UTC().Format(time.RFC3339Nano),
+		}
+	}
+	payload, err := json.Marshal(document)
+	if err != nil {
+		panic(err)
+	}
+	return string(payload)
+}
+
+func definitionActivationDefaultFactorySaveBody(
+	id, workType string,
+	version *factoryapi.HybridLogicalTimestamp,
+) string {
+	document := map[string]any{
+		"name": "UNDEFINED",
+		"id":   id,
 		"workTypes": []map[string]any{{
 			"name": workType,
 			"states": []map[string]string{
