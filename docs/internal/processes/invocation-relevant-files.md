@@ -845,7 +845,14 @@ response-stream output.
   in `pkg/services/system_initialization/internal/workflow` and must not import
   `pkg/initializer`, transports, `pkg/wire`, or Settings/Definitions store
   surfaces such as `factory_definitions/packagedinstallation`; boundary proof
-  lives in `internal/workflow/boundary_test.go` and `wire/boundary_test.go`. Bare root/help, invalid commands,
+  lives in `internal/workflow/boundary_test.go` and `wire/boundary_test.go`.
+  Bootstrap owner-local Wire at `pkg/services/system_initialization/wire` must
+  stay registered under destination `system_initialization` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and both
+  `go-*-coverage-package-minimums.json` baselines; prove registration with
+  `wire/manifest_registration_test.go` rather than re-editing manifests when
+  IMP-BOOT already landed the rows. Bare root/help, invalid commands,
   and `you init` do not activate system initialization: `you init` owns only the
   atomic provider/model settings update. The retired `you config init` command,
   its CLI renderer, and installer invocation must remain absent. Root-built
