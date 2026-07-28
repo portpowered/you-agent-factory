@@ -1,4 +1,4 @@
-package service_test
+package internal_test
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
-	automationservice "github.com/portpowered/infinite-you/pkg/services/automations/service"
+	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -100,17 +100,17 @@ func TestSubmitCronTick_TimeoutFailureIsClassifiedAndBounded(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("cron tick error = %v, want deadline exceeded classification", err)
 	}
-	if submitCalls != automationservice.CronMaxRetries+1 {
-		t.Fatalf("cron submit attempts = %d, want %d", submitCalls, automationservice.CronMaxRetries+1)
+	if submitCalls != automationinternal.CronMaxRetries+1 {
+		t.Fatalf("cron submit attempts = %d, want %d", submitCalls, automationinternal.CronMaxRetries+1)
 	}
-	if observedLogs.FilterMessage("cron watcher trigger retrying").Len() != automationservice.CronMaxRetries {
-		t.Fatalf("retry log count = %d, want %d", observedLogs.FilterMessage("cron watcher trigger retrying").Len(), automationservice.CronMaxRetries)
+	if observedLogs.FilterMessage("cron watcher trigger retrying").Len() != automationinternal.CronMaxRetries {
+		t.Fatalf("retry log count = %d, want %d", observedLogs.FilterMessage("cron watcher trigger retrying").Len(), automationinternal.CronMaxRetries)
 	}
 	if observedLogs.FilterMessage("cron watcher trigger exhausted").Len() != 1 {
 		t.Fatal("expected exhausted timeout log after bounded cron retries")
 	}
 
-	failure := automationservice.ClassifyCronTriggerFailure(err)
+	failure := automationinternal.ClassifyCronTriggerFailure(err)
 	if !failure.Retryable || failure.Family != workerexecution.WorkFailureFamilyRetryable || failure.Type != workerexecution.WorkFailureTypeTimeout {
 		t.Fatalf("cron timeout classification = %#v, want retryable timeout", failure)
 	}
@@ -160,7 +160,7 @@ func TestSubmitCronTick_RetryableFailureRetriesBeforeSuccess(t *testing.T) {
 	submitter := func(_ context.Context, _ work.WorkRequest) error {
 		attempt++
 		submitCalls++
-		if attempt <= automationservice.CronMaxRetries {
+		if attempt <= automationinternal.CronMaxRetries {
 			return retryErr
 		}
 		return nil
@@ -178,11 +178,11 @@ func TestSubmitCronTick_RetryableFailureRetriesBeforeSuccess(t *testing.T) {
 	); err != nil {
 		t.Fatalf("cron tick should succeed after retryable failures: %v", err)
 	}
-	if submitCalls != automationservice.CronMaxRetries+1 {
-		t.Fatalf("cron submit attempts = %d, want %d", submitCalls, automationservice.CronMaxRetries+1)
+	if submitCalls != automationinternal.CronMaxRetries+1 {
+		t.Fatalf("cron submit attempts = %d, want %d", submitCalls, automationinternal.CronMaxRetries+1)
 	}
-	if observedLogs.FilterMessage("cron watcher trigger retrying").Len() != automationservice.CronMaxRetries {
-		t.Fatalf("retry log count = %d, want %d", observedLogs.FilterMessage("cron watcher trigger retrying").Len(), automationservice.CronMaxRetries)
+	if observedLogs.FilterMessage("cron watcher trigger retrying").Len() != automationinternal.CronMaxRetries {
+		t.Fatalf("retry log count = %d, want %d", observedLogs.FilterMessage("cron watcher trigger retrying").Len(), automationinternal.CronMaxRetries)
 	}
 	if observedLogs.FilterMessage("cron watcher trigger exhausted").Len() != 0 {
 		t.Fatal("cron retry success should not log exhaustion")

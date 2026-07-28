@@ -203,8 +203,12 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal",
+      "minimum": 85.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/service",
-      "minimum": 83.73
+      "minimum": 57.90
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/transports/http",

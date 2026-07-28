@@ -1,4 +1,4 @@
-package service
+package internal
 
 import (
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"

@@ -1,4 +1,4 @@
-package service_test
+package internal_test
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
-	automationservice "github.com/portpowered/infinite-you/pkg/services/automations/service"
+	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -118,7 +118,7 @@ func TestScriptPollerCommandRequest_ResolvesWorkstationEnvAndWorkerTimeout(t *te
 		scriptPollerRuntimeConfigOptions{poller: poller, pollerWorker: worker},
 	)
 
-	req, err := automationservice.ScriptPollerCommandRequest(runtimeCfg, poller, worker, nil)
+	req, err := automationinternal.ScriptPollerCommandRequest(runtimeCfg, poller, worker, nil)
 	if err != nil {
 		t.Fatalf("ScriptPollerCommandRequest: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestRunScriptPoller_UsesWorkerTimeout(t *testing.T) {
 
 func TestParseScriptPollerOutput_RejectsConflictingEnvelopeFields(t *testing.T) {
 	raw := []byte(`{"request":{"requestId":"a","type":"FACTORY_REQUEST_BATCH","works":[]},"submissions":[]}`)
-	_, hasOutput, err := automationservice.ParseScriptPollerOutput(raw)
+	_, hasOutput, err := automationinternal.ParseScriptPollerOutput(raw)
 	if !hasOutput {
 		t.Fatal("expected conflicting envelope to count as output")
 	}
@@ -171,20 +171,20 @@ func TestParseScriptPollerOutput_RejectsConflictingEnvelopeFields(t *testing.T) 
 
 func TestParseScriptPollerOutput_RejectsInvalidRequestTypeAndMissingRequestID(t *testing.T) {
 	invalidType := []byte(`{"requestId":"x","type":"UNSUPPORTED","works":[]}`)
-	_, _, err := automationservice.ParseScriptPollerOutput(invalidType)
+	_, _, err := automationinternal.ParseScriptPollerOutput(invalidType)
 	if err == nil || !strings.Contains(err.Error(), "unsupported work request type") {
 		t.Fatalf("invalid type error = %v", err)
 	}
 
 	missingID := []byte(`{"requestId":"","type":"FACTORY_REQUEST_BATCH","works":[{"name":"w","workTypeName":"task"}]}`)
-	_, _, err = automationservice.ParseScriptPollerOutput(missingID)
+	_, _, err = automationinternal.ParseScriptPollerOutput(missingID)
 	if err == nil || !strings.Contains(err.Error(), "requestId") {
 		t.Fatalf("missing requestId error = %v", err)
 	}
 }
 
 func TestParseScriptPollerOutput_EmptyStdoutIsNotOutput(t *testing.T) {
-	_, hasOutput, err := automationservice.ParseScriptPollerOutput(nil)
+	_, hasOutput, err := automationinternal.ParseScriptPollerOutput(nil)
 	if hasOutput || err != nil {
 		t.Fatalf("empty stdout = hasOutput %v err %v, want no output", hasOutput, err)
 	}

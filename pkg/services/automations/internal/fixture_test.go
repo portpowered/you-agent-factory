@@ -1,4 +1,4 @@
-package service_test
+package internal_test
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
-	automationservice "github.com/portpowered/infinite-you/pkg/services/automations/service"
+	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -25,8 +25,8 @@ type automationFixture struct {
 	HostedPollers     automations.HostedPollers
 }
 
-func newAutomationService(fixture automationFixture) *automationservice.Service {
-	return automationservice.New(
+func newAutomationService(fixture automationFixture) *automationinternal.Service {
+	return automationinternal.New(
 		fixture.Logger,
 		fixture.Clock,
 		fixture.CommandRunner,

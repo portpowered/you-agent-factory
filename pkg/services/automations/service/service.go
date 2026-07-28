@@ -1,52 +1,38 @@
+// Package service is a transitional compile shim that re-exports the composed
+// Automations root from pkg/services/automations/internal. Peers should
+// construct through automations/wire; baseline deletion of this path is owned
+// by DEL-AUTO.
 package service
 
 import (
-	"context"
-	"errors"
-	"sync"
-	"time"
-
-	"github.com/jonboulle/clockwork"
+	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
-	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
-	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
-	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
-	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
-	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
-	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
-	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
-var _ automations.Service = (*Service)(nil)
-
 // Clock is the automation time source needed for scheduling and supervision.
-type Clock interface {
-	Now() time.Time
-}
+type Clock = automationinternal.Clock
 
 // Service supervises cron, poller, and watcher automation using injected collaborators.
-type Service struct {
-	loggerValue       *zap.Logger
-	clock             Clock
-	commandRunnerEdge workers.CommandRunner
-	workflowID        string
-	defaultFactoryDir string
-	hostedPollers     automations.HostedPollers
-	resolveTemplates  workers.TemplateFieldResolver
-	executionPolicy   factorydefinitions.WorkstationExecutionPolicyService
-	reconciler        reconciliation.Service
-	scriptPollers     scriptpollers.Service
-	cron              cron.Service
-	filesystemWatchers filesystemwatchers.Service
-	schedulerMu       sync.Mutex
-	schedulerSources  map[automations.SourceIdentity]*schedulerSource
-}
+type Service = automationinternal.Service
 
-// New constructs the automation service from explicit worker-sidecar
-// dependencies.
+// WorkRequestSubmitter submits parsed poller or cron work requests into the runtime.
+type WorkRequestSubmitter = automationinternal.WorkRequestSubmitter
+
+// CronTriggerFailure classifies cron tick submit failures for retry policy.
+type CronTriggerFailure = automationinternal.CronTriggerFailure
+
+// ScriptPollerRestartBackoffMin is the minimum restart delay after an unexpected
+// script poller exit.
+const ScriptPollerRestartBackoffMin = automationinternal.ScriptPollerRestartBackoffMin
+
+// CronMaxRetries is the number of retry attempts after the initial cron tick submit.
+const CronMaxRetries = automationinternal.CronMaxRetries
+
+// New constructs the automation service from explicit worker-sidecar dependencies.
 func New(
 	logger *zap.Logger,
 	clock Clock,
@@ -57,33 +43,16 @@ func New(
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 ) *Service {
-	service := &Service{
-		loggerValue:       logger,
-		clock:             clock,
-		commandRunnerEdge: commandRunner,
-		workflowID:        workflowID,
-		defaultFactoryDir: defaultFactoryDir,
-		hostedPollers:     hostedPollers,
-		resolveTemplates:  resolveTemplates,
-		executionPolicy:   executionPolicy,
-		schedulerSources:  make(map[automations.SourceIdentity]*schedulerSource),
-	}
-	service.reconciler = service.newSchedulerReconciler()
-	service.scriptPollers = service.newScriptPollers()
-	service.cron = cronwire.NewService()
-	service.filesystemWatchers = fswire.NewService()
-	return service
-}
-
-func (s *Service) newScriptPollers() scriptpollers.Service {
-	return scriptpollerswire.NewService(scriptpollers.Dependencies{
-		Logger:           s.pollerLogger,
-		Clock:            s.supervisorClock,
-		CommandRunner:    s.commandRunner,
-		ResolveTemplates: s.resolveTemplates,
-		ExecutionPolicy:  s.executionPolicy,
-		CursorRecorder:   scriptpollers.NewMemoryCursorRecorder(),
-	})
+	return automationinternal.New(
+		logger,
+		clock,
+		commandRunner,
+		workflowID,
+		defaultFactoryDir,
+		hostedPollers,
+		resolveTemplates,
+		executionPolicy,
+	)
 }
 
 // NewService constructs the Automations root contract for composition.
@@ -97,7 +66,7 @@ func NewService(
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 ) *Service {
-	return New(
+	return automationinternal.NewService(
 		logger,
 		clock,
 		commandRunner,
@@ -109,99 +78,27 @@ func NewService(
 	)
 }
 
-// Root returns the inert published Automation operations backed by the same
-// reconciliation owner used for runtime scheduler supervision.
-func (s *Service) Root() automations.Root {
-	if s == nil || s.reconciler == nil {
-		return automations.Root{}
-	}
-	return automations.Root{Operations: s}
-}
-
-func (s *Service) Reconcile(
-	ctx context.Context,
-	request automations.ReconcileRequest,
-) (automations.ReconcileResult, error) {
-	return s.reconciler.Reconcile(ctx, request)
-}
-
-func (s *Service) StartSource(
-	ctx context.Context,
-	request automations.StartSourceRequest,
-) (automations.StartSourceResult, error) {
-	return s.reconciler.StartSource(ctx, request)
-}
-
-func (s *Service) StopSource(
-	ctx context.Context,
-	request automations.StopSourceRequest,
-) (automations.StopSourceResult, error) {
-	return s.reconciler.StopSource(ctx, request)
-}
-
-func (s *Service) WaitSource(
-	ctx context.Context,
-	request automations.WaitSourceRequest,
-) (automations.WaitSourceResult, error) {
-	return s.reconciler.WaitSource(ctx, request)
-}
-
-func (s *Service) SourceStatus(
-	ctx context.Context,
-	request automations.SourceStatusRequest,
-) (automations.SourceStatusResult, error) {
-	return s.reconciler.SourceStatus(ctx, request)
-}
-
-func (s *Service) GetStatus(
-	ctx context.Context,
-	request automations.GetStatusRequest,
-) (automations.GetStatusResult, error) {
-	return s.reconciler.GetStatus(ctx, request)
-}
-
-func (s *Service) GetCursor(
-	ctx context.Context,
-	request automations.GetCursorRequest,
-) (automations.GetCursorResult, error) {
-	if s != nil && s.scriptPollers != nil && scriptpollers.IsScriptPollerInstanceID(request.InstanceID) {
-		return s.scriptPollers.GetCursor(ctx, request)
-	}
-	return s.reconciler.GetCursor(ctx, request)
-}
-
-func (s *Service) logger() *zap.Logger {
-	if s == nil || s.loggerValue == nil {
-		return zap.NewNop()
-	}
-	return s.loggerValue
-}
-
-func (s *Service) commandRunner() workers.CommandRunner {
-	if s != nil && s.commandRunnerEdge != nil {
-		return s.commandRunnerEdge
-	}
-	return unavailableCommandRunner{}
-}
-
-type unavailableCommandRunner struct{}
-
-func (unavailableCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{}, errors.New("automation command runner is required")
-}
-
-func (s *Service) supervisorClock() clockwork.Clock {
-	if s != nil {
-		if clock, ok := s.clock.(clockwork.Clock); ok && clock != nil {
-			return clock
-		}
-	}
-	return clockwork.NewRealClock()
-}
-
-func (s *Service) pollerLogger(workstationName, workerName string) *zap.Logger {
-	return s.logger().With(
-		zap.String("workstation", workstationName),
-		zap.String("worker", workerName),
+// ScriptPollerCommandRequest builds the command invocation for a script poller worker.
+func ScriptPollerCommandRequest(
+	runtimeCfg factorydefinitions.RuntimeConfigLookup,
+	workstation factorydefinitions.FactoryWorkstationConfig,
+	workerDef *factorydefinitions.FactoryWorkerConfig,
+	resolveTemplates workers.TemplateFieldResolver,
+) (workers.CommandRequest, error) {
+	return automationinternal.ScriptPollerCommandRequest(
+		runtimeCfg,
+		workstation,
+		workerDef,
+		resolveTemplates,
 	)
+}
+
+// ParseScriptPollerOutput parses stdout from a script poller into a work request.
+func ParseScriptPollerOutput(stdout []byte) (work.WorkRequest, bool, error) {
+	return automationinternal.ParseScriptPollerOutput(stdout)
+}
+
+// ClassifyCronTriggerFailure maps cron submit errors to retry policy.
+func ClassifyCronTriggerFailure(err error) CronTriggerFailure {
+	return automationinternal.ClassifyCronTriggerFailure(err)
 }
