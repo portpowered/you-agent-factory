@@ -716,7 +716,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedQuorumOptionalMemberSettingsReachWorkers` covers overrides.
   - `TestPackagedQuorumInsufficientSuccessfulMembersFails` covers failure.
 
-- [ ] `tests/functional/factory/packaged/review/invocation_test.go`
+- [x] `tests/functional/factory/packaged/review/invocation_test.go`
   - `TestPackagedReviewApprovalCompletes` covers first-pass approval.
   - `TestPackagedReviewRejectionCarriesFeedback` covers retry context.
   - `TestPackagedReviewRetryExhaustionFails` covers bounded failure.
