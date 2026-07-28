@@ -11,9 +11,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
@@ -25,6 +27,7 @@ import (
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 // NewService constructs an inert Factory Definitions root from construction and
@@ -48,6 +51,7 @@ func NewService(
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 	portableFileSystem portablefiles.FileSystem,
+	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
 ) (factorydefinitions.Service, error) {
 	if err := validateDependencies(
 		sessionHost,
@@ -66,6 +70,7 @@ func NewService(
 		requiredToolChecker,
 		orchestratorValidator,
 		portableFileSystem,
+		directoryReplacementStore,
 	); err != nil {
 		return nil, err
 	}
@@ -102,7 +107,35 @@ func NewService(
 		return nil, fmt.Errorf("construct Factory Definitions: compilation subservice rejected its dependencies")
 	}
 
-	definitions := factorydefinitionsservice.New(
+	authoringFS, err := resolveAuthoringLayoutFilesystem(portableFileSystem)
+	if err != nil {
+		return nil, err
+	}
+	pruneRemovedDocs, err := portableconfig.NewPortableBundledDocsPruner(portableFileSystem)
+	if err != nil {
+		return nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
+	}
+	authoringLayout, err := NewAuthoringLayoutService(AuthoringLayoutDependencies{
+		Validator: validator,
+		MapInput: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
+			return validationentry.MapFactoryJSONForPersistence(payload, loader.LoadSourceFromCanonicalJSON)
+		},
+		Loader:             loader,
+		MaterializeFiles:   portableconfig.NewMaterializer(portableFileSystem),
+		ValidateWrites:     portableconfig.NewWritesValidator(portableFileSystem),
+		PruneRemovedDocs:   pruneRemovedDocs,
+		CopySupportedFiles: portableconfig.NewFilesCopier(portableFileSystem),
+		AuthoredWriterFS:   authoringFS,
+		EnsureInbox:        inboxgitkeep.NewLocal(portableFileSystem),
+		PersistenceFS:      authoringFS,
+		NamedPaths:         namedPaths,
+		Directories:        directoryReplacementStore,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
+	}
+
+	definitions := factorydefinitionsservice.NewWithAuthoringLayout(
 		sessionHost,
 		clock,
 		versionFileSystem,
@@ -134,6 +167,7 @@ func NewService(
 		packagedInstaller,
 		requiredToolChecker,
 		orchestratorValidator,
+		authoringLayout,
 	)
 	if definitions == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: implementation rejected its dependencies")
@@ -173,6 +207,7 @@ func validateDependencies(
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 	portableFileSystem portablefiles.FileSystem,
+	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
 ) error {
 	if sessionHost == nil {
 		return fmt.Errorf("construct Factory Definitions: session host is required")
@@ -224,6 +259,9 @@ func validateDependencies(
 	}
 	if portableFileSystem == nil {
 		return fmt.Errorf("construct Factory Definitions: portable filesystem is required")
+	}
+	if directoryReplacementStore == nil {
+		return fmt.Errorf("construct Factory Definitions: directory replacement store is required")
 	}
 	return nil
 }
@@ -280,4 +318,20 @@ func (s compilationAttachedService) CompileEffectiveFactorySource(
 	request factorydefinitions.CompileEffectiveFactorySourceRequest,
 ) (factorydefinitions.CompileEffectiveFactorySourceResult, error) {
 	return s.compilation.CompileEffectiveFactorySource(ctx, request)
+}
+
+type authoringLayoutFilesystem interface {
+	portablefiles.FileSystem
+	factorydefinitions.AuthoredLayoutWriterFileSystem
+	factorydefinitions.PersistenceFileSystem
+}
+
+func resolveAuthoringLayoutFilesystem(portableFileSystem portablefiles.FileSystem) (authoringLayoutFilesystem, error) {
+	authoringFS, ok := portableFileSystem.(authoringLayoutFilesystem)
+	if !ok {
+		return nil, fmt.Errorf(
+			"construct Factory Definitions: portable filesystem must support authoring_layout persistence",
+		)
+	}
+	return authoringFS, nil
 }
