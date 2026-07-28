@@ -277,6 +277,7 @@
     "pkg/services/factory_sessions/wire/contracts",
     "pkg/services/factory_visualization",
     "pkg/services/factory_visualization/internal/contracts",
+    "pkg/services/factory_visualization/internal/recordingsqueries",
     "pkg/services/factory_visualization/internal/services/activation_lifecycle",
     "pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service",
     "pkg/services/factory_visualization/internal/services/activation_lifecycle/wire",
@@ -286,6 +287,7 @@
     "pkg/services/factory_visualization/internal/services/response_event_presentation",
     "pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service",
     "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
+    "pkg/services/factory_visualization/internal/testing/recordingsstub",
     "pkg/services/factory_visualization/transports/cli",
     "pkg/services/factory_visualization/transports/http",
     "pkg/services/factory_visualization/transports/mcp",
@@ -358,7 +360,10 @@
     "pkg/services/providers/internal/services/execution/internal/adapters/codex",
     "pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch",
     "pkg/services/providers/internal/services/execution/internal/adapters/cursor",
+    "pkg/services/providers/internal/services/execution/internal/adapters/gemini",
+    "pkg/services/providers/internal/services/execution/internal/adapters/kiro",
     "pkg/services/providers/internal/services/execution/internal/adapters/opencode",
+    "pkg/services/providers/internal/services/execution/internal/adapters/pi",
     "pkg/services/providers/internal/services/execution/internal/service",
     "pkg/services/providers/internal/services/execution/wire",
     "pkg/services/providers/internal/testutil/execution",
@@ -1722,6 +1727,11 @@
       "destination": "factory_visualization"
     },
     {
+      "packagePath": "pkg/services/factory_visualization/internal/recordingsqueries",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
       "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle",
       "disposition": "retain",
       "destination": "factory_visualization/internal/services/activation_lifecycle"
@@ -1765,6 +1775,11 @@
       "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
       "disposition": "retain",
       "destination": "factory_visualization/internal/services/response_event_presentation"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/testing/recordingsstub",
+      "disposition": "retain",
+      "destination": "factory_visualization"
     },
     {
       "packagePath": "pkg/services/factory_visualization/transports/cli",
@@ -2127,7 +2142,22 @@
       "destination": "providers/internal/services/execution"
     },
     {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/gemini",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/kiro",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
       "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/opencode",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/pi",
       "disposition": "retain",
       "destination": "providers/internal/services/execution"
     },

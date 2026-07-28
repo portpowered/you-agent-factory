@@ -1895,7 +1895,19 @@
       "minimum": 0.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/gemini",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/kiro",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/opencode",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/pi",
       "minimum": 0.00
     },
     {
