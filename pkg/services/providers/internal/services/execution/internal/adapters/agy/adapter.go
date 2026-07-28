@@ -81,13 +81,9 @@ func newAttempt(effect Effect) execution.Attempt {
 			declared.SessionRef = sessionRef
 			return providers.ExecuteResult{SessionRef: sessionRef}, execution.AttemptFailure{Declared: &declared}
 		}
-		sessionRef := cloneSessionRef(effectResult.SessionRef)
-		if sessionRef == nil {
-			sessionRef = sessionRefFromRequest(request.ResumeSession)
-		}
 		return providers.ExecuteResult{
 			Content:    content,
-			SessionRef: sessionRef,
+			SessionRef: cloneSessionRef(effectResult.SessionRef),
 			Diagnostics: &providers.ExecuteDiagnostics{
 				DurationMillis: effectResult.DurationMillis,
 				Metadata:       cloneMetadata(effectResult.Metadata),
