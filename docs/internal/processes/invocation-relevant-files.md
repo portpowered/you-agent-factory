@@ -2031,7 +2031,7 @@ response-stream output.
   fail-closed assertions. Do not treat uncorrelated `SessionStarted`, bare
   `RUNNING`, or peak `/status` categories alone as sufficient inspectability proof.
   Hosted `--with-server` one-shot runs must invoke on the opened API-server
-  session (`HostedSessionInvokerSink`) so `GET /work` and factory events reflect
+  session via `HostedLiveInvocation` so `GET /work` and factory events reflect
   the same CLI-started run.
 - Packaged `@you/goal` CLI/API primary-outcome shape agreement lives in the same
   cross cell (`TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree`). Compare
