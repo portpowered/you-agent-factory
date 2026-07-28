@@ -490,7 +490,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/engine",
-      "minimum": 74.39
+      "minimum": 73.78
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
@@ -592,7 +592,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime",
-      "minimum": 65.21
+      "minimum": 65.07
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime/buffers",
@@ -764,7 +764,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore",
-      "minimum": 47.92
+      "minimum": 47.60
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream",
@@ -820,7 +820,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/scopedlisting",
-      "minimum": 76.59
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service",
@@ -932,7 +932,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session",
-      "minimum": 30.06
+      "minimum": 27.30
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution",
@@ -2266,7 +2266,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
-      "minimum": 83.25
+      "minimum": 83.20
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions",

@@ -180,7 +180,7 @@ func validateDependencies(
 		return fmt.Errorf("construct Factory Definitions: required tool checker is required")
 	}
 	if orchestratorValidator == nil {
-		return fmt.Errorf("construct Factory Definitions: orchestrator validator is required")
+		return fmt.Errorf("construct Factory Definitions: orchestrator definition validator is required")
 	}
 	return nil
 }

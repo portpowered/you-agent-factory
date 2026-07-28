@@ -109,9 +109,9 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			want:   "required tool checker is required",
 		},
 		{
-			name:   "orchestrator validator",
+			name:   "orchestrator definition validator",
 			mutate: func(ports *constructionPorts) { ports.orchestratorValidator = nil },
-			want:   "orchestrator validator is required",
+			want:   "orchestrator definition validator is required",
 		},
 	}
 	for _, test := range tests {
@@ -509,6 +509,24 @@ func (stubSessionHost) AttachFactoryDefinitions(
 	return definitions
 }
 
+type stubRequiredToolChecker struct{}
+
+func (stubRequiredToolChecker) Check(
+	factorycontracts.RequiredToolConfig,
+) factorycontracts.RequiredToolCheckResult {
+	return factorycontracts.RequiredToolCheckResult{}
+}
+
+type stubOrchestratorValidator struct{}
+
+func (stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
+	context.Context,
+	*factorycontracts.FactoryOrchestratorJavaScriptConfig,
+	factorycontracts.WorkflowSourceReader,
+) []factorycontracts.ValidationTarget {
+	return nil
+}
+
 type stubValidator struct{}
 
 func (stubValidator) Validate(
@@ -547,22 +565,6 @@ func (stubValidator) PruneLayout(
 	factorycontracts.PendingFactoryGraphTopology,
 ) factorycontracts.ValidationResult {
 	return factorycontracts.ValidationResult{}
-}
-
-type stubRequiredToolChecker struct{}
-
-func (stubRequiredToolChecker) Check(factorycontracts.RequiredToolConfig) factorycontracts.RequiredToolCheckResult {
-	return factorycontracts.RequiredToolCheckResult{}
-}
-
-type stubOrchestratorValidator struct{}
-
-func (stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
-	context.Context,
-	*factorycontracts.FactoryOrchestratorJavaScriptConfig,
-	factorycontracts.WorkflowSourceReader,
-) []factorycontracts.ValidationTarget {
-	return nil
 }
 
 type stubPersistence struct{}

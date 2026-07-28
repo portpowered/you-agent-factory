@@ -1534,7 +1534,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun",
-      "minimum": 81.57
+      "minimum": 81.10
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/interface",

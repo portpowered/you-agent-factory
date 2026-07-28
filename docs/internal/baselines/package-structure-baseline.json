@@ -44,11 +44,6 @@
     },
     {
       "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_generated_rest_client_smoke_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
       "target": "tests/functional/runtime_api"
     },
@@ -299,21 +294,6 @@
     },
     {
       "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_rest_client_smoke_test.go",
-      "target": "TestGeneratedRESTClientSmoke_BoundsCancellationAndDeadline"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_rest_client_smoke_test.go",
-      "target": "TestGeneratedRESTClientSmoke_ConfiguresCallerOwnedDependencies"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_rest_client_smoke_test.go",
-      "target": "TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
       "target": "TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent"
     },
@@ -321,11 +301,6 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
       "target": "TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned"
     },
     {
       "rule": "deprecated-runtime-api-test",
