@@ -8,6 +8,13 @@ import (
 )
 
 func init() {
+	RegisterDefaultsResolutionFromHome()
+}
+
+// RegisterDefaultsResolutionFromHome wires defaults resolution through the
+// Settings-owned CLI adapter ownership path. Tests may call this after clearing
+// the hook to restore production wiring.
+func RegisterDefaultsResolutionFromHome() {
 	operatorsettings.ConfigureDefaultsResolutionFromHome(resolveFromHomeViaSettingsCLI)
 }
 

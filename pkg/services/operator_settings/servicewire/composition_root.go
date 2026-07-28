@@ -51,11 +51,22 @@ func newCompositionRoot(
 }
 
 func newResolutionService() (resolution.Service, error) {
-	providersRoot, err := providerswire.NewService()
+	return constructResolutionService()
+}
+
+var constructResolutionService = defaultResolutionService
+
+var (
+	constructProvidersRoot  = providerswire.NewService
+	constructResolutionWire = resolutionwire.NewService
+)
+
+func defaultResolutionService() (resolution.Service, error) {
+	providersRoot, err := constructProvidersRoot()
 	if err != nil {
 		return nil, fmt.Errorf("construct providers root: %w", err)
 	}
-	resolutionService, err := resolutionwire.NewService(providersRoot)
+	resolutionService, err := constructResolutionWire(providersRoot)
 	if err != nil {
 		return nil, fmt.Errorf("construct resolution service: %w", err)
 	}

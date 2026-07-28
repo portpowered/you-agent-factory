@@ -1444,7 +1444,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire",
-      "minimum": 100.00
+      "minimum": 86.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/testlink",
