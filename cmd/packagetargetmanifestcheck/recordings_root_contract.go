@@ -22,6 +22,7 @@ var recordingsThinRootContractFiles = []string{
 	"service_root_contract_lifecycle_test.go",
 	"service_root_contract_replay_test.go",
 	"service_root_contract_seam_test.go",
+	"wire_peer_import_boundary_test.go",
 	"workers_root_boundary_test.go",
 }
 
