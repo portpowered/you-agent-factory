@@ -3,7 +3,7 @@ package orchestratorcontract
 import (
 	"strings"
 
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // BuildPreview projects preview/session-start policy metadata from one request.
@@ -48,11 +48,11 @@ func effectiveTimeoutMillis(requested, policyMax *int64) *int64 {
 }
 
 func resolveRunnerDecision(requested string, policy EffectivePolicy) *RunnerDecision {
-	normalized := workerrunner.NormalizeRunnerID(requested)
+	normalized := workers.NormalizeRunnerID(requested)
 	decision := &RunnerDecision{
 		Requested: requested,
 		Resolved:  normalized,
-		Allowed:   workerrunner.IsBuiltInRunnerID(normalized),
+		Allowed:   workers.IsBuiltInRunnerID(normalized),
 	}
 	if !decision.Allowed {
 		decision.Diagnostic = &Diagnostic{
@@ -65,7 +65,7 @@ func resolveRunnerDecision(requested string, policy EffectivePolicy) *RunnerDeci
 		return decision
 	}
 	for _, allowed := range policy.AllowedRunners {
-		if workerrunner.NormalizeRunnerID(allowed) == normalized {
+		if workers.NormalizeRunnerID(allowed) == normalized {
 			return decision
 		}
 	}

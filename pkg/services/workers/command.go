@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerenvdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/envdiagnostics"
 )
 
 // CommandRunner is the Workers-owned subprocess execution port.
@@ -36,3 +37,21 @@ type CommandResult struct {
 	Stderr   []byte
 	ExitCode int
 }
+
+const (
+	RedactedCommandEnvValue         = workerenvdiagnostics.RedactedCommandEnvValue
+	MetadataOnlyCommandEnvValue     = workerenvdiagnostics.MetadataOnlyCommandEnvValue
+	CommandEnvClassificationSafe    = workerenvdiagnostics.CommandEnvClassificationSafe
+	CommandEnvClassificationRedacted = workerenvdiagnostics.CommandEnvClassificationRedacted
+	CommandEnvClassificationMetadataOnly = workerenvdiagnostics.CommandEnvClassificationMetadataOnly
+)
+
+type (
+	CommandEnvClassification       = workerenvdiagnostics.CommandEnvClassification
+	CommandEnvDiagnosticProjection = workerenvdiagnostics.CommandEnvDiagnosticProjection
+)
+
+var (
+	ClassifyCommandEnvKey           = workerenvdiagnostics.ClassifyCommandEnvKey
+	ProjectCommandEnvForDiagnostics = workerenvdiagnostics.ProjectCommandEnvForDiagnostics
+)

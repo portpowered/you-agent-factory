@@ -41,6 +41,7 @@ func TestWorkersThinRootContractFiles(t *testing.T) {
 		"interfaces.go",
 		"legacy_fold_boundary_test.go",
 		"progress_observations.go",
+		"prompt_template_contracts.go",
 		"provider_port.go",
 		"provider_port_test.go",
 		"response_drafts.go",
@@ -50,8 +51,11 @@ func TestWorkersThinRootContractFiles(t *testing.T) {
 		"sessions_consumer_contracts.go",
 		"service_import_boundary_test.go",
 		"template_fields.go",
+		"template_fields_root_test.go",
+		"validate_draft.go",
 		"worker_vocabulary_boundary_test.go",
 		"worker_vocabulary_contract.go",
+		"workstation_contracts.go",
 		"workstation_result_contract_test.go",
 	}
 	if !slices.Equal(ownershipinventory.WorkersThinRootContractFiles, want) {
@@ -73,7 +77,6 @@ func TestWorkersRootContractMoveDestinations(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]string{
-		"workstations":     "pkg/services/workers/internal/services/workstations",
 		"workers_internal": "pkg/services/workers/internal",
 	}
 
@@ -101,7 +104,7 @@ func TestWorkersRootContractMoveDestinations(t *testing.T) {
 		gotClusters = append(gotClusters, target.Cluster)
 	}
 	slices.Sort(gotClusters)
-	wantClusters := []string{"workstations", "workers_internal"}
+	wantClusters := []string{"workers_internal"}
 	slices.Sort(wantClusters)
 	if !slices.Equal(gotClusters, wantClusters) {
 		t.Fatalf("move clusters = %v, want %v", gotClusters, wantClusters)

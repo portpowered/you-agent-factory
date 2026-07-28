@@ -24,17 +24,22 @@ var workersThinRootContractFiles = []string{
 	"interfaces.go",
 	"legacy_fold_boundary_test.go",
 	"progress_observations.go",
+	"prompt_template_contracts.go",
 	"provider_port.go",
 	"provider_port_test.go",
 	"response_drafts.go",
 	"runtime_service.go",
+	"runner_policy_contracts.go",
 	"safe_diagnostics.go",
 	"sessions_consumer_boundary_test.go",
 	"sessions_consumer_contracts.go",
 	"service_import_boundary_test.go",
 	"template_fields.go",
+	"template_fields_root_test.go",
+	"validate_draft.go",
 	"worker_vocabulary_boundary_test.go",
 	"worker_vocabulary_contract.go",
+	"workstation_contracts.go",
 	"workstation_result_contract_test.go",
 }
 
@@ -47,24 +52,6 @@ type workersRootContractMoveTarget struct {
 // workersRootContractMoveTargets mirrors internal/ownershipinventory
 // WorkersRootContractMoveTargets for package-target manifest checks.
 var workersRootContractMoveTargets = []workersRootContractMoveTarget{
-	{
-		cluster:     "workstations",
-		destination: "pkg/services/workers/internal/services/workstations",
-		files: []string{
-			"env_diagnostics.go",
-			"env_diagnostics_test.go",
-			"inference_failure.go",
-			"inference_failure_test.go",
-			"invocation_executor_test.go",
-			"model_invocation.go",
-			"prompt_templates.go",
-			"response_draft_validation.go",
-			"template_fields_test.go",
-			"token_lineage.go",
-			"workstation_pool_boundary.go",
-			"workstation_pool_boundary_test.go",
-		},
-	},
 	{
 		cluster:     "workers_internal",
 		destination: "pkg/services/workers/internal",

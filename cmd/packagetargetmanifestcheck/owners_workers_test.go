@@ -212,8 +212,11 @@ func TestWorkersTopLevelTransitionalDebtDirectoriesMapToMove(t *testing.T) {
 	topLevelDebt := []string{
 		"construction",
 		"diagnostics",
+		"draftvalidation",
+		"envdiagnostics",
 		"execution",
 		"executor",
+		"inferencefailure",
 		"interface",
 		"invocation",
 		"process",
@@ -222,6 +225,7 @@ func TestWorkersTopLevelTransitionalDebtDirectoriesMapToMove(t *testing.T) {
 		"service",
 		"services",
 		"skippermissions",
+		"workstationpool",
 		"worktree",
 	}
 

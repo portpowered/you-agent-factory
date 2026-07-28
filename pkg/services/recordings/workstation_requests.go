@@ -11,7 +11,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
 )
 
 // WorkstationFactoryWorldWorkstationRequestProjectionSlice is the canonical,
@@ -359,7 +358,7 @@ func workstationDispatchRequestView(
 }
 
 func generatedFactoryWorldSelectedRunnerView(runnerID string, runnerSource workerexecution.RunnerSelectionSource) *WorkstationFactoryWorldSelectedRunnerView {
-	runnerID = workerrunner.NormalizeRunnerID(runnerID)
+	runnerID = workerexecution.NormalizeRunnerID(runnerID)
 	if runnerID == "" && runnerSource == "" {
 		return nil
 	}
@@ -367,7 +366,7 @@ func generatedFactoryWorldSelectedRunnerView(runnerID string, runnerSource worke
 		RunnerId:        runnerIDPtr(runnerID),
 		SelectionSource: runnerSelectionSourcePtr(string(runnerSource)),
 	}
-	if metadata, ok := workerrunner.BuiltInRunnerMetadata(runnerID); ok {
+	if metadata, ok := workerexecution.BuiltInRunnerMetadata(runnerID); ok {
 		view.DisplayName = workstationRequestStringPtr(metadata.DisplayName)
 		view.Capabilities = generatedFactoryWorldRunnerCapabilitiesView(metadata.Capabilities)
 	}
@@ -378,7 +377,7 @@ func runnerIDPtr(value string) *WorkstationRunnerID {
 	if strings.TrimSpace(value) == "" {
 		return nil
 	}
-	converted := WorkstationRunnerID(interfaces.PermissivePublicFactoryRunnerID(workerrunner.NormalizeRunnerID(value)))
+	converted := WorkstationRunnerID(interfaces.PermissivePublicFactoryRunnerID(workerexecution.NormalizeRunnerID(value)))
 	return &converted
 }
 

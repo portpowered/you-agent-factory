@@ -1,4 +1,4 @@
-package workers
+package envdiagnostics
 
 import (
 	"fmt"
@@ -125,7 +125,8 @@ func ProjectCommandEnvForDiagnostics(env []string) CommandEnvDiagnosticProjectio
 	return projection
 }
 
-func commandEnvDiagnosticMetadata(projection CommandEnvDiagnosticProjection) map[string]string {
+// CommandEnvDiagnosticMetadata records count and key-set metadata for one projection.
+func CommandEnvDiagnosticMetadata(projection CommandEnvDiagnosticProjection) map[string]string {
 	if projection.Count == 0 && len(projection.Keys) == 0 {
 		return nil
 	}

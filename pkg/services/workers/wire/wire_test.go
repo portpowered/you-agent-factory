@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
+	"github.com/portpowered/infinite-you/pkg/services/workers/workstationpool"
 )
 
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
@@ -92,6 +93,37 @@ func TestRunnerSelectionAvailableThroughPublishedRootShim(t *testing.T) {
 	metadata, ok := workerrunner.BuiltInRunnerMetadata(selection.RunnerID)
 	if !ok || metadata.ID != workers.RunnerIDOpenCode {
 		t.Fatalf("metadata = %#v, %v", metadata, ok)
+	}
+}
+
+func TestWorkstationPoolAvailableThroughPublishedRootShim(t *testing.T) {
+	t.Parallel()
+
+	service, err := validNewServiceInputs().callNewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	ctx := context.Background()
+	started, err := service.StartWorkstationPool(ctx, workers.WorkstationPoolStartRequest{
+		Bindings: []workers.AssembledRuntimeBinding{
+			{RoleName: "review", RoleKind: workers.RuntimeBuildRoleKindWorkstation},
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartWorkstationPool() error = %v", err)
+	}
+	if started.Outcome != workers.WorkstationPoolLifecycleOutcomeStarted {
+		t.Fatalf("StartWorkstationPool() outcome = %q, want STARTED", started.Outcome)
+	}
+
+	boundary := workstationpool.NewWorkstationPoolBoundary(workstationpool.WorkstationPoolBoundaryConfig{
+		Service:    workstationpool.WorkstationExecutionServiceFromRoot(service),
+		RouteNames: []string{"review"},
+		Async:      true,
+	})
+	if err := boundary.Start(ctx); err != nil {
+		t.Fatalf("WorkstationPoolBoundary.Start() error = %v", err)
 	}
 }
 

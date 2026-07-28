@@ -4,7 +4,6 @@ import (
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
 	workerdiagnosticsmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics"
 )
 
@@ -103,13 +102,13 @@ var (
 	CloneWorkstationExecutionRequest          = workerexecution.CloneWorkstationExecutionRequest
 	CloneWorkFailureMetadata                  = workerexecution.CloneWorkFailureMetadata
 	CanonicalProviderSessionProvider          = workerexecution.CanonicalProviderSessionProvider
-	BuiltInRunnerMetadata                     = workerrunner.BuiltInRunnerMetadata
+	BuiltInRunnerMetadata                     = workerexecution.BuiltInRunnerMetadata
 	GeneratedSafeWorkDiagnostics              = workerdiagnosticsmapping.GeneratedSafeWorkDiagnostics
-	NewRunnerCapabilities                     = workerrunner.NewCapabilities
-	ResolveRunnerSelection                    = workerrunner.ResolveRunnerSelection
+	NewRunnerCapabilities                     = workerexecution.NewCapabilities
+	ResolveRunnerSelection                    = workerexecution.ResolveRunnerSelection
 	SafeAgentRunDiagnosticFromWorkDiagnostics = workerexecution.SafeAgentRunDiagnosticFromWorkDiagnostics
 	SafeWorkDiagnosticsFromGenerated          = workerdiagnosticsmapping.SafeWorkDiagnosticsFromGenerated
 	SafeWorkDiagnosticsFromWorkDiagnostics    = workerexecution.SafeWorkDiagnosticsFromWorkDiagnostics
-	V1RunnerBaselineCapabilities              = workerrunner.V1BaselineCapabilities
+	V1RunnerBaselineCapabilities              = workerexecution.V1BaselineCapabilities
 	WorkDiagnosticsFromSafeWorkDiagnostics    = workerexecution.WorkDiagnosticsFromSafeWorkDiagnostics
 )

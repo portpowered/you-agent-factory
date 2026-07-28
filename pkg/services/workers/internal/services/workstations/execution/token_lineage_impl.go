@@ -1,19 +1,22 @@
-package workers
+package workerexecution
 
-import "github.com/portpowered/infinite-you/pkg/services/work"
+import (
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+)
 
-func PreviousChainingTraceIDs(tokens []Token) []string {
-	colors := make([]Color, len(tokens))
+func PreviousChainingTraceIDs(tokens []workers.Token) []string {
+	colors := make([]workers.Color, len(tokens))
 	for i := range tokens {
 		colors[i] = tokens[i].Color
 	}
 	return PreviousChainingTraceIDsFromColors(colors)
 }
 
-func PreviousChainingTraceIDsFromColors(colors []Color) []string {
+func PreviousChainingTraceIDsFromColors(colors []workers.Color) []string {
 	traceIDs := make([]string, 0, len(colors))
 	for _, color := range colors {
-		if color.DataType == DataTypeResource {
+		if color.DataType == workers.DataTypeResource {
 			continue
 		}
 		traceIDs = append(traceIDs, firstNonEmpty(color.CurrentChainingTraceID, color.TraceID))
@@ -21,33 +24,33 @@ func PreviousChainingTraceIDsFromColors(colors []Color) []string {
 	return work.CanonicalChainingTraceIDs(traceIDs)
 }
 
-func CurrentChainingTraceID(tokens []Token, ignoredWorkTypeIDs ...string) string {
-	colors := make([]Color, len(tokens))
+func CurrentChainingTraceID(tokens []workers.Token, ignoredWorkTypeIDs ...string) string {
+	colors := make([]workers.Color, len(tokens))
 	for i := range tokens {
 		colors[i] = tokens[i].Color
 	}
 	return CurrentChainingTraceIDFromColors(colors, ignoredWorkTypeIDs...)
 }
 
-func CurrentChainingTraceIDFromColors(colors []Color, ignoredWorkTypeIDs ...string) string {
+func CurrentChainingTraceIDFromColors(colors []workers.Color, ignoredWorkTypeIDs ...string) string {
 	for _, color := range colors {
-		if color.DataType == DataTypeResource || contains(ignoredWorkTypeIDs, color.WorkTypeID) {
+		if color.DataType == workers.DataTypeResource || contains(ignoredWorkTypeIDs, color.WorkTypeID) {
 			continue
 		}
 		return firstNonEmpty(color.CurrentChainingTraceID, color.TraceID)
 	}
 	for _, color := range colors {
-		if color.DataType != DataTypeResource {
+		if color.DataType != workers.DataTypeResource {
 			return firstNonEmpty(color.CurrentChainingTraceID, color.TraceID)
 		}
 	}
 	return ""
 }
 
-func ChainingTraceDepthFromColors(colors []Color) int {
+func ChainingTraceDepthFromColors(colors []workers.Color) int {
 	depth := 0
 	for _, color := range colors {
-		if color.DataType == DataTypeResource {
+		if color.DataType == workers.DataTypeResource {
 			continue
 		}
 		candidate := color.ChainingTraceDepth

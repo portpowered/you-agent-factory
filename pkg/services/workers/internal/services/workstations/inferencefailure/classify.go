@@ -1,6 +1,7 @@
-package workers
+package inferencefailure
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -19,10 +20,7 @@ const (
 	InferenceFailureClassRuntimeFailure       InferenceFailureClass = "runtime_failure"
 )
 
-const inferenceFailureMessageLimit = 160
-
-// InferenceFailure is the detached, customer-safe outcome of Worker-owned
-// inference failure classification.
+// InferenceFailure is the detached, customer-safe outcome of inference failure classification.
 type InferenceFailure struct {
 	Class      InferenceFailureClass
 	Message    string
@@ -53,14 +51,53 @@ type InferenceFailureContext struct {
 	Operation  string
 }
 
-// AsInferenceFailure reports whether err contains a classified inference failure.
-func AsInferenceFailure(err error) (*InferenceFailure, bool) {
-	var failure *InferenceFailure
-	if errors.As(err, &failure) && failure != nil {
-		return failure, true
-	}
-	return nil, false
+// WorkFailureType classifies provider execution failures for classification input.
+type WorkFailureType string
+
+const WorkFailureTypeTimeout WorkFailureType = "timeout"
+
+// ProviderError is the normalized provider failure input for classification.
+type ProviderError struct {
+	Type    WorkFailureType
+	Message string
+	Cause   error
 }
+
+func (e *ProviderError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if strings.TrimSpace(e.Message) != "" {
+		return e.Message
+	}
+	return string(e.Type)
+}
+
+func (e *ProviderError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
+// WorkResultOutcome classifies execution results for work-result failure classification.
+type WorkResultOutcome string
+
+const OutcomeFailed WorkResultOutcome = "FAILED"
+
+// WorkFailureMetadata carries failure metadata from a failed work result.
+type WorkFailureMetadata struct {
+	Type WorkFailureType
+}
+
+// WorkResult is the minimal failed-result view used for classification.
+type WorkResult struct {
+	Outcome         WorkResultOutcome
+	Error           string
+	FailureMetadata *WorkFailureMetadata
+}
+
+const inferenceFailureMessageLimit = 160
 
 // ClassifyInferenceFailure owns the conversion of model-readiness and Worker
 // execution failures into one detached customer-safe result.
@@ -101,17 +138,40 @@ func ClassifyInferenceFailure(err error, ctx InferenceFailureContext) (*Inferenc
 	return classifyRawExecutionFailure(err, ctx)
 }
 
+// AsInferenceFailure reports whether err contains a classified inference failure.
+func AsInferenceFailure(err error) (*InferenceFailure, bool) {
+	var failure *InferenceFailure
+	if errors.As(err, &failure) && failure != nil {
+		return failure, true
+	}
+	return nil, false
+}
+
+// NormalizeProviderExecutionError normalizes timeout failures for classification.
+func NormalizeProviderExecutionError(err error) *ProviderError {
+	if err == nil {
+		return nil
+	}
+	var providerErr *ProviderError
+	if errors.As(err, &providerErr) {
+		return providerErr
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return &ProviderError{Type: WorkFailureTypeTimeout, Message: "execution timeout", Cause: err}
+	}
+	return nil
+}
+
 // ClassifyInferenceWorkResultFailure owns failed Work-result classification.
 func ClassifyInferenceWorkResultFailure(result WorkResult, ctx InferenceFailureContext) (*InferenceFailure, bool) {
 	if result.Outcome != OutcomeFailed {
 		return nil, false
 	}
 	if result.FailureMetadata != nil && result.FailureMetadata.Type != "" {
-		return classifyProviderFailure(NewProviderError(
-			result.FailureMetadata.Type,
-			boundedInferenceMessage(result.Error),
-			nil,
-		), ctx), true
+		return classifyProviderFailure(&ProviderError{
+			Type:    result.FailureMetadata.Type,
+			Message: boundedInferenceMessage(result.Error),
+		}, ctx), true
 	}
 	errText := strings.TrimSpace(result.Error)
 	if errText == "" {
@@ -199,13 +259,13 @@ func classifyProviderFailure(providerErr *ProviderError, ctx InferenceFailureCon
 		return &InferenceFailure{
 			Class:     InferenceFailureClassTimeout,
 			Message:   fmt.Sprintf("inference timed out for model %q operation %q: wait and retry the request", firstNonEmpty(ctx.ModelName, "model"), firstNonEmpty(ctx.Operation, "operation")),
-			ModelName: ctx.ModelName, WorkerName: ctx.WorkerName, Operation: ctx.Operation, Cause: providerErr,
+			ModelName: ctx.ModelName, WorkerName: ctx.WorkerName, Operation: ctx.Operation, Cause: providerErr.Cause,
 		}
 	}
 	if message == "" {
 		message = "inference execution failed"
 	}
-	return runtimeFailure(ctx, message, providerErr)
+	return runtimeFailure(ctx, message, providerErr.Cause)
 }
 
 func classifyRawExecutionFailure(err error, ctx InferenceFailureContext) (*InferenceFailure, bool) {
@@ -272,4 +332,13 @@ func isRawSubprocessFailureMessage(message string) bool {
 		}
 	}
 	return false
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

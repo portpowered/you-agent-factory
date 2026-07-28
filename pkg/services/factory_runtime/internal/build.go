@@ -16,7 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
+	"github.com/portpowered/infinite-you/pkg/services/workers/workstationpool"
 	"go.uber.org/zap"
 	"path/filepath"
 	"strings"
@@ -24,7 +24,7 @@ import (
 
 const defaultSessionID = "~default"
 
-type runtimeWorkstationService = workers.WorkstationExecutionService
+type runtimeWorkstationService = workstationpool.WorkstationExecutionService
 
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
 type RuntimeFactory struct {
@@ -439,13 +439,13 @@ func (f *RuntimeFactory) compileOrchestrationNet(
 }
 
 func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryConfig) string {
-	if runner := workerrunner.NormalizeRunnerID(override); runner != "" {
+	if runner := workers.NormalizeRunnerID(override); runner != "" {
 		return runner
 	}
 	if factoryCfg == nil {
 		return ""
 	}
-	return workerrunner.NormalizeRunnerID(factoryCfg.Runner)
+	return workers.NormalizeRunnerID(factoryCfg.Runner)
 }
 
 func effectiveDispatchRecorder(

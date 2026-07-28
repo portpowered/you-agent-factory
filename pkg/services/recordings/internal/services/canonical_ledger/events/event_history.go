@@ -13,8 +13,6 @@ import (
 	eventsnapshot "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events/snapshot"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
 )
 
 // TODO: we should move these constants to the interfaces package, actually we should move the events generally to the openapi.yaml to allow generation of the various types of events payloads.
@@ -134,7 +132,7 @@ func (h *FactoryEventHistory) SetFactoryRunnerOverride(runnerID string) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.factoryRunner = workerrunner.NormalizeRunnerID(runnerID)
+	h.factoryRunner = workers.NormalizeRunnerID(runnerID)
 }
 
 // SetInitialStructureFactory overrides the canonical Factory snapshot emitted
@@ -342,7 +340,7 @@ func (h *FactoryEventHistory) RecordRunRequest() {
 
 // RecordWorkInput records a submitted work token after submit-time identity
 // generation has completed.
-func (h *FactoryEventHistory) RecordWorkInput(tick int, req work.SubmitRequest, token workerexecution.Token, eventTime time.Time) {
+func (h *FactoryEventHistory) RecordWorkInput(tick int, req work.SubmitRequest, token workers.Token, eventTime time.Time) {
 	if h == nil || token.ID == "" {
 		return
 	}
@@ -440,7 +438,7 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 }
 
 // RecordWorkstationResponse records a completed dispatch and its outputs.
-func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workerexecution.WorkResult, completed interfaces.CompletedDispatch) {
+func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workers.WorkResult, completed interfaces.CompletedDispatch) {
 	if h == nil || result.DispatchID == "" {
 		return
 	}
@@ -459,13 +457,13 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workere
 			DispatchID:               stringPtr(result.DispatchID),
 			TraceIDs:                 stringSlicePtr(traceIDsFromTokens(completed.ConsumedTokens)),
 			WorkIDs:                  stringSlicePtr(workIDsFromTokens(completed.ConsumedTokens)),
-			CurrentChainingTraceID:   stringPtrIfNotEmpty(workerexecution.CurrentChainingTraceID(completed.ConsumedTokens, interfaces.SystemTimeWorkTypeID)),
-			PreviousChainingTraceIDs: stringSlicePtr(workerexecution.PreviousChainingTraceIDs(completed.ConsumedTokens)),
+			CurrentChainingTraceID:   stringPtrIfNotEmpty(workers.CurrentChainingTraceID(completed.ConsumedTokens, interfaces.SystemTimeWorkTypeID)),
+			PreviousChainingTraceIDs: stringSlicePtr(workers.PreviousChainingTraceIDs(completed.ConsumedTokens)),
 		},
-		workerexecution.DispatchResponseEventPayload{
+		workers.DispatchResponseEventPayload{
 			TransitionID:                result.TransitionID,
-			CurrentChainingTraceID:      stringPtrIfNotEmpty(workerexecution.CurrentChainingTraceID(completed.ConsumedTokens, interfaces.SystemTimeWorkTypeID)),
-			PreviousChainingTraceIDs:    stringSlicePtr(workerexecution.PreviousChainingTraceIDs(completed.ConsumedTokens)),
+			CurrentChainingTraceID:      stringPtrIfNotEmpty(workers.CurrentChainingTraceID(completed.ConsumedTokens, interfaces.SystemTimeWorkTypeID)),
+			PreviousChainingTraceIDs:    stringSlicePtr(workers.PreviousChainingTraceIDs(completed.ConsumedTokens)),
 			Outcome:                     result.Outcome,
 			Output:                      stringPtrIfNotEmpty(result.Output),
 			Error:                       stringPtrIfNotEmpty(result.Error),
@@ -475,14 +473,14 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workere
 			DurationMillis:              int64Ptr(completed.Duration.Milliseconds()),
 			OutputWork:                  eventWorksPtr(outputWorkItems(completed.OutputMutations, completed.ConsumedTokens)),
 			OutputResources:             h.dispatchOutputResourcesPtr(completed.OutputMutations),
-			ProviderFailure:             workerexecution.CloneWorkFailureMetadata(result.FailureMetadata),
+			ProviderFailure:             workers.CloneWorkFailureMetadata(result.FailureMetadata),
 		},
 	))
 }
 
 // RecordModelEvent appends worker-owned model execution facts to canonical
 // history while Factory owns the envelope, vocabulary, and ordering.
-func (h *FactoryEventHistory) RecordModelEvent(event workerexecution.ModelEvent) {
+func (h *FactoryEventHistory) RecordModelEvent(event workers.ModelEvent) {
 	if h == nil || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.DispatchID) == "" {
 		return
 	}
@@ -505,13 +503,13 @@ func (h *FactoryEventHistory) RecordModelEvent(event workerexecution.ModelEvent)
 	))
 }
 
-func modelFactoryEventPayload(event workerexecution.ModelEvent) (interfaces.FactoryEventType, any) {
+func modelFactoryEventPayload(event workers.ModelEvent) (interfaces.FactoryEventType, any) {
 	switch event.Kind {
-	case workerexecution.ModelEventKindRequest:
+	case workers.ModelEventKindRequest:
 		if event.Request != nil && event.Response == nil {
 			return interfaces.FactoryEventTypeModelRequest, *event.Request
 		}
-	case workerexecution.ModelEventKindResponse:
+	case workers.ModelEventKindResponse:
 		if event.Response != nil && event.Request == nil {
 			return interfaces.FactoryEventTypeModelResponse, *event.Response
 		}
@@ -521,7 +519,7 @@ func modelFactoryEventPayload(event workerexecution.ModelEvent) (interfaces.Fact
 
 // RecordScriptEvent appends worker-owned script facts to the canonical history
 // while Factory owns the envelope, vocabulary, and ordering.
-func (h *FactoryEventHistory) RecordScriptEvent(event workerexecution.ScriptEvent) {
+func (h *FactoryEventHistory) RecordScriptEvent(event workers.ScriptEvent) {
 	if h == nil || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.DispatchID) == "" {
 		return
 	}
@@ -544,13 +542,13 @@ func (h *FactoryEventHistory) RecordScriptEvent(event workerexecution.ScriptEven
 	))
 }
 
-func scriptFactoryEventPayload(event workerexecution.ScriptEvent) (interfaces.FactoryEventType, any) {
+func scriptFactoryEventPayload(event workers.ScriptEvent) (interfaces.FactoryEventType, any) {
 	switch event.Kind {
-	case workerexecution.ScriptEventKindRequest:
+	case workers.ScriptEventKindRequest:
 		if event.Request != nil && event.Response == nil {
 			return interfaces.FactoryEventTypeScriptRequest, *event.Request
 		}
-	case workerexecution.ScriptEventKindResponse:
+	case workers.ScriptEventKindResponse:
 		if event.Response != nil && event.Request == nil {
 			return interfaces.FactoryEventTypeScriptResponse, *event.Response
 		}
@@ -560,7 +558,7 @@ func scriptFactoryEventPayload(event workerexecution.ScriptEvent) (interfaces.Fa
 
 // RecordAgentRunEvent appends an agent-run boundary event to the same
 // canonical history used for dispatch and replay events.
-func (h *FactoryEventHistory) RecordAgentRunEvent(event workerexecution.AgentRunResponseEvent) {
+func (h *FactoryEventHistory) RecordAgentRunEvent(event workers.AgentRunResponseEvent) {
 	if h == nil || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.DispatchID) == "" {
 		return
 	}
@@ -713,13 +711,13 @@ func domainFactoryEvent(eventType interfaces.FactoryEventType, id string, contex
 	}
 }
 
-func (h *FactoryEventHistory) resolvedRunnerSelectionForDispatch(dispatch work.WorkDispatch) workerexecution.ResolvedRunnerSelection {
+func (h *FactoryEventHistory) resolvedRunnerSelectionForDispatch(dispatch work.WorkDispatch) workers.ResolvedRunnerSelection {
 	if h == nil {
-		return workerexecution.ResolvedRunnerSelection{}
+		return workers.ResolvedRunnerSelection{}
 	}
 	workstationRunner, workerModelProvider := h.runnerSelectionInputsForDispatch(dispatch)
 	factoryRunner := h.factoryRunnerID()
-	return workerrunner.ResolveRunnerSelection(workstationRunner, factoryRunner, workerModelProvider)
+	return workers.ResolveRunnerSelection(workstationRunner, factoryRunner, workerModelProvider)
 }
 
 func (h *FactoryEventHistory) runnerSelectionInputsForDispatch(dispatch work.WorkDispatch) (string, string) {
@@ -774,14 +772,14 @@ func (h *FactoryEventHistory) factoryRunnerID() string {
 	return cfg.Runner
 }
 
-func traceIDsFromTokens(tokens []workerexecution.Token) []string {
-	return workerexecution.PreviousChainingTraceIDs(tokens)
+func traceIDsFromTokens(tokens []workers.Token) []string {
+	return workers.PreviousChainingTraceIDs(tokens)
 }
 
-func workIDsFromTokens(tokens []workerexecution.Token) []string {
+func workIDsFromTokens(tokens []workers.Token) []string {
 	values := make([]string, 0, len(tokens))
 	for _, token := range tokens {
-		if token.Color.DataType == workerexecution.DataTypeResource {
+		if token.Color.DataType == workers.DataTypeResource {
 			continue
 		}
 		values = append(values, token.Color.WorkID)
@@ -833,7 +831,7 @@ func slicePtr[T any](values []T) *[]T {
 	return &out
 }
 
-func workItemFromToken(token workerexecution.Token) work.FactoryWorkItem {
+func workItemFromToken(token workers.Token) work.FactoryWorkItem {
 	currentChainingTraceID := token.Color.CurrentChainingTraceID
 	if currentChainingTraceID == "" {
 		currentChainingTraceID = token.Color.TraceID
@@ -855,8 +853,8 @@ func workItemFromToken(token workerexecution.Token) work.FactoryWorkItem {
 	}
 }
 
-func failureDetailsForResult(result workerexecution.WorkResult) (string, string) {
-	if result.Outcome != workerexecution.OutcomeFailed {
+func failureDetailsForResult(result workers.WorkResult) (string, string) {
+	if result.Outcome != workers.OutcomeFailed {
 		return "", ""
 	}
 
@@ -868,7 +866,7 @@ func failureDetailsForResult(result workerexecution.WorkResult) (string, string)
 	return reason, message
 }
 
-func failureReasonForResult(result workerexecution.WorkResult) string {
+func failureReasonForResult(result workers.WorkResult) string {
 	failureMetadata := result.FailureMetadata
 	if failureMetadata != nil {
 		if failureMetadata.Type != "" {
@@ -884,11 +882,11 @@ func failureReasonForResult(result workerexecution.WorkResult) string {
 	return failureReasonUnknown
 }
 
-func outputWorkItems(mutations []interfaces.TokenMutationRecord, consumedTokens []workerexecution.Token) []work.FactoryWorkItem {
+func outputWorkItems(mutations []interfaces.TokenMutationRecord, consumedTokens []workers.Token) []work.FactoryWorkItem {
 	items := make([]work.FactoryWorkItem, 0, len(mutations))
-	previousChainingTraceIDs := workerexecution.PreviousChainingTraceIDs(consumedTokens)
+	previousChainingTraceIDs := workers.PreviousChainingTraceIDs(consumedTokens)
 	for _, mutation := range mutations {
-		if mutation.Token == nil || mutation.Token.Color.DataType == workerexecution.DataTypeResource {
+		if mutation.Token == nil || mutation.Token.Color.DataType == workers.DataTypeResource {
 			continue
 		}
 		item := workItemFromToken(*mutation.Token)
@@ -909,36 +907,36 @@ func cloneStringMap(input map[string]string) map[string]string {
 	return clone
 }
 
-func failureDetail(reason, message string) *workerexecution.FailureDetail {
+func failureDetail(reason, message string) *workers.FailureDetail {
 	return failureDetailValue(reason, message)
 }
 
-func failureDetailValue(reason, message string) *workerexecution.FailureDetail {
+func failureDetailValue(reason, message string) *workers.FailureDetail {
 	reason = strings.TrimSpace(reason)
 	message = strings.TrimSpace(message)
 	if reason == "" || message == "" {
 		return nil
 	}
-	return &workerexecution.FailureDetail{
+	return &workers.FailureDetail{
 		Reason:  normalizedFailureReason(reason),
 		Message: message,
 	}
 }
 
-func normalizedFailureReason(reason string) workerexecution.WorkFailureType {
-	candidate := workerexecution.WorkFailureType(strings.TrimSpace(reason))
+func normalizedFailureReason(reason string) workers.WorkFailureType {
+	candidate := workers.WorkFailureType(strings.TrimSpace(reason))
 	switch candidate {
-	case workerexecution.WorkFailureTypeAuthFailure,
-		workerexecution.WorkFailureTypePermanentBadRequest,
-		workerexecution.WorkFailureTypeThrottled,
-		workerexecution.WorkFailureTypeInternalServerError,
-		workerexecution.WorkFailureTypeTimeout,
-		workerexecution.WorkFailureTypeMisconfigured,
-		workerexecution.WorkFailureTypeMissingExecutable,
-		workerexecution.WorkFailureTypeCommandLineTooLong:
+	case workers.WorkFailureTypeAuthFailure,
+		workers.WorkFailureTypePermanentBadRequest,
+		workers.WorkFailureTypeThrottled,
+		workers.WorkFailureTypeInternalServerError,
+		workers.WorkFailureTypeTimeout,
+		workers.WorkFailureTypeMisconfigured,
+		workers.WorkFailureTypeMissingExecutable,
+		workers.WorkFailureTypeCommandLineTooLong:
 		return candidate
 	default:
-		return workerexecution.WorkFailureTypeUnknown
+		return workers.WorkFailureTypeUnknown
 	}
 }
 

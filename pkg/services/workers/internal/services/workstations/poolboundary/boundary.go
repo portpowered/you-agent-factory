@@ -1,10 +1,12 @@
-package workers
+package poolboundary
 
 import (
 	"context"
 	"fmt"
 	"sort"
 	"sync"
+
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // DefaultRuntimePoolBindingCapacity preserves legacy Factory Runtime pool
@@ -14,18 +16,18 @@ const DefaultRuntimePoolBindingCapacity = 64
 // WorkstationExecutionService is the narrow Workers pool API Factory Runtime
 // dispatch planning consumes without importing Workers implementation packages.
 type WorkstationExecutionService interface {
-	StartWorkstationPool(context.Context, WorkstationPoolStartRequest) (WorkstationPoolStartResult, error)
-	StopWorkstationPool(context.Context) (WorkstationPoolStopResult, error)
-	DispatchWorkstation(context.Context, WorkstationDispatchRequest) (WorkstationDispatchResult, error)
-	CancelWorkstationDispatch(context.Context, WorkstationDispatchCancelRequest) (WorkstationDispatchCancelResult, error)
+	StartWorkstationPool(context.Context, workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error)
+	StopWorkstationPool(context.Context) (workers.WorkstationPoolStopResult, error)
+	DispatchWorkstation(context.Context, workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error)
+	CancelWorkstationDispatch(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
 }
 
 // WorkstationDispatchAcceptFunc receives one detached dispatch result from an
 // asynchronous or synchronous workstation publish.
 type WorkstationDispatchAcceptFunc func(
 	context.Context,
-	WorkstationDispatchRequest,
-	WorkstationDispatchResult,
+	workers.WorkstationDispatchRequest,
+	workers.WorkstationDispatchResult,
 	error,
 )
 
@@ -37,10 +39,10 @@ type WorkstationPoolBoundary interface {
 	Start(context.Context) error
 	Publish(
 		context.Context,
-		WorkstationDispatchRequest,
+		workers.WorkstationDispatchRequest,
 		WorkstationDispatchAcceptFunc,
 	) error
-	Cancel(context.Context, WorkstationDispatchCancelRequest) (WorkstationDispatchCancelResult, error)
+	Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
 	Stop(context.Context) error
 }
 
@@ -48,7 +50,7 @@ type WorkstationPoolBoundary interface {
 // snapshot for a runtime session.
 type WorkstationPoolBoundaryConfig struct {
 	Service       WorkstationExecutionService
-	Executors     map[string]WorkerExecutor
+	Executors     map[string]workers.WorkerExecutor
 	RouteNames    []string
 	Async         bool
 	Capacity      int
@@ -77,7 +79,7 @@ func NewWorkstationPoolBoundary(cfg WorkstationPoolBoundaryConfig) WorkstationPo
 
 type workstationPoolBoundary struct {
 	service  WorkstationExecutionService
-	bindings []AssembledRuntimeBinding
+	bindings []workers.AssembledRuntimeBinding
 	async    bool
 	started  bool
 	stopped  bool
@@ -85,18 +87,18 @@ type workstationPoolBoundary struct {
 }
 
 type workerExecutorRequestAdapter struct {
-	executors map[string]WorkerExecutor
+	executors map[string]workers.WorkerExecutor
 }
 
 func (a workerExecutorRequestAdapter) Execute(
 	ctx context.Context,
-	request WorkstationExecutionRequest,
-) (result WorkResult, err error) {
+	request workers.WorkstationExecutionRequest,
+) (result workers.WorkResult, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			result = WorkResult{
+			result = workers.WorkResult{
 				DispatchID: request.Dispatch.DispatchID, TransitionID: request.Dispatch.TransitionID,
-				Outcome: OutcomeFailed,
+				Outcome: workers.OutcomeFailed,
 				Error:   fmt.Sprintf("executor panic: %v", recovered),
 			}
 			err = nil
@@ -108,7 +110,7 @@ func (a workerExecutorRequestAdapter) Execute(
 	}
 	executor := a.executors[workerType]
 	if executor == nil {
-		return WorkResult{}, fmt.Errorf(
+		return workers.WorkResult{}, fmt.Errorf(
 			"no executor registered for worker type %q",
 			workerType,
 		)
@@ -118,17 +120,17 @@ func (a workerExecutorRequestAdapter) Execute(
 
 func assembleWorkstationPoolBindings(
 	routeNames []string,
-	executor WorkstationRequestExecutor,
+	executor workers.WorkstationRequestExecutor,
 	capacity int,
 	queueCapacity int,
-) []AssembledRuntimeBinding {
+) []workers.AssembledRuntimeBinding {
 	names := append([]string(nil), routeNames...)
 	sort.Strings(names)
-	bindings := make([]AssembledRuntimeBinding, 0, len(names))
+	bindings := make([]workers.AssembledRuntimeBinding, 0, len(names))
 	for _, name := range names {
-		bindings = append(bindings, AssembledRuntimeBinding{
+		bindings = append(bindings, workers.AssembledRuntimeBinding{
 			RoleName:      name,
-			RoleKind:      RuntimeBuildRoleKindWorkstation,
+			RoleKind:      workers.RuntimeBuildRoleKindWorkstation,
 			Executor:      executor,
 			Capacity:      capacity,
 			QueueCapacity: queueCapacity,
@@ -144,15 +146,15 @@ func (b *workstationPoolBoundary) Start(ctx context.Context) error {
 		return nil
 	}
 	if b.stopped {
-		return ErrWorkstationPoolStopped
+		return workers.ErrWorkstationPoolStopped
 	}
 	if b.service == nil {
-		return ErrWorkstationPoolUnavailable
+		return workers.ErrWorkstationPoolUnavailable
 	}
 	if _, err := b.service.StartWorkstationPool(
 		ctx,
-		WorkstationPoolStartRequest{
-			Bindings: append([]AssembledRuntimeBinding(nil), b.bindings...),
+		workers.WorkstationPoolStartRequest{
+			Bindings: append([]workers.AssembledRuntimeBinding(nil), b.bindings...),
 		},
 	); err != nil {
 		return err
@@ -163,7 +165,7 @@ func (b *workstationPoolBoundary) Start(ctx context.Context) error {
 
 func (b *workstationPoolBoundary) Publish(
 	ctx context.Context,
-	request WorkstationDispatchRequest,
+	request workers.WorkstationDispatchRequest,
 	accept WorkstationDispatchAcceptFunc,
 ) error {
 	if err := b.Start(ctx); err != nil {
@@ -183,10 +185,10 @@ func (b *workstationPoolBoundary) Publish(
 
 func (b *workstationPoolBoundary) Cancel(
 	ctx context.Context,
-	request WorkstationDispatchCancelRequest,
-) (WorkstationDispatchCancelResult, error) {
+	request workers.WorkstationDispatchCancelRequest,
+) (workers.WorkstationDispatchCancelResult, error) {
 	if b.service == nil {
-		return WorkstationDispatchCancelResult{}, ErrWorkstationPoolUnavailable
+		return workers.WorkstationDispatchCancelResult{}, workers.ErrWorkstationPoolUnavailable
 	}
 	return b.service.CancelWorkstationDispatch(ctx, request)
 }
