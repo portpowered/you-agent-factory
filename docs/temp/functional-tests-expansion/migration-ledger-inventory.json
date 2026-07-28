@@ -3243,7 +3243,7 @@
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress",
       "lane": "short",
-      "destination": "tests/functional/work/recovery/manual_move_test.go",
+      "destination": "wrong-layer: catch-all runtime_api manual work recovery smoke absorbed by tests/functional/work/recovery/manual_move_test.go customer-facing recovery cell. Replacement evidence owner: tests/functional/work/recovery/manual_move_test.go.",
       "catch_all": "runtime_api",
       "specialty_targets": "none",
       "deletion_only_batch": "runtime_api-delete-02-work-submission"
@@ -7717,14 +7717,94 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/recovery/manual_move_test.go",
+      "package": "you-agent-factory/tests/functional/work/recovery",
+      "scenario": "TestFailedCascadeCanBeRecoveredByPublicWorkMove",
+      "lane": "short",
+      "destination": "tests/functional/work/recovery/manual_move_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/recovery/manual_move_test.go",
+      "package": "you-agent-factory/tests/functional/work/recovery",
+      "scenario": "TestTerminalFailedWorkCannotBeRedispatchedIllegally",
+      "lane": "short",
+      "destination": "tests/functional/work/recovery/manual_move_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/recovery/manual_move_test.go",
+      "package": "you-agent-factory/tests/functional/work/recovery",
+      "scenario": "TestAPIMoveWorkResumesRecoverableFlow",
+      "lane": "short",
+      "destination": "tests/functional/work/recovery/manual_move_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/recovery/manual_move_test.go",
+      "package": "you-agent-factory/tests/functional/work/recovery",
+      "scenario": "TestAPIInvalidMoveReturnsConflictWithoutMutation",
+      "lane": "short",
+      "destination": "tests/functional/work/recovery/manual_move_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/recordings/recordings_read_test.go",
+      "package": "you-agent-factory/tests/functional/work/recordings",
+      "lane": "short",
+      "destination": "wrong-layer: pss-cut-work-rec recordings-backed Work read coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/work/recordings/recordings_read_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a",
+      "scenario": "TestRecordingsBackedWorkReadsUseRecordingsRootContract"
+    },
+    {
+      "source_path": "tests/functional/work/recordings/recordings_read_test.go",
+      "package": "you-agent-factory/tests/functional/work/recordings",
+      "lane": "short",
+      "destination": "wrong-layer: pss-cut-work-rec recordings-backed Work read coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/work/recordings/recordings_read_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a",
+      "scenario": "TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot"
+    },
+    {
+      "source_path": "tests/functional/work/recordings/recordings_read_test.go",
+      "package": "you-agent-factory/tests/functional/work/recordings",
+      "lane": "short",
+      "destination": "wrong-layer: pss-cut-work-rec recordings-backed Work read coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/work/recordings/recordings_read_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a",
+      "scenario": "TestRecordingsBackedWorkReadsMapRichWorldState"
+    },
+    {
+      "source_path": "tests/functional/work/recordings/recordings_read_test.go",
+      "package": "you-agent-factory/tests/functional/work/recordings",
+      "lane": "short",
+      "destination": "wrong-layer: pss-cut-work-rec recordings-backed Work read coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/work/recordings/recordings_read_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a",
+      "scenario": "TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures"
     }
   ],
-  "scanned_at_utc": "2026-07-28T06:07:45Z",
+  "scanned_at_utc": "2026-07-28T06:30:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 496,
+      "none": 504,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -7755,9 +7835,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 752,
+    "customer_top_level_Test_scenarios": 760,
     "lane_functionallong": 95,
-    "lane_short": 657,
+    "lane_short": 665,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,

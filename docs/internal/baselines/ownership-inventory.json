@@ -2600,6 +2600,62 @@
       "deletionCondition": "delete public package after IMP-DEF-catalog private subservice cutover proof"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "disposition": "move",
+      "destination": "factory_definitions",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "deletionCondition": "delete public package after IMP-DEF-authoring_layout private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/expand",
+      "disposition": "move",
+      "destination": "factory_definitions",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "deletionCondition": "delete public package after IMP-DEF-authoring_layout private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/flatten",
+      "disposition": "move",
+      "destination": "factory_definitions",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "deletionCondition": "delete public package after IMP-DEF-authoring_layout private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/internal/service",
+      "disposition": "move",
+      "destination": "factory_definitions",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "deletionCondition": "delete public package after IMP-DEF-authoring_layout private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/persist",
+      "disposition": "move",
+      "destination": "factory_definitions",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "deletionCondition": "delete public package after IMP-DEF-authoring_layout private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/prepare",
+      "disposition": "move",
+      "destination": "factory_definitions",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "deletionCondition": "delete public package after IMP-DEF-authoring_layout private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/wire",
+      "disposition": "move",
+      "destination": "factory_definitions",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "deletionCondition": "delete public package after IMP-DEF-authoring_layout private subservice cutover proof"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -2678,7 +2734,7 @@
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/snapshots_portability",
+      "successor": "pkg/services/factory_definitions/internal",
       "deletionCondition": "delete public package after IMP-DEF-snapshots_portability private subservice cutover proof"
     },
     {
@@ -2686,7 +2742,7 @@
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/snapshots_portability",
+      "successor": "pkg/services/factory_definitions/internal",
       "deletionCondition": "delete public package after IMP-DEF-snapshots_portability private subservice cutover proof"
     },
     {
@@ -2694,7 +2750,7 @@
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/snapshots_portability",
+      "successor": "pkg/services/factory_definitions/internal",
       "deletionCondition": "delete public package after IMP-DEF-snapshots_portability private subservice cutover proof"
     },
     {
@@ -2702,7 +2758,7 @@
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/snapshots_portability",
+      "successor": "pkg/services/factory_definitions/internal",
       "deletionCondition": "delete public package after IMP-DEF-snapshots_portability private subservice cutover proof"
     },
     {
@@ -2710,7 +2766,7 @@
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/snapshots_portability",
+      "successor": "pkg/services/factory_definitions/internal",
       "deletionCondition": "delete public package after IMP-DEF-snapshots_portability private subservice cutover proof"
     },
     {
@@ -2718,7 +2774,7 @@
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/snapshots_portability",
+      "successor": "pkg/services/factory_definitions/internal",
       "deletionCondition": "delete public package after IMP-DEF-snapshots_portability private subservice cutover proof"
     },
     {
@@ -4345,27 +4401,35 @@
     },
     {
       "packagePath": "pkg/services/recordings/artifacts",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "recordings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/artifacts_export",
+      "deletionCondition": "delete public package after IMP-REC-artifacts_export private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/recordings/events",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "recordings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/canonical_ledger",
+      "deletionCondition": "delete public package after IMP-REC-canonical_ledger private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/recordings/events/kinds",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "recordings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/canonical_ledger",
+      "deletionCondition": "delete public package after IMP-REC-canonical_ledger private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/recordings/events/snapshot",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "recordings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/canonical_ledger",
+      "deletionCondition": "delete public package after IMP-REC-canonical_ledger private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/recordings/internal/canonical",
@@ -4465,45 +4529,59 @@
     },
     {
       "packagePath": "pkg/services/recordings/projections",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "recordings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/projection_query",
+      "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/recordings/projections/dashboard",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "recordings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/projection_query",
+      "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/recordings/projections/projectiontests",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "recordings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/projection_query",
+      "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/recordings/replay",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "recordings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/replay",
+      "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/recordings/replay/clocktests",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "recordings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/replay",
+      "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/recordings/replay/configtests",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "recordings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/replay",
+      "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/recordings/replay/fixturetests",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "recordings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/replay",
+      "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/recordings/service",

@@ -57,6 +57,14 @@ func factoryDefinitionsMapping(packagePath string) (PackageRow, bool) {
 	if isFactoryDefinitionsCanonicalRetain(rest) {
 		return retainRow(packagePath, factoryDefinitionsOwner, DestinationKindOwner), true
 	}
+	if factoryDefinitionsTransitionalMoveNestedSubservice(rest) {
+		return moveRow(
+			packagePath,
+			factoryDefinitionsOwner,
+			factoryDefinitionsPackagePrefix+"/internal",
+			factoryDefinitionsDeletionCondition("snapshots_portability", rest),
+		), true
+	}
 	subservice, ok := factoryDefinitionsMoveSubservice(rest)
 	if !ok {
 		if nestedSubservice, nestedOK := factoryDefinitionsNestedMoveSubservice(rest); nestedOK {
@@ -103,6 +111,11 @@ func factoryDefinitionsMoveSubservice(rest string) (subservice string, ok bool) 
 	return "", false
 }
 
+func factoryDefinitionsTransitionalMoveNestedSubservice(rest string) bool {
+	return rest == "internal/services/snapshots_portability" ||
+		strings.HasPrefix(rest, "internal/services/snapshots_portability/")
+}
+
 func factoryDefinitionsNestedMoveSubservice(rest string) (subservice string, ok bool) {
 	if !strings.HasPrefix(rest, "internal/services/") {
 		return "", false
@@ -113,7 +126,7 @@ func factoryDefinitionsNestedMoveSubservice(rest string) (subservice string, ok 
 		return "", false
 	}
 	switch subservice {
-	case "authoring_layout", "compilation", "snapshots_portability", "distribution":
+	case "authoring_layout", "compilation", "distribution":
 		return subservice, true
 	default:
 		return "", false
