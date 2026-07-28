@@ -551,6 +551,45 @@
   contracts. Catalog metadata infers domain `transport` and subsection
   `cli/commands` from the path; every top-level `Test*` needs a
   customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  CLI run command wiring functional coverage belongs in
+  `tests/functional/transport/cli/commands/run_wiring_test.go`: prove `you run`
+  factory-by-path, named, and packaged-goal invocations write primary results to
+  stdout; reject invalid Factory load before success stdout; accept stdin-only
+  prompt input; reject conflicting or ambiguous positional and stdin input with
+  stable `INVOCATION_INPUT_SOURCE_CONFLICT` diagnostics before runtime startup;
+  keep quiet clean stdout pipeable without operator lifecycle chatter; and write
+  no success primary-result payload when invocation primary-result resolution
+  fails. Drive proofs through built `you` CLI subprocesses with mock workers at
+  the public CLI boundary. Catalog metadata infers domain `transport` and
+  subsection `cli/commands` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  CLI submit command wiring functional coverage belongs in
+  `tests/functional/transport/cli/commands/submit_wiring_test.go`: prove `you
+  submit batch` accepts inline and filesystem-path canonical
+  `FACTORY_REQUEST_BATCH` JSON against a running Factory Session server; reject
+  unreachable servers and preserve public backend error fields without leaking
+  unsafe request payloads. Catalog metadata infers domain `transport` and
+  subsection `cli/commands` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  CLI work command wiring functional coverage belongs in
+  `tests/functional/transport/cli/commands/work_wiring_test.go`: prove `you work
+  list`, `you work show`, `you work move`, and `you work visualize` reflect
+  submitted work, manual recovery moves, missing-work not-found failures, and
+  deterministic dependency graphs through the public CLI against a running
+  Factory Session server. Catalog metadata infers domain `transport` and
+  subsection `cli/commands` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  CLI human text-stream output functional coverage belongs in
+  `tests/functional/transport/cli/output/text_stream_test.go`: prove human
+  response-stream runs surface incremental lifecycle output before terminal
+  primary results; suppress structured envelope noise and operator lifecycle
+  chatter on quiet clean stdout; report operator continuous-run startup output
+  without quiet; and end interrupted runs with documented cancellation outcomes
+  without claiming successful primary results. Drive proofs through
+  `support.BuildProcess` at the public CLI boundary. Catalog metadata infers
+  domain `transport` and subsection `cli/output` from the path; every top-level
+  `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
   Prove default
   `functional-test-viz` wiring (boundary first, single coverage with profile
   + JSON under `.artifacts/functional-test-viz/`, Markdown generator) with

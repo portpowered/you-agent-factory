@@ -1234,11 +1234,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_factory_prompt_run_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go",
       "target": "smoke"
     },

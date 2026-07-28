@@ -1027,30 +1027,6 @@
       "name": "TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree"
     },
     {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIAmbiguousPromptAndStdinFailsBeforeRuntimeStartup"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLICleanInvocationStdoutRemainsPipeableAcrossRuns"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIFailureWritesNoSuccessPayloadToStdout"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIRejectsConflictingPositionalAndStdinInput"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIStdinOnlyCleanInvocationStdoutRemainsPipeable"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIWritesPrimaryResultFromStdin"
-    },
-    {
       "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
       "name": "TestNamedGoalInvocationParity_EmptyInputRejectedWithStableCode"
     },
