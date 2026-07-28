@@ -138,6 +138,31 @@ Use this map when changing the public REST contract.
   `pkg/transports/http` server composes injected service-owned adapters; HTTP-DEF
   proves fake-root parity at the adapter edge without importing Definitions
   internals.
+  CUT-DEF-RUN seals Factory Definitions production imports of Factory Runtime to
+  the service root only (`pkg/services/factory_runtime`) for orchestration
+  semantic-validation edges; the lease-wide guard is
+  `pkg/services/factory_definitions/runtime_import_boundary_test.go` and fails
+  closed on nested `factory_runtime/**`, legacy `pkg/factory/**`, and Petri
+  orchestrator implementation paths. Orchestration-specific semantic validation stays on the
+  injected `OrchestratorDefinitionValidator` port; the nested validation
+  subservice additionally forbids direct Runtime imports in
+  `internal/services/validation/boundary_test.go`. Prove the sealed semantic
+  validation edge with
+  `pkg/services/factory_definitions/orchestration_semantic_validation_boundary_test.go`:
+  Definitions-owned strategy checks without a Runtime port, orchestration-invalid
+  targets through the injected port, and import guards on the validation and
+  orchestrator packages. Keep Petri engine types off the Definitions validation
+  peer surface with
+  `pkg/services/factory_definitions/validation_peer_surface_boundary_test.go`:
+  import guards on the public `validation` package, AST checks on
+  `validation_contract.go` and `contracts/validation.go`, and behavioral proofs
+  that validation targets use Definitions-owned code/severity/subject vocabulary.
+  Prove typed invalid-topology, required-tool, and orchestrator/strategy cases on
+  the sealed public validation path with
+  `pkg/services/factory_definitions/sealed_validation_path_boundary_test.go`:
+  `validation.Service.ValidateTopology` and `Validate` behavioral proofs with
+  code/severity/subject or rule/path assertions, plus import guards on the
+  validation package for the Runtime semantic-validation edge.
 - Factory Visualization HTTP decoding, root contract mapping, typed error
   translation, and cancel/timeout handling live in
   `pkg/services/factory_visualization/transports/http`. HTTP-VIS proves

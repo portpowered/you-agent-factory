@@ -13,6 +13,9 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
+	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
+	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
+	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factorysnapshotcapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture"
@@ -71,6 +74,18 @@ func NewService(
 		factorysnapshot.ObjectFromFactoryConfig,
 	)
 
+	compilation, err := compilationwire.NewService(compilationservice.Dependencies{
+		LoadCanonical:      loader.LoadSourceFromCanonicalJSON,
+		LoadFromFactoryDir: loader.LoadSourceFromFactoryDir,
+		EncodeFactory:      compilationcanonical.EncodeFactoryPort(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("construct Factory Definitions compilation: %w", err)
+	}
+	if compilation == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: compilation subservice rejected its dependencies")
+	}
+
 	definitions := factorydefinitionsservice.New(
 		sessionHost,
 		clock,
@@ -116,7 +131,7 @@ func NewService(
 	if attached == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: effective catalog attachment rejected its dependencies")
 	}
-	return attached, nil
+	return attachCompilation(attached, compilation), nil
 }
 
 func validateDependencies(
@@ -215,3 +230,28 @@ func StaticClock(instant time.Time) factorydefinitions.Clock {
 type staticClock struct{ instant time.Time }
 
 func (c staticClock) Now() time.Time { return c.instant }
+
+type compilationAttachedService struct {
+	factorydefinitions.Service
+	compilation compilationservice.Service
+}
+
+func attachCompilation(
+	service factorydefinitions.Service,
+	compilation compilationservice.Service,
+) factorydefinitions.Service {
+	if service == nil || compilation == nil {
+		return service
+	}
+	return compilationAttachedService{
+		Service:     service,
+		compilation: compilation,
+	}
+}
+
+func (s compilationAttachedService) CompileEffectiveFactorySource(
+	ctx context.Context,
+	request factorydefinitions.CompileEffectiveFactorySourceRequest,
+) (factorydefinitions.CompileEffectiveFactorySourceResult, error) {
+	return s.compilation.CompileEffectiveFactorySource(ctx, request)
+}
