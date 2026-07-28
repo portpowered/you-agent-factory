@@ -169,7 +169,6 @@
     "pkg/services/factory_runtime/build",
     "pkg/services/factory_runtime/context",
     "pkg/services/factory_runtime/definitionmapping",
-    "pkg/services/factory_runtime/engine",
     "pkg/services/factory_runtime/internal",
     "pkg/services/factory_runtime/internal/factorystatus",
     "pkg/services/factory_runtime/internal/host",
@@ -194,22 +193,23 @@
     "pkg/services/factory_runtime/internal/services/instance_host/internal/service",
     "pkg/services/factory_runtime/internal/services/instance_host/wire",
     "pkg/services/factory_runtime/internal/services/orchestration",
+    "pkg/services/factory_runtime/internal/services/orchestration/engine",
     "pkg/services/factory_runtime/internal/services/orchestration/internal/service",
+    "pkg/services/factory_runtime/internal/services/orchestration/runtime",
+    "pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
+    "pkg/services/factory_runtime/internal/services/orchestration/scheduler",
+    "pkg/services/factory_runtime/internal/services/orchestration/state",
+    "pkg/services/factory_runtime/internal/services/orchestration/state/validation",
+    "pkg/services/factory_runtime/internal/services/orchestration/subsystems",
     "pkg/services/factory_runtime/internal/services/orchestration/wire",
     "pkg/services/factory_runtime/javascript",
     "pkg/services/factory_runtime/metrics",
     "pkg/services/factory_runtime/orchestrationowner",
     "pkg/services/factory_runtime/orchestratorcontract",
     "pkg/services/factory_runtime/replayhooks",
-    "pkg/services/factory_runtime/runtime",
-    "pkg/services/factory_runtime/runtime/buffers",
     "pkg/services/factory_runtime/runtimecontract",
-    "pkg/services/factory_runtime/scheduler",
     "pkg/services/factory_runtime/service",
     "pkg/services/factory_runtime/service/host",
-    "pkg/services/factory_runtime/state",
-    "pkg/services/factory_runtime/state/validation",
-    "pkg/services/factory_runtime/subsystems",
     "pkg/services/factory_runtime/testkit",
     "pkg/services/factory_runtime/throttle",
     "pkg/services/factory_runtime/token",
@@ -1200,11 +1200,6 @@
       "destination": "factory_runtime/internal/services/orchestration"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/engine",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/internal",
       "disposition": "retain",
       "destination": "factory_runtime"
@@ -1325,7 +1320,42 @@
       "destination": "factory_runtime/internal/services/orchestration"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/engine",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/scheduler",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/state",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/state/validation",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/subsystems",
       "disposition": "retain",
       "destination": "factory_runtime/internal/services/orchestration"
     },
@@ -1360,22 +1390,7 @@
       "destination": "factory_runtime/internal/services/orchestration"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/runtime",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/runtime/buffers",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/runtimecontract",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/scheduler",
       "disposition": "move",
       "destination": "factory_runtime/internal/services/orchestration"
     },
@@ -1388,21 +1403,6 @@
       "packagePath": "pkg/services/factory_runtime/service/host",
       "disposition": "move",
       "destination": "factory_runtime/internal"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/state",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/state/validation",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/subsystems",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
     },
     {
       "packagePath": "pkg/services/factory_runtime/testkit",

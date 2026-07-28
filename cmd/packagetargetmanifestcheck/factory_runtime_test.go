@@ -103,26 +103,26 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/engine",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/engine",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/engine",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/engine",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/runtime",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/runtime",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/runtime",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/runtime",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/runtime/buffers",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/runtime/buffers",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
@@ -135,26 +135,26 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/scheduler",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/scheduler",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/scheduler",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/scheduler",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/state",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/state",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/state",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/state",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/subsystems",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/subsystems",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/subsystems",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/subsystems",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
@@ -215,10 +215,10 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/state/validation",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/state/validation",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/state/validation",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/state/validation",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},

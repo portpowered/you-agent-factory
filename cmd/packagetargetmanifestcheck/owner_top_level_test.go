@@ -89,7 +89,7 @@ func TestOwnerTopLevelInventoryCoversPacketGaps(t *testing.T) {
 
 	mustUnexpected := map[string][]string{
 		"factory_runtime": {
-			"build", "engine", "runtime", "scheduler", "state", "subsystems", "token",
+			"build", "token",
 		},
 		"workers": {
 			"construction", "diagnostics", "execution",

@@ -432,7 +432,7 @@
   context is cancelled. Response-stream stdout write failures cancel the
   invocation through `pkg/transports/cli/run/factory_invocation_input.go`, and
   worker-pool shutdown cancels in-flight executor contexts through
-  `pkg/services/factory_runtime/runtime/worker_pool.go`. Catalog metadata infers domain
+  `pkg/services/factory_runtime/internal/services/orchestration/runtime/worker_pool.go`. Catalog metadata infers domain
   `transport` and subsection `cli/output` from the path. Every top-level `Test*`
   needs a customer-readable Go doc so `functionaltestmetadata` stays
   viz-compatible.

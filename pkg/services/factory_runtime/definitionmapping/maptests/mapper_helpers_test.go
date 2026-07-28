@@ -6,7 +6,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/definitionmapping"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 )
 
 type testConfigMapper struct{}

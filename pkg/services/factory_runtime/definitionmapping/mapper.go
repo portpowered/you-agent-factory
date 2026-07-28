@@ -11,8 +11,8 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state/validation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state/validation"
 )
 
 // Mapper converts an authored Factory definition into the internal Petri

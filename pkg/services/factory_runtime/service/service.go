@@ -11,7 +11,7 @@ import (
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	factoryhostinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/build"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/scheduler"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"

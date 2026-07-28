@@ -2498,6 +2498,31 @@
       "target": "pkg/services/factory_runtime/internal/services/orchestration/service.go:Binding,pkg/services/factory_runtime/internal/services/orchestration/service.go:Service"
     },
     {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/engine",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/scheduler",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/state",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/subsystems",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
+    },
+    {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_sessions",
       "target": "pkg/services/factory_sessions/activation_contract.go:DefinitionActivationGatewayProvider,pkg/services/factory_sessions/execution_contract.go:ExecutionService,pkg/services/factory_sessions/models_cli_collaboration.go:ModelsCLIPresentationCollaborator,pkg/services/factory_sessions/service_contracts.go:Service"
@@ -2839,11 +2864,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/engine",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_runtime/exhaustiontests",
       "target": "pkg/services/factory_runtime"
     },
@@ -2874,32 +2894,12 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/runtime",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_runtime/runtimecontract",
       "target": "pkg/services/factory_runtime"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/scheduler",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_runtime/service",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/state",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/subsystems",
       "target": "pkg/services/factory_runtime"
     },
     {

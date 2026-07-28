@@ -59,15 +59,9 @@ func TestMapPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/engine",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_runtime/engine",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_runtime",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_runtime/internal/services/orchestration",
-				DeletionCondition: "delete public package after IMP-RUN-orchestration private subservice cutover proof",
-			},
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/engine",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
 		},
 		{
 			path: "pkg/services/factory_runtime/checkpointstore",
@@ -103,26 +97,14 @@ func TestMapPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/runtime/buffers",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_runtime/runtime/buffers",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_runtime",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_runtime/internal/services/orchestration",
-				DeletionCondition: "delete public package after IMP-RUN-orchestration private subservice cutover proof",
-			},
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
 		},
 		{
-			path: "pkg/services/factory_runtime/state/validation",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_runtime/state/validation",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_runtime",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_runtime/internal/services/orchestration",
-				DeletionCondition: "delete public package after IMP-RUN-orchestration private subservice cutover proof",
-			},
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/state/validation",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
 		},
 		{
 			path: "pkg/services/factory_runtime/throttle",

@@ -9,7 +9,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state/validation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state/validation"
 )
 
 // TestConfigMapper_BuilderEquivalence verifies that the config mapper produces

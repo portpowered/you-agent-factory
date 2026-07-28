@@ -607,7 +607,7 @@
       "minimum": 91.88
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/engine",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/engine",
       "minimum": 89.63
     },
     {
@@ -765,11 +765,11 @@
       "minimum": 8.33
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime",
-      "minimum": 82.46
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime",
+      "minimum": 83.72
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime/buffers",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
       "minimum": 55.00
     },
     {
@@ -777,7 +777,7 @@
       "minimum": 74.40
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/scheduler",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler",
       "minimum": 87.30
     },
     {
@@ -801,15 +801,15 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/state",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state",
       "minimum": 84.43
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/state/validation",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state/validation",
       "minimum": 95.60
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/subsystems",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems",
       "minimum": 83.56
     },
     {

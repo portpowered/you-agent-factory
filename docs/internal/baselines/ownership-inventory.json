@@ -1213,7 +1213,7 @@
       "fromOwner": "factory_runtime",
       "toOwner": "work",
       "class": "command",
-      "evidence": "pkg/services/factory_runtime/engine -\u003e pkg/services/work"
+      "evidence": "pkg/services/factory_runtime -\u003e pkg/services/work"
     },
     {
       "fromOwner": "factory_runtime",
@@ -3238,14 +3238,6 @@
       "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/engine",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/exhaustiontests",
       "disposition": "move",
       "destination": "factory_runtime",
@@ -3420,7 +3412,73 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/engine",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/scheduler",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/state",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/state/validation",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/subsystems",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/subsystems/circuitbreakertests",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/subsystems/dispatchertests",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/subsystems/goalroutingtests",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/subsystems/terminationtests",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"
@@ -3472,31 +3530,7 @@
       "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/runtime",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/runtime/buffers",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/runtimecontract",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/scheduler",
       "disposition": "move",
       "destination": "factory_runtime",
       "destinationKind": "owner",
@@ -3518,62 +3552,6 @@
       "destinationKind": "owner",
       "successor": "pkg/services/factory_runtime/internal",
       "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/state",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/state/validation",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/subsystems",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/subsystems/circuitbreakertests",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/subsystems/dispatchertests",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/subsystems/goalroutingtests",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/subsystems/terminationtests",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/testkit",
