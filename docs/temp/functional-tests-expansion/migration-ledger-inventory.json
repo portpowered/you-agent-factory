@@ -7827,14 +7827,44 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestAPIGetAndSaveCurrentFactoryWithinOneSession",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestAPISaveCurrentFactoryValidatesBeforePersistence",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestAPICurrentFactoriesRemainSessionScoped",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T06:44:16Z",
+  "scanned_at_utc": "2026-07-28T07:03:39Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 507,
+      "none": 510,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -7845,7 +7875,7 @@
       "automations": 7,
       "bootstrap_portability": 21,
       "cli": 59,
-      "factory": 27,
+      "factory": 30,
       "guards_batch": 23,
       "models": 5,
       "observability": 9,
@@ -7865,9 +7895,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 763,
+    "customer_top_level_Test_scenarios": 766,
     "lane_functionallong": 95,
-    "lane_short": 668,
+    "lane_short": 671,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -7880,6 +7910,7 @@
       "you-agent-factory/tests/functional/cli/named_invocation": 6,
       "you-agent-factory/tests/functional/cli/root_discovery": 9,
       "you-agent-factory/tests/functional/cli/session_resume": 6,
+      "you-agent-factory/tests/functional/factory/current": 3,
       "you-agent-factory/tests/functional/factory/definitions": 6,
       "you-agent-factory/tests/functional/factory/packaged/catalog": 7,
       "you-agent-factory/tests/functional/factory/packaged/deep_research": 3,
