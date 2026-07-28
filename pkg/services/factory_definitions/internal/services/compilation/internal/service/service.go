@@ -8,25 +8,24 @@ import (
 	"strings"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 )
 
 // Service is the private nested compilation implementation behind the CTR-DEF
 // root compile slice.
 type Service struct {
-	loadCanonical      factorycontracts.CanonicalFactoryJSONLoader
-	loadFromFactoryDir factorycontracts.LoadedFactoryLoader
-	encodeFactory      factorycontracts.FactoryConfigJSONEncoder
+	loadCanonical      factoryroot.CanonicalFactoryJSONLoader
+	loadFromFactoryDir factoryroot.LoadedFactoryLoader
+	encodeFactory      factoryroot.FactoryConfigJSONEncoder
 }
 
 var _ compilationservice.Service = (*Service)(nil)
 
 // New constructs the compilation implementation from exact injected ports.
 func New(
-	loadCanonical factorycontracts.CanonicalFactoryJSONLoader,
-	loadFromFactoryDir factorycontracts.LoadedFactoryLoader,
-	encodeFactory factorycontracts.FactoryConfigJSONEncoder,
+	loadCanonical factoryroot.CanonicalFactoryJSONLoader,
+	loadFromFactoryDir factoryroot.LoadedFactoryLoader,
+	encodeFactory factoryroot.FactoryConfigJSONEncoder,
 ) *Service {
 	if loadCanonical == nil || loadFromFactoryDir == nil || encodeFactory == nil {
 		return nil
@@ -62,7 +61,7 @@ func (s *Service) CompileEffectiveFactorySource(
 	}
 
 	var (
-		loaded factorycontracts.MutableLoadedFactorySource
+		loaded factoryroot.MutableLoadedFactorySource
 		err    error
 	)
 	switch {

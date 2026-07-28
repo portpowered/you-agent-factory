@@ -13,9 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
-	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	"go.uber.org/zap"
 )
 
@@ -25,7 +22,7 @@ import (
 // opening consumer.
 type ExternalEffects struct {
 	Clock                     factoryruntime.Clock
-	ProviderOverride          workerprovider.Provider
+	ProviderOverride          workers.Provider
 	ModelPullMetricsRecorder  models.PullMetricsRecorder
 	InvocationMetricsRecorder roles.InvocationMetricsRecorder
 	ProviderCommandRunner     platformprocess.CommandRunner
@@ -58,7 +55,7 @@ type AutomationFactory = func(
 type FactorySessionExecutionFactory = func(
 	string,
 	factorysessions.PersistencePolicy,
-	workerprovider.Provider,
+	workers.Provider,
 	factoryruntime.Clock,
 	map[string]struct{},
 	factoryruntime.JavaScriptWorkerSettings,
@@ -66,9 +63,9 @@ type FactorySessionExecutionFactory = func(
 ) (factorysessions.ExecutionService, error)
 
 type ConductorInvocationWithProgressFactory = func(
-	*providerregistry.Registry,
+	workers.ProviderRegistry,
 	workers.CommandRunner,
-	agypty.PTYAllocator,
+	workers.PTYAllocator,
 	workers.ProgressPublisher,
 ) (workers.InvocationExecutor, error)
 
@@ -86,12 +83,12 @@ type WorkersRuntimeFactory = func(
 	models.RuntimeScopeRef,
 	workers.CommandRunner,
 	workers.CommandRunner,
-	agypty.PTYAllocator,
+	workers.PTYAllocator,
 	*zap.Logger,
 	bool,
 	string,
 	*bool,
-	workerprovider.Provider,
+	workers.Provider,
 	func() time.Time,
 	work.ContentMaterializer,
 ) (workers.RuntimeService, error)
@@ -110,7 +107,7 @@ type DurableExecutionFactory func(
 	factorysessions.SessionRuntimeOpeningRequest,
 	RuntimeRoot,
 	factoryruntime.Clock,
-	workerprovider.Provider,
+	workers.Provider,
 	*workers.MockWorkersConfig,
 	FactorySessionExecutionFactory,
 	factorysessions.ProviderIdentityResolver,
@@ -123,8 +120,8 @@ type WorkerExecutionFactory func(
 	*zap.Logger,
 	workers.CommandRunner,
 	workers.CommandRunner,
-	agypty.PTYAllocator,
-	workerprovider.Provider,
+	workers.PTYAllocator,
+	workers.Provider,
 	roles.CurrentRuntimeResolver,
 	models.Service,
 	models.RuntimeScopeRef,

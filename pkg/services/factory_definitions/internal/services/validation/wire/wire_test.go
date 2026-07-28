@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
@@ -13,24 +12,24 @@ import (
 )
 
 type stubLoadedSource struct {
-	cfg *factorycontracts.FactoryConfig
+	cfg *factoryroot.FactoryConfig
 }
 
-func (s stubLoadedSource) FactoryConfig() *factorycontracts.FactoryConfig { return s.cfg }
+func (s stubLoadedSource) FactoryConfig() *factoryroot.FactoryConfig { return s.cfg }
 func (s stubLoadedSource) FactoryDir() string                             { return "" }
 func (s stubLoadedSource) RuntimeBaseDir() string                         { return "" }
 func (s stubLoadedSource) SetRuntimeBaseDir(string)                       {}
-func (s stubLoadedSource) PortableBundledFileReplacements() []factorycontracts.PortableBundledFileReplacement {
+func (s stubLoadedSource) PortableBundledFileReplacements() []factoryroot.PortableBundledFileReplacement {
 	return nil
 }
 func (s stubLoadedSource) MutateWorkers(func(*workerconfig.Config) error) error { return nil }
-func (s stubLoadedSource) Workstation(string) (*factorycontracts.FactoryWorkstationConfig, bool) {
+func (s stubLoadedSource) Workstation(string) (*factoryroot.FactoryWorkstationConfig, bool) {
 	return nil, false
 }
 func (s stubLoadedSource) Worker(string) (*workerconfig.Config, bool) { return nil, false }
 
-func stubLoadCanonical(payload []byte, _ factorycontracts.WorkstationLoader) (factorycontracts.MutableLoadedFactorySource, error) {
-	var cfg factorycontracts.FactoryConfig
+func stubLoadCanonical(payload []byte, _ factoryroot.WorkstationLoader) (factoryroot.MutableLoadedFactorySource, error) {
+	var cfg factoryroot.FactoryConfig
 	if err := json.Unmarshal(payload, &cfg); err != nil {
 		return nil, factoryroot.ErrInvalidNamedFactory
 	}

@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // EditableFactory carries one detached Factory definition and the optimistic-
@@ -21,7 +20,7 @@ func (s *Service) SaveReplaceCurrentSnapshotForSession(
 	ctx context.Context,
 	sessionID string,
 	request EditableFactory,
-) (*interfaces.FactorySnapshot, error) {
+) (*factorydefinitions.FactorySnapshot, error) {
 	if s == nil || s.host == nil {
 		return nil, fmt.Errorf("factory definition service is required")
 	}
@@ -67,9 +66,9 @@ func (s *Service) prepareEditableFactoryDefinitionSave(
 	ctx context.Context,
 	sessionRootDir string,
 	currentName string,
-	request *interfaces.FactorySnapshot,
-) (string, *interfaces.FactorySnapshot, error) {
-	if currentName != interfaces.DefaultCurrentFactoryName {
+	request *factorydefinitions.FactorySnapshot,
+) (string, *factorydefinitions.FactorySnapshot, error) {
+	if currentName != factorydefinitions.DefaultCurrentFactoryName {
 		if err := namedfactorypath.ValidateName(currentName); err != nil {
 			return "", nil, fmt.Errorf("%w: %w", factorydefinitions.ErrInvalidNamedFactoryName, err)
 		}
@@ -92,13 +91,13 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 	sessionRootDir string,
 	targetDir string,
 	activateFactoryDir string,
-	sanitized *interfaces.FactorySnapshot,
-) (*interfaces.FactorySnapshot, error) {
+	sanitized *factorydefinitions.FactorySnapshot,
+) (*factorydefinitions.FactorySnapshot, error) {
 	currentName, err := factorySnapshotName(sanitized)
 	if err != nil {
 		return nil, fmt.Errorf("read editable factory snapshot identity: %w", err)
 	}
-	var saved *interfaces.FactorySnapshot
+	var saved *factorydefinitions.FactorySnapshot
 	err = s.host.WithActivationLock(func() error {
 		if err := s.host.RequireIdleRuntimeForSession(ctx, sessionID); err != nil {
 			return err
@@ -158,7 +157,7 @@ func resolveReplaceCurrentLayoutTarget(
 	sessionRootDir string,
 	name string,
 ) (targetDir string, activateFactoryDir string, err error) {
-	if name == interfaces.DefaultCurrentFactoryName {
+	if name == factorydefinitions.DefaultCurrentFactoryName {
 		return sessionRootDir, sessionRootDir, nil
 	}
 	factoryDir, err := resolveExistingFactoryDirFromHost(host, sessionRootDir, name)
@@ -168,7 +167,7 @@ func resolveReplaceCurrentLayoutTarget(
 	return factoryDir, factoryDir, nil
 }
 
-func factorySnapshotName(snapshot *interfaces.FactorySnapshot) (string, error) {
+func factorySnapshotName(snapshot *factorydefinitions.FactorySnapshot) (string, error) {
 	if snapshot == nil {
 		return "", fmt.Errorf("factory snapshot is required")
 	}

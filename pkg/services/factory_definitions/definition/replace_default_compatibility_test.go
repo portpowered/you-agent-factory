@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func workerTypeModel() *factoryapi.WorkerType {
@@ -28,7 +28,7 @@ func workstationTypeModel() *factoryapi.WorkstationType {
 func TestSaveDefaultCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 	t.Parallel()
 	rootDir := t.TempDir()
-	initialPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	initialPath := filepath.Join(rootDir, factorydefinitions.FactoryConfigFile)
 	initial := []byte(`{"name":"root","id":"root-runtime","version":{"logical":"1","physical":"2026-05-31T12:00:00Z"},"workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
 	if err := os.WriteFile(initialPath, initial, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
@@ -99,7 +99,7 @@ func TestSaveDefaultCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 		t.Fatalf("factory.json should omit inlined workstation body after split save, got %s", factoryJSON)
 	}
 
-	workerAgents := filepath.Join(rootDir, interfaces.WorkersDir, "planner", interfaces.FactoryAgentsFileName)
+	workerAgents := filepath.Join(rootDir, factorydefinitions.WorkersDir, "planner", factorydefinitions.FactoryAgentsFileName)
 	workerBody, err := os.ReadFile(workerAgents)
 	if err != nil {
 		t.Fatalf("ReadFile(planner AGENTS.md): %v", err)
@@ -108,7 +108,7 @@ func TestSaveDefaultCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 		t.Fatalf("planner AGENTS.md = %q, want planner body", workerBody)
 	}
 
-	workstationAgents := filepath.Join(rootDir, interfaces.WorkstationsDir, "plan-task", interfaces.FactoryAgentsFileName)
+	workstationAgents := filepath.Join(rootDir, factorydefinitions.WorkstationsDir, "plan-task", factorydefinitions.FactoryAgentsFileName)
 	workstationBody, err := os.ReadFile(workstationAgents)
 	if err != nil {
 		t.Fatalf("ReadFile(plan-task AGENTS.md): %v", err)
@@ -121,16 +121,16 @@ func TestSaveDefaultCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 func TestSaveDefaultCurrentFactoryForSession_RestoresTreeOnActivationFailure(t *testing.T) {
 	t.Parallel()
 	rootDir := t.TempDir()
-	initialPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	initialPath := filepath.Join(rootDir, factorydefinitions.FactoryConfigFile)
 	initial := []byte(`{"name":"root","id":"root-runtime","version":{"logical":"1","physical":"2026-05-31T12:00:00Z"},"workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
 	if err := os.WriteFile(initialPath, initial, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
-	staleWorkerDir := filepath.Join(rootDir, interfaces.WorkersDir, "stale-worker")
+	staleWorkerDir := filepath.Join(rootDir, factorydefinitions.WorkersDir, "stale-worker")
 	if err := os.MkdirAll(staleWorkerDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(stale-worker): %v", err)
 	}
-	staleMarker := filepath.Join(staleWorkerDir, interfaces.FactoryAgentsFileName)
+	staleMarker := filepath.Join(staleWorkerDir, factorydefinitions.FactoryAgentsFileName)
 	if err := os.WriteFile(staleMarker, []byte("STALE_MARKER"), 0o644); err != nil {
 		t.Fatalf("WriteFile(stale AGENTS.md): %v", err)
 	}
@@ -216,8 +216,8 @@ type splitLayoutDefaultSaveHost struct {
 	discardCalled  bool
 }
 
-func (h *splitLayoutDefaultSaveHost) RequireSession(sessionID string) (*interfaces.DefinitionSession, error) {
-	return &interfaces.DefinitionSession{
+func (h *splitLayoutDefaultSaveHost) RequireSession(sessionID string) (*factorydefinitions.DefinitionSession, error) {
+	return &factorydefinitions.DefinitionSession{
 		ID:         sessionID,
 		FactoryDir: h.sessionRootDir,
 		FolderPath: h.sessionRootDir,
@@ -237,14 +237,14 @@ func (h *splitLayoutDefaultSaveHost) RequireIdleRuntimeForSession(context.Contex
 	return nil
 }
 
-func (h *splitLayoutDefaultSaveHost) ActivateSessionEditableFactory(context.Context, *interfaces.DefinitionSession, string, string, string, factoryapi.FactoryName, string) error {
+func (h *splitLayoutDefaultSaveHost) ActivateSessionEditableFactory(context.Context, *factorydefinitions.DefinitionSession, string, string, string, factoryapi.FactoryName, string) error {
 	return h.activateErr
 }
 
 func (h *splitLayoutDefaultSaveHost) ReplaceFactoryLayoutAtDir(
 	targetDir string,
-	prepared *interfaces.PreparedFactoryLayoutPayload,
-) (*interfaces.FactorySplitLayoutReplaceResult, error) {
+	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
+) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
 	if targetDir != h.sessionRootDir {
 		return nil, errors.New("unexpected replace target dir")
 	}
@@ -252,7 +252,7 @@ func (h *splitLayoutDefaultSaveHost) ReplaceFactoryLayoutAtDir(
 	if err != nil {
 		return nil, err
 	}
-	return &interfaces.FactorySplitLayoutReplaceResult{
+	return &factorydefinitions.FactorySplitLayoutReplaceResult{
 		Restore: func() {
 			h.restoreCalled = true
 			result.Restore()
@@ -302,7 +302,7 @@ func (h *splitLayoutDefaultSaveHost) PreparePersistedFactoryPayload(
 	segment string,
 	factory factoryapi.Factory,
 	version factoryapi.HybridLogicalTimestamp,
-) (*interfaces.PreparedFactoryLayoutPayload, error) {
+) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
 	return preparePersistedFactoryPayload(segment, factory, version)
 }
 

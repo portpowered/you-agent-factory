@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -44,7 +43,7 @@ func TestReplayBindingContractsAcceptWorkersRootPorts(t *testing.T) {
 	}
 
 	var factory recordings.ReplayExecutionFactory = func(
-		_ *factorydefinitions.ReplayArtifact,
+		_ *recordings.ReplayArtifact,
 	) (
 		workers.Provider,
 		workers.CommandRunner,
@@ -58,7 +57,7 @@ func TestReplayBindingContractsAcceptWorkersRootPorts(t *testing.T) {
 		t.Fatal("ReplayExecutionFactory must be constructible with workers root ports")
 	}
 
-	p, r, _, _, err := factory(&factorydefinitions.ReplayArtifact{SchemaVersion: "replay.v1"})
+	p, r, _, _, err := factory(&recordings.ReplayArtifact{SchemaVersion: "replay.v1"})
 	if err != nil {
 		t.Fatalf("ReplayExecutionFactory: %v", err)
 	}

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/events"
 	projectionquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query"
@@ -24,15 +23,15 @@ func New() *Service {
 }
 
 func (*Service) ReconstructFactoryWorldState(
-	events []factorydefinitions.FactoryEvent,
+	events []recordings.FactoryEvent,
 	selectedTick int,
-) (factorydefinitions.FactoryWorldState, error) {
+) (recordings.FactoryWorldState, error) {
 	if selectedTick < 0 {
-		return factorydefinitions.FactoryWorldState{}, recordings.ErrInvalidProjectionInput
+		return recordings.FactoryWorldState{}, recordings.ErrInvalidProjectionInput
 	}
 	state, err := projections.ReconstructCanonicalFactoryWorldState(events, selectedTick)
 	if err != nil {
-		return factorydefinitions.FactoryWorldState{}, fmt.Errorf(
+		return recordings.FactoryWorldState{}, fmt.Errorf(
 			"%w: %v",
 			recordings.ErrInvalidProjectionInput,
 			err,
@@ -42,28 +41,28 @@ func (*Service) ReconstructFactoryWorldState(
 }
 
 func (*Service) SimpleDashboardRenderData(
-	state factorydefinitions.FactoryWorldState,
+	state recordings.FactoryWorldState,
 ) recordings.SimpleDashboardRenderData {
 	return dashboardprojections.SimpleDashboardRenderDataFromWorldState(state)
 }
 
 func (*Service) ProjectActiveThrottlePauses(
-	topology factorydefinitions.InitialStructurePayload,
-	pauses []factorydefinitions.ActiveThrottlePause,
-) []factorydefinitions.FactoryWorldThrottlePause {
+	topology recordings.InitialStructurePayload,
+	pauses []recordings.ActiveThrottlePause,
+) []recordings.FactoryWorldThrottlePause {
 	return projections.ProjectActiveThrottlePauses(topology, pauses)
 }
 
 func (*Service) ProjectWorkstationRequests(
-	state factorydefinitions.FactoryWorldState,
+	state recordings.FactoryWorldState,
 ) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice {
 	return recordings.BuildFactoryWorldWorkstationRequestProjectionSlice(state)
 }
 
 func (*Service) ValidateReconnectReplay(
-	events []factorydefinitions.FactoryEvent,
-	cursor factorydefinitions.FactoryEventReconnectCursor,
-	scope factorydefinitions.FactoryEventReconnectScope,
+	events []recordings.FactoryEvent,
+	cursor recordings.FactoryEventReconnectCursor,
+	scope recordings.FactoryEventReconnectScope,
 ) error {
 	_, err := reconnectReplay(events, cursor, scope)
 	return err
@@ -74,10 +73,10 @@ func (*Service) ValidateReconnectReplay(
 // cursor ordering and dispatch reconciliation; this boundary additionally
 // enforces the requested Factory Session scope.
 func reconnectReplay(
-	events []factorydefinitions.FactoryEvent,
-	cursor factorydefinitions.FactoryEventReconnectCursor,
-	scope factorydefinitions.FactoryEventReconnectScope,
-) ([]factorydefinitions.FactoryEvent, error) {
+	events []recordings.FactoryEvent,
+	cursor recordings.FactoryEventReconnectCursor,
+	scope recordings.FactoryEventReconnectScope,
+) ([]recordings.FactoryEvent, error) {
 	sessionID := strings.TrimSpace(scope.SessionID)
 	if sessionID != "" && !cursorBelongsToSession(events, cursor, sessionID) {
 		return nil, reconnectCursorNotFound(cursor, sessionID)
@@ -91,7 +90,7 @@ func reconnectReplay(
 		return replay, nil
 	}
 
-	scoped := make([]factorydefinitions.FactoryEvent, 0, len(replay))
+	scoped := make([]recordings.FactoryEvent, 0, len(replay))
 	for _, event := range replay {
 		if eventBelongsToSession(event, sessionID) {
 			scoped = append(scoped, event)
@@ -101,8 +100,8 @@ func reconnectReplay(
 }
 
 func cursorBelongsToSession(
-	events []factorydefinitions.FactoryEvent,
-	cursor factorydefinitions.FactoryEventReconnectCursor,
+	events []recordings.FactoryEvent,
+	cursor recordings.FactoryEventReconnectCursor,
 	sessionID string,
 ) bool {
 	if afterEventID := strings.TrimSpace(cursor.AfterEventID); afterEventID != "" {
@@ -131,13 +130,13 @@ func cursorBelongsToSession(
 	return false
 }
 
-func eventBelongsToSession(event factorydefinitions.FactoryEvent, sessionID string) bool {
+func eventBelongsToSession(event recordings.FactoryEvent, sessionID string) bool {
 	return event.Context.SessionID != nil &&
 		strings.TrimSpace(*event.Context.SessionID) == sessionID
 }
 
 func reconnectCursorNotFound(
-	cursor factorydefinitions.FactoryEventReconnectCursor,
+	cursor recordings.FactoryEventReconnectCursor,
 	sessionID string,
 ) error {
 	if afterEventID := strings.TrimSpace(cursor.AfterEventID); afterEventID != "" {

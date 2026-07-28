@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 )
 
@@ -38,9 +38,9 @@ func TestOrchestrationSemanticValidation_DefinitionsOwnedStrategyCheckWithoutRun
 	t.Parallel()
 
 	validator := factoryvalidation.New(nil)
-	cfg := &factorycontracts.FactoryConfig{
+	cfg := &factorydefinitions.FactoryConfig{
 		Name: "unsupported-orchestrator",
-		Orchestrator: &factorycontracts.FactoryOrchestratorConfig{
+		Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
 			Kind: "LEGACY",
 		},
 	}
@@ -49,9 +49,9 @@ func TestOrchestrationSemanticValidation_DefinitionsOwnedStrategyCheckWithoutRun
 	found := false
 	for _, target := range result.Targets {
 		if target.Code == factoryvalidation.CodeOrchestratorUnsupportedKind &&
-			target.Severity == factorycontracts.ValidationSeverityError &&
-			target.Subject.Type == factorycontracts.ValidationSubjectTypeFactory &&
-			target.Subject.Location == factorycontracts.ValidationSubjectLocationDefinition {
+			target.Severity == factorydefinitions.ValidationSeverityError &&
+			target.Subject.Type == factorydefinitions.ValidationSubjectTypeFactory &&
+			target.Subject.Location == factorydefinitions.ValidationSubjectLocationDefinition {
 			found = true
 		}
 	}
@@ -68,15 +68,15 @@ func TestOrchestrationSemanticValidation_InvalidOrchestrationReturnsDefinitionsO
 	t.Parallel()
 
 	cfg := validJavaScriptOrchestratorConfig()
-	validator := factoryvalidation.New(runtimeSemanticValidationStub{targets: []factorycontracts.ValidationTarget{{
+	validator := factoryvalidation.New(runtimeSemanticValidationStub{targets: []factorydefinitions.ValidationTarget{{
 		Code:     "workflow.source.syntaxError",
-		Severity: factorycontracts.ValidationSeverityError,
+		Severity: factorydefinitions.ValidationSeverityError,
 		Message:  "unexpected token",
 		Path:     "factory.orchestrator.javascript.inlineSource",
-		Subject: factorycontracts.ValidationSubject{
-			Type:     factorycontracts.ValidationSubjectTypeFactory,
+		Subject: factorydefinitions.ValidationSubject{
+			Type:     factorydefinitions.ValidationSubjectTypeFactory,
 			ID:       "factory",
-			Location: factorycontracts.ValidationSubjectLocationDefinition,
+			Location: factorydefinitions.ValidationSubjectLocationDefinition,
 		},
 	}}})
 
@@ -84,10 +84,10 @@ func TestOrchestrationSemanticValidation_InvalidOrchestrationReturnsDefinitionsO
 	found := false
 	for _, target := range result.Targets {
 		if target.Code == "workflow.source.syntaxError" &&
-			target.Severity == factorycontracts.ValidationSeverityError &&
-			target.Subject.Type == factorycontracts.ValidationSubjectTypeFactory &&
+			target.Severity == factorydefinitions.ValidationSeverityError &&
+			target.Subject.Type == factorydefinitions.ValidationSubjectTypeFactory &&
 			target.Subject.ID == "factory" &&
-			target.Subject.Location == factorycontracts.ValidationSubjectLocationDefinition &&
+			target.Subject.Location == factorydefinitions.ValidationSubjectLocationDefinition &&
 			target.Path == "factory.orchestrator.javascript.inlineSource" {
 			found = true
 		}
@@ -127,28 +127,28 @@ func TestOrchestrationSemanticValidationPortContractUsesDefinitionsVocabularyOnl
 		"list",
 		"-f",
 		"{{join .Imports \"\\n\"}}",
-		factoryDefinitionsRoot+"/contracts",
+		factoryDefinitionsRoot+"/internal/contracts",
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("go list imports for contracts: %v\n%s", err, output)
+		t.Fatalf("go list imports for internal/contracts: %v\n%s", err, output)
 	}
 	for _, importPath := range strings.Fields(string(output)) {
 		if isForbiddenFactoryDefinitionsRuntimeImport(importPath) {
 			t.Fatalf(
-				"contracts import %s is forbidden on OrchestratorDefinitionValidator port; use Definitions vocabulary only",
+				"internal/contracts import %s is forbidden on OrchestratorDefinitionValidator port; use Definitions vocabulary only",
 				importPath,
 			)
 		}
 	}
 }
 
-func validJavaScriptOrchestratorConfig() *factorycontracts.FactoryConfig {
-	return &factorycontracts.FactoryConfig{
+func validJavaScriptOrchestratorConfig() *factorydefinitions.FactoryConfig {
+	return &factorydefinitions.FactoryConfig{
 		Name: "javascript-orchestrator",
-		Orchestrator: &factorycontracts.FactoryOrchestratorConfig{
-			Kind: factorycontracts.OrchestratorKindJavaScript,
-			JavaScript: &factorycontracts.FactoryOrchestratorJavaScriptConfig{
+		Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
+			Kind: factorydefinitions.OrchestratorKindJavaScript,
+			JavaScript: &factorydefinitions.FactoryOrchestratorJavaScriptConfig{
 				SourceRef:  "factory/workflows/review.js",
 				Entrypoint: "main",
 			},
@@ -157,13 +157,13 @@ func validJavaScriptOrchestratorConfig() *factorycontracts.FactoryConfig {
 }
 
 type runtimeSemanticValidationStub struct {
-	targets []factorycontracts.ValidationTarget
+	targets []factorydefinitions.ValidationTarget
 }
 
 func (s runtimeSemanticValidationStub) ValidateJavaScriptFactoryDefinition(
 	_ context.Context,
-	_ *factorycontracts.FactoryOrchestratorJavaScriptConfig,
-	_ factorycontracts.WorkflowSourceReader,
-) []factorycontracts.ValidationTarget {
-	return append([]factorycontracts.ValidationTarget(nil), s.targets...)
+	_ *factorydefinitions.FactoryOrchestratorJavaScriptConfig,
+	_ factorydefinitions.WorkflowSourceReader,
+) []factorydefinitions.ValidationTarget {
+	return append([]factorydefinitions.ValidationTarget(nil), s.targets...)
 }

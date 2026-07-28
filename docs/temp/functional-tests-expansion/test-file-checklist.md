@@ -558,6 +558,13 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestDependentWorkWaitsForPrerequisiteTargetState`.
   - `TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure`.
   - `TestFanInReleasesOnlyAfterEveryPrerequisite`.
+  - `TestWorkWithoutDependsOnRelationsDispatchesNormally`.
+
+- [x] `tests/functional/work/recordings/recordings_read_test.go`
+  - `TestRecordingsBackedWorkReadsUseRecordingsRootContract`.
+  - `TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot`.
+  - `TestRecordingsBackedWorkReadsMapRichWorldState`.
+  - `TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures`.
 
 - [ ] `tests/functional/work/relationships/parent_child_test.go`
   - `TestParentChildLineageSurvivesDispatchAndReplay`.
@@ -595,7 +602,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [ ] `tests/functional/sessions/live_runtime_build_process_test.go`
   - `TestBuildProcessRoutesLiveOpenListControlAndCloseThroughFactorySessionsRoot`.
 
-- [ ] `tests/functional/sessions/controls/pause_resume_test.go`
+- [x] `tests/functional/sessions/controls/pause_resume_test.go`
   - `TestPausedFactorySessionBuffersSubmittedWork`.
   - `TestResumedFactorySessionDrainsBufferedWorkInOrder`.
   - `TestPauseResumeEmitsDurableLifecycleEvents`.
@@ -896,6 +903,19 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [ ] `tests/functional/resilience/platform/unix_process_test.go`
   - `TestUnixProviderTimeoutTerminatesProcessGroup`.
   - `TestUnixSignalsMapToInterruptedPublicOutcome`.
+
+## Wave 3 — operator settings
+
+- [x] `tests/functional/operator_settings/servicewire/servicewire_composition_test.go`
+  - `TestServiceWireCompositionRootServesDocumentAndResolutionOperations`.
+  - `TestServiceFromHomePortsConstructsSettingsRoot`.
+  - `TestServiceFromHomePortsRejectsMissingPorts`.
+  - `TestServiceFromConfigDocumentConstructsFromDocumentPorts`.
+  - `TestServiceFromConfigDocumentRejectsMissingDocumentPorts`.
+  - `TestResolveFromHomeUsesSettingsAdapterOwnershipPath`.
+  - `TestResolveFromHomeRejectsMissingFilesystemPorts`.
+  - `TestResolveFromHomeFallbackPreservesAcceptedSemantics`.
+  - `TestRegisterDefaultsResolutionFromHomeRestoresAdapterOwnership`.
 
 ## Completion audit
 

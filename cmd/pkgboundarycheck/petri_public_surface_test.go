@@ -97,8 +97,8 @@ func leak(transition runtime.PetriTransition) {}
 			name:     "enabled-transition engine shape",
 			filePath: "pkg/workers/outside/enabled_transition_leak.go",
 			source: `package outside
-import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
-func leak(et contracts.EnabledTransition) {}
+import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+func leak(et factorydefinitions.EnabledTransition) {}
 `,
 			symbol: "EnabledTransition", shape: "enabled-transition engine shape",
 			symbolLine: "symbol: EnabledTransition (enabled-transition engine shape)",
@@ -117,9 +117,9 @@ func leak(snapshot runtime.StateSnapshot) {}
 			name:     "engine state snapshot constructor",
 			filePath: "pkg/workers/outside/engine_state_snapshot_leak.go",
 			source: `package outside
-import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+import runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 func leak() {
-  _ = contracts.NewEngineStateSnapshot[any, any](nil, nil, nil)
+  _ = runtime.NewEngineStateSnapshot[any, any](nil, nil, nil)
 }
 `,
 			symbol: "NewEngineStateSnapshot", shape: "engine snapshot",
@@ -242,7 +242,7 @@ func TestScanPetriPublicSurfaceAllowsAuthoredOrchestratorKindPetri(t *testing.T)
 	t.Parallel()
 	repoRoot := t.TempDir()
 	writeGoSourceFile(t, repoRoot, "pkg/services/factory_definitions/config_authoring.go", `package factory_definitions
-import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 func authoredPetriFactory() contracts.FactoryOrchestratorConfig {
   return contracts.FactoryOrchestratorConfig{Kind: contracts.OrchestratorKindPetri}
 }

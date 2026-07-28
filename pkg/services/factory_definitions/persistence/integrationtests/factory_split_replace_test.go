@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 )
 
 func TestReplaceFactoryLayoutAtDir_WritesSplitLayoutAndRestores(t *testing.T) {
 	targetDir := t.TempDir()
 	initial := splitReplaceTestPayload(t, "alpha")
-	if err := os.WriteFile(filepath.Join(targetDir, interfaces.FactoryConfigFile), initial, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(targetDir, factorydefinitions.FactoryConfigFile), initial, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
 
@@ -39,7 +39,7 @@ func TestReplaceFactoryLayoutAtDir_WritesSplitLayoutAndRestores(t *testing.T) {
 func TestReplaceFactorySplitLayout_WritesSplitLayoutAndRestores(t *testing.T) {
 	targetDir := t.TempDir()
 	initial := splitReplaceTestPayload(t, "alpha")
-	if err := os.WriteFile(filepath.Join(targetDir, interfaces.FactoryConfigFile), initial, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(targetDir, factorydefinitions.FactoryConfigFile), initial, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
 
@@ -58,14 +58,14 @@ func TestReplaceFactorySplitLayout_WritesSplitLayoutAndRestores(t *testing.T) {
 func TestReplaceFactorySplitLayout_PrunesRemovedWorkerAndOverwritesAgents(t *testing.T) {
 	targetDir := t.TempDir()
 	initial := splitReplaceTestPayload(t, "alpha")
-	if err := os.WriteFile(filepath.Join(targetDir, interfaces.FactoryConfigFile), initial, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(targetDir, factorydefinitions.FactoryConfigFile), initial, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
-	oldWorkerDir := filepath.Join(targetDir, interfaces.WorkersDir, "old-name")
+	oldWorkerDir := filepath.Join(targetDir, factorydefinitions.WorkersDir, "old-name")
 	if err := os.MkdirAll(oldWorkerDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(old worker): %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(oldWorkerDir, interfaces.FactoryAgentsFileName), []byte("stale worker\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(oldWorkerDir, factorydefinitions.FactoryAgentsFileName), []byte("stale worker\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(old worker AGENTS.md): %v", err)
 	}
 
@@ -82,7 +82,7 @@ func TestReplaceFactorySplitLayout_PrunesRemovedWorkerAndOverwritesAgents(t *tes
 		t.Fatalf("expected removed worker directory %s, stat err=%v", oldWorkerDir, err)
 	}
 
-	agentsPath := filepath.Join(targetDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName)
+	agentsPath := filepath.Join(targetDir, factorydefinitions.WorkersDir, "executor", factorydefinitions.FactoryAgentsFileName)
 	agents, err := os.ReadFile(agentsPath)
 	if err != nil {
 		t.Fatalf("ReadFile(executor AGENTS.md): %v", err)
@@ -91,7 +91,7 @@ func TestReplaceFactorySplitLayout_PrunesRemovedWorkerAndOverwritesAgents(t *tes
 		t.Fatalf("executor AGENTS.md = %q, want submitted worker body", agents)
 	}
 
-	workstationPath := filepath.Join(targetDir, interfaces.WorkstationsDir, "execute-alpha-v2", interfaces.FactoryAgentsFileName)
+	workstationPath := filepath.Join(targetDir, factorydefinitions.WorkstationsDir, "execute-alpha-v2", factorydefinitions.FactoryAgentsFileName)
 	if _, err := os.Stat(workstationPath); err != nil {
 		t.Fatalf("expected workstation AGENTS.md at %s: %v", workstationPath, err)
 	}
@@ -100,14 +100,14 @@ func TestReplaceFactorySplitLayout_PrunesRemovedWorkerAndOverwritesAgents(t *tes
 func TestReplaceFactoryLayoutAtDir_PrunesRemovedWorkerDirectory(t *testing.T) {
 	targetDir := t.TempDir()
 	initial := splitReplaceTestPayload(t, "alpha")
-	if err := os.WriteFile(filepath.Join(targetDir, interfaces.FactoryConfigFile), initial, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(targetDir, factorydefinitions.FactoryConfigFile), initial, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
-	removedWorkerDir := filepath.Join(targetDir, interfaces.WorkersDir, "removed")
+	removedWorkerDir := filepath.Join(targetDir, factorydefinitions.WorkersDir, "removed")
 	if err := os.MkdirAll(removedWorkerDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(workers/removed): %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(removedWorkerDir, interfaces.FactoryAgentsFileName), []byte("orphan worker\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(removedWorkerDir, factorydefinitions.FactoryAgentsFileName), []byte("orphan worker\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(workers/removed/AGENTS.md): %v", err)
 	}
 
@@ -131,14 +131,14 @@ func TestReplaceFactoryLayoutAtDir_PrunesRemovedWorkerDirectory(t *testing.T) {
 func TestReplaceFactoryLayoutAtDir_PrunesRemovedWorkstationDirectory(t *testing.T) {
 	targetDir := t.TempDir()
 	initial := splitReplaceTestPayload(t, "alpha")
-	if err := os.WriteFile(filepath.Join(targetDir, interfaces.FactoryConfigFile), initial, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(targetDir, factorydefinitions.FactoryConfigFile), initial, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
-	removedWorkstationDir := filepath.Join(targetDir, interfaces.WorkstationsDir, "removed")
+	removedWorkstationDir := filepath.Join(targetDir, factorydefinitions.WorkstationsDir, "removed")
 	if err := os.MkdirAll(removedWorkstationDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(workstations/removed): %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(removedWorkstationDir, interfaces.FactoryAgentsFileName), []byte("orphan workstation\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(removedWorkstationDir, factorydefinitions.FactoryAgentsFileName), []byte("orphan workstation\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(workstations/removed/AGENTS.md): %v", err)
 	}
 
@@ -162,7 +162,7 @@ func TestReplaceFactoryLayoutAtDir_PrunesRemovedWorkstationDirectory(t *testing.
 func TestReplaceFactorySplitLayout_OverwritesExistingAgentsOnSave(t *testing.T) {
 	targetDir := t.TempDir()
 	payload := splitReplaceTestPayload(t, "alpha")
-	if err := os.WriteFile(filepath.Join(targetDir, interfaces.FactoryConfigFile), payload, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(targetDir, factorydefinitions.FactoryConfigFile), payload, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
 
@@ -174,15 +174,15 @@ func TestReplaceFactorySplitLayout_OverwritesExistingAgentsOnSave(t *testing.T) 
 		result.DiscardBackup()
 	}
 
-	executorAgents := filepath.Join(targetDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName)
+	executorAgents := filepath.Join(targetDir, factorydefinitions.WorkersDir, "executor", factorydefinitions.FactoryAgentsFileName)
 	if err := os.WriteFile(executorAgents, []byte("stale executor body\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(stale executor AGENTS.md): %v", err)
 	}
-	oldWorkerDir := filepath.Join(targetDir, interfaces.WorkersDir, "old-name")
+	oldWorkerDir := filepath.Join(targetDir, factorydefinitions.WorkersDir, "old-name")
 	if err := os.MkdirAll(oldWorkerDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(old worker): %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(oldWorkerDir, interfaces.FactoryAgentsFileName), []byte("stale worker\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(oldWorkerDir, factorydefinitions.FactoryAgentsFileName), []byte("stale worker\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(old worker AGENTS.md): %v", err)
 	}
 
@@ -213,7 +213,7 @@ func TestReplaceFactorySplitLayout_OverwritesExistingAgentsOnSave(t *testing.T) 
 func assertSplitLayoutPersisted(t *testing.T, factoryDir, project string) {
 	t.Helper()
 
-	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile))
 	if err != nil {
 		t.Fatalf("ReadFile(factory.json): %v", err)
 	}
@@ -221,7 +221,7 @@ func assertSplitLayoutPersisted(t *testing.T, factoryDir, project string) {
 		t.Fatalf("factory.json should omit inlined worker body, got %s", factoryJSON)
 	}
 
-	agentsPath := filepath.Join(factoryDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName)
+	agentsPath := filepath.Join(factoryDir, factorydefinitions.WorkersDir, "executor", factorydefinitions.FactoryAgentsFileName)
 	agents, err := os.ReadFile(agentsPath)
 	if err != nil {
 		t.Fatalf("ReadFile(worker AGENTS.md): %v", err)
@@ -230,7 +230,7 @@ func assertSplitLayoutPersisted(t *testing.T, factoryDir, project string) {
 		t.Fatalf("worker AGENTS.md = %q, want executor body", agents)
 	}
 
-	workstationPath := filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-"+project, interfaces.FactoryAgentsFileName)
+	workstationPath := filepath.Join(factoryDir, factorydefinitions.WorkstationsDir, "execute-"+project, factorydefinitions.FactoryAgentsFileName)
 	if _, err := os.Stat(workstationPath); err != nil {
 		t.Fatalf("expected workstation AGENTS.md at %s: %v", workstationPath, err)
 	}
@@ -247,7 +247,7 @@ func assertSplitLayoutPersisted(t *testing.T, factoryDir, project string) {
 func assertMonolithicFactoryJSON(t *testing.T, factoryDir string, want []byte) {
 	t.Helper()
 
-	got, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	got, err := os.ReadFile(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile))
 	if err != nil {
 		t.Fatalf("ReadFile(factory.json): %v", err)
 	}

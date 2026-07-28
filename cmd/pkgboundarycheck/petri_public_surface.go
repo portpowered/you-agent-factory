@@ -17,7 +17,6 @@ import (
 const (
 	petriPublicSurfaceRequiredOwner   = "Factory Runtime internals"
 	petriPublicSurfaceInternalPrefix  = "pkg/services/factory_runtime/internal/"
-	factoryDefinitionsContractsImport = repositoryImportPrefix + "pkg/services/factory_definitions/contracts"
 	petriPublicSurfaceBaselinePath    = "petri-public-surface-baseline.json"
 	petriPublicSurfaceBaselineStage   = "imp-run-01-petri-boundary-retirement"
 	petriPublicSurfaceDeletionGate    = "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
@@ -56,9 +55,8 @@ var prohibitedPetriPublicSurfaceSymbols = map[string]string{
 }
 
 var petriPublicSurfaceWatchedImports = map[string]struct{}{
-	factoryRuntimeRootImportPath:      {},
-	factoryDefinitionsImportPath:      {},
-	factoryDefinitionsContractsImport: {},
+	factoryRuntimeRootImportPath: {},
+	factoryDefinitionsImportPath: {},
 }
 
 type petriPublicSurfaceFinding struct {
@@ -180,8 +178,6 @@ func petriPublicSurfaceImports(parsed *ast.File) (map[string]string, map[string]
 			name = spec.Name.Name
 		} else if importPath == factoryDefinitionsImportPath {
 			name = "factorydefinitions"
-		} else if importPath == factoryDefinitionsContractsImport {
-			name = "contracts"
 		} else if importPath == factoryRuntimeRootImportPath {
 			name = "factory"
 		}

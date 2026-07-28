@@ -7,52 +7,52 @@ import (
 	"testing"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 )
 
 type stubLoadedSource struct {
-	cfg *factorycontracts.FactoryConfig
+	cfg *factorydefinitions.FactoryConfig
 }
 
-func (s stubLoadedSource) FactoryConfig() *factorycontracts.FactoryConfig { return s.cfg }
+func (s stubLoadedSource) FactoryConfig() *factorydefinitions.FactoryConfig { return s.cfg }
 func (s stubLoadedSource) FactoryDir() string                             { return "/factories/alpha" }
 func (s stubLoadedSource) RuntimeBaseDir() string                         { return "/factories/alpha" }
 func (s stubLoadedSource) SetRuntimeBaseDir(string)                       {}
-func (s stubLoadedSource) PortableBundledFileReplacements() []factorycontracts.PortableBundledFileReplacement {
+func (s stubLoadedSource) PortableBundledFileReplacements() []factorydefinitions.PortableBundledFileReplacement {
 	return nil
 }
-func (s stubLoadedSource) MutateWorkers(func(*factorycontracts.FactoryWorkerConfig) error) error {
+func (s stubLoadedSource) MutateWorkers(func(*factorydefinitions.FactoryWorkerConfig) error) error {
 	return nil
 }
-func (s stubLoadedSource) Workstation(string) (*factorycontracts.FactoryWorkstationConfig, bool) {
+func (s stubLoadedSource) Workstation(string) (*factorydefinitions.FactoryWorkstationConfig, bool) {
 	return nil, false
 }
-func (s stubLoadedSource) Worker(string) (*factorycontracts.FactoryWorkerConfig, bool) {
+func (s stubLoadedSource) Worker(string) (*factorydefinitions.FactoryWorkerConfig, bool) {
 	return nil, false
 }
 
-func stubLoadCanonical(payload []byte, _ factorycontracts.WorkstationLoader) (factorycontracts.MutableLoadedFactorySource, error) {
-	var cfg factorycontracts.FactoryConfig
+func stubLoadCanonical(payload []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+	var cfg factorydefinitions.FactoryConfig
 	if err := json.Unmarshal(payload, &cfg); err != nil {
 		return nil, factoryroot.ErrInvalidNamedFactory
 	}
 	return stubLoadedSource{cfg: &cfg}, nil
 }
 
-func stubEncodeFactory(cfg *factorycontracts.FactoryConfig) ([]byte, error) {
+func stubEncodeFactory(cfg *factorydefinitions.FactoryConfig) ([]byte, error) {
 	return json.Marshal(cfg)
 }
 
 func TestNewService_RequiresExactInjectedPorts(t *testing.T) {
 	t.Parallel()
 
-	loadCanonical := factorycontracts.CanonicalFactoryJSONLoader(stubLoadCanonical)
-	loadFromFactoryDir := factorycontracts.LoadedFactoryLoader(func(string, factorycontracts.WorkstationLoader) (factorycontracts.MutableLoadedFactorySource, error) {
+	loadCanonical := factorydefinitions.CanonicalFactoryJSONLoader(stubLoadCanonical)
+	loadFromFactoryDir := factorydefinitions.LoadedFactoryLoader(func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		return nil, factoryroot.ErrInvalidNamedFactory
 	})
-	encodeFactory := factorycontracts.FactoryConfigJSONEncoder(stubEncodeFactory)
+	encodeFactory := factorydefinitions.FactoryConfigJSONEncoder(stubEncodeFactory)
 
 	if svc, err := compilationwire.NewService(compilationservice.Dependencies{
 		LoadCanonical:      nil,
@@ -94,11 +94,11 @@ func TestNewService_HostEffectsComeOnlyFromInjectedPorts(t *testing.T) {
 	t.Parallel()
 
 	loadCalls := 0
-	loadCanonical := factorycontracts.CanonicalFactoryJSONLoader(func(payload []byte, _ factorycontracts.WorkstationLoader) (factorycontracts.MutableLoadedFactorySource, error) {
+	loadCanonical := factorydefinitions.CanonicalFactoryJSONLoader(func(payload []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		loadCalls++
 		return stubLoadCanonical(payload, nil)
 	})
-	loadFromFactoryDir := factorycontracts.LoadedFactoryLoader(func(string, factorycontracts.WorkstationLoader) (factorycontracts.MutableLoadedFactorySource, error) {
+	loadFromFactoryDir := factorydefinitions.LoadedFactoryLoader(func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		t.Fatal("directory loader must not be used for canonical compile")
 		return nil, nil
 	})

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 func TestOpenAPIFactoryEventTypePayloadMappingCoversEveryFactoryEventType(t *testing.T) {
@@ -42,9 +42,9 @@ func TestValidateFactoryEventTypePayloadMappingNamesMissingEnumValue(t *testing.
 
 	err = ValidateFactoryEventTypePayloadMapping(
 		mapping,
-		[]factorycontracts.FactoryEventType{
-			factorycontracts.FactoryEventTypeRunRequest,
-			factorycontracts.FactoryEventTypeWorkRequest,
+		[]recordings.FactoryEventType{
+			recordings.FactoryEventTypeRunRequest,
+			recordings.FactoryEventTypeWorkRequest,
 		},
 		[]string{"RunRequestEventPayload"},
 	)
@@ -65,9 +65,9 @@ func TestValidateFactoryEventTypePayloadMappingNamesOrphanMappingKey(t *testing.
 
 	err = ValidateFactoryEventTypePayloadMapping(
 		mapping,
-		[]factorycontracts.FactoryEventType{
-			factorycontracts.FactoryEventTypeRunRequest,
-			factorycontracts.FactoryEventTypeWorkRequest,
+		[]recordings.FactoryEventType{
+			recordings.FactoryEventTypeRunRequest,
+			recordings.FactoryEventTypeWorkRequest,
 		},
 		[]string{"RunRequestEventPayload", "WorkRequestEventPayload", "FactoryChangeEventPayload"},
 	)
@@ -76,7 +76,7 @@ func TestValidateFactoryEventTypePayloadMappingNamesOrphanMappingKey(t *testing.
 	}
 }
 
-func loadBundledFactoryEventDiscriminatorContract(t *testing.T) (map[string]string, []string, []factorycontracts.FactoryEventType) {
+func loadBundledFactoryEventDiscriminatorContract(t *testing.T) (map[string]string, []string, []recordings.FactoryEventType) {
 	t.Helper()
 
 	openAPIPath := bundledOpenAPIPath(t)

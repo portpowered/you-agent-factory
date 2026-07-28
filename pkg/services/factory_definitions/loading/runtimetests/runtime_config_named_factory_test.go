@@ -11,7 +11,7 @@ import (
 
 	. "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 )
 
@@ -66,9 +66,9 @@ func assertScopedNamedFactoryPaths(t *testing.T, factoryDir, wantDir string) {
 		t.Fatalf("factory dir = %q, want %q", factoryDir, wantDir)
 	}
 	for _, path := range []string{
-		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
-		filepath.Join(factoryDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName),
-		filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-tts", interfaces.FactoryAgentsFileName),
+		filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile),
+		filepath.Join(factoryDir, factorydefinitions.WorkersDir, "executor", factorydefinitions.FactoryAgentsFileName),
+		filepath.Join(factoryDir, factorydefinitions.WorkstationsDir, "execute-tts", factorydefinitions.FactoryAgentsFileName),
 	} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected scoped named-factory path %s: %v", path, err)
@@ -82,7 +82,7 @@ func assertScopedCurrentFactoryPointer(t *testing.T, rootDir string) {
 	if err := factorydefinitioncomposition.NamedPaths().WriteCurrentPointer(rootDir, "@you/tts"); err != nil {
 		t.Fatalf("WriteCurrentFactoryPointer(scoped): %v", err)
 	}
-	pointerBytes, err := os.ReadFile(filepath.Join(rootDir, interfaces.CurrentFactoryPointerFile))
+	pointerBytes, err := os.ReadFile(filepath.Join(rootDir, factorydefinitions.CurrentFactoryPointerFile))
 	if err != nil {
 		t.Fatalf("ReadFile(current pointer): %v", err)
 	}
@@ -141,8 +141,8 @@ func TestMapNamedFactoryDir_HierarchicalScopedLayout(t *testing.T) {
 
 func TestDefaultNamedFactoryRoots(t *testing.T) {
 	homeDir := filepath.Join("home", "customer")
-	wantRoot := interfaces.NamedFactoriesRoot(homeDir)
-	globalRoot, err := interfaces.NamedFactoriesRootForHome(homeDir)
+	wantRoot := factorydefinitions.NamedFactoriesRoot(homeDir)
+	globalRoot, err := factorydefinitions.NamedFactoriesRootForHome(homeDir)
 	if err != nil {
 		t.Fatalf("GlobalNamedFactoryRootForHome: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestDefaultNamedFactoryRoots(t *testing.T) {
 		t.Fatalf("global root = %q, want factorydefinitions.NamedFactoriesRoot = %q", globalRoot, wantRoot)
 	}
 
-	projectRoot, err := interfaces.ProjectFactoriesRootForWorkingDir(filepath.Join("repo", "app"))
+	projectRoot, err := factorydefinitions.ProjectFactoriesRootForWorkingDir(filepath.Join("repo", "app"))
 	if err != nil {
 		t.Fatalf("DefaultProjectNamedFactoryRoot: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestPersistNamedFactory_PreservesVersionMetadataAcrossLoadRoundTrip(t *test
 		t.Fatalf("loaded version = %#v, want logical=17 physical=%s", loaded.FactoryConfig().Version, versionTime)
 	}
 
-	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile))
 	if err != nil {
 		t.Fatalf("ReadFile(factory.json): %v", err)
 	}
@@ -213,7 +213,7 @@ func TestPersistNamedFactory_StripsSupportedBundledFileInlineContentFromFactoryJ
 	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, "inputs", "task", "default", "starter.md"), "starter work\n")
 	assertRuntimeFactoryFileMode(t, filepath.Join(factoryDir, "scripts", "execute-story.ps1"), 0o755)
 
-	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile))
 	if err != nil {
 		t.Fatalf("ReadFile(factory.json): %v", err)
 	}
@@ -259,7 +259,7 @@ func TestReplaceNamedFactory_PreservesPortableLayoutAcrossReplace(t *testing.T) 
 	}
 	assertLoadedPortableLayoutConfig(t, loaded.FactoryConfig(), "workstation:execute-alpha")
 
-	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile))
 	if err != nil {
 		t.Fatalf("ReadFile(factory.json): %v", err)
 	}
@@ -291,7 +291,7 @@ func TestPersistNamedFactory_PreservesPortableLayoutAcrossNamedFactoryLoadFlatte
 	assertPortableLayoutJSONBytes(t, flattened, "workstation:execute-alpha")
 
 	canonicalDir := t.TempDir()
-	canonicalPath := filepath.Join(canonicalDir, interfaces.FactoryConfigFile)
+	canonicalPath := filepath.Join(canonicalDir, factorydefinitions.FactoryConfigFile)
 	if err := os.WriteFile(canonicalPath, flattened, 0o644); err != nil {
 		t.Fatalf("WriteFile(flattened factory.json): %v", err)
 	}
@@ -500,7 +500,7 @@ func TestLoadRuntimeConfig_InvalidCurrentFactoryPointerReturnsStructuredError(t 
 		}},
 	})
 
-	if err := os.WriteFile(filepath.Join(rootDir, interfaces.CurrentFactoryPointerFile), []byte("../beta\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(rootDir, factorydefinitions.CurrentFactoryPointerFile), []byte("../beta\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(current pointer): %v", err)
 	}
 
@@ -581,11 +581,11 @@ func assertPersistedNamedFactoryLayout(t *testing.T, factoryDir, wantDir string)
 		t.Fatalf("factory dir = %q, want %q", factoryDir, wantDir)
 	}
 	for _, path := range []string{
-		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
-		filepath.Join(factoryDir, interfaces.InputsDir),
-		filepath.Join(factoryDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName),
-		filepath.Join(factoryDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName),
-		filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-alpha", interfaces.FactoryAgentsFileName),
+		filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile),
+		filepath.Join(factoryDir, factorydefinitions.InputsDir),
+		filepath.Join(factoryDir, factorydefinitions.InputsDir, "task", factorydefinitions.DefaultChannelName),
+		filepath.Join(factoryDir, factorydefinitions.WorkersDir, "executor", factorydefinitions.FactoryAgentsFileName),
+		filepath.Join(factoryDir, factorydefinitions.WorkstationsDir, "execute-alpha", factorydefinitions.FactoryAgentsFileName),
 	} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected persisted named-factory path %s: %v", path, err)
@@ -596,7 +596,7 @@ func assertPersistedNamedFactoryLayout(t *testing.T, factoryDir, wantDir string)
 func assertPersistedNamedFactoryPayload(t *testing.T, factoryDir string) {
 	t.Helper()
 
-	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile))
 	if err != nil {
 		t.Fatalf("ReadFile(factory.json): %v", err)
 	}
@@ -631,14 +631,14 @@ func assertPersistedNamedFactoryPayload(t *testing.T, factoryDir string) {
 func assertPersistedNamedFactoryAgents(t *testing.T, factoryDir string) {
 	t.Helper()
 
-	workerAgents, err := os.ReadFile(filepath.Join(factoryDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName))
+	workerAgents, err := os.ReadFile(filepath.Join(factoryDir, factorydefinitions.WorkersDir, "executor", factorydefinitions.FactoryAgentsFileName))
 	if err != nil {
 		t.Fatalf("ReadFile(worker AGENTS.md): %v", err)
 	}
 	if got := string(workerAgents); got != "You are the executor." {
 		t.Fatalf("persisted worker AGENTS.md = %q, want body-only worker content", got)
 	}
-	workstationAgents, err := os.ReadFile(filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-alpha", interfaces.FactoryAgentsFileName))
+	workstationAgents, err := os.ReadFile(filepath.Join(factoryDir, factorydefinitions.WorkstationsDir, "execute-alpha", factorydefinitions.FactoryAgentsFileName))
 	if err != nil {
 		t.Fatalf("ReadFile(workstation AGENTS.md): %v", err)
 	}

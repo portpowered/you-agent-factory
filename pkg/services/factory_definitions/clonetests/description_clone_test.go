@@ -3,28 +3,28 @@ package layouttests
 import (
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestCloneFactoryConfigDetachesEntityDescriptions(t *testing.T) {
-	description := func(id string) *interfaces.NameValueConfig {
-		return &interfaces.NameValueConfig{
-			Type:    interfaces.NameValueTypeLocalizableAsset,
+	description := func(id string) *factorydefinitions.NameValueConfig {
+		return &factorydefinitions.NameValueConfig{
+			Type:    factorydefinitions.NameValueTypeLocalizableAsset,
 			Value:   id,
 			Locales: []string{"en-US"},
 			Values:  map[string]string{"fr-FR": id + " FR"},
 			ID:      id,
 		}
 	}
-	original := &interfaces.FactoryConfig{
+	original := &factorydefinitions.FactoryConfig{
 		Name:         "described",
 		Description:  description("factory"),
-		WorkTypes:    []interfaces.WorkTypeConfig{{Name: "task", Description: description("work-type")}},
-		Workers:      []interfaces.FactoryWorkerConfig{{Name: "worker", Description: description("worker")}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "station", Description: description("station")}},
+		WorkTypes:    []factorydefinitions.WorkTypeConfig{{Name: "task", Description: description("work-type")}},
+		Workers:      []factorydefinitions.FactoryWorkerConfig{{Name: "worker", Description: description("worker")}},
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{Name: "station", Description: description("station")}},
 	}
 
-	cloned, err := interfaces.CloneFactoryConfig(original)
+	cloned, err := factorydefinitions.CloneFactoryConfig(original)
 	if err != nil {
 		t.Fatalf("CloneFactoryConfig: %v", err)
 	}

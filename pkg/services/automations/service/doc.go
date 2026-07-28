@@ -1,8 +1,5 @@
-// Package service composes Automations runtime sidecars for script pollers,
-// hosted pollers, filesystem watchers, and cron Work generation. Script
-// command/source polling is owned by internal/services/script_pollers and
-// reached only through this Automations root. Wire supplies explicit
-// submitters, clocks, loggers, cancellation, and configuration. Use
-// StartSchedulerSidecarsForRuntime as the unified runtime entrypoint for poller
-// and cron supervision.
+// Package service is a transitional compile shim that re-exports the composed
+// Automations root from pkg/services/automations/internal. Peers should
+// construct through automations/wire; baseline deletion of this path is owned
+// by DEL-AUTO.
 package service
