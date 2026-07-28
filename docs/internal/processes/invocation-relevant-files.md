@@ -378,7 +378,10 @@ primary-result behavior.
   Block fallback when `RegistrationOptions.RequireStructuredStream` or request
   env `providers_require_structured_stream=true` is set. Inject the native
   effect into the adapter registration; reconcile lifecycle failures with the
-  same precedence rules as other Providers-owned adapters.
+  same precedence rules as other Providers-owned adapters. Prove cancellation,
+  timeout, declared/parse failure, stderr exit classification, and
+  late-success suppression through `conformance_test.go`, `failure_test.go`,
+  and `exit_failure_test.go` against the Providers root path.
 - Keep reusable one-attempt conformance under the Providers-private Execution
   testkit. Build the singular Providers root around a fresh
   controllable adapter for each scenario, observe only Providers-owned
