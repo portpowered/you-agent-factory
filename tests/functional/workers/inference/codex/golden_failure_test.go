@@ -93,8 +93,8 @@ func TestCodexGoldenTimeoutHasNoFalseTerminalMessage(t *testing.T) {
 	if inference.FailureDetail.Reason != factoryapi.WorkFailureTypeTimeout {
 		t.Fatalf("failure reason = %q, want TIMEOUT", inference.FailureDetail.Reason)
 	}
-	if inference.FailureDetail.Message != "Codex request timed out." {
-		t.Fatalf("failure message = %q, want Codex request timed out.", inference.FailureDetail.Message)
+	if inference.FailureDetail.Message != "provider invocation timed out" {
+		t.Fatalf("failure message = %q, want provider invocation timed out", inference.FailureDetail.Message)
 	}
 	assertCodexGoldenTimeoutHasNoFalseTerminalSuccess(t, replay, inference)
 

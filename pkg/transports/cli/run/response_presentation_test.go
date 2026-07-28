@@ -167,9 +167,9 @@ func TestHumanFactoryEventRenderer_CustomerLifecycleGolden(t *testing.T) {
 	events[7].Context.PhaseName = &phaseName
 
 	var output strings.Builder
-	renderer := newHumanFactoryEventRenderer(&output, testResponsePresentation())
+	renderer := openTestHumanFactoryEventRenderer(t, &output, testResponsePresentation())
 	renderer.PresentFactoryEvents(events)
-	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+	if err := renderer.WriteFinalInvocationResult(apisurface.FactoryInvocationResult{
 		Status:        factorydefinitions.InvocationTerminalStatusCompleted,
 		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "approved"}},
 	}); err != nil {
@@ -212,9 +212,9 @@ func TestJSONFactoryEventRenderer_EmitsDiscriminatedSafeNDJSON(t *testing.T) {
 	))
 
 	var output strings.Builder
-	renderer := newJSONFactoryEventRenderer(&output, testResponsePresentation())
+	renderer := openTestJSONFactoryEventRenderer(t, &output, testResponsePresentation())
 	renderer.PresentFactoryEvents(events)
-	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+	if err := renderer.WriteFinalInvocationResult(apisurface.FactoryInvocationResult{
 		RequestID: "request-ndjson", Status: factorydefinitions.InvocationTerminalStatusCompleted,
 		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "complete"}},
 	}); err != nil {
@@ -273,9 +273,9 @@ func assertInvocationResultNDJSONRecord(t *testing.T, line string) {
 
 func TestJSONFactoryEventRenderer_WithoutTerminalWritesOnlyFactoryEvents(t *testing.T) {
 	var output strings.Builder
-	renderer := newJSONFactoryEventRenderer(&output, testResponsePresentation())
+	renderer := openTestJSONFactoryEventRenderer(t, &output, testResponsePresentation())
 	renderer.PresentFactoryEvents(canonicalJavaScriptFactoryEvents())
-	renderer.stopProgressRendering()
+	renderer.StopProgressRendering()
 
 	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
 	if len(lines) != 3 {

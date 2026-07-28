@@ -11,7 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
 const (
@@ -318,5 +317,5 @@ func executionMetadataMatches(recorded, observed work.ExecutionMetadata) bool {
 	return true
 }
 
-var _ workerprovider.Provider = (*SideEffects)(nil)
+var _ workers.Provider = (*SideEffects)(nil)
 var _ workers.CommandRunner = (*SideEffects)(nil)

@@ -1,0 +1,68 @@
+package recordings_test
+
+import (
+	"context"
+	"testing"
+
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+)
+
+type workersRootPortProbe struct{}
+
+func (workersRootPortProbe) Infer(
+	_ context.Context,
+	_ workers.ProviderInferenceRequest,
+) (workers.InferenceResponse, error) {
+	return workers.InferenceResponse{}, nil
+}
+
+func (workersRootPortProbe) Run(
+	_ context.Context,
+	_ workers.CommandRequest,
+) (workers.CommandResult, error) {
+	return workers.CommandResult{}, nil
+}
+
+// TestReplayBindingContractsAcceptWorkersRootPorts proves published replay
+// binding contracts name Workers service root ports instead of nested Workers
+// implementation packages.
+func TestReplayBindingContractsAcceptWorkersRootPorts(t *testing.T) {
+	t.Parallel()
+
+	probe := workersRootPortProbe{}
+	var provider workers.Provider = probe
+	var runner workers.CommandRunner = probe
+
+	binding := recordings.BindReplayExecutionResult{
+		Provider:      provider,
+		CommandRunner: runner,
+	}
+	if binding.Provider == nil || binding.CommandRunner == nil {
+		t.Fatal("BindReplayExecutionResult must accept workers root ports")
+	}
+
+	var factory recordings.ReplayExecutionFactory = func(
+		_ *factorydefinitions.ReplayArtifact,
+	) (
+		workers.Provider,
+		workers.CommandRunner,
+		[]recordings.ReplayHook,
+		recordings.CompletionDeliveryPlanner,
+		error,
+	) {
+		return provider, runner, nil, nil, nil
+	}
+	if factory == nil {
+		t.Fatal("ReplayExecutionFactory must be constructible with workers root ports")
+	}
+
+	p, r, _, _, err := factory(&factorydefinitions.ReplayArtifact{SchemaVersion: "replay.v1"})
+	if err != nil {
+		t.Fatalf("ReplayExecutionFactory: %v", err)
+	}
+	if p == nil || r == nil {
+		t.Fatalf("factory ports = (%v,%v), want non-nil provider and runner", p, r)
+	}
+}
