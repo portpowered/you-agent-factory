@@ -27,8 +27,13 @@ var workThinRootContractFiles = []string{
 	"recordings_import_boundary_test.go",
 	"recordings_request_boundary_test.go",
 	"service_contract.go",
+	"service_import_boundary_test.go",
+	"service_peer_bindings.go",
+	"service_peer_bindings_test.go",
 	"service_root_contract_seal_test.go",
 	"service_root_contract_test.go",
+	"wire_behavioral_proof_test.go",
+	"legacy_packages_disposition_test.go",
 }
 
 type workRootContractFoldTarget struct {
@@ -61,6 +66,8 @@ var workExcessRootContractFolds = []workRootContractFoldTarget{
 			"arguments_test.go",
 			"invocation_input_preparation.go",
 			"invocation_input_preparation_test.go",
+			"invocation_policy_service.go",
+			"invocation_policy_service_test.go",
 			"primary_result.go",
 			"primary_result_test.go",
 			"primary_result_regression_test.go",

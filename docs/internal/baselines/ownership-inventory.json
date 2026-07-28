@@ -3512,22 +3512,6 @@
       "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/service",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal",
-      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/service/host",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal",
-      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/state",
       "disposition": "move",
       "destination": "factory_runtime",
