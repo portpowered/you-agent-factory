@@ -50,11 +50,13 @@ func TestNewAdapter_RejectsNilRoot(t *testing.T) {
 }
 
 type runtimeRootFake struct {
-	observe   func(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
-	pause     func(context.Context, factoryruntime.PauseRequest) (factoryruntime.PauseResult, error)
-	resume    func(context.Context, factoryruntime.ResumeRequest) (factoryruntime.ResumeResult, error)
-	terminate func(context.Context, factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error)
-	moveWork  func(context.Context, factoryruntime.MoveWorkRequest) (factoryruntime.MoveWorkResult, error)
+	observe              func(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
+	pause                func(context.Context, factoryruntime.PauseRequest) (factoryruntime.PauseResult, error)
+	resume               func(context.Context, factoryruntime.ResumeRequest) (factoryruntime.ResumeResult, error)
+	terminate            func(context.Context, factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error)
+	moveWork             func(context.Context, factoryruntime.MoveWorkRequest) (factoryruntime.MoveWorkResult, error)
+	planDispatch         func(context.Context, factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error)
+	acceptDispatchResult func(context.Context, factoryruntime.AcceptDispatchResultRequest) (factoryruntime.AcceptDispatchResultResult, error)
 }
 
 var _ factoryruntime.Service = (*runtimeRootFake)(nil)
@@ -94,10 +96,16 @@ func (fake *runtimeRootFake) Observe(ctx context.Context, req factoryruntime.Obs
 	}
 	return factoryruntime.ObserveResult{}, nil
 }
-func (fake *runtimeRootFake) PlanDispatch(context.Context, factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error) {
+func (fake *runtimeRootFake) PlanDispatch(ctx context.Context, req factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error) {
+	if fake.planDispatch != nil {
+		return fake.planDispatch(ctx, req)
+	}
 	return factoryruntime.PlanDispatchResult{}, nil
 }
-func (fake *runtimeRootFake) AcceptDispatchResult(context.Context, factoryruntime.AcceptDispatchResultRequest) (factoryruntime.AcceptDispatchResultResult, error) {
+func (fake *runtimeRootFake) AcceptDispatchResult(ctx context.Context, req factoryruntime.AcceptDispatchResultRequest) (factoryruntime.AcceptDispatchResultResult, error) {
+	if fake.acceptDispatchResult != nil {
+		return fake.acceptDispatchResult(ctx, req)
+	}
 	return factoryruntime.AcceptDispatchResultResult{}, nil
 }
 func (fake *runtimeRootFake) CaptureCheckpoint(context.Context, factoryruntime.CaptureCheckpointRequest) (factoryruntime.CaptureCheckpointResult, error) {

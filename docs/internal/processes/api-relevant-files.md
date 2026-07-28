@@ -56,6 +56,11 @@ Use this map when changing the public REST contract.
   terminate through `ControlPause`, `ControlResume`, and `ControlTerminate`
   with published `ControlOutcome` success vocabulary; operator move-work maps
   `moveWorkBySessionId` through `ControlMoveWork` in `move_work_mapping.go`.
+  Dispatch-plan adaptation (`handlers_dispatch_plan.go`) maps plan-dispatch and
+  accept-dispatch-result through `PlanDispatch` and `AcceptDispatchResult` with
+  published `DispatchPlanOutcome` success vocabulary in
+  `dispatch_plan_mapping.go`; typed dispatch-plan failures map at the adapter
+  edge before story 006 centralizes the full sentinel set.
 - Factory Definitions HTTP decoding, generated-contract mapping, service
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_definitions/transports/http`. The top-level
