@@ -664,11 +664,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/bootstrap_portability/factory_validation_test.go",
-      "target": "bootstrap_portability"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/bootstrap_portability/helpers_functionallong_test.go",
       "target": "bootstrap_portability"
     },
@@ -1056,11 +1051,6 @@
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/review_retry_exhaustion_long_test.go",
       "target": "workflow"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/bootstrap_portability/metadata_contract/factory_metadata_contract_test.go",
-      "target": "bootstrap_portability"
     },
     {
       "rule": "functional-test-unclassified-domain",

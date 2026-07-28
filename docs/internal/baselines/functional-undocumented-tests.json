@@ -111,14 +111,6 @@
       "name": "TestExportImportSmoke_PreservesNestedFactoryDocsThroughExportImport"
     },
     {
-      "file": "bootstrap_portability/metadata_contract/factory_metadata_contract_test.go",
-      "name": "TestFactoryMetadataContractLoadsLegacyExamplesAndRendersCanonicalHelp"
-    },
-    {
-      "file": "bootstrap_portability/metadata_contract/factory_metadata_contract_test.go",
-      "name": "TestFactoryMetadataSnapshotRejectsInvalidProgrammaticExampleArguments"
-    },
-    {
       "file": "cli/factory_run/output/failure_test.go",
       "name": "TestInvocationFailureOutputContracts"
     },
