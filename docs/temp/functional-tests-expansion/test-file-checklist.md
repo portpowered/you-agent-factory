@@ -583,7 +583,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [ ] `tests/functional/sessions/live_runtime_build_process_test.go`
   - `TestBuildProcessRoutesLiveOpenListControlAndCloseThroughFactorySessionsRoot`.
 
-- [ ] `tests/functional/sessions/controls/pause_resume_test.go`
+- [x] `tests/functional/sessions/controls/pause_resume_test.go`
   - `TestPausedFactorySessionBuffersSubmittedWork`.
   - `TestResumedFactorySessionDrainsBufferedWorkInOrder`.
   - `TestPauseResumeEmitsDurableLifecycleEvents`.

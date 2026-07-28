@@ -7547,6 +7547,56 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/controls/pause_resume_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/controls",
+      "scenario": "TestPausedFactorySessionBuffersSubmittedWork",
+      "lane": "short",
+      "destination": "tests/functional/sessions/controls/pause_resume_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/controls/pause_resume_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/controls",
+      "scenario": "TestResumedFactorySessionDrainsBufferedWorkInOrder",
+      "lane": "short",
+      "destination": "tests/functional/sessions/controls/pause_resume_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/controls/pause_resume_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/controls",
+      "scenario": "TestPauseResumeEmitsDurableLifecycleEvents",
+      "lane": "short",
+      "destination": "tests/functional/sessions/controls/pause_resume_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/controls/pause_resume_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/controls",
+      "scenario": "TestAPIPauseResumeCancelAndTerminateFactorySession",
+      "lane": "short",
+      "destination": "tests/functional/sessions/controls/pause_resume_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/controls/pause_resume_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/controls",
+      "scenario": "TestAPIInvalidLifecycleTransitionReturnsConflict",
+      "lane": "short",
+      "destination": "tests/functional/sessions/controls/pause_resume_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
   "scanned_at_utc": "2026-07-28T05:00:00Z",
@@ -7585,9 +7635,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 732,
+    "customer_top_level_Test_scenarios": 740,
     "lane_functionallong": 95,
-    "lane_short": 637,
+    "lane_short": 645,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
