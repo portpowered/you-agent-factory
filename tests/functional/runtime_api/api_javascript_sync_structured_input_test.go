@@ -183,6 +183,25 @@ func postJavaScriptSyncExecution(
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
 
+	status, body := postJavaScriptSyncExecutionExpectStatus(t, baseURL, args)
+	if status != http.StatusOK {
+		t.Fatalf("POST /factory-sessions/sync status = %d, want 200: %s", status, body)
+	}
+
+	var result factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.Unmarshal([]byte(body), &result); err != nil {
+		t.Fatalf("decode sync execution response: %v\nbody:\n%s", err, body)
+	}
+	return result
+}
+
+func postJavaScriptSyncExecutionExpectStatus(
+	t *testing.T,
+	baseURL string,
+	args map[string]any,
+) (int, string) {
+	t.Helper()
+
 	factoryID := jsStructuredInputFactoryName
 	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
 		RequestId: "js-structured-input-sync",
@@ -207,15 +226,10 @@ func postJavaScriptSyncExecution(
 		t.Fatalf("POST %s: %v", endpoint, err)
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		var responseBody bytes.Buffer
-		_, _ = responseBody.ReadFrom(response.Body)
-		t.Fatalf("POST %s status = %d, want 200: %s", endpoint, response.StatusCode, responseBody.String())
-	}
 
-	var result factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
-		t.Fatalf("decode sync execution response: %v", err)
+	var responseBody bytes.Buffer
+	if _, err := responseBody.ReadFrom(response.Body); err != nil {
+		t.Fatalf("read sync execution response: %v", err)
 	}
-	return result
+	return response.StatusCode, responseBody.String()
 }

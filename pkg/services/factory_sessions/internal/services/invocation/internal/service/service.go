@@ -66,9 +66,6 @@ func (s *Service) InvokeFactorySession(
 	sessionID string,
 	request factorysessions.InvocationRequest,
 ) (factorydefinitions.FactoryInvocationResult, error) {
-	if s == nil || s.owner == nil {
-		return factorydefinitions.FactoryInvocationResult{}, fmt.Errorf("Factory Session invocation service is unavailable")
-	}
 	return s.owner.InvokeFactorySession(ctx, sessionID, request)
 }
 
@@ -78,8 +75,5 @@ func (s *Service) ResolveInvocationInput(
 	cfg *factorydefinitions.FactoryConfig,
 	request factorysessions.InvocationRequest,
 ) (factorysessions.ResolvedInvocationInput, error) {
-	if s == nil || s.owner == nil {
-		return factorysessions.ResolvedInvocationInput{}, fmt.Errorf("Factory Session invocation service is unavailable")
-	}
 	return s.owner.ResolveInvocationInput(cfg, request)
 }
