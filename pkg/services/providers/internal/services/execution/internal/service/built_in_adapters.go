@@ -8,6 +8,7 @@ import (
 	geminiadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/gemini"
 	kiroadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/kiro"
 	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/opencode"
+	piadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/pi"
 )
 
 // BuiltInDependencies carries exact provider-native invocation effects.
@@ -18,6 +19,7 @@ type BuiltInDependencies struct {
 	Gemini   geminiadapter.Effect
 	Kiro     kiroadapter.Effect
 	OpenCode opencodeadapter.Effect
+	Pi       piadapter.Effect
 }
 
 // BuiltInRegistrations returns the immutable set of native adapters currently
@@ -38,5 +40,6 @@ func BuiltInRegistrations(
 		geminiadapter.NewRegistration(effects.Gemini),
 		kiroadapter.NewRegistration(effects.Kiro),
 		opencodeadapter.NewRegistration(effects.OpenCode),
+		piadapter.NewRegistration(effects.Pi),
 	}
 }

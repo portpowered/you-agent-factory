@@ -11,6 +11,7 @@ import (
 	geminiadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/gemini"
 	kiroadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/kiro"
 	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/opencode"
+	piadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/pi"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -72,5 +73,6 @@ func BuiltInDependenciesFromWorkersRunner(
 		Gemini:   geminiadapter.NewCommandEffect(runner),
 		Kiro:     kiroadapter.NewCommandEffect(runner),
 		OpenCode: opencodeadapter.NewCommandEffect(runner),
+		Pi:       piadapter.NewCommandEffect(runner),
 	}
 }

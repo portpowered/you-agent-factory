@@ -13,8 +13,8 @@ func TestBuiltInRegistrationsSelectDistinctCodexClaudeCursorGeminiKiroAndOpenCod
 	t.Parallel()
 
 	registrations := BuiltInRegistrations()
-	if len(registrations) != 6 {
-		t.Fatalf("registration count = %d, want 6", len(registrations))
+	if len(registrations) != 7 {
+		t.Fatalf("registration count = %d, want 7", len(registrations))
 	}
 
 	byID := make(map[providers.ID]string, len(registrations))
@@ -48,5 +48,8 @@ func TestBuiltInRegistrationsSelectDistinctCodexClaudeCursorGeminiKiroAndOpenCod
 	}
 	if !strings.Contains(byID[providers.IDKiro], "Kiro") {
 		t.Fatalf("Kiro adapter message = %q", byID[providers.IDKiro])
+	}
+	if !strings.Contains(byID[providers.IDPi], "Pi") {
+		t.Fatalf("Pi adapter message = %q", byID[providers.IDPi])
 	}
 }
