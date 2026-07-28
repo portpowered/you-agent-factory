@@ -660,6 +660,28 @@ func readAPIFactorySessionDurableReadModel(
 	return read
 }
 
+func waitForAPIFactorySessionStatus(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+	want factoryapi.FactorySessionDurableLifecycleStatus,
+	timeout time.Duration,
+) factoryapi.FactorySessionDurableReadModel {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		read := readAPIFactorySessionDurableReadModel(t, baseURL, sessionID)
+		if read.Status == want {
+			return read
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	read := readAPIFactorySessionDurableReadModel(t, baseURL, sessionID)
+	t.Fatalf("api session %s status = %q, want %q within %s", sessionID, read.Status, want, timeout)
+	return read
+}
+
 func assertFactorySessionOutputExcludesForbiddenVocabulary(t *testing.T, text string) {
 	t.Helper()
 	lower := strings.ToLower(text)

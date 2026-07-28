@@ -260,6 +260,54 @@ func TestMCPAsyncFactorySessionCanBePolledToFailure(t *testing.T) {
 	closeMCPServer(t, nil, serveErr)
 }
 
+// TestMCPAsyncCancellationIsVisibleThroughAPI proves MCP cancel on an async
+// Factory Session leaves a cancelled lifecycle status visible through the public
+// API for the same session id so operators can confirm cancellation outside the
+// MCP host.
+func TestMCPAsyncCancellationIsVisibleThroughAPI(t *testing.T) {
+	projectRoot := setupBusyLoopWorkflowFixture(t)
+	apiServer := startFunctionalAPIServerForMCPControls(t, projectRoot)
+	baseURL := apiServer.URL()
+
+	client, shutdown, serveErr := startRootRuntimeMCPServer(t, projectRoot, nil)
+	assertMCPInitialized(t, client)
+
+	sessionID := startMCPRunningSession(t, client)
+	mcpControl(
+		t,
+		client,
+		sessionID,
+		factoryapi.FactorySessionLifecycleControlKindCancel,
+		factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+	)
+	mcpRead := waitForMCPSessionStatus(
+		t,
+		client,
+		sessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusCanceled,
+		8*time.Second,
+	)
+	assertCanonicalSessionID(t, mcpRead.SessionId, sessionID, "mcp cancel read")
+
+	apiRead := waitForAPIFactorySessionStatus(
+		t,
+		baseURL,
+		sessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusCanceled,
+		8*time.Second,
+	)
+	assertCanonicalSessionID(t, apiRead.SessionId, sessionID, "api cancel read")
+	if mcpRead.Status != apiRead.Status {
+		t.Fatalf("mcp status = %q, api status = %q, want matching shared CANCELED status", mcpRead.Status, apiRead.Status)
+	}
+	if apiRead.OrchestratorKind != factoryapi.JAVASCRIPT {
+		t.Fatalf("api orchestratorKind = %q, want %q", apiRead.OrchestratorKind, factoryapi.JAVASCRIPT)
+	}
+
+	shutdown()
+	closeMCPServer(t, nil, serveErr)
+}
+
 func toolNamesFromListResult(t *testing.T, result map[string]any) []string {
 	t.Helper()
 	rawTools, ok := result["tools"].([]any)
