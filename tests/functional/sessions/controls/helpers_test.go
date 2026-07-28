@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -21,6 +23,9 @@ const (
 	pauseResumeDrainWaitTimeout       = 30 * time.Second
 	pauseResumeBusyLoopWorkflowName   = "busy-loop"
 	pauseResumeDurableStatusTimeout   = 15 * time.Second
+
+	interruptedInspectWorkTypeName     = "goal"
+	interruptedInspectReviewWorkstation = "review-goal"
 )
 
 func pauseResumeControlsFactoryDirWithBusyLoop(t *testing.T) string {
@@ -578,6 +583,241 @@ func assertPauseResumeLifecycleControlEvents(
 			"lifecycle-control event order = pause@%s resume@%s, want pause before resume",
 			pausePayload.OccurredAt.UTC(),
 			resumePayload.OccurredAt.UTC(),
+		)
+	}
+}
+
+func invocationPipelineConfig() map[string]any {
+	return map[string]any{
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]string{{"name": "worker-a"}},
+		"workstations": []map[string]any{{
+			"name":      "process",
+			"worker":    "worker-a",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+		}},
+	}
+}
+
+func scaffoldInvocationFactory(t *testing.T, overrides map[string]any) string {
+	t.Helper()
+
+	cfg := invocationPipelineConfig()
+	for key, value := range overrides {
+		cfg[key] = value
+	}
+	workTypes := cfg["workTypes"].([]map[string]any)
+	for i := range workTypes {
+		if name, _ := workTypes[i]["name"].(string); name == "task" {
+			workTypes[i]["handlingBehavior"] = []string{"DEFAULT"}
+		}
+	}
+	dir := support.ScaffoldFactory(t, cfg)
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	return dir
+}
+
+func textInvocationRequest(t *testing.T, text string, timeoutMillis *int64) factoryapi.InvocationRequest {
+	t.Helper()
+
+	var part factoryapi.WorkContentPart
+	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeText,
+		Text: text,
+	}); err != nil {
+		t.Fatalf("build invocation text content: %v", err)
+	}
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := factoryapi.WorkContent{part}
+	return factoryapi.InvocationRequest{
+		SourceKind:    &sourceKind,
+		Content:       &content,
+		TimeoutMillis: timeoutMillis,
+	}
+}
+
+func postInvocation(t *testing.T, serverURL string, request factoryapi.InvocationRequest) factoryapi.InvocationResponse {
+	t.Helper()
+
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal invocation request: %v", err)
+	}
+	response, err := http.Post(
+		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
+		"application/json",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("POST /factory-sessions/~default/invocations: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		payload, readErr := io.ReadAll(response.Body)
+		if readErr != nil {
+			t.Fatalf("read invocation error response: %v", readErr)
+		}
+		t.Fatalf(
+			"POST /factory-sessions/~default/invocations status = %d: %s",
+			response.StatusCode,
+			strings.TrimSpace(string(payload)),
+		)
+	}
+
+	var decoded factoryapi.InvocationResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode invocation response: %v", err)
+	}
+	return decoded
+}
+
+func scaffoldInterruptedInspectFactory(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, interruptedInspectFactoryConfig())
+	support.WriteAgentConfig(t, dir, "mock-worker", `---
+type: SCRIPT_WORKER
+command: /bin/echo
+args:
+  - interrupted
+---
+Classify goal work.
+`)
+	support.WriteWorkstationConfig(t, dir, interruptedInspectReviewWorkstation, `---
+type: CLASSIFIER_WORKSTATION
+---
+Review goal work for interrupted routing.
+`)
+	return dir
+}
+
+func interruptedInspectFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "sessions-controls-interrupted-inspect",
+		"workTypes": []map[string]any{
+			{
+				"name": interruptedInspectWorkTypeName,
+				"states": []map[string]any{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "interrupted", "type": "FAILED"},
+					{"name": "complete", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]string{
+			{"name": "mock-worker"},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":   interruptedInspectReviewWorkstation,
+				"type":   "CLASSIFIER_WORKSTATION",
+				"worker": "mock-worker",
+				"inputs":    []map[string]string{{"workType": interruptedInspectWorkTypeName, "state": "init"}},
+				"classificationRoutes": []map[string]any{
+					{
+						"label": "accepted",
+						"outputs": []map[string]string{
+							{"workType": interruptedInspectWorkTypeName, "state": "complete"},
+						},
+					},
+					{
+						"label": "interrupted",
+						"outputs": []map[string]string{
+							{"workType": interruptedInspectWorkTypeName, "state": "interrupted"},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func writeInterruptedInspectMockWorkers(t *testing.T) string {
+	t.Helper()
+
+	cfg := workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{
+			{
+				WorkerName:      "mock-worker",
+				WorkstationName: interruptedInspectReviewWorkstation,
+				RunType:         workers.MockWorkerRunTypeScript,
+				ScriptConfig: &workers.MockWorkerScriptConfig{
+					Command: "/bin/echo",
+					Args:    []string{"interrupted"},
+				},
+			},
+		},
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal interrupted inspect mock-workers config: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "mock-workers-interrupted-inspect.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write interrupted inspect mock-workers config: %v", err)
+	}
+	return path
+}
+
+func startInterruptedInspectAPIServer(
+	t *testing.T,
+	factoryDir string,
+	mockWorkersPath string,
+) *support.FunctionalAPIServer {
+	t.Helper()
+
+	payload, err := os.ReadFile(mockWorkersPath)
+	if err != nil {
+		t.Fatalf("read customer mock-workers config: %v", err)
+	}
+	var mockWorkersConfig workers.MockWorkersConfig
+	if err := json.Unmarshal(payload, &mockWorkersConfig); err != nil {
+		t.Fatalf("decode customer mock-workers config: %v", err)
+	}
+	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+		MockWorkersConfig:         &mockWorkersConfig,
+	})
+}
+
+func assertInterruptedStopSummary(
+	t *testing.T,
+	summary *factoryapi.FactoryStopSummary,
+	context string,
+) {
+	t.Helper()
+
+	if summary == nil {
+		t.Fatalf("%s stopSummary = nil, want INTERRUPTED dispatch context", context)
+	}
+	if summary.StopKind != factoryapi.FactoryStopKind("INTERRUPTED") {
+		t.Fatalf("%s stopKind = %q, want INTERRUPTED", context, summary.StopKind)
+	}
+	if summary.LatestDispatch == nil ||
+		summary.LatestDispatch.Status != factoryapi.FactoryDispatchStatusINTERRUPTED {
+		t.Fatalf(
+			"%s latestDispatch = %#v, want INTERRUPTED dispatch context",
+			context,
+			summary.LatestDispatch,
+		)
+	}
+	if summary.LatestResultSummary == nil ||
+		strings.TrimSpace(*summary.LatestResultSummary) == "" {
+		t.Fatalf(
+			"%s latestResultSummary = %#v, want interrupted stop explanation",
+			context,
+			summary.LatestResultSummary,
 		)
 	}
 }

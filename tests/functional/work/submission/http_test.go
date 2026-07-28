@@ -1,14 +1,21 @@
 package submission_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const (
@@ -22,6 +29,151 @@ const (
 
 	httpUnknownWorkID = "work-http-unknown-missing-id"
 )
+
+// TestAPIPOSTSubmitAndQueryWork proves REST POST /work submission and GET /work
+// query expose the submitted Work through the public HTTP surface after completion.
+func TestAPIPOSTSubmitAndQueryWork(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow config-driven REST submit/query functional test")
+	}
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		ProviderOverride:          support.MockInferenceProvider("Processed. COMPLETE"),
+	})
+	defer server.Stop(t)
+
+	postWorkViaRESTAPI(t, server.URL())
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	assertListedWorkCompleteTask(t, server.URL())
+}
+
+// TestAPIBatchUpsertAcceptsWorksContent proves batch upsert through PUT
+// /work-requests accepts canonical works content and projects ordered content parts.
+func TestAPIBatchUpsertAcceptsWorksContent(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	const (
+		workID    = "work-http-batch-content"
+		requestID = "request-http-batch-content"
+	)
+	body, err := json.Marshal(map[string]any{
+		"requestId": requestID,
+		"type":      "FACTORY_REQUEST_BATCH",
+		"works": []map[string]any{{
+			"name":         "content-batch-work",
+			"workId":       workID,
+			"workTypeName": "task",
+			"content": []map[string]any{
+				{"type": "text", "text": "Batch canonical content."},
+				{"type": "text", "text": "Second batch part."},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal batch request: %v", err)
+	}
+	endpoint := support.DefaultSessionWorkURL(
+		server.URL(),
+		"/work-requests/"+url.PathEscape(requestID),
+	)
+	httpReq, err := http.NewRequest(http.MethodPut, endpoint, bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build PUT /work-requests request: %v", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		t.Fatalf("PUT /work-requests: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("PUT /work-requests status = %d, want 201: %s", resp.StatusCode, payload)
+	}
+	var upserted factoryapi.UpsertWorkRequestResponse
+	if err := json.NewDecoder(resp.Body).Decode(&upserted); err != nil {
+		t.Fatalf("decode work request response: %v", err)
+	}
+	if upserted.RequestId != requestID || upserted.TraceId == "" {
+		t.Fatalf("PUT /work-requests response = %#v, want request id and trace id", upserted)
+	}
+	if len(upserted.Works) != 1 || upserted.Works[0].WorkId != workID {
+		t.Fatalf("PUT /work-requests works = %#v, want one accepted work with id %q", upserted.Works, workID)
+	}
+
+	items := waitForWorkIDsComplete(t, server.URL(), []string{workID}, 10*time.Second)
+	content := items[0].Content
+	if content == nil || len(*content) != 2 {
+		t.Fatalf("GET /work content = %#v, want two ordered batch content parts", content)
+	}
+	firstPart, err := (*content)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode first batch content part: %v", err)
+	}
+	secondPart, err := (*content)[1].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode second batch content part: %v", err)
+	}
+	if firstPart.Text != "Batch canonical content." || secondPart.Text != "Second batch part." {
+		t.Fatalf("GET /work batch content = %#v, want ordered batch text parts", content)
+	}
+	functionalevidence.Covers(t, "rest/upsertWorkRequestBySessionId")
+}
+
+// TestCLIWorkTypeNameReachesLiveAPIHandler proves CLI submit with an explicit
+// work type name reaches the live public HTTP handler and completes the Work.
+func TestCLIWorkTypeNameReachesLiveAPIHandler(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI submit functional test")
+	}
+
+	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	payloadPath := filepath.Join(t.TempDir(), "request.md")
+	if err := os.WriteFile(payloadPath, []byte("ship name based CLI submit"), 0o644); err != nil {
+		t.Fatalf("write CLI submit payload: %v", err)
+	}
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you",
+		"--server", functionalServerBaseURL(t, server.URL()),
+		"submit",
+		"--name", "  cli-live-api-name  ",
+		"--work-type-name", "task",
+		"--payload", payloadPath,
+	})
+	inputs.Input.WorkingDirectory = factoryDir
+	if err := support.ExecuteProcess(t, inputs); err != nil {
+		t.Fatalf(
+			"Process.Execute(you submit --work-type-name) error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+
+	item := waitForWorkTypeComplete(t, server.URL(), "task", 10*time.Second)
+	if item.Name != "cli-live-api-name" {
+		t.Fatalf("CLI-submitted work name = %q, want cli-live-api-name", item.Name)
+	}
+	if support.StringPointerValue(item.WorkTypeName) != "task" ||
+		workStateName(item.State) != "complete" {
+		t.Fatalf("CLI-submitted work = %#v, want task in complete state", item)
+	}
+}
 
 // TestAPISubmitBatchThenListAndGetWork proves a successful public HTTP batch
 // Work Request submission makes the submitted Work visible through list and get
@@ -287,6 +439,57 @@ func assertAPIUnknownWorkTypedNotFoundHTTPResponse(
 	var shown factoryapi.Work
 	if json.Unmarshal(body, &shown) == nil && strings.TrimSpace(shown.Name) != "" {
 		t.Fatalf("GET unknown Work %q must not emit a success Work payload: %#v", workID, shown)
+	}
+}
+
+func postWorkViaRESTAPI(t *testing.T, baseURL string) {
+	t.Helper()
+
+	req, err := http.NewRequest(
+		http.MethodPost,
+		strings.TrimSuffix(baseURL, "/")+support.DefaultSessionWorkPath("/work"),
+		bytes.NewBufferString(`{"name":"rest-submit","workTypeName": "task", "payload": {"title": "REST submit"}}`),
+	)
+	if err != nil {
+		t.Fatalf("build POST /work request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /work: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusCreated {
+		t.Errorf("POST /work: expected status 201, got %d", response.StatusCode)
+	}
+
+	var submitResp factoryapi.SubmitWorkResponse
+	if err := json.NewDecoder(response.Body).Decode(&submitResp); err != nil {
+		t.Fatalf("POST /work: failed to decode response: %v", err)
+	}
+	if submitResp.TraceId == "" {
+		t.Error("POST /work: expected non-empty trace_id")
+	}
+}
+
+func assertListedWorkCompleteTask(t *testing.T, baseURL string) {
+	t.Helper()
+
+	listResp := support.GetJSON[factoryapi.ListWorkResponse](
+		t,
+		strings.TrimSuffix(baseURL, "/")+support.DefaultSessionWorkPath("/work"),
+	)
+	if len(listResp.Results) != 1 {
+		t.Fatalf("GET /work: expected 1 result, got %d", len(listResp.Results))
+	}
+
+	work := listResp.Results[0]
+	if support.StringPointerValue(work.WorkTypeName) != "task" {
+		t.Errorf("GET /work: expected work type 'task', got %q", support.StringPointerValue(work.WorkTypeName))
+	}
+	if workStateName(work.State) != "complete" ||
+		work.State.Type != factoryapi.WorkStateTypeTERMINAL {
+		t.Errorf("GET /work: expected state complete/TERMINAL, got %#v", work.State)
 	}
 }
 

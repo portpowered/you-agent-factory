@@ -119,28 +119,12 @@
       "name": "TestFactoryMetadataSnapshotRejectsInvalidProgrammaticExampleArguments"
     },
     {
-      "file": "bootstrap_portability/watcher_current_factory_activation_long_test.go",
-      "name": "TestCurrentFactoryActivationFixture_ActivatesSecondPersistedFactoryAndResolvesCurrentFactory"
-    },
-    {
-      "file": "bootstrap_portability/watcher_current_factory_activation_long_test.go",
-      "name": "TestCurrentFactoryActivationFixture_LiveAPIReadsFollowActivatedFactory"
-    },
-    {
-      "file": "bootstrap_portability/watcher_current_factory_activation_long_test.go",
-      "name": "TestCurrentFactoryActivationFixture_WatchedFileExecutionFollowsActivatedFactory"
-    },
-    {
       "file": "cli/factory_run/output/failure_test.go",
       "name": "TestInvocationFailureOutputContracts"
     },
     {
       "file": "cli/factory_run/output/output_test.go",
       "name": "TestSuccessfulInvocationOutputModes"
-    },
-    {
-      "file": "cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
-      "name": "TestPackagedFactoryJSONAndYAMLValidateFlattenAndRunParity"
     },
     {
       "file": "cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
@@ -152,15 +136,7 @@
     },
     {
       "file": "cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
-      "name": "TestRejectedAuthoredSourcesFailBeforeRuntimeExecution"
-    },
-    {
-      "file": "cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
       "name": "TestRuntimeMappingFailureRetainsSelectedSourceContext"
-    },
-    {
-      "file": "cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
-      "name": "TestYAMLCreateAndUpdateRemainRunnableAfterCanonicalPersistence"
     },
     {
       "file": "cli/input_contract/canonical_input_contract_test.go",
@@ -539,10 +515,6 @@
       "name": "TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies"
     },
     {
-      "file": "replay_contracts/canonical_topology_snapshot_projection_test.go",
-      "name": "TestCanonicalTopologySnapshotsPreservePublicIdentityAndResourceEvidence"
-    },
-    {
       "file": "replay_contracts/replay_event_stream_artifact_smoke_long_test.go",
       "name": "TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifact"
     },
@@ -553,10 +525,6 @@
     {
       "file": "replay_contracts/replay_factory_only_serialization_smoke_long_test.go",
       "name": "TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPayload"
-    },
-    {
-      "file": "replay_contracts/replay_legacy_unary_retirement_smoke_long_test.go",
-      "name": "TestLegacyUnaryRetirementSmoke_ReplaySubmitsCanonicalBatchWorkRequests"
     },
     {
       "file": "replay_contracts/replay_record_end_to_end_long_test.go",
@@ -583,18 +551,6 @@
       "name": "TestReplayRuntimeConfigSmoke_CanonicalWorkstationsDriveDispatchAndReplay"
     },
     {
-      "file": "replay_contracts/replay_script_boundary_events_test.go",
-      "name": "TestReplayScriptBoundaryEvents_CanonicalHistoryAndArtifactIncludeScriptResponseBoundary"
-    },
-    {
-      "file": "replay_contracts/replay_script_boundary_events_test.go",
-      "name": "TestReplayScriptBoundaryEvents_CanonicalHistoryIncludesScriptRequestBoundary"
-    },
-    {
-      "file": "replay_contracts/replay_script_boundary_events_test.go",
-      "name": "TestReplayScriptBoundaryEvents_ProcessFailureBoundaryPersistsInCanonicalHistoryAndArtifact"
-    },
-    {
       "file": "replay_contracts/replay_thin_event_dual_dispatch_smoke_long_test.go",
       "name": "TestReplayThinEventDualDispatchSmoke_ReplayAndReadersReuseSharedArtifact"
     },
@@ -619,76 +575,16 @@
       "name": "TestReplayWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelation"
     },
     {
-      "file": "runtime_api/api_batch_submission_boundary_smoke_long_test.go",
-      "name": "TestFactoryRequestBatch_PublicBatchShapeStaysAlignedAcrossWatchedFileAndHTTP"
-    },
-    {
       "file": "runtime_api/api_cleanup_smoke_test.go",
       "name": "TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces"
-    },
-    {
-      "file": "runtime_api/api_config_driven_submit_query_smoke_test.go",
-      "name": "TestConfigDriven_RESTAPISubmitAndQuery"
-    },
-    {
-      "file": "runtime_api/api_factory_event_mapping_test.go",
-      "name": "TestFactoryEventTransportMappingRejectsMalformedCanonicalPayload"
     },
     {
       "file": "runtime_api/api_functional_server_override_regression_test.go",
       "name": "TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride"
     },
     {
-      "file": "runtime_api/api_functionallong_compile_smoke_test.go",
-      "name": "TestRuntimeAPI_CompilesWithFunctionalLongTag"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_SubmitWorkContentAcceptsCanonicalParts"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredSubmission"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubmissionOnSupportedRunner"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptOrderedTextSubmission"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectForgedStructuredFileReference"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubmissionOnUnsupportedRunner"
-    },
-    {
-      "file": "runtime_api/api_inference_events_test.go",
-      "name": "TestInferenceEvents_HTTPStreamAndPublicWorkCorrelateRetryAttempts"
-    },
-    {
       "file": "runtime_api/api_inference_events_test.go",
       "name": "TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact"
-    },
-    {
-      "file": "runtime_api/api_inference_events_test.go",
-      "name": "TestInferenceEvents_ThinEventSmoke_CapturesThinnedDispatchInferenceSequenceAndReconstructsViews"
-    },
-    {
-      "file": "runtime_api/api_manual_work_recovery_test.go",
-      "name": "TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress"
     },
     {
       "file": "runtime_api/api_model_local_inference_long_test.go",
@@ -697,54 +593,6 @@
     {
       "file": "runtime_api/api_model_transport_smoke_test.go",
       "name": "TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned"
-    },
-    {
-      "file": "runtime_api/api_packaged_deep_research_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedDeepResearchUsesMaterializedFactorySource"
-    },
-    {
-      "file": "runtime_api/api_packaged_goal_invocation_test.go",
-      "name": "TestPackagedGoalBuiltInTopology_SubmitWhilePausedResumesThroughSessionControl"
-    },
-    {
-      "file": "runtime_api/api_packaged_goal_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedGoalContinueRepeatsBeforeCompletion"
-    },
-    {
-      "file": "runtime_api/api_packaged_goal_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedGoalRejectRepeatsBeforeCompletion"
-    },
-    {
-      "file": "runtime_api/api_packaged_goal_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedGoalReturnsExplicitSummaryPrimaryResult"
-    },
-    {
-      "file": "runtime_api/api_packaged_goal_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedGoalWorkerFailureReturnsFailedStatusDetails"
-    },
-    {
-      "file": "runtime_api/api_packaged_quorum_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedQuorumAppliesRoleArguments"
-    },
-    {
-      "file": "runtime_api/api_packaged_quorum_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedQuorumGatesMergeUntilBothBranchesComplete"
-    },
-    {
-      "file": "runtime_api/api_packaged_review_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedReviewRejectsThenApprovesRevision"
-    },
-    {
-      "file": "runtime_api/api_packaged_review_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedReviewReturnsApprovedCandidate"
-    },
-    {
-      "file": "runtime_api/api_packaged_review_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedReviewWorkerFailureReturnsFailedStatus"
-    },
-    {
-      "file": "runtime_api/api_request_batch_boundary_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork"
     },
     {
       "file": "runtime_api/api_runtime_config_alignment_smoke_test.go",
@@ -769,42 +617,6 @@
     {
       "file": "runtime_api/api_service_mode_observability_smoke_test.go",
       "name": "TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayReachableUntilCanceled"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_CanceledRequestContextStopsRequest"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PausedSessionReturnsPausedStatus"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_RejectsArgsWithoutActiveSignature"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_RejectsInvalidStructuredArgValueShape"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_RejectsWhitespaceOnlyText"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_ReturnsPrimaryResult"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_TimeoutReturnsTimedOutStatus"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_UnresolvedPrimaryResultReturnsFailedStatus"
-    },
-    {
-      "file": "runtime_api/api_submit_runtime_work_trace_shaping_smoke_test.go",
-      "name": "TestSubmitRuntimeWork_EmitsCanonicalTraceAwareBatchEvent"
     },
     {
       "file": "runtime_api/dashboard_engine_state_test.go",
@@ -1027,136 +839,12 @@
       "name": "TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree"
     },
     {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIAmbiguousPromptAndStdinFailsBeforeRuntimeStartup"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLICleanInvocationStdoutRemainsPipeableAcrossRuns"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIFailureWritesNoSuccessPayloadToStdout"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIRejectsConflictingPositionalAndStdinInput"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIStdinOnlyCleanInvocationStdoutRemainsPipeable"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIWritesPrimaryResultFromStdin"
-    },
-    {
-      "file": "smoke/cli_named_deep_research_smoke_test.go",
-      "name": "TestNamedDeepResearchCLI_DefaultInvocationReturnsLeadSynthesis"
-    },
-    {
-      "file": "smoke/cli_named_deep_research_smoke_test.go",
-      "name": "TestNamedDeepResearchCLI_InvokesConfiguredBoundedResearchWithApprovedFlags"
-    },
-    {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_EmptyInputRejectedWithStableCode"
-    },
-    {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_NamedFactoryCLIAndAPIShareSuccessOutcome"
-    },
-    {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_PositionalCLIAndAPIShareSuccessOutcome"
-    },
-    {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_SourceConflictRejectedBeforeInvocation"
-    },
-    {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_StdinCLIAndAPITextShareSuccessOutcome"
-    },
-    {
-      "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "name": "TestNamedGoalInvocationParity_UnresolvedPrimaryResultReportsStableFailure"
-    },
-    {
-      "file": "smoke/cli_named_goal_operator_controls_smoke_test.go",
-      "name": "TestNamedGoalOperatorControls_ClIPauseResumeDrainsBufferedGoalsInOrder"
-    },
-    {
-      "file": "smoke/cli_named_goal_operator_controls_smoke_test.go",
-      "name": "TestNamedGoalOperatorControls_InterruptedGoalInspectSurfacesDispatchAndStopSummary"
-    },
-    {
-      "file": "smoke/cli_named_goal_operator_controls_smoke_test.go",
-      "name": "TestNamedGoalOperatorControls_PauseBuffersSubmitUntilResume"
-    },
-    {
-      "file": "smoke/cli_named_goal_operator_controls_smoke_test.go",
-      "name": "TestNamedGoalOperatorControls_PauseResumeRecordsLifecycleControlEventsForReplay"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_AcceptedCompletesWithPrimaryResult"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_ClassifierNonSuccessOutcomesSurfaceDistinctStates"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_InterruptedSuppressesSuccessPrimaryResult"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_ReworkLoopsBackThenCompletesWithGoalContext"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_StructuredUnknownDecisionRoutesToFailed"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_UnknownClassifierLabelRoutesToFailed"
-    },
-    {
-      "file": "smoke/cli_named_goal_run_smoke_test.go",
-      "name": "TestNamedGoalRun_RealCLICompletesBatchInvocationWithPrimaryResultOnStdout"
-    },
-    {
-      "file": "smoke/cli_named_goal_run_smoke_test.go",
-      "name": "TestNamedGoalRun_RealCLIExitsAfterBatchCompletionWithoutContinuousMode"
-    },
-    {
-      "file": "smoke/cli_named_quorum_invocation_smoke_test.go",
-      "name": "TestNamedQuorumRun_RealCLIAcceptsRoleFlagsAndReturnsOneMergeResult"
-    },
-    {
-      "file": "smoke/cli_named_review_invocation_smoke_test.go",
-      "name": "TestNamedReviewInvocationVariants_RealCLIRequireApprovalAfterRejection"
-    },
-    {
-      "file": "smoke/config_driven_execution_test.go",
-      "name": "TestConfigDrivenExecution_AddWorkType"
-    },
-    {
-      "file": "smoke/config_driven_execution_test.go",
-      "name": "TestConfigDrivenExecution_GlobalConfigDrivesDefaultsAndWorkerPreset"
-    },
-    {
       "file": "smoke/guarded_loop_breaker_long_test.go",
       "name": "TestIntegrationSmoke_GuardedLoopBreakerRoutesOverLimitExampleWorkToFailed"
     },
     {
       "file": "smoke/guarded_loop_breaker_test.go",
       "name": "TestIntegrationSmoke_GuardedLoopBreakerExampleRejectsRetiredExhaustionRulesAtBoundary"
-    },
-    {
-      "file": "smoke/service_config_override_alignment_long_test.go",
-      "name": "TestServiceConfigOverrideAlignment_CustomerProcessScriptCommandRunner"
     },
     {
       "file": "smoke/service_lifecycle_smoke_long_test.go",
@@ -1183,86 +871,6 @@
       "name": "TestServiceLifecycle_WorkFileSubmissionCompletesTwoStagePipeline"
     },
     {
-      "file": "smoke/stateless_loaded_config_smoke_long_test.go",
-      "name": "TestStatelessExecutionSmoke_LoadedConfigDrivesExecution"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestBackendCoverageAliasesSmoke_RedirectToIndependentLanes"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestBackendVerificationLaneScriptSmoke_PreservesFailureExitAndLog"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestBackendVerificationLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestConcurrentUIVerificationLanesScriptSmoke_DoesNotWaitForDetachedLogHandle"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestConcurrentUIVerificationLanesScriptSmoke_FailureReportsExactLaneRerun"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestConcurrentUIVerificationLanesScriptSmoke_RunsBothOwnedLanesConcurrently"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestLongTestsCommandSmoke_FailureReportsExactSpecialtyLaneRerun"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestUICoverageCommandSmoke_RunsPackageCoverageThenReplayCheck"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestUIPackageCoverageCommandSmoke_InvokesPackageOwnedCoverageScript"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyFastCommandSmoke_ContractFailureStopsLaterSuites"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyFastCommandSmoke_FailureReportsOwnedSuiteAndRerunCommand"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyPRCommandSmoke_UsesRequiredLanesOnce"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyPRInferenceCommandSmoke_FailureReportsOwnedRerunCommand"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyPRInferenceCommandSmoke_RunsSingleNamedRegressionOnly"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers"
-    },
-    {
       "file": "work/recordings/recordings_read_test.go",
       "name": "TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot"
     },
@@ -1275,88 +883,12 @@
       "name": "TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures"
     },
     {
-      "file": "workflow/code_review_loop_long_test.go",
-      "name": "TestCodeReviewLoop"
-    },
-    {
       "file": "workflow/config_driven_retry_loop_breaker_test.go",
       "name": "TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit"
     },
     {
       "file": "workflow/config_driven_retry_loop_breaker_test.go",
       "name": "TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries"
-    },
-    {
-      "file": "workflow/conflict_resolution_test.go",
-      "name": "TestConflictResolution_ResolverFails"
-    },
-    {
-      "file": "workflow/conflict_resolution_test.go",
-      "name": "TestConflictResolution_ReviewApproveFirstTry"
-    },
-    {
-      "file": "workflow/conflict_resolution_test.go",
-      "name": "TestConflictResolution_ReviewFailResolveReReview"
-    },
-    {
-      "file": "workflow/logical_move_long_test.go",
-      "name": "TestLogicalMove_PreservesTokenColor"
-    },
-    {
-      "file": "workflow/logical_move_long_test.go",
-      "name": "TestLogicalMove_Success"
-    },
-    {
-      "file": "workflow/multi_output_color_propagation_long_test.go",
-      "name": "TestMultiOutputColorPropagation"
-    },
-    {
-      "file": "workflow/multi_output_color_propagation_long_test.go",
-      "name": "TestMultiOutputColorPropagation_NameAvailableDownstream"
-    },
-    {
-      "file": "workflow/multi_output_color_propagation_test.go",
-      "name": "TestDocReviewerExamplePNGFanoutPreservesSharedNameDownstream"
-    },
-    {
-      "file": "workflow/multi_output_color_propagation_test.go",
-      "name": "TestMultiOutputReviewerFanoutPreservesSharedNameDownstream"
-    },
-    {
-      "file": "workflow/multi_output_color_propagation_test.go",
-      "name": "TestNtoN_TypeMatching"
-    },
-    {
-      "file": "workflow/name_propagation_long_test.go",
-      "name": "TestNamePropagation_InPromptTemplate"
-    },
-    {
-      "file": "workflow/name_propagation_long_test.go",
-      "name": "TestNamePropagation_MarkdownFile"
-    },
-    {
-      "file": "workflow/rejection_path_test.go",
-      "name": "TestRejectionPath_NoRejectionArcsFailsToken"
-    },
-    {
-      "file": "workflow/rejection_path_test.go",
-      "name": "TestRejectionPath_NoRejectionArcsFailureRecordSet"
-    },
-    {
-      "file": "workflow/rejection_path_test.go",
-      "name": "TestRejectionPath_NoRejectionArcsReleasesResources"
-    },
-    {
-      "file": "workflow/rejection_path_test.go",
-      "name": "TestRejectionPath_WithRejectionArcsRoutesViaArcs"
-    },
-    {
-      "file": "workflow/repeater_parameterized_test.go",
-      "name": "TestParameterizedFields_UnresolvedTemplateRoutesToFailure"
-    },
-    {
-      "file": "workflow/repeater_parameterized_test.go",
-      "name": "TestParameterizedFields_WorkingDirectoryResolvesFromTags"
     },
     {
       "file": "workflow/review_retry_exhaustion_long_test.go",

@@ -321,3 +321,81 @@ func packagedQuorumRequestText(t *testing.T) string {
 	t.Helper()
 	return fmt.Sprintf("functional packaged quorum required input %d", time.Now().UnixNano())
 }
+
+type packagedQuorumGatedCommandRunner struct {
+	mu             sync.Mutex
+	requests       map[string]platformprocess.CommandRequest
+	callCounts     map[string]int
+	mergePrompt    string
+	startedA       chan struct{}
+	startedB       chan struct{}
+	startedAOnce   sync.Once
+	startedBOnce   sync.Once
+	releaseBranchB chan struct{}
+}
+
+func newPackagedQuorumGatedCommandRunner() *packagedQuorumGatedCommandRunner {
+	return &packagedQuorumGatedCommandRunner{
+		requests:       make(map[string]platformprocess.CommandRequest),
+		callCounts:     make(map[string]int),
+		startedA:       make(chan struct{}),
+		startedB:       make(chan struct{}),
+		releaseBranchB: make(chan struct{}),
+	}
+}
+
+func (runner *packagedQuorumGatedCommandRunner) Run(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	lane := packagedQuorumRequestLane(request)
+	runner.mu.Lock()
+	runner.requests[lane] = request
+	runner.callCounts[lane]++
+	runner.mu.Unlock()
+
+	switch lane {
+	case packagedQuorumBranchAWorkstation:
+		runner.startedAOnce.Do(func() { close(runner.startedA) })
+		return packagedQuorumCodexResult("branch A COMPLETE"), nil
+	case packagedQuorumBranchBWorkstation:
+		runner.startedBOnce.Do(func() { close(runner.startedB) })
+		select {
+		case <-runner.releaseBranchB:
+			return packagedQuorumCodexResult("branch B COMPLETE"), nil
+		case <-ctx.Done():
+			return platformprocess.CommandResult{}, ctx.Err()
+		}
+	case packagedQuorumMergeWorkstation:
+		prompt := packagedQuorumCommandPrompt(request)
+		runner.mu.Lock()
+		runner.mergePrompt = prompt
+		runner.mu.Unlock()
+		return packagedQuorumCodexResult("merged quorum response:\n" + prompt + "\nCOMPLETE"), nil
+	default:
+		return platformprocess.CommandResult{}, nil
+	}
+}
+
+func (runner *packagedQuorumGatedCommandRunner) capturedMergePrompt() string {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.mergePrompt
+}
+
+func (runner *packagedQuorumGatedCommandRunner) callCount(workstation string) int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.callCounts[workstation]
+}
+
+func (runner *packagedQuorumGatedCommandRunner) waitForBranchStarts(t *testing.T) {
+	t.Helper()
+	for _, started := range []<-chan struct{}{runner.startedA, runner.startedB} {
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for both quorum branches to start")
+		}
+	}
+}

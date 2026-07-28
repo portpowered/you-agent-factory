@@ -18,6 +18,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -33,8 +34,10 @@ type FunctionalAPIServerConfig struct {
 	UseMockWorkers            bool
 	MockWorkersConfig         *workers.MockWorkersConfig
 	WaitForServiceModeRuntime bool
+	ResponseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits
 	Args                      []string
 	Env                       []string
+	ProviderOverride          providercontract.Provider
 	Edges                     serviceedges.Edges
 }
 
@@ -61,6 +64,12 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	t.Helper()
 
 	edges := cfg.Edges
+	if cfg.ProviderOverride != nil {
+		edges.ProviderOverride = cfg.ProviderOverride
+	}
+	if cfg.ResponseEventRetentionLimits != nil {
+		edges.FactorySessionResponseEventRetentionLimits = cfg.ResponseEventRetentionLimits
+	}
 
 	api := NewProcessAPIServer()
 	edges.APIServerStarter = api.Start

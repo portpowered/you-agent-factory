@@ -37,7 +37,6 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 		Owner:          "factory_definitions",
 		ExpectedRetain: []string{"internal", "transports", "wire"},
 		Unexpected: []string{
-			"authoredlayout",
 			"clonetests",
 			"decisionenvelope",
 			"definition",
@@ -46,18 +45,14 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 			"invocationoutput",
 			"invocationworktype",
 			"loadedsource",
-			"loading",
 			"namevalue",
-			"namedfactories",
 			"namedpaths",
 			"packagedinstallation",
 			"packages",
 			"persistence",
-			"portableconfig",
 			"quorumpolicy",
 			"replayconfig",
 			"resource",
-			"runtimeconfig",
 			"service",
 			"snapshotcapture",
 			"systeminitializationtests",
@@ -72,9 +67,7 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 		Owner:          "factory_runtime",
 		ExpectedRetain: []string{"internal", "transports", "wire"},
 		Unexpected: []string{
-			"exhaustiontests",
 			"testdata",
-			"testkit",
 		},
 	},
 	"factory_sessions": {
@@ -92,7 +85,7 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 	"operator_settings": {
 		Owner:          "operator_settings",
 		ExpectedRetain: []string{"internal", "transports", "wire"},
-		Unexpected:     []string{"identityinventory", "servicewire", "testdata", "testlink", "testproviders"},
+		Unexpected:     []string{"testdata"},
 	},
 	"provider_sessions": {
 		Owner:          "provider_sessions",
@@ -100,7 +93,7 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 	},
 	"providers": {
 		Owner:          "providers",
-		ExpectedRetain: []string{"internal", "wire"},
+		ExpectedRetain: []string{"internal", "transports", "wire"},
 	},
 	"recordings": {
 		Owner:          "recordings",
@@ -114,7 +107,7 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 	"work": {
 		Owner:          "work",
 		ExpectedRetain: []string{"internal", "transports", "wire"},
-		Unexpected:     []string{"service", "stateaccessrecordings", "testdata"},
+		Unexpected:     []string{"testdata"},
 	},
 	"workers": {
 		Owner:          "workers",

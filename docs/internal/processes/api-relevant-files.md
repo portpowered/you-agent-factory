@@ -96,6 +96,41 @@ Use this map when changing the public REST contract.
   deadline exhaustion end without mapping to INTERNAL_ERROR; canceled requests
   terminate without an ErrorResponse body and deadline exhaustion returns 504
   (`request_context.go`).
+- DEL-WORK story 001 (`pss-del-work-001`) confirms CLN-WORK-FOLD-SERVICE,
+  CLN-WORK-LEGACY-PACKAGES, and CLN-WORK-CONTRACT-ROOTS are Factory-complete
+  before leased deletion begins. Observable gate proofs live in
+  `pkg/services/work/del_work_prerequisite_gate_test.go` (tree invariants from
+  CLN-WORK-FOLD-SERVICE internal fold, CLN-WORK-LEGACY-PACKAGES private
+  subservices, and CLN-WORK-CONTRACT-ROOTS thin root contract seal). Fold
+  behavioral proofs live in sibling boundary tests under `pkg/services/work/`.
+- DEL-WORK story 002 (`pss-del-work-002`) deletes emptied transitional `service/`
+  and `stateaccessrecordings/` public paths and clears production/test imports.
+  Observable deletion gate proofs live in
+  `pkg/services/work/del_work_deletion_gate_test.go`; wire behavioral proofs
+  remain in `wire_behavioral_proof_test.go` and `wire/recordings_state_access_test.go`.
+- DEL-WORK story 003 (`pss-del-work-003`) lowers structure, ownership, and
+  package-target baselines for deleted transitional `service/` and
+  `stateaccessrecordings/` paths. Observable baseline gate proofs live in
+  `pkg/services/work/del_work_baseline_gate_test.go`; burn down
+  `package-structure-baseline.json`, `ownership-inventory.json`, and
+  `package-target-manifest.json` rows together and remove deleted paths from
+  `workMoveRules` / `nestedOwnerMoveRules["work"]`.
+- DEL-WORK story 004 (`pss-del-work-004`) lowers unit and functional coverage
+  baseline rows for deleted transitional `service/` and `stateaccessrecordings/`
+  import paths only. Observable coverage gate proofs live in
+  `pkg/services/work/del_work_baseline_gate_test.go`; burn down
+  `go-unit-coverage-package-minimums.json` and
+  `go-functional-coverage-package-minimums.json` rows together without touching
+  other Work package coverage floors.
+- DEL-WORK story 005 (`pss-del-work-005`) proves root shape, structure/ownership
+  debt reduction, and repository structure verification after transitional
+  public deletion; proofs live in
+  `pkg/services/work/packaged_root_shape_test.go` and
+  `pkg/services/work/del_work_proof_gate_test.go`. Work ownership verification
+  helpers live in `internal/ownershipinventory/work_top_level.go`,
+  `internal/ownershipinventory/work_dual_ledger.go`, and
+  `VerifyWorkRootGoInventory` in `work_root_contract.go`. Fold behavioral
+  proofs remain in sibling boundary tests under `pkg/services/work/`.
 - Factory Runtime HTTP decoding, generated-contract mapping, Runtime root
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_runtime/transports/http`. The adapter consumes the
@@ -145,11 +180,66 @@ Use this map when changing the public REST contract.
   proves fake-root parity at the adapter edge without importing Definitions
   internals.
   pss-cln-def-fold-toplevel seals non-owner production imports of the transitional
-  `factory_definitions/service` compile shim to the documented Automations-leased
-  `pkg/wire` residual only; the repository-wide guard is
-  `pkg/services/factory_definitions/non_owner_service_import_boundary_test.go`,
+  `factory_definitions/service` compile shim to the Factory Definitions owner only;
+  RET-DEF-ROOT-WIRE retargeted root `pkg/wire` off the shim. The repository-wide
+  guard is `pkg/services/factory_definitions/non_owner_service_import_boundary_test.go`,
   with `pkg/services/factory_definitions/service` registered in
-  `cmd/pkgboundarycheck` converged service subpackage roots.
+  `cmd/pkgboundarycheck` converged service subpackage roots. Root pkg/wire must
+  not reintroduce the transitional import (`root_wire_hold_test.go`).
+  DEL-DEF story 001 (`pss-del-def-001`) confirms prerequisite packets are
+  Factory-complete before leased deletion begins. Observable gate proofs live in
+  `pkg/services/factory_definitions/del_def_prerequisite_gate_test.go` (tree
+  invariants from CLN-DEF-CONTRACTS, IMP-DEF repair subservices, CUT-DEF-SES,
+  INV-DEF-TOPLEVEL canonical roots, and CLN-DEF-FOLD-TOPLEVEL transitional
+  packages still present for deletion). CUT-DEF-RUN import sealing is proved by
+  `runtime_import_boundary_test.go`; BOOT-DEF Definitions-root bootstrap proofs
+  live in
+  `pkg/services/system_initialization/initialize_definitions_root_boundary_test.go`.
+  Do not delete transitional top-level packages or lower baselines until story
+  001 passes.
+  DEL-DEF story 002 (`pss-del-def-002`) deletes emptied transitional DEF
+  top-level packages (`authoredlayout`, `portableconfig`, `loading`,
+  `runtimeconfig`, `namedfactories`) and retargets owner imports to
+  `internal/services/*` destinations. The `service/` compile shim remains for
+  owner-local transitional construction until DEL-DEF-RESIDUAL deletes it.
+  Import-clearing proof is
+  `pkg/services/factory_definitions/del_def_transitional_deletion_test.go`;
+  deletion/absence proofs are in `del_def_prerequisite_gate_test.go`. Root
+  `pkg/wire` composition ports moved to public exports under
+  `pkg/services/factory_definitions/wire/root_wire_*.go` so root wire does not
+  import `internal/**` illegally.
+  DEL-DEF story 003 (`pss-del-def-003`) lowers structure/ownership/package-target
+  baselines for the deleted transitional DEF packages only: remove stale rows from
+  `docs/internal/baselines/package-structure-baseline.json`,
+  `docs/internal/baselines/ownership-inventory.json` (regenerate with
+  `go run ./cmd/ownershipinventoryfreeze`), and
+  `docs/internal/packaged-service-structure/package-target-manifest.json`
+  (regenerate inventory/owner rows with
+  `go run ./cmd/packagetargetmanifestcheck -write-inventory -write-owner-packages -write-residual-packages`).
+  Also drop deleted top-level children from both
+  `internal/ownershipinventory/owner_top_level.go` and
+  `cmd/packagetargetmanifestcheck/owner_top_level.go` unexpected inventories.
+  DEL-DEF story 004 (`pss-del-def-004`) removes unit and functional coverage
+  baseline rows for the deleted transitional DEF import paths only
+  (`authoredlayout`, `portableconfig`, `loading`, `runtimeconfig`,
+  `namedfactories`) from
+  `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`.
+  Leave `service/` coverage rows while the Automations-leased compile shim
+  remains; internal `internal/services/*` destination packages keep their own
+  coverage floors.
+  DEL-DEF story 005 (`pss-del-def-005`) proves emptied transitional packages are
+  gone, remaining children trend toward `wire/` + `internal/` + `transports/`,
+  parent-private `internal/services/*` subservices remain, and
+  `factory_definitions/wire` constructs the published Service root without
+  deleted transitional imports. Observable completion proofs live in
+  `pkg/services/factory_definitions/del_def_root_shape_test.go`; deeper
+  catalog/authoring/validate/snapshot/distribute behavioral proofs live in
+  `pkg/services/factory_definitions/wire/fold_behavior_preservation_test.go`.
+  After story 002 fold destinations land under internal subservices, add any new
+  `service-root-unexpected-directory` rows for those internal paths only in
+  `docs/internal/baselines/package-structure-baseline.json` (not the deleted
+  top-level transitional paths).
   CUT-DEF-RUN seals Factory Definitions production imports of Factory Runtime to
   the service root only (`pkg/services/factory_runtime`) for orchestration
   semantic-validation edges; the lease-wide guard is
@@ -388,6 +478,26 @@ Use this map when changing the public REST contract.
   `docs/internal/baselines/ownership-inventory.json`, and the
   `go-*-coverage-package-minimums.json` baselines when adding or moving the
   owner-local transport package.
+- Providers catalog HTTP decoding, adapter-owned response mapping
+  (`catalog_mapping.go`), service invocation (`catalog_operations.go`),
+  typed catalog error mapping (`catalog_error_mapping.go`), and handler entry
+  points (`handlers_catalog.go`) live in
+  `pkg/services/providers/transports/http`. Providers execute HTTP decoding,
+  adapter-owned response mapping (`execute_mapping.go`), service invocation
+  (`execute_operations.go`), typed execute error mapping (`execute_error_mapping.go`),
+  and handler entry points (`handlers_execute.go`) live in the same package.
+  The top-level `pkg/transports/http` server does not register Providers routes
+  until PSS-I02 fan-in; the owner-local adapter consumes `providers.Service` (or a
+  fake root in tests) and must not import `pkg/services/providers/internal/**`.
+  HTTP-PROV uses adapter-owned JSON success shapes (not shared OpenAPI authorship)
+  and maps catalog typed failures (`ErrInvalidID`, `ErrUnknownProvider`,
+  `ErrProviderUnavailable`) to stable HTTP outcomes via `CatalogRootErrorResponse`.
+  Execute typed failures (`ExecuteFailure` kinds and `ErrExecuteFailed`,
+  `ErrExecuteCancelled`, `ErrExecuteTimeout`, plus shared catalog failures) map
+  through `ExecuteRootErrorResponse`. Request-context cancellation and deadline
+  exhaustion for execute map through `request_context.go` to the published execute
+  cancel/timeout HTTP outcomes (`PROVIDER_EXECUTION_CANCELED`,
+  `PROVIDER_EXECUTION_TIMEOUT`) and must not fall through to `INTERNAL_ERROR`.
 - Shared filesystem documents represented in OpenAPI should decode and encode
   through the generated model in a focused `pkg/transports/mapping` package,
   then map into domain-owned values. Inject that codec into the service
@@ -453,8 +563,9 @@ Use this map when changing the public REST contract.
 - Functional-scenario public component projection lives in `internal/functionalscenarios` with the maintenance entrypoint in `cmd/functionalscenarioproject`. Treat `contracts/cli/commands.json`, `contracts/mcp/tools.json`, and bundled `api/openapi.yaml` as its canonical inputs; derive SSE components from OpenAPI operations whose response media types include `text/event-stream` so the SSE inventory cannot drift into a handwritten route list.
 - Test-only durable Factory Session cross-interface captures live in `tests/functional/sessionparity`. Keep REST event observations as the actual `text/event-stream` body (`data:` frames containing Factory Event JSON), CLI event observations as the direct `--json` array, and live MCP observations as complete JSON-RPC `tools/call` responses whose serialized `ToolResponse` is in `result.content[0].text`; do not substitute pre-extracted typed results for the live MCP boundary.
 - Work-owned unary `you submit` contract proofs belong in `tests/functional/work/transports/cli/submit/unary_contract/unary_contract_test.go` through `support.BuildProcess` + `Process.Execute` with public `you submit --json`, file-backed and stdin (`--payload -`) payloads, default and explicit `--session` targeting, and structured failure preservation against a controlled public HTTP edge. Assert public CLI acknowledgment, session-scoped work list observations, and typed safe failure markers only; do not import service implementations or internal Petri packages.
-- Work-owned CLI batch ingress shape, work-type selection, and unknown-type rejection proofs belong in `tests/functional/work/submission/batch_inputs_test.go` through `you submit batch` with inline, file path, and stdin (`-`) payloads plus public default-session work list observations. Work-owned CLI submit-batch contract depth (dry-run non-mutation, success human/JSON shapes, invalid JSON before upsert) belongs in `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go` through `support.BuildProcess` + `Process.Execute` with external effects replaced only through `edges.Edges` (`ProviderCommandRunner` / mocked Codex preferred over `MockWorkers`). HTTP batch submit/list/get, canonical Work Request upsert identity, and typed not-found for unknown Work belong in `tests/functional/work/submission/http_test.go` through `support.UpsertDefaultSessionWorkRequest`, `support.ListDefaultSessionWork`, and `GET /work/{id}` on the public default session. HTTP stage-then-submit proofs that staged file references create Work with the expected customer-visible content belong in `tests/functional/work/submission/stage_and_submit_test.go` through `POST /work/staged-files`, structured `POST /work` items, and `GET /work/{id}` on the public default session.
-- Request-batch functional lifecycle coverage for generated REST writes/reads and the Factory Event SSE stream remains in `tests/functional/runtime_api/api_request_batch_boundary_smoke_test.go`, with `support.StartFunctionalAPIServiceModeServer` as the approved test seam. `make functional-boundary-check` accepts only repository `tests/functional/*_test.go` sources, scans the work-owned batch ingress, HTTP submission, and stage-and-submit cells in `batch_inputs_test.go`, `http_test.go`, and `stage_and_submit_test.go`, and rejects direct Factory runtime, projection, service, or Petri imports; owner-level package tests remain the place for those internals.
+- Work-owned CLI batch ingress shape, work-type selection, unknown-type rejection, and blocked-dispatch concurrent batch ingress regression proofs belong in `tests/functional/work/submission/batch_inputs_test.go` through `you submit batch` with inline, file path, and stdin (`-`) payloads plus public default-session work list observations. Work-owned CLI submit-batch contract depth (dry-run non-mutation, success human/JSON shapes, invalid JSON before upsert) belongs in `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go` through `support.BuildProcess` + `Process.Execute` with external effects replaced only through `edges.Edges` (`ProviderCommandRunner` / mocked Codex preferred over `MockWorkers`). Legacy unary retirement record/replay canonical batch Work Request identity proofs belong in `tests/functional/work/submission/batch_inputs_long_test.go` through `support.UpsertDefaultSessionWorkRequest` with `support.NewShapedProviderCommandRunner` and `--record` / `--replay` on the public API server seam. HTTP batch submit/list/get, canonical Work Request upsert identity, and typed not-found for unknown Work belong in `tests/functional/work/submission/http_test.go` through `support.UpsertDefaultSessionWorkRequest`, `support.ListDefaultSessionWork`, and `GET /work/{id}` on the public default session. HTTP stage-then-submit proofs that staged file references create Work with the expected customer-visible content belong in `tests/functional/work/submission/stage_and_submit_test.go` through `POST /work/staged-files`, structured `POST /work` items, and `GET /work/{id}` on the public default session.
+- Request-batch functional lifecycle coverage for generated REST writes/reads and the Factory Event SSE stream now lives in `tests/functional/work/submission` (for example `batch_inputs_test.go` dependency ordering and blocked-dispatch ingress regression, and `http_test.go` batch upsert/list/get). `make functional-boundary-check` scans the work-owned batch ingress, HTTP submission, and stage-and-submit cells in `batch_inputs_test.go`, `http_test.go`, and `stage_and_submit_test.go`, and rejects direct `pkg/services/*` imports because the forbidden `pkg/service` prefix matches every services path; use `support.ExecuteProcess`, `support.MockInferenceProvider`, `support.BlockingInferenceProvider`, `support.DefaultSessionEventsURL`, and `FunctionalAPIServerConfig.ProviderOverride` instead of importing `factory_sessions`, `edges`, or worker packages in those destination cells.
+- Ready-batch `runtime_api` catch-all deletion can lower indirect functional coverage for internal orchestration, recordings projection, and work state-access packages that the deleted scenarios exercised only as side effects. When `make test-functional-coverage` reports package regressions after destination migration, lower the matching rows in `docs/internal/baselines/go-functional-coverage-package-minimums.json` to the post-deletion profile rather than restoring catch-all coverage.
 - Functional API replay setup belongs in `tests/functional/internal/support`: pass replay artifact and execution-root inputs through `FunctionalAPIServerConfig` so scenario files can observe only the public Factory Session event stream and terminal API payloads, rather than capturing `FactoryService`, engine snapshots, or reconstructed projections.
 - `WaitForTerminalStatus` in `tests/functional/internal/support/http_observation.go` must require IDLE/FINISHED `runtimeStatus` plus a stable category window long enough to survive repeater CONTINUE handoffs under coverage-shard load; a short Initial=0/Processing=0 gap while Work is consumed but not yet marked in-flight must not count as completion (Ralph init smoke flakes under Backend Functional Coverage).
 - Functional work-location observations belong on public Work listings through `support.CountWorkAtCustomerState` / `support.HasWorkAtCustomerState` (`workType:state` keys such as `task:complete`). Do not add support helpers that read `FactorySession.Runtime.Petri` markings for place occupancy; resource availability stays on `session.Runtime.Usage.Resources` or `GET /status` resource usage.

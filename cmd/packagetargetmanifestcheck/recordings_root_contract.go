@@ -13,7 +13,12 @@ import (
 var recordingsThinRootContractFiles = []string{
 	"contracts.go",
 	"contracts_test.go",
+	"del_rec_proof_gate_test.go",
 	"metadata.go",
+	"packaged_root_shape_test.go",
+	"portable_recording.go",
+	"portable_recording_build.go",
+	"portable_recording_validate.go",
 	"runtime_import_boundary_test.go",
 	"runtime_request_boundary_test.go",
 	"service_import_boundary_test.go",
@@ -34,67 +39,7 @@ type recordingsRootContractFoldTarget struct {
 
 // recordingsExcessRootContractFolds mirrors internal/ownershipinventory
 // RecordingsExcessRootContractFolds for package-target manifest checks.
-var recordingsExcessRootContractFolds = []recordingsRootContractFoldTarget{
-	{
-		cluster: "event",
-		files: []string{
-			"canonical_event_contract_test.go",
-			"event_contract.go",
-			"event_contract_test.go",
-			"event_vocabulary_boundary_test.go",
-			"events_import_boundary_test.go",
-		},
-		destination: "pkg/services/recordings/internal/services/canonical_ledger",
-	},
-	{
-		cluster: "world_state",
-		files: []string{
-			"world_state_contract.go",
-			"world_state_contract_test.go",
-			"projections_import_boundary_test.go",
-		},
-		destination: "pkg/services/recordings/internal/services/projection_query",
-	},
-	{
-		cluster: "artifacts",
-		files: []string{
-			"artifacts_import_boundary_test.go",
-		},
-		destination: "pkg/services/recordings/internal/services/artifacts_export",
-	},
-	{
-		cluster: "replay",
-		files: []string{
-			"replay_contract.go",
-			"replay_import_boundary_test.go",
-		},
-		destination: "pkg/services/recordings/internal/services/replay",
-	},
-	{
-		cluster: "dispatch",
-		files: []string{
-			"dispatch_contract.go",
-		},
-		destination: "pkg/services/recordings/internal/services/projection_query",
-	},
-	{
-		cluster: "workstation_request",
-		files: []string{
-			"workstation_requests.go",
-			"workstation_requests_content_assert_test.go",
-			"workstation_requests_test.go",
-		},
-		destination: "pkg/services/recordings/internal/services/projection_query",
-	},
-	{
-		cluster: "live_recording_target",
-		files: []string{
-			"live_recording_target.go",
-			"live_recording_target_test.go",
-		},
-		destination: "pkg/services/recordings/internal/services/recording_lifecycle",
-	},
-}
+var recordingsExcessRootContractFolds = []recordingsRootContractFoldTarget{}
 
 func listRecordingsRootGoFiles(root string) ([]string, error) {
 	recordingsRoot := filepath.Join(root, filepath.FromSlash(recordingsRootRelative))

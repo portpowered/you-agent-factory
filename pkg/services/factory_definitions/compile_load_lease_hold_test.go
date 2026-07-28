@@ -13,10 +13,13 @@ const (
 )
 
 var transitionalCompileLoadPublicDirs = []string{
-	"loading",
 	"loadedsource",
-	"runtimeconfig",
 	"definition",
+}
+
+var deletedCompileLoadPublicDirs = []string{
+	"loading",
+	"runtimeconfig",
 }
 
 func TestCompileLoadFold_TransitionalPublicPackagesRemainPresent(t *testing.T) {
@@ -28,10 +31,25 @@ func TestCompileLoadFold_TransitionalPublicPackagesRemainPresent(t *testing.T) {
 			t.Parallel()
 			info, err := os.Stat(relativeDir)
 			if err != nil {
-				t.Fatalf("transitional public package %s must remain present until DEL-DEF: %v", relativeDir, err)
+				t.Fatalf("transitional public package %s must remain present until its owning DEL packet: %v", relativeDir, err)
 			}
 			if !info.IsDir() {
-				t.Fatalf("transitional public path %s must remain a directory until DEL-DEF", relativeDir)
+				t.Fatalf("transitional public path %s must remain a directory until its owning DEL packet", relativeDir)
+			}
+		})
+	}
+}
+
+func TestDelDef_DeletedCompileLoadTransitionalPublicPackagesAbsent(t *testing.T) {
+	t.Parallel()
+
+	for _, relativeDir := range deletedCompileLoadPublicDirs {
+		relativeDir := relativeDir
+		t.Run(relativeDir, func(t *testing.T) {
+			t.Parallel()
+			_, err := os.Stat(relativeDir)
+			if !os.IsNotExist(err) {
+				t.Fatalf("transitional public package %s must be deleted by DEL-DEF; stat = %v", relativeDir, err)
 			}
 		})
 	}

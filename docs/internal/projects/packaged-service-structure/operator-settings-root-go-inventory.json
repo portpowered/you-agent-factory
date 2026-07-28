@@ -2,91 +2,37 @@
   "formatVersion": "pss-operator-settings-root-go-inventory/v1",
   "ownerPackage": "pkg/services/operator_settings",
   "sortKey": "file name ascending byte order",
-  "clusters": [
-    {
-      "cluster": "document_construction_bridge",
-      "destination": "pkg/services/operator_settings/internal/services/document",
-      "files": [
-        "document_bridge.go",
-        "document_characterization_test.go",
-        "document_owner_construct.go",
-        "document_routing_test.go",
-        "encode.go"
-      ]
-    },
-    {
-      "cluster": "identity_input_index_inventory",
-      "destination": "pkg/services/operator_settings/internal",
-      "files": [
-        "identity.go",
-        "identity_persist_test.go",
-        "identity_test.go",
-        "input_index.go",
-        "input_index_load_cases.go",
-        "input_index_parse_cases.go",
-        "input_index_resolve_cases.go",
-        "input_inventory_test.go",
-        "inventory.go"
-      ]
-    },
-    {
-      "cluster": "resolution_composition",
-      "destination": "pkg/services/operator_settings/internal/services/resolution",
-      "files": [
-        "environment_resolution.go",
-        "provider_scope.go",
-        "resolution_characterization_test.go",
-        "resolution_composition.go"
-      ]
-    },
-    {
-      "cluster": "providers_root_construction",
-      "destination": "pkg/services/operator_settings/internal",
-      "files": [
-        "providers_root_construct.go"
-      ]
-    },
-    {
-      "cluster": "construction_ports",
-      "destination": "pkg/services/operator_settings/internal",
-      "files": [
-        "dependencies.go",
-        "dependencies_test.go",
-        "service_characterization_test.go",
-        "testmain_test.go"
-      ]
-    },
-    {
-      "cluster": "defaults_resolution_implementation",
-      "destination": "pkg/services/operator_settings/internal/services/resolution",
-      "files": [
-        "atomic_config_test.go",
-        "operator_config.go",
-        "operator_config_test.go"
-      ]
-    }
-  ],
+  "clusters": [],
   "files": [
     {
-      "file": "atomic_config_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal/services/resolution",
-      "cluster": "defaults_resolution_implementation",
-      "note": "Atomic defaults/config characterization folds with private resolution implementation."
+      "file": "backend_scope.go",
+      "classification": "thin_root_contract",
+      "note": "Peer-facing backend-scope identity types and EnsureLocalBackendScope thin surface delegating to private implementation."
     },
     {
-      "file": "dependencies.go",
-      "classification": "fold_target_construction_port",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "construction_ports",
-      "note": "FileSystem, encoder/decoder, and catalog construction ports fold into private implementation; not peer-facing Service contract."
+      "file": "config_document.go",
+      "classification": "thin_root_contract",
+      "note": "Peer-facing ConfigDocument and ConfigDocumentService thin surface delegating to the private document subservice."
     },
     {
-      "file": "dependencies_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "construction_ports",
-      "note": "Construction-port characterization folds with private implementation."
+      "file": "construction_ports_contract.go",
+      "classification": "thin_root_contract",
+      "note": "Thin construction-port aliases and func types for owner wire; canonical interface definitions live under operator_settings/internal."
+    },
+    {
+      "file": "defaults_contract.go",
+      "classification": "thin_root_contract",
+      "note": "Peer-facing operator defaults/config vocabulary retained at the thin Operator Settings root."
+    },
+    {
+      "file": "defaults_resolution.go",
+      "classification": "thin_root_contract",
+      "note": "Peer-facing defaults-resolution operations thin surface delegating to the private resolution subservice."
+    },
+    {
+      "file": "del_set_proof_gate_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "DEL-SET story 005 gate proving structure, ownership, package-target, and root reconciliation verification pass after transitional public package deletion and baseline burn-down."
     },
     {
       "file": "doc.go",
@@ -94,156 +40,19 @@
       "note": "Package documentation for the committed thin Operator Settings root contract surface."
     },
     {
-      "file": "document_bridge.go",
-      "classification": "fold_target_document",
-      "foldDestination": "pkg/services/operator_settings/internal/services/document",
-      "cluster": "document_construction_bridge",
-      "note": "Config↔Document bridge helpers fold into private document subservice."
-    },
-    {
-      "file": "document_characterization_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal/services/document",
-      "cluster": "document_construction_bridge",
-      "note": "Document implementation characterization folds with private document subservice."
-    },
-    {
       "file": "document_contract.go",
       "classification": "thin_root_contract",
       "note": "Peer-facing document request, result, value, and typed-error contracts."
     },
     {
-      "file": "document_owner_construct.go",
-      "classification": "fold_target_document",
-      "foldDestination": "pkg/services/operator_settings/internal/services/document",
-      "cluster": "document_construction_bridge",
-      "note": "Document owner constructor registration folds into private document subservice."
+      "file": "input_inventory_contract.go",
+      "classification": "thin_root_contract",
+      "note": "Peer-facing operator-config input inventory types and ProjectInputInventory thin surface delegating to private implementation."
     },
     {
-      "file": "document_routing_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal/services/document",
-      "cluster": "document_construction_bridge",
-      "note": "Document routing characterization folds with private document subservice."
-    },
-    {
-      "file": "encode.go",
-      "classification": "fold_target_document",
-      "foldDestination": "pkg/services/operator_settings/internal/services/document",
-      "cluster": "document_construction_bridge",
-      "note": "ConfigDocument semantic encode/decode implementation folds into private document subservice."
-    },
-    {
-      "file": "environment_resolution.go",
-      "classification": "fold_target_resolution",
-      "foldDestination": "pkg/services/operator_settings/internal/services/resolution",
-      "cluster": "resolution_composition",
-      "note": "Environment-aware defaults resolution helper folds into private resolution subservice."
-    },
-    {
-      "file": "identity.go",
-      "classification": "fold_target_identity",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Backend scope identity load/generate/persist helpers fold into private implementation."
-    },
-    {
-      "file": "identity_persist_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Identity persistence characterization folds with private implementation."
-    },
-    {
-      "file": "identity_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Identity helper characterization folds with private implementation."
-    },
-    {
-      "file": "input_index.go",
-      "classification": "fold_target_identity",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Operator-config input inventory projection folds into private implementation."
-    },
-    {
-      "file": "input_index_load_cases.go",
-      "classification": "fold_target_identity",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Input-index load cases fold with private input-index inventory helpers."
-    },
-    {
-      "file": "input_index_parse_cases.go",
-      "classification": "fold_target_identity",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Input-index parse cases fold with private input-index inventory helpers."
-    },
-    {
-      "file": "input_index_resolve_cases.go",
-      "classification": "fold_target_identity",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Input-index resolve cases fold with private input-index inventory helpers."
-    },
-    {
-      "file": "input_inventory_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Input inventory characterization folds with private implementation."
-    },
-    {
-      "file": "inventory.go",
-      "classification": "fold_target_identity",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Input inventory types and projection helpers fold into private implementation."
-    },
-    {
-      "file": "operator_config.go",
-      "classification": "fold_target_implementation",
-      "foldDestination": "pkg/services/operator_settings/internal/services/resolution",
-      "cluster": "defaults_resolution_implementation",
-      "note": "Defaults precedence and file/env/flag resolution implementation folds into private resolution subservice."
-    },
-    {
-      "file": "operator_config_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal/services/resolution",
-      "cluster": "defaults_resolution_implementation",
-      "note": "Operator-config resolution characterization folds with private resolution subservice."
-    },
-    {
-      "file": "provider_scope.go",
-      "classification": "fold_target_resolution",
-      "foldDestination": "pkg/services/operator_settings/internal/services/resolution",
-      "cluster": "resolution_composition",
-      "note": "Provider backend-scope derivation helper folds into private resolution subservice."
-    },
-    {
-      "file": "providers_root_construct.go",
-      "classification": "fold_target_providers_construct",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "providers_root_construction",
-      "note": "Providers root constructor registration folds into private implementation."
-    },
-    {
-      "file": "resolution_characterization_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal/services/resolution",
-      "cluster": "resolution_composition",
-      "note": "Resolution implementation characterization folds with private resolution subservice."
-    },
-    {
-      "file": "resolution_composition.go",
-      "classification": "fold_target_resolution",
-      "foldDestination": "pkg/services/operator_settings/internal/services/resolution",
-      "cluster": "resolution_composition",
-      "note": "Defaults resolution composition registration folds into private resolution subservice."
+      "file": "packaged_root_shape_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "DEL-SET story 005 seal proving Operator Settings ships only wire/, internal/, transports/, and INV-retained test-only testdata/ package directories plus thin root contract files."
     },
     {
       "file": "resolution_contract.go",
@@ -256,11 +65,9 @@
       "note": "Legacy root-contract preservation proofs for transitional Settings vocabulary."
     },
     {
-      "file": "service_characterization_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "construction_ports",
-      "note": "Service assembly characterization through transitional composition folds with private implementation."
+      "file": "root_wire_behavioral_boundary_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "Wire-constructed behavioral proof that published Service LoadDocument, ApplyDocumentUpdate, and ResolveEffective preserve observables and typed failures at the peer root boundary."
     },
     {
       "file": "service_contract.go",
@@ -271,13 +78,6 @@
       "file": "service_root_contract_invariants_test.go",
       "classification": "thin_root_contract_test",
       "note": "Peer-shaped Service seal tests using only published root contracts."
-    },
-    {
-      "file": "testmain_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "construction_ports",
-      "note": "Package testmain composition hook folds with private implementation test helpers."
     }
   ]
 }

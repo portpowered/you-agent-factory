@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
@@ -18,16 +19,28 @@ import (
 // runtime state is allocated only when the outer service binds an explicit
 // runtime clock.
 type ResponseStream struct {
-	eventIDs responseeventstore.ResponseEventIDGenerator
+	eventIDs        responseeventstore.ResponseEventIDGenerator
+	retentionLimits *responseeventstore.RetentionLimits
 }
 
 var _ responsestreamservice.Service = (*ResponseStream)(nil)
 
-func New(eventIDs responseeventstore.ResponseEventIDGenerator) (*ResponseStream, error) {
+func New(
+	eventIDs responseeventstore.ResponseEventIDGenerator,
+	limits *factorysessions.ResponseEventRetentionLimits,
+) (*ResponseStream, error) {
 	if eventIDs == nil {
 		return nil, errors.New("construct Factory Session response streams: event ID generator is required")
 	}
-	return &ResponseStream{eventIDs: eventIDs}, nil
+	service := &ResponseStream{eventIDs: eventIDs}
+	if limits != nil {
+		service.retentionLimits = &responseeventstore.RetentionLimits{
+			MaxEvents:                limits.MaxEvents,
+			MaxBytes:                 limits.MaxBytes,
+			CompletedRetentionWindow: limits.CompletedRetentionWindow,
+		}
+	}
+	return service, nil
 }
 
 func (s *ResponseStream) NewEventStore(sessionID string, clock factoryruntime.Clock) (*responseeventstore.SessionResponseEventStore, error) {
@@ -37,8 +50,12 @@ func (s *ResponseStream) NewEventStore(sessionID string, clock factoryruntime.Cl
 	if strings.TrimSpace(sessionID) == "" {
 		return nil, errors.New("Factory Session response-stream session ID is required")
 	}
+	limits := responseeventstore.DefaultRetentionLimits()
+	if s.retentionLimits != nil {
+		limits = *s.retentionLimits
+	}
 	store, err := responseeventstore.NewSessionResponseEventStoreWithClockAndLimits(
-		strings.TrimSpace(sessionID), clock, responseeventstore.DefaultRetentionLimits(), s.eventIDs,
+		strings.TrimSpace(sessionID), clock, limits, s.eventIDs,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create Factory Session response-event store: %w", err)

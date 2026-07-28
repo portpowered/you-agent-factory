@@ -213,9 +213,9 @@ func committedPublicSurfaces() []PublicSurfaceEntry {
 		{
 			ID:               "replay:recordings-replay",
 			Kind:             PublicSurfaceKindReplay,
-			SurfacePath:      "pkg/services/recordings/replay",
+			SurfacePath:      "pkg/services/recordings/wire",
 			ReplacementOwner: "recordings",
-			Note:             "Replay and artifact reconstruction remain Recordings-owned public surfaces.",
+			Note:             "Replay and artifact reconstruction remain Recordings-owned public surfaces through recordings/wire after DEL-REC removed the transitional replay/ shim.",
 		},
 		{
 			ID:               "visualization:factory-visualization",

@@ -27,6 +27,9 @@ const (
 type RetentionLimits struct {
 	MaxEvents int
 	MaxBytes  int
+	// CompletedRetentionWindow overrides CompletedStreamRetentionWindow when
+	// positive.
+	CompletedRetentionWindow time.Duration
 }
 
 // DefaultRetentionLimits returns the bounded controls used by compatibility

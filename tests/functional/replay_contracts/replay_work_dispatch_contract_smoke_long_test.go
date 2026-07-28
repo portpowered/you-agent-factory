@@ -68,12 +68,13 @@ func TestReplayWorkDispatchContractSmoke_LegacySubmitRequestAdapterPreservesPayl
 		commandOutput: "legacy dispatch output",
 		submit: func(server *support.FunctionalAPIServer) {
 			traceID := "trace-legacy-smoke-001"
+			workName := "legacy-dispatch-smoke"
 			tags := factoryapi.StringMap{
 				"branch": "legacy-adapter",
 				"team":   "agent-factory",
 			}
 			submitted = support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
-				Name:         "legacy-dispatch-smoke",
+				Name:         &workName,
 				WorkTypeName: "task",
 				TraceId:      &traceID,
 				Payload:      map[string]any{"title": "legacy dispatch contract"},
@@ -199,7 +200,7 @@ func runRecordedWorkDispatchContractSmoke(t *testing.T, scenario dispatchContrac
 	})
 	scenario.submit(server)
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	assertReplayPlaceCounts(t, support.GetDefaultSession(t, server.URL()), map[string]int{
+	assertReplayPlaceCounts(t, support.ListDefaultSessionWork(t, server.URL()), map[string]int{
 		"task:done": 1, "task:init": 0, "task:failed": 0,
 	})
 	if got := runner.CallCount(); got != 1 {

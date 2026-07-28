@@ -29,7 +29,7 @@ SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT ?= 120s
 CRON_TIME_WORK_SMOKE_TEST := TestCronFiresAtInjectedTimeWithoutWallClockSleep
 CRON_TIME_WORK_SMOKE_COUNT ?= 10
 CRON_TIME_WORK_SMOKE_TIMEOUT ?= 120s
-CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST := TestCurrentFactoryActivationFixture_ActivatesSecondPersistedFactoryAndResolvesCurrentFactory
+CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST := TestCurrentFactoryActivationSwitchesPersistedFactories
 CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT ?= 1
 CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT ?= 120s
 CROSS_PROVIDER_PARITY_SMOKE_TEST := TestCrossProviderParity
@@ -302,7 +302,7 @@ fnd-12-cli-behavior-baselines:
 
 fnd-12-http-behavior-baselines:
 	$(GO) test ./tests/functional/transport/http/server -run TestGeneratedClientAndServerSchemaStayAligned -count=1 -timeout $(GO_TEST_TIMEOUT)
-	$(GO) test ./tests/functional/runtime_api -run TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmission -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./tests/functional/work/submission -run TestAPISubmitWorkRejectsEmptyStructuredSubmission -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 fnd-12-mcp-behavior-baselines:
 	$(GO) test ./pkg/transports/mcp/server -run '^Test(ServeStdioUsesSDKProtocolAndRegistersCatalog|SDKProtocolErrors)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
@@ -344,7 +344,7 @@ test-lane-audit:
 
 test-maintenance:
 	$(MAKE) test-lane-audit
-	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./cmd/... ./internal/... ./packages/model-providers ./packages/packaged-factories ./tests/functional/internal/... ./ui ./pkg/services/factory_runtime/exhaustiontests -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./cmd/... ./internal/... ./packages/model-providers ./packages/packaged-factories ./tests/functional/internal/... ./ui ./pkg/services/factory_runtime/internal/exhaustiontests -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-integration:
 	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/persistence/integrationtests ./pkg/services/factory_definitions/portableconfig/integrationtests ./pkg/services/factory_sessions/internal/execution/fixtures ./pkg/transports/http/servertests/... -count=1 -timeout $(GO_TEST_TIMEOUT)
@@ -487,7 +487,7 @@ cron-time-work-smoke:
 	$(GO) test ./tests/functional/workstations/cron -run $(CRON_TIME_WORK_SMOKE_TEST) -count=$(CRON_TIME_WORK_SMOKE_COUNT) -timeout $(CRON_TIME_WORK_SMOKE_TIMEOUT)
 
 current-factory-watcher-switch-smoke:
-	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/bootstrap_portability -run $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST) -count=$(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT) -timeout $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT)
+	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/factory/current -run $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST) -count=$(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT) -timeout $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT)
 
 provider-parity-smoke:
 	$(GO) test ./pkg/services/workers/provider/paritytests -run $(CROSS_PROVIDER_PARITY_SMOKE_TEST) -count=1 -timeout $(CROSS_PROVIDER_PARITY_SMOKE_TIMEOUT)
@@ -510,9 +510,11 @@ response-stream-stress-smoke:
 artifact-contract-closeout:
 	$(GO) test ./internal/testutil -run TestArtifactContractInventory_ -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(MAKE) release-surface-smoke
-	$(GO) test ./pkg/transports/http ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/portableconfig/integrationtests ./pkg/services/recordings/replay ./pkg/platform/replay ./tests/adhoc ./tests/functional/bootstrap_portability ./tests/functional/runtime_api -run "Test(AutomatPortabilityFixture_|GeneratedAPIIntegrationSmoke_|LegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly)" -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./pkg/transports/http ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/portableconfig/integrationtests ./pkg/services/recordings/replay ./pkg/platform/replay ./tests/adhoc ./tests/functional/bootstrap_portability ./tests/functional/runtime_api -run "Test(AutomatPortabilityFixture_|GeneratedAPIIntegrationSmoke_)" -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./tests/functional/work/submission -run TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./tests/functional/transport/http/server -run TestGeneratedClientAndServerSchemaStayAligned -count=1 -timeout $(GO_TEST_TIMEOUT)
-	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/replay_contracts -run "Test(ReplayEventStreamArtifactSmoke_|WorkerPublicContractSmoke_)" -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/replay_contracts -run "TestReplayEventStreamArtifactSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/script -run "TestWorkerPublicContractSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 lint:
 	$(MAKE) $(LINT_TARGETS)

@@ -31,7 +31,7 @@ var validationForbiddenImportRoots = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence",
 }
 

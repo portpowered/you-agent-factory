@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -60,6 +61,111 @@ func runPackagedReviewCLIJSONInvocation(
 	return response
 }
 
+func runPackagedReviewCLIJSONInvocationWithFactorySetup(
+	t *testing.T,
+	runner platformprocess.CommandRunner,
+	configure func(*testing.T, string),
+	requestText string,
+	extraArgs ...string,
+) factoryapi.InvocationResponse {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	factoryDir := support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedReviewFactoryName)
+	if configure != nil {
+		configure(t, factoryDir)
+	}
+
+	args := []string{
+		"you", "--json", "run",
+		"--named", factorydefinitions.PackagedReviewFactoryName,
+		"--no-record",
+	}
+	args = append(args, extraArgs...)
+	args = append(args, requestText)
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	})
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s",
+			args,
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	if inputs.Stderr() != "" {
+		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
+	}
+
+	var response factoryapi.InvocationResponse
+	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
+		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
+	}
+	return response
+}
+
+func setPackagedReviewWorkerModel(t *testing.T, factoryDir, model string) {
+	t.Helper()
+
+	path := filepath.Join(factoryDir, "factory.json")
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read materialized factory: %v", err)
+	}
+	var factory map[string]any
+	if err := json.Unmarshal(payload, &factory); err != nil {
+		t.Fatalf("decode materialized factory: %v", err)
+	}
+	for _, worker := range factory["workers"].([]any) {
+		definition := worker.(map[string]any)
+		definition["modelProvider"] = "CODEX"
+		definition["model"] = model
+	}
+	updated, err := json.Marshal(factory)
+	if err != nil {
+		t.Fatalf("encode materialized factory: %v", err)
+	}
+	if err := os.WriteFile(path, updated, 0o644); err != nil {
+		t.Fatalf("write materialized factory: %v", err)
+	}
+}
+
+func assertPackagedReviewProviderInvocations(
+	t *testing.T,
+	requests []platformprocess.CommandRequest,
+	wantProvider string,
+	wantModel string,
+) {
+	t.Helper()
+
+	for index, request := range requests {
+		if wantProvider != "" && request.Command != wantProvider {
+			t.Fatalf("provider invocation %d command = %q, want %q", index, request.Command, wantProvider)
+		}
+		if wantModel != "" && !packagedReviewProviderRequestIncludesModel(request, wantModel) {
+			t.Fatalf("provider invocation %d args = %#v, want --model %q", index, request.Args, wantModel)
+		}
+	}
+}
+
+func packagedReviewProviderRequestIncludesModel(
+	request platformprocess.CommandRequest,
+	wantModel string,
+) bool {
+	for index := 0; index+1 < len(request.Args); index++ {
+		if request.Args[index] == "--model" && request.Args[index+1] == wantModel {
+			return true
+		}
+	}
+	return false
+}
+
 func runPackagedReviewCLIJSONFailureInvocation(
 	t *testing.T,
 	runner platformprocess.CommandRunner,
@@ -88,8 +194,10 @@ func runPackagedReviewCLIJSONFailureInvocation(
 	execErr := process.Execute(inputs.Input)
 
 	var response factoryapi.InvocationResponse
-	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
-		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
+	if stdout := strings.TrimSpace(inputs.Stdout()); stdout != "" {
+		if decodeErr := json.Unmarshal([]byte(stdout), &response); decodeErr != nil {
+			t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
+		}
 	}
 	return response, inputs.Stderr(), execErr
 }

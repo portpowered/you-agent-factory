@@ -28,7 +28,7 @@ func TestVerifyOperatorSettingsDualLedgerAlignmentFailsWhenMoveSuccessorDrifts(t
 		t.Fatalf("Load() error = %v", err)
 	}
 	for index := range inventory.Packages {
-		if inventory.Packages[index].PackagePath == ownershipinventory.OperatorSettingsOwnerPackagePath+"/identityinventory" {
+		if inventory.Packages[index].PackagePath == ownershipinventory.OperatorSettingsOwnerPackagePath+"/internal/construct" {
 			inventory.Packages[index].Successor = "pkg/services/operator_settings/wire"
 			break
 		}
@@ -39,7 +39,7 @@ func TestVerifyOperatorSettingsDualLedgerAlignmentFailsWhenMoveSuccessorDrifts(t
 	if err == nil {
 		t.Fatal("VerifyOperatorSettingsDualLedgerAlignment() error = nil, want successor drift failure")
 	}
-	if !strings.Contains(err.Error(), "dual-ledger move drift") || !strings.Contains(err.Error(), "identityinventory") {
+	if !strings.Contains(err.Error(), "dual-ledger move drift") || !strings.Contains(err.Error(), "internal/construct") {
 		t.Fatalf("VerifyOperatorSettingsDualLedgerAlignment() error = %v, want successor drift failure", err)
 	}
 }
@@ -82,7 +82,7 @@ func TestVerifyOperatorSettingsDualLedgerAlignmentFailsWhenUnexpectedSiblingRegr
 		t.Fatalf("Load() error = %v", err)
 	}
 	for index := range inventory.Packages {
-		if inventory.Packages[index].PackagePath == ownershipinventory.OperatorSettingsOwnerPackagePath+"/servicewire" {
+		if inventory.Packages[index].PackagePath == ownershipinventory.OperatorSettingsOwnerPackagePath+"/internal/construct" {
 			inventory.Packages[index].Disposition = ownershipinventory.DispositionRetain
 			inventory.Packages[index].Destination = "operator_settings"
 			inventory.Packages[index].Successor = ""
@@ -96,7 +96,7 @@ func TestVerifyOperatorSettingsDualLedgerAlignmentFailsWhenUnexpectedSiblingRegr
 	if err == nil {
 		t.Fatal("VerifyOperatorSettingsDualLedgerAlignment() error = nil, want retain regression failure")
 	}
-	if !strings.Contains(err.Error(), "dual-ledger disposition drift") || !strings.Contains(err.Error(), "servicewire") {
+	if !strings.Contains(err.Error(), "dual-ledger disposition drift") || !strings.Contains(err.Error(), "internal/construct") {
 		t.Fatalf("VerifyOperatorSettingsDualLedgerAlignment() error = %v, want retain regression failure", err)
 	}
 }

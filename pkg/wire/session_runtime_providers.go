@@ -19,9 +19,8 @@ import (
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
-	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
-	factoryworkstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workstationexecution"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -45,7 +44,6 @@ import (
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	workerworktree "github.com/portpowered/infinite-you/pkg/services/workers/worktree"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
-	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
 	"go.uber.org/zap"
 )
 
@@ -319,7 +317,7 @@ func provideFactoryDefinitionValidationService(
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) factorydefinitions.ValidationOperations {
 	_ = workflows
-	return wirefactorydefinitions.ValidationOperations(
+	return factorydefinitionswire.NewValidationOperations(
 		orchestratorValidator,
 		loader.LoadSourceFromCanonicalJSON,
 	)
@@ -344,7 +342,7 @@ func provideSubmittedDefinitionValidationOperation(
 }
 
 func provideLoadedFactorySourceFactory() factorydefinitions.LoadedFactorySourceFactory {
-	return wirefactorydefinitions.LoadedFactorySourceFactory()
+	return factorydefinitionswire.LoadedFactorySourceFactory()
 }
 
 func provideNamedFactoryCatalog(
@@ -367,7 +365,7 @@ func provideFactoryDefinitionPersistence(
 	namedPaths factorydefinitions.NamedPathResolver,
 	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
 ) (factorydefinitions.Persistence, error) {
-	return wirefactorydefinitions.Persistence(
+	return factorydefinitionswire.Persistence(
 		validator,
 		func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			return validationentry.MapFactoryJSONForPersistence(
@@ -411,7 +409,7 @@ func provideEditableFactoryValidator(
 		snapshot *factorydefinitions.FactorySnapshot,
 		workstationLoader factorydefinitions.WorkstationLoader,
 	) error {
-		return factorydefinitionswire.ValidateEditableSnapshot(
+		return factoryeditable.ValidateSnapshot(
 			ctx,
 			snapshot,
 			workstationLoader,
@@ -437,18 +435,21 @@ func provideInitialFactorySnapshotFactory(
 	return func(
 		loaded factorydefinitions.LoadedFactorySource,
 	) (*factorydefinitions.FactorySnapshot, error) {
-		return factorydefinitionsservice.CaptureInitialSnapshot(
+		return factorydefinitionswire.CaptureInitialSnapshot(
 			loaded,
-			wirefactorydefinitions.PortableFactoryConfigPreparer(
+			factorydefinitionswire.PortableFactoryConfigPreparer(
 				applySupportedFiles,
 				applyStarterWork,
 			),
-			wirefactorydefinitions.FactorySnapshotCapturer(),
+			factorydefinitionswire.FactorySnapshotCapturer(),
 		)
 	}
 }
 
-func provideAutomationFactory(edges serviceedges.Edges) factorysessionwire.AutomationFactory {
+func provideAutomationFactory(
+	edges serviceedges.Edges,
+	workstationExecution factorydefinitions.WorkstationExecutionPolicyService,
+) factorysessionwire.AutomationFactory {
 	return func(
 		logger *zap.Logger,
 		clock factoryruntime.Clock,
@@ -483,7 +484,7 @@ func provideAutomationFactory(edges serviceedges.Edges) factorysessionwire.Autom
 			nil,
 			"",
 			workerswire.ResolveTemplateFields,
-			factoryworkstationexecution.NewService(),
+			workstationExecution,
 		)
 		if err != nil {
 			return nil
@@ -492,12 +493,19 @@ func provideAutomationFactory(edges serviceedges.Edges) factorysessionwire.Autom
 	}
 }
 
+func provideFactorySessionResponseEventRetentionLimits(
+	edges serviceedges.Edges,
+) *factorysessions.ResponseEventRetentionLimits {
+	return edges.FactorySessionResponseEventRetentionLimits
+}
+
 func provideFactorySessionsService(
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
 	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
 	ttsObservability factorydefinitions.TTSObservabilityService,
 	eventIDs factorysessions.ResponseEventIDGenerator,
+	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directories factorysessionwire.DirectoryInspection,
@@ -508,7 +516,7 @@ func provideFactorySessionsService(
 ) (factorysessions.Service, error) {
 	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
-	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks)
+	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks)
 }
 
 func provideOrchestrationJavaScriptExecution(
@@ -533,6 +541,7 @@ func provideFactorySessionExecutionFactory(
 	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
 	responseEventIDs factorysessions.ResponseEventIDGenerator,
+	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	invocationWithProgress factorysessionwire.WorkerInvocationWithProgressFactory,
 	allocator agypty.PTYAllocator,
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
@@ -599,6 +608,7 @@ func provideFactorySessionExecutionFactory(
 			sessionIDs,
 			liveChildInvocation,
 			responseEventIDs,
+			responseEventRetentionLimits,
 		)
 	}
 }
@@ -678,7 +688,7 @@ func providePortableRecordingWriter(edges serviceedges.Edges) (recordings.Portab
 }
 
 func provideLoadedFactorySnapshotCapturer() factorydefinitions.LoadedFactorySnapshotCapturer {
-	return wirefactorydefinitions.LoadedFactorySnapshotCapturer()
+	return factorydefinitionswire.LoadedFactorySnapshotCapturer()
 }
 
 func provideRuntimeRecorderFactory(
@@ -716,8 +726,8 @@ func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
 	) {
 		return recordingswire.NewReplayExecution(
 			artifact,
-			wirefactorydefinitions.FactorySnapshotJSONDecoder(),
-			wirefactorydefinitions.ReplayRuntimeConfigDecoder(),
+			factorydefinitionswire.FactorySnapshotJSONDecoder(),
+			factorydefinitionswire.ReplayRuntimeConfigDecoder(),
 		)
 	}
 }
@@ -728,6 +738,7 @@ func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
 func provideWorkersRuntimeFactory(
 	interpolation factorydefinitions.InvocationInterpolationService,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
+	workstationExecution factorydefinitions.WorkstationExecutionPolicyService,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
 	retryRandom platformrandom.Source,
@@ -832,7 +843,7 @@ func provideWorkersRuntimeFactory(
 			currentWorkingDirectory,
 			contentMaterializer,
 			interpolation,
-			factoryworkstationexecution.NewService(),
+			workstationExecution,
 			factoryDocs,
 			resolveSymlinks,
 			executableLocator,

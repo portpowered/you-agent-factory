@@ -9,6 +9,7 @@ import (
 	projectionquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections"
 	dashboardprojections "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections/dashboard"
+	workstationprojections "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections/workstation"
 )
 
 // Service keeps the canonical reducer and derived-query implementation behind
@@ -56,7 +57,7 @@ func (*Service) ProjectActiveThrottlePauses(
 func (*Service) ProjectWorkstationRequests(
 	state recordings.FactoryWorldState,
 ) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice {
-	return recordings.BuildFactoryWorldWorkstationRequestProjectionSlice(state)
+	return workstationprojections.BuildFactoryWorldWorkstationRequestProjectionSlice(state)
 }
 
 func (*Service) ValidateReconnectReplay(

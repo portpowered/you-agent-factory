@@ -1,12 +1,70 @@
 package sessioncontrols_test
 
 import (
+	"strings"
 	"testing"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// TestPausedFactorySessionReturnsInvocationPausedStatus proves invocation against
+// a paused live Factory Session returns a typed INVOCATION_PAUSED failure through
+// the public session invocation API without fabricating a completed primary result.
+func TestPausedFactorySessionReturnsInvocationPausedStatus(t *testing.T) {
+	factoryDir := scaffoldInvocationFactory(t, nil)
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(
+		t,
+		&edges,
+		support.NewStaticSuccessCommandRunner("primary result COMPLETE"),
+		nil,
+	)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     edges,
+	})
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	sessionID := factorysessions.DefaultSessionID
+	pause := postSessionLifecycleControl(
+		t,
+		baseURL,
+		sessionID,
+		factoryapi.FactorySessionLifecycleControlKindPause,
+	)
+	if pause.Operation != factoryapi.FactorySessionLifecycleControlKindPause ||
+		pause.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("pause response = %#v, want accepted pause", pause)
+	}
+
+	response := postInvocation(t, baseURL, textInvocationRequest(t, "invoke this", nil))
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED", response.Status)
+	}
+	if response.ErrorCode == nil ||
+		*response.ErrorCode != factoryapi.InvocationResponseErrorCode("INVOCATION_PAUSED") {
+		t.Fatalf("invocation errorCode = %#v, want INVOCATION_PAUSED", response.ErrorCode)
+	}
+	if response.Message == nil ||
+		!strings.Contains(*response.Message, `session "`+sessionID+`" is paused`) {
+		gotMessage := "<nil>"
+		if response.Message != nil {
+			gotMessage = *response.Message
+		}
+		t.Fatalf("invocation message = %q, want paused session detail", gotMessage)
+	}
+	if response.SessionId == nil || *response.SessionId != sessionID {
+		t.Fatalf("invocation sessionId = %#v, want %q", response.SessionId, sessionID)
+	}
+	if response.PrimaryResult != nil {
+		t.Fatalf("invocation primaryResult = %#v, want nil on paused output", response.PrimaryResult)
+	}
+}
 
 // TestPausedFactorySessionBuffersSubmittedWork proves a paused Factory Session
 // accepts submitted work through the public session-control boundary while
@@ -186,6 +244,65 @@ func TestPauseResumeEmitsDurableLifecycleEvents(t *testing.T) {
 	)
 
 	assertPauseResumeLifecycleControlEvents(t, server.GetFactoryEvents(t))
+}
+
+// TestInterruptedWorkInspectSurfacesDispatchAndStopSummary proves work stopped
+// on an interrupted customer state surfaces INTERRUPTED stop summaries with
+// dispatch context on public session and work read surfaces.
+func TestInterruptedWorkInspectSurfacesDispatchAndStopSummary(t *testing.T) {
+	factoryDir := scaffoldInterruptedInspectFactory(t)
+	mockWorkersPath := writeInterruptedInspectMockWorkers(t)
+	server := startInterruptedInspectAPIServer(t, factoryDir, mockWorkersPath)
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	submitted := support.SubmitDefaultSessionWork(t, baseURL, factoryapi.SubmitWorkRequest{
+		Name:         stringPointer("interrupted-operator-inspect"),
+		WorkTypeName: interruptedInspectWorkTypeName,
+		Payload:      map[string]string{"title": "Interrupted inspect probe"},
+	})
+	workID := stringPointerValue(submitted.WorkId)
+	if workID == "" {
+		t.Fatalf("submit interrupted inspect work missing work id: %#v", submitted)
+	}
+
+	interruptedLocation := support.WorkCustomerLocation(
+		interruptedInspectWorkTypeName,
+		"interrupted",
+	)
+	waitForSessionWorkIDsAtCustomerState(
+		t,
+		baseURL,
+		[]string{workID},
+		interruptedLocation,
+		pauseResumeDrainWaitTimeout,
+	)
+	support.WaitForRuntimeIdle(t, baseURL, pauseResumeDurableStatusTimeout)
+
+	work := support.GetDefaultSessionWorkByID(t, baseURL, workID)
+	if work.StopSummary == nil {
+		t.Fatalf("work show = %#v, want stopSummary on interrupted work", work)
+	}
+	assertInterruptedStopSummary(t, work.StopSummary, "work")
+
+	session := support.GetDefaultSession(t, baseURL)
+	if session.Runtime.StopSummary != nil {
+		assertInterruptedStopSummary(t, session.Runtime.StopSummary, "session")
+	}
+
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	completeLocation := support.WorkCustomerLocation(interruptedInspectWorkTypeName, "complete")
+	if support.HasWorkAtCustomerState(listed, workID, completeLocation) {
+		t.Fatalf("interrupted work %q reached %s", workID, completeLocation)
+	}
+	if !support.HasWorkAtCustomerState(listed, workID, interruptedLocation) {
+		t.Fatalf(
+			"work listing missing %s for work %q: %#v",
+			interruptedLocation,
+			workID,
+			listed.Results,
+		)
+	}
 }
 
 // TestAPIPauseResumeCancelAndTerminateFactorySession proves public API pause,

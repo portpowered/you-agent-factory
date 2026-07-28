@@ -33,6 +33,12 @@ func BuildProcess(t testing.TB, edges serviceedges.Edges) Process {
 	return process
 }
 
+// ExecuteProcess runs one customer command through the shared root-built process.
+func ExecuteProcess(t testing.TB, inputs *CapturedInputs) error {
+	t.Helper()
+	return BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+}
+
 // InstallPackagedFactory enters through a normal runtime command so the
 // Initializer materializes packaged Factories, then returns the selected path.
 func InstallPackagedFactory(t testing.TB, homeDir, name string) string {

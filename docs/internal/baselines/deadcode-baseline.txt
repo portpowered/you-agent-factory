@@ -141,7 +141,7 @@ pkg/services/factory_runtime/runtime/factory_runtime_test_helpers_test.go: unrea
 pkg/services/factory_runtime/runtime/factory_runtime_test_helpers_test.go: unreachable func: stringValueForRuntimeTest
 pkg/services/factory_runtime/runtime/root_contract_service_test.go: unreachable func: testRuntimeClock.Now
 pkg/services/factory_runtime/subsystems/noop_dispatcher.go: unreachable func: NoOpDispatcherSubsystem.TickGroup
-pkg/services/factory_runtime/testkit/runtime.go: unreachable func: NewPetriMarking
+pkg/services/factory_runtime/internal/testkit/runtime.go: unreachable func: NewPetriMarking
 pkg/services/factory_runtime/token/lineage.go: unreachable func: CurrentChainingTraceIDFromColors
 pkg/services/factory_sessions/internal/cursors/observer.go: unreachable func: RecordPreflight
 pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go: unreachable func: newResumeCoverageBlockingProvider
@@ -274,7 +274,6 @@ pkg/transports/mapping/validationentry/validator_test.go: unreachable func: prog
 pkg/transports/mapping/validationentry/validator_test.go: unreachable func: programmableFactoryValidator.WorkTypeHandlingBehavior
 pkg/transports/mapping/validationentry/validator_test.go: unreachable func: programmableFactoryValidator.WorkerWorkstationBehaviorCompatibility
 pkg/transports/mapping/validationentry/validator_test.go: unreachable func: testCanonicalFactoryLoader
-pkg/wire/factorydefinitions/snapshot.go: unreachable func: FactorySnapshotDirectoryLoader
 tests/functional/bootstrap_portability/automat_portability_fixture_test.go: unreachable func: assertAutomatBundledFileEntryWithoutInline
 tests/functional/bootstrap_portability/export_import_fixture_test.go: unreachable func: exportImportFixture.persistAs
 tests/functional/guards_batch/executor_review_state_lane_classification.go: unreachable func: activeReviewInitCount

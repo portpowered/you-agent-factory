@@ -1,14 +1,11 @@
 package wire
 
 import (
-	"context"
-
+	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
-	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
-	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
 )
 
 func provideFactoryDefinitionsFactory(
@@ -25,59 +22,37 @@ func provideFactoryDefinitionsFactory(
 	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
+	portableFileSystem portablefiles.FileSystem,
+	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
 ) factorysessionwire.FactoryDefinitionsFactory {
 	return func(
 		sessionHost factorysessions.DefinitionHost,
 		activationGateway factorydefinitions.DefinitionActivationGateway,
 		validator factorydefinitions.Validator,
 	) factorydefinitions.Service {
-		definitions := factorydefinitionsservice.New(
+		definitions, err := factorydefinitionswire.NewService(
 			sessionHost,
 			activationGateway,
-			clock,
-			versionFileSystem,
 			validator,
-			loader.LoadSourceFromCanonicalJSON,
-			func(
-				factoryDir string,
-				workstationLoader factorydefinitions.WorkstationLoader,
-			) (factorydefinitions.MutableLoadedFactorySource, error) {
-				return loader.LoadRuntimeSource(factoryDir, workstationLoader)
-			},
-			namedPaths.ReadCurrentPointer,
-			func(
-				ctx context.Context,
-				segment string,
-				payload []byte,
-				_ factorydefinitions.Validator,
-			) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
-				return persistence.PrepareFactoryLayout(ctx, segment, payload)
-			},
-			persistence.CreateNamedFactory,
-			namedPaths.WriteCurrentPointer,
-			wirefactorydefinitions.PortableFactoryConfigPreparer(
-				applySupportedFiles,
-				applyStarterWork,
-			),
-			wirefactorydefinitions.FactorySnapshotCapturer(),
-			persistence.ReplaceFactoryLayout,
+			persistence,
+			loader,
+			applySupportedFiles,
+			applyStarterWork,
 			namedPaths,
 			namedFactoryCatalogFileSystem,
+			clock,
+			versionFileSystem,
+			listEffective,
 			packagedCatalog,
 			packagedInstaller,
 			requiredToolChecker,
 			orchestratorValidator,
-		)
-		if definitions == nil {
-			return nil
-		}
-		attached, err := factorydefinitionsservice.AttachEffectiveCatalog(
-			definitions,
-			listEffective,
+			portableFileSystem,
+			directoryReplacementStore,
 		)
 		if err != nil {
 			return nil
 		}
-		return attached
+		return definitions
 	}
 }

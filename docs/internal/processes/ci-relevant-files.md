@@ -140,6 +140,88 @@
   `functional-boundary-check` stays unavoidable through the nested
   `test-functional-coverage` call, and the lane uploads Markdown, coverage
   JSON, profile, and command log on success and failure.
+  When reconciling `main` into long-lived migration branches, Backend
+  Functional Coverage may fail on a package floor regression from newly merged
+  factory_runtime orchestration code; align
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json` to the
+  measured `gocoveragecheck` actual for that package before re-requesting CI.
+  Verify-tier Make and CI script wiring (verify-fast, verify-pr, verify-extended,
+  long-tests, verify-pr-inference, backend/UI coverage aliases, and CI wrapper
+  scripts) is wrong-layer contract evidence owned under
+  `tests/functional/observability/verification/verify_tier_contract_test.go`
+  with shared stubbed-Make helpers in the same package; do not re-home those
+  proofs under `tests/functional/smoke`.
+  Factory Session pause/resume and lifecycle-control functional coverage belongs
+  in `tests/functional/sessions/controls/`: prove pause buffers submitted work
+  through public session-control and work-list boundaries; prove resume drains
+  buffered work in submission order via dispatch observation; prove interrupted
+  goal inspect surfaces INTERRUPTED stop summaries on session and work read
+  surfaces; and prove pause/resume emit durable `SESSION_LIFECYCLE_CONTROL`
+  Factory Events for replay. Drive proofs through
+  `support.StartFunctionalAPIServer` with `MockWorkersConfig` or packaged
+  `@you/goal` factories when routing interruption is required. Catalog metadata
+  infers domain `sessions` and subsection `controls` from the path; every
+  top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
+  stays viz-compatible.
+  Petri dispatch simple-run functional coverage belongs in
+  `tests/functional/orchestration/petri/dispatch/simple_run_test.go`: prove
+  cold-start and preseeded admission, archive-terminal completion, config-driven
+  and scaffolded service-pipeline happy paths, noop fallback, multi-item
+  completion, single- and two-stage pipelines, ideation and dispatcher workflow
+  completion, worker failure routing, and invocation input/output mapping through
+  `support.RunFactoryToCompletionWithEdgesAndWork` with external effects
+  substituted only through `edges.Edges`. Catalog metadata infers domain
+  `orchestration` and subsection `petri/dispatch` from the path; every top-level
+  `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
+  Execution workstation functional coverage belongs in
+  `tests/functional/workstations/execution/`: prove multi-item and staged two-step
+  collection through `basic_test.go` with the stateless-collector fixture,
+  public work listings, dispatch observations, and terminal/failed state
+  projections; prove competing-workstation contention, shared-executor staged
+  resolution, and distinct-worker workstation binding through
+  `contention_test.go` with scaffolded or legacy fixtures and injected
+  `edges.Edges.ProviderOverride`. Drive proofs through
+  `support.RunFactoryToCompletionWithEdgesAndObservations` and substitute
+  external effects only through `edges.Edges`. Catalog metadata infers domain
+  `workstations` and subsection `execution` from the path; every top-level
+  `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
+  Packaged Factory invocation functional coverage belongs in
+  `tests/functional/factory/packaged/`: prove `@you/deep-research` default and
+  optional bounded-research overrides through `deep_research/invocation_test.go`;
+  prove `@you/goal` accept/reject/pause and quiet CLI batch completion through
+  `goal/invocation_test.go`; prove `@you/quorum` branch/merge role flags and
+  merged primary results through `quorum/invocation_test.go`; prove
+  `@you/review` rejection-then-approval and provider/model override wiring
+  through `review/invocation_test.go`. Drive proofs through
+  `support.BuildProcess` + `support.FakeInputs` or
+  `support.StartFunctionalAPIServer` with `edges.Edges.ProviderCommandRunner`
+  or `MockWorkersConfig` as appropriate; prefer edge-mocked Codex providers over
+  live execution. Catalog metadata infers domain `factory` and subsection
+  `packaged/<factory>` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  Classifier routing functional coverage belongs in
+  `tests/functional/work/routing/classifier_test.go`: prove accepted, approved,
+  rework loop-back, rejection retry, multi-output payload preservation, and
+  distinct unknown/malformed failure markers through scaffolded classifier
+  fixtures and `support.RunFactoryToCompletionWithEdgesAndObservations` with
+  injected `edges.Edges.ProviderCommandRunner`. Legacy packaged `@you/goal`
+  plan/check/review routing smokes are obsolete; interrupted inspect ownership
+  stays in `tests/functional/sessions/controls/`. Catalog metadata infers domain
+  `work` and subsection `routing` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  Inline JavaScript Factory loading functional coverage belongs in
+  `tests/functional/orchestration/javascript/loading/inline_javascript_test.go`:
+  drive sync Factory Session execution through `support.BuildProcess` +
+  `support.FakeInputs` with `you --json run`, `--factory`, and
+  `--with-mock-workers`; prove inline definitions complete with terminal
+  `COMPLETED` primary outcomes and without private VM internals; prove
+  sequential `agent.run` child dispatches complete in order with stage-output
+  dependency evidence on the primary result and zero live provider execution;
+  prove deliberate inline syntax failures fail before dispatch with
+  customer-stable `workflow.source.syntaxError` diagnostics that name the
+  authored source line. Substitute external effects only through `edges.Edges`.
   JavaScript file-backed loading functional coverage belongs in
   `tests/functional/orchestration/javascript/loading/file_javascript_test.go`:
   drive sync Factory Session execution through `support.BuildProcess` +
@@ -305,15 +387,18 @@
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
   Mock-worker replacement functional coverage belongs in
-  `tests/functional/workers/mock/replacement_test.go`: prove named-only
-  `--with-mock-workers` replacement through
+  `tests/functional/workers/mock/`: prove named-only `--with-mock-workers`
+  replacement through
   `tests/functional/internal/support.StartFunctionalAPIServer` with
   `MockWorkersConfig`, `UnmatchedDispatchPolicy: passthrough`, and an injected
   `edges.Edges.ProviderCommandRunner`; prove invalid override contract failures
-  through `support.BuildProcess` + `process.Execute` before dispatch; and prove
+  through `support.BuildProcess` + `process.Execute` before dispatch; prove
   configured mock rejection with stable public `WorkOutcomeFailed` /
   `WorkFailureTypeUnknown` dispatch responses without live provider credentials
-  or leaking configured reject stdout/stderr on customer-visible surfaces.
+  or leaking configured reject stdout/stderr on customer-visible surfaces; and
+  prove customer-process service-config override alignment when script and
+  provider dispatches share one replaced command-runner edge or route through a
+  replaced `ScriptCommandRunner` on legacy fixture script workers.
   Catalog metadata infers domain `workers` and subsection `mock` from the path;
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
@@ -482,6 +567,45 @@
   contracts. Catalog metadata infers domain `transport` and subsection
   `cli/commands` from the path; every top-level `Test*` needs a
   customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  CLI run command wiring functional coverage belongs in
+  `tests/functional/transport/cli/commands/run_wiring_test.go`: prove `you run`
+  factory-by-path, named, and packaged-goal invocations write primary results to
+  stdout; reject invalid Factory load before success stdout; accept stdin-only
+  prompt input; reject conflicting or ambiguous positional and stdin input with
+  stable `INVOCATION_INPUT_SOURCE_CONFLICT` diagnostics before runtime startup;
+  keep quiet clean stdout pipeable without operator lifecycle chatter; and write
+  no success primary-result payload when invocation primary-result resolution
+  fails. Drive proofs through built `you` CLI subprocesses with mock workers at
+  the public CLI boundary. Catalog metadata infers domain `transport` and
+  subsection `cli/commands` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  CLI submit command wiring functional coverage belongs in
+  `tests/functional/transport/cli/commands/submit_wiring_test.go`: prove `you
+  submit batch` accepts inline and filesystem-path canonical
+  `FACTORY_REQUEST_BATCH` JSON against a running Factory Session server; reject
+  unreachable servers and preserve public backend error fields without leaking
+  unsafe request payloads. Catalog metadata infers domain `transport` and
+  subsection `cli/commands` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  CLI work command wiring functional coverage belongs in
+  `tests/functional/transport/cli/commands/work_wiring_test.go`: prove `you work
+  list`, `you work show`, `you work move`, and `you work visualize` reflect
+  submitted work, manual recovery moves, missing-work not-found failures, and
+  deterministic dependency graphs through the public CLI against a running
+  Factory Session server. Catalog metadata infers domain `transport` and
+  subsection `cli/commands` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  CLI human text-stream output functional coverage belongs in
+  `tests/functional/transport/cli/output/text_stream_test.go`: prove human
+  response-stream runs surface incremental lifecycle output before terminal
+  primary results; suppress structured envelope noise and operator lifecycle
+  chatter on quiet clean stdout; report operator continuous-run startup output
+  without quiet; and end interrupted runs with documented cancellation outcomes
+  without claiming successful primary results. Drive proofs through
+  `support.BuildProcess` at the public CLI boundary. Catalog metadata infers
+  domain `transport` and subsection `cli/output` from the path; every top-level
+  `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
   Prove default
   `functional-test-viz` wiring (boundary first, single coverage with profile
   + JSON under `.artifacts/functional-test-viz/`, Markdown generator) with
@@ -518,6 +642,38 @@ Wave 0 functional-tests-expansion planning authority lives under
   `migration-ledger-inventory.json`, retarget any specialty Make bindings, and
   refresh `test-file-checklist.md` plus narrowly coupled baselines
   (`package-structure-baseline.json`, `functional-undocumented-tests.json`).
+  Smoke ready-batch closeout (`smoke-delete-04/05/07/10/13`) follows the same
+  release pattern: reconcile `migration-ledger-inventory.json` destination rows
+  (`deletion_only_batch: n/a`), add checklist cells for newly owned destination
+  files (for example `observability/verification/verify_tier_contract_test.go`
+  and `workers/mock/service_config_override_alignment_*`), and drop released batch
+  ids from `ExpectedDeletionOnlyBatches`.
+  Ready `replay_contracts` deletion batches (`delete-02`, `delete-04`,
+  `delete-05`, `delete-06`) release by removing catch-all source rows,
+  adding destination `n/a` rows for migrated live scenarios, dropping
+  consumed batch ids from `ExpectedDeletionOnlyBatches` and
+  `guards_bootstrap_replay_mapping.batch_ids`, and marking batches
+  `released` in `migration-ledger.md`; wrong-layer delete-06 needs no new
+  live row because `deadcode_contract_test.go` already owns replacement
+  evidence. When merged main adds provider harness scenarios (for example
+  `providers/agy/process_harness_test.go`), reconcile them into the ledger
+  companion and checklist in the same closeout pass so
+  `go run ./cmd/migrationledgercheck` stays aligned with the live tree.
+  After rebasing a migration branch onto `main`, also deduplicate ledger rows
+  introduced by parallel closeout work (duplicate provider harness entries) and
+  add inventory/checklist cells for any new live scenarios landing from `main`
+  before pushing.
+  Held destination-cleared smoke batches `smoke-delete-03-factory-definitions` and
+  `smoke-delete-06-factory-packaged-cross` follow the same release pattern after
+  stories 001–003 migrate/delete: add destination-owned rows (including
+  `defaults_loaded_config_long_test.go` checklist cell), remove stale smoke source
+  rows, and mark both batches `released`.
+  `tests/functional/events/response_events/stream_test.go` owns public Response
+  Event SSE stream contracts (`GET /factory-sessions/{session_id}/response-events`)
+  through `support.OpenFactoryResponseEventStreamAt` and related helpers; Wave 2
+  consumption released `replay_contracts-delete-03-events-response-events` after
+  retiring `replay_script_boundary_events_test.go` and the two stream-mapped
+  `runtime_api` inference-event scenarios.
   `tests/functional/factory/definitions/init_test.go` owns public Factory-init
   functional coverage through `session create --init-new-factory` against
   `support.StartFunctionalAPIServer`, with seeded Work run via
@@ -553,6 +709,11 @@ Wave 0 functional-tests-expansion planning authority lives under
   `factory_definitions` and subsection `transports/cli` from the path; every
   top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
   stays viz-compatible.
+  `tests/functional/factory/definitions/import_export_test.go` owns export→import→run,
+  nested docs/scripts/metadata preservation, and invalid-import Current Factory
+  safety through `support.BuildProcess` + `support.FlattenFactoryConfig` /
+  `support.CreateNamedFactory` CLI round-trips with `support.RunFactoryToCompletionWithEdgesAndWork`
+  for terminal run proofs; catalog metadata infers domain `factory/definitions`.
   `make pkg-structure` enforces the domain-mirrored functional layout
   `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
   unclassified scenario packages are blocking, while existing nonconforming
@@ -847,6 +1008,29 @@ Wave 0 functional-tests-expansion planning authority lives under
   Catalog metadata infers domain `workers` and subsection
   `transports/cli/run/modes` from the path; every top-level `Test*` needs a
   customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+- Workers-owned CLI run lifecycle functional coverage belongs in
+  `tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go`:
+  drive clean/prompt-style public `you run --factory` through
+  `support.BuildProcess` + `support.FakeInputs` with `serviceedges.Edges`
+  populated via `support.ConfigureWorkerCommands` and
+  `support.NewStaticSuccessCommandRunner` (preferred over `--with-mock-workers`);
+  scaffold a minimal Codex model-worker factory with `support.ScaffoldFactory`
+  and `support.BuildModelWorkerConfig`; prove default primary-result stdout is
+  pipeable and free of dashboard open/startup sidecar chatter. For
+  server-attached targeting, prove `you run --with-server` routes through the
+  hosted live Factory Session (not a detached local one-shot): start a continuous
+  host with `support.StartFunctionalAPIServer` only to show `you --server <url>
+  run` without `--with-server` cannot attach when client provider edges are
+  isolated, then run a separate hosted `you run --factory --with-server`
+  invocation with provider edges on the hosted process only and correlate
+  observable session identity (and optional `/work` reads) on the hosted API
+  while the one-shot host is alive. For clean-invocation failure, use
+  `support.NewShapedProviderCommandRunner` with a deterministic non-zero exit
+  and stderr payload, assert empty stdout without false-success primary result,
+  and decode exactly one stderr `ErrorResponse` with actionable code/message.
+  Catalog metadata infers domain `workers` and subsection
+  `transports/cli/run/lifecycle` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
 - Packaged `@you/tts` invocation functional coverage belongs in
   `tests/functional/factory/packaged/tts/invocation_test.go`: prove required-text
   audio artifact metadata, optional voice/format reachability on fake provider
@@ -900,6 +1084,17 @@ Wave 0 functional-tests-expansion planning authority lives under
   infers domain `provider_sessions` and subsection `root_composition`; every
   top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
   stays viz-compatible.
+
+- `tests/functional/work/peer_import_boundary_test.go` owns Work FUN functional
+  import seal (pss-fun-work-005): every package under `tests/functional/work/...`
+  must not import `pkg/services/work/internal`, deleted transitional Work packages
+  (`service/`, `stateaccessrecordings/`), or legacy `pkg/work*` consumer edges.
+  Named production peers must reach Work only through `pkg/services/work` or
+  `pkg/services/work/transports/*`. Use exact `isWorkServiceImport` matching
+  (`work` root or `work/` subpath) so `pkg/services/workers` is not mistaken for
+  Work. Complements `tests/functional/work/root_composition/*` behavioral proofs;
+  recordings-root contract proofs under `tests/functional/work/recordings` may
+  still import `pkg/services/work/wire`.
 
 - `tests/functional/provider_sessions/build_process_inert_test.go` owns
   Provider Sessions inert-construction proof through `support.BuildProcess` /

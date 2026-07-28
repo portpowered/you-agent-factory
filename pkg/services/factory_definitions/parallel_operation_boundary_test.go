@@ -11,8 +11,9 @@ import (
 // parallelOperationAllowedPackages may still reference deletion-only parallel
 // catalog operation aliases until remaining construction surfaces finish cutover.
 var parallelOperationAllowedPackages = []string{
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading",
+	"github.com/portpowered/infinite-you/pkg/wire",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition",
 	"github.com/portpowered/infinite-you/pkg/transports/cli",
 	"github.com/portpowered/infinite-you/pkg/transports/cli/factory",

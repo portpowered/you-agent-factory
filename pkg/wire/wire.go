@@ -10,7 +10,6 @@ import (
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	edges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -103,6 +102,7 @@ var servicesSet = wire.NewSet(
 	provideFactorySessionIDGenerator,
 	provideFactorySessionRuntimeInstanceIDGenerator,
 	provideFactorySessionResponseEventIDGenerator,
+	provideFactorySessionResponseEventRetentionLimits,
 	provideFactorySessionCursorPersistenceFileSystem,
 	provideFactorySessionCursorCreateTemporaryFile,
 	provideFactorySessionCursorStoreFactory,
@@ -117,12 +117,14 @@ var servicesSet = wire.NewSet(
 	provideWorkSubmittedFileReader,
 	provideWorkContentHostPlatform,
 	provideContentMaterializer,
+	provideFactoryInvocationPolicyPorts,
 	provideDecisionEnvelopeService,
 	provideInvocationInterpolationService,
 	provideInvocationOutputShapingService,
 	provideInvocationWorkTypeService,
 	provideQuorumPolicyService,
 	provideWorkPropagationPolicyService,
+	provideWorkstationExecutionPolicyService,
 	provideTTSObservabilityService,
 	provideAutomationFactory,
 	provideFactorySessionsService,
@@ -169,9 +171,9 @@ var servicesSet = wire.NewSet(
 	providePortableBundledFileWritesValidator,
 	providePortableBundledFilesCopier,
 	providePortableBundledFileSourceResolver,
-	factorydefinitionswire.NewPortableBundledFilesApplier,
-	factorydefinitionswire.NewFactoryStarterWorkApplier,
-	factorydefinitionswire.NewPortableBundledDocsPruner,
+	providePortableBundledFilesApplier,
+	provideFactoryStarterWorkApplier,
+	providePortableBundledDocsPruner,
 	provideFactoryDefinitionLoader,
 	provideFactoryRuntimeClockResolver,
 	provideFactoryRuntimeSessionLoggerFactory,

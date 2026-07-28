@@ -10,10 +10,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout"
-
+	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
+	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
 	factorysnapshotcapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factoryconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -29,7 +28,7 @@ func prepareExternalFactoryLayoutForDefinitionTest(
 	validator factorydefinitions.Validator,
 ) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
 	mapper := factoryconfigmapping.NewFactoryConfigMapper()
-	return factoryauthoredlayout.Prepare(
+	return authoringlayoutprepare.FactoryLayout(
 		ctx,
 		segment,
 		payload,
@@ -84,7 +83,7 @@ func (stubDefinitionHost) PreparePortableFactoryConfig(
 	factoryConfig *factorydefinitions.FactoryConfig,
 	includeInlineContent bool,
 ) (*factorydefinitions.FactoryConfig, error) {
-	return portableconfig.Prepare(
+	return snapshotsportabilityprepare.PrepareConfig(
 		factoryDir,
 		factoryConfig,
 		includeInlineContent,
@@ -333,7 +332,7 @@ func (h saveDefinitionHostAdapter) PreparePortableFactoryConfig(
 	factoryConfig *factorydefinitions.FactoryConfig,
 	includeInlineContent bool,
 ) (*factorydefinitions.FactoryConfig, error) {
-	return portableconfig.Prepare(
+	return snapshotsportabilityprepare.PrepareConfig(
 		factoryDir,
 		factoryConfig,
 		includeInlineContent,

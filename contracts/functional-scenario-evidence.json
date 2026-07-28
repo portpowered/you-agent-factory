@@ -2,12 +2,6 @@
   "formatVersion": 1,
   "declarations": [
     {
-      "test": "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent",
-      "stableIds": [
-        "rest/upsertWorkRequestBySessionId"
-      ]
-    },
-    {
       "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIDispatchListAndDetailExposePublicCorrelation",
       "stableIds": [
         "rest/getFactorySessionDispatch",
@@ -52,6 +46,12 @@
       "test": "tests/functional/work/recovery/manual_move_test.go::TestFailedCascadeCanBeRecoveredByPublicWorkMove",
       "stableIds": [
         "rest/moveWorkBySessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/work/submission/http_test.go::TestAPIBatchUpsertAcceptsWorksContent",
+      "stableIds": [
+        "rest/upsertWorkRequestBySessionId"
       ]
     },
     {

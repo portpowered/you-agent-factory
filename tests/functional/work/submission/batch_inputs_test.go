@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -44,6 +46,10 @@ const (
 	batchInputsMixedBatchRequestID   = "work-batch-inputs-mixed-batch"
 	batchInputsMixedValidWorkName    = "mixed-valid-task"
 	batchInputsMixedInvalidWorkName  = "mixed-invalid-task"
+
+	batchIngressRegressionRequestID = "request-http-batch-ingress-regression"
+	batchIngressRegressionWorkID    = "work-http-batch-ingress-regression"
+	batchIngressRegressionTraceID   = "trace-http-batch-ingress-regression"
 )
 
 // TestWorkBatchAcceptsInlineFileAndStdinShapes proves the public Work Request
@@ -216,6 +222,322 @@ func TestWorkBatchRejectsUnknownTypeWithoutPartialMutation(t *testing.T) {
 		assertWorkNotListedByName(t, baseURL, batchInputsMixedInvalidWorkName)
 		assertListedWorkCount(t, baseURL, baselineCount)
 	})
+}
+
+// TestBlockedDispatchConcurrentBatchIngressRegression proves accepted batch ingress
+// stays HTTP-observable (WORK_REQUEST plus Work list/get) while an unrelated
+// dispatch remains blocked, and same-request-ID replay stays idempotent.
+func TestBlockedDispatchConcurrentBatchIngressRegression(t *testing.T) {
+	factoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
+	dispatchRelease := make(chan struct{})
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+		ProviderOverride:          support.BlockingInferenceProvider(dispatchRelease),
+	})
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	body, err := json.Marshal(factoryapi.SubmitWorkRequest{
+		Name:         stringPtr("blocked-dispatch-for-ingress-regression"),
+		WorkTypeName: batchInputsWorkType,
+		Payload:      map[string]string{"title": "blocked dispatch for batch ingress regression"},
+	})
+	if err != nil {
+		t.Fatalf("marshal POST /work request: %v", err)
+	}
+	submitted := postSubmitWork(t, baseURL, body)
+	if submitted.TraceId == "" {
+		t.Fatal("POST /work returned an empty trace ID")
+	}
+	waitForServiceModeSessionActive(t, baseURL, 10*time.Second)
+
+	workTypeName := batchInputsWorkType
+	batchRequest := factoryapi.WorkRequest{
+		RequestId: batchIngressRegressionRequestID,
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &[]factoryapi.Work{{
+			Name:         "http-ingress-regression",
+			WorkId:       stringPtr(batchIngressRegressionWorkID),
+			WorkTypeName: &workTypeName,
+			TraceId:      stringPtr(batchIngressRegressionTraceID),
+			Payload:      map[string]string{"title": "concurrent batch ingress regression"},
+		}},
+	}
+
+	first := support.UpsertDefaultSessionWorkRequest(t, baseURL, batchRequest)
+	if first.RequestId != batchIngressRegressionRequestID {
+		t.Fatalf("PUT /work-requests request_id = %q, want %q", first.RequestId, batchIngressRegressionRequestID)
+	}
+	if len(first.Works) != 1 || first.Works[0].WorkId != batchIngressRegressionWorkID {
+		t.Fatalf(
+			"PUT /work-requests works = %#v, want one work with id %q",
+			first.Works,
+			batchIngressRegressionWorkID,
+		)
+	}
+
+	support.AssertSingleWorkRequestEvent(
+		t,
+		server.GetFactoryEvents(t),
+		batchIngressRegressionRequestID,
+		batchIngressRegressionWorkID,
+		workTypeName,
+	)
+	assertBatchIngressWorkListAndGetVisible(t, baseURL, batchIngressRegressionWorkID)
+
+	replayed := support.UpsertDefaultSessionWorkRequest(t, baseURL, batchRequest)
+	if replayed.RequestId != first.RequestId || replayed.TraceId != first.TraceId {
+		t.Fatalf("idempotent PUT identity changed: first=%#v replay=%#v", first, replayed)
+	}
+	support.AssertSingleWorkRequestEvent(
+		t,
+		server.GetFactoryEvents(t),
+		batchIngressRegressionRequestID,
+		batchIngressRegressionWorkID,
+		workTypeName,
+	)
+
+	select {
+	case <-dispatchRelease:
+		t.Fatal("blocked dispatch released before ingress regression assertions finished")
+	default:
+	}
+
+	close(dispatchRelease)
+}
+
+func waitForServiceModeSessionActive(t *testing.T, baseURL string, timeout time.Duration) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		session := support.GetDefaultSession(t, baseURL)
+		if session.Runtime.Progress.FactoryState == "RUNNING" &&
+			session.Runtime.Progress.InFlightCount > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	session := support.GetDefaultSession(t, baseURL)
+	t.Fatalf("timed out waiting for active service-mode session: %#v", session.Runtime)
+}
+
+func assertBatchIngressWorkListAndGetVisible(t *testing.T, baseURL, workID string) {
+	t.Helper()
+
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	if !batchIngressWorkListingContainsID(listed, workID) {
+		t.Fatalf(
+			"work %q missing from public Work list before blocked dispatch completed; listed=%#v",
+			workID,
+			listed.Results,
+		)
+	}
+
+	endpoint := support.DefaultSessionWorkURL(baseURL, "/work/"+workID)
+	response, err := http.Get(endpoint)
+	if err != nil {
+		t.Fatalf("GET %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("GET %s status = %d, want 200 while blocked dispatch continues", endpoint, response.StatusCode)
+	}
+
+	work := support.GetJSON[factoryapi.Work](t, endpoint)
+	if support.StringPointerValue(work.WorkId) != workID {
+		t.Fatalf("GET /work/%s workId = %q, want %q", workID, support.StringPointerValue(work.WorkId), workID)
+	}
+}
+
+func batchIngressWorkListingContainsID(listed factoryapi.ListWorkResponse, workID string) bool {
+	for _, item := range listed.Results {
+		if support.StringPointerValue(item.WorkId) == workID {
+			return true
+		}
+	}
+	return false
+}
+
+// TestWorkBatchDependencyOrderingNormalizesRuntimeWork proves batch upsert with
+// DEPENDS_ON relations dispatches dependent work only after prerequisite terminal
+// outcomes and preserves canonical work type names in public projections.
+func TestWorkBatchDependencyOrderingNormalizesRuntimeWork(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, competingPipelineFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+
+	stream := support.OpenFactoryEventStreamAt(
+		t,
+		support.DefaultSessionEventsURL(server.URL()),
+	)
+	_ = stream.NextEvent(5 * time.Second) // RUN_REQUEST
+	_ = stream.NextEvent(5 * time.Second) // INITIAL_STRUCTURE_REQUEST
+
+	const (
+		firstWorkID  = "work-batch-dependency-first"
+		secondWorkID = "work-batch-dependency-second"
+	)
+	requiredState := "complete"
+	workTypeName := batchInputsWorkType
+	request := factoryapi.WorkRequest{
+		RequestId: "request-batch-dependency",
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &[]factoryapi.Work{
+			{
+				Name:         "first",
+				WorkId:       stringPtr(firstWorkID),
+				WorkTypeName: &workTypeName,
+				Payload:      map[string]string{"step": "first"},
+			},
+			{
+				Name:         "second",
+				WorkId:       stringPtr(secondWorkID),
+				WorkTypeName: &workTypeName,
+				Payload:      map[string]string{"step": "second"},
+			},
+		},
+		Relations: &[]factoryapi.Relation{{
+			Type:           factoryapi.RelationTypeDependsOn,
+			SourceWorkName: "second",
+			TargetWorkName: "first",
+			RequiredState:  &requiredState,
+		}},
+	}
+
+	response := support.UpsertDefaultSessionWorkRequest(t, server.URL(), request)
+	if response.RequestId != request.RequestId || response.TraceId == "" || len(response.Works) != 2 {
+		t.Fatalf("PUT /work-requests response = %#v, want request id, trace id, and two works", response)
+	}
+	wantWorks := []factoryapi.UpsertWorkRequestSubmittedWork{
+		{Name: "first", WorkTypeName: workTypeName, WorkId: firstWorkID},
+		{Name: "second", WorkTypeName: workTypeName, WorkId: secondWorkID},
+	}
+	if !reflect.DeepEqual(response.Works, wantWorks) {
+		t.Fatalf("PUT /work-requests works = %#v, want %#v", response.Works, wantWorks)
+	}
+	if replayed := support.UpsertDefaultSessionWorkRequest(t, server.URL(), request); !reflect.DeepEqual(replayed, response) {
+		t.Fatalf("replayed PUT /work-requests response = %#v, want original %#v", replayed, response)
+	}
+
+	items := waitForWorkIDsComplete(t, server.URL(), []string{firstWorkID, secondWorkID}, 10*time.Second)
+	for _, item := range items {
+		if support.StringPointerValue(item.WorkTypeName) != workTypeName {
+			t.Fatalf(
+				"batch work %s workTypeName = %q, want %q",
+				support.StringPointerValue(item.WorkId),
+				support.StringPointerValue(item.WorkTypeName),
+				workTypeName,
+			)
+		}
+	}
+	assertPublicBatchDurableOutcomes(t, server.URL(), firstWorkID, secondWorkID)
+	assertPublicBatchDependencyAndIdempotency(t, stream, request.RequestId, firstWorkID, secondWorkID)
+}
+
+func assertPublicBatchDurableOutcomes(t *testing.T, baseURL, firstWorkID, secondWorkID string) {
+	t.Helper()
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	counts := map[string]int{}
+	for _, workItem := range listed.Results {
+		workID := support.StringPointerValue(workItem.WorkId)
+		if workID == firstWorkID || workID == secondWorkID {
+			counts[workID]++
+		}
+	}
+	if counts[firstWorkID] != 1 || counts[secondWorkID] != 1 {
+		t.Fatalf("public durable batch work counts = %#v, want one outcome for each batch work", counts)
+	}
+}
+
+func assertPublicBatchDependencyAndIdempotency(
+	t *testing.T,
+	stream *support.FactoryEventStream,
+	requestID, firstWorkID, secondWorkID string,
+) {
+	t.Helper()
+
+	requestEvents, relationEvents := 0, 0
+	firstTerminalSequence, secondDispatchSequence := -1, -1
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		event := stream.NextEvent(time.Until(deadline))
+		switch event.Type {
+		case factoryapi.FactoryEventTypeWorkRequest:
+			if support.StringPointerValue(event.Context.RequestId) == requestID {
+				requestEvents++
+				payload, err := event.Payload.AsWorkRequestEventPayload()
+				if err != nil {
+					t.Fatalf("decode public WORK_REQUEST event: %v", err)
+				}
+				if payload.Type != factoryapi.WorkRequestTypeFactoryRequestBatch ||
+					len(support.FactoryWorksValue(payload.Works)) != 2 {
+					t.Fatalf("public WORK_REQUEST payload = %#v, want two-work FACTORY_REQUEST_BATCH", payload)
+				}
+			}
+		case factoryapi.FactoryEventTypeRelationshipChangeRequest:
+			if support.StringPointerValue(event.Context.RequestId) == requestID {
+				relationEvents++
+				payload, err := event.Payload.AsRelationshipChangeRequestEventPayload()
+				if err != nil {
+					t.Fatalf("decode public RELATIONSHIP_CHANGE_REQUEST event: %v", err)
+				}
+				if payload.Relation.Type != factoryapi.RelationTypeDependsOn ||
+					payload.Relation.SourceWorkName != "second" ||
+					support.StringPointerValue(payload.Relation.TargetWorkId) != firstWorkID {
+					t.Fatalf("public dependency relation = %#v, want second DEPENDS_ON first", payload.Relation)
+				}
+			}
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			if payload, err := event.Payload.AsDispatchResponseEventPayload(); err == nil &&
+				payload.Outcome == factoryapi.WorkOutcomeAccepted &&
+				publicEventWorkIDsContain(event.Context.WorkIds, firstWorkID) {
+				firstTerminalSequence = event.Context.Sequence
+			}
+		case factoryapi.FactoryEventTypeDispatchRequest:
+			if payload, err := event.Payload.AsDispatchRequestEventPayload(); err == nil &&
+				publicDispatchInputsContainWork(payload, secondWorkID) {
+				secondDispatchSequence = event.Context.Sequence
+			}
+		}
+		if requestEvents == 1 && relationEvents == 1 &&
+			firstTerminalSequence >= 0 && secondDispatchSequence > firstTerminalSequence {
+			return
+		}
+	}
+	t.Fatalf(
+		"public batch events = requests:%d relations:%d first-terminal:%d second-dispatch:%d; want one request, one relation, and dependency ordering",
+		requestEvents,
+		relationEvents,
+		firstTerminalSequence,
+		secondDispatchSequence,
+	)
+}
+
+func publicDispatchInputsContainWork(payload factoryapi.DispatchRequestEventPayload, workID string) bool {
+	for _, input := range payload.Inputs {
+		if input.WorkId == workID {
+			return true
+		}
+	}
+	return false
+}
+
+func publicEventWorkIDsContain(workIDs *[]string, want string) bool {
+	if workIDs == nil {
+		return false
+	}
+	for _, workID := range *workIDs {
+		if workID == want {
+			return true
+		}
+	}
+	return false
 }
 
 type batchInputsSubmitJSON struct {

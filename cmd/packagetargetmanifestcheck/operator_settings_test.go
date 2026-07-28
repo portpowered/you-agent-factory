@@ -41,46 +41,6 @@ func TestMapCommittedOwnerPackageOperatorSettingsMoveDestinations(t *testing.T) 
 			},
 		},
 		{
-			path: "pkg/services/operator_settings/identityinventory",
-			want: PackageMapping{
-				PackagePath: "pkg/services/operator_settings/identityinventory",
-				Disposition: DispositionMove,
-				Destination: "operator_settings/internal/services/document",
-			},
-		},
-		{
-			path: "pkg/services/operator_settings/identityinventory/input_index",
-			want: PackageMapping{
-				PackagePath: "pkg/services/operator_settings/identityinventory/input_index",
-				Disposition: DispositionMove,
-				Destination: "operator_settings/internal/services/document",
-			},
-		},
-		{
-			path: "pkg/services/operator_settings/servicewire",
-			want: PackageMapping{
-				PackagePath: "pkg/services/operator_settings/servicewire",
-				Disposition: DispositionMove,
-				Destination: "operator_settings/internal",
-			},
-		},
-		{
-			path: "pkg/services/operator_settings/testlink",
-			want: PackageMapping{
-				PackagePath: "pkg/services/operator_settings/testlink",
-				Disposition: DispositionMove,
-				Destination: "operator_settings/internal",
-			},
-		},
-		{
-			path: "pkg/services/operator_settings/testproviders",
-			want: PackageMapping{
-				PackagePath: "pkg/services/operator_settings/testproviders",
-				Disposition: DispositionMove,
-				Destination: "operator_settings/internal",
-			},
-		},
-		{
 			path: "pkg/services/operator_settings/testdata/fixtures/valid",
 			want: PackageMapping{
 				PackagePath: "pkg/services/operator_settings/testdata/fixtures/valid",
@@ -164,6 +124,42 @@ func TestVerifyOperatorSettingsDualLedgerAlignmentPassesOnRepository(t *testing.
 	repoRoot := findRepoRoot(t)
 	if err := ownershipinventory.VerifyOperatorSettingsDualLedgerAlignment(repoRoot); err != nil {
 		t.Fatalf("VerifyOperatorSettingsDualLedgerAlignment() error = %v", err)
+	}
+}
+
+func TestVerifyOperatorSettingsTopLevelInventoryPassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	if err := ownershipinventory.VerifyOperatorSettingsTopLevelInventory(repoRoot); err != nil {
+		t.Fatalf("VerifyOperatorSettingsTopLevelInventory() error = %v", err)
+	}
+}
+
+func TestVerifyOperatorSettingsRootGoInventoryPassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	if err := ownershipinventory.VerifyOperatorSettingsRootGoInventory(repoRoot); err != nil {
+		t.Fatalf("VerifyOperatorSettingsRootGoInventory() error = %v", err)
+	}
+}
+
+func TestVerifyOperatorSettingsCommittedRootContractInventoryAlignmentPassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	if err := ownershipinventory.VerifyOperatorSettingsCommittedRootContractInventoryAlignment(repoRoot); err != nil {
+		t.Fatalf("VerifyOperatorSettingsCommittedRootContractInventoryAlignment() error = %v", err)
+	}
+}
+
+func TestVerifyOperatorSettingsRootReconciliationPassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	if err := ownershipinventory.VerifyOperatorSettingsRootReconciliation(repoRoot); err != nil {
+		t.Fatalf("VerifyOperatorSettingsRootReconciliation() error = %v", err)
 	}
 }
 
