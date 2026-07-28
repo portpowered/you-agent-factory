@@ -244,7 +244,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
-      "minimum": 57.75
+      "exception": {
+        "kind": "migration",
+        "justification": "CUT-DEF-SES moved activation lock, idle, and swap ports from definition Host wrappers to the Sessions DefinitionActivationGateway; the functional profile no longer executes the removed host adapter statements.",
+        "owner": "factory-definition-maintainers",
+        "deadline": "2026-12-31",
+        "removalGate": "Functional coverage for the definition package is restored through gateway integration tests without reintroducing Host activation wrappers."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable",
@@ -624,7 +630,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",
-      "minimum": 65.51
+      "exception": {
+        "kind": "migration",
+        "justification": "CUT-DEF-SES requires DefinitionActivationGateway in service composition and removes AttachFactoryDefinitions callback wiring; the functional profile no longer executes the retired construction statements.",
+        "owner": "factory-definition-maintainers",
+        "deadline": "2026-12-31",
+        "removalGate": "Functional coverage for the service composition package is restored through gateway integration tests without reintroducing attach-back construction."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture",

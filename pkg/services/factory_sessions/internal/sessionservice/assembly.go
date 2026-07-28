@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -314,61 +313,17 @@ func (h definitionHost) ValidateEditableFactorySnapshot(ctx context.Context, sna
 func (h definitionHost) GetCurrentFactorySnapshotForSession(ctx context.Context, id string) (*factorydefinitions.FactorySnapshot, error) {
 	return h.callbacks().GetCurrentFactorySnapshotForSession(ctx, id)
 }
-func (h definitionHost) WithActivationLock(run func() error) error {
-	return h.callbacks().WithActivationLock(run)
-}
-func (h definitionHost) RequireIdleRuntimeForSession(ctx context.Context, id string) error {
-	return h.callbacks().RequireIdleRuntimeForSession(ctx, id)
-}
-func (h definitionHost) ActivateSessionEditableFactory(
-	ctx context.Context,
-	session *factorydefinitions.DefinitionSession,
-	sessionID string,
-	sessionRootDir string,
-	factoryDir string,
-	name string,
-	runtimeName string,
-) error {
-	return h.callbacks().ActivateSessionEditableFactory(
-		ctx, h.liveSession(session), sessionID, sessionRootDir, factoryDir, name, runtimeName,
-	)
-}
 func (h definitionHost) ReplaceFactoryLayoutAtDir(
 	targetDir string,
 	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
 ) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
 	return h.callbacks().ReplaceFactoryLayoutAtDir(targetDir, prepared)
 }
-func (h definitionHost) SaveNow() time.Time   { return h.callbacks().SaveNow() }
-func (h definitionHost) RunSessionID() string { return h.callbacks().RunSessionID() }
-func (h definitionHost) SessionForActivation(id string) *factorydefinitions.DefinitionSession {
-	return projectDefinitionSession(h.callbacks().SessionForActivation(id))
-}
-func (h definitionHost) NamedFactoryActivationPaths(session *factorydefinitions.DefinitionSession) (string, string) {
-	return h.callbacks().NamedFactoryActivationPaths(h.liveSession(session))
-}
-func (h definitionHost) RequireIdleBeforeNamedFactoryActivation(
-	ctx context.Context,
-	id string,
-	session *factorydefinitions.DefinitionSession,
-) error {
-	return h.callbacks().RequireIdleBeforeNamedFactoryActivation(ctx, id, h.liveSession(session))
-}
-func (h definitionHost) SwapPersistedNamedFactoryRuntime(
-	ctx context.Context,
-	id string,
-	session *factorydefinitions.DefinitionSession,
-	persistRoot string,
-	folderPath string,
-	factoryDir string,
-	name string,
-) error {
-	return h.callbacks().SwapPersistedNamedFactoryRuntime(
-		ctx, id, h.liveSession(session), persistRoot, folderPath, factoryDir, name,
-	)
-}
-func (h definitionHost) AttachFactoryDefinitions(definitions factorydefinitions.Service) factorydefinitions.Service {
-	return h.runtime.AttachFactoryDefinitionService(definitions)
+
+var _ factorysessions.DefinitionActivationGatewayProvider = definitionHost{}
+
+func (h definitionHost) DefinitionActivationGateway() factorysessions.DefinitionActivationGateway {
+	return h.runtime.DefinitionActivationGateway()
 }
 
 func projectDefinitionSession(

@@ -28,10 +28,12 @@ func provideFactoryDefinitionsFactory(
 ) factorysessionwire.FactoryDefinitionsFactory {
 	return func(
 		sessionHost factorysessions.DefinitionHost,
+		activationGateway factorydefinitions.DefinitionActivationGateway,
 		validator factorydefinitions.Validator,
 	) factorydefinitions.Service {
 		definitions := factorydefinitionsservice.New(
 			sessionHost,
+			activationGateway,
 			clock,
 			versionFileSystem,
 			validator,

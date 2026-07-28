@@ -450,7 +450,7 @@ func newRootCatalog(t *testing.T) factorydefinitions.Service {
 	if err != nil {
 		t.Fatalf("catalogwire.NewService: %v", err)
 	}
-	return factorydefinition.NewWithCatalog(nil, catalogService)
+	return factorydefinition.NewWithCatalog(nil, factorydefinition.StubActivationGateway(), catalogService)
 }
 
 func writeNamedFactory(t *testing.T, rootDir, name string) string {
