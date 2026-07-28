@@ -412,6 +412,14 @@ func trimmedStringValue(value *string) string {
 }
 
 func normalizeSessionInvocationError(err error) error {
+	var inputErr *work.InputError
+	if errors.As(err, &inputErr) {
+		return inputErr
+	}
+	var argumentErr *work.ArgumentError
+	if errors.As(err, &argumentErr) {
+		return argumentErr
+	}
 	var validationErr *work.TextContentValidationError
 	if errors.As(err, &validationErr) {
 		return &factorydefinitions.RequestValidationError{Message: validationErr.Message}
