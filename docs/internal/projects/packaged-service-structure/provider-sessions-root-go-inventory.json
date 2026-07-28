@@ -68,6 +68,12 @@
       "classification": "fold_target_implementation_test",
       "foldDestination": "pkg/services/provider_sessions/internal",
       "note": "Root-level implementation integration tests assembling production Service through provider_sessions/wire; fold target for CLN-PSES-CONTRACT-ROOTS."
+    },
+    {
+      "file": "wire_behavioral_proof_test.go",
+      "classification": "fold_target_implementation_test",
+      "foldDestination": "pkg/services/provider_sessions/internal",
+      "note": "Focused wire-constructed behavioral proof for Details, Inspect, and Project across Codex and Cursor reader fixtures on the published Service surface."
     }
   ]
 }

@@ -161,6 +161,7 @@ func TestProviderSessionsRootGoInventoryDistinguishesThinContractTestsFromImplem
 		"project_providers_boundary_test.go",
 		"readers_providers_boundary_test.go",
 		"service_test.go",
+		"wire_behavioral_proof_test.go",
 	}
 
 	var gotThinTests []string
