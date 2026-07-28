@@ -879,9 +879,12 @@ in `pkg/services/factory_runtime` (`interfaces.go`) plus root typed errors in
 `engine`, or other nested Runtime paths); lock this with
 `pkg/services/factory_sessions/runtime_consumer_import_boundary_test.go` and
 `cmd/pkgboundarycheck` peer-subpackage rules. Lock live control and observation
-through `pkg/services/factory_sessions/internal/services/live_runtime/control_observation_boundary_test.go`
-and gateway forwarding checks in
-`pkg/services/factory_sessions/internal/sessionservice/lifecycle_test.go`.
+through `pkg/services/factory_sessions/runtime_control_observation_boundary_test.go`
+(import scan plus root peer characterization),
+`pkg/services/factory_sessions/internal/services/live_runtime/control_observation_boundary_test.go`,
+and consolidated gateway proof in
+`pkg/services/factory_sessions/internal/sessionservice/runtime_control_observation_boundary_test.go`
+(with additional forwarding checks in `lifecycle_test.go`).
 Durable and JavaScript execution handoff must construct through Runtime root
 workflow, orchestration, and checkpoint contracts
 (`JavaScriptWorkflows`, `OrchestrationJavaScriptExecution`,
