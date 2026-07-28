@@ -15,7 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboard"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/runconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay"
@@ -26,6 +25,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
@@ -676,24 +676,7 @@ func openDashboardAtBoundEndpoint(
 // Place IDs follow the pattern '{work_type_id}:{state_value}'.
 // Terminal states contain "completed", failed states contain "failed".
 func CountTokenStates(snap *state.PetriMarkingSnapshot) (wip, completed, failed int) {
-	for _, t := range snap.Tokens {
-		placeID := t.PlaceID
-		// Extract state from place ID (after the last ':').
-		state := placeID
-		if idx := strings.LastIndexByte(placeID, ':'); idx >= 0 {
-			state = placeID[idx+1:]
-		}
-
-		switch {
-		case isFailedState(state):
-			failed++
-		case isTerminalState(state):
-			completed++
-		default:
-			wip++
-		}
-	}
-	return
+	return factoryruntimecli.CountTokenStates(snap)
 }
 
 func isTerminalState(state string) bool {
@@ -706,5 +689,5 @@ func isFailedState(state string) bool {
 
 // FormatDuration formats a duration as "Xm" or "Xh Ym".
 func FormatDuration(d time.Duration) string {
-	return dashboard.FormatDuration(d)
+	return factoryruntimecli.FormatDuration(d)
 }

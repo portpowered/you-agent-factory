@@ -1036,6 +1036,12 @@
     },
     {
       "fromOwner": "automations",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/automations/transports/http -\u003e pkg/transports/http/generated"
+    },
+    {
+      "fromOwner": "automations",
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/services/automations -\u003e pkg/services/work"
@@ -1202,6 +1208,12 @@
       "toOwner": "recordings",
       "class": "event",
       "evidence": "pkg/services/factory_runtime -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "factory_runtime",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/factory_runtime/transports/cli -\u003e pkg/transports/cli/cliserver"
     },
     {
       "fromOwner": "factory_runtime",
@@ -2466,6 +2478,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/automations/transports/http",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/automations/wire",
       "disposition": "retain",
       "destination": "automations",
@@ -3186,6 +3204,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/transports/cli",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/wire",
       "disposition": "retain",
       "destination": "factory_runtime",
@@ -3643,6 +3667,12 @@
     },
     {
       "packagePath": "pkg/services/factory_visualization/transports/http",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/mcp",
       "disposition": "retain",
       "destination": "factory_visualization",
       "destinationKind": "owner"
@@ -4207,6 +4237,12 @@
     },
     {
       "packagePath": "pkg/services/system_initialization/internal/workflow",
+      "disposition": "retain",
+      "destination": "system_initialization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization/transports/cli",
       "disposition": "retain",
       "destination": "system_initialization",
       "destinationKind": "owner"

@@ -44,6 +44,7 @@ import (
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	operatorsettingsservicewire "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
@@ -256,14 +257,14 @@ func provideOperatorConfigDocumentService(
 	decode operatorsettings.ConfigDecoder,
 	encode operatorsettings.ConfigEncoder,
 ) operatorsettings.ConfigDocumentService {
-	return operatorsettings.ConfigDocumentService{
-		Files:           files,
-		CreateTemp:      createTemp,
-		Providers:       providers,
-		Decoder:         decode,
-		Encoder:         encode,
-		PersistenceLock: &sync.Mutex{},
-	}
+	return operatorsettingsservicewire.NewConfigDocumentService(
+		files,
+		createTemp,
+		decode,
+		encode,
+		providers,
+		&sync.Mutex{},
+	)
 }
 
 func provideOperatorSettingsIDGenerator(edges serviceedges.Edges) operatorsettings.IDGenerator {
