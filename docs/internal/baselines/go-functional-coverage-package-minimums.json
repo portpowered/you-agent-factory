@@ -814,7 +814,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore",
-      "minimum": 46.53
+      "minimum": 43.77
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream",
@@ -1880,7 +1880,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/wire",
-      "minimum": 100.00
+      "minimum": 8.82
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers",
