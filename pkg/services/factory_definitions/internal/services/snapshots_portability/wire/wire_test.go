@@ -6,22 +6,21 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
 )
 
 type stubSnapshotPorts struct{}
 
-func (stubSnapshotPorts) loadCanonical([]byte, factorycontracts.WorkstationLoader) (factorycontracts.MutableLoadedFactorySource, error) {
+func (stubSnapshotPorts) loadCanonical([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 	return nil, nil
 }
 
-func (stubSnapshotPorts) captureLoaded(factorycontracts.FactorySnapshotSource, string, map[string]string) (*factorycontracts.FactorySnapshot, error) {
+func (stubSnapshotPorts) captureLoaded(factorydefinitions.FactorySnapshotSource, string, map[string]string) (*factorydefinitions.FactorySnapshot, error) {
 	return nil, nil
 }
 
-func (stubSnapshotPorts) preparePortable(string, *factorycontracts.FactoryConfig, bool) (*factorycontracts.FactoryConfig, error) {
+func (stubSnapshotPorts) preparePortable(string, *factorydefinitions.FactoryConfig, bool) (*factorydefinitions.FactoryConfig, error) {
 	return nil, nil
 }
 
@@ -29,11 +28,11 @@ func (stubSnapshotPorts) decodeSnapshot([]byte) (*factorydefinitions.FactorySnap
 	return nil, nil
 }
 
-func (stubSnapshotPorts) materializePortableFiles(string, *factorycontracts.FactoryConfig) ([]factorycontracts.PortableBundledFileReplacement, error) {
+func (stubSnapshotPorts) materializePortableFiles(string, *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
 	return nil, nil
 }
 
-func (stubSnapshotPorts) validateMaterializeWrites(string, *factorycontracts.FactoryConfig) error {
+func (stubSnapshotPorts) validateMaterializeWrites(string, *factorydefinitions.FactoryConfig) error {
 	return nil
 }
 
