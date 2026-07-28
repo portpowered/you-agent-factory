@@ -23,7 +23,9 @@ Use this map when changing the public REST contract.
   derive detached artifact projections through
   `BuildPortableArtifact` + `ReconstructWorldState`, and encode
   `interfaces.FactorySessionArtifactState` values into the public artifact
-  response shapes.
+  response shapes. Typed Recordings root failures map through
+  `error_mapping.go` into public `ErrorResponse` bodies with stable status,
+  family, and code; unmapped failures use sanitized internal messages.
   Package-boundary tests must prove the adapter does not import
   `pkg/services/recordings/internal/**`.
 - Factory Session CLI request construction, rendering, diagnostics, and

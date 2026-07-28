@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -48,15 +47,7 @@ func (a *Adapter) GetEventsBySessionId(
 	}
 	result, err := a.invokeSubscribeFrom(r.Context(), request)
 	if err != nil {
-		if errors.Is(err, recordings.ErrInvalidSubscribeScope) ||
-			errors.Is(err, recordings.ErrInvalidReconnectCursor) ||
-			errors.Is(err, recordings.ErrReconnectCursorNotFound) ||
-			errors.Is(err, recordings.ErrReconnectCursorExpired) ||
-			errors.Is(err, recordings.ErrReconnectCursorUnavailable) {
-			a.writeError(w, http.StatusBadRequest, "invalid event reconnect cursor", "BAD_REQUEST")
-			return
-		}
-		a.writeError(w, http.StatusInternalServerError, "failed to subscribe to factory events", "INTERNAL_ERROR")
+		a.writeRootOrInternalError(w, recordingsHTTPOperationEventSubscribe, err)
 		return
 	}
 	a.streamFactoryEvents(w, r, result.Subscription, input.SessionID, input.StreamGenerationID)
@@ -78,11 +69,7 @@ func (a *Adapter) probeEventStreamRecovery(w http.ResponseWriter, input EventSub
 	}
 	_, err = a.invokeSubscribeFrom(context.Background(), request)
 	if err != nil {
-		if errors.Is(err, recordings.ErrInvalidSubscribeScope) ||
-			errors.Is(err, recordings.ErrInvalidReconnectCursor) ||
-			errors.Is(err, recordings.ErrReconnectCursorNotFound) ||
-			errors.Is(err, recordings.ErrReconnectCursorExpired) ||
-			errors.Is(err, recordings.ErrReconnectCursorUnavailable) {
+		if isEventReconnectValidationError(err) {
 			a.writeJSON(
 				w,
 				http.StatusOK,

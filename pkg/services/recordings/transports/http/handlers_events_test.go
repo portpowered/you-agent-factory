@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -122,6 +123,63 @@ func TestGetEventsBySessionId_ProbeMapsStaleCursorWithoutTreatingFakeRootAsSucce
 		!strings.Contains(recorder.Body.String(), `"outcome":"CURSOR_STALE"`) ||
 		!strings.Contains(recorder.Body.String(), `"omitAfterSequence":true`) {
 		t.Fatalf("response = %d %s, want cursor_stale recovery probe", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestGetEventsBySessionId_MapsTypedReconnectErrorsToBadRequest(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewAdapter(&rootFake{
+		subscribeFrom: func(context.Context, recordings.SubscribeRequest) (recordings.SubscribeResult, error) {
+			return recordings.SubscribeResult{}, recordings.ErrInvalidReconnectCursor
+		},
+	})
+	recorder := httptest.NewRecorder()
+
+	adapter.GetEventsBySessionId(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/events", nil),
+		"session-1",
+		factoryapi.GetEventsBySessionIdParams{},
+	)
+
+	body := recorder.Body.String()
+	if recorder.Code != http.StatusBadRequest ||
+		!strings.Contains(body, `"code":"BAD_REQUEST"`) ||
+		!strings.Contains(body, `"family":"BAD_REQUEST"`) ||
+		!strings.Contains(body, `"message":"invalid event reconnect cursor"`) {
+		t.Fatalf("response = %d %s, want typed bad request ErrorResponse", recorder.Code, body)
+	}
+	if strings.Contains(body, "pkg/services/recordings") {
+		t.Fatalf("response leaked internal package path: %s", body)
+	}
+}
+
+func TestGetEventsBySessionId_SanitizesUnmappedRootFailures(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewAdapter(&rootFake{
+		subscribeFrom: func(context.Context, recordings.SubscribeRequest) (recordings.SubscribeResult, error) {
+			return recordings.SubscribeResult{}, errors.New("pkg/services/recordings/internal/service: boom")
+		},
+	})
+	recorder := httptest.NewRecorder()
+
+	adapter.GetEventsBySessionId(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/events", nil),
+		"session-1",
+		factoryapi.GetEventsBySessionIdParams{},
+	)
+
+	body := recorder.Body.String()
+	if recorder.Code != http.StatusInternalServerError ||
+		!strings.Contains(body, `"code":"INTERNAL_ERROR"`) ||
+		!strings.Contains(body, `"message":"failed to subscribe to factory events"`) {
+		t.Fatalf("response = %d %s, want sanitized internal ErrorResponse", recorder.Code, body)
+	}
+	if strings.Contains(body, "pkg/services/recordings") || strings.Contains(body, "boom") {
+		t.Fatalf("response leaked internal failure details: %s", body)
 	}
 }
 

@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -130,6 +131,58 @@ func TestListFactorySessionArtifacts_MapsMissingTargetToNotFound(t *testing.T) {
 	}
 	if strings.Contains(recorder.Body.String(), "pkg/services/recordings") {
 		t.Fatalf("response leaked internal package path: %s", recorder.Body.String())
+	}
+}
+
+func TestListFactorySessionArtifacts_MapsValidationErrorToBadRequest(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewAdapter(&rootFake{
+		queryRecordingStatus: func(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
+			return recordings.RecordingStatusResult{}, recordings.ErrInvalidProjectionInput
+		},
+	})
+	recorder := httptest.NewRecorder()
+
+	adapter.ListFactorySessionArtifacts(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/artifacts", nil),
+		"session-1",
+	)
+
+	body := recorder.Body.String()
+	if recorder.Code != http.StatusBadRequest ||
+		!strings.Contains(body, `"code":"BAD_REQUEST"`) ||
+		!strings.Contains(body, `"family":"BAD_REQUEST"`) ||
+		!strings.Contains(body, `"message":"invalid artifact read request"`) {
+		t.Fatalf("response = %d %s, want typed bad request ErrorResponse", recorder.Code, body)
+	}
+}
+
+func TestListFactorySessionArtifacts_SanitizesUnmappedRootFailures(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewAdapter(&rootFake{
+		queryRecordingStatus: func(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
+			return recordings.RecordingStatusResult{}, errors.New("pkg/services/recordings/internal/service: boom")
+		},
+	})
+	recorder := httptest.NewRecorder()
+
+	adapter.ListFactorySessionArtifacts(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/artifacts", nil),
+		"session-1",
+	)
+
+	body := recorder.Body.String()
+	if recorder.Code != http.StatusInternalServerError ||
+		!strings.Contains(body, `"code":"INTERNAL_ERROR"`) ||
+		!strings.Contains(body, `"message":"failed to read factory session artifacts"`) {
+		t.Fatalf("response = %d %s, want sanitized internal ErrorResponse", recorder.Code, body)
+	}
+	if strings.Contains(body, "pkg/services/recordings") || strings.Contains(body, "boom") {
+		t.Fatalf("response leaked internal failure details: %s", body)
 	}
 }
 

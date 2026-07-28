@@ -26,10 +26,7 @@ func (a *Adapter) ListFactorySessionArtifacts(
 	}
 	artifacts, err := a.loadArtifactProjections(r.Context(), statusRequest.RecordingID)
 	if err != nil {
-		if a.writeArtifactReadError(w, err) {
-			return
-		}
-		a.writeError(w, http.StatusInternalServerError, "failed to list factory session artifacts", "INTERNAL_ERROR")
+		a.writeRootOrInternalError(w, recordingsHTTPOperationArtifactRead, err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, ArtifactListResponseToAPI(input.SessionID, artifacts))
@@ -59,10 +56,7 @@ func (a *Adapter) GetFactorySessionArtifact(
 	}
 	artifacts, err := a.loadArtifactProjections(r.Context(), readRequest.RecordingID)
 	if err != nil {
-		if a.writeArtifactReadError(w, err) {
-			return
-		}
-		a.writeError(w, http.StatusInternalServerError, "failed to get factory session artifact", "INTERNAL_ERROR")
+		a.writeRootOrInternalError(w, recordingsHTTPOperationArtifactRead, err)
 		return
 	}
 	artifact, ok := findArtifactStateByID(artifacts, input.ArtifactID)
@@ -97,22 +91,3 @@ func (a *Adapter) loadArtifactProjections(
 	return ArtifactStatesFromWorldStatePayload(reconstructed.WorldState.Payload)
 }
 
-func (a *Adapter) writeArtifactReadError(w http.ResponseWriter, err error) bool {
-	switch {
-	case errors.Is(err, errInvalidArtifactReadScope),
-		errors.Is(err, errInvalidArtifactReadID),
-		errors.Is(err, recordings.ErrInvalidRecordingScope),
-		errors.Is(err, recordings.ErrInvalidProjectionInput),
-		errors.Is(err, recordings.ErrInvalidProjectionScope),
-		errors.Is(err, recordings.ErrMalformedProjectionOrder):
-		a.writeError(w, http.StatusBadRequest, "invalid artifact read request", "BAD_REQUEST")
-		return true
-	case errors.Is(err, recordings.ErrMissingRecordingTarget),
-		errors.Is(err, recordings.ErrPortableArtifactUnavailable),
-		errors.Is(err, recordings.ErrForeignPortableArtifact):
-		a.writeError(w, http.StatusNotFound, "factory session artifact not found", "NOT_FOUND")
-		return true
-	default:
-		return false
-	}
-}
