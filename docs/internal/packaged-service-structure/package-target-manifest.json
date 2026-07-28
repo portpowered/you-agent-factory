@@ -396,6 +396,8 @@
     "pkg/services/recordings/internal/services/canonical_ledger/wire",
     "pkg/services/recordings/internal/services/projection_query",
     "pkg/services/recordings/internal/services/projection_query/internal/service",
+    "pkg/services/recordings/internal/services/projection_query/projections",
+    "pkg/services/recordings/internal/services/projection_query/projections/dashboard",
     "pkg/services/recordings/internal/services/projection_query/wire",
     "pkg/services/recordings/internal/services/recording_lifecycle",
     "pkg/services/recordings/internal/services/recording_lifecycle/internal/service",
@@ -2334,6 +2336,16 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/projection_query/internal/service",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/projection_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/projections",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/projection_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/projections/dashboard",
       "disposition": "retain",
       "destination": "recordings/internal/services/projection_query"
     },

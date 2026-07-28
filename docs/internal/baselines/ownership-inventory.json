@@ -4732,6 +4732,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/projections",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/projections/dashboard",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/projections/projectiontests",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/recordings/internal/services/projection_query/wire",
       "disposition": "retain",
       "destination": "recordings",
@@ -4783,14 +4801,6 @@
     },
     {
       "packagePath": "pkg/services/recordings/projections/dashboard",
-      "disposition": "move",
-      "destination": "recordings",
-      "destinationKind": "owner",
-      "successor": "pkg/services/recordings/internal/services/projection_query",
-      "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/recordings/projections/projectiontests",
       "disposition": "move",
       "destination": "recordings",
       "destinationKind": "owner",

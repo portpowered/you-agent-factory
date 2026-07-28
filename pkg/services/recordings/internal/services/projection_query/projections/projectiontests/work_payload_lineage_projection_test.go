@@ -348,7 +348,7 @@ func assertNewDownstreamOutputSnapshot(t *testing.T, resolved work.WorkPayloadRe
 func loadProjectionReplayFixtureEvents(t *testing.T, rel ...string) []factoryapi.FactoryEvent {
 	t.Helper()
 
-	path := testpath.MustRepoPathFromCaller(t, 0, append([]string{"pkg", "services", "recordings", "projections"}, rel...)...)
+	path := testpath.MustRepoPathFromCaller(t, 0, append([]string{"pkg", "services", "recordings", "internal", "services", "projection_query", "projections"}, rel...)...)
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatalf("open replay fixture %s: %v", path, err)

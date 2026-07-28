@@ -2205,8 +2205,16 @@
       "minimum": 100.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/projections",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections",
       "minimum": 45.87
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections/dashboard",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/projections",
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/projections/dashboard",

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	. "github.com/portpowered/infinite-you/pkg/services/recordings/projections"
+	. "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )

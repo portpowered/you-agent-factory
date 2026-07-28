@@ -10,11 +10,11 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingprojections "github.com/portpowered/infinite-you/pkg/services/recordings/projections"
-	"github.com/portpowered/infinite-you/pkg/services/recordings/projections/dashboard"
+	recordingprojections "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections"
+	recordingdashboard "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections/dashboard"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboard"
+	clidashboard "github.com/portpowered/infinite-you/pkg/transports/cli/dashboard"
 	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/http/workstationprojection"
 )
@@ -42,14 +42,14 @@ func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupporte
 	assertSelectedTickWorkstationRequests(t, requestSlice)
 
 	now := t0.Add(12 * time.Second)
-	output := dashboard.FormatSimpleDashboardWithRenderData(
-		dashboard.SimpleDashboardHeader{
+	output := clidashboard.FormatSimpleDashboardWithRenderData(
+		clidashboard.SimpleDashboardHeader{
 			FactoryState:  "RUNNING",
 			RuntimeStatus: interfaces.RuntimeStatusActive,
 			TickCount:     11,
 			Uptime:        11 * time.Second,
 		},
-		projections.SimpleDashboardRenderDataFromWorldState(worldState),
+		recordingdashboard.SimpleDashboardRenderDataFromWorldState(worldState),
 		now,
 	)
 	assertSelectedTickTimeCorrelation(t, requestSlice, output, t0)

@@ -93,13 +93,13 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/recordings/projections/projectiontests/world_state_test.go",
+      "target": "pkg/services/recordings/internal/services/projection_query/projections/projectiontests/world_state_test.go",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/recordings/projections/world_state.go",
+      "target": "pkg/services/recordings/internal/services/projection_query/projections/world_state.go",
       "owner": "backend-maintainers",
       "removalReason": "JavaScript world replay remains consolidated with world_state until dedicated projection seams split."
     },
@@ -801,49 +801,49 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/projections/projectiontests/dispatch_lifecycle_event_replay_test.go#assertJavaScriptDispatchLifecycleReplay",
+      "target": "pkg/services/recordings/internal/services/projection_query/projections/projectiontests/dispatch_lifecycle_event_replay_test.go#assertJavaScriptDispatchLifecycleReplay",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/projections/projectiontests/simple_dashboard_projection_test.go#TestBuildSimpleDashboardProjection_RecordsWorkMoveHistory",
+      "target": "pkg/services/recordings/internal/services/projection_query/projections/projectiontests/simple_dashboard_projection_test.go#TestBuildSimpleDashboardProjection_RecordsWorkMoveHistory",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/projections/projectiontests/simple_dashboard_projection_test.go#assertTerminalProjection",
+      "target": "pkg/services/recordings/internal/services/projection_query/projections/projectiontests/simple_dashboard_projection_test.go#assertTerminalProjection",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/projections/projectiontests/world_state_support_test.go#assignGeneratedProjectionPayload",
+      "target": "pkg/services/recordings/internal/services/projection_query/projections/projectiontests/world_state_support_test.go#assignGeneratedProjectionPayload",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/projections/projectiontests/world_state_support_test.go#assignGeneratedProjectionSessionLifecyclePayload",
+      "target": "pkg/services/recordings/internal/services/projection_query/projections/projectiontests/world_state_support_test.go#assignGeneratedProjectionSessionLifecyclePayload",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/projections/projectiontests/world_state_test.go#TestReconstructFactoryWorldState_PreservesSafeInferenceAttemptDiagnostics",
+      "target": "pkg/services/recordings/internal/services/projection_query/projections/projectiontests/world_state_test.go#TestReconstructFactoryWorldState_PreservesSafeInferenceAttemptDiagnostics",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/projections/world_state.go#factoryWorldReducer.apply",
+      "target": "pkg/services/recordings/internal/services/projection_query/projections/world_state.go#factoryWorldReducer.apply",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/projections/world_state_dispatch.go#mergeJavaScriptDispatchState",
+      "target": "pkg/services/recordings/internal/services/projection_query/projections/world_state_dispatch.go#mergeJavaScriptDispatchState",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
@@ -1251,13 +1251,13 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/recordings/projections/projectiontests/world_state_test.go",
+      "target": "pkg/services/recordings/internal/services/projection_query/projections/projectiontests/world_state_test.go",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/recordings/projections/world_state.go",
+      "target": "pkg/services/recordings/internal/services/projection_query/projections/world_state.go",
       "owner": "backend-maintainers",
       "removalReason": "JavaScript world replay remains consolidated with world_state until dedicated projection seams split."
     },

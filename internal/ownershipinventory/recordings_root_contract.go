@@ -52,6 +52,7 @@ var RecordingsExcessRootContractFolds = []RecordingsRootContractFoldTarget{
 		Files: []string{
 			"world_state_contract.go",
 			"world_state_contract_test.go",
+			"projections_import_boundary_test.go",
 		},
 		Destination: recordingsPackagePrefix + "/internal/services/projection_query",
 	},

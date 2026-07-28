@@ -17,7 +17,7 @@ import (
 const (
 	modulePrefix              = "github.com/portpowered/infinite-you/"
 	factoryRuntimeRoot        = modulePrefix + "pkg/services/factory_runtime"
-	recordingsProjectionsRoot = modulePrefix + "pkg/services/recordings/projections"
+	recordingsProjectionsRoot = modulePrefix + "pkg/services/recordings/internal/services/projection_query/projections"
 )
 
 // TestProjectionsImportRuntimeRootOnly seals CUT-REC-RUN story 004: Recordings

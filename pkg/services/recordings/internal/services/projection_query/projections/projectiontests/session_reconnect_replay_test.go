@@ -6,7 +6,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryevents "github.com/portpowered/infinite-you/pkg/services/recordings/events"
-	. "github.com/portpowered/infinite-you/pkg/services/recordings/projections"
+	. "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
