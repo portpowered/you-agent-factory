@@ -45,5 +45,6 @@ Flags:
       --json                                   emit structured JSON on stdout for supported commands; diagnostics remain on stderr
       --server string                          factory API base URI (http:// or https://); HTTP client commands target this URI, while you server and server-enabled runs bind its loopback host and port (default "http://localhost:7437")
   -v, --verbose                                emit concise command diagnostics to stderr
+      --version                                version for you
 
 Use "you [command] --help" for more information about a command.

@@ -13,6 +13,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	"go.uber.org/zap"
@@ -60,6 +61,7 @@ type Config struct {
 	ReplayPath                    string
 	DisableDefaultRecording       bool
 	RecordingTargetPlanner        recordings.LiveRecordingTargetPlanner
+	RecordingsCLI                 recordingscli.Adapter
 	Clock                         recordings.RecordingClock
 	RuntimeLogDir                 string
 	RuntimeLogConfig              logging.RuntimeLogConfig

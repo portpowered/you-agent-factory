@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,6 +27,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 )
 
 type stubFactoryService struct {
@@ -438,10 +440,80 @@ func TestRun_DefaultRecordPathResolutionErrorSkipsServiceStart(t *testing.T) {
 	}
 }
 
-func TestResolveRecordPathForRunRequiresInjectedRecordingPlanner(t *testing.T) {
+func TestResolveRecordPathForRunDelegatesToInjectedRecordingsCLIAdapter(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	adapter := stubRecordingsCLIAdapter{resolve: func(request recordingscli.InvocationRequest) (recordingscli.ResolvedRecordPath, error) {
+		called = true
+		if request.RecordPath != "explicit.replay.json" {
+			t.Fatalf("request = %#v", request)
+		}
+		return recordingscli.ResolvedRecordPath{ServicePath: "explicit.replay.json"}, nil
+	}}
+
+	resolved, err := resolveRecordPathForRun(RunConfig{
+		RecordPath:    "explicit.replay.json",
+		RecordingsCLI: adapter,
+	})
+	if err != nil {
+		t.Fatalf("resolveRecordPathForRun() error = %v", err)
+	}
+	if !called {
+		t.Fatal("expected injected Recordings CLI adapter to resolve the record path")
+	}
+	if resolved.servicePath != "explicit.replay.json" {
+		t.Fatalf("service path = %q, want explicit.replay.json", resolved.servicePath)
+	}
+}
+
+type stubRecordingsCLIAdapter struct {
+	resolve func(recordingscli.InvocationRequest) (recordingscli.ResolvedRecordPath, error)
+}
+
+func (adapter stubRecordingsCLIAdapter) ResolveRecordPath(
+	request recordingscli.InvocationRequest,
+) (recordingscli.ResolvedRecordPath, error) {
+	return adapter.resolve(request)
+}
+
+func (adapter stubRecordingsCLIAdapter) ResolveRecordPathWithContext(
+	ctx context.Context,
+	request recordingscli.InvocationRequest,
+) (recordingscli.ResolvedRecordPath, error) {
+	return recordingscli.New().ResolveRecordPathWithContext(ctx, request)
+}
+
+func (adapter stubRecordingsCLIAdapter) ReportRecordingPathOnShutdown(
+	output io.Writer,
+	resolved recordingscli.ResolvedRecordPath,
+) {
+	recordingscli.New().ReportRecordingPathOnShutdown(output, resolved)
+}
+
+func (adapter stubRecordingsCLIAdapter) RecordingDiagnosticsLabel(
+	resolved recordingscli.ResolvedRecordPath,
+	replayPath string,
+) string {
+	return recordingscli.New().RecordingDiagnosticsLabel(resolved, replayPath)
+}
+
+func TestResolveRecordPathForRunRequiresInjectedRecordingsCLIAdapter(t *testing.T) {
 	t.Parallel()
 
 	_, err := resolveRecordPathForRun(RunConfig{HomeDir: "home"})
+	if err == nil || err.Error() != "Recordings CLI adapter is required" {
+		t.Fatalf("resolveRecordPathForRun() error = %v, want required adapter", err)
+	}
+}
+
+func TestResolveRecordPathForRunRequiresInjectedRecordingPlanner(t *testing.T) {
+	t.Parallel()
+
+	_, err := resolveRecordPathForRun(RunConfig{
+		HomeDir:       "home",
+		RecordingsCLI: recordingscli.New(),
+	})
 	if err == nil || err.Error() != "Recordings live recording target planner is required" {
 		t.Fatalf("resolveRecordPathForRun() error = %v, want required planner", err)
 	}
@@ -469,14 +541,14 @@ func TestOpenSequentialHomesControlDefaultRecordingPath(t *testing.T) {
 			gotMetricsDir = cfg.RuntimeMetricsDir
 			return stubFactoryService{run: func(context.Context) error { return nil }}, nil
 		}}
-		operation, err := Open(context.Background(), RunConfig{
+		operation, err := Open(context.Background(), ensureTestRecordingsCLI(RunConfig{
 			Dir: t.TempDir(), HomeDir: homeDir, Port: 0, SuppressDashboardRendering: true,
 			StdinIsTTY: func() bool { return true },
 			RecordingTargetPlanner: recordings.LiveRecordingTargetPlannerFunc(func(request recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
 				plannedRequest = request
 				return recordings.LiveRecordingTarget{ServicePath: plannedPath, ReportedPath: plannedPath}, nil
 			}),
-		}, factory.BuildRunner, factory.Invocation(), testResponsePresentation(), nil, testMockWorkersConfigLoader, testRuntimeOpeningRequestFactory)
+		}), factory.BuildRunner, factory.Invocation(), testResponsePresentation(), nil, testMockWorkersConfigLoader, testRuntimeOpeningRequestFactory)
 		if err != nil {
 			t.Fatalf("Open(home %q) error = %v", homeDir, err)
 		}

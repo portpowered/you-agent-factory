@@ -41,7 +41,7 @@ func reviewAgentExecutor(provider *agentMockProvider) *executorpkg.AgentExecutor
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"review": {OutcomeFormat: interfaces.DecisionEnvelopeOutcomeFormat},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom, agentDecisionEnvelopeFake{})
+	}, provider, nil, time.Now, agentDecisionEnvelopeFake{})
 
 }
 
@@ -250,7 +250,7 @@ func TestAgentExecutor_ProcessWorkstation_StillUsesStopTokenWhenNotReview(t *tes
 		Workers: map[string]*interfaces.FactoryWorkerConfig{
 			"processor": {Model: "test-model", StopToken: "<COMPLETE>"},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{

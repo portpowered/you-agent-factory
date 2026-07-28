@@ -28,7 +28,7 @@ intentionally small enough to distribute across many agents.
 
 ### CLI process contract
 
-- [ ] `tests/functional/transport/cli/process/help_and_version_test.go`
+- [x] `tests/functional/transport/cli/process/help_and_version_test.go`
   - `TestCLIHelpListsPublicCommandFamilies` verifies root help includes the
     supported public command families without hidden/internal commands.
   - `TestCLISubcommandHelpUsesStableUsageAndExitZero` verifies representative
@@ -36,13 +36,13 @@ intentionally small enough to distribute across many agents.
   - `TestCLIVersionWritesOneMachineReadableVersion` verifies version output is
     stdout-only and contains no startup noise.
 
-- [ ] `tests/functional/transport/cli/process/unknown_command_test.go`
+- [x] `tests/functional/transport/cli/process/unknown_command_test.go`
   - `TestCLIUnknownCommandWritesActionableStderr` verifies the invalid token is
     named and suggestions are customer-safe.
   - `TestCLIUnknownCommandReturnsUsageExitCode` verifies stdout remains empty
     and the process returns the documented non-success code.
 
-- [ ] `tests/functional/transport/cli/process/stdin_test.go`
+- [x] `tests/functional/transport/cli/process/stdin_test.go`
   - `TestRunReadsPromptFromStdin` verifies `you run -` consumes stdin and sends
     the exact value to the selected worker.
   - `TestSubmitBatchReadsJSONFromStdin` verifies `you submit batch -` consumes

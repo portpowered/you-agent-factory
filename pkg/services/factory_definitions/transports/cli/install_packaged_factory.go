@@ -50,62 +50,11 @@ func InstallPackagedFactory(
 	cfg InstallPackagedFactoryConfig,
 	install InstallPackagedFactoryOperation,
 ) error {
-	if install == nil {
+	adapter := New(install)
+	if adapter == nil {
 		return fmt.Errorf("packaged factory installation service is required")
 	}
-	if cfg.Output == nil {
-		return fmt.Errorf("packaged factory installation output is required")
-	}
-	if strings.TrimSpace(cfg.Package) == "" {
-		return fmt.Errorf("package name is required")
-	}
-	rootDir, err := resolveInstallRootDir(cfg)
-	if err != nil {
-		return err
-	}
-	format, err := parseInstallFormat(cfg.Format, cfg.FormatChanged)
-	if err != nil {
-		return err
-	}
-	diagnosticPrintf(
-		cfg.Diagnostics,
-		cfg.Verbose,
-		"init packaged factory request name=%s rootDir=%s format=%s replace=%t",
-		cfg.Package,
-		rootDir,
-		format,
-		cfg.Replace,
-	)
-	result, err := install(
-		cfg.Context,
-		factorydefinitions.InstallPackagedFactoryRequest{
-			RootDir: rootDir,
-			Name:    cfg.Package,
-			Format:  format,
-			Replace: cfg.Replace,
-		},
-	)
-	if err != nil {
-		diagnosticPrintf(
-			cfg.Diagnostics,
-			cfg.Verbose,
-			"init packaged factory failed name=%s rootDir=%s",
-			cfg.Package,
-			rootDir,
-		)
-		return renderInstallPackagedFactoryError(err)
-	}
-	diagnosticPrintf(
-		cfg.Diagnostics,
-		cfg.Verbose,
-		"init packaged factory complete name=%s rootDir=%s outcome=%s factoryDir=%s format=%s",
-		result.Definition.Name,
-		rootDir,
-		result.Outcome,
-		result.Definition.FactoryDir,
-		result.Format,
-	)
-	return renderInstallPackagedFactorySuccess(cfg, result)
+	return adapter.InstallPackagedFactory(cfg)
 }
 
 func resolveInstallRootDir(cfg InstallPackagedFactoryConfig) (string, error) {
