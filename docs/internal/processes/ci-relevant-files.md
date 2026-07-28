@@ -856,12 +856,14 @@ Wave 0 functional-tests-expansion planning authority lives under
   scaffold a minimal Codex model-worker factory with `support.ScaffoldFactory`
   and `support.BuildModelWorkerConfig`; prove default primary-result stdout is
   pipeable and free of dashboard open/startup sidecar chatter. For
-  server-attached targeting, start an already-open Factory Session with
-  `support.StartFunctionalAPIServer` + `WaitForServiceModeRuntime`, optionally
-  open an explicit session through `support.OpenFactorySessionAt`, then issue
-  `you --server <url> run --factory ...` (no `--with-server`) and correlate the
-  unchanged default session identity through public `session show` / session GET
-  reads. For clean-invocation failure, use
+  server-attached targeting, prove `you run --with-server` routes through the
+  hosted live Factory Session (not a detached local one-shot): start a continuous
+  host with `support.StartFunctionalAPIServer` only to show `you --server <url>
+  run` without `--with-server` cannot attach when client provider edges are
+  isolated, then run a separate hosted `you run --factory --with-server`
+  invocation with provider edges on the hosted process only and correlate
+  observable session identity (and optional `/work` reads) on the hosted API
+  while the one-shot host is alive. For clean-invocation failure, use
   `support.NewShapedProviderCommandRunner` with a deterministic non-zero exit
   and stderr payload, assert empty stdout without false-success primary result,
   and decode exactly one stderr `ErrorResponse` with actionable code/message.

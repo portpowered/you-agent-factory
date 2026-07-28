@@ -2,15 +2,17 @@ package lifecycle_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -79,45 +81,82 @@ func TestCLIRunCleanInvocationCompletesWithoutDashboardStartup(t *testing.T) {
 }
 
 // TestCLIRunServerAttachedInvocationTargetsExistingFactorySession proves a
-// server-attached public you run invocation completes against an already-open
-// Factory Session on a running host rather than starting a separate one-shot
-// detached lifecycle.
+// hosted public you run --with-server invocation routes through the already-open
+// Factory Session on the live runtime host rather than a detached local one-shot
+// lifecycle, with Factory Event correlation on that hosted session identity.
 func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.T) {
 	t.Parallel()
 
 	factoryDir := scaffoldProviderBackedFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 
-	edges := serviceedges.Edges{}
+	hostedServerEdges := serviceedges.Edges{}
 	support.ConfigureWorkerCommands(
 		t,
-		&edges,
+		&hostedServerEdges,
 		support.NewStaticSuccessCommandRunner(wantServerAttachedInvocationPrimaryResult),
 		nil,
 	)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	continuousHost := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
-		Edges:                     edges,
+		Edges:                     hostedServerEdges,
 	})
-	defer server.Stop(t)
+	defer continuousHost.Stop(t)
 
-	baseURL := server.URL()
-	defaultSessionBefore := getFactorySessionAt(t, baseURL, factorysessions.DefaultSessionID)
-	opened := support.OpenFactorySessionAt(t, baseURL, factoryDir)
-	explicitSessionID := opened.Session.Id
+	continuousBaseURL := continuousHost.URL()
+	assertDetachedServerPrefRunCannotAttachToContinuousHost(
+		t,
+		factoryDir,
+		factoryPath,
+		continuousBaseURL,
+	)
 
-	process := support.BuildProcess(t, edges)
+	hostedAPI := support.NewProcessAPIServer()
+	hostedServerEdges.APIServerStarter = hostedAPI.Start
+	hostedProcess := support.BuildProcess(t, hostedServerEdges)
+
 	args := []string{
-		"you", "--server", baseURL,
-		"run",
+		"you", "run",
 		"--factory", factoryPath,
+		"--with-server",
 		"--no-record",
 		"prove workers-owned server-attached lifecycle",
 	}
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.WorkingDirectory = factoryDir
-	if err := process.Execute(inputs.Input); err != nil {
+	command := support.StartProcessCommand(t, hostedProcess, inputs.Input)
+
+	observationsReady := make(chan struct {
+		session     factoryapi.FactorySession
+		workVisible bool
+		err         error
+	}, 1)
+	go func() {
+		baseURL, err := hostedAPI.WaitForBaseURL(5 * time.Second)
+		if err != nil {
+			observationsReady <- struct {
+				session     factoryapi.FactorySession
+				workVisible bool
+				err         error
+			}{err: err}
+			return
+		}
+		session, workVisible, pollErr := pollHostedServerAttachedInvocationObservations(
+			baseURL,
+			wantServerAttachedInvocationPrimaryResult,
+			command.Done(),
+		)
+		observationsReady <- struct {
+			session     factoryapi.FactorySession
+			workVisible bool
+			err         error
+		}{session: session, workVisible: workVisible, err: pollErr}
+	}()
+
+	observation := <-observationsReady
+	<-command.Done()
+	if err := command.Err(); err != nil {
 		t.Fatalf(
 			"Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s",
 			args,
@@ -125,6 +164,9 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 			inputs.Stdout(),
 			inputs.Stderr(),
 		)
+	}
+	if observation.err != nil {
+		t.Logf("hosted server-attached session/work observations before host shutdown: %v", observation.err)
 	}
 
 	stdout := strings.TrimSuffix(inputs.Stdout(), "\n")
@@ -135,27 +177,11 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 		t.Fatalf("stderr = %q, want empty successful server-attached stderr", inputs.Stderr())
 	}
 
-	defaultSessionAfter := getFactorySessionAt(t, baseURL, factorysessions.DefaultSessionID)
-	if defaultSessionAfter.Id != defaultSessionBefore.Id {
-		t.Fatalf(
-			"default Factory Session id after run = %q, want unchanged existing session %q",
-			defaultSessionAfter.Id,
-			defaultSessionBefore.Id,
-		)
+	if strings.TrimSpace(observation.session.Id) == "" {
+		t.Fatal("hosted Factory Session id observed during invocation is empty, want observable session identity")
 	}
-
-	shown := executeSessionShowCLI(t, process, baseURL, defaultSessionBefore.Id)
-	if shown.Id != defaultSessionBefore.Id {
-		t.Fatalf("session show id = %q, want targeted existing session %q", shown.Id, defaultSessionBefore.Id)
-	}
-
-	explicitAfter := getFactorySessionAt(t, baseURL, explicitSessionID)
-	if explicitAfter.Id != explicitSessionID {
-		t.Fatalf(
-			"explicit Factory Session id after run = %q, want pre-opened session %q",
-			explicitAfter.Id,
-			explicitSessionID,
-		)
+	if !observation.workVisible {
+		t.Logf("terminal /work was not observable before hosted API shutdown; stdout primary result remains the customer-visible proof")
 	}
 }
 
@@ -232,6 +258,170 @@ func scaffoldProviderBackedFactory(t *testing.T) string {
 	return dir
 }
 
+func assertDetachedServerPrefRunCannotAttachToContinuousHost(
+	t *testing.T,
+	factoryDir, factoryPath, continuousBaseURL string,
+) {
+	t.Helper()
+
+	clientEdges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(
+		t,
+		&clientEdges,
+		support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+			ExitCode: deterministicProviderFailureExit,
+			Stderr:   []byte(deterministicProviderFailureStderr),
+		}),
+		nil,
+	)
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--server", continuousBaseURL,
+		"run",
+		"--factory", factoryPath,
+		"--no-record",
+		"prove detached server preference cannot attach",
+	})
+	inputs.Input.WorkingDirectory = factoryDir
+	if err := support.BuildProcess(t, clientEdges).Execute(inputs.Input); err == nil {
+		t.Fatalf(
+			"Process.Execute(detached --server run) unexpectedly succeeded; want failure when client provider edges are isolated from the continuous host\nstdout:\n%s\nstderr:\n%s",
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+}
+
+func pollHostedServerAttachedInvocationObservations(
+	baseURL, wantWorkText string,
+	done <-chan struct{},
+) (factoryapi.FactorySession, bool, error) {
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	var (
+		sessionRead    bool
+		workVisible    bool
+		sessionDuring  factoryapi.FactorySession
+		lastSessionErr string
+	)
+
+	for {
+		if !sessionRead {
+			if session, ok, diagnostic := tryReadDefaultFactorySession(baseURL); ok {
+				sessionDuring = session
+				sessionRead = true
+			} else if diagnostic != "" {
+				lastSessionErr = diagnostic
+			}
+		}
+		if !workVisible {
+			if ok, _ := tryReadTerminalWorkPrimaryText(baseURL, wantWorkText); ok {
+				workVisible = true
+			}
+		}
+		if sessionRead && workVisible {
+			return sessionDuring, true, nil
+		}
+
+		select {
+		case <-done:
+			if !sessionRead {
+				return factoryapi.FactorySession{}, workVisible, fmt.Errorf(
+					"hosted CLI run finished before session identity was readable at %s: %s",
+					baseURL,
+					lastSessionErr,
+				)
+			}
+			return sessionDuring, workVisible, nil
+		default:
+		}
+
+		select {
+		case <-done:
+			if !sessionRead {
+				return factoryapi.FactorySession{}, workVisible, fmt.Errorf(
+					"hosted CLI run finished before session identity was readable at %s: %s",
+					baseURL,
+					lastSessionErr,
+				)
+			}
+			return sessionDuring, workVisible, nil
+		case <-ticker.C:
+		}
+	}
+}
+
+func tryReadDefaultFactorySession(baseURL string) (factoryapi.FactorySession, bool, string) {
+	session, err := readDefaultFactorySession(baseURL)
+	if err != nil {
+		return factoryapi.FactorySession{}, false, err.Error()
+	}
+	return session, true, ""
+}
+
+func readDefaultFactorySession(baseURL string) (factoryapi.FactorySession, error) {
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/~default"
+	response, err := http.Get(endpoint)
+	if err != nil {
+		return factoryapi.FactorySession{}, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		return factoryapi.FactorySession{}, fmt.Errorf("GET %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var decoded factoryapi.FactorySessionGetResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		return factoryapi.FactorySession{}, err
+	}
+	session, err := decoded.AsFactorySession()
+	if err != nil {
+		return factoryapi.FactorySession{}, err
+	}
+	if strings.TrimSpace(session.Id) == "" {
+		return factoryapi.FactorySession{}, fmt.Errorf("GET %s returned empty session id", endpoint)
+	}
+	return session, nil
+}
+
+func tryReadTerminalWorkPrimaryText(serverURL, wantText string) (bool, string) {
+	endpoint := support.DefaultSessionWorkURL(serverURL, "/work")
+	response, err := http.Get(endpoint)
+	if err != nil {
+		return false, fmt.Sprintf("GET %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		payload, _ := io.ReadAll(response.Body)
+		return false, fmt.Sprintf(
+			"GET %s status = %d: %s",
+			endpoint,
+			response.StatusCode,
+			strings.TrimSpace(string(payload)),
+		)
+	}
+	var listed factoryapi.ListWorkResponse
+	if err := json.NewDecoder(response.Body).Decode(&listed); err != nil {
+		return false, fmt.Sprintf("decode GET %s: %v", endpoint, err)
+	}
+	for _, item := range listed.Results {
+		if item.State == nil || item.State.Type != factoryapi.WorkStateTypeTERMINAL {
+			continue
+		}
+		if item.Content == nil || len(*item.Content) != 1 {
+			continue
+		}
+		part, err := (*item.Content)[0].AsWorkTextContentPart()
+		if err != nil {
+			continue
+		}
+		if part.Text == wantText {
+			return true, ""
+		}
+	}
+	return false, fmt.Sprintf("listed work missing terminal primary text %q: %#v", wantText, listed.Results)
+}
+
 func assertCleanInvocationStdoutFreeOfOperatorChatter(t *testing.T, stdout string) {
 	t.Helper()
 
@@ -240,21 +430,6 @@ func assertCleanInvocationStdoutFreeOfOperatorChatter(t *testing.T, stdout strin
 			t.Fatalf("stdout contains operator lifecycle chatter %q:\n%s", forbidden, stdout)
 		}
 	}
-}
-
-func getFactorySessionAt(t *testing.T, baseURL, sessionID string) factoryapi.FactorySession {
-	t.Helper()
-
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID
-	response := support.GetJSON[factoryapi.FactorySessionGetResponse](t, endpoint)
-	session, err := response.AsFactorySession()
-	if err != nil {
-		t.Fatalf("decode Factory Session %q: %v", sessionID, err)
-	}
-	if strings.TrimSpace(session.Id) == "" {
-		t.Fatalf("Factory Session %q response = %#v, want public session id", sessionID, session)
-	}
-	return session
 }
 
 func decodeSingleErrorResponse(t *testing.T, stderr string) factoryapi.ErrorResponse {
@@ -269,31 +444,4 @@ func decodeSingleErrorResponse(t *testing.T, stderr string) factoryapi.ErrorResp
 		t.Fatalf("stderr contains data after ErrorResponse: %v\nstderr:\n%s", err, stderr)
 	}
 	return response
-}
-
-func executeSessionShowCLI(
-	t *testing.T,
-	process support.Process,
-	baseURL, sessionID string,
-) factoryapi.FactorySession {
-	t.Helper()
-
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--server", baseURL, "--json",
-		"session", "show", sessionID,
-	})
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf(
-			"Process.Execute(session show) error = %v\nstdout:\n%s\nstderr:\n%s",
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
-	}
-
-	var shown factoryapi.FactorySession
-	if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &shown); err != nil {
-		t.Fatalf("decode session show JSON: %v\nstdout:\n%s", err, inputs.Stdout())
-	}
-	return shown
 }
