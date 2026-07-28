@@ -2617,20 +2617,20 @@
       "minimum": 55.93
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation",
+      "minimum": 81.57
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting",
+      "minimum": 23.80
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire",
       "minimum": 100.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/invocation",
-      "minimum": 81.57
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process",
       "minimum": 61.59
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/prompting",
-      "minimum": 23.80
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider",

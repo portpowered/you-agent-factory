@@ -7,7 +7,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/invocation"
+	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	workerproviderstructured "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured"

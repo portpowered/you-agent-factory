@@ -21,7 +21,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/prompting"
+	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 	"github.com/portpowered/infinite-you/pkg/services/workers/worktree"
 )
 

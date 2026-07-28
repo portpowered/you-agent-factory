@@ -198,10 +198,10 @@ pkg/services/work/internal/services/content_materialization/internal/service/mat
 pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupAgentsMD
 pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupFactoryJSON
 pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupFixture
-pkg/services/workers/prompting/prompt.go: unreachable func: NewDefaultPromptRenderer
-pkg/services/workers/prompting/prompt_contract.go: unreachable func: NewService
-pkg/services/workers/prompting/prompt_contract.go: unreachable func: Service.BuildPromptTemplateContract
-pkg/services/workers/prompting/prompt_contract.go: unreachable func: Service.ValidatePromptTemplate
+pkg/services/workers/internal/services/workstations/prompting/prompt.go: unreachable func: NewDefaultPromptRenderer
+pkg/services/workers/internal/services/workstations/prompting/prompt_contract.go: unreachable func: NewService
+pkg/services/workers/internal/services/workstations/prompting/prompt_contract.go: unreachable func: Service.BuildPromptTemplateContract
+pkg/services/workers/internal/services/workstations/prompting/prompt_contract.go: unreachable func: Service.ValidatePromptTemplate
 pkg/services/workers/internal/services/runners/testing/runner_test.go: unreachable func: shellArgsForTest
 pkg/services/workers/internal/services/runners/testing/runner_test.go: unreachable func: shellCommandForTest
 pkg/transports/cli/baseline/command_tree.go: unreachable func: SerializeCommandTree

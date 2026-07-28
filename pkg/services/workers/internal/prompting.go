@@ -2,7 +2,7 @@ package internal
 
 import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/prompting"
+	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 )
 
 func (*Service) BuildPromptTemplateContract(

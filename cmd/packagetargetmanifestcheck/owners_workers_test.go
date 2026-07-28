@@ -82,7 +82,7 @@ func TestMapCommittedOwnerPackageWorkersTransitionalDebtMoves(t *testing.T) {
 			want: PackageMapping{
 				PackagePath: "pkg/services/workers/invocation",
 				Disposition: DispositionMove,
-				Destination: "workers/internal/services/runners",
+				Destination: "workers/internal/services/workstations",
 			},
 		},
 		{

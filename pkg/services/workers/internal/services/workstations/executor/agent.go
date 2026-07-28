@@ -13,7 +13,7 @@ import (
 	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/invocation"
+	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"

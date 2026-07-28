@@ -5274,6 +5274,18 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/workers/internal/services/workstations/invocation",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/prompting",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/services/workstations/wire",
       "disposition": "retain",
       "destination": "workers",
@@ -5284,8 +5296,8 @@
       "disposition": "move",
       "destination": "workers",
       "destinationKind": "owner",
-      "successor": "pkg/services/workers/internal/services/runners",
-      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
+      "successor": "pkg/services/workers/internal/services/workstations",
+      "deletionCondition": "delete public package after IMP-WRK-workstations private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/process",
