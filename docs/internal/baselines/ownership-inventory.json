@@ -4808,6 +4808,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/workers/internal",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/agypty",
       "disposition": "move",
       "destination": "providers",
