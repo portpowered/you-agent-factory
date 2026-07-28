@@ -7917,6 +7917,46 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/dependencies_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestDependentWorkWaitsForPrerequisiteTargetState",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/dependencies_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/dependencies_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/dependencies_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/dependencies_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestFanInReleasesOnlyAfterEveryPrerequisite",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/dependencies_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/dependencies_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestWorkWithoutDependsOnRelationsDispatchesNormally",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/dependencies_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
   "scanned_at_utc": "2026-07-28T07:03:39Z",
@@ -7924,7 +7964,7 @@
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 510,
+      "none": 514,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -7950,14 +7990,14 @@
       "sessions": 21,
       "smoke": 62,
       "transport": 106,
-      "work": 13,
+      "work": 17,
       "workers": 74,
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 766,
+    "customer_top_level_Test_scenarios": 770,
     "lane_functionallong": 95,
-    "lane_short": 671,
+    "lane_short": 675,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
