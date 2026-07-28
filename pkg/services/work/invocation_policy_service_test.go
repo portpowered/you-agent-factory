@@ -117,6 +117,52 @@ func TestInvocationPolicyServiceRejectsUnsupportedSlices(t *testing.T) {
 	}
 }
 
+func TestInvocationPolicyServicePrepareInvocationInputAcceptsPositionalText(t *testing.T) {
+	t.Parallel()
+
+	prepared, err := NewInvocationPolicyService().PrepareInvocationInput(context.Background(), InvocationInputPreparationRequest{
+		Arguments: []string{"hello"},
+	})
+	if err != nil {
+		t.Fatalf("PrepareInvocationInput: %v", err)
+	}
+	if prepared.ResolvedInput == nil || prepared.ResolvedInput.Text != "hello" {
+		t.Fatalf("prepared = %#v, want positional hello text", prepared)
+	}
+}
+
+func TestInvocationPolicyServiceResolvePrimaryResultAllowsNilContext(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewInvocationPolicyService().ResolvePrimaryResult(nil, PrimaryResultSelectionInput{
+		RequestID: "request-1",
+		InvocationReturn: &InvocationReturnConfig{Policy: "NOT_A_POLICY"},
+		WorldState: InvocationWorldState{
+			WorkRequestsByID: map[string]InvocationWorkRequest{
+				"request-1": {WorkItems: []FactoryWorkItem{{ID: "work-1"}}},
+			},
+		},
+	})
+	if !errors.Is(err, ErrUnsupportedReturnPolicy) {
+		t.Fatalf("error = %v, want ErrUnsupportedReturnPolicy", err)
+	}
+}
+
+func TestInvocationPolicyServicePrepareInvocationInputPropagatesCanceledContext(t *testing.T) {
+	t.Parallel()
+
+	service := NewInvocationPolicyService()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := service.PrepareInvocationInput(ctx, InvocationInputPreparationRequest{
+		Arguments: []string{"hello"},
+	})
+	if err == nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+}
+
 func TestInvocationPolicyServicePrepareInvocationInputWrapsTypedFailures(t *testing.T) {
 	t.Parallel()
 

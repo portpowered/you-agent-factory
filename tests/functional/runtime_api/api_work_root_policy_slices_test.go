@@ -63,6 +63,24 @@ func TestWorkRootPolicySlicesRejectUnsupportedOperations(t *testing.T) {
 			want: "does not support admission prep",
 		},
 		{
+			name:    "materialization state access",
+			service: materialization,
+			call: func(service work.Service) error {
+				_, err := service.MoveWorkForSession(ctx, "session-1", "work-1", "done", "move-1")
+				return err
+			},
+			want: "does not support state access",
+		},
+		{
+			name:    "materialization content staging",
+			service: materialization,
+			call: func(service work.Service) error {
+				_, err := service.StageContent(ctx, work.StageContentRequest{})
+				return err
+			},
+			want: "does not support content staging",
+		},
+		{
 			name:    "materialization invocation policy",
 			service: materialization,
 			call: func(service work.Service) error {
@@ -80,6 +98,33 @@ func TestWorkRootPolicySlicesRejectUnsupportedOperations(t *testing.T) {
 			},
 			want: "does not support content materialization",
 		},
+		{
+			name:    "admission invocation input",
+			service: admission,
+			call: func(service work.Service) error {
+				_, err := service.PrepareInvocationInput(ctx, work.InvocationInputPreparationRequest{})
+				return err
+			},
+			want: "does not support invocation policy",
+		},
+		{
+			name:    "admission primary result",
+			service: admission,
+			call: func(service work.Service) error {
+				_, err := service.ResolvePrimaryResult(ctx, work.PrimaryResultSelectionInput{})
+				return err
+			},
+			want: "does not support invocation policy",
+		},
+		{
+			name:    "admission state access",
+			service: admission,
+			call: func(service work.Service) error {
+				_, err := service.ListWork(ctx, "session-1", work.ListOptions{})
+				return err
+			},
+			want: "does not support state access",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -87,6 +132,18 @@ func TestWorkRootPolicySlicesRejectUnsupportedOperations(t *testing.T) {
 				t.Fatalf("error = %v, want substring %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestWorkRootPolicyServiceResolvePrimaryResultHonorsCanceledContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := work.NewInvocationPolicyService().ResolvePrimaryResult(ctx, work.PrimaryResultSelectionInput{})
+	if err == nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled", err)
 	}
 }
 

@@ -143,51 +143,110 @@ func TestMaterializationServiceRejectsUnsupportedSlices(t *testing.T) {
 	service := MaterializationService(ContentMaterializeFunc(func(context.Context, string) (string, ContentCleanup, error) {
 		return "", nil, nil
 	}))
+	assertPeerBindingRejectsUnsupportedSlices(t, service, []unsupportedSliceCase{
+		{name: "admission", call: func(ctx context.Context, service Service) error {
+			_, err := service.SubmitWorkRequestForSession(ctx, "session-1", WorkRequest{})
+			return err
+		}, want: "does not support admission"},
+		{name: "admission prep", call: func(ctx context.Context, service Service) error {
+			_, err := service.PrepareWorkRequest(ctx, WorkRequestPreparation{})
+			return err
+		}, want: "does not support admission prep"},
+		{name: "state access move", call: func(ctx context.Context, service Service) error {
+			_, err := service.MoveWorkForSession(ctx, "session-1", "work-1", "done", "move-1")
+			return err
+		}, want: "does not support state access"},
+		{name: "state access list", call: func(ctx context.Context, service Service) error {
+			_, err := service.ListWork(ctx, "session-1", ListOptions{})
+			return err
+		}, want: "does not support state access"},
+		{name: "state access get", call: func(ctx context.Context, service Service) error {
+			_, err := service.GetWork(ctx, "session-1", "work-1")
+			return err
+		}, want: "does not support state access"},
+		{name: "state access move and read", call: func(ctx context.Context, service Service) error {
+			_, err := service.MoveWorkAndRead(ctx, "session-1", "work-1", "done", "move-1")
+			return err
+		}, want: "does not support state access"},
+		{name: "content stage", call: func(ctx context.Context, service Service) error {
+			_, err := service.StageContent(ctx, StageContentRequest{})
+			return err
+		}, want: "does not support content staging"},
+		{name: "content prepare", call: func(ctx context.Context, service Service) error {
+			_, err := service.PrepareContent(ctx, nil)
+			return err
+		}, want: "does not support content staging"},
+		{name: "content resolve", call: func(ctx context.Context, service Service) error {
+			_, err := service.ResolveContent(ctx, "ref")
+			return err
+		}, want: "does not support content staging"},
+		{name: "content cleanup", call: func(ctx context.Context, service Service) error {
+			return service.CleanupContent(ctx, "ref")
+		}, want: "does not support content staging"},
+		{name: "invocation input", call: func(ctx context.Context, service Service) error {
+			_, err := service.PrepareInvocationInput(ctx, InvocationInputPreparationRequest{})
+			return err
+		}, want: "does not support invocation policy"},
+		{name: "primary result", call: func(ctx context.Context, service Service) error {
+			_, err := service.ResolvePrimaryResult(ctx, PrimaryResultSelectionInput{})
+			return err
+		}, want: "does not support invocation policy"},
+	})
+}
+
+func TestAdmissionContentServiceRejectsUnsupportedSlices(t *testing.T) {
+	t.Parallel()
+
+	service := AdmissionContentService(&recordingPeerContentStaging{}, mustRequestPreparationService(t))
+	assertPeerBindingRejectsUnsupportedSlices(t, service, []unsupportedSliceCase{
+		{name: "admission", call: func(ctx context.Context, service Service) error {
+			_, err := service.SubmitWorkRequestForSession(ctx, "session-1", WorkRequest{})
+			return err
+		}, want: "does not support admission"},
+		{name: "state access move", call: func(ctx context.Context, service Service) error {
+			_, err := service.MoveWorkForSession(ctx, "session-1", "work-1", "done", "move-1")
+			return err
+		}, want: "does not support state access"},
+		{name: "state access list", call: func(ctx context.Context, service Service) error {
+			_, err := service.ListWork(ctx, "session-1", ListOptions{})
+			return err
+		}, want: "does not support state access"},
+		{name: "state access get", call: func(ctx context.Context, service Service) error {
+			_, err := service.GetWork(ctx, "session-1", "work-1")
+			return err
+		}, want: "does not support state access"},
+		{name: "state access move and read", call: func(ctx context.Context, service Service) error {
+			_, err := service.MoveWorkAndRead(ctx, "session-1", "work-1", "done", "move-1")
+			return err
+		}, want: "does not support state access"},
+		{name: "content materialize", call: func(ctx context.Context, service Service) error {
+			_, _, err := service.MaterializeContentURL(ctx, "file:///peer.png")
+			return err
+		}, want: "does not support content materialization"},
+		{name: "invocation input", call: func(ctx context.Context, service Service) error {
+			_, err := service.PrepareInvocationInput(ctx, InvocationInputPreparationRequest{})
+			return err
+		}, want: "does not support invocation policy"},
+		{name: "primary result", call: func(ctx context.Context, service Service) error {
+			_, err := service.ResolvePrimaryResult(ctx, PrimaryResultSelectionInput{})
+			return err
+		}, want: "does not support invocation policy"},
+	})
+}
+
+type unsupportedSliceCase struct {
+	name string
+	call func(context.Context, Service) error
+	want string
+}
+
+func assertPeerBindingRejectsUnsupportedSlices(t *testing.T, service Service, cases []unsupportedSliceCase) {
+	t.Helper()
 	ctx := context.Background()
-
-	cases := []struct {
-		name string
-		call func() error
-		want string
-	}{
-		{
-			name: "admission",
-			call: func() error {
-				_, err := service.SubmitWorkRequestForSession(ctx, "session-1", WorkRequest{})
-				return err
-			},
-			want: "does not support admission",
-		},
-		{
-			name: "content stage",
-			call: func() error {
-				_, err := service.StageContent(ctx, StageContentRequest{})
-				return err
-			},
-			want: "does not support content staging",
-		},
-		{
-			name: "invocation input",
-			call: func() error {
-				_, err := service.PrepareInvocationInput(ctx, InvocationInputPreparationRequest{})
-				return err
-			},
-			want: "does not support invocation policy",
-		},
-		{
-			name: "primary result",
-			call: func() error {
-				_, err := service.ResolvePrimaryResult(ctx, PrimaryResultSelectionInput{})
-				return err
-			},
-			want: "does not support invocation policy",
-		},
-	}
-
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if err := tc.call(); err == nil || !strings.Contains(err.Error(), tc.want) {
+			if err := tc.call(ctx, service); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %v, want substring %q", err, tc.want)
 			}
 		})

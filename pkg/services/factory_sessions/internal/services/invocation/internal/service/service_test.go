@@ -171,6 +171,31 @@ func TestServiceCompletesTimeoutExactlyOnce(t *testing.T) {
 	}
 }
 
+func TestServiceResolveInvocationInputNormalizesCompatibilityText(t *testing.T) {
+	t.Parallel()
+
+	deps := validDependencies(nil)
+	service, err := New(deps)
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+	cfg := &factorydefinitions.FactoryConfig{WorkTypes: []factorydefinitions.WorkTypeConfig{{
+		Name: "task", HandlingBehavior: []string{factorydefinitions.WorkTypeHandlingBehaviorDefault},
+	}}}
+	sourceKind := factorysessions.InvocationInputSourceKindText
+	resolved, err := service.ResolveInvocationInput(cfg, factorysessions.InvocationRequest{
+		ContentProvided: true,
+		SourceKind:      &sourceKind,
+		Content:         []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("ResolveInvocationInput(): %v", err)
+	}
+	if len(resolved.Content) != 1 || resolved.Content[0].Text != "hello" {
+		t.Fatalf("resolved content = %#v, want hello compatibility text", resolved.Content)
+	}
+}
+
 func TestServicePreservesDependencyFailure(t *testing.T) {
 	t.Parallel()
 
