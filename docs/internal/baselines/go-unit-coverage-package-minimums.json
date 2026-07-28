@@ -2233,10 +2233,6 @@
       "minimum": 96.51
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/testhelpers",
-      "minimum": 0.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners",
       "exception": {
         "kind": "measurement",
@@ -2339,6 +2335,14 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/draftvalidation",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/envdiagnostics",
+      "minimum": 91.39
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution",
       "exception": {
         "kind": "measurement",
@@ -2351,14 +2355,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording",
       "minimum": 74.05
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/draftvalidation",
-      "minimum": 0.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/envdiagnostics",
-      "minimum": 91.39
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor",
@@ -2381,10 +2377,6 @@
       "minimum": 86.84
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting",
-      "minimum": 83.42
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/poolboundary",
       "exception": {
         "kind": "measurement",
@@ -2393,6 +2385,10 @@
         "deadline": "2027-07-15",
         "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
       }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting",
+      "minimum": 83.42
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions",
@@ -2405,6 +2401,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/worktree",
       "minimum": 59.05
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/testhelpers",
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/invocation",
