@@ -32,6 +32,8 @@ func TestWorkersThinRootContractFiles(t *testing.T) {
 
 	want := []string{
 		"command.go",
+		"del_wrk_baseline_gate_test.go",
+		"del_wrk_delete_ready_inventory_gate_test.go",
 		"execution_context.go",
 		"execution_contracts.go",
 		"execution_requests.go",

@@ -16,6 +16,7 @@ const workersRootRelative = "pkg/services/workers"
 // (INV-WRK-TOPLEVEL).
 var WorkersThinRootContractFiles = []string{
 	"command.go",
+	"del_wrk_baseline_gate_test.go",
 	"del_wrk_delete_ready_inventory_gate_test.go",
 	"execution_context.go",
 	"execution_contracts.go",
@@ -136,4 +137,4 @@ const WorkersRootContractPreCutoverFileCount = 41
 
 // WorkersRootContractBaselineFileCount is the inventoried root .go file count
 // after CLN-WRK-CONTRACT-ROOTS cutover completes.
-const WorkersRootContractBaselineFileCount = 34
+const WorkersRootContractBaselineFileCount = 35

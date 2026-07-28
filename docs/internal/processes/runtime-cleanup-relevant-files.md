@@ -1279,6 +1279,20 @@ Deeper fold-behavior preservation across catalog, authoring, validate,
 snapshot/portability, and distribute slices remains in
 `pkg/services/factory_definitions/wire/fold_behavior_preservation_test.go`.
 
+## DEL-WRK baseline burn-down gates
+
+Story 003 lowers structure, ownership, package-target, and coverage baselines for
+deleted Workers transitional packages. Lock the ledger absence proof in
+`pkg/services/workers/del_wrk_baseline_gate_test.go` after
+`ownership-inventory.json`, `package-target-manifest.json`,
+`package-structure-baseline.json`, and both `go-*-coverage-package-minimums.json`
+no longer list deleted paths (except the held-back `executor/agentrun` shim).
+
+Regenerate ledgers with `go run ./cmd/ownershipinventoryfreeze`,
+`go run ./cmd/packagetargetmanifestcheck -write-inventory -write-owner-packages`,
+and sync `package-structure-baseline.json` from current `pkgstructurecheck` drift
+when CLN contract-root renames change exported-function baseline rows.
+
 ## DEL-WRK delete-ready inventory
 
 Story 001 records the confirmed delete-ready set for emptied Workers transitional
