@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"time"
 
 	"github.com/jonboulle/clockwork"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
@@ -23,9 +22,7 @@ import (
 var _ automations.Service = (*Service)(nil)
 
 // Clock is the automation time source needed for scheduling and supervision.
-type Clock interface {
-	Now() time.Time
-}
+type Clock = automations.Clock
 
 // Service supervises cron, poller, and watcher automation using injected collaborators.
 type Service struct {

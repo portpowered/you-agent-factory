@@ -14,7 +14,7 @@ import (
 )
 
 // Clock is the automation time source needed for scheduling and supervision.
-type Clock = automationinternal.Clock
+type Clock = automations.Clock
 
 // Service supervises cron, poller, and watcher automation using injected collaborators.
 type Service = automationinternal.Service
