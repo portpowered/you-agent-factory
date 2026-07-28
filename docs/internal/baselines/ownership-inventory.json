@@ -2442,6 +2442,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/automations/wire",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/edges",
       "disposition": "retain",
       "destination": "edges",
@@ -4128,6 +4134,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/work/internal/services/content_staging",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/content_staging/internal/service",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/content_staging/wire",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/work/internal/services/state_access",
       "disposition": "retain",
       "destination": "work",
@@ -4153,6 +4177,12 @@
     },
     {
       "packagePath": "pkg/services/work/service",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/wire",
       "disposition": "retain",
       "destination": "work",
       "destinationKind": "owner"

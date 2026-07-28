@@ -207,6 +207,10 @@
       "minimum": 83.73
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/wire",
+      "minimum": 92.60
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/edges",
       "minimum": 71.65
     },
