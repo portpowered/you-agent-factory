@@ -64,12 +64,12 @@ func newAttempt(effect Effect) execution.Attempt {
 			return nil
 		})
 		if failure, failed := collectFailure(effectErr); failed {
-			if failure.Declared != nil && effectResult.SessionRef != nil {
-				declared := failure.Declared.Clone()
-				declared.SessionRef = cloneSessionRef(effectResult.SessionRef)
-				failure.Declared = &declared
+			sessionRef := cloneSessionRef(effectResult.SessionRef)
+			if sessionRef == nil {
+				sessionRef = sessionRefFromRequest(request.ResumeSession)
 			}
-			return providers.ExecuteResult{}, failure
+			failure = attachFailureSession(failure, sessionRef)
+			return providers.ExecuteResult{SessionRef: sessionRef}, failure
 		}
 		content, parseFailure := parseFinalOutput(stdout.Bytes())
 		if parseFailure != nil {
@@ -152,4 +152,27 @@ func cloneSessionRef(sessionRef *providers.SessionRef) *providers.SessionRef {
 	}
 	cloned := sessionRef.Clone()
 	return &cloned
+}
+
+func attachFailureSession(
+	failure execution.AttemptFailure,
+	sessionRef *providers.SessionRef,
+) execution.AttemptFailure {
+	if failure.Declared == nil && failure.NativeError != nil {
+		if setup := classifySetupError(failure.NativeError); setup != nil {
+			declared := setup.Clone()
+			declared.SessionRef = cloneSessionRef(sessionRef)
+			failure.Declared = &declared
+			failure.NativeError = nil
+			return failure
+		}
+	}
+	if sessionRef == nil || failure.Declared == nil {
+		return failure
+	}
+	declared := failure.Declared.Clone()
+	declared.SessionRef = cloneSessionRef(sessionRef)
+	failure.Declared = &declared
+	failure.NativeError = nil
+	return failure
 }

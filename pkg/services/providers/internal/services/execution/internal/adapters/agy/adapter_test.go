@@ -3,9 +3,12 @@ package agy_test
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
@@ -168,6 +171,159 @@ func TestAgyRootPreservesRequestAndFinalStdout(t *testing.T) {
 	}
 	if result.Diagnostics == nil || result.Diagnostics.DurationMillis != 23 {
 		t.Fatalf("Diagnostics = %#v", result.Diagnostics)
+	}
+}
+
+func TestAgyRootCancellationAndDeadlineReachEffectAndCleanUpOnce(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		newContext func() (context.Context, context.CancelFunc)
+		want       error
+	}{
+		{
+			name: "cancellation",
+			newContext: func() (context.Context, context.CancelFunc) {
+				return context.WithCancel(t.Context())
+			},
+			want: providers.ErrExecuteCancelled,
+		},
+		{
+			name: "deadline",
+			newContext: func() (context.Context, context.CancelFunc) {
+				return context.WithTimeout(t.Context(), 50*time.Millisecond)
+			},
+			want: providers.ErrExecuteTimeout,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			started := make(chan struct{})
+			var cleanups atomic.Int32
+			effect := agy.EffectFunc(func(
+				ctx context.Context,
+				_ providers.ExecuteRequest,
+				_ func([]byte) error,
+			) (agy.EffectResult, error) {
+				close(started)
+				defer cleanups.Add(1)
+				<-ctx.Done()
+				return agy.EffectResult{}, ctx.Err()
+			})
+			ctx, cancel := test.newContext()
+			defer cancel()
+			root := newAgyRoot(t, effect)
+			outcome := make(chan error, 1)
+			go func() {
+				_, err := root.Execute(ctx, agyFailureRequest())
+				outcome <- err
+			}()
+			<-started
+			if test.want == providers.ErrExecuteCancelled {
+				cancel()
+			}
+
+			select {
+			case err := <-outcome:
+				if !errors.Is(err, test.want) {
+					t.Fatalf("Execute() error = %v, want %v", err, test.want)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("Execute() did not stop after context ended")
+			}
+			if got := cleanups.Load(); got != 1 {
+				t.Fatalf("cleanup calls = %d, want 1", got)
+			}
+		})
+	}
+}
+
+func TestAgyRootTimeoutPreservesResumeSessionOnFailure(t *testing.T) {
+	t.Parallel()
+
+	factoryRoot := t.TempDir()
+	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
+		FactoryRoot: factoryRoot,
+		Allocator: &failureStubAllocator{result: agypty.SessionResult{
+			ExitCode: 124, TimedOut: true, CleanedText: "partial answer before timeout",
+		}, runErr: agypty.ErrSessionTimedOut},
+		Executable:             "agy",
+		ExecutableDependencies: executableDependencies(nil),
+	})
+	root := newAgyRoot(t, effect)
+
+	result, err := root.Execute(t.Context(), providers.ExecuteRequest{
+		Provider:    providers.IDAgy,
+		AttemptID:   "dispatch-agy-timeout-session",
+		UserMessage: "plan the goal",
+		ResumeSession: &providers.SessionRef{
+			Provider: providers.IDAgy,
+			Kind:     providers.SessionIDKind,
+			ID:       "session-on-failure",
+		},
+	})
+	if err == nil {
+		t.Fatal("Execute() error = nil, want timeout failure")
+	}
+	if result.Content != "" {
+		t.Fatalf("result content = %q, want no terminal success on timeout", result.Content)
+	}
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute() error = %v, want ExecuteFailure", err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindTimeout {
+		t.Fatalf("failure kind = %q, want timeout", failure.Kind)
+	}
+	if failure.SessionRef == nil || failure.SessionRef.ID != "session-on-failure" {
+		t.Fatalf("failure SessionRef = %#v, want resumed session", failure.SessionRef)
+	}
+}
+
+func TestAgyRootMissingExecutablePreservesResumeSessionOnFailure(t *testing.T) {
+	t.Parallel()
+
+	factoryRoot := t.TempDir()
+	missingExecutable := filepath.Join(factoryRoot, "missing-agy")
+	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
+		FactoryRoot:            factoryRoot,
+		Allocator:              &stubAllocator{},
+		Executable:             missingExecutable,
+		ExecutableDependencies: executableDependencies(nil),
+	})
+	root := newAgyRoot(t, effect)
+
+	_, err := root.Execute(t.Context(), providers.ExecuteRequest{
+		Provider:    providers.IDAgy,
+		AttemptID:   "dispatch-agy-missing-session",
+		UserMessage: "hello",
+		ResumeSession: &providers.SessionRef{
+			Provider: providers.IDAgy,
+			Kind:     providers.SessionIDKind,
+			ID:       "session-on-setup-failure",
+		},
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute() error = %v, want ExecuteFailure", err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindDependency {
+		t.Fatalf("failure kind = %q, want dependency", failure.Kind)
+	}
+	if failure.SessionRef == nil || failure.SessionRef.ID != "session-on-setup-failure" {
+		t.Fatalf("failure SessionRef = %#v, want resumed session", failure.SessionRef)
+	}
+}
+
+func agyFailureRequest() providers.ExecuteRequest {
+	return providers.ExecuteRequest{
+		Provider:    providers.IDAgy,
+		AttemptID:   "attempt-agy-failure",
+		UserMessage: "deterministic failure prompt",
 	}
 }
 

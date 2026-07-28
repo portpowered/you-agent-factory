@@ -9,6 +9,7 @@ import (
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 )
 
@@ -116,4 +117,11 @@ func declaredFailureFromWorkFailure(failureType workers.WorkFailureType) provide
 			Message: "Agy reported an execution failure.",
 		}
 	}
+}
+
+func orchestrationFailure(err error) error {
+	if setup := classifySetupError(err); setup != nil {
+		return setup.Clone()
+	}
+	return execution.AttemptFailure{NativeError: err}
 }

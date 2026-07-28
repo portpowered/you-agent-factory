@@ -13,7 +13,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
-	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/commandenv"
@@ -55,6 +54,7 @@ func NewPTYEffect(options PTYEffectOptions) Effect {
 		observe func([]byte) error,
 	) (EffectResult, error) {
 		started := time.Now()
+		sessionRef := sessionRefFromRequest(request.ResumeSession)
 		launch, err := buildPTYLaunch(request, ptyLaunchConfig{
 			factoryRoot:  factoryRoot,
 			executable:   executable,
@@ -63,12 +63,12 @@ func NewPTYEffect(options PTYEffectOptions) Effect {
 			sessionConfig: sessionConfig,
 		})
 		if err != nil {
-			return EffectResult{}, execution.AttemptFailure{NativeError: err}
+			return EffectResult{SessionRef: sessionRef}, orchestrationFailure(err)
 		}
 		result, runErr := runPTY(ctx, options.Allocator, launch, sessionConfig, observe)
 		effectResult := EffectResult{
 			DurationMillis: time.Since(started).Milliseconds(),
-			SessionRef:     sessionRefFromRequest(request.ResumeSession),
+			SessionRef:     sessionRef,
 		}
 		if runErr != nil {
 			return effectResult, nativePTYError(ctx, result, runErr)
