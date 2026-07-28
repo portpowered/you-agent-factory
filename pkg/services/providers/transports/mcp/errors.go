@@ -4,15 +4,23 @@ import (
 	"context"
 	"errors"
 	"strings"
+
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 const (
 	errorCodeBadRequest         = "BAD_REQUEST"
-	errorCodeServiceUnavailable = "provider.service.unavailable"
-	errorCodeInternalExecution  = "provider.execution.internal"
-	errorCodeRequestCanceled    = "provider.request.canceled"
-	errorCodeRequestTimedOut    = "provider.request.timed_out"
+	errorCodeServiceUnavailable    = "provider.service.unavailable"
+	errorCodeIdentityInvalid       = "provider.identity.invalid"
+	errorCodeCatalogUnknown        = "provider.catalog.unknown"
+	errorCodeCatalogUnavailable    = "provider.catalog.unavailable"
+	errorCodeInternalExecution     = "provider.execution.internal"
+	errorCodeRequestCanceled       = "provider.request.canceled"
+	errorCodeRequestTimedOut       = "provider.request.timed_out"
 	errorMessageServiceUnavailable = "providers service is unavailable"
+	errorMessageIdentityInvalid    = "provider id is invalid"
+	errorMessageCatalogUnknown     = "provider is unknown"
+	errorMessageCatalogUnavailable = "provider is unavailable"
 	errorMessageRequestCanceled    = "providers request was canceled"
 	errorMessageRequestTimedOut    = "providers request timed out"
 	errorMessageInternalExecution  = "providers execution failed"
@@ -82,6 +90,43 @@ func unavailableServiceErrorEnvelope() ToolErrorEnvelope {
 		Code:      errorCodeServiceUnavailable,
 		Message:   errorMessageServiceUnavailable,
 		Retryable: false,
+	}
+}
+
+func getProviderErrorEnvelope(err error) ToolErrorEnvelope {
+	if envelope, ok := contextRequestErrorEnvelope(err); ok {
+		return envelope
+	}
+	switch {
+	case errors.Is(err, providers.ErrInvalidID):
+		return ToolErrorEnvelope{
+			Code:      errorCodeIdentityInvalid,
+			Message:   errorMessageIdentityInvalid,
+			Retryable: false,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, providers.ErrUnknownProvider):
+		return ToolErrorEnvelope{
+			Code:      errorCodeCatalogUnknown,
+			Message:   errorMessageCatalogUnknown,
+			Retryable: false,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, providers.ErrProviderUnavailable):
+		return ToolErrorEnvelope{
+			Code:      errorCodeCatalogUnavailable,
+			Message:   errorMessageCatalogUnavailable,
+			Retryable: true,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	default:
+		return executionErrorEnvelope(err)
 	}
 }
 

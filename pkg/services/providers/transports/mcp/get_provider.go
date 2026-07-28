@@ -29,7 +29,7 @@ func GetProvider(
 		ID: providers.ID(input.ID),
 	})
 	if err != nil {
-		envelope := executionErrorEnvelope(err)
+		envelope := getProviderErrorEnvelope(err)
 		return ToolResponse[providers.GetProviderResult]{Error: &envelope}
 	}
 	return ToolResponse[providers.GetProviderResult]{Result: &result}
