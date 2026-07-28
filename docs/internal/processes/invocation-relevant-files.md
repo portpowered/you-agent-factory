@@ -1008,7 +1008,11 @@ response-stream output.
   `provideSystemInitializationService` through
   `factorydefinitionsservice.NewPackagedFactoryInstaller`, not
   `factory_definitions/packagedinstallation`; composed initialize proofs live in
-  `pkg/wire/system_initialization_composition_test.go`. The Bootstrap CLI adapter at
+  `pkg/wire/system_initialization_composition_test.go`. Focused initialize/scaffold
+  proofs through injected Definitions root catalog and ensure-installer collaborators
+  live in `initialize_definitions_root_boundary_test.go` (created/skipped outcomes,
+  customer-owned Factory preservation, partial-failure rollback facts, and
+  AttachFactoryDefinitions absence). The Bootstrap CLI adapter at
   `pkg/services/system_initialization/transports/cli` must stay registered under
   destination `system_initialization` in the same shared manifests; prove
   registration with `transports/cli/manifest_registration_test.go` rather than
