@@ -893,6 +893,16 @@ response-stream output.
   `docs/internal/baselines/ownership-inventory.json` and
   `docs/internal/packaged-service-structure/package-target-manifest.json` after
   remap mapping changes.
+- Operator Settings excess root `.go` contract inventory for INV-SET-TOPLEVEL
+  lives in
+  `docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json`
+  with drift verification in
+  `internal/ownershipinventory/operator_settings_root_go.go`; thin-root retain
+  surfaces are `doc.go`, `service_contract.go`, `document_contract.go`, and
+  `resolution_contract.go` plus root-contract seal tests; excess clusters fold
+  to `operator_settings/internal` or
+  `operator_settings/internal/services/{document,resolution}` for
+  CLN-SET-CONTRACT-ROOTS.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore
