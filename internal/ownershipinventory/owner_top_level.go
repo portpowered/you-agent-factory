@@ -100,7 +100,7 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 	},
 	"providers": {
 		Owner:          "providers",
-		ExpectedRetain: []string{"internal", "wire"},
+		ExpectedRetain: []string{"internal", "transports", "wire"},
 	},
 	"recordings": {
 		Owner:          "recordings",
