@@ -2629,6 +2629,11 @@
     },
     {
       "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout",
+      "target": "pkg/services/factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/internal/services/authoring_layout/expand",
       "target": "pkg/services/factory_definitions/internal/services/authoring_layout"
     },
@@ -2646,6 +2651,11 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/internal/services/authoring_layout/prepare",
       "target": "pkg/services/factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
+      "target": "pkg/services/factory_definitions/internal/services/catalog"
     },
     {
       "rule": "service-root-unexpected-directory",
@@ -2685,6 +2695,11 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
+      "target": "pkg/services/factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
       "target": "pkg/services/factory_definitions/internal/services/snapshots_portability"
     },
     {

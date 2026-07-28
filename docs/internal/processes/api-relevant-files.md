@@ -191,6 +191,18 @@ Use this map when changing the public REST contract.
   Leave `service/` coverage rows while the Automations-leased compile shim
   remains; internal `internal/services/*` destination packages keep their own
   coverage floors.
+  DEL-DEF story 005 (`pss-del-def-005`) proves emptied transitional packages are
+  gone, remaining children trend toward `wire/` + `internal/` + `transports/`,
+  parent-private `internal/services/*` subservices remain, and
+  `factory_definitions/wire` constructs the published Service root without
+  deleted transitional imports. Observable completion proofs live in
+  `pkg/services/factory_definitions/del_def_root_shape_test.go`; deeper
+  catalog/authoring/validate/snapshot/distribute behavioral proofs live in
+  `pkg/services/factory_definitions/wire/fold_behavior_preservation_test.go`.
+  After story 002 fold destinations land under internal subservices, add any new
+  `service-root-unexpected-directory` rows for those internal paths only in
+  `docs/internal/baselines/package-structure-baseline.json` (not the deleted
+  top-level transitional paths).
   CUT-DEF-RUN seals Factory Definitions production imports of Factory Runtime to
   the service root only (`pkg/services/factory_runtime`) for orchestration
   semantic-validation edges; the lease-wide guard is
