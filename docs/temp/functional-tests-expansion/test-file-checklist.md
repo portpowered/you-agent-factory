@@ -534,7 +534,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [ ] `tests/functional/work/submission/stage_and_submit_test.go`
   - `TestAPIStageAndSubmitFileCreatesExpectedWork`.
 
-- [ ] `tests/functional/work/relationships/dependencies_test.go`
+- [x] `tests/functional/work/relationships/dependencies_test.go`
   - `TestDependentWorkWaitsForPrerequisiteTargetState`.
   - `TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure`.
   - `TestFanInReleasesOnlyAfterEveryPrerequisite`.
