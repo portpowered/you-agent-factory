@@ -91,6 +91,18 @@ func TestProviderSessionsCommittedOwnershipLocksServiceMoveDestination(t *testin
 	}
 }
 
+func TestMapPackageProviderSessionsHypotheticalUnexpectedSiblingDefaultsToRetain(t *testing.T) {
+	t.Parallel()
+
+	got, err := ownershipinventory.MapPackage("pkg/services/provider_sessions/hypothetical")
+	if err != nil {
+		t.Fatalf("MapPackage() error = %v", err)
+	}
+	if got.Disposition != ownershipinventory.DispositionRetain || got.Destination != "provider_sessions" {
+		t.Fatalf("MapPackage() = %#v, want default retain→provider_sessions for unmapped owner child", got)
+	}
+}
+
 func TestProviderSessionsInventoryRejectsRetainToOwnerRootForUnexpectedPublicSibling(t *testing.T) {
 	t.Parallel()
 

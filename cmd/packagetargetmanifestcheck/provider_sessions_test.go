@@ -119,6 +119,41 @@ func TestProviderSessionsDualLedgerAgreeOnServiceMoveDestination(t *testing.T) {
 	}
 }
 
+func TestCommittedManifestProviderSessionsRejectsRetainToOwnerRootForUnexpectedSiblings(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	topLevel, err := ownershipinventory.LoadProviderSessionsTopLevelInventory(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadProviderSessionsTopLevelInventory() error = %v", err)
+	}
+	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
+	if err != nil {
+		t.Fatalf("loadManifest() error = %v", err)
+	}
+
+	manifestByPath := make(map[string]PackageMapping, len(manifest.Packages))
+	for _, row := range manifest.Packages {
+		manifestByPath[row.PackagePath] = row
+	}
+
+	for _, packagePath := range ownershipinventory.ProviderSessionsUnexpectedPublicSiblingPackagePaths(topLevel) {
+		row, ok := manifestByPath[packagePath]
+		if !ok {
+			t.Fatalf("committed manifest missing unexpected public sibling %q", packagePath)
+		}
+		if row.Disposition == DispositionRetain && row.Destination == "provider_sessions" {
+			t.Fatalf("committed manifest row retain→provider_sessions for %q", packagePath)
+		}
+		if row.Disposition != DispositionMove {
+			t.Fatalf("committed manifest row %q disposition = %q, want move", packagePath, row.Disposition)
+		}
+		if row.Destination == "provider_sessions" {
+			t.Fatalf("committed manifest row %q move destination = owner root, want nested plan path", packagePath)
+		}
+	}
+}
+
 func TestProviderSessionsInventoryRejectsRetainToOwnerRootForUnexpectedPublicSibling(t *testing.T) {
 	t.Parallel()
 

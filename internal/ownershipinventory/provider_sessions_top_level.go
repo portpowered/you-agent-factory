@@ -70,6 +70,81 @@ func ListProviderSessionsTopLevelDirectories(root string) ([]string, error) {
 	return directories, nil
 }
 
+// ProviderSessionsUnexpectedPublicSiblingPackagePaths returns stable-sorted
+// production package paths for every unexpected public top-level sibling listed
+// in the committed Provider Sessions top-level inventory.
+func ProviderSessionsUnexpectedPublicSiblingPackagePaths(inventory ProviderSessionsTopLevelInventory) []string {
+	var packagePaths []string
+	for _, child := range inventory.Children {
+		if !isProviderSessionsUnexpectedPublicSiblingClassification(child.Classification) {
+			continue
+		}
+		packagePaths = append(packagePaths, ProviderSessionsOwnerPackagePath+"/"+child.Directory)
+	}
+	slices.Sort(packagePaths)
+	return packagePaths
+}
+
+func isProviderSessionsUnexpectedPublicSiblingClassification(classification string) bool {
+	return classification == ProviderSessionsTopLevelUnexpectedPublicSibling ||
+		classification == ProviderSessionsTopLevelINVUnexpectedPublicSibling
+}
+
+// VerifyProviderSessionsUnexpectedPublicSiblingRemaps proves live top-level
+// children match the committed inventory and every unexpected public sibling
+// is remapped move/delete with an explicit private destination rather than
+// retain→provider_sessions.
+func VerifyProviderSessionsUnexpectedPublicSiblingRemaps(root string) error {
+	if err := VerifyProviderSessionsTopLevelInventory(root); err != nil {
+		return err
+	}
+	inventory, err := LoadProviderSessionsTopLevelInventory(root)
+	if err != nil {
+		return err
+	}
+	for _, packagePath := range ProviderSessionsUnexpectedPublicSiblingPackagePaths(inventory) {
+		row, err := MapPackage(packagePath)
+		if err != nil {
+			return fmt.Errorf("map unexpected public sibling %q: %w", packagePath, err)
+		}
+		if err := validateProviderSessionsUnexpectedPublicSiblingRow(packagePath, row); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateProviderSessionsUnexpectedPublicSiblingRow(packagePath string, row PackageRow) error {
+	if row.Disposition == DispositionRetain && row.Destination == "provider_sessions" {
+		return fmt.Errorf("unexpected public sibling %q retains under owner root", packagePath)
+	}
+	switch row.Disposition {
+	case DispositionMove, DispositionDelete:
+	default:
+		return fmt.Errorf("unexpected public sibling %q disposition %q must be move or delete", packagePath, row.Disposition)
+	}
+	if row.Disposition == DispositionMove {
+		if strings.TrimSpace(row.Successor) == "" || strings.TrimSpace(row.DeletionCondition) == "" {
+			return fmt.Errorf("unexpected public sibling %q missing successor/deletionCondition", packagePath)
+		}
+		if !isProviderSessionsPrivateSuccessor(row.Successor) {
+			return fmt.Errorf("unexpected public sibling %q successor %q outside provider_sessions private destinations", packagePath, row.Successor)
+		}
+	}
+	return nil
+}
+
+func isProviderSessionsPrivateSuccessor(successor string) bool {
+	switch successor {
+	case ProviderSessionsOwnerPackagePath + "/internal",
+		ProviderSessionsOwnerPackagePath + "/internal/services/codex_reader",
+		ProviderSessionsOwnerPackagePath + "/internal/services/cursor_reader":
+		return true
+	default:
+		return false
+	}
+}
+
 // VerifyProviderSessionsTopLevelInventory proves the live filesystem matches the
 // committed Provider Sessions top-level inventory rows.
 func VerifyProviderSessionsTopLevelInventory(root string) error {
@@ -120,8 +195,7 @@ func validateProviderSessionsTopLevelInventory(inventory ProviderSessionsTopLeve
 			}
 			continue
 		}
-		if child.Classification == ProviderSessionsTopLevelUnexpectedPublicSibling ||
-			child.Classification == ProviderSessionsTopLevelINVUnexpectedPublicSibling {
+		if isProviderSessionsUnexpectedPublicSiblingClassification(child.Classification) {
 			unexpectedBeyondService = append(unexpectedBeyondService, child.Directory)
 		}
 	}
@@ -147,8 +221,9 @@ func providerSessionsTopLevelDirectoryNames(children []ProviderSessionsTopLevelC
 
 func isProviderSessionsTopLevelClassification(classification string) bool {
 	switch classification {
-	case ProviderSessionsTopLevelCanonicalRetain,
-		ProviderSessionsTopLevelUnexpectedPublicSibling,
+	case ProviderSessionsTopLevelCanonicalRetain:
+		return true
+	case ProviderSessionsTopLevelUnexpectedPublicSibling,
 		ProviderSessionsTopLevelINVUnexpectedPublicSibling:
 		return true
 	default:
