@@ -342,6 +342,7 @@
     "pkg/services/recordings/wire",
     "pkg/services/system_initialization",
     "pkg/services/system_initialization/internal/workflow",
+    "pkg/services/system_initialization/transports/cli",
     "pkg/services/system_initialization/wire",
     "pkg/services/work",
     "pkg/services/work/internal/services/content_materialization",
@@ -1989,6 +1990,11 @@
     },
     {
       "packagePath": "pkg/services/system_initialization/internal/workflow",
+      "disposition": "retain",
+      "destination": "system_initialization"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization/transports/cli",
       "disposition": "retain",
       "destination": "system_initialization"
     },
