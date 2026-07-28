@@ -45,3 +45,20 @@ func (r *Recovery) Capture(req checkpointrecovery.CaptureRequest) (checkpointrec
 	}
 	return checkpointrecovery.CaptureResult{Envelope: stored}, nil
 }
+
+// Load retrieves one versioned opaque checkpoint envelope without restoring
+// mutable execution state.
+func (r *Recovery) Load(req checkpointrecovery.LoadRequest) (checkpointrecovery.LoadResult, error) {
+	checkpointID := strings.TrimSpace(req.CheckpointID)
+	if checkpointID == "" {
+		return checkpointrecovery.LoadResult{}, checkpointrecovery.ErrCheckpointNotFound
+	}
+	envelope, err := r.store.Get(checkpointID)
+	if err != nil {
+		return checkpointrecovery.LoadResult{}, err
+	}
+	return checkpointrecovery.LoadResult{
+		Envelope:   envelope,
+		Compatible: checkpointrecovery.CompatibilityForSchema(envelope.SchemaVersion, req.ExpectedSchemaVersion),
+	}, nil
+}

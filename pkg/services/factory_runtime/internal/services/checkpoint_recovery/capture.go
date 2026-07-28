@@ -36,10 +36,11 @@ type CaptureResult struct {
 	Envelope Envelope
 }
 
-// Service owns Runtime-private checkpoint capture against the opaque store
-// port. Load and restore remain separate root operations in later stories.
+// Service owns Runtime-private checkpoint capture and load against the opaque
+// store port. Restore remains a separate root operation in a later story.
 type Service interface {
 	Capture(CaptureRequest) (CaptureResult, error)
+	Load(LoadRequest) (LoadResult, error)
 }
 
 // EncodeRuntimeOpaquePayload serializes minimal execution facts into opaque

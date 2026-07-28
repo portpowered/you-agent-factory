@@ -139,9 +139,15 @@ func (r *Root) CaptureCheckpoint(
 	return factoryruntime.CaptureCheckpointResult{}, factoryruntime.ErrCapabilityUnavailable
 }
 
-func (r *Root) LoadCheckpoint(_ context.Context, req factoryruntime.LoadCheckpointRequest) (factoryruntime.LoadCheckpointResult, error) {
-	if req.CheckpointID == "" {
+func (r *Root) LoadCheckpoint(
+	ctx context.Context,
+	req factoryruntime.LoadCheckpointRequest,
+) (factoryruntime.LoadCheckpointResult, error) {
+	if strings.TrimSpace(req.CheckpointID) == "" {
 		return factoryruntime.LoadCheckpointResult{}, factoryruntime.ErrCheckpointNotFound
+	}
+	if r != nil && r.active != nil {
+		return r.active.LoadCheckpoint(ctx, req)
 	}
 	return factoryruntime.LoadCheckpointResult{}, factoryruntime.ErrCapabilityUnavailable
 }

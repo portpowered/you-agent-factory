@@ -329,11 +329,28 @@ func checkpointCaptureLifecycleError(state interfaces.FactoryState) error {
 }
 
 func (f *factoryImpl) LoadCheckpoint(_ context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
-	return factory.LoadCheckpointResult{}, f.unavailableRootCapability(
-		req.CheckpointID == "",
-		factory.ErrCheckpointNotFound,
-		true,
-	)
+	checkpointID := strings.TrimSpace(req.CheckpointID)
+	if checkpointID == "" {
+		return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
+	}
+	f.mu.RLock()
+	recovery := f.checkpointRecovery
+	f.mu.RUnlock()
+	if recovery == nil {
+		return factory.LoadCheckpointResult{}, factory.ErrCapabilityUnavailable
+	}
+	loaded, err := recovery.Load(checkpointrecovery.LoadRequest{
+		CheckpointID:          checkpointID,
+		ExpectedSchemaVersion: req.ExpectedSchemaVersion,
+	})
+	if err != nil {
+		return factory.LoadCheckpointResult{}, err
+	}
+	return factory.LoadCheckpointResult{
+		Outcome:    factory.CheckpointOutcomeLoaded,
+		Checkpoint: checkpointrecovery.RootCheckpointFromEnvelope(loaded.Envelope),
+		Compatible: loaded.Compatible,
+	}, nil
 }
 
 func (f *factoryImpl) RestoreCheckpoint(

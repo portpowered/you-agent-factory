@@ -608,8 +608,34 @@ func TestFactoryImpl_CheckpointContracts_DoNotReportFalseSuccess(t *testing.T) {
 	}
 	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{})
 	requireRootErrIs(t, err, factory.ErrCheckpointNotFound, "LoadCheckpoint(empty)")
-	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-1"})
-	requireRootErrIs(t, err, factory.ErrCapabilityUnavailable, "LoadCheckpoint(cp-1)")
+	loaded, err := impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-1"})
+	requireNoRootErr(t, err, "LoadCheckpoint(cp-1)")
+	if loaded.Outcome != factory.CheckpointOutcomeLoaded {
+		t.Fatalf("LoadCheckpoint(cp-1) outcome = %q, want LOADED", loaded.Outcome)
+	}
+	if loaded.Checkpoint.CheckpointID != "cp-1" ||
+		loaded.Checkpoint.SchemaVersion != captured.Checkpoint.SchemaVersion ||
+		len(loaded.Checkpoint.Payload) == 0 {
+		t.Fatalf("LoadCheckpoint(cp-1) checkpoint = %#v, want stored opaque checkpoint", loaded.Checkpoint)
+	}
+	compatible, err := impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{
+		CheckpointID:          "cp-1",
+		ExpectedSchemaVersion: captured.Checkpoint.SchemaVersion,
+	})
+	requireNoRootErr(t, err, "LoadCheckpoint(compatible)")
+	if !compatible.Compatible {
+		t.Fatal("LoadCheckpoint(compatible) Compatible = false, want true")
+	}
+	incompatible, err := impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{
+		CheckpointID:          "cp-1",
+		ExpectedSchemaVersion: captured.Checkpoint.SchemaVersion + 1,
+	})
+	requireNoRootErr(t, err, "LoadCheckpoint(incompatible)")
+	if incompatible.Compatible {
+		t.Fatal("LoadCheckpoint(incompatible) Compatible = true, want false")
+	}
+	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "missing"})
+	requireRootErrIs(t, err, factory.ErrCheckpointNotFound, "LoadCheckpoint(missing)")
 
 	_, err = impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{
 		Checkpoint: factory.Checkpoint{CheckpointID: "cp-1", SchemaVersion: 1, Payload: []byte(`{}`)},
@@ -625,8 +651,11 @@ func TestFactoryImpl_CheckpointContracts_DoNotReportFalseSuccess(t *testing.T) {
 	impl.state = interfaces.FactoryStateCompleted
 	_, err = impl.CaptureCheckpoint(ctx, factory.CaptureCheckpointRequest{CheckpointID: "cp-2"})
 	requireRootErrIs(t, err, factory.ErrNotRunning, "CaptureCheckpoint(completed)")
-	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-2"})
-	requireRootErrIs(t, err, factory.ErrCapabilityUnavailable, "LoadCheckpoint(completed)")
+	loadedAfterComplete, err := impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-1"})
+	requireNoRootErr(t, err, "LoadCheckpoint(completed)")
+	if loadedAfterComplete.Outcome != factory.CheckpointOutcomeLoaded {
+		t.Fatalf("LoadCheckpoint(completed) outcome = %q, want LOADED", loadedAfterComplete.Outcome)
+	}
 	_, err = impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{
 		Checkpoint: factory.Checkpoint{CheckpointID: "cp-2", SchemaVersion: 1, Payload: []byte(`{}`)},
 	})
