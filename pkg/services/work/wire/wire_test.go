@@ -1,6 +1,8 @@
 package wire_test
 
 import (
+	"context"
+	"errors"
 	"io"
 	"io/fs"
 	"net/http"
@@ -208,6 +210,66 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	var root work.Service = service
 	if root == nil {
 		t.Fatal("constructed value is not assignable to work.Service")
+	}
+}
+
+func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	service, err := validNewServiceInputs(t).callNewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewService() returned nil service")
+	}
+	var root work.Service = service
+	if root == nil {
+		t.Fatal("constructed root is nil")
+	}
+
+	_, err = root.SubmitWorkRequestForSession(ctx, "session-unresolved", work.WorkRequest{})
+	if err == nil {
+		t.Fatal("SubmitWorkRequestForSession() error = nil, want unresolved runtime failure")
+	}
+	if err.Error() != "Work state access session adapter is unavailable" {
+		t.Fatalf("SubmitWorkRequestForSession() error = %v, want unavailable session adapter", err)
+	}
+
+	_, err = root.ListWork(ctx, "session-unresolved", work.ListOptions{})
+	if err == nil {
+		t.Fatal("ListWork() error = nil, want unresolved runtime failure")
+	}
+	if err.Error() != "Work state access session adapter is unavailable" {
+		t.Fatalf("ListWork() error = %v, want unavailable session adapter", err)
+	}
+
+	_, err = root.MoveWorkForSession(ctx, "session-unresolved", "work-1", "done", "req-1")
+	if err == nil {
+		t.Fatal("MoveWorkForSession() error = nil, want unresolved runtime failure")
+	}
+	if err.Error() != "Work state access session adapter is unavailable" {
+		t.Fatalf("MoveWorkForSession() error = %v, want unavailable session adapter", err)
+	}
+
+	_, err = root.StageContent(ctx, work.StageContentRequest{
+		ItemType:  "invalid",
+		FileName:  "file.txt",
+		MediaType: "text/plain",
+		Content:   []byte("data"),
+	})
+	var stagingErr *work.ContentStagingError
+	if !errors.As(err, &stagingErr) {
+		t.Fatalf("StageContent() error = %v, want *ContentStagingError", err)
+	}
+
+	_, cleanup, err := root.MaterializeContentURL(ctx, "http://127.0.0.1/secret")
+	if cleanup != nil {
+		cleanup()
+	}
+	if !errors.Is(err, work.ErrUnsafeContentURL) {
+		t.Fatalf("MaterializeContentURL() error = %v, want ErrUnsafeContentURL", err)
 	}
 }
 
