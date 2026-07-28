@@ -750,6 +750,13 @@ response-stream output.
   remaining request-validation error and `FactoryInvocationResult` session
   result shape stay at their current boundary until Factory Session contracts
   converge; the Factory Session owner constructs that shared result.
+- Work owner-local Wire at `pkg/services/work/wire` must stay registered under
+  destination `work` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and both
+  `go-*-coverage-package-minimums.json` baselines; prove registration with
+  `wire/manifest_registration_test.go` rather than re-editing manifests when
+  IMP-WORK already landed the rows.
 - `pkg/work/content/contract` translates between generated OpenAPI `WorkContent`
   and the backend-owned `work.WorkContentPart` shape; pure content rules remain
   in `pkg/work/content`.
