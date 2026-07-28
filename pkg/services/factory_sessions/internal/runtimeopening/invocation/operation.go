@@ -127,6 +127,9 @@ func (o *operation) InvokeFactory(
 	request factorysessions.InvocationRequest,
 	consume factorysessions.FactoryEventConsumer,
 ) (outcome roles.FactoryInvocationOutcome, resultErr error) {
+	if target.HostedLiveInvocation != nil {
+		return o.invokeFactoryOnHostedLiveRuntime(ctx, target, request, consume)
+	}
 	opened, lifecycle, err := o.open(ctx, target)
 	if err != nil {
 		return outcome, err
@@ -134,19 +137,79 @@ func (o *operation) InvokeFactory(
 	defer func() {
 		resultErr = errors.Join(resultErr, lifecycle.close(ctx, opened))
 	}()
+	return o.invokeFactoryOnOpenedRuntime(ctx, opened, lifecycle.runContext, target, request, consume)
+}
 
+func (o *operation) invokeFactoryOnHostedLiveRuntime(
+	ctx context.Context,
+	target roles.InvocationTarget,
+	request factorysessions.InvocationRequest,
+	consume factorysessions.FactoryEventConsumer,
+) (outcome roles.FactoryInvocationOutcome, resultErr error) {
+	hosted := target.HostedLiveInvocation
+	if hosted == nil || hosted.Sessions == nil || hosted.Invoker == nil {
+		return outcome, errors.New("hosted live invocation runtime is incomplete")
+	}
+	projection, projectionErr := hosted.Sessions.GetFactorySession(
+		ctx, factorysessions.DefaultSessionID,
+	)
+	if projectionErr == nil && factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
+		ephemeralTarget := target
+		ephemeralTarget.HostedLiveInvocation = nil
+		return o.invokeFactoryOnEphemeralRuntime(ctx, ephemeralTarget, request, consume)
+	}
+	liveEvents, err := startLiveInvocationFactoryEvents(ctx, hosted.Sessions, consume)
+	if err != nil {
+		return outcome, err
+	}
+	outcome.Result, resultErr = hosted.Invoker.InvokeFactorySession(
+		ctx, factorysessions.DefaultSessionID, request,
+	)
+	if liveEvents != nil {
+		resultErr = errors.Join(
+			resultErr,
+			liveEvents.finish(ctx, hosted.Sessions, outcome.Result),
+		)
+	}
+	return outcome, resultErr
+}
+
+func (o *operation) invokeFactoryOnEphemeralRuntime(
+	ctx context.Context,
+	target roles.InvocationTarget,
+	request factorysessions.InvocationRequest,
+	consume factorysessions.FactoryEventConsumer,
+) (outcome roles.FactoryInvocationOutcome, resultErr error) {
+	opened, lifecycle, err := o.open(ctx, target)
+	if err != nil {
+		return outcome, err
+	}
+	defer func() {
+		resultErr = errors.Join(resultErr, lifecycle.close(ctx, opened))
+	}()
+	return o.invokeFactoryOnOpenedRuntime(ctx, opened, lifecycle.runContext, target, request, consume)
+}
+
+func (o *operation) invokeFactoryOnOpenedRuntime(
+	ctx context.Context,
+	opened roles.OpenedInvocationRuntime,
+	runContext context.Context,
+	target roles.InvocationTarget,
+	request factorysessions.InvocationRequest,
+	consume factorysessions.FactoryEventConsumer,
+) (outcome roles.FactoryInvocationOutcome, resultErr error) {
 	projection, projectionErr := opened.Sessions.GetFactorySession(
-		lifecycle.runContext, factorysessions.DefaultSessionID,
+		runContext, factorysessions.DefaultSessionID,
 	)
 	if projectionErr == nil && factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
 		delivery := newInvocationFactoryEventDelivery(consume)
 		result, err := invokeJavaScriptFactory(
-			lifecycle.runContext, opened, projection.Context, target, request, o.generateSessionID,
+			runContext, opened, projection.Context, target, request, o.generateSessionID,
 			delivery.present,
 		)
 		outcome.Result = result
 		if err == nil && consume != nil {
-			events, readErr := readInvocationFactoryEvents(lifecycle.runContext, opened.Sessions, result)
+			events, readErr := readInvocationFactoryEvents(runContext, opened.Sessions, result)
 			if readErr != nil {
 				return outcome, readErr
 			}
@@ -155,15 +218,15 @@ func (o *operation) InvokeFactory(
 		return outcome, err
 	}
 
-	liveEvents, err := startLiveInvocationFactoryEvents(lifecycle.runContext, opened.Sessions, consume)
+	liveEvents, err := startLiveInvocationFactoryEvents(runContext, opened.Sessions, consume)
 	if err != nil {
 		return outcome, err
 	}
 	outcome.Result, resultErr = opened.Invoker.InvokeFactorySession(
-		lifecycle.runContext, factorysessions.DefaultSessionID, request,
+		runContext, factorysessions.DefaultSessionID, request,
 	)
 	if liveEvents != nil {
-		resultErr = errors.Join(resultErr, liveEvents.finish(lifecycle.runContext, opened.Sessions, outcome.Result))
+		resultErr = errors.Join(resultErr, liveEvents.finish(runContext, opened.Sessions, outcome.Result))
 	}
 	return outcome, resultErr
 }

@@ -15,9 +15,8 @@ import (
 
 // TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads proves a Factory Session
 // invocation started through the public CLI run boundary leaves compatible session
-// identity readable through the public API session surface and inspectable run
-// correlation plus terminal outcome facts through the public API work read surface
-// or the CLI-compatible invocation outcome fields on the same hosted Factory host.
+// identity readable through the public API session surface and terminal work outcome
+// facts readable through the public API work read surface on the same Factory host.
 func TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads(t *testing.T) {
 	dir := scaffoldInvocationFactory(t, nil)
 	providerRunner := support.NewStaticSuccessCommandRunner(terminalSuccessPrimaryResult)
@@ -49,7 +48,8 @@ func TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads(t *testing.T) {
 	if sessionDuring.Runtime.Status == "" {
 		t.Fatalf("session runtime status during CLI invocation = %#v, want observable lifecycle status", sessionDuring.Runtime)
 	}
-	workDuring := support.ListDefaultSessionWork(t, baseURL)
+
+	assertTerminalWorkPrimaryText(t, baseURL, terminalSuccessPrimaryResult)
 
 	<-command.Done()
 	if err := command.Err(); err != nil {
@@ -72,23 +72,6 @@ func TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads(t *testing.T) {
 	}
 	if strings.TrimSpace(cliResponse.RequestId) == "" {
 		t.Fatalf("CLI invocation requestId = %q, want non-empty run correlation", cliResponse.RequestId)
-	}
-
-	if len(workDuring.Results) == 1 {
-		item := workDuring.Results[0]
-		if item.State == nil || generatedWorkStateType(item.State) != factoryapi.WorkStateTypeTERMINAL {
-			t.Fatalf("work state = %#v, want TERMINAL", item.State)
-		}
-		if item.Content == nil || len(*item.Content) != 1 {
-			t.Fatalf("work content = %#v, want one text part", item.Content)
-		}
-		part, err := (*item.Content)[0].AsWorkTextContentPart()
-		if err != nil {
-			t.Fatalf("work content[0] as text part: %v", err)
-		}
-		if part.Text != terminalSuccessPrimaryResult {
-			t.Fatalf("work content text = %q, want %q", part.Text, terminalSuccessPrimaryResult)
-		}
 	}
 }
 

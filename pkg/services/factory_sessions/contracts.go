@@ -60,6 +60,19 @@ type InvocationTarget struct {
 	MetricsRecorder                  interface {
 		RecordInvocationMetric(InvocationMetric)
 	}
+	// HostedLiveInvocation routes factory invokes through an already-running
+	// Factory Session runtime host instead of opening an ephemeral invocation
+	// runtime. CLI run --with-server uses this so API work/session reads observe
+	// the same live runtime as the invocation.
+	HostedLiveInvocation *HostedLiveInvocation
+}
+
+// HostedLiveInvocation is the live runtime surface used by hosted CLI invocations.
+type HostedLiveInvocation struct {
+	Sessions Service
+	Invoker  interface {
+		InvokeFactorySession(context.Context, string, InvocationRequest) (interfaces.FactoryInvocationResult, error)
+	}
 }
 
 // FactoryInvocationOutcome is the detached result of one Factory invocation.
@@ -76,6 +89,10 @@ type ApplicationOpeningPorts struct {
 		RecordInvocationMetric(InvocationMetric)
 	}
 	RuntimeHostObserver RuntimeHostObserver
+	// RuntimeHTTPServicesBound is called once after the application runtime opens
+	// and before component binding. Hosted CLI invocations use it to route factory
+	// invokes through the live session invoker on the already-running host.
+	RuntimeHTTPServicesBound func(RuntimeHTTPServices)
 }
 
 // ApplicationOpeningRequest binds a runtime request to invocation-local ports.
