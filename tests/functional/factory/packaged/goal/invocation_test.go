@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -31,14 +32,15 @@ func TestPackagedGoalAcceptCompletesWithSummary(t *testing.T) {
 // the post-reject primary result.
 func TestPackagedGoalRejectRepeatsThenCompletes(t *testing.T) {
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
-	mockWorkersPath, executorCounterPath := writePackagedGoalRejectThenAcceptMockWorkersConfig(t)
+	runner := support.NewShapedProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte("goal is not complete yet")},
+		platformprocess.CommandResult{Stdout: []byte(packagedGoalRejectThenCompleteSummary + "\n<COMPLETE>")},
+	)
 
-	_, response := invokePackagedGoal(t, dir, mockWorkersPath, "invoke packaged goal after reject")
+	_, response := invokePackagedGoalWithProviderRunner(t, dir, runner, "invoke packaged goal after reject")
 	assertPackagedGoalCompletedWithSummary(t, response, packagedGoalRejectThenCompleteSummary)
-
-	executorInvocations := readPackagedGoalExecutorInvocationCount(t, executorCounterPath)
-	if executorInvocations < 2 {
-		t.Fatalf("executor invocation count = %d, want at least 2 after reject-then-complete", executorInvocations)
+	if got := runner.CallCount(); got < 2 {
+		t.Fatalf("provider invocation count = %d, want at least 2 after reject-then-complete", got)
 	}
 }
 
