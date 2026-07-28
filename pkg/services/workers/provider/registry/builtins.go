@@ -144,11 +144,11 @@ func migratedBuiltInIntegration(
 			ProvidersService: dependencies.ProvidersService,
 		})
 	case "kiro":
-		if dependencies.CommandRunner == nil {
+		if dependencies.ProvidersService == nil {
 			return kiro.NewIntegration()
 		}
 		return kiro.NewIntegration(kiro.IntegrationDependencies{
-			CommandRunner: dependencies.CommandRunner,
+			ProvidersService: dependencies.ProvidersService,
 		})
 	default:
 		return nil

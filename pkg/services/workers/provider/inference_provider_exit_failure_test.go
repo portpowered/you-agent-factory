@@ -614,34 +614,6 @@ func TestNormalizeProviderExitFailure_SelectsOpenCodeParserFromNormalizedIdentit
 	}
 }
 
-func TestNormalizeProviderExitFailure_CompatibilityShimUsesMigratedProviderParsers(t *testing.T) {
-	t.Parallel()
-
-	for _, name := range []string{
-		"kiro_structured_invalid_request_stdout",
-	} {
-		entry := providerErrorCorpusEntryForTest(t, name)
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			got := NormalizeProviderExitFailure(
-				string(entry.Provider),
-				entry.CommandResult(),
-				nil,
-				nil,
-			)
-			if got.Type != entry.ExpectedType || got.Family != entry.ExpectedFamily {
-				t.Fatalf(
-					"NormalizeProviderExitFailure() = type %q family %q, want type %q family %q",
-					got.Type,
-					got.Family,
-					entry.ExpectedType,
-					entry.ExpectedFamily,
-				)
-			}
-		})
-	}
-}
-
 func TestNormalizeProviderExitFailure_OpenCodeCorpusUsesCentralPolicy(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{

@@ -21,7 +21,6 @@ import (
 	agyadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/commandenv"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
-	kiropkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro"
 	opencodepkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/opencode"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -387,11 +386,6 @@ func parseProviderExitFailure(provider string, result CommandResult) parsedProvi
 	case string(modelprovider.ProviderOpenCode):
 		failure := parseOpenCodeProviderExitFailure(result)
 		return parsedProviderFailure{failure: failure}
-	case string(modelprovider.ProviderKiro):
-		failure := kiropkg.ParseProviderFailure(kiropkg.FailureInput{
-			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-		})
-		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
 	default:
 		return parsedProviderFailure{failure: parseUnknownProviderFailure(normalizedProvider, result)}
 	}
@@ -421,18 +415,6 @@ func parseUnknownProviderFailure(provider string, result CommandResult) Provider
 // NormalizeProviderExitFailure exposes the canonical provider exit-failure
 // normalization path for compatibility shims and behavior-focused tests.
 func NormalizeProviderExitFailure(provider string, result CommandResult, session *workerexecution.ProviderSessionMetadata, diagnostics *workerexecution.WorkDiagnostics) *ProviderError {
-	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case string(modelprovider.ProviderKiro):
-		failure := kiropkg.ParseProviderFailure(kiropkg.FailureInput{
-			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-		})
-		return newProviderErrorFromResultWithDiagnostics(
-			ProviderFailureResult{Reason: failure.Reason, Message: failure.Message},
-			nil,
-			session,
-			diagnostics,
-		)
-	}
 	return normalizeProviderExitFailure(provider, result, session, diagnostics)
 }
 

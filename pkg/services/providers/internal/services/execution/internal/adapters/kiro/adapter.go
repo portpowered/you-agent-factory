@@ -62,6 +62,11 @@ func newAttempt(effect Effect) execution.Attempt {
 			return nil
 		})
 		if failure, failed := collectFailure(effectErr); failed {
+			if failure.Declared != nil && effectResult.SessionRef != nil {
+				declared := failure.Declared.Clone()
+				declared.SessionRef = cloneSessionRef(effectResult.SessionRef)
+				failure.Declared = &declared
+			}
 			return providers.ExecuteResult{}, failure
 		}
 		sessionRef := effectResult.SessionRef

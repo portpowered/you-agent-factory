@@ -484,8 +484,12 @@ func TestConductorInvocationRunnerPreservesKiroResumeSessionWithoutReplacement(t
 	commandRunner := &builtInConductorCommandRunner{
 		result: workers.CommandResult{Stdout: []byte("kiro resumed via conductor")},
 	}
+	providersService, err := providerswire.NewService(providerswire.WithWorkersCommandRunner(commandRunner))
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
 	registrations, err := providerregistry.BuiltInRegistrations(
-		providerregistry.BuiltInDependencies{CommandRunner: commandRunner},
+		providerregistry.BuiltInDependencies{ProvidersService: providersService},
 	)
 	if err != nil {
 		t.Fatalf("BuiltInRegistrations() error = %v", err)
