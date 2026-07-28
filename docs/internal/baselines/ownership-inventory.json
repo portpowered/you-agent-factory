@@ -1167,7 +1167,7 @@
       "fromOwner": "factory_definitions",
       "toOwner": "automations",
       "class": "command",
-      "evidence": "pkg/services/factory_definitions/validation -\u003e pkg/services/automations"
+      "evidence": "pkg/services/factory_definitions/internal/services/validation/impl -\u003e pkg/services/automations"
     },
     {
       "fromOwner": "factory_definitions",
@@ -1468,6 +1468,12 @@
       "toOwner": "platform",
       "class": "external_effect",
       "evidence": "pkg/services/providers/internal/services/execution/internal/adapters/agy -\u003e pkg/platform/filesystem"
+    },
+    {
+      "fromOwner": "providers",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/providers/transports/cli -\u003e pkg/transports/cli/clidiag"
     },
     {
       "fromOwner": "providers",
@@ -2689,6 +2695,12 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/namedpaths",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -4669,6 +4681,12 @@
     },
     {
       "packagePath": "pkg/services/providers/internal/testutil/execution",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/transports/cli",
       "disposition": "retain",
       "destination": "providers",
       "destinationKind": "owner"
