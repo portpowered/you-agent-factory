@@ -60,6 +60,46 @@ func TestCLIUnknownCommandWritesActionableStderr(t *testing.T) {
 	}
 }
 
+// TestCLIUnknownCommandReturnsUsageExitCode proves that rejecting a mistyped root
+// command through the public built you CLI leaves stdout empty, returns the
+// documented non-success usage/validation exit code, and does not start Factory
+// load, server, or worker dispatch attributable to the rejected invocation.
+func TestCLIUnknownCommandReturnsUsageExitCode(t *testing.T) {
+	t.Parallel()
+
+	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	session := harness.NewSession(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	result, err := session.Run(ctx, unknownCommandProbeToken)
+	if err == nil {
+		t.Fatalf("unknown root command result = %#v; want process failure", result)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("exit code = %d, want documented usage/validation exit 1", result.ExitCode)
+	}
+
+	stdout := strings.TrimSpace(result.Stdout)
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty (no primary result, usage dump, or lifecycle chatter)", result.Stdout)
+	}
+	for _, forbidden := range []string{
+		"Factory initiated:",
+		"Dashboard URL:",
+		"Dashboard server disabled",
+		"Available Commands:",
+		"How to use:",
+	} {
+		if strings.Contains(result.Stdout, forbidden) {
+			t.Fatalf("stdout contains product activation or help surface %q:\n%s", forbidden, result.Stdout)
+		}
+	}
+
+	assertRootHelpDiscoveryHasNoProductFilesystemEffects(t, session)
+}
+
 func containsSuggestionToken(stderr, command string) bool {
 	for _, line := range strings.Split(stderr, "\n") {
 		line = strings.TrimSpace(line)
