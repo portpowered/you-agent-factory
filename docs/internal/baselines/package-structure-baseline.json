@@ -34,17 +34,7 @@
     },
     {
       "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_factory_event_mapping_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_functional_server_override_regression_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_functionallong_compile_smoke_test.go",
       "target": "tests/functional/runtime_api"
     },
     {
@@ -309,18 +299,8 @@
     },
     {
       "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_factory_event_mapping_test.go",
-      "target": "TestFactoryEventTransportMappingRejectsMalformedCanonicalPayload"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_functional_server_override_regression_test.go",
       "target": "TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_functionallong_compile_smoke_test.go",
-      "target": "TestRuntimeAPI_CompilesWithFunctionalLongTag"
     },
     {
       "rule": "deprecated-runtime-api-test",

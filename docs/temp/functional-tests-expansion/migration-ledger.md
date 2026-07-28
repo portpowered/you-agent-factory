@@ -460,7 +460,7 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/replay_contracts/short_helpers_contract_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayEventCountCountsMatchingEventTypes | short | wrong-layer: package-integration — package-local replay helper contracts (replayEventCount, factoryRelationsValue) without root.BuildProcess / public transport boundary. Replacement evidence owner: tests/functional/internal/support/deadcode_contract_test.go. | replay_contracts | none | replay_contracts-delete-06-wrong-layer |
 | tests/functional/replay_contracts/worker_public_contract_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFieldsPrivate | functionallong | tests/functional/workers/script/execution_test.go | replay_contracts | artifact-contract-closeout | replay_contracts-delete-05-workers-script |
 
-#### `runtime_api` (108 scenarios, catch_all=`runtime_api`)
+#### `runtime_api` (106 scenarios, catch_all=`runtime_api`)
 
 | source_path | package | scenario | lane | destination | catch_all | specialty_targets | deletion_only_batch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -468,9 +468,7 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/runtime_api/api_cleanup_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces | short | tests/functional/product/dashboard/http_test.go | runtime_api | none | runtime_api-delete-10-observability-product |
 | tests/functional/runtime_api/api_config_driven_submit_query_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestConfigDriven_RESTAPISubmitAndQuery | short | tests/functional/work/submission/http_test.go | runtime_api | none | runtime_api-delete-02-work-submission |
 | tests/functional/runtime_api/api_event_replay_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline | short | tests/functional/events/factory_events/order_and_cursor_test.go | runtime_api | none | runtime_api-delete-07-events-replay |
-| tests/functional/runtime_api/api_factory_event_mapping_test.go | you-agent-factory/tests/functional/runtime_api | TestFactoryEventTransportMappingRejectsMalformedCanonicalPayload | short | wrong-layer: unit — calls pkg/transports/mapping.FactoryEventsToAPI directly without root.BuildProcess / public HTTP. Replacement evidence owner: pkg/transports/mapping unit or package-integration tests. | runtime_api | none | runtime_api-delete-11-wrong-layer |
 | tests/functional/runtime_api/api_functional_server_override_regression_test.go | you-agent-factory/tests/functional/runtime_api | TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride | short | tests/functional/workers/mock/replacement_test.go | runtime_api | none | runtime_api-delete-09-workers-resilience |
-| tests/functional/runtime_api/api_functionallong_compile_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestRuntimeAPI_CompilesWithFunctionalLongTag | short | wrong-layer: contract-smoke-outside-functional — compile-only `go test -tags=functionallong -run ^$` package check; not a customer Process/HTTP/MCP scenario. Replacement evidence: package compile / pkg-structure lanes once runtime_api is empty. | runtime_api | none | runtime_api-delete-11-wrong-layer |
 | tests/functional/runtime_api/api_generated_rest_client_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestGeneratedRESTClientSmoke_BoundsCancellationAndDeadline | short | tests/functional/transport/http/server/generated_client_test.go | runtime_api | none | runtime_api-delete-01-transport-http |
 | tests/functional/runtime_api/api_generated_rest_client_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestGeneratedRESTClientSmoke_ConfiguresCallerOwnedDependencies | short | tests/functional/transport/http/server/generated_client_test.go | runtime_api | none | runtime_api-delete-01-transport-http |
 | tests/functional/runtime_api/api_generated_rest_client_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure | short | tests/functional/transport/http/server/generated_client_test.go | runtime_api | none | runtime_api-delete-01-transport-http |
@@ -851,7 +849,6 @@ execute independently until package ownership reaches zero.
 | `runtime_api-delete-08-models` | 2 | models/lifecycle | `long-tests-functional-runtime`, `pr-inference-approval` |
 | `runtime_api-delete-09-workers-resilience` | 4 | workers/{mock,script,inference}, observability/metrics | none |
 | `runtime_api-delete-10-observability-product` | 6 | observability/metrics, product/dashboard, orchestration/petri, transport/http/status | none |
-| `runtime_api-delete-11-wrong-layer` | 2 | approved wrong-layer (unit / contract-smoke-outside-functional) | none |
 
 Batch execution guidance for later move work:
 
@@ -871,9 +868,7 @@ Batch execution guidance for later move work:
 | tests/functional/runtime_api/api_cleanup_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces | short | tests/functional/product/dashboard/http_test.go | runtime_api | none | runtime_api-delete-10-observability-product |
 | tests/functional/runtime_api/api_config_driven_submit_query_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestConfigDriven_RESTAPISubmitAndQuery | short | tests/functional/work/submission/http_test.go | runtime_api | none | runtime_api-delete-02-work-submission |
 | tests/functional/runtime_api/api_event_replay_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline | short | tests/functional/events/factory_events/order_and_cursor_test.go | runtime_api | none | runtime_api-delete-07-events-replay |
-| tests/functional/runtime_api/api_factory_event_mapping_test.go | you-agent-factory/tests/functional/runtime_api | TestFactoryEventTransportMappingRejectsMalformedCanonicalPayload | short | wrong-layer: unit — calls pkg/transports/mapping.FactoryEventsToAPI directly without root.BuildProcess / public HTTP. Replacement evidence owner: pkg/transports/mapping unit or package-integration tests. | runtime_api | none | runtime_api-delete-11-wrong-layer |
 | tests/functional/runtime_api/api_functional_server_override_regression_test.go | you-agent-factory/tests/functional/runtime_api | TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride | short | tests/functional/workers/mock/replacement_test.go | runtime_api | none | runtime_api-delete-09-workers-resilience |
-| tests/functional/runtime_api/api_functionallong_compile_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestRuntimeAPI_CompilesWithFunctionalLongTag | short | wrong-layer: contract-smoke-outside-functional — compile-only `go test -tags=functionallong -run ^$` package check; not a customer Process/HTTP/MCP scenario. Replacement evidence: package compile / pkg-structure lanes once runtime_api is empty. | runtime_api | none | runtime_api-delete-11-wrong-layer |
 | tests/functional/runtime_api/api_generated_rest_client_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestGeneratedRESTClientSmoke_BoundsCancellationAndDeadline | short | tests/functional/transport/http/server/generated_client_test.go | runtime_api | none | runtime_api-delete-01-transport-http |
 | tests/functional/runtime_api/api_generated_rest_client_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestGeneratedRESTClientSmoke_ConfiguresCallerOwnedDependencies | short | tests/functional/transport/http/server/generated_client_test.go | runtime_api | none | runtime_api-delete-01-transport-http |
 | tests/functional/runtime_api/api_generated_rest_client_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure | short | tests/functional/transport/http/server/generated_client_test.go | runtime_api | none | runtime_api-delete-01-transport-http |
@@ -984,10 +979,11 @@ Batch execution guidance for later move work:
 
 ### Wrong-layer approvals (runtime_api)
 
-| scenario | wrong-layer rationale | replacement evidence owner |
-| --- | --- | --- |
-| `TestFactoryEventTransportMappingRejectsMalformedCanonicalPayload` | unit — calls pkg/transports/mapping.FactoryEventsToAPI directly without root.BuildProcess / public HTTP. Replacement evidence owner: pkg/transports/mapping unit or package-integration tests. | see rationale |
-| `TestRuntimeAPI_CompilesWithFunctionalLongTag` | contract-smoke-outside-functional — compile-only `go test -tags=functionallong -run ^$` package check; not a customer Process/HTTP/MCP scenario. Replacement evidence: package compile / pkg-structure lanes once runtime_api is empty. | see rationale |
+Released batch `runtime_api-delete-11-wrong-layer` consumed approved wrong-layer
+scenarios after replacement evidence landed in `pkg/transports/mapping`
+(`TestFactoryEventsToAPIRejectsMalformedCanonicalPayload`) and the remaining
+`functionallong` compile surface continued to be exercised by
+`pr-inference-approval` and other `runtime_api` `functionallong` tests.
 
 ## smoke and workflow split plans
 
@@ -1746,7 +1742,7 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `runtime_api-delete-08-models` | runtime_api | 2 | models/lifecycle | planned |
 | `runtime_api-delete-09-workers-resilience` | runtime_api | 4 | workers/{mock,script,inference}, observability/metrics | planned |
 | `runtime_api-delete-10-observability-product` | runtime_api | 4 | observability/metrics, product/dashboard, orchestration/petri, transport/http/status | planned |
-| `runtime_api-delete-11-wrong-layer` | runtime_api | 2 | approved wrong-layer (unit / contract-smoke-outside-functional) | planned |
+| `runtime_api-delete-11-wrong-layer` | runtime_api | 2 | approved wrong-layer (unit / contract-smoke-outside-functional) | released |
 | `smoke-delete-02-workstations-execution` | smoke | 4 | workstations/execution | released |
 | `smoke-delete-03-factory-definitions` | smoke | 3 | factory/definitions | planned |
 | `smoke-delete-04-transport-cli` | smoke | 10 | transport/cli | planned |

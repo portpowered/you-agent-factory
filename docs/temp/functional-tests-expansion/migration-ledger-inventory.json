@@ -4209,16 +4209,6 @@
       "deletion_only_batch": "runtime_api-delete-07-events-replay"
     },
     {
-      "source_path": "tests/functional/runtime_api/api_factory_event_mapping_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestFactoryEventTransportMappingRejectsMalformedCanonicalPayload",
-      "lane": "short",
-      "destination": "wrong-layer: unit \u2014 calls pkg/transports/mapping.FactoryEventsToAPI directly without root.BuildProcess / public HTTP. Replacement evidence owner: pkg/transports/mapping unit or package-integration tests.",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-11-wrong-layer"
-    },
-    {
       "source_path": "tests/functional/runtime_api/api_functional_server_override_regression_test.go",
       "package": "you-agent-factory/tests/functional/runtime_api",
       "scenario": "TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride",
@@ -4227,16 +4217,6 @@
       "catch_all": "runtime_api",
       "specialty_targets": "none",
       "deletion_only_batch": "runtime_api-delete-09-workers-resilience"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_functionallong_compile_smoke_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestRuntimeAPI_CompilesWithFunctionalLongTag",
-      "lane": "short",
-      "destination": "wrong-layer: contract-smoke-outside-functional \u2014 compile-only `go test -tags=functionallong -run ^$` package check; not a customer Process/HTTP/MCP scenario. Replacement evidence: package compile / pkg-structure lanes once runtime_api is empty.",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-11-wrong-layer"
     },
     {
       "source_path": "tests/functional/runtime_api/api_generated_smoke_test.go",
@@ -9146,7 +9126,7 @@
       "guards_batch": 23,
       "none": 638,
       "replay_contracts": 23,
-      "runtime_api": 96,
+      "runtime_api": 94,
       "smoke": 62,
       "workflow": 30
     },
@@ -9167,7 +9147,7 @@
       "provider_sessions": 15,
       "providers": 64,
       "replay_contracts": 23,
-      "runtime_api": 105,
+      "runtime_api": 103,
       "sessionparity": 13,
       "sessions": 40,
       "smoke": 62,
@@ -9177,9 +9157,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 894,
+    "customer_top_level_Test_scenarios": 892,
     "lane_functionallong": 95,
-    "lane_short": 799,
+    "lane_short": 797,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 14,
@@ -9233,7 +9213,7 @@
       "you-agent-factory/tests/functional/providers/kiro": 5,
       "you-agent-factory/tests/functional/providers/pi": 4,
       "you-agent-factory/tests/functional/replay_contracts": 23,
-      "you-agent-factory/tests/functional/runtime_api": 66,
+      "you-agent-factory/tests/functional/runtime_api": 64,
       "you-agent-factory/tests/functional/runtime_api/factory_transformation": 39,
       "you-agent-factory/tests/functional/sessionparity": 13,
       "you-agent-factory/tests/functional/sessions": 1,
@@ -9294,7 +9274,7 @@
   "runtime_api_mapping": {
     "mapped_at": "2026-07-24T02:25:00Z",
     "story": "fnd-007-migration-ledger-003",
-    "scenario_count": 106,
+    "scenario_count": 104,
     "batch_ids": [
       "runtime_api-delete-01-transport-http",
       "runtime_api-delete-02-work-submission",
@@ -9305,8 +9285,7 @@
       "runtime_api-delete-07-events-replay",
       "runtime_api-delete-08-models",
       "runtime_api-delete-09-workers-resilience",
-      "runtime_api-delete-10-observability-product",
-      "runtime_api-delete-11-wrong-layer"
+      "runtime_api-delete-10-observability-product"
     ],
     "wrong_layer_count": 2
   },
@@ -9362,19 +9341,19 @@
   "completeness_audit": {
     "audited_at_utc": "2026-07-28T10:50:00Z",
     "story": "ft-wave2-work-relationships-parent-child-003",
-    "live_customer_scenarios": 854,
-    "ledger_rows": 854,
+    "live_customer_scenarios": 852,
+    "ledger_rows": 852,
     "unmapped_scenarios": 0,
     "checklist_destinations": 436,
-    "wrong_layer_destinations": 69,
+    "wrong_layer_destinations": 67,
     "invalid_destinations": 0,
-    "lane_short": 759,
+    "lane_short": 757,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
-    "deletion_only_batches": 51,
+    "deletion_only_batches": 50,
     "validator": "go run ./cmd/migrationledgercheck",
-    "row_count": 854,
-    "short_lane_rows": 759,
+    "row_count": 852,
+    "short_lane_rows": 757,
     "functionallong_lane_rows": 95
   }
 }

@@ -663,16 +663,8 @@
       "name": "TestConfigDriven_RESTAPISubmitAndQuery"
     },
     {
-      "file": "runtime_api/api_factory_event_mapping_test.go",
-      "name": "TestFactoryEventTransportMappingRejectsMalformedCanonicalPayload"
-    },
-    {
       "file": "runtime_api/api_functional_server_override_regression_test.go",
       "name": "TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride"
-    },
-    {
-      "file": "runtime_api/api_functionallong_compile_smoke_test.go",
-      "name": "TestRuntimeAPI_CompilesWithFunctionalLongTag"
     },
     {
       "file": "runtime_api/api_generated_smoke_test.go",
