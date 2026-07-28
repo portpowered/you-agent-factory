@@ -525,6 +525,58 @@ func assertDispatchHistoryFallbackOutput(t *testing.T, output string) {
 	}
 }
 
+func TestFormatSimpleDashboardWithRenderData_RendersWorkTypeCountBreakdown(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.Local)
+
+	output := FormatSimpleDashboardWithRenderData(
+		factoryruntime.RuntimeEngineStateSnapshot{
+			FactoryState:  "RUNNING",
+			RuntimeStatus: interfaces.RuntimeStatusIdle,
+			Uptime:        time.Minute,
+			TickCount:     2,
+		},
+		recordings.SimpleDashboardRenderData{
+			Session: recordings.SimpleDashboardSessionData{
+				HasData:              true,
+				DispatchedCount:      3,
+				CompletedCount:       1,
+				FailedCount:          1,
+				DispatchedByWorkType: map[string]int{"story": 2, "bug": 1},
+				CompletedByWorkType:  map[string]int{"story": 1},
+				FailedByWorkType:     map[string]int{"bug": 1},
+			},
+		},
+		now,
+	)
+
+	for _, want := range []string{"(bug=1, story=2)", "Workstations Dispatched:  3", "Workstations Completed:   1", "Workstations Failed:      1"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestFormatSimpleDashboard_UsesSnapshotTopologyWhenArgumentNil(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.Local)
+	topology := buildTestTopology()
+
+	es := interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net]{
+		FactoryState:  "RUNNING",
+		RuntimeStatus: interfaces.RuntimeStatusIdle,
+		TickCount:     7,
+		Uptime:        3 * time.Minute,
+		Topology:      topology,
+	}
+
+	output := FormatSimpleDashboard(es, nil, now)
+
+	for _, want := range []string{"Factory: RUNNING", "Runtime: IDLE", "Tick: 7"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output missing %q:\n%s", want, output)
+		}
+	}
+}
+
 func TestFormatSimpleDashboard_SnapshotOnlyDoesNotRenderSessionRows(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.Local)
 	topology := buildTestTopology()
