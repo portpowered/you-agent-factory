@@ -41,6 +41,20 @@ primary-result behavior.
   `runnerswire.NewInferenceCompositionRunner` in
   `pkg/services/workers/service/runtime_options.go` instead of decorator-only
   local-model wrappers.
+- A Runner implemented as a nested private service under
+  `internal/services/runners/internal/services/<name>` follows the recursive
+  service shape enforced by `make pkg-structure`: expose exactly one `Service`
+  interface at the service root, keep implementation and construction under
+  `internal/service`, and let the service-local `wire` package project that
+  implementation to the parent Runners wire package. The parent must not import
+  through the nested Go `internal` boundary directly.
+- When a Providers-backed Runner translates the ordered progress retained in a
+  detached `providers.ExecuteResult`, snapshot that result once, publish each
+  progress fact synchronously through the injected Workers observation edge,
+  and clone progress metadata and Provider Session correlation independently
+  for every publication. Return the detached terminal result only after those
+  publications so publisher mutation cannot alter later observations or the
+  one terminal outcome.
 - Selection-aware `you run` schema resolution belongs at the CLI read boundary:
   resolve an already-selected named Factory config path or explicit Factory
   source through the read-only Factory Definitions loader, check cancellation
@@ -2102,3 +2116,21 @@ response-stream output.
   Compatibility command edges that expose only `Run` may publish one complete
   stdout chunk followed by one complete stderr chunk; real process edges retain
   live mixed-stream ordering through `RunStreaming`.
+- Agent Runner root-built functional evidence belongs in
+  `tests/functional/workers/agent/` for `root.BuildProcess` construction
+  inertness and in `pkg/services/workers/service/agent_runner_root_test.go`
+  for Workers-service composition of the registered Agent Runner over an
+  injected `providers.Service`. Do not import `pkg/root` from
+  `runners/wire` tests; that creates a `wire -> root -> wire` cycle.
+- Providers-backed Agent Runners map typed one-attempt failure kinds at the
+  Workers boundary: authentication and invalid requests remain terminal,
+  throttling enters the throttle family, dependency and timeout failures remain
+  retryable, and unknown failures remain terminal. Publish detached failure
+  progress before returning the single normalized failure, preserve the
+  Providers error as a cause, and let caller context cancellation or deadline
+  win any concurrent provider failure classification; the Runner never retries.
+- Agent dispatch cutover routes model/agent/inference workers through
+  `construction.Service.WithAgentRunnerCutover(true)`, which resolves the
+  registered parent-private Agent Runner over `providersroot.NewService` and
+  skips conductor/registry-capability runner decorators. Retire executor-level
+  `inferWithRetry`; caller-owned retry remains outside the Runner boundary.

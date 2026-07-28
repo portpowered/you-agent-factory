@@ -5,8 +5,6 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 
@@ -28,22 +26,6 @@ type agentMockProvider struct {
 
 type staticRuntimeConfig = runtimefixtures.RuntimeConfigLookupFixture
 
-var deterministicRetryRandom = platformrandom.SourceFunc(func(int64) (int64, error) {
-	return 0, nil
-})
-
-type sequenceRetryRandom struct {
-	values []int64
-	bounds []int64
-}
-
-func (source *sequenceRetryRandom) Int63n(upperBound int64) (int64, error) {
-	source.bounds = append(source.bounds, upperBound)
-	value := source.values[0]
-	source.values = source.values[1:]
-	return value, nil
-}
-
 func TestAgentExecutor_UsesInjectedClockForWorkMetrics(t *testing.T) {
 	times := []time.Time{
 		time.Date(2026, time.July, 20, 12, 0, 0, 0, time.UTC),
@@ -59,7 +41,6 @@ func TestAgentExecutor_UsesInjectedClockForWorkMetrics(t *testing.T) {
 		&agentMockProvider{},
 		nil,
 		clock,
-		deterministicRetryRandom,
 	)
 
 	result, err := executor.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{
@@ -170,7 +151,7 @@ func TestAgentExecutor_SuccessfulResponse_PopulatesOutput(t *testing.T) {
 		Workers: map[string]*workerconfig.FactoryWorkerConfig{
 			"worker-a": {Model: "claude-sonnet-4-20250514"},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -210,9 +191,7 @@ func TestAgentExecutor_AttachesProviderDiagnosticsToWorkResult(t *testing.T) {
 		Workers: map[string]*workerconfig.FactoryWorkerConfig{
 			"worker-a": {Model: "claude-sonnet-4-20250514", ModelProvider: "claude"},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
-	executor.retryConfig.maxRetries = 0
-
+	}, provider, nil, time.Now)
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
 			DispatchID:      "d-1",
@@ -274,7 +253,7 @@ func TestAgentExecutor_SuccessResponseDiagnosticsStayDetachedFromProviderMutatio
 		Workers: map[string]*workerconfig.FactoryWorkerConfig{
 			"worker-a": {Model: "claude-sonnet-4-20250514", ModelProvider: "claude"},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -341,9 +320,7 @@ func TestAgentExecutor_ErrorDiagnosticsStayDetachedFromProviderMutation(t *testi
 		Workers: map[string]*workerconfig.FactoryWorkerConfig{
 			"worker-a": {Model: "claude-sonnet-4-20250514", ModelProvider: "claude"},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
-	executor.retryConfig.maxRetries = 0
-
+	}, provider, nil, time.Now)
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
 			DispatchID:      "d-1",
@@ -386,7 +363,7 @@ func TestAgentExecutor_PropagatesExecutionMetadataToProviderRequest(t *testing.T
 		Workers: map[string]*workerconfig.FactoryWorkerConfig{
 			"worker-a": {Model: "claude-sonnet-4-20250514", ModelProvider: "claude"},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	want := work.ExecutionMetadata{
 		DispatchCreatedTick: 7,
@@ -419,7 +396,7 @@ func TestAgentExecutor_ClaudeSessionIDFromRuntimeConfigFlowsIntoProviderRequest(
 				SessionID:     "claude-session-123",
 			},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	_, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -456,7 +433,7 @@ func TestAgentExecutor_SuccessfulClaudeResponse_PreservesConfiguredSessionID(t *
 				SessionID:     "claude-session-123",
 			},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -486,7 +463,7 @@ func TestAgentExecutor_ProviderError_ReturnsFailedResult(t *testing.T) {
 		Workers: map[string]*workerconfig.FactoryWorkerConfig{
 			"worker-a": {Model: "test-model"},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -526,7 +503,7 @@ func TestAgentExecutor_SuccessfulResponse_PreservesProviderSession(t *testing.T)
 		Workers: map[string]*workerconfig.FactoryWorkerConfig{
 			"worker-a": {Model: "gpt-5-codex", ModelProvider: "codex"},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -547,110 +524,7 @@ func TestAgentExecutor_SuccessfulResponse_PreservesProviderSession(t *testing.T)
 	}
 }
 
-func TestAgentExecutor_RetryableProviderError_RetriesTwiceBeforeSuccess(t *testing.T) {
-	provider := &agentMockProvider{
-		errors: []error{
-			workerprovider.NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "provider 500", nil),
-			workerprovider.NewProviderError(workerexecution.WorkFailureTypeTimeout, "provider timeout", nil),
-			nil,
-		},
-		responses: []workerexecution.InferenceResponse{
-			{},
-			{},
-			{Content: "Recovered. COMPLETE"},
-		},
-	}
-	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*workerconfig.FactoryWorkerConfig{
-			"worker-a": {Model: "test-model"},
-		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
-
-	var sleeps []time.Duration
-	executor.retryConfig.sleep = func(_ context.Context, delay time.Duration) error {
-		sleeps = append(sleeps, delay)
-		return nil
-	}
-	executor.retryConfig.jitter = func(baseDelay time.Duration) (time.Duration, error) {
-		return baseDelay / 2, nil
-	}
-
-	result, err := executor.Execute(context.Background(), testAgentRequest(
-		work.WorkDispatch{
-			DispatchID:   "d-1",
-			TransitionID: "t-1",
-			WorkerType:   "worker-a",
-		},
-		withAgentPrompts("sys", "msg"),
-	))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if result.Outcome != workerexecution.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
-	}
-	if result.Output != "Recovered. COMPLETE" {
-		t.Fatalf("Output = %q, want %q", result.Output, "Recovered. COMPLETE")
-	}
-	if provider.callCount != 3 {
-		t.Fatalf("provider call count = %d, want 3", provider.callCount)
-	}
-	if result.Metrics.RetryCount != 2 {
-		t.Fatalf("RetryCount = %d, want 2", result.Metrics.RetryCount)
-	}
-	if len(sleeps) != 2 {
-		t.Fatalf("sleep count = %d, want 2", len(sleeps))
-	}
-	if sleeps[0] != 150*time.Millisecond {
-		t.Fatalf("first backoff = %v, want %v", sleeps[0], 150*time.Millisecond)
-	}
-	if sleeps[1] != 300*time.Millisecond {
-		t.Fatalf("second backoff = %v, want %v", sleeps[1], 300*time.Millisecond)
-	}
-}
-
-func TestAgentExecutor_RetryJitterUsesInjectedRandomSource(t *testing.T) {
-	provider := &agentMockProvider{
-		errors: []error{
-			workerprovider.NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "first failure", nil),
-			workerprovider.NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "second failure", nil),
-			nil,
-		},
-		responses: []workerexecution.InferenceResponse{{}, {}, {Content: "recovered"}},
-	}
-	random := &sequenceRetryRandom{values: []int64{int64(25 * time.Millisecond), int64(50 * time.Millisecond)}}
-	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*workerconfig.FactoryWorkerConfig{
-			"worker-a": {Model: "test-model"},
-		},
-	}, provider, nil, time.Now, random)
-	var sleeps []time.Duration
-	executor.retryConfig.sleep = func(_ context.Context, delay time.Duration) error {
-		sleeps = append(sleeps, delay)
-		return nil
-	}
-
-	result, err := executor.Execute(context.Background(), testAgentRequest(
-		work.WorkDispatch{DispatchID: "d-jitter", TransitionID: "t-jitter", WorkerType: "worker-a"},
-	))
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if result.Outcome != workerexecution.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
-	}
-	wantSleeps := []time.Duration{125 * time.Millisecond, 250 * time.Millisecond}
-	if len(sleeps) != len(wantSleeps) || sleeps[0] != wantSleeps[0] || sleeps[1] != wantSleeps[1] {
-		t.Fatalf("retry sleeps = %v, want %v", sleeps, wantSleeps)
-	}
-	wantBounds := []int64{int64(50*time.Millisecond) + 1, int64(100*time.Millisecond) + 1}
-	if len(random.bounds) != len(wantBounds) || random.bounds[0] != wantBounds[0] || random.bounds[1] != wantBounds[1] {
-		t.Fatalf("random bounds = %v, want %v", random.bounds, wantBounds)
-	}
-}
-
-func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryableProviderMetadata(t *testing.T) {
+func TestAgentExecutor_CodexWindowsExitCode4294967295_ReturnsRetryableProviderMetadata(t *testing.T) {
 	provider := &agentMockProvider{
 		err: workerprovider.NormalizeProviderExitFailure(
 			string(modelprovider.ProviderCodex),
@@ -670,14 +544,8 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryable
 		Workers: map[string]*workerconfig.FactoryWorkerConfig{
 			"worker-a": {Model: "gpt-5.3-codex-spark", ModelProvider: string(modelprovider.ProviderCodex)},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
-	var sleeps []time.Duration
-	executor.retryConfig.sleep = func(_ context.Context, delay time.Duration) error {
-		sleeps = append(sleeps, delay)
-		return nil
-	}
-	executor.retryConfig.jitter = func(time.Duration) (time.Duration, error) { return 0, nil }
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -695,13 +563,7 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryable
 		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if provider.callCount != 3 {
-		t.Fatalf("provider call count = %d, want 3", provider.callCount)
-	}
-	if result.Metrics.RetryCount != 2 {
-		t.Fatalf("RetryCount = %d, want 2", result.Metrics.RetryCount)
-	}
-	if len(sleeps) != 2 {
-		t.Fatalf("sleep count = %d, want 2", len(sleeps))
+		t.Fatalf("provider call count = %d, want 3 after retryable exhaustion", provider.callCount)
 	}
 	if result.FailureMetadata == nil {
 		t.Fatal("expected failure metadata on failed result")
@@ -743,14 +605,8 @@ func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 		Workers: map[string]*workerconfig.FactoryWorkerConfig{
 			"worker-a": {Model: "test-model"},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
-	sleepCalled := false
-	executor.retryConfig.sleep = func(_ context.Context, _ time.Duration) error {
-		sleepCalled = true
-		return nil
-	}
-	executor.retryConfig.jitter = func(time.Duration) (time.Duration, error) { return 0, nil }
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -782,9 +638,7 @@ func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 	if result.ProviderSession.ID != "sess_codex_error_123" {
 		t.Fatalf("provider session id = %q, want %q", result.ProviderSession.ID, "sess_codex_error_123")
 	}
-	if sleepCalled {
-		t.Fatal("expected terminal provider error to skip retry sleep")
-	}
+
 }
 
 func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testing.T) {
@@ -810,7 +664,7 @@ func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testi
 				SessionID:     "claude-session-123",
 			},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -834,112 +688,4 @@ func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testi
 	}
 }
 
-func TestAgentExecutor_RawDeadlineExceeded_RetriesBeforeSuccess(t *testing.T) {
-	provider := &agentMockProvider{
-		errors: []error{
-			context.DeadlineExceeded,
-			context.DeadlineExceeded,
-			nil,
-		},
-		responses: []workerexecution.InferenceResponse{
-			{},
-			{},
-			{Content: "Recovered. COMPLETE"},
-		},
-	}
-	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*workerconfig.FactoryWorkerConfig{
-			"worker-a": {Model: "test-model"},
-		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
 
-	var sleeps []time.Duration
-	executor.retryConfig.sleep = func(_ context.Context, delay time.Duration) error {
-		sleeps = append(sleeps, delay)
-		return nil
-	}
-	executor.retryConfig.jitter = func(baseDelay time.Duration) (time.Duration, error) {
-		return baseDelay / 2, nil
-	}
-
-	result, err := executor.Execute(context.Background(), testAgentRequest(
-		work.WorkDispatch{
-			DispatchID:   "d-raw-timeout-success",
-			TransitionID: "t-raw-timeout-success",
-			WorkerType:   "worker-a",
-		},
-		withAgentPrompts("sys", "msg"),
-	))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if result.Outcome != workerexecution.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
-	}
-	if result.Output != "Recovered. COMPLETE" {
-		t.Fatalf("Output = %q, want %q", result.Output, "Recovered. COMPLETE")
-	}
-	if provider.callCount != 3 {
-		t.Fatalf("provider call count = %d, want 3", provider.callCount)
-	}
-	if result.Metrics.RetryCount != 2 {
-		t.Fatalf("RetryCount = %d, want 2", result.Metrics.RetryCount)
-	}
-	if len(sleeps) != 2 {
-		t.Fatalf("sleep count = %d, want 2", len(sleeps))
-	}
-}
-
-func TestAgentExecutor_RawDeadlineExceeded_ExhaustsRetriesIntoStructuredTimeoutFailure(t *testing.T) {
-	provider := &agentMockProvider{err: context.DeadlineExceeded}
-	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*workerconfig.FactoryWorkerConfig{
-			"worker-a": {Model: "test-model"},
-		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
-
-	var sleeps []time.Duration
-	executor.retryConfig.sleep = func(_ context.Context, delay time.Duration) error {
-		sleeps = append(sleeps, delay)
-		return nil
-	}
-	executor.retryConfig.jitter = func(time.Duration) (time.Duration, error) { return 0, nil }
-
-	result, err := executor.Execute(context.Background(), testAgentRequest(
-		work.WorkDispatch{
-			DispatchID:   "d-raw-timeout-fail",
-			TransitionID: "t-raw-timeout-fail",
-			WorkerType:   "worker-a",
-		},
-		withAgentPrompts("sys", "msg"),
-	))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if result.Outcome != workerexecution.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
-	}
-	if result.Error != "execution timeout" {
-		t.Fatalf("Error = %q, want %q", result.Error, "execution timeout")
-	}
-	if provider.callCount != 3 {
-		t.Fatalf("provider call count = %d, want 3", provider.callCount)
-	}
-	if result.Metrics.RetryCount != 2 {
-		t.Fatalf("RetryCount = %d, want 2", result.Metrics.RetryCount)
-	}
-	if len(sleeps) != 2 {
-		t.Fatalf("sleep count = %d, want 2", len(sleeps))
-	}
-	if result.FailureMetadata == nil {
-		t.Fatal("FailureMetadata = nil, want timeout metadata")
-	}
-	if result.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
-		t.Fatalf("FailureMetadata.Type = %q, want %q", result.FailureMetadata.Type, workerexecution.WorkFailureTypeTimeout)
-	}
-	if result.FailureMetadata.Family != workerexecution.WorkFailureFamilyRetryable {
-		t.Fatalf("FailureMetadata.Family = %q, want %q", result.FailureMetadata.Family, workerexecution.WorkFailureFamilyRetryable)
-	}
-}

@@ -38,6 +38,7 @@ const (
 type ExecuteFailure struct {
 	Kind        ExecuteFailureKind
 	Message     string
+	SessionRef  *SessionRef
 	Diagnostics *ExecuteDiagnostics
 }
 
@@ -55,6 +56,10 @@ func (failure ExecuteFailure) Unwrap() error {
 
 // Clone returns a detached execute-failure copy.
 func (failure ExecuteFailure) Clone() ExecuteFailure {
+	if failure.SessionRef != nil {
+		session := failure.SessionRef.Clone()
+		failure.SessionRef = &session
+	}
 	if failure.Diagnostics != nil {
 		diagnostics := failure.Diagnostics.Clone()
 		failure.Diagnostics = &diagnostics
@@ -79,12 +84,18 @@ func sentinelForExecuteFailureKind(kind ExecuteFailureKind) error {
 type ExecuteRequest struct {
 	Provider         ID
 	AttemptID        string
+	WorkerType       string
+	WorkstationName  string
+	Model            string
 	SystemPrompt     string
 	UserMessage      string
+	InputTokens      []any
 	OutputSchema     string
 	ResumeSession    *SessionRef
-	WorkingDirectory string
-	Worktree         string
+	WorkingDirectory   string
+	Worktree           string
+	EnvVars            map[string]string
+	ProcessEnvironment []string
 }
 
 // Validate checks request fields whose validity does not depend on catalog
@@ -110,6 +121,13 @@ func (request ExecuteRequest) Clone() ExecuteRequest {
 	if request.ResumeSession != nil {
 		resume := request.ResumeSession.Clone()
 		cloned.ResumeSession = &resume
+	}
+	cloned.EnvVars = cloneStringMap(request.EnvVars)
+	if request.ProcessEnvironment != nil {
+		cloned.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
+	}
+	if request.InputTokens != nil {
+		cloned.InputTokens = append([]any(nil), request.InputTokens...)
 	}
 	return cloned
 }

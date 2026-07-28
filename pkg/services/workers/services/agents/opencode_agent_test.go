@@ -32,7 +32,7 @@ func TestAgentExecutor_ForwardsOpenCodeAgentOnOpenCodeDispatch(t *testing.T) {
 				OpenCodeAgent: "reviewer",
 			},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -77,7 +77,7 @@ func TestAgentExecutor_LeavesOpenCodeAgentEmptyForNonOpenCodeDispatch(t *testing
 				OpenCodeAgent: "reviewer",
 			},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	_, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
