@@ -13,13 +13,15 @@ func TestDiscoverTools_ExposesExpectedFactoryRuntimeTools(t *testing.T) {
 	t.Parallel()
 
 	tools := factoryrunmcp.DiscoverTools()
-	if len(tools) != 2 {
-		t.Fatalf("tool count = %d, want 2", len(tools))
+	if len(tools) != 4 {
+		t.Fatalf("tool count = %d, want 4", len(tools))
 	}
 
 	wantNames := []string{
 		factoryrunmcp.ToolControlPause,
 		factoryrunmcp.ToolObserve,
+		factoryrunmcp.ToolPlanDispatch,
+		factoryrunmcp.ToolAcceptDispatchResult,
 	}
 	gotNames := factoryrunmcp.ToolNames()
 	if !slices.Equal(gotNames, wantNames) {

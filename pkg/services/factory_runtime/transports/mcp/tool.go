@@ -6,8 +6,10 @@ import "encoding/json"
 
 // Tool names use Factory Runtime vocabulary for owner-local discovery.
 const (
-	ToolControlPause = "you.factory_runtime.control_pause"
-	ToolObserve      = "you.factory_runtime.observe"
+	ToolControlPause          = "you.factory_runtime.control_pause"
+	ToolObserve               = "you.factory_runtime.observe"
+	ToolPlanDispatch          = "you.factory_runtime.plan_dispatch"
+	ToolAcceptDispatchResult  = "you.factory_runtime.accept_dispatch_result"
 )
 
 // Stable error envelope fields shared by every Factory Runtime MCP tool.

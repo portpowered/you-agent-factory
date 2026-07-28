@@ -63,9 +63,11 @@ func TestBind_FakeRuntimeRootInvokedThroughCanonicalObserveTool(t *testing.T) {
 
 type fakeRuntimeRoot struct {
 	factoryruntime.Service
-	invoked      *bool
-	controlPause func(context.Context, factoryruntime.PauseRequest) (factoryruntime.PauseResult, error)
-	observe      func(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
+	invoked              *bool
+	controlPause         func(context.Context, factoryruntime.PauseRequest) (factoryruntime.PauseResult, error)
+	observe              func(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
+	planDispatch         func(context.Context, factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error)
+	acceptDispatchResult func(context.Context, factoryruntime.AcceptDispatchResultRequest) (factoryruntime.AcceptDispatchResultResult, error)
 }
 
 func (root fakeRuntimeRoot) markInvoked() {
@@ -94,4 +96,26 @@ func (root fakeRuntimeRoot) Observe(
 		panic("unexpected Observe on fake runtime root")
 	}
 	return root.observe(ctx, request)
+}
+
+func (root fakeRuntimeRoot) PlanDispatch(
+	ctx context.Context,
+	request factoryruntime.PlanDispatchRequest,
+) (factoryruntime.PlanDispatchResult, error) {
+	root.markInvoked()
+	if root.planDispatch == nil {
+		panic("unexpected PlanDispatch on fake runtime root")
+	}
+	return root.planDispatch(ctx, request)
+}
+
+func (root fakeRuntimeRoot) AcceptDispatchResult(
+	ctx context.Context,
+	request factoryruntime.AcceptDispatchResultRequest,
+) (factoryruntime.AcceptDispatchResultResult, error) {
+	root.markInvoked()
+	if root.acceptDispatchResult == nil {
+		panic("unexpected AcceptDispatchResult on fake runtime root")
+	}
+	return root.acceptDispatchResult(ctx, request)
 }

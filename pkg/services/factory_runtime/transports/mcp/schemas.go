@@ -26,6 +26,14 @@ func integerProperty(description string) map[string]any {
 	}
 }
 
+func stringArrayProperty(description string) map[string]any {
+	return map[string]any{
+		"type":        "array",
+		"description": description,
+		"items":       map[string]any{"type": "string"},
+	}
+}
+
 func enumStringProperty(description string, values ...string) map[string]any {
 	return map[string]any{
 		"type":        "string",
@@ -120,4 +128,34 @@ func observeResultSchema() map[string]any {
 	return objectSchema(map[string]any{
 		"Observation": observationSchema(),
 	}, "Observation")
+}
+
+func dispatchPlanOutcomeSchema() map[string]any {
+	return enumStringProperty(
+		"Plain dispatch-plan outcome published at the Factory Runtime root.",
+		"ACCEPTED", "RETIRED", "DUPLICATE_IDEMPOTENT",
+	)
+}
+
+func dispatchResultOutcomeSchema() map[string]any {
+	return enumStringProperty(
+		"Plain correlated worker-result outcome published at the Factory Runtime root.",
+		"SUCCESS", "FAILURE", "CANCELLED",
+	)
+}
+
+func planDispatchResultSchema() map[string]any {
+	return objectSchema(map[string]any{
+		"Outcome":       dispatchPlanOutcomeSchema(),
+		"DispatchID":    stringProperty("Dispatch identifier for the planned intent."),
+		"CorrelationID": stringProperty("Correlation identifier for the planned intent."),
+	}, "Outcome", "DispatchID", "CorrelationID")
+}
+
+func acceptDispatchResultResultSchema() map[string]any {
+	return objectSchema(map[string]any{
+		"Outcome":       dispatchPlanOutcomeSchema(),
+		"DispatchID":    stringProperty("Dispatch identifier for the accepted result."),
+		"CorrelationID": stringProperty("Correlation identifier for the accepted result."),
+	}, "Outcome", "DispatchID", "CorrelationID")
 }

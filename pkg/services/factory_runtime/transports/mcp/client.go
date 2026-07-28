@@ -55,6 +55,16 @@ var canonicalToolHandlers = map[string]canonicalToolHandler{
 			return Observe(ctx, runtime, request)
 		})
 	},
+	ToolPlanDispatch: func(ctx context.Context, runtime factoryruntime.Service, input json.RawMessage) (json.RawMessage, error) {
+		return callToolJSON(input, "decode plan dispatch input", func(request PlanDispatchInput) ToolResponse[factoryruntime.PlanDispatchResult] {
+			return PlanDispatch(ctx, runtime, request)
+		})
+	},
+	ToolAcceptDispatchResult: func(ctx context.Context, runtime factoryruntime.Service, input json.RawMessage) (json.RawMessage, error) {
+		return callToolJSON(input, "decode accept dispatch result input", func(request AcceptDispatchResultInput) ToolResponse[factoryruntime.AcceptDispatchResultResult] {
+			return AcceptDispatchResult(ctx, runtime, request)
+		})
+	},
 }
 
 func callToolJSON[Input any, Output any](

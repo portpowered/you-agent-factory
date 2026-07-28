@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -172,6 +173,204 @@ func TestBind_ObserveValidationFailureReturnsBadRequestWithoutInvokingFakeRoot(t
 	raw, err := operation(context.Background(), factoryrunmcp.ToolObserve, json.RawMessage(`{"scope":"WORKSPACE"}`))
 	if err != nil {
 		t.Fatalf("CallTool(observe) transport error = %v, want typed tool response", err)
+	}
+	assertBadRequestToolResponse(t, raw)
+	if invoked {
+		t.Fatal("fake runtime root was invoked for validation failure")
+	}
+}
+
+func TestBind_PlanDispatchSuccessResultParity(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	fake := fakeRuntimeRoot{
+		invoked: &invoked,
+		planDispatch: func(_ context.Context, request factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error) {
+			want := factoryruntime.PlanDispatchRequest{
+				DispatchID:      "dispatch-1",
+				CorrelationID:   "corr-1",
+				WorkIDs:         []string{"work-1"},
+				WorkstationName: "ws-alpha",
+				WorkerType:      "coder",
+				ReplayKey:       "replay-1",
+			}
+			if !reflect.DeepEqual(request, want) {
+				t.Fatalf("plan dispatch request = %#v, want %#v", request, want)
+			}
+			return factoryruntime.PlanDispatchResult{
+				Outcome:       factoryruntime.DispatchPlanOutcomeAccepted,
+				DispatchID:    "dispatch-1",
+				CorrelationID: "corr-1",
+			}, nil
+		},
+	}
+	operation := factoryrunmcp.Bind(factoryrunmcp.RootDependencies{Runtime: fake})
+	raw, err := operation(
+		context.Background(),
+		factoryrunmcp.ToolPlanDispatch,
+		json.RawMessage(`{
+			"dispatchId":"dispatch-1",
+			"correlationId":"corr-1",
+			"workIds":["work-1"],
+			"workstationName":"ws-alpha",
+			"workerType":"coder",
+			"replayKey":"replay-1"
+		}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(plan_dispatch) transport error = %v, want typed tool response", err)
+	}
+	if !invoked {
+		t.Fatal("fake runtime root was not invoked")
+	}
+
+	var response factoryrunmcp.ToolResponse[factoryruntime.PlanDispatchResult]
+	if err := json.Unmarshal(raw, &response); err != nil {
+		t.Fatalf("decode tool response: %v", err)
+	}
+	if response.Error != nil {
+		t.Fatalf("tool response error = %#v, want success result", response.Error)
+	}
+	if response.Result == nil {
+		t.Fatalf("tool response = %s, want result envelope", raw)
+	}
+	if response.Result.Outcome != factoryruntime.DispatchPlanOutcomeAccepted {
+		t.Fatalf("result.Outcome = %q, want ACCEPTED", response.Result.Outcome)
+	}
+	if response.Result.DispatchID != "dispatch-1" || response.Result.CorrelationID != "corr-1" {
+		t.Fatalf("result = %#v, want dispatch-1/corr-1 identities", response.Result)
+	}
+}
+
+func TestBind_AcceptDispatchResultSuccessResultParity(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	fake := fakeRuntimeRoot{
+		invoked: &invoked,
+		acceptDispatchResult: func(_ context.Context, request factoryruntime.AcceptDispatchResultRequest) (factoryruntime.AcceptDispatchResultResult, error) {
+			want := factoryruntime.AcceptDispatchResultRequest{
+				DispatchID:    "dispatch-1",
+				CorrelationID: "corr-1",
+				WorkID:        "work-1",
+				ResultOutcome: factoryruntime.DispatchResultOutcomeSuccess,
+			}
+			if request != want {
+				t.Fatalf("accept dispatch result request = %#v, want %#v", request, want)
+			}
+			return factoryruntime.AcceptDispatchResultResult{
+				Outcome:       factoryruntime.DispatchPlanOutcomeRetired,
+				DispatchID:    "dispatch-1",
+				CorrelationID: "corr-1",
+			}, nil
+		},
+	}
+	operation := factoryrunmcp.Bind(factoryrunmcp.RootDependencies{Runtime: fake})
+	raw, err := operation(
+		context.Background(),
+		factoryrunmcp.ToolAcceptDispatchResult,
+		json.RawMessage(`{
+			"dispatchId":"dispatch-1",
+			"correlationId":"corr-1",
+			"workId":"work-1",
+			"resultOutcome":"SUCCESS"
+		}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(accept_dispatch_result) transport error = %v, want typed tool response", err)
+	}
+	if !invoked {
+		t.Fatal("fake runtime root was not invoked")
+	}
+
+	var response factoryrunmcp.ToolResponse[factoryruntime.AcceptDispatchResultResult]
+	if err := json.Unmarshal(raw, &response); err != nil {
+		t.Fatalf("decode tool response: %v", err)
+	}
+	if response.Error != nil {
+		t.Fatalf("tool response error = %#v, want success result", response.Error)
+	}
+	if response.Result == nil {
+		t.Fatalf("tool response = %s, want result envelope", raw)
+	}
+	if response.Result.Outcome != factoryruntime.DispatchPlanOutcomeRetired {
+		t.Fatalf("result.Outcome = %q, want RETIRED", response.Result.Outcome)
+	}
+	if response.Result.DispatchID != "dispatch-1" || response.Result.CorrelationID != "corr-1" {
+		t.Fatalf("result = %#v, want dispatch-1/corr-1 identities", response.Result)
+	}
+}
+
+func TestBind_PlanDispatchInvalidJSONDecodeReturnsBadRequestWithoutInvokingFakeRoot(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	operation := factoryrunmcp.Bind(factoryrunmcp.RootDependencies{
+		Runtime: fakeRuntimeRoot{invoked: &invoked},
+	})
+	raw, err := operation(context.Background(), factoryrunmcp.ToolPlanDispatch, json.RawMessage(`{"dispatchId":`))
+	if err != nil {
+		t.Fatalf("CallTool(plan_dispatch) transport error = %v, want typed tool response", err)
+	}
+	assertBadRequestToolResponse(t, raw)
+	if invoked {
+		t.Fatal("fake runtime root was invoked for invalid JSON decode")
+	}
+}
+
+func TestBind_AcceptDispatchResultInvalidJSONDecodeReturnsBadRequestWithoutInvokingFakeRoot(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	operation := factoryrunmcp.Bind(factoryrunmcp.RootDependencies{
+		Runtime: fakeRuntimeRoot{invoked: &invoked},
+	})
+	raw, err := operation(context.Background(), factoryrunmcp.ToolAcceptDispatchResult, json.RawMessage(`{"workId":`))
+	if err != nil {
+		t.Fatalf("CallTool(accept_dispatch_result) transport error = %v, want typed tool response", err)
+	}
+	assertBadRequestToolResponse(t, raw)
+	if invoked {
+		t.Fatal("fake runtime root was invoked for invalid JSON decode")
+	}
+}
+
+func TestBind_PlanDispatchValidationFailureReturnsBadRequestWithoutInvokingFakeRoot(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	operation := factoryrunmcp.Bind(factoryrunmcp.RootDependencies{
+		Runtime: fakeRuntimeRoot{invoked: &invoked},
+	})
+	raw, err := operation(
+		context.Background(),
+		factoryrunmcp.ToolPlanDispatch,
+		json.RawMessage(`{"dispatchId":"dispatch-1","correlationId":"corr-1","workIds":[],"workstationName":"ws","workerType":"coder","replayKey":"replay"}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(plan_dispatch) transport error = %v, want typed tool response", err)
+	}
+	assertBadRequestToolResponse(t, raw)
+	if invoked {
+		t.Fatal("fake runtime root was invoked for validation failure")
+	}
+}
+
+func TestBind_AcceptDispatchResultValidationFailureReturnsBadRequestWithoutInvokingFakeRoot(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	operation := factoryrunmcp.Bind(factoryrunmcp.RootDependencies{
+		Runtime: fakeRuntimeRoot{invoked: &invoked},
+	})
+	raw, err := operation(
+		context.Background(),
+		factoryrunmcp.ToolAcceptDispatchResult,
+		json.RawMessage(`{"dispatchId":"dispatch-1","correlationId":"corr-1","workId":"work-1","resultOutcome":"UNKNOWN"}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(accept_dispatch_result) transport error = %v, want typed tool response", err)
 	}
 	assertBadRequestToolResponse(t, raw)
 	if invoked {
