@@ -9,7 +9,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/construction"
+	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/execution/recording"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"

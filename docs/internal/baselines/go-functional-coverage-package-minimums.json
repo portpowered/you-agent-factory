@@ -2469,7 +2469,7 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/construction",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction",
       "minimum": 74.13
     },
     {

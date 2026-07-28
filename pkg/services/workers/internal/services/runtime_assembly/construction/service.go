@@ -1,4 +1,5 @@
-// Package construction owns construction of configured worker executors.
+// Package construction owns inert construction of configured worker executors
+// for the private Workers Runtime Assembly subservice.
 package construction
 
 import (

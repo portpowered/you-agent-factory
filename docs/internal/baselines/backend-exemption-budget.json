@@ -879,7 +879,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/construction/service.go#Service.Build",
+      "target": "pkg/services/workers/internal/services/runtime_assembly/construction/service.go#Service.Build",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },

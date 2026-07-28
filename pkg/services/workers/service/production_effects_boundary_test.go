@@ -17,7 +17,7 @@ func TestWorkersCompletedEffectInjectionsHaveNoOwnerFallbacks(t *testing.T) {
 	}
 	workersDir := filepath.Clean(filepath.Join(filepath.Dir(filename), ".."))
 	checks := map[string][][]byte{
-		"construction/service.go":                         {[]byte("time.Now")},
+		"internal/services/runtime_assembly/construction/service.go": {[]byte("time.Now")},
 		"execution/recording/model.go":                    {[]byte("time.Now")},
 		"provider/recording_provider.go":                  {[]byte("time.Now")},
 		"executor/agentrun/executor.go":                   {[]byte("time.Now"), []byte("time.Since")},

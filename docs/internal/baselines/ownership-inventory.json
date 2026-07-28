@@ -1763,7 +1763,7 @@
       "fromOwner": "workers",
       "toOwner": "factory_definitions",
       "class": "query",
-      "evidence": "pkg/services/workers/construction -\u003e pkg/services/factory_definitions"
+      "evidence": "pkg/services/workers/execution/recording -\u003e pkg/services/factory_definitions"
     },
     {
       "fromOwner": "workers",
@@ -1781,7 +1781,7 @@
       "fromOwner": "workers",
       "toOwner": "platform",
       "class": "external_effect",
-      "evidence": "pkg/services/workers/construction -\u003e pkg/platform/filesystem"
+      "evidence": "pkg/services/workers/executor -\u003e pkg/platform/random"
     },
     {
       "fromOwner": "workers",
@@ -1793,7 +1793,7 @@
       "fromOwner": "workers",
       "toOwner": "providers",
       "class": "command",
-      "evidence": "pkg/services/workers/construction -\u003e pkg/services/workers/provider"
+      "evidence": "pkg/services/workers/execution/recording -\u003e pkg/services/workers/provider"
     },
     {
       "fromOwner": "workers",
@@ -5187,6 +5187,12 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runtime_assembly",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runtime_assembly/construction",
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
