@@ -19,8 +19,9 @@ import (
 )
 
 const (
-	cursorGoldenSuccessWorkspaceHash             = "cursor-fixture-workspace"
+	cursorGoldenSuccessWorkspaceHash              = "cursor-fixture-workspace"
 	cursorGoldenExpectedProviderSessionDetailFile = "expected-provider-session-detail.json"
+	cursorUnavailableContentSessionID             = "cursor-fixture-unavailable-content"
 )
 
 // TestCursorProviderSessionDetailsLoadFromGoldenMetadata loads a sanitized Cursor
@@ -92,6 +93,46 @@ func TestCursorProviderSessionDetailsLoadFromGoldenMetadata(t *testing.T) {
 	}
 }
 
+// TestCursorProviderSessionUnavailableContentRemainsInspectable proves that a
+// Cursor Provider Session whose store contains encrypted or otherwise unavailable
+// blob content still returns an inspectable public detail response with identity
+// and unavailable parse facts instead of fabricated plaintext transcript.
+func TestCursorProviderSessionUnavailableContentRemainsInspectable(t *testing.T) {
+	homeDir := t.TempDir()
+	writeCursorUnavailableContentStorageFixture(t, homeDir, cursorUnavailableContentSessionID)
+
+	server := startCursorProviderSessionDetailServer(t, homeDir, serviceedges.Edges{})
+	defer server.Stop(t)
+
+	detail := support.GetJSON[factoryapi.ProviderSessionDetailResponse](
+		t,
+		cursorProviderSessionDetailURL(server.URL(), cursorUnavailableContentSessionID),
+	)
+	if detail.ProviderSession.Id != cursorUnavailableContentSessionID {
+		t.Fatalf("detail provider session id = %q, want %q", detail.ProviderSession.Id, cursorUnavailableContentSessionID)
+	}
+	if detail.ProviderSession.Provider != factoryapi.Cursor {
+		t.Fatalf("detail provider = %q, want cursor", detail.ProviderSession.Provider)
+	}
+	if detail.ProviderSession.Kind != factoryapi.LoadableProviderSessionKindSessionID {
+		t.Fatalf("detail kind = %q, want session_id", detail.ProviderSession.Kind)
+	}
+	if detail.Parse.UnknownEventCount == 0 && len(detail.Parse.UnknownEvents) == 0 {
+		t.Fatalf("parse summary = %#v, want unavailable unknown-event diagnostics", detail.Parse)
+	}
+	for _, entry := range detail.Transcript {
+		if entry.Text != nil && strings.TrimSpace(*entry.Text) != "" {
+			t.Fatalf("transcript entry = %#v, want no fabricated plaintext from unavailable blobs", entry)
+		}
+	}
+
+	encoded, err := json.Marshal(detail)
+	if err != nil {
+		t.Fatalf("marshal detail: %v", err)
+	}
+	assertCursorProviderSessionDetailBodySafe(t, "unavailable-content", string(encoded), homeDir)
+}
+
 func startCursorProviderSessionDetailServer(
 	t *testing.T,
 	homeDir string,
@@ -160,6 +201,43 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);`
 		`{"usage":{"inputTokens":12,"outputTokens":34,"cacheReadTokens":5,"cacheWriteTokens":2}}`,
 	); err != nil {
 		t.Fatalf("insert cursor storage usage meta: %v", err)
+	}
+}
+
+func writeCursorUnavailableContentStorageFixture(t *testing.T, homeDir, sessionID string) {
+	t.Helper()
+
+	chatsRoot := filepath.Join(homeDir, ".cursor", "chats")
+	dbPath := filepath.Join(chatsRoot, cursorGoldenSuccessWorkspaceHash, sessionID, "store.db")
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		t.Fatalf("mkdir cursor storage: %v", err)
+	}
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open cursor storage sqlite: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if _, err := db.Exec(`CREATE TABLE blobs (key TEXT PRIMARY KEY, value TEXT)`); err != nil {
+		t.Fatalf("create cursor storage blobs table: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO blobs (key, value) VALUES (?, ?)`,
+		"encrypted-blob",
+		string([]byte{0x00, 0x01, 0x02, 0x03, 0xff, 0xfe, 0xfd, 0xfc, 0xfb, 0xfa}),
+	); err != nil {
+		t.Fatalf("insert encrypted cursor storage blob: %v", err)
+	}
+}
+
+func assertCursorProviderSessionDetailBodySafe(t *testing.T, caseID, body, homeDir string) {
+	t.Helper()
+	if err := support.ValidateProviderSessionFixtureContent(caseID, "provider-session-detail", []byte(body)); err != nil {
+		t.Fatalf("provider session response leaked forbidden material: %v\nbody=%s", err, body)
+	}
+	cursorChatsRoot := filepath.Join(homeDir, ".cursor", "chats")
+	if strings.Contains(body, homeDir) || strings.Contains(body, cursorChatsRoot) {
+		t.Fatalf("provider session response leaked configured host path: %s", body)
 	}
 }
 
