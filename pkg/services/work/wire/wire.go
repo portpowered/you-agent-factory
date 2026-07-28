@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal/service"
 	contentstagingwire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_staging/wire"
 	contentmaterializationwire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/wire"
-	workservice "github.com/portpowered/infinite-you/pkg/services/work/service"
 )
 
 // DefaultContentMaterializationHTTPTimeout is the Work-owned outbound retrieval
@@ -93,8 +93,26 @@ func NewService(
 		writeFile,
 		openFile,
 	)
-	service := workservice.NewService(runtimes, nil, contentStaging, contentMaterializer)
+	service := internalservice.NewService(runtimes, nil, contentStaging, contentMaterializer)
 	return service, nil
+}
+
+// NewRuntimeService constructs a session-scoped Work root from application-wired
+// content collaborators. Application composition supplies shared content staging
+// and materialization services so runtime opening and peer edges observe the same
+// instances.
+func NewRuntimeService(
+	runtimes work.RuntimeResolver,
+	readSubmittedFile work.SubmittedFileReader,
+	contentStaging work.ContentStagingService,
+	contentMaterializer work.ContentMaterializer,
+) work.Service {
+	return internalservice.NewService(
+		runtimes,
+		readSubmittedFile,
+		contentStaging,
+		contentMaterializer,
+	)
 }
 
 // NewContentMaterializationService constructs the nested content_materialization

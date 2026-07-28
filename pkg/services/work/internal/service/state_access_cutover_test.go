@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workservice "github.com/portpowered/infinite-you/pkg/services/work/service"
+	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal/service"
 )
 
 type petriMoveRuntime struct {
@@ -34,7 +34,7 @@ func (f *petriMoveRuntime) MoveWork(
 
 func TestNewServiceRoutesStateAccessSubmitMoveAndReadThroughDetachedResults(t *testing.T) {
 	runtime := &petriMoveRuntime{}
-	service := workservice.NewService(workRuntimeResolver{runtime: runtime}, nil, nil, nil)
+	service := internalservice.NewService(workRuntimeResolver{runtime: runtime}, nil, nil, nil)
 	ctx := context.Background()
 
 	request := work.WorkRequest{RequestID: "request-cutover"}

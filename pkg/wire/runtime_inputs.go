@@ -21,7 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workservice "github.com/portpowered/infinite-you/pkg/services/work/service"
+	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
@@ -332,6 +332,6 @@ func provideWorkFactory(
 	contentMaterializer work.ContentMaterializer,
 ) factorysessionwire.WorkFactory {
 	return func(runtimes work.RuntimeResolver) work.Service {
-		return workservice.NewService(runtimes, readFile, contentStaging, contentMaterializer)
+		return workwire.NewRuntimeService(runtimes, readFile, contentStaging, contentMaterializer)
 	}
 }
