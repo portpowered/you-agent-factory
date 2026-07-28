@@ -12,6 +12,7 @@ import (
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 )
 
 func TestAgyNewRegistrationBindsCanonicalIdentity(t *testing.T) {
@@ -64,6 +65,70 @@ func TestAgyBuiltInRegistrationFailsClosedWithoutEffect(t *testing.T) {
 		},
 	)
 	assertAgyDependencyFailure(t, result, err)
+}
+
+func TestAgyRootPTYExecutionEndToEnd(t *testing.T) {
+	t.Parallel()
+
+	factoryRoot := t.TempDir()
+	mock := &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "Hello from Agy"}}
+	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
+		FactoryRoot:            factoryRoot,
+		Allocator:              mock,
+		Executable:             "agy",
+		ExecutableDependencies: executableDependencies(nil),
+	})
+	root := newAgyRoot(t, effect)
+
+	result, err := root.Execute(t.Context(), providers.ExecuteRequest{
+		Provider:         providers.IDAgy,
+		AttemptID:        "dispatch-agy-e2e",
+		WorkingDirectory: ".",
+		UserMessage:      privatePrompt,
+		ResumeSession: &providers.SessionRef{
+			Provider: providers.IDAgy,
+			Kind:     providers.SessionIDKind,
+			ID:       "session-e2e",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Content != "Hello from Agy" {
+		t.Fatalf("Content = %q, want cleaned final text", result.Content)
+	}
+	if result.SessionRef == nil || result.SessionRef.ID != "session-e2e" {
+		t.Fatalf("SessionRef = %#v, want resumed session", result.SessionRef)
+	}
+	if result.Diagnostics == nil || result.Diagnostics.DurationMillis < 0 {
+		t.Fatalf("Diagnostics = %#v", result.Diagnostics)
+	}
+}
+
+func TestAgyRootRejectsUnusableFinalOutput(t *testing.T) {
+	t.Parallel()
+
+	factoryRoot := t.TempDir()
+	mock := &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: ""}}
+	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
+		FactoryRoot:            factoryRoot,
+		Allocator:              mock,
+		Executable:             "agy",
+		ExecutableDependencies: executableDependencies(nil),
+	})
+	root := newAgyRoot(t, effect)
+
+	result, err := root.Execute(t.Context(), providers.ExecuteRequest{
+		Provider:    providers.IDAgy,
+		AttemptID:   "dispatch-agy-empty",
+		UserMessage: "hello",
+	})
+	if err == nil {
+		t.Fatal("Execute() error = nil, want final parse failure")
+	}
+	if result.Content != "" {
+		t.Fatalf("result = %#v, want empty content on failure", result)
+	}
 }
 
 func TestAgyRootPreservesRequestAndFinalStdout(t *testing.T) {

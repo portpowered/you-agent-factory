@@ -64,11 +64,30 @@ func newAttempt(effect Effect) execution.Attempt {
 			return nil
 		})
 		if failure, failed := collectFailure(effectErr); failed {
+			if failure.Declared != nil && effectResult.SessionRef != nil {
+				declared := failure.Declared.Clone()
+				declared.SessionRef = cloneSessionRef(effectResult.SessionRef)
+				failure.Declared = &declared
+			}
 			return providers.ExecuteResult{}, failure
 		}
+		content, parseFailure := parseFinalOutput(stdout.Bytes())
+		if parseFailure != nil {
+			sessionRef := cloneSessionRef(effectResult.SessionRef)
+			if sessionRef == nil {
+				sessionRef = sessionRefFromRequest(request.ResumeSession)
+			}
+			declared := parseFailure.Clone()
+			declared.SessionRef = sessionRef
+			return providers.ExecuteResult{SessionRef: sessionRef}, execution.AttemptFailure{Declared: &declared}
+		}
+		sessionRef := cloneSessionRef(effectResult.SessionRef)
+		if sessionRef == nil {
+			sessionRef = sessionRefFromRequest(request.ResumeSession)
+		}
 		return providers.ExecuteResult{
-			Content:    string(stdout.Bytes()),
-			SessionRef: cloneSessionRef(effectResult.SessionRef),
+			Content:    content,
+			SessionRef: sessionRef,
 			Diagnostics: &providers.ExecuteDiagnostics{
 				DurationMillis: effectResult.DurationMillis,
 				Metadata:       cloneMetadata(effectResult.Metadata),
