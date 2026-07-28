@@ -1,6 +1,7 @@
 package execution_test
 
 import (
+	"strings"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -113,4 +114,59 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 	})
 
 	functionalevidence.Covers(t, "rest/getFactorySessionResults", "rest/invokeFactorySessionBySessionId")
+}
+
+// TestAPIDispatchListAndDetailExposePublicCorrelation proves durable Factory
+// Session dispatch list and detail reads expose the same public dispatch
+// identifier and compatible correlation fields so customers can join summaries
+// to detail without private runtime handles.
+func TestAPIDispatchListAndDetailExposePublicCorrelation(t *testing.T) {
+	dir := scaffoldDispatchCorrelationFactory(t)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		UseMockWorkers:            true,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: support.NewRecordingCommandRunner("unexpected live provider execution"),
+		},
+	})
+
+	started := startDispatchCorrelationSync(t, server.URL(), dir)
+	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
+	}
+	if strings.TrimSpace(started.SessionId) == "" {
+		t.Fatal("sessionId is empty, want durable Factory Session identifier")
+	}
+
+	listed := listFactorySessionDispatches(t, server.URL(), started.SessionId)
+	if len(listed.Dispatches) == 0 {
+		t.Fatalf("dispatch list is empty, want at least one public dispatch summary")
+	}
+	if listed.SessionId != started.SessionId {
+		t.Fatalf("dispatch list sessionId = %q, want %q", listed.SessionId, started.SessionId)
+	}
+
+	var matched bool
+	for _, summary := range listed.Dispatches {
+		if summary.Label == nil || *summary.Label != dispatchCorrelationChildLabel {
+			continue
+		}
+		if summary.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
+			t.Fatalf("dispatch summary status = %q, want COMPLETED", summary.Status)
+		}
+		detail := getFactorySessionDispatch(t, server.URL(), started.SessionId, summary.Id)
+		assertDispatchListDetailPublicCorrelation(t, started.SessionId, summary, detail)
+		matched = true
+		break
+	}
+	if !matched {
+		t.Fatalf(
+			"dispatch list = %#v, want one completed dispatch labeled %q",
+			listed.Dispatches,
+			dispatchCorrelationChildLabel,
+		)
+	}
+
+	functionalevidence.Covers(t, "rest/getFactorySessionDispatch", "rest/listFactorySessionDispatches")
 }

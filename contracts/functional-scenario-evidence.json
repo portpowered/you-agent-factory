@@ -20,6 +20,13 @@
       ]
     },
     {
+      "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIDispatchListAndDetailExposePublicCorrelation",
+      "stableIds": [
+        "rest/getFactorySessionDispatch",
+        "rest/listFactorySessionDispatches"
+      ]
+    },
+    {
       "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData",
       "stableIds": [
         "rest/getFactorySessionResults",

@@ -21,9 +21,20 @@ import (
 )
 
 const (
-	terminalSuccessPrimaryResult      = "primary result COMPLETE"
-	inlineJavaScriptWorkflowFileName  = "results-dispatches.workflow.js"
+	terminalSuccessPrimaryResult         = "primary result COMPLETE"
+	inlineJavaScriptWorkflowFileName     = "results-dispatches.workflow.js"
+	dispatchCorrelationWorkflowFileName  = "results-dispatches-correlation.workflow.js"
+	dispatchCorrelationChildLabel        = "dispatch-correlation-child"
+	dispatchCorrelationChildPrompt       = "prove-dispatch-correlation"
 )
+
+var dispatchCorrelationWorkflow = `return (async function () {
+  const child = await agent.run({
+    prompt: "` + dispatchCorrelationChildPrompt + `",
+    label: "` + dispatchCorrelationChildLabel + `",
+  });
+  return { child };
+})();`
 
 type blockingInvocationRunner struct {
 	started chan struct{}
@@ -80,6 +91,20 @@ func scaffoldInvocationFactory(t *testing.T, overrides map[string]any) string {
 	}
 	dir := support.ScaffoldFactory(t, cfg)
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	return dir
+}
+
+func scaffoldDispatchCorrelationFactory(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{"name": "results-dispatches-correlation"})
+	if err := os.WriteFile(
+		filepath.Join(dir, dispatchCorrelationWorkflowFileName),
+		[]byte(dispatchCorrelationWorkflow),
+		0o600,
+	); err != nil {
+		t.Fatalf("write dispatch correlation workflow: %v", err)
+	}
 	return dir
 }
 
@@ -172,6 +197,71 @@ func postInvocation(t *testing.T, serverURL string, request factoryapi.Invocatio
 		t.Fatalf("decode invocation response: %v", err)
 	}
 	return decoded
+}
+
+func startDispatchCorrelationSync(
+	t *testing.T,
+	serverURL, factoryDir string,
+) factoryapi.FactorySessionSyncExecutionResponse {
+	t.Helper()
+
+	workflowPath := filepath.Join(factoryDir, dispatchCorrelationWorkflowFileName)
+	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
+		RequestId: "results-dispatches-correlation-sync",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
+			WorkflowFile: &workflowPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal dispatch correlation sync request: %v", err)
+	}
+
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build dispatch correlation sync request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST %s status = %d, want 200: %s", endpoint, response.StatusCode, strings.TrimSpace(string(payload)))
+	}
+
+	var result factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatalf("decode dispatch correlation sync response: %v", err)
+	}
+	return result
+}
+
+func listFactorySessionDispatches(
+	t *testing.T,
+	serverURL, sessionID string,
+) factoryapi.ListFactorySessionDispatchesResponse {
+	t.Helper()
+
+	return support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
+		t,
+		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/dispatches",
+	)
+}
+
+func getFactorySessionDispatch(
+	t *testing.T,
+	serverURL, sessionID, dispatchID string,
+) factoryapi.FactoryDispatch {
+	t.Helper()
+
+	return support.GetJSON[factoryapi.FactoryDispatch](
+		t,
+		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/dispatches/"+dispatchID,
+	)
 }
 
 func startInlineJavaScriptSync(
@@ -306,6 +396,69 @@ func generatedWorkStateType(state *factoryapi.WorkState) factoryapi.WorkStateTyp
 		return ""
 	}
 	return state.Type
+}
+
+func assertDispatchListDetailPublicCorrelation(
+	t *testing.T,
+	sessionID string,
+	summary factoryapi.FactorySessionDispatchSummary,
+	detail factoryapi.FactoryDispatch,
+) {
+	t.Helper()
+
+	if strings.TrimSpace(summary.Id) == "" {
+		t.Fatal("dispatch summary id is empty, want public dispatch identifier")
+	}
+	if detail.Id != summary.Id {
+		t.Fatalf("dispatch detail id = %q, want list summary id %q", detail.Id, summary.Id)
+	}
+	if detail.SessionId != sessionID {
+		t.Fatalf("dispatch detail sessionId = %q, want %q", detail.SessionId, sessionID)
+	}
+	if detail.Status != summary.Status {
+		t.Fatalf("dispatch detail status = %q, want list summary status %q", detail.Status, summary.Status)
+	}
+	if detail.DispatchKind != summary.DispatchKind {
+		t.Fatalf("dispatch detail dispatchKind = %q, want list summary dispatchKind %q", detail.DispatchKind, summary.DispatchKind)
+	}
+	if detail.OrchestratorKind != factoryapi.JAVASCRIPT {
+		t.Fatalf("dispatch detail orchestratorKind = %q, want JAVASCRIPT", detail.OrchestratorKind)
+	}
+	if summary.Label == nil || detail.Label == nil || *detail.Label != *summary.Label {
+		t.Fatalf("dispatch detail label = %#v, want list summary label %#v", detail.Label, summary.Label)
+	}
+	if summary.ProviderSessionRefs != nil && len(*summary.ProviderSessionRefs) > 0 {
+		if detail.ProviderSessionRefs == nil {
+			t.Fatalf("dispatch detail providerSessionRefs = nil, want list summary refs %#v", summary.ProviderSessionRefs)
+		}
+		if len(*detail.ProviderSessionRefs) != len(*summary.ProviderSessionRefs) {
+			t.Fatalf(
+				"dispatch detail providerSessionRefs count = %d, want %d from list summary",
+				len(*detail.ProviderSessionRefs),
+				len(*summary.ProviderSessionRefs),
+			)
+		}
+		for i := range *summary.ProviderSessionRefs {
+			summaryRef := (*summary.ProviderSessionRefs)[i]
+			detailRef := (*detail.ProviderSessionRefs)[i]
+			if detailRef.Id != summaryRef.Id {
+				t.Fatalf(
+					"providerSessionRefs[%d].id = %q, want list summary ref %q",
+					i,
+					detailRef.Id,
+					summaryRef.Id,
+				)
+			}
+			if detailRef.Provider != summaryRef.Provider {
+				t.Fatalf(
+					"providerSessionRefs[%d].provider = %q, want list summary ref %q",
+					i,
+					detailRef.Provider,
+					summaryRef.Provider,
+				)
+			}
+		}
+	}
 }
 
 func waitForBlockingInvocationStart(t *testing.T, blocking *blockingInvocationRunner) {
