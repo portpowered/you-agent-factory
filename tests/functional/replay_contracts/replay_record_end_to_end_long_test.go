@@ -314,7 +314,7 @@ Finish the input task.
 		},
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	assertReplayPlaceCounts(t, support.GetDefaultSession(t, server.URL()), map[string]int{
+	assertReplayPlaceCounts(t, support.ListDefaultSessionWork(t, server.URL()), map[string]int{
 		"task:complete": 1, "task:init": 0, "task:failed": 0,
 	})
 	server.Stop(t)

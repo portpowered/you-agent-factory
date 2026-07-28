@@ -643,6 +643,17 @@ Wave 0 functional-tests-expansion planning authority lives under
   files (for example `observability/verification/verify_tier_contract_test.go`
   and `workers/mock/service_config_override_alignment_*`), and drop released batch
   ids from `ExpectedDeletionOnlyBatches`.
+  Ready `replay_contracts` deletion batches (`delete-02`, `delete-04`,
+  `delete-05`, `delete-06`) release by removing catch-all source rows,
+  adding destination `n/a` rows for migrated live scenarios, dropping
+  consumed batch ids from `ExpectedDeletionOnlyBatches` and
+  `guards_bootstrap_replay_mapping.batch_ids`, and marking batches
+  `released` in `migration-ledger.md`; wrong-layer delete-06 needs no new
+  live row because `deadcode_contract_test.go` already owns replacement
+  evidence. When merged main adds provider harness scenarios (for example
+  `providers/agy/process_harness_test.go`), reconcile them into the ledger
+  companion and checklist in the same closeout pass so
+  `go run ./cmd/migrationledgercheck` stays aligned with the live tree.
   `tests/functional/factory/definitions/init_test.go` owns public Factory-init
   functional coverage through `session create --init-new-factory` against
   `support.StartFunctionalAPIServer`, with seeded Work run via
