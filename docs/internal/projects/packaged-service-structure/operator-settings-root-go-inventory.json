@@ -2,25 +2,7 @@
   "formatVersion": "pss-operator-settings-root-go-inventory/v1",
   "ownerPackage": "pkg/services/operator_settings",
   "sortKey": "file name ascending byte order",
-  "clusters": [
-    {
-      "cluster": "providers_root_construction",
-      "destination": "pkg/services/operator_settings/internal",
-      "files": [
-        "providers_root_construct.go"
-      ]
-    },
-    {
-      "cluster": "construction_ports",
-      "destination": "pkg/services/operator_settings/internal",
-      "files": [
-        "dependencies.go",
-        "dependencies_test.go",
-        "service_characterization_test.go",
-        "testmain_test.go"
-      ]
-    }
-  ],
+  "clusters": [],
   "files": [
     {
       "file": "backend_scope.go",
@@ -33,6 +15,11 @@
       "note": "Peer-facing ConfigDocument and ConfigDocumentService thin surface delegating to the private document subservice."
     },
     {
+      "file": "construction_ports_contract.go",
+      "classification": "thin_root_contract",
+      "note": "Thin construction-port aliases and func types for owner wire; canonical interface definitions live under operator_settings/internal."
+    },
+    {
       "file": "defaults_contract.go",
       "classification": "thin_root_contract",
       "note": "Peer-facing operator defaults/config vocabulary retained at the thin Operator Settings root."
@@ -41,20 +28,6 @@
       "file": "defaults_resolution.go",
       "classification": "thin_root_contract",
       "note": "Peer-facing defaults-resolution operations thin surface delegating to the private resolution subservice."
-    },
-    {
-      "file": "dependencies.go",
-      "classification": "fold_target_construction_port",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "construction_ports",
-      "note": "FileSystem, encoder/decoder, and catalog construction ports fold into private implementation; not peer-facing Service contract."
-    },
-    {
-      "file": "dependencies_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "construction_ports",
-      "note": "Construction-port characterization folds with private implementation."
     },
     {
       "file": "doc.go",
@@ -72,13 +45,6 @@
       "note": "Peer-facing operator-config input inventory types and ProjectInputInventory thin surface delegating to private implementation."
     },
     {
-      "file": "providers_root_construct.go",
-      "classification": "fold_target_providers_construct",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "providers_root_construction",
-      "note": "Providers root constructor registration folds into private implementation."
-    },
-    {
       "file": "resolution_contract.go",
       "classification": "thin_root_contract",
       "note": "Peer-facing effective-resolution request, result, value, and typed-error contracts."
@@ -89,13 +55,6 @@
       "note": "Legacy root-contract preservation proofs for transitional Settings vocabulary."
     },
     {
-      "file": "service_characterization_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "construction_ports",
-      "note": "Service assembly characterization through transitional composition folds with private implementation."
-    },
-    {
       "file": "service_contract.go",
       "classification": "thin_root_contract",
       "note": "Peer Service interface for document operations and effective resolution."
@@ -104,13 +63,6 @@
       "file": "service_root_contract_invariants_test.go",
       "classification": "thin_root_contract_test",
       "note": "Peer-shaped Service seal tests using only published root contracts."
-    },
-    {
-      "file": "testmain_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "construction_ports",
-      "note": "Package testmain composition hook folds with private implementation test helpers."
     }
   ]
 }

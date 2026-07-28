@@ -13,6 +13,7 @@ import (
 var OperatorSettingsThinRootContractFiles = []string{
 	"backend_scope.go",
 	"config_document.go",
+	"construction_ports_contract.go",
 	"defaults_contract.go",
 	"defaults_resolution.go",
 	"doc.go",
@@ -34,25 +35,7 @@ type OperatorSettingsRootContractFoldTarget struct {
 
 // OperatorSettingsExcessRootContractFolds inventories excess root contract/helper
 // clusters beyond the thin Operator Settings service root contract.
-var OperatorSettingsExcessRootContractFolds = []OperatorSettingsRootContractFoldTarget{
-	{
-		Cluster: "providers_root_construction",
-		Files: []string{
-			"providers_root_construct.go",
-		},
-		Destination: OperatorSettingsOwnerPackagePath + "/internal",
-	},
-	{
-		Cluster: "construction_ports",
-		Files: []string{
-			"dependencies.go",
-			"dependencies_test.go",
-			"service_characterization_test.go",
-			"testmain_test.go",
-		},
-		Destination: OperatorSettingsOwnerPackagePath + "/internal",
-	},
-}
+var OperatorSettingsExcessRootContractFolds = []OperatorSettingsRootContractFoldTarget{}
 
 // ClassifyOperatorSettingsRootContractFile reports whether fileName is a committed
 // thin-root keeper or an inventoried excess fold target.

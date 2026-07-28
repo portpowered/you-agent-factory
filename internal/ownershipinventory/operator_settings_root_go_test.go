@@ -118,6 +118,7 @@ func TestOperatorSettingsRootGoInventoryClassifiesThinRootContractSurfaces(t *te
 	wantThin := []string{
 		"backend_scope.go",
 		"config_document.go",
+		"construction_ports_contract.go",
 		"defaults_contract.go",
 		"defaults_resolution.go",
 		"doc.go",
@@ -147,38 +148,8 @@ func TestOperatorSettingsRootGoInventoryNamesExcessFoldClusters(t *testing.T) {
 		t.Fatalf("LoadOperatorSettingsRootGoInventory() error = %v", err)
 	}
 
-	want := map[string]string{
-		"providers_root_construction": "pkg/services/operator_settings/internal",
-		"construction_ports":          "pkg/services/operator_settings/internal",
-	}
-
-	for _, cluster := range inventory.Clusters {
-		wantDestination, ok := want[cluster.Cluster]
-		if !ok {
-			t.Fatalf("unexpected fold cluster %q", cluster.Cluster)
-		}
-		if cluster.Destination != wantDestination {
-			t.Fatalf("cluster %q destination = %q, want %q", cluster.Cluster, cluster.Destination, wantDestination)
-		}
-		if len(cluster.Files) == 0 {
-			t.Fatalf("cluster %q has no inventoried files", cluster.Cluster)
-		}
-		if !strings.HasPrefix(ownershipinventory.OperatorSettingsRootContractFoldCondition(cluster.Cluster), "CLN-SET-CONTRACT-ROOTS") {
-			t.Fatalf("fold condition for %q missing CLN-SET-CONTRACT-ROOTS prefix", cluster.Cluster)
-		}
-	}
-
-	gotClusters := make([]string, 0, len(inventory.Clusters))
-	for _, cluster := range inventory.Clusters {
-		gotClusters = append(gotClusters, cluster.Cluster)
-	}
-	slices.Sort(gotClusters)
-	wantClusters := []string{
-		"construction_ports",
-		"providers_root_construction",
-	}
-	if !slices.Equal(gotClusters, wantClusters) {
-		t.Fatalf("fold clusters = %v, want %v", gotClusters, wantClusters)
+	if len(inventory.Clusters) != 0 {
+		t.Fatalf("fold clusters = %#v, want empty after story-005 fold", inventory.Clusters)
 	}
 }
 
@@ -195,12 +166,6 @@ func TestOperatorSettingsRootGoInventoryDistinguishesThinContractTestsFromImplem
 		"root_contract_legacy_preservation_test.go",
 		"service_root_contract_invariants_test.go",
 	}
-	wantFoldTests := []string{
-		"dependencies_test.go",
-		"service_characterization_test.go",
-		"testmain_test.go",
-	}
-
 	var gotThinTests []string
 	var gotFoldTests []string
 	for _, file := range inventory.Files {
@@ -216,8 +181,8 @@ func TestOperatorSettingsRootGoInventoryDistinguishesThinContractTestsFromImplem
 	if !slices.Equal(gotThinTests, wantThinTests) {
 		t.Fatalf("thin root contract tests = %v, want %v", gotThinTests, wantThinTests)
 	}
-	if !slices.Equal(gotFoldTests, wantFoldTests) {
-		t.Fatalf("implementation fold test targets = %v, want %v", gotFoldTests, wantFoldTests)
+	if len(gotFoldTests) != 0 {
+		t.Fatalf("implementation fold test targets = %v, want empty after story-005 fold", gotFoldTests)
 	}
 }
 

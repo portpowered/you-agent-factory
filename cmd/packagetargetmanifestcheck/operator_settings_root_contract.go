@@ -16,6 +16,7 @@ const operatorSettingsRootRelative = "pkg/services/operator_settings"
 var operatorSettingsThinRootContractFiles = []string{
 	"backend_scope.go",
 	"config_document.go",
+	"construction_ports_contract.go",
 	"defaults_contract.go",
 	"defaults_resolution.go",
 	"doc.go",
@@ -35,25 +36,7 @@ type operatorSettingsRootContractFoldTarget struct {
 
 // operatorSettingsExcessRootContractFolds mirrors internal/ownershipinventory
 // OperatorSettingsExcessRootContractFolds for package-target manifest checks.
-var operatorSettingsExcessRootContractFolds = []operatorSettingsRootContractFoldTarget{
-	{
-		cluster: "providers_root_construction",
-		files: []string{
-			"providers_root_construct.go",
-		},
-		destination: "pkg/services/operator_settings/internal",
-	},
-	{
-		cluster: "construction_ports",
-		files: []string{
-			"dependencies.go",
-			"dependencies_test.go",
-			"service_characterization_test.go",
-			"testmain_test.go",
-		},
-		destination: "pkg/services/operator_settings/internal",
-	},
-}
+var operatorSettingsExcessRootContractFolds = []operatorSettingsRootContractFoldTarget{}
 
 func listOperatorSettingsRootGoFiles(root string) ([]string, error) {
 	settingsRoot := filepath.Join(root, filepath.FromSlash(operatorSettingsRootRelative))

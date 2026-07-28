@@ -1,4 +1,4 @@
-package operatorsettings
+package internal_test
 
 import (
 	"bytes"
@@ -9,30 +9,31 @@ import (
 
 	"github.com/google/uuid"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 var testFiles platformfilesystem.Local
-var testIDGenerator IDGenerator = uuid.NewString
-var testCreateTemp CreateTemporaryFile = func(dir, pattern string) (TemporaryFile, error) {
+var testIDGenerator operatorsettings.IDGenerator = uuid.NewString
+var testCreateTemp operatorsettings.CreateTemporaryFile = func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 	return os.CreateTemp(dir, pattern)
 }
 
-func decodeTestConfig(data []byte) (Config, error) {
+func decodeTestConfig(data []byte) (operatorsettings.Config, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var generated *factoryapi.GlobalConfig
 	if err := decoder.Decode(&generated); err != nil {
-		return Config{}, err
+		return operatorsettings.Config{}, err
 	}
 	if generated == nil {
-		return Config{}, fmt.Errorf("expected a JSON object")
+		return operatorsettings.Config{}, fmt.Errorf("expected a JSON object")
 	}
 	var trailing json.RawMessage
 	if err := decoder.Decode(&trailing); err != io.EOF {
-		return Config{}, fmt.Errorf("unexpected trailing JSON")
+		return operatorsettings.Config{}, fmt.Errorf("unexpected trailing JSON")
 	}
-	config := Config{}
+	config := operatorsettings.Config{}
 	if generated.BackendScopeID != nil {
 		config.BackendScopeID = *generated.BackendScopeID
 	}
@@ -46,7 +47,7 @@ func decodeTestConfig(data []byte) (Config, error) {
 	}
 	if generated.WorkerPresets != nil {
 		for _, preset := range *generated.WorkerPresets {
-			mapped := WorkerPreset{ID: preset.Id, ModelProvider: string(preset.ModelProvider)}
+			mapped := operatorsettings.WorkerPreset{ID: preset.Id, ModelProvider: string(preset.ModelProvider)}
 			if preset.Model != nil {
 				mapped.Model = *preset.Model
 			}
@@ -59,12 +60,12 @@ func decodeTestConfig(data []byte) (Config, error) {
 	return config.Normalize()
 }
 
-func encodeTestConfig(config Config) ([]byte, error) {
+func encodeTestConfig(config operatorsettings.Config) ([]byte, error) {
 	generated := factoryapi.GlobalConfig{}
 	if config.BackendScopeID != "" {
 		generated.BackendScopeID = &config.BackendScopeID
 	}
-	if config.Defaults != (Defaults{}) {
+	if config.Defaults != (operatorsettings.Defaults{}) {
 		generated.Defaults = &factoryapi.GlobalConfigDefaults{}
 		if config.Defaults.WorkerModelProvider != "" {
 			generated.Defaults.WorkerModelProvider = &config.Defaults.WorkerModelProvider
@@ -94,6 +95,13 @@ func encodeTestConfig(config Config) ([]byte, error) {
 	return append(payload, '\n'), err
 }
 
-func ensureTestBackendScope(path string) (ResolvedBackendScope, error) {
-	return EnsureLocalBackendScope(testFiles, testCreateTemp, testIDGenerator, decodeTestConfig, encodeTestConfig, path)
+func ensureTestBackendScope(path string) (operatorsettings.ResolvedBackendScope, error) {
+	return operatorsettings.EnsureLocalBackendScope(
+		testFiles,
+		testCreateTemp,
+		testIDGenerator,
+		decodeTestConfig,
+		encodeTestConfig,
+		path,
+	)
 }

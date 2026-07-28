@@ -2,7 +2,6 @@ package main
 
 import (
 	"slices"
-	"strings"
 	"testing"
 )
 
@@ -24,19 +23,8 @@ func TestOperatorSettingsRootGoFilesMatchCommittedInventory(t *testing.T) {
 func TestOperatorSettingsExcessRootContractFoldDestinations(t *testing.T) {
 	t.Parallel()
 
-	want := map[string]string{
-		"providers_root_construction": "pkg/services/operator_settings/internal",
-		"construction_ports":          "pkg/services/operator_settings/internal",
-	}
-
-	for _, target := range operatorSettingsExcessRootContractFolds {
-		wantDestination, ok := want[target.cluster]
-		if !ok {
-			t.Fatalf("unexpected fold cluster %q", target.cluster)
-		}
-		if target.destination != wantDestination {
-			t.Fatalf("cluster %q destination = %q, want %q", target.cluster, target.destination, wantDestination)
-		}
+	if len(operatorSettingsExcessRootContractFolds) != 0 {
+		t.Fatalf("operatorSettingsExcessRootContractFolds = %#v, want empty after story-005 fold", operatorSettingsExcessRootContractFolds)
 	}
 }
 
@@ -121,22 +109,7 @@ func TestOperatorSettingsThinRootContractFilesClassifyAsRetain(t *testing.T) {
 func TestOperatorSettingsExcessRootContractFoldClustersMatchInventoryNote(t *testing.T) {
 	t.Parallel()
 
-	gotClusters := make([]string, 0, len(operatorSettingsExcessRootContractFolds))
-	for _, target := range operatorSettingsExcessRootContractFolds {
-		gotClusters = append(gotClusters, target.cluster)
-		if len(target.files) == 0 {
-			t.Fatalf("cluster %q has no inventoried files", target.cluster)
-		}
-		if !strings.HasPrefix(target.destination, operatorSettingsRootRelative+"/internal") {
-			t.Fatalf("cluster %q destination = %q, want path under %s/internal", target.cluster, target.destination, operatorSettingsRootRelative)
-		}
-	}
-	slices.Sort(gotClusters)
-	wantClusters := []string{
-		"construction_ports",
-		"providers_root_construction",
-	}
-	if !slices.Equal(gotClusters, wantClusters) {
-		t.Fatalf("fold clusters = %v, want %v", gotClusters, wantClusters)
+	if len(operatorSettingsExcessRootContractFolds) != 0 {
+		t.Fatalf("operatorSettingsExcessRootContractFolds = %#v, want empty after story-005 fold", operatorSettingsExcessRootContractFolds)
 	}
 }

@@ -2,7 +2,6 @@ package ownershipinventory_test
 
 import (
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
@@ -29,6 +28,7 @@ func TestOperatorSettingsThinRootContractFiles(t *testing.T) {
 	want := []string{
 		"backend_scope.go",
 		"config_document.go",
+		"construction_ports_contract.go",
 		"defaults_contract.go",
 		"defaults_resolution.go",
 		"doc.go",
@@ -57,41 +57,8 @@ func TestOperatorSettingsThinRootContractFiles(t *testing.T) {
 func TestOperatorSettingsExcessRootContractFoldDestinations(t *testing.T) {
 	t.Parallel()
 
-	want := map[string]string{
-		"providers_root_construction": "pkg/services/operator_settings/internal",
-		"construction_ports":          "pkg/services/operator_settings/internal",
-	}
-
-	for _, target := range ownershipinventory.OperatorSettingsExcessRootContractFolds {
-		wantDestination, ok := want[target.Cluster]
-		if !ok {
-			t.Fatalf("unexpected fold cluster %q", target.Cluster)
-		}
-		if target.Destination != wantDestination {
-			t.Fatalf("cluster %q destination = %q, want %q", target.Cluster, target.Destination, wantDestination)
-		}
-		if len(target.Files) == 0 {
-			t.Fatalf("cluster %q has no inventoried files", target.Cluster)
-		}
-		if !ownershipinventory.IsOperatorSettingsPrivateRootContractFoldDestination(target.Destination) {
-			t.Fatalf("cluster %q destination = %q, want private fold path under operator_settings/internal", target.Cluster, target.Destination)
-		}
-		if !strings.HasPrefix(ownershipinventory.OperatorSettingsRootContractFoldCondition(target.Cluster), "CLN-SET-CONTRACT-ROOTS") {
-			t.Fatalf("fold condition for %q missing CLN-SET-CONTRACT-ROOTS prefix", target.Cluster)
-		}
-	}
-
-	gotClusters := make([]string, 0, len(ownershipinventory.OperatorSettingsExcessRootContractFolds))
-	for _, target := range ownershipinventory.OperatorSettingsExcessRootContractFolds {
-		gotClusters = append(gotClusters, target.Cluster)
-	}
-	slices.Sort(gotClusters)
-	wantClusters := []string{
-		"construction_ports",
-		"providers_root_construction",
-	}
-	if !slices.Equal(gotClusters, wantClusters) {
-		t.Fatalf("fold clusters = %v, want %v", gotClusters, wantClusters)
+	if len(ownershipinventory.OperatorSettingsExcessRootContractFolds) != 0 {
+		t.Fatalf("OperatorSettingsExcessRootContractFolds = %#v, want empty after story-005 fold", ownershipinventory.OperatorSettingsExcessRootContractFolds)
 	}
 }
 

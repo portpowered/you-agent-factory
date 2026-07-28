@@ -1,4 +1,4 @@
-package operatorsettings_test
+package internal_test
 
 import (
 	"errors"
@@ -105,9 +105,6 @@ func (fake *documentPeerFake) mergeProviderModelUpdate(
 	return document, nil
 }
 
-// resolutionPeerFake implements effective resolution using only Operator Settings
-// root contracts and plain in-memory facts. It does not import filesystem, codec,
-// CLI, UI, Wire, or Initializer packages.
 type resolutionPeerFake struct{}
 
 func newResolutionPeerFake() *resolutionPeerFake {
@@ -257,9 +254,6 @@ func (fake *resolutionPeerFake) canonicalizeProvider(raw string) (string, bool) 
 	}
 }
 
-// servicePeerFake implements the full Operator Settings Service using only root
-// contracts and in-memory state. It does not import filesystem, codec, CLI, UI,
-// Wire, or Initializer packages.
 type servicePeerFake struct {
 	document   *documentPeerFake
 	resolution *resolutionPeerFake

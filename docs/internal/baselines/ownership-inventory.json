@@ -4372,6 +4372,14 @@
       "deletionCondition": "delete public package after IMP-OPS-document private subservice cutover proof"
     },
     {
+      "packagePath": "pkg/services/operator_settings/internal",
+      "disposition": "move",
+      "destination": "operator_settings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
+    },
+    {
       "packagePath": "pkg/services/operator_settings/internal/construct",
       "disposition": "move",
       "destination": "operator_settings",

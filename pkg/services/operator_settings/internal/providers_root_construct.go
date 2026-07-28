@@ -1,4 +1,4 @@
-package operatorsettings
+package internal
 
 import (
 	"fmt"

@@ -6,6 +6,9 @@ import (
 	"io/fs"
 )
 
+// Construction/process-edge port aliases and func types for owner wire and
+// composition paths. Peers depend on Service rather than these ports.
+
 // TemporaryFile is the exact atomic-write handle used by Operator Settings.
 type TemporaryFile interface {
 	io.Writer

@@ -1033,6 +1033,15 @@ response-stream output.
   `ConfigureDefaultsResolutionFromHome`; keep `Config.Normalize` at the root for
   codec decode paths; wire/construct/servicewire/testlink blank-import the
   defaults subpackage so registration runs before defaults-resolution callers.
+- CLN-SET-CONTRACT-ROOTS story-005 folds `providers_root_construction` into
+  `pkg/services/operator_settings/internal/providers_root_construct.go` and relocates
+  construction-port characterization tests under `operator_settings/internal`;
+  the peer root keeps `construction_ports_contract.go` as the thin owner-wire port
+  surface (func types plus `FileSystem`/`TemporaryFile` contracts) and
+  `operator_settings/wire/construction_ports.go` re-exports those aliases for
+  process-edge bags; register Providers-root construction from
+  `operator_settings/wire/register.go` (not `pkg/wire`) so owner wire can import
+  `operator_settings/internal` without widening peer import boundaries.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore
