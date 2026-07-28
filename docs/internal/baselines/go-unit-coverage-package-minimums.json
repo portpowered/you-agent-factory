@@ -1605,6 +1605,10 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/stateaccessrecordings",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
       "minimum": 72.95
     },

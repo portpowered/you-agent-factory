@@ -4524,6 +4524,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/work/stateaccessrecordings",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/work/service",
       "disposition": "move",
       "destination": "work",
