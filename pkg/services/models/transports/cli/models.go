@@ -90,14 +90,11 @@ type httpService struct {
 }
 
 // New constructs the composition-stable Models CLI service injected into Cobra
-// composition. Production wiring should migrate to NewService over the Models
-// root; this constructor remains a thin HTTP-and-bootstrap facade until CLI-MOD
-// composition story 002 lands.
+// composition. It is a thin facade over the owned adapter Service built from
+// composition collaborators when a Models root is available, with HTTP and
+// bootstrap invoke behavior retained for remote and legacy composition paths.
 func New(httpProtocol clihttp.Protocol, invocation InvocationOperation) Service {
-	if httpProtocol == nil || invocation == nil {
-		return nil
-	}
-	return &httpService{http: httpProtocol, invocation: invocation}
+	return bindCompositionService(httpProtocol, invocation)
 }
 
 func (service *httpService) List(cfg ListConfig) error {
