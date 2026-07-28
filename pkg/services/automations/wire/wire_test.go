@@ -3,6 +3,7 @@ package wire_test
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"runtime"
 	"sync"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -130,6 +132,97 @@ func (pollers recordingHostedPollers) ValidateLinearPoller(
 
 type rootPeer interface {
 	Root() automations.Root
+}
+
+type stubFilesystemInputReader struct{}
+
+func (stubFilesystemInputReader) ReadDir(string) ([]fs.DirEntry, error) { return nil, nil }
+func (stubFilesystemInputReader) ReadFile(string) ([]byte, error)       { return nil, nil }
+func (stubFilesystemInputReader) Stat(string) (fs.FileInfo, error)      { return nil, nil }
+
+func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
+	t.Parallel()
+
+	service := validConstructionPorts(t).newService(t)
+	var published automations.Service = service
+	if published == nil {
+		t.Fatal("constructed service is nil")
+	}
+
+	peer, ok := service.(rootPeer)
+	if !ok {
+		t.Fatal("constructed service does not expose Root() for published peer inspection")
+	}
+	root := peer.Root()
+
+	reconciled, err := root.Reconcile(context.Background(), automations.ReconcileRequest{
+		Desired: []automations.DesiredSpec{{
+			AutomationID: "automations-wire",
+			SourceID:     "source-a",
+			Kind:         "schedule",
+			State:        automations.DesiredLifecycleRunning,
+		}},
+		Observed: []automations.ObservedInstance{{
+			AutomationID: "automations-wire",
+			SourceID:     "source-a",
+			InstanceID:   "instance-a",
+			State:        automations.ObservedLifecycleRunning,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Root().Reconcile() = %v", err)
+	}
+	if len(reconciled.Outcomes) != 1 {
+		t.Fatalf("Root().Reconcile() outcomes = %+v, want one converged source", reconciled.Outcomes)
+	}
+	if reconciled.Outcomes[0].Convergence != automations.ConvergenceStatusConverged {
+		t.Fatalf(
+			"Root().Reconcile() convergence = %q, want %q",
+			reconciled.Outcomes[0].Convergence,
+			automations.ConvergenceStatusConverged,
+		)
+	}
+
+	watcher := published.NewFilesystemWatcher(automations.FilesystemWatcherConfig{
+		Dir: t.TempDir(),
+		Submitter: func(context.Context, work.WorkRequest) error {
+			return nil
+		},
+		Files:          stubFilesystemInputReader{},
+		WalkDirectory:  func(string, fs.WalkDirFunc) error { return nil },
+		WorkRequestIDs: func() string { return "wire-peer-test" },
+	})
+	if watcher == nil {
+		t.Fatal("NewFilesystemWatcher returned nil watcher")
+	}
+
+	_, err = root.SourceStatus(context.Background(), automations.SourceStatusRequest{
+		Identity: automations.SourceIdentity{
+			AutomationID: "automations-wire",
+			SourceID:     "missing-source",
+		},
+	})
+	var automationsErr *automations.Error
+	if !errors.As(err, &automationsErr) || automationsErr.Code != automations.ErrorCodeNotFound {
+		t.Fatalf("Root().SourceStatus() = %v, want typed not-found error", err)
+	}
+	if !errors.Is(err, automations.ErrNotFound) {
+		t.Fatalf("Root().SourceStatus() = %v, want ErrNotFound", err)
+	}
+
+	_, err = root.Reconcile(context.Background(), automations.ReconcileRequest{
+		Desired: []automations.DesiredSpec{{
+			SourceID: "source-a",
+			Kind:     "schedule",
+			State:    automations.DesiredLifecycleRunning,
+		}},
+	})
+	if !errors.As(err, &automationsErr) || automationsErr.Code != automations.ErrorCodeInvalid {
+		t.Fatalf("Root().Reconcile(invalid) = %v, want typed invalid error", err)
+	}
+	if !errors.Is(err, automations.ErrInvalidRequest) {
+		t.Fatalf("Root().Reconcile(invalid) = %v, want ErrInvalidRequest", err)
+	}
 }
 
 func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
