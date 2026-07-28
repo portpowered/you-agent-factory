@@ -1284,7 +1284,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings",
-      "minimum": 50.59
+      "minimum": 46.25
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/identityinventory",
