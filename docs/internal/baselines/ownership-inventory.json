@@ -1211,6 +1211,12 @@
     },
     {
       "fromOwner": "factory_runtime",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/factory_runtime/transports/cli -\u003e pkg/transports/cli/cliserver"
+    },
+    {
+      "fromOwner": "factory_runtime",
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/services/factory_runtime/engine -\u003e pkg/services/work"
@@ -3175,6 +3181,12 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/cli",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"
