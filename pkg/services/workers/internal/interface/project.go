@@ -1,7 +1,7 @@
 package mockworkers
 
 // TopologyBaselineRelativePath is the committed mock-worker topology inventory fixture.
-const TopologyBaselineRelativePath = "pkg/services/workers/interface/testdata/baseline/mock-workers-topology.json"
+const TopologyBaselineRelativePath = "pkg/services/workers/internal/interface/testdata/baseline/mock-workers-topology.json"
 
 // ProjectTopologyInventory builds the deterministic mock-worker topology inventory
 // from current ParseMockWorkersConfig / LoadMockWorkersConfig / Validate boundaries.

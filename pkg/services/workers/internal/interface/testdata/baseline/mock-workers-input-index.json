@@ -11,7 +11,7 @@
       "category": "parse-empty-default",
       "entrypoint": "ParseMockWorkersConfig",
       "outcome": "accept",
-      "fixture": "pkg/services/workers/interface/testdata/fixtures/valid/empty-accept.json",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/valid/empty-accept.json",
       "description": "empty mockWorkers array is the default accept config when unmatchedDispatchPolicy is omitted",
       "expectedConfig": {}
     },
@@ -20,7 +20,7 @@
       "category": "parse-accept-entry",
       "entrypoint": "ParseMockWorkersConfig",
       "outcome": "accept",
-      "fixture": "pkg/services/workers/interface/testdata/fixtures/valid/accept-entry-selectors.json",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/valid/accept-entry-selectors.json",
       "description": "accept runType preserves selector-bearing workInputs entries",
       "expectedConfig": {
         "mockWorkerCount": 1,
@@ -39,7 +39,7 @@
       "category": "parse-reject-entry",
       "entrypoint": "ParseMockWorkersConfig",
       "outcome": "accept",
-      "fixture": "pkg/services/workers/interface/testdata/fixtures/valid/reject-without-reject-config.json",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/valid/reject-without-reject-config.json",
       "description": "reject runType accepts omitted rejectConfig",
       "expectedConfig": {
         "mockWorkerCount": 1,
@@ -56,7 +56,7 @@
       "category": "parse-script-entry",
       "entrypoint": "ParseMockWorkersConfig",
       "outcome": "accept",
-      "fixture": "pkg/services/workers/interface/testdata/fixtures/valid/script-minimal-command.json",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/valid/script-minimal-command.json",
       "description": "script runType requires only scriptConfig.command; optional script fields may be omitted",
       "expectedConfig": {
         "mockWorkerCount": 1,
@@ -74,7 +74,7 @@
       "category": "parse-unmatched-policy",
       "entrypoint": "ParseMockWorkersConfig",
       "outcome": "accept",
-      "fixture": "pkg/services/workers/interface/testdata/fixtures/valid/unmatched-policy-explicit-accept.json",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/valid/unmatched-policy-explicit-accept.json",
       "description": "explicit unmatchedDispatchPolicy accept matches omitted-policy default behavior",
       "expectedConfig": {
         "unmatchedDispatchPolicy": "accept"
@@ -146,7 +146,7 @@
       "category": "parse-unknown-field",
       "entrypoint": "ParseMockWorkersConfig",
       "outcome": "reject",
-      "fixture": "pkg/services/workers/interface/testdata/fixtures/invalid/unknown-top-level.json",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-top-level.json",
       "description": "unknown top-level keys are rejected under strict decode",
       "errorFragments": [
         "decode mock workers JSON",
@@ -158,7 +158,7 @@
       "category": "parse-unknown-field",
       "entrypoint": "ParseMockWorkersConfig",
       "outcome": "reject",
-      "fixture": "pkg/services/workers/interface/testdata/fixtures/invalid/unknown-nested-mock-worker.json",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-nested-mock-worker.json",
       "description": "unknown nested mockWorkers[] keys are rejected under strict decode",
       "errorFragments": [
         "decode mock workers JSON",
@@ -170,7 +170,7 @@
       "category": "parse-unknown-field",
       "entrypoint": "ParseMockWorkersConfig",
       "outcome": "reject",
-      "fixture": "pkg/services/workers/interface/testdata/fixtures/invalid/trailing-json.json",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/invalid/trailing-json.json",
       "description": "trailing JSON values after the root object are rejected",
       "errorFragments": [
         "unexpected trailing JSON"
@@ -181,7 +181,7 @@
       "category": "parse-accept-entry",
       "entrypoint": "ParseMockWorkersConfig",
       "outcome": "reject",
-      "fixture": "pkg/services/workers/interface/testdata/fixtures/invalid/unknown-run-type.json",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-run-type.json",
       "description": "unknown runType values fail validation with actionable diagnostics",
       "errorFragments": [
         "runType must be one of \"accept\", \"script\", or \"reject\"; got \"maybe\""
@@ -192,7 +192,7 @@
       "category": "parse-unmatched-policy",
       "entrypoint": "ParseMockWorkersConfig",
       "outcome": "reject",
-      "fixture": "pkg/services/workers/interface/testdata/fixtures/invalid/unknown-unmatched-policy.json",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-unmatched-policy.json",
       "description": "unknown unmatchedDispatchPolicy values fail validation with actionable diagnostics",
       "errorFragments": [
         "unmatchedDispatchPolicy must be one of \"accept\" or \"passthrough\"; got \"maybe\""
@@ -203,7 +203,7 @@
       "category": "parse-script-entry",
       "entrypoint": "ParseMockWorkersConfig",
       "outcome": "reject",
-      "fixture": "pkg/services/workers/interface/testdata/fixtures/invalid/script-without-script-config.json",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/invalid/script-without-script-config.json",
       "description": "script runType without scriptConfig fails validation",
       "errorFragments": [
         "scriptConfig is required"
@@ -214,7 +214,7 @@
       "category": "parse-script-entry",
       "entrypoint": "ParseMockWorkersConfig",
       "outcome": "reject",
-      "fixture": "pkg/services/workers/interface/testdata/fixtures/invalid/script-without-command.json",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/invalid/script-without-command.json",
       "description": "script runType without scriptConfig.command fails validation",
       "errorFragments": [
         "scriptConfig.command is required"
@@ -225,7 +225,7 @@
       "category": "parse-reject-entry",
       "entrypoint": "ParseMockWorkersConfig",
       "outcome": "reject",
-      "fixture": "pkg/services/workers/interface/testdata/fixtures/invalid/reject-exit-code-out-of-range.json",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/invalid/reject-exit-code-out-of-range.json",
       "description": "rejectConfig.exitCode outside 1-255 fails validation",
       "errorFragments": [
         "rejectConfig.exitCode must be between 1 and 255"

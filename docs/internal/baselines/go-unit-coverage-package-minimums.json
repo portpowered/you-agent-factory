@@ -1987,7 +1987,7 @@
       "minimum": 71.96
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/diagnostics",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/diagnostics",
       "exception": {
         "kind": "measurement",
         "justification": "The active unit coverage profile contains no measurable statements for this package.",
@@ -2019,7 +2019,7 @@
       "minimum": 81.10
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/interface",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/interface",
       "minimum": 96.51
     },
     {

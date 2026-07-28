@@ -7,7 +7,7 @@ package mockworkers
 const InputInventoryFormatVersion = "mock-workers-input/v1"
 
 // InputIndexBaselineRelativePath is the committed mock-worker input index fixture.
-const InputIndexBaselineRelativePath = "pkg/services/workers/interface/testdata/baseline/mock-workers-input-index.json"
+const InputIndexBaselineRelativePath = "pkg/services/workers/internal/interface/testdata/baseline/mock-workers-input-index.json"
 
 const (
 	outcomeAccept = "accept"

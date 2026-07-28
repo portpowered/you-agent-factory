@@ -5072,8 +5072,8 @@
       "disposition": "move",
       "destination": "workers",
       "destinationKind": "owner",
-      "successor": "pkg/services/workers/internal/services/runners",
-      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/execution",
@@ -5112,11 +5112,27 @@
       "disposition": "move",
       "destination": "workers",
       "destinationKind": "owner",
-      "successor": "pkg/services/workers/internal/services/runners",
-      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/internal",
+      "disposition": "move",
+      "destination": "workers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/diagnostics",
+      "disposition": "move",
+      "destination": "workers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/interface",
       "disposition": "move",
       "destination": "workers",
       "destinationKind": "owner",

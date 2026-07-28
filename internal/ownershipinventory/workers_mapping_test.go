@@ -75,8 +75,8 @@ func TestMapPackageWorkersMoveDestinations(t *testing.T) {
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "workers",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/workers/internal/services/runners",
-				DeletionCondition: "delete public package after IMP-WRK-runners private subservice cutover proof",
+				Successor:         "pkg/services/workers/internal",
+				DeletionCondition: "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof",
 			},
 		},
 		{
@@ -86,8 +86,8 @@ func TestMapPackageWorkersMoveDestinations(t *testing.T) {
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "workers",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/workers/internal/services/runners",
-				DeletionCondition: "delete public package after IMP-WRK-runners private subservice cutover proof",
+				Successor:         "pkg/services/workers/internal",
+				DeletionCondition: "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof",
 			},
 		},
 		{

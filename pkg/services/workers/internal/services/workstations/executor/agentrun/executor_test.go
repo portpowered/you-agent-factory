@@ -9,7 +9,7 @@ import (
 	"time"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/diagnostics"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/internal/diagnostics"
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 

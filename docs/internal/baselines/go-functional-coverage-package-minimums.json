@@ -2473,7 +2473,7 @@
       "minimum": 74.13
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/diagnostics",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/diagnostics",
       "exception": {
         "kind": "measurement",
         "justification": "The active functional coverage profile contains no measurable statements for this package.",
@@ -2505,7 +2505,7 @@
       "minimum": 43.76
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/interface",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/interface",
       "exception": {
         "kind": "measurement",
         "justification": "The active functional coverage profile contains no measurable statements for this package.",

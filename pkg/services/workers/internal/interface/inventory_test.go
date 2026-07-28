@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/services/workers/interface"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/interface"
 )
 
 func TestProjectTopologyInventory_RecordsLoaderBoundariesAndRunTypes(t *testing.T) {

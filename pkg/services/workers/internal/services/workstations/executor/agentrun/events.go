@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/diagnostics"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/internal/diagnostics"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 

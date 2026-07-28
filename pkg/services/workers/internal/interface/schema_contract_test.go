@@ -12,7 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/contractstaging"
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/services/workers/interface"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/interface"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 

@@ -77,7 +77,7 @@ func TestMapCommittedOwnerPackageWorkersMoveDestinations(t *testing.T) {
 			want: PackageMapping{
 				PackagePath: "pkg/services/workers/diagnostics",
 				Disposition: DispositionMove,
-				Destination: "workers/internal/services/runners",
+				Destination: "workers/internal",
 			},
 		},
 		{
@@ -141,7 +141,7 @@ func TestMapCommittedOwnerPackageWorkersMoveDestinations(t *testing.T) {
 			want: PackageMapping{
 				PackagePath: "pkg/services/workers/interface",
 				Disposition: DispositionMove,
-				Destination: "workers/internal/services/runners",
+				Destination: "workers/internal",
 			},
 		},
 		{

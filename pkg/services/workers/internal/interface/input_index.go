@@ -34,7 +34,7 @@ func parseValidFixtureInputCases() []InputCase {
 			Category:    categoryParseEmptyDefault,
 			Entrypoint:  entrypointParseMockWorkersConfig,
 			Outcome:     outcomeAccept,
-			Fixture:     "pkg/services/workers/interface/testdata/fixtures/valid/empty-accept.json",
+			Fixture:     "pkg/services/workers/internal/interface/testdata/fixtures/valid/empty-accept.json",
 			Description: "empty mockWorkers array is the default accept config when unmatchedDispatchPolicy is omitted",
 			ExpectedConfig: &MockWorkersConfigExpectation{
 				MockWorkerCount: 0,
@@ -45,7 +45,7 @@ func parseValidFixtureInputCases() []InputCase {
 			Category:    categoryParseAcceptEntry,
 			Entrypoint:  entrypointParseMockWorkersConfig,
 			Outcome:     outcomeAccept,
-			Fixture:     "pkg/services/workers/interface/testdata/fixtures/valid/accept-entry-selectors.json",
+			Fixture:     "pkg/services/workers/internal/interface/testdata/fixtures/valid/accept-entry-selectors.json",
 			Description: "accept runType preserves selector-bearing workInputs entries",
 			ExpectedConfig: &MockWorkersConfigExpectation{
 				MockWorkerCount: 1,
@@ -62,7 +62,7 @@ func parseValidFixtureInputCases() []InputCase {
 			Category:    categoryParseRejectEntry,
 			Entrypoint:  entrypointParseMockWorkersConfig,
 			Outcome:     outcomeAccept,
-			Fixture:     "pkg/services/workers/interface/testdata/fixtures/valid/reject-without-reject-config.json",
+			Fixture:     "pkg/services/workers/internal/interface/testdata/fixtures/valid/reject-without-reject-config.json",
 			Description: "reject runType accepts omitted rejectConfig",
 			ExpectedConfig: &MockWorkersConfigExpectation{
 				MockWorkerCount: 1,
@@ -77,7 +77,7 @@ func parseValidFixtureInputCases() []InputCase {
 			Category:    categoryParseScriptEntry,
 			Entrypoint:  entrypointParseMockWorkersConfig,
 			Outcome:     outcomeAccept,
-			Fixture:     "pkg/services/workers/interface/testdata/fixtures/valid/script-minimal-command.json",
+			Fixture:     "pkg/services/workers/internal/interface/testdata/fixtures/valid/script-minimal-command.json",
 			Description: "script runType requires only scriptConfig.command; optional script fields may be omitted",
 			ExpectedConfig: &MockWorkersConfigExpectation{
 				MockWorkerCount: 1,
@@ -93,7 +93,7 @@ func parseValidFixtureInputCases() []InputCase {
 			Category:    categoryParseUnmatchedPolicy,
 			Entrypoint:  entrypointParseMockWorkersConfig,
 			Outcome:     outcomeAccept,
-			Fixture:     "pkg/services/workers/interface/testdata/fixtures/valid/unmatched-policy-explicit-accept.json",
+			Fixture:     "pkg/services/workers/internal/interface/testdata/fixtures/valid/unmatched-policy-explicit-accept.json",
 			Description: "explicit unmatchedDispatchPolicy accept matches omitted-policy default behavior",
 			ExpectedConfig: &MockWorkersConfigExpectation{
 				UnmatchedDispatchPolicy: string(MockWorkerUnmatchedDispatchPolicyAccept),
@@ -170,7 +170,7 @@ func parseInvalidInputCases() []InputCase {
 			Category:    categoryParseUnknownField,
 			Entrypoint:  entrypointParseMockWorkersConfig,
 			Outcome:     outcomeReject,
-			Fixture:     "pkg/services/workers/interface/testdata/fixtures/invalid/unknown-top-level.json",
+			Fixture:     "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-top-level.json",
 			Description: "unknown top-level keys are rejected under strict decode",
 			ErrorFragments: []string{
 				"decode mock workers JSON",
@@ -182,7 +182,7 @@ func parseInvalidInputCases() []InputCase {
 			Category:    categoryParseUnknownField,
 			Entrypoint:  entrypointParseMockWorkersConfig,
 			Outcome:     outcomeReject,
-			Fixture:     "pkg/services/workers/interface/testdata/fixtures/invalid/unknown-nested-mock-worker.json",
+			Fixture:     "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-nested-mock-worker.json",
 			Description: "unknown nested mockWorkers[] keys are rejected under strict decode",
 			ErrorFragments: []string{
 				"decode mock workers JSON",
@@ -194,7 +194,7 @@ func parseInvalidInputCases() []InputCase {
 			Category:    categoryParseUnknownField,
 			Entrypoint:  entrypointParseMockWorkersConfig,
 			Outcome:     outcomeReject,
-			Fixture:     "pkg/services/workers/interface/testdata/fixtures/invalid/trailing-json.json",
+			Fixture:     "pkg/services/workers/internal/interface/testdata/fixtures/invalid/trailing-json.json",
 			Description: "trailing JSON values after the root object are rejected",
 			ErrorFragments: []string{
 				"unexpected trailing JSON",
@@ -205,7 +205,7 @@ func parseInvalidInputCases() []InputCase {
 			Category:    categoryParseAcceptEntry,
 			Entrypoint:  entrypointParseMockWorkersConfig,
 			Outcome:     outcomeReject,
-			Fixture:     "pkg/services/workers/interface/testdata/fixtures/invalid/unknown-run-type.json",
+			Fixture:     "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-run-type.json",
 			Description: "unknown runType values fail validation with actionable diagnostics",
 			ErrorFragments: []string{
 				`runType must be one of "accept", "script", or "reject"; got "maybe"`,
@@ -216,7 +216,7 @@ func parseInvalidInputCases() []InputCase {
 			Category:    categoryParseUnmatchedPolicy,
 			Entrypoint:  entrypointParseMockWorkersConfig,
 			Outcome:     outcomeReject,
-			Fixture:     "pkg/services/workers/interface/testdata/fixtures/invalid/unknown-unmatched-policy.json",
+			Fixture:     "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-unmatched-policy.json",
 			Description: "unknown unmatchedDispatchPolicy values fail validation with actionable diagnostics",
 			ErrorFragments: []string{
 				`unmatchedDispatchPolicy must be one of "accept" or "passthrough"; got "maybe"`,
@@ -227,7 +227,7 @@ func parseInvalidInputCases() []InputCase {
 			Category:    categoryParseScriptEntry,
 			Entrypoint:  entrypointParseMockWorkersConfig,
 			Outcome:     outcomeReject,
-			Fixture:     "pkg/services/workers/interface/testdata/fixtures/invalid/script-without-script-config.json",
+			Fixture:     "pkg/services/workers/internal/interface/testdata/fixtures/invalid/script-without-script-config.json",
 			Description: "script runType without scriptConfig fails validation",
 			ErrorFragments: []string{
 				"scriptConfig is required",
@@ -238,7 +238,7 @@ func parseInvalidInputCases() []InputCase {
 			Category:    categoryParseScriptEntry,
 			Entrypoint:  entrypointParseMockWorkersConfig,
 			Outcome:     outcomeReject,
-			Fixture:     "pkg/services/workers/interface/testdata/fixtures/invalid/script-without-command.json",
+			Fixture:     "pkg/services/workers/internal/interface/testdata/fixtures/invalid/script-without-command.json",
 			Description: "script runType without scriptConfig.command fails validation",
 			ErrorFragments: []string{
 				"scriptConfig.command is required",
@@ -249,7 +249,7 @@ func parseInvalidInputCases() []InputCase {
 			Category:    categoryParseRejectEntry,
 			Entrypoint:  entrypointParseMockWorkersConfig,
 			Outcome:     outcomeReject,
-			Fixture:     "pkg/services/workers/interface/testdata/fixtures/invalid/reject-exit-code-out-of-range.json",
+			Fixture:     "pkg/services/workers/internal/interface/testdata/fixtures/invalid/reject-exit-code-out-of-range.json",
 			Description: "rejectConfig.exitCode outside 1-255 fails validation",
 			ErrorFragments: []string{
 				"rejectConfig.exitCode must be between 1 and 255",

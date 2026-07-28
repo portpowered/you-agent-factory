@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/services/workers/interface"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/interface"
 )
 
 // productionLoaderSources records the loader implementation files this inventory
@@ -22,13 +22,13 @@ var productionLoaderSources = []struct {
 	sha256Hex    string
 }{
 	{
-		relativePath: "pkg/services/workers/interface/config.go",
+		relativePath: "pkg/services/workers/internal/interface/config.go",
 		sha256Hex:    "6208ee5c7f15b258be2fb6816690651acbf1a751cec58989448e01d7ad2cbe76",
 	},
 }
 
 var inventoryLaneRoots = []string{
-	"pkg/services/workers/interface/testdata",
+	"pkg/services/workers/internal/interface/testdata",
 }
 
 func TestProductionLoaderSources_UnchangedForInventoryLane(t *testing.T) {

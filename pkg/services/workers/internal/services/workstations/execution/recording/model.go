@@ -17,7 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/diagnostics"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/internal/diagnostics"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
 

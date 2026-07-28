@@ -9,7 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/services/workers/interface"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/interface"
 )
 
 func localMockWorkersConfigLoader(t *testing.T) mockworkers.MockWorkersConfigLoader {
