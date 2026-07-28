@@ -118,6 +118,11 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			mutate: func(ports *constructionPorts) { ports.portableFileSystem = nil },
 			want:   "portable filesystem is required",
 		},
+		{
+			name:   "directory replacement store",
+			mutate: func(ports *constructionPorts) { ports.directoryReplacementStore = nil },
+			want:   "directory replacement store is required",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -138,6 +143,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 				ports.requiredToolChecker,
 				ports.orchestratorValidator,
 				ports.portableFileSystem,
+				ports.directoryReplacementStore,
 			)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("NewService() error = %v, want %q", err, test.want)
@@ -198,6 +204,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		stubRequiredToolChecker{},
 		stubOrchestratorValidator{},
 		platformfilesystem.Local{},
+		stubDirectoryReplacementStore{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -281,6 +288,7 @@ func TestNewServiceServesPublishedPackagedCatalogPeerBehavior(t *testing.T) {
 		ports.requiredToolChecker,
 		ports.orchestratorValidator,
 		ports.portableFileSystem,
+		ports.directoryReplacementStore,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -341,6 +349,7 @@ func TestNewServiceServesPublishedCompilePeerBehavior(t *testing.T) {
 		ports.requiredToolChecker,
 		ports.orchestratorValidator,
 		ports.portableFileSystem,
+		ports.directoryReplacementStore,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -419,6 +428,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 		ports.requiredToolChecker,
 		ports.orchestratorValidator,
 		ports.portableFileSystem,
+		ports.directoryReplacementStore,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -454,6 +464,7 @@ func TestNewServiceDelegatesSnapshotPortabilityThroughRoot(t *testing.T) {
 		ports.requiredToolChecker,
 		ports.orchestratorValidator,
 		ports.portableFileSystem,
+		ports.directoryReplacementStore,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -518,6 +529,7 @@ type constructionPorts struct {
 	requiredToolChecker           factorydefinitions.RequiredToolChecker
 	orchestratorValidator         factorydefinitions.OrchestratorDefinitionValidator
 	portableFileSystem            portablefiles.FileSystem
+	directoryReplacementStore     factorydefinitions.DirectoryReplacementStore
 }
 
 func validConstructionPorts(t *testing.T) constructionPorts {
@@ -566,8 +578,16 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 		requiredToolChecker:   stubRequiredToolChecker{},
 		orchestratorValidator: stubOrchestratorValidator{},
 		portableFileSystem:    platformfilesystem.Local{},
+		directoryReplacementStore: stubDirectoryReplacementStore{},
 	}
 }
+
+type stubDirectoryReplacementStore struct{}
+
+func (stubDirectoryReplacementStore) Commit(string, string, string) (string, error) {
+	return "", nil
+}
+func (stubDirectoryReplacementStore) Restore(string, string) {}
 
 type stubSessionHost struct{}
 

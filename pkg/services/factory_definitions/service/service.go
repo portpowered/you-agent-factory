@@ -8,6 +8,7 @@ import (
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
+	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
@@ -36,6 +37,57 @@ func New(
 	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
 	requiredToolChecker factoryroot.RequiredToolChecker,
 	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
+) factoryroot.Service {
+	return NewWithAuthoringLayout(
+		sessionHost,
+		activationGateway,
+		clock,
+		versionFileSystem,
+		validator,
+		loadCanonical,
+		loadFactory,
+		readCurrentFactoryPointer,
+		prepareFactoryLayoutPayload,
+		persistNamedFactory,
+		writeCurrentFactoryPointer,
+		preparePortableFactoryConfig,
+		captureFactorySnapshot,
+		replaceFactoryLayout,
+		namedPaths,
+		namedFactoryCatalogFileSystem,
+		packagedCatalog,
+		packagedInstaller,
+		requiredToolChecker,
+		orchestratorValidator,
+		nil,
+	)
+}
+
+// NewWithAuthoringLayout constructs the public Factory Definitions service
+// with the private authoring_layout subservice attached to the CTR-DEF root
+// authoring slice.
+func NewWithAuthoringLayout(
+	sessionHost factoryroot.SessionHost,
+	activationGateway factoryroot.DefinitionActivationGateway,
+	clock factoryroot.Clock,
+	versionFileSystem factoryroot.VersionFileSystem,
+	validator factoryroot.Validator,
+	loadCanonical factoryroot.CanonicalFactoryJSONLoader,
+	loadFactory factoryroot.LoadedFactoryLoader,
+	readCurrentFactoryPointer factoryroot.CurrentFactoryPointerReader,
+	prepareFactoryLayoutPayload factoryroot.FactoryLayoutPayloadPreparer,
+	persistNamedFactory factoryroot.NamedFactoryPersister,
+	writeCurrentFactoryPointer factoryroot.CurrentFactoryPointerWriter,
+	preparePortableFactoryConfig factoryroot.PortableFactoryConfigPreparer,
+	captureFactorySnapshot factoryroot.FactorySnapshotCapturer,
+	replaceFactoryLayout factoryroot.FactoryLayoutReplacer,
+	namedPaths factoryroot.NamedPathResolver,
+	namedFactoryCatalogFileSystem factoryroot.NamedFactoryCatalogFileSystem,
+	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
+	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
+	requiredToolChecker factoryroot.RequiredToolChecker,
+	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
+	authoringLayout authoringlayout.Service,
 ) factoryroot.Service {
 	if sessionHost == nil || activationGateway == nil || clock == nil || versionFileSystem == nil ||
 		namedPaths == nil || namedFactoryCatalogFileSystem == nil ||
@@ -83,15 +135,16 @@ func New(
 	validationService, _ := validationwire.NewService(validationservice.Dependencies{
 		Operations:            operations,
 		Effective:             effective,
-		LoadCanonical:       loadCanonical,
+		LoadCanonical:         loadCanonical,
 		RequiredToolChecker:   requiredToolChecker,
 		OrchestratorValidator: orchestratorValidator,
 	})
-	return factorydefinition.NewWithCatalogPackagesValidationAndInstallation(
+	return factorydefinition.NewWithCatalogPackagesValidationInstallationAndAuthoring(
 		host,
 		activationGateway,
 		catalogService,
 		validationService,
+		authoringLayout,
 		packagedCatalog,
 		packagedInstaller,
 		versionFileSystem,

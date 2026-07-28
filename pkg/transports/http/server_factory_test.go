@@ -16,7 +16,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
@@ -46,7 +45,6 @@ type strictWorkAPIFake struct {
 	move      func(context.Context, string, string, string, string) (work.OperatorMoveResult, error)
 	subscribe func(context.Context, string, *workerconfig.FactoryEventReconnectCursor) (*workerconfig.FactoryEventStream, error)
 	probe     func(context.Context, string, *workerconfig.FactoryEventReconnectCursor) error
-	snapshot  func(context.Context, string) (*workerconfig.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error)
 	list      func(context.Context, string, work.ListOptions) (work.ListResult, error)
 	getWork   func(context.Context, string, string) (work.ReadModel, error)
 	moveRead  func(context.Context, string, string, string, string) (work.ReadModel, error)
@@ -182,13 +180,6 @@ func (fake strictWorkAPIFake) ProbeFactoryEventsForSession(ctx context.Context, 
 		panic("unexpected WorkAPI.ProbeFactoryEventsForSession call")
 	}
 	return fake.probe(ctx, sessionID, reconnect)
-}
-
-func (fake strictWorkAPIFake) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*workerconfig.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
-	if fake.snapshot == nil {
-		panic("unexpected WorkAPI.GetEngineStateSnapshotForSession call")
-	}
-	return fake.snapshot(ctx, sessionID)
 }
 
 func newWorkTransportTestServer(workAPI apisurface.WorkAPI) *Server {
@@ -1130,9 +1121,6 @@ func TestSessionScopedWorkRoutes_UnknownSessionReturnsNotFound(t *testing.T) {
 			},
 			move: func(context.Context, string, string, string, string) (work.OperatorMoveResult, error) {
 				return work.OperatorMoveResult{}, missing()
-			},
-			snapshot: func(context.Context, string) (*workerconfig.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
-				return nil, missing()
 			},
 			list: func(context.Context, string, work.ListOptions) (work.ListResult, error) {
 				return work.ListResult{}, missing()

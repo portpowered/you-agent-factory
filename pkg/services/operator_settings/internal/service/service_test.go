@@ -8,16 +8,13 @@ import (
 	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	documentwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/wire"
 	resolutionwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/wire"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/operator_settings/testproviders"
 )
 
 func TestRootDelegatesResolveEffectiveToPrivateOwner(t *testing.T) {
 	t.Parallel()
 
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() = %v", err)
-	}
+	providersRoot := testproviders.StandardCatalog()
 	documentService := documentwire.NewService(
 		&rootTestFileSystem{},
 		rootTestCreateTemporaryFile,
@@ -60,10 +57,7 @@ func TestRootDelegatesResolveEffectiveToPrivateOwner(t *testing.T) {
 func TestNew_RejectsNilDocument(t *testing.T) {
 	t.Parallel()
 
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() = %v", err)
-	}
+	providersRoot := testproviders.StandardCatalog()
 	resolutionService, err := resolutionwire.NewService(providersRoot)
 	if err != nil {
 		t.Fatalf("resolutionwire.NewService() = %v", err)

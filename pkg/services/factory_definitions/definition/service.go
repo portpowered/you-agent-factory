@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
@@ -30,13 +31,14 @@ const (
 type Service struct {
 	nonCatalogDefaults
 	catalog.Service
-	validationService  validationservice.Service
-	compilationService compilationservice.Service
-	host               Host
-	activationGateway  factoryroot.DefinitionActivationGateway
-	versionFileSystem  factoryroot.VersionFileSystem
-	packagedCatalog    factoryroot.PackagedFactoryCatalogOperations
-	packagedInstaller  factoryroot.PackagedFactoryInstallationOperations
+	validationService        validationservice.Service
+	authoringLayoutService   authoringlayout.Service
+	compilationService       compilationservice.Service
+	host                     Host
+	activationGateway        factoryroot.DefinitionActivationGateway
+	versionFileSystem        factoryroot.VersionFileSystem
+	packagedCatalog          factoryroot.PackagedFactoryCatalogOperations
+	packagedInstaller        factoryroot.PackagedFactoryInstallationOperations
 }
 
 type nonCatalogDefaults interface {
@@ -163,6 +165,31 @@ func NewWithCatalogPackagesValidationAndInstallation(
 	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
+	return NewWithCatalogPackagesValidationInstallationAndAuthoring(
+		host,
+		activationGateway,
+		catalogService,
+		validationService,
+		nil,
+		packagedCatalog,
+		packagedInstaller,
+		versionFileSystems...,
+	)
+}
+
+// NewWithCatalogPackagesValidationInstallationAndAuthoring constructs the
+// complete Definitions root collaborator with catalog, validation, packaged
+// installation, and private authoring_layout ownership.
+func NewWithCatalogPackagesValidationInstallationAndAuthoring(
+	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
+	catalogService catalog.Service,
+	validationService validationservice.Service,
+	authoringLayoutService authoringlayout.Service,
+	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
+	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
+	versionFileSystems ...factoryroot.VersionFileSystem,
+) *Service {
 	service := NewWithCatalogPackagesAndInstallation(
 		host,
 		activationGateway,
@@ -172,6 +199,7 @@ func NewWithCatalogPackagesValidationAndInstallation(
 		versionFileSystems...,
 	)
 	service.validationService = validationService
+	service.authoringLayoutService = authoringLayoutService
 	return service
 }
 
@@ -203,6 +231,56 @@ func (s *Service) ValidateEffectiveFactoryDefinition(
 		return factoryroot.UnimplementedService{}.ValidateEffectiveFactoryDefinition(ctx, request)
 	}
 	return s.validationService.ValidateEffectiveFactoryDefinition(ctx, request)
+}
+
+func (s *Service) PrepareFactoryLayout(
+	ctx context.Context,
+	request factoryroot.PrepareFactoryLayoutRequest,
+) (factoryroot.PrepareFactoryLayoutResult, error) {
+	if s == nil || s.authoringLayoutService == nil {
+		return factoryroot.UnimplementedService{}.PrepareFactoryLayout(ctx, request)
+	}
+	return s.authoringLayoutService.PrepareFactoryLayout(ctx, request)
+}
+
+func (s *Service) FlattenFactoryLayout(
+	ctx context.Context,
+	request factoryroot.FlattenFactoryLayoutRequest,
+) (factoryroot.FlattenFactoryLayoutResult, error) {
+	if s == nil || s.authoringLayoutService == nil {
+		return factoryroot.UnimplementedService{}.FlattenFactoryLayout(ctx, request)
+	}
+	return s.authoringLayoutService.FlattenFactoryLayout(ctx, request)
+}
+
+func (s *Service) ExpandFactoryLayout(
+	ctx context.Context,
+	request factoryroot.ExpandFactoryLayoutRequest,
+) (factoryroot.ExpandFactoryLayoutResult, error) {
+	if s == nil || s.authoringLayoutService == nil {
+		return factoryroot.UnimplementedService{}.ExpandFactoryLayout(ctx, request)
+	}
+	return s.authoringLayoutService.ExpandFactoryLayout(ctx, request)
+}
+
+func (s *Service) CreateNamedFactory(
+	ctx context.Context,
+	request factoryroot.CreateNamedFactoryRequest,
+) (factoryroot.CreateNamedFactoryResult, error) {
+	if s == nil || s.authoringLayoutService == nil {
+		return factoryroot.UnimplementedService{}.CreateNamedFactory(ctx, request)
+	}
+	return s.authoringLayoutService.CreateNamedFactory(ctx, request)
+}
+
+func (s *Service) ReplaceNamedFactory(
+	ctx context.Context,
+	request factoryroot.ReplaceNamedFactoryRequest,
+) (factoryroot.ReplaceNamedFactoryResult, error) {
+	if s == nil || s.authoringLayoutService == nil {
+		return factoryroot.UnimplementedService{}.ReplaceNamedFactory(ctx, request)
+	}
+	return s.authoringLayoutService.ReplaceNamedFactory(ctx, request)
 }
 
 func (s *Service) ListBuiltInPackagedFactories(

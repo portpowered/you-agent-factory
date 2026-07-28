@@ -244,11 +244,13 @@ func (fs *SessionRuntime) requireIdleRuntimeForSession(
 	ctx context.Context,
 	sessionID string,
 ) error {
-	snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, sessionID)
+	observationResult, err := fs.ObserveForSession(ctx, sessionID, factory.ObserveRequest{
+		Scope: factory.ObservationScopeFull,
+	})
 	if err != nil {
 		return fmt.Errorf("read session runtime status: %w", err)
 	}
-	return factory.RequireIdleRuntime(snapshot)
+	return factory.RequireIdleRuntimeFromObservation(observationResult.Observation)
 }
 
 //nolint:contextcheck // The request context bounds the save/startup wait, while the long-lived service runtime context owns the replacement session runtime and sidecars after the request returns.

@@ -112,10 +112,6 @@ func TestLegacySessionOperationsFailClosedForRootOnlyRuntime(t *testing.T) {
 		!strings.Contains(err.Error(), "legacy Factory Runtime event subscription is required") {
 		t.Fatalf("SubscribeFactoryEventsForSession error = %v, want missing legacy event capability", err)
 	}
-	if _, err := service.GetEngineStateSnapshotForSession(ctx, "session-1"); err == nil ||
-		!strings.Contains(err.Error(), "legacy Factory Runtime observation is unavailable") {
-		t.Fatalf("GetEngineStateSnapshotForSession error = %v, want missing legacy observation capability", err)
-	}
 }
 
 func TestSubmitFileParsesAndSubmitsCanonicalWorkRequest(t *testing.T) {

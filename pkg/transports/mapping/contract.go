@@ -30,6 +30,8 @@ type FactorySaveAPI interface {
 // operations retained by the HTTP compatibility routes.
 type RuntimeAPI interface {
 	factory.APIFactory
+	// GetEngineStateSnapshot is migration-only and not part of the APIFactory peer contract.
+	GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net], error)
 	GetCurrentFactory(ctx context.Context) (factoryapi.Factory, error)
 }
 
@@ -71,7 +73,6 @@ type WorkAPI interface {
 	MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (work.OperatorMoveResult, error)
 	SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
 	ProbeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) error
-	GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net], error)
 }
 
 // WorkReadAPI is the exact detached Work query and move-result role. It is
