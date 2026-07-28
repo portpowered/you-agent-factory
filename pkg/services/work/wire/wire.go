@@ -9,7 +9,9 @@
 package wire
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -57,11 +59,27 @@ func NewService(
 	writeFile work.ContentWriteFile,
 	openFile work.ContentOpenFile,
 ) (work.Service, error) {
+	if err := validateNewServiceInputs(
+		runtimes,
+		filesystem,
+		random,
+		clock,
+		hostPlatform,
+		httpDoer,
+		inspectPath,
+		createTempFile,
+		removePath,
+		writeFile,
+		openFile,
+	); err != nil {
+		return nil, err
+	}
 	contentStaging, err := contentstagingwire.NewService(filesystem, random, clock, stagingTTL)
 	if err != nil {
 		return nil, err
 	}
-	contentMaterializer, err := contentmaterializationwire.NewService(
+	// Wire validation covers nested materialization construction preconditions.
+	contentMaterializer, _ := contentmaterializationwire.NewService(
 		hostPlatform,
 		0,
 		0,
@@ -75,9 +93,6 @@ func NewService(
 		writeFile,
 		openFile,
 	)
-	if err != nil {
-		return nil, err
-	}
 	service := workservice.NewService(runtimes, nil, contentStaging, contentMaterializer)
 	return service, nil
 }
@@ -97,4 +112,53 @@ func NewContentMaterializationService(
 		hostPlatform, 0, 0, 0, false, httpDoer, "",
 		inspectPath, createTempFile, removePath, writeFile, openFile,
 	)
+}
+
+func validateNewServiceInputs(
+	runtimes work.RuntimeResolver,
+	filesystem work.ContentStagingFileSystem,
+	random work.ContentStagingRandom,
+	clock work.ContentStagingClock,
+	hostPlatform work.ContentHostPlatform,
+	httpDoer work.ContentHTTPDoer,
+	inspectPath work.ContentInspectPath,
+	createTempFile work.ContentCreateTemporaryFile,
+	removePath work.ContentRemovePath,
+	writeFile work.ContentWriteFile,
+	openFile work.ContentOpenFile,
+) error {
+	if runtimes == nil {
+		return fmt.Errorf("construct Work: runtime resolver is required")
+	}
+	if filesystem == nil {
+		return fmt.Errorf("construct Work: content staging filesystem is required")
+	}
+	if random == nil {
+		return fmt.Errorf("construct Work: content staging random is required")
+	}
+	if clock == nil {
+		return fmt.Errorf("construct Work: content staging clock is required")
+	}
+	if strings.TrimSpace(string(hostPlatform)) == "" {
+		return fmt.Errorf("construct Work: content host platform is required")
+	}
+	if httpDoer == nil {
+		return fmt.Errorf("construct Work: HTTP doer is required")
+	}
+	if inspectPath == nil {
+		return fmt.Errorf("construct Work: inspect path is required")
+	}
+	if createTempFile == nil {
+		return fmt.Errorf("construct Work: create temporary file is required")
+	}
+	if removePath == nil {
+		return fmt.Errorf("construct Work: remove path is required")
+	}
+	if writeFile == nil {
+		return fmt.Errorf("construct Work: write file is required")
+	}
+	if openFile == nil {
+		return fmt.Errorf("construct Work: open file is required")
+	}
+	return nil
 }

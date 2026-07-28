@@ -81,23 +81,95 @@ func TestNewContentMaterializationServiceConstructsPublishedRole(t *testing.T) {
 	}
 }
 
+func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
+	t.Parallel()
+
+	valid := validNewServiceInputs(t)
+	tests := []struct {
+		name   string
+		mutate func(*newServiceInputs)
+		wantErr string
+	}{
+		{
+			name:    "runtime resolver",
+			mutate:  func(in *newServiceInputs) { in.runtimes = nil },
+			wantErr: "construct Work: runtime resolver is required",
+		},
+		{
+			name:    "content staging filesystem",
+			mutate:  func(in *newServiceInputs) { in.filesystem = nil },
+			wantErr: "construct Work: content staging filesystem is required",
+		},
+		{
+			name:    "content staging random",
+			mutate:  func(in *newServiceInputs) { in.random = nil },
+			wantErr: "construct Work: content staging random is required",
+		},
+		{
+			name:    "content staging clock",
+			mutate:  func(in *newServiceInputs) { in.clock = nil },
+			wantErr: "construct Work: content staging clock is required",
+		},
+		{
+			name:    "content host platform",
+			mutate:  func(in *newServiceInputs) { in.hostPlatform = "" },
+			wantErr: "construct Work: content host platform is required",
+		},
+		{
+			name:    "HTTP doer",
+			mutate:  func(in *newServiceInputs) { in.httpDoer = nil },
+			wantErr: "construct Work: HTTP doer is required",
+		},
+		{
+			name:    "inspect path",
+			mutate:  func(in *newServiceInputs) { in.inspectPath = nil },
+			wantErr: "construct Work: inspect path is required",
+		},
+		{
+			name:    "create temporary file",
+			mutate:  func(in *newServiceInputs) { in.createTempFile = nil },
+			wantErr: "construct Work: create temporary file is required",
+		},
+		{
+			name:    "remove path",
+			mutate:  func(in *newServiceInputs) { in.removePath = nil },
+			wantErr: "construct Work: remove path is required",
+		},
+		{
+			name:    "write file",
+			mutate:  func(in *newServiceInputs) { in.writeFile = nil },
+			wantErr: "construct Work: write file is required",
+		},
+		{
+			name:    "open file",
+			mutate:  func(in *newServiceInputs) { in.openFile = nil },
+			wantErr: "construct Work: open file is required",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			inputs := valid
+			test.mutate(&inputs)
+			service, err := inputs.callNewService()
+			if err == nil {
+				t.Fatalf("NewService() error = nil, want missing %s dependency", test.name)
+			}
+			if err.Error() != test.wantErr {
+				t.Fatalf("NewService() error = %q, want %q", err.Error(), test.wantErr)
+			}
+			if service != nil {
+				t.Fatalf("NewService() = %#v, want nil service", service)
+			}
+		})
+	}
+}
+
 func TestNewServicePropagatesContentStagingConstructionErrors(t *testing.T) {
 	t.Parallel()
 
-	service, err := workwire.NewService(
-		stubRuntimeResolver{},
-		nil,
-		stubStagingRandom{},
-		&stubStagingClock{now: time.Unix(0, 0)},
-		time.Minute,
-		work.ContentHostPlatform(runtime.GOOS),
-		validMaterializationHTTPClient(),
-		os.Stat,
-		validCreateTempFile,
-		os.Remove,
-		os.WriteFile,
-		validOpenFile,
-	)
+	inputs := validNewServiceInputs(t)
+	inputs.random = failingStagingRandom{}
+	service, err := inputs.callNewService()
 	if err == nil {
 		t.Fatal("NewService() error = nil, want content staging construction failure")
 	}
@@ -109,22 +181,14 @@ func TestNewServicePropagatesContentStagingConstructionErrors(t *testing.T) {
 func TestNewServicePropagatesContentMaterializationConstructionErrors(t *testing.T) {
 	t.Parallel()
 
-	service, err := workwire.NewService(
-		stubRuntimeResolver{},
-		&stubStagingFileSystem{root: t.TempDir()},
-		stubStagingRandom{},
-		&stubStagingClock{now: time.Unix(0, 0)},
-		time.Minute,
-		"",
-		validMaterializationHTTPClient(),
-		os.Stat,
-		validCreateTempFile,
-		os.Remove,
-		os.WriteFile,
-		validOpenFile,
-	)
+	inputs := validNewServiceInputs(t)
+	inputs.hostPlatform = "   "
+	service, err := inputs.callNewService()
 	if err == nil {
-		t.Fatal("NewService() error = nil, want content materialization construction failure")
+		t.Fatal("NewService() error = nil, want content host platform rejection")
+	}
+	if err.Error() != "construct Work: content host platform is required" {
+		t.Fatalf("NewService() error = %q, want wire-level host platform rejection", err.Error())
 	}
 	if service != nil {
 		t.Fatalf("NewService() = %#v, want nil service", service)
@@ -134,20 +198,7 @@ func TestNewServicePropagatesContentMaterializationConstructionErrors(t *testing
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
-	service, err := workwire.NewService(
-		stubRuntimeResolver{},
-		&stubStagingFileSystem{root: t.TempDir()},
-		stubStagingRandom{},
-		&stubStagingClock{now: time.Unix(0, 0)},
-		time.Minute,
-		work.ContentHostPlatform(runtime.GOOS),
-		validMaterializationHTTPClient(),
-		os.Stat,
-		validCreateTempFile,
-		os.Remove,
-		os.WriteFile,
-		validOpenFile,
-	)
+	service, err := validNewServiceInputs(t).callNewService()
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -158,6 +209,56 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	if root == nil {
 		t.Fatal("constructed value is not assignable to work.Service")
 	}
+}
+
+type newServiceInputs struct {
+	runtimes       work.RuntimeResolver
+	filesystem     work.ContentStagingFileSystem
+	random         work.ContentStagingRandom
+	clock          work.ContentStagingClock
+	stagingTTL     time.Duration
+	hostPlatform   work.ContentHostPlatform
+	httpDoer       work.ContentHTTPDoer
+	inspectPath    work.ContentInspectPath
+	createTempFile work.ContentCreateTemporaryFile
+	removePath     work.ContentRemovePath
+	writeFile      work.ContentWriteFile
+	openFile       work.ContentOpenFile
+}
+
+func validNewServiceInputs(t *testing.T) newServiceInputs {
+	t.Helper()
+	return newServiceInputs{
+		runtimes:       stubRuntimeResolver{},
+		filesystem:     &stubStagingFileSystem{root: t.TempDir()},
+		random:         stubStagingRandom{},
+		clock:          &stubStagingClock{now: time.Unix(0, 0)},
+		stagingTTL:     time.Minute,
+		hostPlatform:   work.ContentHostPlatform(runtime.GOOS),
+		httpDoer:       validMaterializationHTTPClient(),
+		inspectPath:    os.Stat,
+		createTempFile: validCreateTempFile,
+		removePath:     os.Remove,
+		writeFile:      os.WriteFile,
+		openFile:       validOpenFile,
+	}
+}
+
+func (in newServiceInputs) callNewService() (work.Service, error) {
+	return workwire.NewService(
+		in.runtimes,
+		in.filesystem,
+		in.random,
+		in.clock,
+		in.stagingTTL,
+		in.hostPlatform,
+		in.httpDoer,
+		in.inspectPath,
+		in.createTempFile,
+		in.removePath,
+		in.writeFile,
+		in.openFile,
+	)
 }
 
 type stubRuntimeResolver struct{}
@@ -193,6 +294,12 @@ func (stubStagingRandom) Read(buffer []byte) (int, error) {
 		buffer[i] = 0x11
 	}
 	return len(buffer), nil
+}
+
+type failingStagingRandom struct{}
+
+func (failingStagingRandom) Read([]byte) (int, error) {
+	return 0, os.ErrInvalid
 }
 
 type stubStagingClock struct {
