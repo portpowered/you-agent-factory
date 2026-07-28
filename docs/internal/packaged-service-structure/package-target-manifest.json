@@ -411,6 +411,7 @@
     "pkg/services/workers/services/inference",
     "pkg/services/workers/services/testing",
     "pkg/services/workers/skippermissions",
+    "pkg/services/workers/wire",
     "pkg/services/workers/worktree",
     "pkg/transports/cli",
     "pkg/transports/cli/baseline",
@@ -2335,6 +2336,11 @@
     },
     {
       "packagePath": "pkg/services/workers/skippermissions",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/wire",
       "disposition": "retain",
       "destination": "workers"
     },

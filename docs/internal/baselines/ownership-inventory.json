@@ -4666,6 +4666,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/workers/wire",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/worktree",
       "disposition": "retain",
       "destination": "workers",
