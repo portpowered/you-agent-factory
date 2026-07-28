@@ -19,7 +19,7 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
-	workersservice "github.com/portpowered/infinite-you/pkg/services/workers/service"
+	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"go.uber.org/zap"
 )
 
@@ -148,7 +148,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		edges.ModelPullMetricsRecorder,
 		factorysessionwire.ModelHostDiagnosticLogger(zap.NewNop()),
 		factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder),
-		workersservice.LocalRuntimeHooks(),
+		workerswire.LocalRuntimeHooks(),
 	)
 }
 

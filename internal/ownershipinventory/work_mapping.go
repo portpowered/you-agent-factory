@@ -14,7 +14,10 @@ type workMoveRule struct {
 }
 
 // workMoveRules mirrors cmd/packagetargetmanifestcheck nestedOwnerMoveRules for work.
-// Ownership rows keep owner destination with concrete successor paths.
+// Confirmed against docs/internal/packaged-service-structure/work-top-level-inventory.md
+// (INV-WORK-TOPLEVEL). Transitional public service/ facades use
+// legacyServiceImplementationMapping in map.go; every other unexpected Work
+// top-level sibling maps move with a private successor (never retain→work).
 var workMoveRules = []workMoveRule{
 	{exact: "materialize", prefix: "materialize/", subservice: "content_materialization"},
 	{exact: "stateaccessrecordings", prefix: "stateaccessrecordings/", subservice: "state_access"},

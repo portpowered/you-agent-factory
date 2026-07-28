@@ -19,6 +19,20 @@ var operatorSettingsForbiddenImportPathFragments = []string{
 	"pkg/services/operator_settings/internal/",
 }
 
+var factoryDefinitionsForbiddenImportRoots = []string{
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation",
+}
+
+var factoryDefinitionsForbiddenImportPathFragments = []string{
+	"factory_definitions/packagedinstallation",
+}
+
+var bootstrapProductionPackages = []string{
+	"github.com/portpowered/infinite-you/pkg/services/system_initialization",
+	"github.com/portpowered/infinite-you/pkg/services/system_initialization/wire",
+	"github.com/portpowered/infinite-you/pkg/services/system_initialization/internal/workflow",
+}
+
 func TestPackageBoundary_ProductionSourceImportsOperatorSettingsRootOnly(t *testing.T) {
 	t.Parallel()
 
@@ -55,6 +69,60 @@ func TestPackageBoundary_DoesNotImportOperatorSettingsTransitionalPackages(t *te
 		"github.com/portpowered/infinite-you/pkg/services/system_initialization",
 		operatorSettingsForbiddenImportRoots,
 	)
+}
+
+func TestPackageBoundary_ProductionSourceImportsFactoryDefinitionsRootOnly(t *testing.T) {
+	t.Parallel()
+
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatalf("read system initialization root package: %v", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") ||
+			strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		source, err := os.ReadFile(entry.Name())
+		if err != nil {
+			t.Fatalf("read %s: %v", entry.Name(), err)
+		}
+		for _, forbidden := range factoryDefinitionsForbiddenImportPathFragments {
+			if strings.Contains(string(source), forbidden) {
+				t.Fatalf(
+					"%s imports forbidden Factory Definitions package %q; depend on pkg/services/factory_definitions root only",
+					entry.Name(),
+					forbidden,
+				)
+			}
+		}
+	}
+}
+
+func TestPackageBoundary_DoesNotImportFactoryDefinitionsTransitionalPackages(t *testing.T) {
+	t.Parallel()
+
+	for _, packagePath := range bootstrapProductionPackages {
+		assertPackageDepsForbidden(t, packagePath, factoryDefinitionsForbiddenImportRoots)
+	}
+}
+
+func TestPackageBoundary_PublishedCollaboratorsUseFactoryDefinitionsRootContracts(t *testing.T) {
+	t.Parallel()
+
+	source, err := os.ReadFile("service.go")
+	if err != nil {
+		t.Fatalf("read service.go: %v", err)
+	}
+	text := string(source)
+	for _, required := range []string{
+		"type PackagedFactoryInstaller = factorydefinitions.PackagedFactoryInstaller",
+		"type PackagedFactoryCatalogOperations = factorydefinitions.PackagedFactoryCatalogOperations",
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("service.go must publish Definitions root collaborator aliases via %q", required)
+		}
+	}
 }
 
 func assertPackageDepsForbidden(t *testing.T, packagePath string, forbiddenRoots []string) {

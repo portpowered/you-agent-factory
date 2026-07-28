@@ -9,7 +9,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	providersessionsservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service"
+	providersessionswire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -70,7 +70,7 @@ func TestInspect_ProvidersRootBoundary_Success(t *testing.T) {
 // existing typed Provider Sessions failures.
 func TestInspect_ProvidersRootBoundary_TypedErrors(t *testing.T) {
 	files := &openRecordingFileSystem{base: platformfilesystem.Local{}}
-	svc, err := providersessionsservice.NewForRoots(
+	svc, err := providersessionswire.NewForRoots(
 		files,
 		filepath.WalkDir,
 		filepath.EvalSymlinks,

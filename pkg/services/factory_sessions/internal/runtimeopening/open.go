@@ -51,7 +51,7 @@ func openRuntime(
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	initialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory,
 	factoryRuntimeAssembler FactoryRuntimeAssembler,
-	contentMaterializer work.ContentMaterializer,
+	workService work.Service,
 	providerSessions providersessions.Service,
 	factoryDefinitionValidator factorydefinitions.Validator,
 	namedPaths factorydefinitions.NamedPathResolver,
@@ -216,8 +216,8 @@ func openRuntime(
 		}
 	}()
 	selectedModels := modelsBind.Root
-	if contentMaterializer == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work content materializer is required")
+	if workService == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work service is required")
 	}
 	if workerExecutionFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: worker execution operation is required")
@@ -234,7 +234,7 @@ func openRuntime(
 		nil,
 		edges.ProviderOverride,
 		runtimeService,
-		selectedModels, modelsBind.Scope, contentMaterializer,
+		selectedModels, modelsBind.Scope, workService,
 		workersRuntimeFactory,
 	)
 	if err != nil {
