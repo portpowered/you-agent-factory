@@ -1699,6 +1699,24 @@
       "minimum": 64.58
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/internal/service",
+      "minimum": 13.10
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/wire",
+      "minimum": 75.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_staging",
       "exception": {
         "kind": "measurement",
@@ -1733,10 +1751,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire",
       "minimum": 76.90
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/work/materialize",
-      "minimum": 13.10
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/service",

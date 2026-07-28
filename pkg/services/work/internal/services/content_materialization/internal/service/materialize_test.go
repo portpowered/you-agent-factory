@@ -1,4 +1,4 @@
-package materialize_test
+package service_test
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"time"
 
 	content "github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/work/materialize"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/internal/service"
 )
 
 func TestMaterializeContentURL_LocalFileOK(t *testing.T) {
@@ -29,7 +29,7 @@ func TestMaterializeContentURL_LocalFileOK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("file URL: %v", err)
 	}
-	got, cleanup, err := materialize.MaterializeContentURL(context.Background(), rawURL, &materialize.Options{
+	got, cleanup, err := service.MaterializeContentURL(context.Background(), rawURL, &service.Options{
 		HostPlatform: content.ContentHostPlatform(runtime.GOOS),
 		InspectPath:  os.Stat,
 	})
@@ -50,7 +50,7 @@ func TestMaterializeContentURL_LocalMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("file URL: %v", err)
 	}
-	_, cleanup, err := materialize.MaterializeContentURL(context.Background(), rawURL, &materialize.Options{
+	_, cleanup, err := service.MaterializeContentURL(context.Background(), rawURL, &service.Options{
 		HostPlatform: content.ContentHostPlatform(runtime.GOOS),
 		InspectPath:  os.Stat,
 	})
@@ -66,7 +66,7 @@ func TestMaterializeContentURL_LocalMissing(t *testing.T) {
 func TestNewRequiresContentHostPlatform(t *testing.T) {
 	t.Parallel()
 
-	service, err := materialize.New("", 0, 0, 0, false, nil, "", nil, nil, nil, nil, nil)
+	service, err := service.New("", 0, 0, 0, false, nil, "", nil, nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("New error = nil, want missing host-platform dependency")
 	}
@@ -84,25 +84,25 @@ func TestNewRequiresEveryExternalEffect(t *testing.T) {
 	valid := newMaterializeTestOptions()
 	tests := []struct {
 		name string
-		new  func() (*materialize.Service, error)
+		new  func() (*service.Service, error)
 	}{
-		{name: "HTTP doer", new: func() (*materialize.Service, error) {
-			return materialize.New(valid.HostPlatform, 0, 0, 0, false, nil, "", valid.InspectPath, valid.CreateTempFile, valid.RemovePath, valid.WriteFile, valid.OpenFile)
+		{name: "HTTP doer", new: func() (*service.Service, error) {
+			return service.New(valid.HostPlatform, 0, 0, 0, false, nil, "", valid.InspectPath, valid.CreateTempFile, valid.RemovePath, valid.WriteFile, valid.OpenFile)
 		}},
-		{name: "inspect path", new: func() (*materialize.Service, error) {
-			return materialize.New(valid.HostPlatform, 0, 0, 0, false, valid.HTTPDoer, "", nil, valid.CreateTempFile, valid.RemovePath, valid.WriteFile, valid.OpenFile)
+		{name: "inspect path", new: func() (*service.Service, error) {
+			return service.New(valid.HostPlatform, 0, 0, 0, false, valid.HTTPDoer, "", nil, valid.CreateTempFile, valid.RemovePath, valid.WriteFile, valid.OpenFile)
 		}},
-		{name: "create temporary file", new: func() (*materialize.Service, error) {
-			return materialize.New(valid.HostPlatform, 0, 0, 0, false, valid.HTTPDoer, "", valid.InspectPath, nil, valid.RemovePath, valid.WriteFile, valid.OpenFile)
+		{name: "create temporary file", new: func() (*service.Service, error) {
+			return service.New(valid.HostPlatform, 0, 0, 0, false, valid.HTTPDoer, "", valid.InspectPath, nil, valid.RemovePath, valid.WriteFile, valid.OpenFile)
 		}},
-		{name: "remove path", new: func() (*materialize.Service, error) {
-			return materialize.New(valid.HostPlatform, 0, 0, 0, false, valid.HTTPDoer, "", valid.InspectPath, valid.CreateTempFile, nil, valid.WriteFile, valid.OpenFile)
+		{name: "remove path", new: func() (*service.Service, error) {
+			return service.New(valid.HostPlatform, 0, 0, 0, false, valid.HTTPDoer, "", valid.InspectPath, valid.CreateTempFile, nil, valid.WriteFile, valid.OpenFile)
 		}},
-		{name: "write file", new: func() (*materialize.Service, error) {
-			return materialize.New(valid.HostPlatform, 0, 0, 0, false, valid.HTTPDoer, "", valid.InspectPath, valid.CreateTempFile, valid.RemovePath, nil, valid.OpenFile)
+		{name: "write file", new: func() (*service.Service, error) {
+			return service.New(valid.HostPlatform, 0, 0, 0, false, valid.HTTPDoer, "", valid.InspectPath, valid.CreateTempFile, valid.RemovePath, nil, valid.OpenFile)
 		}},
-		{name: "open file", new: func() (*materialize.Service, error) {
-			return materialize.New(valid.HostPlatform, 0, 0, 0, false, valid.HTTPDoer, "", valid.InspectPath, valid.CreateTempFile, valid.RemovePath, valid.WriteFile, nil)
+		{name: "open file", new: func() (*service.Service, error) {
+			return service.New(valid.HostPlatform, 0, 0, 0, false, valid.HTTPDoer, "", valid.InspectPath, valid.CreateTempFile, valid.RemovePath, valid.WriteFile, nil)
 		}},
 	}
 	for _, test := range tests {
@@ -128,7 +128,7 @@ func TestInjectedWriteFailureCleansUpTemporaryFile(t *testing.T) {
 	opts.WriteFile = func(string, []byte, os.FileMode) error {
 		return errors.New("injected write failure")
 	}
-	_, cleanup, err := materialize.MaterializeContentURL(
+	_, cleanup, err := service.MaterializeContentURL(
 		context.Background(), "data:text/plain;base64,aGVsbG8=", opts,
 	)
 	defer cleanup()
@@ -143,7 +143,7 @@ func TestInjectedWriteFailureCleansUpTemporaryFile(t *testing.T) {
 func TestMaterializeFileURLRequiresContentHostPlatform(t *testing.T) {
 	t.Parallel()
 
-	_, cleanup, err := materialize.MaterializeContentURL(
+	_, cleanup, err := service.MaterializeContentURL(
 		context.Background(),
 		"file:///tmp/content.png",
 		nil,
@@ -165,7 +165,7 @@ func TestMaterializeContentURL_RemoteOK(t *testing.T) {
 	opts := newMaterializeTestOptions()
 	opts.AllowPrivateURLs = true
 	opts.HTTPDoer = server.Client()
-	got, cleanup, err := materialize.MaterializeContentURL(context.Background(), server.URL, opts)
+	got, cleanup, err := service.MaterializeContentURL(context.Background(), server.URL, opts)
 	if err != nil {
 		t.Fatalf("materialize: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestMaterializeContentURL_Remote404(t *testing.T) {
 	opts := newMaterializeTestOptions()
 	opts.AllowPrivateURLs = true
 	opts.HTTPDoer = server.Client()
-	_, cleanup, err := materialize.MaterializeContentURL(context.Background(), server.URL, opts)
+	_, cleanup, err := service.MaterializeContentURL(context.Background(), server.URL, opts)
 	defer cleanup()
 	if err == nil {
 		t.Fatal("expected error for 404")
@@ -223,7 +223,7 @@ func TestMaterializeContentURL_RemoteTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, cleanup, err := materialize.MaterializeContentURL(ctx, server.URL, opts)
+	_, cleanup, err := service.MaterializeContentURL(ctx, server.URL, opts)
 	defer cleanup()
 	if err == nil {
 		t.Fatal("expected timeout error")
@@ -239,7 +239,7 @@ func TestMaterializeContentURL_RemoteCanceled(t *testing.T) {
 
 	opts := newMaterializeTestOptions()
 	opts.AllowPrivateURLs = true
-	_, cleanup, err := materialize.MaterializeContentURL(ctx, "https://example.com/image.png", opts)
+	_, cleanup, err := service.MaterializeContentURL(ctx, "https://example.com/image.png", opts)
 	defer cleanup()
 	if err == nil {
 		t.Fatal("expected cancellation error")
@@ -252,7 +252,7 @@ func TestMaterializeContentURL_RemoteCanceled(t *testing.T) {
 func TestMaterializeContentURL_DataURL(t *testing.T) {
 	// 1x1 PNG
 	const dataURL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-	got, cleanup, err := materialize.MaterializeContentURL(context.Background(), dataURL, newMaterializeTestOptions())
+	got, cleanup, err := service.MaterializeContentURL(context.Background(), dataURL, newMaterializeTestOptions())
 	if err != nil {
 		t.Fatalf("materialize: %v", err)
 	}
@@ -276,13 +276,17 @@ func TestMaterializeContentURL_SSRFRejected(t *testing.T) {
 		"http://127.0.0.1/test.png",
 		"http://169.254.169.254/latest/meta-data/",
 		"http://10.0.0.1/secret",
+		"http://[::1]/secret",
 	}
 	for _, rawURL := range cases {
 		t.Run(rawURL, func(t *testing.T) {
-			_, cleanup, err := materialize.MaterializeContentURL(context.Background(), rawURL, nil)
+			_, cleanup, err := service.MaterializeContentURL(context.Background(), rawURL, nil)
 			defer cleanup()
 			if err == nil {
 				t.Fatal("expected ssrf error")
+			}
+			if !errors.Is(err, content.ErrUnsafeContentURL) {
+				t.Fatalf("error = %v, want errors.Is(..., ErrUnsafeContentURL)", err)
 			}
 			if !strings.Contains(err.Error(), "media url not allowed") {
 				t.Fatalf("error = %v", err)
@@ -294,7 +298,7 @@ func TestMaterializeContentURL_SSRFRejected(t *testing.T) {
 	}
 }
 
-func TestDispatchCache_ReusesURLAndCleansUpOnRelease(t *testing.T) {
+func TestDispatchCache_ReusesLocalURLWithoutRefetch(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "img.png")
 	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
@@ -305,7 +309,7 @@ func TestDispatchCache_ReusesURLAndCleansUpOnRelease(t *testing.T) {
 		t.Fatalf("file URL: %v", err)
 	}
 
-	cache := materialize.NewDispatchCache()
+	cache := service.NewDispatchCache()
 	options := newMaterializeTestOptions()
 	p1, cleanup1, err := cache.MaterializeContentURL(context.Background(), rawURL, options)
 	if err != nil {
@@ -327,6 +331,83 @@ func TestDispatchCache_ReusesURLAndCleansUpOnRelease(t *testing.T) {
 	cache.Release()
 }
 
+func TestDispatchCache_ReusesRemoteURLWithoutRefetch(t *testing.T) {
+	requests := 0
+	body := []byte("cached-remote")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		_, _ = w.Write(body)
+	}))
+	defer server.Close()
+
+	opts := newMaterializeTestOptions()
+	opts.AllowPrivateURLs = true
+	opts.HTTPDoer = server.Client()
+
+	cache := service.NewDispatchCache()
+	p1, _, err := cache.MaterializeContentURL(context.Background(), server.URL, opts)
+	if err != nil {
+		t.Fatalf("first materialize: %v", err)
+	}
+	p2, _, err := cache.MaterializeContentURL(context.Background(), server.URL, opts)
+	if err != nil {
+		t.Fatalf("second materialize: %v", err)
+	}
+	if p1 != p2 {
+		t.Fatalf("paths differ: %q vs %q", p1, p2)
+	}
+	if requests != 1 {
+		t.Fatalf("remote fetch count = %d, want 1 cache hit without re-fetch", requests)
+	}
+	if _, err := os.Stat(p1); err != nil {
+		t.Fatalf("cached temp file should exist before release: %v", err)
+	}
+
+	cache.Release()
+	if _, err := os.Stat(p1); !os.IsNotExist(err) {
+		t.Fatalf("cached temp file should be removed after Release, stat err=%v", err)
+	}
+}
+
+func TestDispatchCache_CancelledMaterializationNotCached(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		_, _ = w.Write([]byte("cached-after-cancel"))
+	}))
+	defer server.Close()
+
+	opts := newMaterializeTestOptions()
+	opts.AllowPrivateURLs = true
+	opts.HTTPDoer = server.Client()
+
+	cache := service.NewDispatchCache()
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _, err := cache.MaterializeContentURL(cancelledCtx, server.URL, opts)
+	if err == nil {
+		t.Fatal("expected cancellation error")
+	}
+	if !strings.Contains(err.Error(), "canceled") {
+		t.Fatalf("error = %v, want explicit cancellation", err)
+	}
+	if requests != 0 {
+		t.Fatalf("cancelled materialization should not fetch, requests = %d", requests)
+	}
+
+	got, _, err := cache.MaterializeContentURL(context.Background(), server.URL, opts)
+	if err != nil {
+		t.Fatalf("materialize after cancellation failure: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("retry after cancellation should fetch once, requests = %d", requests)
+	}
+	if _, err := os.Stat(got); err != nil {
+		t.Fatalf("materialized temp file should exist: %v", err)
+	}
+	cache.Release()
+}
+
 func TestMaterializeContentURL_RemoteExceedsSizeLimit(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, strings.Repeat("x", 32))
@@ -337,22 +418,60 @@ func TestMaterializeContentURL_RemoteExceedsSizeLimit(t *testing.T) {
 	opts.AllowPrivateURLs = true
 	opts.HTTPDoer = server.Client()
 	opts.MaxBytes = 8
-	_, cleanup, err := materialize.MaterializeContentURL(context.Background(), server.URL, opts)
+	_, cleanup, err := service.MaterializeContentURL(context.Background(), server.URL, opts)
 	defer cleanup()
 	if err == nil {
 		t.Fatal("expected size limit error")
+	}
+	if !errors.Is(err, content.ErrContentURLInaccessible) {
+		t.Fatalf("error = %v, want errors.Is(..., ErrContentURLInaccessible)", err)
 	}
 	if !strings.Contains(err.Error(), "exceeds size limit") {
 		t.Fatalf("error = %v", err)
 	}
 }
 
-func newMaterializeTestOptions() *materialize.Options {
-	return &materialize.Options{
+func TestMaterializeContentURL_RemoteExceedsSizeLimitCleansUpTempFile(t *testing.T) {
+	t.Parallel()
+
+	var createdPath string
+	opts := newMaterializeTestOptions()
+	opts.AllowPrivateURLs = true
+	opts.CreateTempFile = func(dir, pattern string) (content.ContentTemporaryFile, error) {
+		f, err := os.CreateTemp(dir, pattern)
+		if err != nil {
+			return nil, err
+		}
+		createdPath = f.Name()
+		return f, nil
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, strings.Repeat("x", 32))
+	}))
+	defer server.Close()
+	opts.HTTPDoer = server.Client()
+	opts.MaxBytes = 8
+
+	_, cleanup, err := service.MaterializeContentURL(context.Background(), server.URL, opts)
+	defer cleanup()
+	if err == nil {
+		t.Fatal("expected size limit error")
+	}
+	if createdPath == "" {
+		t.Fatal("expected temporary file to be created before size-limit failure")
+	}
+	if _, statErr := os.Stat(createdPath); !os.IsNotExist(statErr) {
+		t.Fatalf("temporary file %q should be removed after size-limit failure, stat err=%v", createdPath, statErr)
+	}
+}
+
+func newMaterializeTestOptions() *service.Options {
+	return &service.Options{
 		HostPlatform: content.ContentHostPlatform(runtime.GOOS),
 		HTTPDoer: &http.Client{
-			Timeout:       materialize.DefaultHTTPTimeout,
-			CheckRedirect: materialize.RedirectPolicy(0, false),
+			Timeout:       service.DefaultHTTPTimeout,
+			CheckRedirect: service.RedirectPolicy(0, false),
 		},
 		InspectPath: os.Stat,
 		CreateTempFile: func(dir, pattern string) (content.ContentTemporaryFile, error) {
