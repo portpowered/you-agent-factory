@@ -47,30 +47,6 @@ func TestMapCommittedOwnerPackageWorkMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/work/service",
-			want: PackageMapping{
-				PackagePath: "pkg/services/work/service",
-				Disposition: DispositionMove,
-				Destination: "work/internal",
-			},
-		},
-		{
-			path: "pkg/services/work/stateaccessrecordings",
-			want: PackageMapping{
-				PackagePath: "pkg/services/work/stateaccessrecordings",
-				Disposition: DispositionMove,
-				Destination: "work/internal/services/state_access",
-			},
-		},
-		{
-			path: "pkg/services/work/stateaccessrecordings/exercise",
-			want: PackageMapping{
-				PackagePath: "pkg/services/work/stateaccessrecordings/exercise",
-				Disposition: DispositionMove,
-				Destination: "work/internal/services/state_access",
-			},
-		},
-		{
 			path: "pkg/services/work/testdata/primary_result_regression",
 			want: PackageMapping{
 				PackagePath: "pkg/services/work/testdata/primary_result_regression",
@@ -122,17 +98,6 @@ func TestWorkTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
 		if !ok {
 			t.Fatalf("unexpected sibling %q missing from confirmed inventory destinations", child)
 		}
-		if child == "service" {
-			got, ok := mapLegacyServiceImplementationPackage("work", "pkg/services/work/"+child, rest)
-			if !ok {
-				t.Fatalf("mapLegacyServiceImplementationPackage() ok = false for %q", child)
-			}
-			if got.Disposition != DispositionMove || got.Destination != want {
-				t.Fatalf("service move mapping = %#v, want move→%s", got, want)
-			}
-			continue
-		}
-
 		destination, ok := nestedOwnerMoveDestination("work", rest)
 		if !ok {
 			t.Fatalf("nestedOwnerMoveDestination(work, %q) ok = false", rest)
@@ -150,14 +115,6 @@ func TestWorkUnexpectedSiblingMoveDestinationsLocked(t *testing.T) {
 		path            string
 		wantDestination string
 	}{
-		{
-			path:            "pkg/services/work/service",
-			wantDestination: "work/internal",
-		},
-		{
-			path:            "pkg/services/work/stateaccessrecordings",
-			wantDestination: "work/internal/services/state_access",
-		},
 		{
 			path:            "pkg/services/work/testdata",
 			wantDestination: "work/internal",

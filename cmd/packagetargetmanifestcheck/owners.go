@@ -309,9 +309,11 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "token_transformer", prefix: "token_transformer/", dest: "factory_runtime/internal/services/orchestration"},
 	},
 	"work": {
+		{exact: "internal/contenturl", prefix: "internal/contenturl/", dest: "work/internal"},
+		{exact: "internal/invocationreturnpolicy", prefix: "internal/invocationreturnpolicy/", dest: "work/internal"},
+		{exact: "internal/requestadmission", prefix: "internal/requestadmission/", dest: "work/internal"},
 		{exact: "internal/service", prefix: "internal/service/", dest: "work/internal"},
 		{exact: "materialize", prefix: "materialize/", dest: "work/internal/services/content_materialization"},
-		{exact: "stateaccessrecordings", prefix: "stateaccessrecordings/", dest: "work/internal/services/state_access"},
 		{exact: "testdata", prefix: "testdata/", dest: "work/internal"},
 	},
 	"operator_settings": {

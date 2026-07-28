@@ -3204,16 +3204,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/work/service",
-      "target": "pkg/services/work"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/work/stateaccessrecordings",
-      "target": "pkg/services/work"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/work/testdata",
       "target": "pkg/services/work"
     },

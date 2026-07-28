@@ -1167,7 +1167,7 @@
       "fromOwner": "factory_definitions",
       "toOwner": "automations",
       "class": "command",
-      "evidence": "pkg/services/factory_definitions/validation -\u003e pkg/services/automations"
+      "evidence": "pkg/services/factory_definitions/internal/services/validation/impl -\u003e pkg/services/automations"
     },
     {
       "fromOwner": "factory_definitions",
@@ -2689,6 +2689,12 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/namedpaths",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -4970,6 +4976,30 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/work/internal/contenturl",
+      "disposition": "move",
+      "destination": "work",
+      "destinationKind": "owner",
+      "successor": "pkg/services/work/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WORK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/invocationreturnpolicy",
+      "disposition": "move",
+      "destination": "work",
+      "destinationKind": "owner",
+      "successor": "pkg/services/work/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WORK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/requestadmission",
+      "disposition": "move",
+      "destination": "work",
+      "destinationKind": "owner",
+      "successor": "pkg/services/work/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WORK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
       "packagePath": "pkg/services/work/internal/service",
       "disposition": "move",
       "destination": "work",
@@ -5026,26 +5056,22 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/work/internal/services/state_access/wire",
+      "packagePath": "pkg/services/work/internal/services/state_access/lineagegraph",
       "disposition": "retain",
       "destination": "work",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/work/service",
-      "disposition": "move",
+      "packagePath": "pkg/services/work/internal/services/state_access/stateaccessquery",
+      "disposition": "retain",
       "destination": "work",
-      "destinationKind": "owner",
-      "successor": "pkg/services/work/internal",
-      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
+      "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/work/stateaccessrecordings",
-      "disposition": "move",
+      "packagePath": "pkg/services/work/internal/services/state_access/wire",
+      "disposition": "retain",
       "destination": "work",
-      "destinationKind": "owner",
-      "successor": "pkg/services/work/internal/services/state_access",
-      "deletionCondition": "delete public package after IMP-WORK-state_access private subservice cutover proof"
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/work/transports/cli",

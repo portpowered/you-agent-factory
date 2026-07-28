@@ -108,6 +108,13 @@ Use this map when changing the public REST contract.
   Observable deletion gate proofs live in
   `pkg/services/work/del_work_deletion_gate_test.go`; wire behavioral proofs
   remain in `wire_behavioral_proof_test.go` and `wire/recordings_state_access_test.go`.
+- DEL-WORK story 003 (`pss-del-work-003`) lowers structure, ownership, and
+  package-target baselines for deleted transitional `service/` and
+  `stateaccessrecordings/` paths. Observable baseline gate proofs live in
+  `pkg/services/work/del_work_baseline_gate_test.go`; burn down
+  `package-structure-baseline.json`, `ownership-inventory.json`, and
+  `package-target-manifest.json` rows together and remove deleted paths from
+  `workMoveRules` / `nestedOwnerMoveRules["work"]`.
 - Factory Runtime HTTP decoding, generated-contract mapping, Runtime root
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_runtime/transports/http`. The adapter consumes the

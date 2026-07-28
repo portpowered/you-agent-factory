@@ -439,6 +439,9 @@
     "pkg/services/system_initialization/transports/cli",
     "pkg/services/system_initialization/wire",
     "pkg/services/work",
+    "pkg/services/work/internal/contenturl",
+    "pkg/services/work/internal/invocationreturnpolicy",
+    "pkg/services/work/internal/requestadmission",
     "pkg/services/work/internal/service",
     "pkg/services/work/internal/services/content_materialization",
     "pkg/services/work/internal/services/content_materialization/internal/service",
@@ -448,9 +451,9 @@
     "pkg/services/work/internal/services/content_staging/wire",
     "pkg/services/work/internal/services/state_access",
     "pkg/services/work/internal/services/state_access/internal/service",
+    "pkg/services/work/internal/services/state_access/lineagegraph",
+    "pkg/services/work/internal/services/state_access/stateaccessquery",
     "pkg/services/work/internal/services/state_access/wire",
-    "pkg/services/work/service",
-    "pkg/services/work/stateaccessrecordings",
     "pkg/services/work/transports/cli",
     "pkg/services/work/transports/http",
     "pkg/services/work/transports/mcp",
@@ -2576,6 +2579,21 @@
       "destination": "work"
     },
     {
+      "packagePath": "pkg/services/work/internal/contenturl",
+      "disposition": "move",
+      "destination": "work/internal"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/invocationreturnpolicy",
+      "disposition": "move",
+      "destination": "work/internal"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/requestadmission",
+      "disposition": "move",
+      "destination": "work/internal"
+    },
+    {
       "packagePath": "pkg/services/work/internal/service",
       "disposition": "move",
       "destination": "work/internal"
@@ -2621,18 +2639,18 @@
       "destination": "work/internal/services/state_access"
     },
     {
-      "packagePath": "pkg/services/work/internal/services/state_access/wire",
+      "packagePath": "pkg/services/work/internal/services/state_access/lineagegraph",
       "disposition": "retain",
       "destination": "work/internal/services/state_access"
     },
     {
-      "packagePath": "pkg/services/work/service",
-      "disposition": "move",
-      "destination": "work/internal"
+      "packagePath": "pkg/services/work/internal/services/state_access/stateaccessquery",
+      "disposition": "retain",
+      "destination": "work/internal/services/state_access"
     },
     {
-      "packagePath": "pkg/services/work/stateaccessrecordings",
-      "disposition": "move",
+      "packagePath": "pkg/services/work/internal/services/state_access/wire",
+      "disposition": "retain",
       "destination": "work/internal/services/state_access"
     },
     {
