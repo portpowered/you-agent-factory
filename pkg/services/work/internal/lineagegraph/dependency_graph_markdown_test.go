@@ -1,4 +1,4 @@
-package work
+package lineagegraph
 
 import (
 	"strings"

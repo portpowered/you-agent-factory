@@ -1,4 +1,4 @@
-package work
+package lineagegraph
 
 import (
 	"fmt"
@@ -35,7 +35,7 @@ type WorkPayloadSnapshot struct {
 	ParentSnapshotIDs    []string                `json:"parent_snapshot_ids,omitempty"`
 	ParentWorkIDs        []string                `json:"parent_work_ids,omitempty"`
 	ParentLogicalWorkIDs []string                `json:"parent_logical_work_ids,omitempty"`
-	WorkItem             FactoryWorkItem         `json:"work_item"`
+	WorkItem             WorkItem         `json:"work_item"`
 }
 
 type WorkPayloadSnapshotKind string
@@ -98,7 +98,7 @@ func (p *WorkPayloadLineageProjection) ensureMaps() {
 
 // RecordWorkRequestSnapshot captures a canonical payload-bearing WORK_REQUEST
 // snapshot. This is the precedence owner for initial-submission lookups.
-func (p *WorkPayloadLineageProjection) RecordWorkRequestSnapshot(observedTick int, requestID string, item FactoryWorkItem) {
+func (p *WorkPayloadLineageProjection) RecordWorkRequestSnapshot(observedTick int, requestID string, item WorkItem) {
 	if item.ID == "" {
 		return
 	}
@@ -127,7 +127,7 @@ func (p *WorkPayloadLineageProjection) RecordWorkRequestSnapshot(observedTick in
 		ParentSnapshotIDs:    parentSnapshotIDs,
 		ParentWorkIDs:        parentWorkIDs,
 		ParentLogicalWorkIDs: parentLogicalWorkIDs,
-		WorkItem:             cloneLineageWorkItem(item),
+		WorkItem:             cloneWorkItem(item),
 	}
 	p.SnapshotsByID[snapshot.SnapshotID] = snapshot
 	if _, exists := p.InitialSnapshotIDByWorkID[item.ID]; !exists {
@@ -140,7 +140,7 @@ func (p *WorkPayloadLineageProjection) RecordWorkRequestSnapshot(observedTick in
 // RecordConsumedInputSnapshot fixes the dispatch-time payload snapshot that
 // actually fed one dispatch input. This is the precedence owner for
 // consumed-input lookups and must not be recomputed from later latest state.
-func (p *WorkPayloadLineageProjection) RecordConsumedInputSnapshot(dispatchID string, item FactoryWorkItem) {
+func (p *WorkPayloadLineageProjection) RecordConsumedInputSnapshot(dispatchID string, item WorkItem) {
 	if dispatchID == "" || item.ID == "" {
 		return
 	}
@@ -169,8 +169,8 @@ func (p *WorkPayloadLineageProjection) RecordConsumedInputSnapshot(dispatchID st
 func (p *WorkPayloadLineageProjection) RecordDispatchOutputSnapshot(
 	observedTick int,
 	dispatchID string,
-	consumedInputs []FactoryWorkItem,
-	item FactoryWorkItem,
+	consumedInputs []WorkItem,
+	item WorkItem,
 	outputIndex int,
 ) {
 	if dispatchID == "" || item.ID == "" {
@@ -216,7 +216,7 @@ func (p *WorkPayloadLineageProjection) RecordDispatchOutputSnapshot(
 		ParentSnapshotIDs:    parentSnapshotIDs,
 		ParentWorkIDs:        parentWorkIDs,
 		ParentLogicalWorkIDs: parentLogicalWorkIDs,
-		WorkItem:             cloneLineageWorkItem(item),
+		WorkItem:             cloneWorkItem(item),
 	}
 	p.SnapshotsByID[snapshot.SnapshotID] = snapshot
 	p.LatestSnapshotIDByWorkID[item.ID] = snapshot.SnapshotID
@@ -284,7 +284,7 @@ func (p WorkPayloadLineageProjection) resolveSnapshotID(snapshotID string, unava
 	if snapshot == nil {
 		return unavailableWorkPayloadResolution(unavailableReason)
 	}
-	cloned := cloneLineageSnapshot(*snapshot)
+	cloned := cloneSnapshot(*snapshot)
 	return WorkPayloadResolution{
 		Status:   WorkPayloadResolutionResolved,
 		Snapshot: &cloned,
@@ -329,17 +329,17 @@ func (p WorkPayloadLineageProjection) resolvedConsumedSnapshotsForDispatch(dispa
 	return snapshots
 }
 
-func cloneLineageSnapshot(snapshot WorkPayloadSnapshot) WorkPayloadSnapshot {
+func cloneSnapshot(snapshot WorkPayloadSnapshot) WorkPayloadSnapshot {
 	snapshot.ParentSnapshotIDs = cloneStringSlice(snapshot.ParentSnapshotIDs)
 	snapshot.ParentWorkIDs = cloneStringSlice(snapshot.ParentWorkIDs)
 	snapshot.ParentLogicalWorkIDs = cloneStringSlice(snapshot.ParentLogicalWorkIDs)
-	snapshot.WorkItem = cloneLineageWorkItem(snapshot.WorkItem)
+	snapshot.WorkItem = cloneWorkItem(snapshot.WorkItem)
 	return snapshot
 }
 
-func cloneLineageWorkItem(item FactoryWorkItem) FactoryWorkItem {
+func cloneWorkItem(item WorkItem) WorkItem {
 	item.PreviousChainingTraceIDs = cloneStringSlice(item.PreviousChainingTraceIDs)
-	item.Content = CloneWorkContentParts(item.Content)
+	item.Content = cloneContentParts(item.Content)
 	item.Tags = cloneStringMap(item.Tags)
 	return item
 }
@@ -396,7 +396,7 @@ func CanonicalChainingTraceIDs(traceIDs []string) []string {
 
 // PreviousChainingTraceIDsFromWorkItems collects predecessor chain IDs from
 // canonical work items using the shared deterministic fan-in rule.
-func PreviousChainingTraceIDsFromWorkItems(items []FactoryWorkItem) []string {
+func PreviousChainingTraceIDsFromWorkItems(items []WorkItem) []string {
 	traceIDs := make([]string, 0, len(items))
 	for _, item := range items {
 		traceIDs = append(traceIDs, firstNonEmptyString(item.CurrentChainingTraceID, item.TraceID))
@@ -407,7 +407,7 @@ func PreviousChainingTraceIDsFromWorkItems(items []FactoryWorkItem) []string {
 // CurrentChainingTraceIDFromWorkItems resolves the current dispatch chain from
 // the first non-system customer work item, falling back to any work item when
 // only system work is present.
-func CurrentChainingTraceIDFromWorkItems(items []FactoryWorkItem) string {
+func CurrentChainingTraceIDFromWorkItems(items []WorkItem) string {
 	for _, item := range items {
 		if item.WorkTypeID == systemTimeWorkTypeID {
 			continue

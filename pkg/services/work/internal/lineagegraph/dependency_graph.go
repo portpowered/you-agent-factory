@@ -1,4 +1,4 @@
-package work
+package lineagegraph
 
 import (
 	"fmt"
@@ -25,17 +25,17 @@ type Graph struct {
 	Edges []Edge
 }
 
-// DeriveFromWorkRequest projects a parsed batch request into a dependency graph.
-func DeriveFromWorkRequest(req WorkRequest) (Graph, error) {
+// DeriveFromBatchRequest projects a parsed batch request into a dependency graph.
+func DeriveFromBatchRequest(req BatchRequest) (Graph, error) {
 	if err := validateBatchForGraph(req); err != nil {
 		return Graph{}, err
 	}
 	return buildGraph(req), nil
 }
 
-func validateBatchForGraph(req WorkRequest) error {
-	if req.Type != WorkRequestTypeFactoryRequestBatch {
-		return fmt.Errorf("batch type must be %q", WorkRequestTypeFactoryRequestBatch)
+func validateBatchForGraph(req BatchRequest) error {
+	if req.Type != BatchRequestTypeFactoryRequestBatch {
+		return fmt.Errorf("batch type must be %q", BatchRequestTypeFactoryRequestBatch)
 	}
 	if strings.TrimSpace(req.RequestID) == "" {
 		return fmt.Errorf("batch requestId is required")
@@ -69,7 +69,7 @@ func validateBatchForGraph(req WorkRequest) error {
 			return fmt.Errorf("relations[%d] references unknown targetWorkName %q", i, rel.TargetWorkName)
 		}
 		switch rel.Type {
-		case WorkRelationDependsOn, WorkRelationParentChild:
+		case RelationDependsOn, RelationParentChild:
 		case "":
 			return fmt.Errorf("relations[%d] is missing type", i)
 		default:
@@ -79,7 +79,7 @@ func validateBatchForGraph(req WorkRequest) error {
 	return nil
 }
 
-func buildGraph(req WorkRequest) Graph {
+func buildGraph(req BatchRequest) Graph {
 	nodes := make([]Node, 0, len(req.Works))
 	for i, work := range req.Works {
 		nodes = append(nodes, Node{
@@ -104,7 +104,7 @@ func buildGraph(req WorkRequest) Graph {
 	}
 }
 
-func stableNodeID(work Work, index int) string {
+func stableNodeID(work BatchWork, index int) string {
 	if strings.TrimSpace(work.Name) != "" {
 		return work.Name
 	}
@@ -114,7 +114,7 @@ func stableNodeID(work Work, index int) string {
 	return fmt.Sprintf("work-%d", index+1)
 }
 
-func nodeLabel(work Work, index int) string {
+func nodeLabel(work BatchWork, index int) string {
 	if strings.TrimSpace(work.Name) != "" {
 		return work.Name
 	}

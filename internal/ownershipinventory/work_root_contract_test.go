@@ -37,6 +37,7 @@ func TestWorkThinRootContractFiles(t *testing.T) {
 		"input.go",
 		"input_test.go",
 		"invocation_return_policy_contract.go",
+		"lineage_contract.go",
 		"read_contract.go",
 		"recordings_import_boundary_test.go",
 		"recordings_request_boundary_test.go",
@@ -70,7 +71,6 @@ func TestWorkExcessRootContractFoldDestinations(t *testing.T) {
 	want := map[string]string{
 		"request_admission":        "pkg/services/work/internal",
 		"invocation_return_policy": "pkg/services/work/internal",
-		"lineage_graph_modules":    "pkg/services/work/internal/services/state_access",
 	}
 
 	for _, target := range ownershipinventory.WorkExcessRootContractFolds {
@@ -99,7 +99,6 @@ func TestWorkExcessRootContractFoldDestinations(t *testing.T) {
 	slices.Sort(gotClusters)
 	wantClusters := []string{
 		"invocation_return_policy",
-		"lineage_graph_modules",
 		"request_admission",
 	}
 	if !slices.Equal(gotClusters, wantClusters) {

@@ -1,4 +1,4 @@
-package work
+package lineagegraph
 
 import (
 	"errors"
@@ -29,7 +29,10 @@ const visualizationBatch = `{
 }`
 
 func TestVisualizationOperation_RendersSupportedFormats(t *testing.T) {
-	operation := NewVisualizationOperation(visualizationFileSystem{"batch.json": {data: []byte(visualizationBatch)}})
+	operation := NewVisualizationOperation(
+		visualizationFileSystem{"batch.json": {data: []byte(visualizationBatch)}},
+		testVisualizationParser,
+	)
 	tests := []struct {
 		format string
 		want   []string
@@ -59,7 +62,7 @@ func TestVisualizationOperation_PreservesValidationAndReadFailures(t *testing.T)
 		"unknown.json": {data: []byte(`{"requestId":"unknown","type":"FACTORY_REQUEST_BATCH","works":[{"name":"alpha","workTypeName":"task"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"alpha","targetWorkName":"missing"}]}`)},
 		"denied.json":  {err: readErr},
 	}
-	operation := NewVisualizationOperation(files)
+	operation := NewVisualizationOperation(files, testVisualizationParser)
 	tests := []struct {
 		request VisualizationRequest
 		want    string
@@ -85,8 +88,17 @@ func TestVisualizationOperation_PreservesValidationAndReadFailures(t *testing.T)
 }
 
 func TestVisualizationOperation_RequiresFilesystem(t *testing.T) {
-	_, err := NewVisualizationOperation(nil)(VisualizationRequest{BatchFile: "batch.json"})
+	_, err := NewVisualizationOperation(nil, testVisualizationParser)(VisualizationRequest{BatchFile: "batch.json"})
 	if err == nil || !strings.Contains(err.Error(), "filesystem is required") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestVisualizationOperation_RequiresParser(t *testing.T) {
+	_, err := NewVisualizationOperation(visualizationFileSystem{"batch.json": {data: []byte(visualizationBatch)}}, nil)(
+		VisualizationRequest{BatchFile: "batch.json"},
+	)
+	if err == nil || !strings.Contains(err.Error(), "batch parser is required") {
 		t.Fatalf("error = %v", err)
 	}
 }

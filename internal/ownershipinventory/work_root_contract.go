@@ -25,6 +25,7 @@ var WorkThinRootContractFiles = []string{
 	"input.go",
 	"input_test.go",
 	"invocation_return_policy_contract.go",
+	"lineage_contract.go",
 	"read_contract.go",
 	"recordings_import_boundary_test.go",
 	"recordings_request_boundary_test.go",
@@ -77,21 +78,6 @@ var WorkExcessRootContractFolds = []WorkRootContractFoldTarget{
 			"primary_result_regression_test.go",
 		},
 		Destination: workPackagePrefix + "/internal",
-	},
-	{
-		Cluster: "lineage_graph_modules",
-		Files: []string{
-			"dependency_graph.go",
-			"dependency_graph_test.go",
-			"dependency_graph_markdown.go",
-			"dependency_graph_markdown_test.go",
-			"dependency_graph_mermaid.go",
-			"dependency_graph_mermaid_test.go",
-			"lineage.go",
-			"visualization.go",
-			"visualization_test.go",
-		},
-		Destination: workPackagePrefix + "/internal/services/state_access",
 	},
 }
 

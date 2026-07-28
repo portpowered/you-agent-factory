@@ -1,4 +1,4 @@
-package work
+package lineagegraph
 
 import (
 	"encoding/json"
@@ -24,9 +24,12 @@ type VisualizationRequest struct {
 
 type VisualizationOperation func(VisualizationRequest) (string, error)
 
+// BatchRequestParser decodes canonical batch JSON into the lineagegraph batch shape.
+type BatchRequestParser func([]byte) (BatchRequest, error)
+
 // NewVisualizationOperation binds the exact filesystem read edge to Work's
 // batch dependency visualization policy.
-func NewVisualizationOperation(filesystem VisualizationFileSystem) VisualizationOperation {
+func NewVisualizationOperation(filesystem VisualizationFileSystem, parse BatchRequestParser) VisualizationOperation {
 	return func(request VisualizationRequest) (string, error) {
 		if filesystem == nil {
 			return "", fmt.Errorf("Work visualization filesystem is required")
@@ -62,11 +65,14 @@ func NewVisualizationOperation(filesystem VisualizationFileSystem) Visualization
 			return "", fmt.Errorf("invalid JSON")
 		}
 
-		workRequest, err := ParseCanonicalWorkRequestJSON(data)
+		if parse == nil {
+			return "", fmt.Errorf("Work visualization batch parser is required")
+		}
+		workRequest, err := parse(data)
 		if err != nil {
 			return "", err
 		}
-		graph, err := DeriveFromWorkRequest(workRequest)
+		graph, err := DeriveFromBatchRequest(workRequest)
 		if err != nil {
 			return "", err
 		}

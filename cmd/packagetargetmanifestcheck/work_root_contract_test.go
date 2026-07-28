@@ -27,7 +27,6 @@ func TestWorkExcessRootContractFoldDestinations(t *testing.T) {
 	want := map[string]string{
 		"request_admission":        "pkg/services/work/internal",
 		"invocation_return_policy": "pkg/services/work/internal",
-		"lineage_graph_modules":    "pkg/services/work/internal/services/state_access",
 	}
 
 	for _, target := range workExcessRootContractFolds {
@@ -135,7 +134,6 @@ func TestWorkExcessRootContractFoldClustersMatchInventoryNote(t *testing.T) {
 	slices.Sort(gotClusters)
 	wantClusters := []string{
 		"invocation_return_policy",
-		"lineage_graph_modules",
 		"request_admission",
 	}
 	if !slices.Equal(gotClusters, wantClusters) {
