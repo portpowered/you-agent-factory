@@ -1441,7 +1441,7 @@
       "fromOwner": "providers",
       "toOwner": "platform",
       "class": "external_effect",
-      "evidence": "pkg/services/providers/internal/services/execution/wire -\u003e pkg/platform/process"
+      "evidence": "pkg/services/providers/internal/services/execution/internal/adapters/cursor -\u003e pkg/platform/filesystem"
     },
     {
       "fromOwner": "providers",
@@ -4484,6 +4484,18 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/cursor",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/opencode",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/providers/internal/services/execution/internal/service",
       "disposition": "retain",
       "destination": "providers",
@@ -5070,14 +5082,6 @@
       "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
     },
     {
-      "packagePath": "pkg/services/workers/provider/adapter/opencode",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
       "packagePath": "pkg/services/workers/provider/adapter/testkit",
       "disposition": "move",
       "destination": "providers",
@@ -5167,6 +5171,14 @@
     },
     {
       "packagePath": "pkg/services/workers/provider/kiro",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/opencode",
       "disposition": "move",
       "destination": "providers",
       "destinationKind": "owner",

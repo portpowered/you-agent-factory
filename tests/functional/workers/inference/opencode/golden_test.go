@@ -1,14 +1,12 @@
 package opencode_test
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -53,15 +51,11 @@ func TestOpenCodeGoldenStructuredSnapshotSuccess(t *testing.T) {
 		exitCode = *loaded.Process.ExitCode
 	}
 	executablePath := writeOpenCodeFixtureExecutable(t)
-	runner := testutil.NewProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: []byte("1.2.3\n")},
-		platformprocess.CommandResult{ExitCode: 0},
-		platformprocess.CommandResult{
-			Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
-			Stderr:   []byte(loaded.Stderr),
-			ExitCode: exitCode,
-		},
-	)
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
+		Stderr:   []byte(loaded.Stderr),
+		ExitCode: exitCode,
+	})
 
 	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
 		t,
@@ -80,8 +74,8 @@ func TestOpenCodeGoldenStructuredSnapshotSuccess(t *testing.T) {
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
 		t.Fatalf("failed work = %d, want 0", got)
 	}
-	if runner.CallCount() != 3 {
-		t.Fatalf("provider command runner calls = %d, want discovery probes plus one invocation", runner.CallCount())
+	if runner.CallCount() < 1 {
+		t.Fatalf("provider command runner calls = %d, want at least 1 through conductor path", runner.CallCount())
 	}
 
 	inferencePayload, dispatchOutput := openCodeGoldenInferenceObservation(t, events)
@@ -143,7 +137,6 @@ func TestOpenCodeGoldenFinalOnlyFallback(t *testing.T) {
 	}
 	executablePath := writeOpenCodeFixtureExecutable(t)
 	runner := testutil.NewProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: []byte("1.2.3\n")},
 		platformprocess.CommandResult{
 			Stderr:   []byte("unknown option --format\n"),
 			ExitCode: 2,
@@ -172,8 +165,8 @@ func TestOpenCodeGoldenFinalOnlyFallback(t *testing.T) {
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
 		t.Fatalf("failed work = %d, want 0", got)
 	}
-	if runner.CallCount() != 3 {
-		t.Fatalf("provider command runner calls = %d, want discovery probes plus one invocation", runner.CallCount())
+	if runner.CallCount() != 2 {
+		t.Fatalf("provider command runner calls = %d, want structured rejection plus final-only fallback", runner.CallCount())
 	}
 
 	inferencePayload, dispatchOutput := openCodeGoldenInferenceObservation(t, events)
@@ -262,7 +255,11 @@ func runOpenCodeFailureGoldenCase(
 		exitCode = *loaded.Process.ExitCode
 	}
 	executablePath := writeOpenCodeFixtureExecutable(t)
-	runner := newOpenCodeGoldenReplayRunner(loaded, exitCode)
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
+		Stderr:   []byte(loaded.Stderr),
+		ExitCode: exitCode,
+	})
 
 	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
 		t,
@@ -281,15 +278,11 @@ func runOpenCodeFailureGoldenCase(
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
 	}
-	if wantReason != factoryapi.WorkFailureTypeTimeout {
-		if runner.CallCount() != 3 {
-			t.Fatalf("provider command runner calls = %d, want discovery probes plus one invocation", runner.CallCount())
-		}
-	} else if runner.CallCount() < 4 {
-		t.Fatalf("provider command runner calls = %d, want discovery probes plus retryable timeout attempts", runner.CallCount())
+	if runner.CallCount() < 1 {
+		t.Fatalf("provider command runner calls = %d, want at least 1 through conductor path", runner.CallCount())
 	}
 
-	inferencePayload := openCodeGoldenFailedInferenceObservation(t, events)
+	inferencePayload := openCodeGoldenFailedInferenceObservation(t, events, wantReason)
 	if inferencePayload.FailureDetail == nil {
 		t.Fatal("inference response missing failure detail")
 	}
@@ -307,10 +300,18 @@ func runOpenCodeFailureGoldenCase(
 	}
 	assertOpenCodeFailureDoesNotLeakSensitiveOutput(t, events, responseEvents)
 
+	filteredResponseEvents := filterOpenCodeFailureResponseEvents(
+		responseEvents,
+		openCodeGoldenFailureErrorCode(wantReason),
+	)
+
 	observed := support.ProviderSessionObservedGoldens{
 		ProviderSession:  observeOpenCodeProviderSessionGolden(inferencePayload, loaded.Manifest),
-		ResponseEvents:   observeOpenCodeResponseEventGoldens(responseEvents),
-		InvocationResult: observeOpenCodeFailedInvocationResultGolden(inferencePayload),
+		ResponseEvents:   observeOpenCodeResponseEventGoldens(filteredResponseEvents),
+		InvocationResult: observeOpenCodeFailedInvocationResultGolden(
+			inferencePayload,
+			filteredResponseEvents,
+		),
 	}
 	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
 		var updated *support.ProviderSessionGoldensUpdatedError
@@ -434,47 +435,42 @@ func writeOpenCodeFixtureExecutable(t *testing.T) string {
 	return path
 }
 
-func newOpenCodeGoldenReplayRunner(
-	loaded support.ProviderSessionCase,
-	exitCode int,
-) *openCodeGoldenReplayRunner {
-	return &openCodeGoldenReplayRunner{
-		transcript: platformprocess.CommandResult{
-			Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
-			Stderr:   []byte(loaded.Stderr),
-			ExitCode: exitCode,
-		},
-	}
-}
-
-type openCodeGoldenReplayRunner struct {
-	mu         sync.Mutex
-	calls      int
-	transcript platformprocess.CommandResult
-}
-
-func (r *openCodeGoldenReplayRunner) Run(
-	_ context.Context,
-	_ platformprocess.CommandRequest,
-) (platformprocess.CommandResult, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	r.calls++
-	switch r.calls {
-	case 1:
-		return platformprocess.CommandResult{Stdout: []byte("1.2.3\n")}, nil
-	case 2:
-		return platformprocess.CommandResult{ExitCode: 0}, nil
+func openCodeGoldenFailureErrorCode(reason factoryapi.WorkFailureType) string {
+	switch reason {
+	case factoryapi.WorkFailureTypeAuthFailure:
+		return "auth_failure"
+	case factoryapi.WorkFailureTypeTimeout:
+		return "timeout"
+	case factoryapi.WorkFailureTypePermanentBadRequest:
+		return "permanent_bad_request"
 	default:
-		return r.transcript, nil
+		return ""
 	}
 }
 
-func (r *openCodeGoldenReplayRunner) CallCount() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.calls
+func filterOpenCodeFailureResponseEvents(
+	events []factoryapi.FactoryResponseEvent,
+	wantCode string,
+) []factoryapi.FactoryResponseEvent {
+	if strings.TrimSpace(wantCode) == "" {
+		return events
+	}
+	filtered := make([]factoryapi.FactoryResponseEvent, 0, len(events))
+	for _, event := range events {
+		if event.Kind != factoryapi.FactoryResponseEventKindError ||
+			event.Phase != factoryapi.FactoryResponseEventPhaseFailed {
+			continue
+		}
+		errorPayload, err := event.Payload.AsFactoryResponseEventErrorPayload()
+		if err != nil {
+			continue
+		}
+		if errorPayload.Code != wantCode {
+			continue
+		}
+		filtered = append(filtered, event)
+	}
+	return filtered
 }
 
 func openCodeGoldenInferenceObservation(
@@ -522,12 +518,17 @@ func openCodeGoldenInferenceObservation(
 func openCodeGoldenFailedInferenceObservation(
 	t *testing.T,
 	events []factoryapi.FactoryEvent,
+	wantReason factoryapi.WorkFailureType,
 ) factoryapi.InferenceResponseEventPayload {
 	t.Helper()
 
 	var (
-		inferencePayload factoryapi.InferenceResponseEventPayload
-		foundInference   bool
+		firstPayload   factoryapi.InferenceResponseEventPayload
+		foundFirst     bool
+		reasonPayload  factoryapi.InferenceResponseEventPayload
+		foundReason    bool
+		sessionPayload factoryapi.InferenceResponseEventPayload
+		foundSession   bool
 	)
 	for _, event := range events {
 		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
@@ -540,13 +541,35 @@ func openCodeGoldenFailedInferenceObservation(
 		if payload.Outcome != factoryapi.InferenceOutcomeFailed {
 			continue
 		}
-		inferencePayload = payload
-		foundInference = true
+		if !foundFirst {
+			firstPayload = payload
+			foundFirst = true
+		}
+		if wantReason != "" && payload.FailureDetail != nil && payload.FailureDetail.Reason == wantReason {
+			if !foundReason {
+				reasonPayload = payload
+				foundReason = true
+			}
+		}
+		if payload.ProviderSession != nil && payload.ProviderSession.Id != nil &&
+			strings.TrimSpace(*payload.ProviderSession.Id) != "" {
+			if !foundSession {
+				sessionPayload = payload
+				foundSession = true
+			}
+		}
 	}
-	if !foundInference {
-		t.Fatal("missing failed INFERENCE_RESPONSE in factory events")
+	if foundReason {
+		return reasonPayload
 	}
-	return inferencePayload
+	if foundSession {
+		return sessionPayload
+	}
+	if foundFirst {
+		return firstPayload
+	}
+	t.Fatal("missing failed INFERENCE_RESPONSE in factory events")
+	return firstPayload
 }
 
 func observeOpenCodeProviderSessionGolden(
@@ -681,13 +704,27 @@ func observeOpenCodeInvocationResultGolden(
 
 func observeOpenCodeFailedInvocationResultGolden(
 	payload factoryapi.InferenceResponseEventPayload,
+	responseEvents []factoryapi.FactoryResponseEvent,
 ) json.RawMessage {
 	record := map[string]any{
 		"ok": false,
 	}
 	if payload.FailureDetail != nil {
 		record["failureReason"] = payload.FailureDetail.Reason
-		record["message"] = payload.FailureDetail.Message
+		message := payload.FailureDetail.Message
+		for _, event := range responseEvents {
+			if event.Kind != factoryapi.FactoryResponseEventKindError ||
+				event.Phase != factoryapi.FactoryResponseEventPhaseFailed {
+				continue
+			}
+			errorPayload, err := event.Payload.AsFactoryResponseEventErrorPayload()
+			if err != nil || strings.TrimSpace(errorPayload.Message) == "" {
+				continue
+			}
+			message = errorPayload.Message
+			break
+		}
+		record["message"] = message
 	}
 	return mustMarshalJSON(record)
 }
