@@ -81,7 +81,6 @@
     "pkg/services/automations/internal/services/script_pollers",
     "pkg/services/automations/internal/services/script_pollers/internal/service",
     "pkg/services/automations/internal/services/script_pollers/wire",
-    "pkg/services/automations/service",
     "pkg/services/automations/transports/http",
     "pkg/services/automations/wire",
     "pkg/services/edges",
@@ -634,7 +633,7 @@
     {
       "packagePath": "pkg/services/automations/internal",
       "disposition": "retain",
-      "destination": "automations/internal"
+      "destination": "automations"
     },
     {
       "packagePath": "pkg/services/automations/internal/services/cron",
@@ -715,11 +714,6 @@
       "packagePath": "pkg/services/automations/internal/services/script_pollers/wire",
       "disposition": "retain",
       "destination": "automations/internal/services/script_pollers"
-    },
-    {
-      "packagePath": "pkg/services/automations/service",
-      "disposition": "move",
-      "destination": "automations/internal"
     },
     {
       "packagePath": "pkg/services/automations/transports/http",

@@ -1165,7 +1165,7 @@
       "fromOwner": "factory_definitions",
       "toOwner": "transports",
       "class": "command",
-      "evidence": "pkg/services/factory_definitions/transports/http -\u003e pkg/transports/http/generated"
+      "evidence": "pkg/services/factory_definitions/internal/services/compilation/canonical -\u003e pkg/transports/mapping/factoryconfig"
     },
     {
       "fromOwner": "factory_definitions",
@@ -1277,12 +1277,6 @@
     },
     {
       "fromOwner": "factory_sessions",
-      "toOwner": "providers",
-      "class": "command",
-      "evidence": "pkg/services/factory_sessions/internal/execution -\u003e pkg/services/workers/provider/inferencecontract"
-    },
-    {
-      "fromOwner": "factory_sessions",
       "toOwner": "recordings",
       "class": "event",
       "evidence": "pkg/services/factory_sessions/internal/controlplane -\u003e pkg/services/recordings"
@@ -1334,12 +1328,6 @@
       "toOwner": "transports",
       "class": "command",
       "evidence": "pkg/services/factory_visualization/transports/cli -\u003e pkg/transports/mapping"
-    },
-    {
-      "fromOwner": "factory_visualization",
-      "toOwner": "transports",
-      "class": "command",
-      "evidence": "pkg/services/factory_visualization/transports/http -\u003e pkg/transports/http/generated"
     },
     {
       "fromOwner": "factory_visualization",
@@ -2394,6 +2382,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/automations/internal",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/automations/internal/services/cron",
       "disposition": "retain",
       "destination": "automations",
@@ -2488,14 +2482,6 @@
       "disposition": "retain",
       "destination": "automations",
       "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/automations/service",
-      "disposition": "move",
-      "destination": "automations",
-      "destinationKind": "owner",
-      "successor": "pkg/services/automations/internal",
-      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
     },
     {
       "packagePath": "pkg/services/automations/transports/http",

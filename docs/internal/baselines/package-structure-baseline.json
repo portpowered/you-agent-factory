@@ -2344,11 +2344,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/automations/service",
-      "target": "pkg/services/automations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/authoredlayout",
       "target": "pkg/services/factory_definitions"
     },
