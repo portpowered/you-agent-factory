@@ -3,6 +3,7 @@ package quorum
 import (
 	"testing"
 
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -41,4 +42,53 @@ func TestPackagedQuorumRequiredInputCompletes(t *testing.T) {
 		"Branch B output:\n",
 		"branch B",
 	)
+}
+
+// TestPackagedQuorumOptionalMemberSettingsReachWorkers proves that optional
+// branch and merge provider/model settings supplied through the public CLI
+// reach the quorum branch and merge workers under edge-mocked Codex providers
+// and complete with a merged primary result reflecting the submitted request.
+func TestPackagedQuorumOptionalMemberSettingsReachWorkers(t *testing.T) {
+	requestText := "configured quorum optional member settings request"
+	runner := newPackagedQuorumCommandRunner()
+
+	response := runPackagedQuorumCLIJSONInvocation(
+		t,
+		runner,
+		requestText,
+		"--branch-provider", "CODEX",
+		"--branch-model", "gpt-5.1",
+		"--merge-provider", "CODEX",
+		"--merge-model", "gpt-5.2",
+	)
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
+	}
+
+	for _, workstation := range []string{
+		packagedQuorumBranchAWorkstation,
+		packagedQuorumBranchBWorkstation,
+		packagedQuorumMergeWorkstation,
+	} {
+		if got := runner.callCount(workstation); got != 1 {
+			t.Fatalf("%s provider call count = %d, want one configured quorum dispatch", workstation, got)
+		}
+	}
+
+	assertMergedQuorumPrimaryResult(t, invocationPrimaryResultText(t, response), requestText)
+	assertPromptIncludes(
+		t,
+		runner.capturedMergePrompt(),
+		"Original request:\n",
+		requestText,
+		"Branch A output:\n",
+		"branch A",
+		"Branch B output:\n",
+		"branch B",
+	)
+
+	codex := string(modelprovider.ProviderCodex)
+	runner.assertProviderModel(t, packagedQuorumBranchAWorkstation, codex, "gpt-5.1")
+	runner.assertProviderModel(t, packagedQuorumBranchBWorkstation, codex, "gpt-5.1")
+	runner.assertProviderModel(t, packagedQuorumMergeWorkstation, codex, "gpt-5.2")
 }

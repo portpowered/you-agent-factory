@@ -24,14 +24,16 @@ const (
 )
 
 type packagedQuorumCommandRunner struct {
-	mu               sync.Mutex
-	callCounts       map[string]int
+	mu                      sync.Mutex
+	callCounts              map[string]int
+	requests                map[string]platformprocess.CommandRequest
 	capturedMergePromptText string
 }
 
 func newPackagedQuorumCommandRunner() *packagedQuorumCommandRunner {
 	return &packagedQuorumCommandRunner{
 		callCounts: make(map[string]int),
+		requests:   make(map[string]platformprocess.CommandRequest),
 	}
 }
 
@@ -42,6 +44,7 @@ func (runner *packagedQuorumCommandRunner) Run(
 	lane := packagedQuorumRequestLane(request)
 	runner.mu.Lock()
 	runner.callCounts[lane]++
+	runner.requests[lane] = request
 	runner.mu.Unlock()
 
 	switch lane {
@@ -100,10 +103,44 @@ func (runner *packagedQuorumCommandRunner) capturedMergePrompt() string {
 	return runner.capturedMergePromptText
 }
 
+func (runner *packagedQuorumCommandRunner) assertProviderModel(
+	t *testing.T,
+	workstation, provider, model string,
+) {
+	t.Helper()
+
+	runner.mu.Lock()
+	request, ok := runner.requests[workstation]
+	runner.mu.Unlock()
+	if !ok {
+		t.Fatalf("no command request for %s", workstation)
+	}
+	if request.Command != provider || !packagedQuorumContainsArgumentPair(request.Args, "--model", model) {
+		t.Fatalf(
+			"%s command = %q %#v, want %s provider with model %q",
+			workstation,
+			request.Command,
+			request.Args,
+			provider,
+			model,
+		)
+	}
+}
+
+func packagedQuorumContainsArgumentPair(args []string, name, value string) bool {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == name && args[index+1] == value {
+			return true
+		}
+	}
+	return false
+}
+
 func runPackagedQuorumCLIJSONInvocation(
 	t *testing.T,
 	runner platformprocess.CommandRunner,
 	requestText string,
+	extraArgs ...string,
 ) factoryapi.InvocationResponse {
 	t.Helper()
 
@@ -114,8 +151,9 @@ func runPackagedQuorumCLIJSONInvocation(
 		"you", "--json", "run",
 		"--named", factorydefinitions.PackagedQuorumFactoryName,
 		"--no-record",
-		requestText,
 	}
+	args = append(args, extraArgs...)
+	args = append(args, requestText)
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	inputs.Input.WorkingDirectory = t.TempDir()
