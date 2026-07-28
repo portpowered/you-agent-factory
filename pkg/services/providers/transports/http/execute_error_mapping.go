@@ -30,6 +30,12 @@ func ExecuteRootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 		return 0, factoryapi.ErrorResponse{}, false
 	}
 
+	if status, response, ok := executeRequestContextErrorResponse(err); ok {
+		if errResp, ok := response.(factoryapi.ErrorResponse); ok {
+			return status, errResp, true
+		}
+	}
+
 	if errors.Is(err, ErrInvalidExecuteRequest) {
 		return badRequestErrorResponse(executeInvalidRequestMessage)
 	}
@@ -69,6 +75,9 @@ func (a *Adapter) writeExecuteError(w http.ResponseWriter, err error) bool {
 }
 
 func (a *Adapter) writeExecuteOrInternalError(w http.ResponseWriter, err error) {
+	if a.writeExecuteRequestContextOutcome(w, err) {
+		return
+	}
 	if a.writeExecuteError(w, err) {
 		return
 	}

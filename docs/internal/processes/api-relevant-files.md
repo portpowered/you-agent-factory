@@ -404,7 +404,10 @@ Use this map when changing the public REST contract.
   `ErrProviderUnavailable`) to stable HTTP outcomes via `CatalogRootErrorResponse`.
   Execute typed failures (`ExecuteFailure` kinds and `ErrExecuteFailed`,
   `ErrExecuteCancelled`, `ErrExecuteTimeout`, plus shared catalog failures) map
-  through `ExecuteRootErrorResponse`.
+  through `ExecuteRootErrorResponse`. Request-context cancellation and deadline
+  exhaustion for execute map through `request_context.go` to the published execute
+  cancel/timeout HTTP outcomes (`PROVIDER_EXECUTION_CANCELED`,
+  `PROVIDER_EXECUTION_TIMEOUT`) and must not fall through to `INTERNAL_ERROR`.
 - Shared filesystem documents represented in OpenAPI should decode and encode
   through the generated model in a focused `pkg/transports/mapping` package,
   then map into domain-owned values. Inject that codec into the service
