@@ -17,9 +17,10 @@ import (
 // workstation-level VISIT_COUNT eligibility guard keeps the guarded
 // completion workstation from dispatching until the watched workstation has
 // visited the shared Work enough times, then releases the expected public
-// terminal Work outcome after the guard becomes satisfied.
+// terminal Work outcome through the guarded second-pass-review dispatch.
 func TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied(t *testing.T) {
 	dir := support.ScaffoldFactory(t, visitGuardedCompletionFactoryConfig())
+	support.WriteWorkstationConfig(t, dir, "advance-to-gate", "---\ntype: LOGICAL_MOVE\n---\n")
 	support.WriteAgentConfig(t, dir, "executor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	support.WriteAgentConfig(t, dir, "loop-reviewer", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	support.WriteAgentConfig(t, dir, "gate-reviewer", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
@@ -48,11 +49,12 @@ func TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied(t *testing.T)
 	executeIndexes := dispatchResponseIndexesForTransition(t, events, "execute-story")
 	secondPassIndexes := dispatchResponseIndexesForTransition(t, events, "second-pass-review")
 	reviewIndexes := dispatchResponseIndexesForTransition(t, events, "review-story")
+	advanceIndexes := dispatchResponseIndexesForTransition(t, events, "advance-to-gate")
 	if len(executeIndexes) < 2 {
 		t.Fatalf("execute-story dispatch count = %d, want at least 2 before guarded completion", len(executeIndexes))
 	}
-	if len(reviewIndexes) < 2 {
-		t.Fatalf("review-story dispatch count = %d, want at least 2 while the guard blocks the gated workstation", len(reviewIndexes))
+	if len(reviewIndexes) != 1 {
+		t.Fatalf("review-story dispatch count = %d, want 1 while the guard blocks the gated workstation", len(reviewIndexes))
 	}
 	for _, index := range secondPassIndexes {
 		if index < executeIndexes[1] {
@@ -63,6 +65,26 @@ func TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied(t *testing.T)
 			)
 		}
 	}
+	if len(secondPassIndexes) < 1 {
+		t.Fatalf("second-pass-review dispatch count = %d, want at least 1 after the guard is satisfied", len(secondPassIndexes))
+	}
+	if len(advanceIndexes) != 1 {
+		t.Fatalf("advance-to-gate dispatch count = %d, want 1 after execute-story satisfies the visit guard", len(advanceIndexes))
+	}
+	if advanceIndexes[0] < executeIndexes[1] {
+		t.Fatalf(
+			"advance-to-gate dispatch index = %d, want after second execute-story dispatch index %d",
+			advanceIndexes[0],
+			executeIndexes[1],
+		)
+	}
+	if secondPassIndexes[0] <= advanceIndexes[0] {
+		t.Fatalf(
+			"second-pass-review dispatch index = %d, want after advance-to-gate dispatch index %d",
+			secondPassIndexes[0],
+			advanceIndexes[0],
+		)
+	}
 	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("story", "complete")); got != 1 {
 		t.Fatalf("complete work count = %d, want 1; listed=%#v", got, listed)
 	}
@@ -72,7 +94,7 @@ func TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied(t *testing.T)
 	assertTerminalWorkCorrelatesToTraceID(t, listed, traceID)
 	assertQuiescentSession(t, session, 1, 0)
 	if runner.CallCount() != 4 {
-		t.Fatalf("provider command calls = %d, want 4 (execute, review reject, execute, review complete)", runner.CallCount())
+		t.Fatalf("provider command calls = %d, want 4 (execute, review reject, execute, guarded second-pass-review)", runner.CallCount())
 	}
 }
 
@@ -480,6 +502,7 @@ func visitGuardedCompletionFactoryConfig() map[string]any {
 			"states": []map[string]string{
 				{"name": "init", "type": "INITIAL"},
 				{"name": "in-review", "type": "PROCESSING"},
+				{"name": "gate-ready", "type": "PROCESSING"},
 				{"name": "complete", "type": "TERMINAL"},
 				{"name": "failed", "type": "FAILED"},
 			},
@@ -503,21 +526,29 @@ func visitGuardedCompletionFactoryConfig() map[string]any {
 				"inputs":      []map[string]string{{"workType": "story", "state": "in-review"}},
 				"onFailure":   []map[string]string{{"workType": "story", "state": "failed"}},
 				"onRejection": []map[string]string{{"workType": "story", "state": "init"}},
-				"outputs":     []map[string]string{{"workType": "story", "state": "complete"}},
+				"outputs":     []map[string]string{{"workType": "story", "state": "gate-ready"}},
 			},
 			{
-				"name":   "second-pass-review",
-				"worker": "gate-reviewer",
+				"name":   "advance-to-gate",
+				"type":   "LOGICAL_MOVE",
 				"inputs": []map[string]string{{"workType": "story", "state": "in-review"}},
 				"outputs": []map[string]string{
-					{"workType": "story", "state": "complete"},
+					{"workType": "story", "state": "gate-ready"},
 				},
-				"onFailure": []map[string]string{{"workType": "story", "state": "failed"}},
 				"guards": []map[string]any{{
 					"type":        "VISIT_COUNT",
 					"workstation": "execute-story",
 					"maxVisits":   float64(2),
 				}},
+			},
+			{
+				"name":   "second-pass-review",
+				"worker": "gate-reviewer",
+				"inputs": []map[string]string{{"workType": "story", "state": "gate-ready"}},
+				"outputs": []map[string]string{
+					{"workType": "story", "state": "complete"},
+				},
+				"onFailure": []map[string]string{{"workType": "story", "state": "failed"}},
 			},
 		},
 	}
