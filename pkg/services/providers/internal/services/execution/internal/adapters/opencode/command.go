@@ -27,6 +27,11 @@ var commandAutomationDefaults = []workerprocess.CommandEnvEntry{
 	{Name: "VISUAL", Value: "true"},
 }
 
+type commandEffect struct {
+	runner workers.CommandRunner
+	mode   Mode
+}
+
 // NewCommandEffect binds one streaming subprocess runner to the OpenCode adapter.
 func NewCommandEffect(
 	runner workers.CommandRunner,
@@ -40,33 +45,52 @@ func NewCommandEffect(
 		config = options[0]
 	}
 	if config.Mode == "" {
-		config.Mode = ModeStructured
+		return newNegotiatingEffect(runner)
 	}
-	return EffectFunc(func(
-		ctx context.Context,
-		request providers.ExecuteRequest,
-		observe func([]byte) error,
-	) (EffectResult, error) {
-		started := time.Now()
-		command, err := buildCommand(request, config.Mode)
-		if err != nil {
-			return EffectResult{}, execution.AttemptFailure{NativeError: err}
-		}
-		result, runErr := runStreaming(ctx, runner, command, observe)
-		effectResult := EffectResult{
-			DurationMillis: time.Since(started).Milliseconds(),
-			Metadata: map[string]string{
-				"output_mode": string(config.Mode),
-			},
-		}
-		if runErr != nil {
-			return effectResult, nativeCommandError(ctx, runErr)
-		}
-		if result.ExitCode != 0 {
-			return effectResult, exitFailureFromCommandResult(result)
-		}
-		return effectResult, nil
-	})
+	return commandEffect{runner: runner, mode: config.Mode}
+}
+
+func (effect commandEffect) WithMode(mode Mode) Effect {
+	if mode == "" {
+		mode = ModeStructured
+	}
+	return commandEffect{runner: effect.runner, mode: mode}
+}
+
+func (effect commandEffect) Execute(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+	observe func([]byte) error,
+) (EffectResult, error) {
+	started := time.Now()
+	command, err := buildCommand(request, effect.mode)
+	if err != nil {
+		return EffectResult{}, execution.AttemptFailure{NativeError: err}
+	}
+	result, runErr := runStreaming(ctx, effect.runner, command, observe)
+	effectResult := EffectResult{
+		DurationMillis: time.Since(started).Milliseconds(),
+		Metadata: map[string]string{
+			"output_mode": string(effect.mode),
+		},
+		Command: commandFactsFromResult(result, runErr),
+	}
+	if runErr != nil {
+		return effectResult, nativeCommandError(ctx, runErr)
+	}
+	if result.ExitCode != 0 {
+		return effectResult, exitFailureFromCommandResult(result)
+	}
+	return effectResult, nil
+}
+
+func commandFactsFromResult(result workers.CommandResult, runErr error) CommandFacts {
+	return CommandFacts{
+		ExitCode: result.ExitCode,
+		Stdout:   append([]byte(nil), result.Stdout...),
+		Stderr:   append([]byte(nil), result.Stderr...),
+		RunError: runErr,
+	}
 }
 
 func buildCommand(

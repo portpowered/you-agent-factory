@@ -138,7 +138,7 @@ func (decoder *decoder) final() (string, *providers.SessionRef, error) {
 		content = strings.TrimSpace(decoder.authoritativeContent())
 	}
 	if content == "" {
-		return "", nil, errors.New("opencode stream did not contain an authoritative response")
+		return "", nil, errMissingAuthoritativeResponse
 	}
 	var session *providers.SessionRef
 	if validCorrelation(decoder.sessionID) {

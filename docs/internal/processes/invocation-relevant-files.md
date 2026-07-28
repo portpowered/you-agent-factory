@@ -372,10 +372,13 @@ primary-result behavior.
   for canonical `providers.IDOpenCode` (`opencode`) and support both structured
   (`--format json`) and final-only success through `ModeStructured` and
   `ModeFinalOnly` on `NewRegistrationWithMode` / `CommandEffectOptions`.
-  Inject the native effect into the adapter registration; reconcile lifecycle
-  failures with the same precedence rules as other Providers-owned adapters.
-  Story 005 should add negotiation/fallback and degradation diagnostics on top
-  of this registration slice.
+  `NewCommandEffect` negotiates structured mode by default, caches downgrade to
+  final-only after one safe `unsupported_format` rejection, and surfaces the
+  `structured_mode_degraded` diagnostic through Providers root progress facts.
+  Block fallback when `RegistrationOptions.RequireStructuredStream` or request
+  env `providers_require_structured_stream=true` is set. Inject the native
+  effect into the adapter registration; reconcile lifecycle failures with the
+  same precedence rules as other Providers-owned adapters.
 - Keep reusable one-attempt conformance under the Providers-private Execution
   testkit. Build the singular Providers root around a fresh
   controllable adapter for each scenario, observe only Providers-owned
