@@ -581,7 +581,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestLogicalMovePreservesWorkPayloadAndLineage`.
   - `TestLogicalMoveMultipleOutputsCreatesEveryExpectedWork`.
 
-- [ ] `tests/functional/work/routing/classifier_test.go`
+- [x] `tests/functional/work/routing/classifier_test.go`
   - `TestClassifierRoutesEveryKnownDecision`.
   - `TestClassifierUnknownAndMalformedDecisionFailDistinctly`.
   - `TestClassifierMultiOutputPreservesPayload`.
