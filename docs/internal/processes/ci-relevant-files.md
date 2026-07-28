@@ -836,6 +836,17 @@ Wave 0 functional-tests-expansion planning authority lives under
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
 
+- `tests/functional/provider_sessions/peer_import_boundary_test.go` owns
+  Provider Sessions FUN functional import seal: every package under
+  `tests/functional/provider_sessions/...` must construct through
+  `root.BuildProcess` / shared functional support and must not import
+  `pkg/services/provider_sessions/internal` or deleted
+  `pkg/services/provider_sessions/service`. Complements inert-construction and
+  post-lifecycle behavioral proofs; does not replace them. Catalog metadata
+  infers domain `provider_sessions` and subsection `root_composition`; every
+  top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
+  stays viz-compatible.
+
 - `tests/functional/provider_sessions/build_process_inert_test.go` owns
   Provider Sessions inert-construction proof through `support.BuildProcess` /
   `root.BuildProcess`. Replace `serviceedges.Edges` Provider Session ports
