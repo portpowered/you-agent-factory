@@ -22,6 +22,8 @@ var factoryRuntimeMoveRules = []factoryRuntimeMoveRule{
 	{exact: "checkpointstore", prefix: "checkpointstore/", subservice: "checkpoint_recovery"},
 	{exact: "checkpointsummary", prefix: "checkpointsummary/", subservice: "checkpoint_recovery"},
 	{exact: "build", prefix: "build/", subservice: "instance_host"},
+	{exact: "internal/factorystatus", prefix: "internal/factorystatus/", subservice: ""},
+	{exact: "internal/legacysnapshot", prefix: "internal/legacysnapshot/", subservice: ""},
 	{exact: "internal/rootobservation", prefix: "internal/rootobservation/", subservice: ""},
 	{exact: "internal/service", prefix: "internal/service/", subservice: ""},
 	{exact: "testkit", prefix: "testkit/", subservice: ""},

@@ -2600,6 +2600,48 @@
       "deletionCondition": "delete public package after IMP-DEF-catalog private subservice cutover proof"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/expand",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/flatten",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/internal/service",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/persist",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/prepare",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/wire",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -3113,93 +3155,139 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/build",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/instance_host",
+      "deletionCondition": "delete public package after IMP-RUN-instance_host private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/checkpointstore",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
+      "deletionCondition": "delete public package after IMP-RUN-checkpoint_recovery private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/checkpointsummary",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
+      "deletionCondition": "delete public package after IMP-RUN-checkpoint_recovery private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/context",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/definitionmapping",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/definitionmapping/maptests",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/engine",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/exhaustiontests",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
+      "disposition": "move",
+      "destination": "factory_runtime",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
+      "disposition": "move",
+      "destination": "factory_runtime",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/runtime",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/source",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/validation",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/petri",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/rootobservation",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/service",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/services/dispatch_planning",
@@ -3257,57 +3345,75 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/javascript",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/metrics",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/orchestrationowner",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/orchestratorcontract",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/replayhooks",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/runtime",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/runtime/buffers",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/runtimecontract",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/scheduler",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/service",
@@ -3327,87 +3433,115 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/state",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/state/validation",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/subsystems",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/subsystems/circuitbreakertests",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/subsystems/dispatchertests",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/subsystems/goalroutingtests",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/subsystems/terminationtests",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/testkit",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/throttle",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/token",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/token_transformer",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/tooling/javascript/callbehavior",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/tooling/javascript/catalog",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
+      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/transports/cli",
@@ -3531,6 +3665,12 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/invocation/runtimeadapter",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/legacysnapshot",
       "disposition": "retain",
       "destination": "factory_sessions",
       "destinationKind": "owner"
@@ -4095,15 +4235,19 @@
     },
     {
       "packagePath": "pkg/services/operator_settings/identityinventory",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "operator_settings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/operator_settings/internal/services/document",
+      "deletionCondition": "delete public package after IMP-OPS-document private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/operator_settings/internal/service",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "operator_settings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/operator_settings/internal/services/document",
@@ -4143,15 +4287,19 @@
     },
     {
       "packagePath": "pkg/services/operator_settings/servicewire",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "operator_settings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/operator_settings/testlink",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "operator_settings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/operator_settings/transports/cli",
@@ -4639,9 +4787,11 @@
     },
     {
       "packagePath": "pkg/services/work/stateaccessrecordings",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "work",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/work/internal/services/state_access",
+      "deletionCondition": "delete public package after IMP-WORK-state_access private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/work/transports/cli",
@@ -4691,51 +4841,67 @@
     },
     {
       "packagePath": "pkg/services/workers/construction",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/runtime_assembly",
+      "deletionCondition": "delete public package after IMP-WRK-runtime_assembly private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/diagnostics",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/runners",
+      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/execution",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/runners",
+      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/execution/recording",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/runners",
+      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/executor",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/runners",
+      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/executor/agentrun",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/runners",
+      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/executor/workstation",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/runners",
+      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/interface",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/runners",
+      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",
@@ -4829,21 +4995,27 @@
     },
     {
       "packagePath": "pkg/services/workers/invocation",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/runners",
+      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/process",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/runners",
+      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/prompting",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/workstations",
+      "deletionCondition": "delete public package after IMP-WRK-workstations private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/provider",
@@ -5015,9 +5187,11 @@
     },
     {
       "packagePath": "pkg/services/workers/runner",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/runners",
+      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/service",
@@ -5029,27 +5203,35 @@
     },
     {
       "packagePath": "pkg/services/workers/services/agents",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/runners",
+      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/services/inference",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/runners",
+      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/services/testing",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/runners",
+      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/skippermissions",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/workstations",
+      "deletionCondition": "delete public package after IMP-WRK-workstations private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/wire",
@@ -5059,9 +5241,11 @@
     },
     {
       "packagePath": "pkg/services/workers/worktree",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/workstations",
+      "deletionCondition": "delete public package after IMP-WRK-workstations private subservice cutover proof"
     },
     {
       "packagePath": "pkg/transports/cli",
