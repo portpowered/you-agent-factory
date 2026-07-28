@@ -76,6 +76,139 @@ func TestCLIRunHelpShowsInvocationSignatureForNamedFactory(t *testing.T) {
 	}
 }
 
+// TestCLIRunHelpDistinguishesRequiredAndOptionalParameters proves you run --named
+// <factory> --help visibly marks required and optional invocationSignature
+// parameters so operators know which arguments they must supply before a run.
+func TestCLIRunHelpDistinguishesRequiredAndOptionalParameters(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	workingDirectory := t.TempDir()
+	sourceDir := support.ScaffoldFactory(t, invocationHelpFactoryConfig())
+	support.CreateNamedFactory(
+		t,
+		homeDir,
+		workingDirectory,
+		invocationHelpNamedFactoryName,
+		filepath.Join(sourceDir, interfaces.FactoryConfigFile),
+	)
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--named", invocationHelpNamedFactoryName,
+		"--help",
+	})
+	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = workingDirectory
+
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(run --named %s --help) error = %v\nstdout:\n%s\nstderr:\n%s",
+			invocationHelpNamedFactoryName,
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+
+	got := inputs.Stdout()
+	usageLine := invocationHelpUsageLine(t, got)
+	if !strings.Contains(usageLine, "<"+invocationHelpRequiredParameter+">") {
+		t.Fatalf("usage line missing required token %q:\n%s", invocationHelpRequiredParameter, usageLine)
+	}
+	if strings.Contains(usageLine, "[<"+invocationHelpRequiredParameter+">]") {
+		t.Fatalf("required parameter %q must not be bracketed in usage:\n%s", invocationHelpRequiredParameter, usageLine)
+	}
+	for _, optionalParameter := range []string{
+		invocationHelpOptionalParameter,
+		invocationHelpOptionalPathParameter,
+	} {
+		if !strings.Contains(usageLine, "[--"+optionalParameter) {
+			t.Fatalf("usage line missing bracketed optional token for %q:\n%s", optionalParameter, usageLine)
+		}
+	}
+
+	assertInvocationHelpParameterRequirement(t, got, invocationHelpRequiredParameter, true)
+	assertInvocationHelpParameterRequirement(t, got, invocationHelpOptionalParameter, false)
+	assertInvocationHelpParameterRequirement(t, got, invocationHelpOptionalPathParameter, false)
+}
+
+func invocationHelpUsageLine(t *testing.T, help string) string {
+	t.Helper()
+
+	const usagePrefix = "Usage:\n  "
+	start := strings.Index(help, usagePrefix)
+	if start < 0 {
+		t.Fatalf("help missing usage section:\n%s", help)
+	}
+	rest := help[start+len(usagePrefix):]
+	end := strings.Index(rest, "\n")
+	if end < 0 {
+		return rest
+	}
+	return rest[:end]
+}
+
+func assertInvocationHelpParameterRequirement(t *testing.T, help, parameter string, required bool) {
+	t.Helper()
+
+	marker := "Factory-defined arguments:"
+	start := strings.Index(help, marker)
+	if start < 0 {
+		t.Fatalf("help missing %q section:\n%s", marker, help)
+	}
+	argumentsSection := help[start+len(marker):]
+	if end := strings.Index(argumentsSection, "\n\n"); end >= 0 {
+		argumentsSection = argumentsSection[:end]
+	}
+
+	parameterSection, ok := invocationHelpParameterSection(argumentsSection, parameter)
+	if !ok {
+		t.Fatalf("help missing parameter %q:\n%s", parameter, help)
+	}
+
+	if required {
+		if !strings.Contains(parameterSection, "Required.") {
+			t.Fatalf("parameter %q missing Required. label:\n%s", parameter, parameterSection)
+		}
+		if strings.Contains(parameterSection, "\n    Optional.") {
+			t.Fatalf("parameter %q incorrectly marked optional:\n%s", parameter, parameterSection)
+		}
+		return
+	}
+	if !strings.Contains(parameterSection, "Optional.") {
+		t.Fatalf("parameter %q missing Optional. label:\n%s", parameter, parameterSection)
+	}
+}
+
+func invocationHelpParameterSection(argumentsSection, parameter string) (string, bool) {
+	lines := strings.Split(argumentsSection, "\n")
+	for index, line := range lines {
+		if !strings.HasPrefix(line, "  ") || strings.HasPrefix(line, "    ") {
+			continue
+		}
+		if !invocationHelpParameterHeaderMatches(line, parameter) {
+			continue
+		}
+		block := []string{line}
+		for _, detail := range lines[index+1:] {
+			if strings.HasPrefix(detail, "  ") && !strings.HasPrefix(detail, "    ") {
+				break
+			}
+			block = append(block, detail)
+		}
+		return strings.Join(block, "\n"), true
+	}
+	return "", false
+}
+
+func invocationHelpParameterHeaderMatches(headerLine, parameter string) bool {
+	return strings.Contains(headerLine, "<"+parameter+">") ||
+		strings.Contains(headerLine, "--"+parameter+" ") ||
+		strings.Contains(headerLine, "--"+parameter+"|")
+}
+
 func invocationHelpFactoryConfig() map[string]any {
 	return map[string]any{
 		"name": invocationHelpFactoryConfigName,
