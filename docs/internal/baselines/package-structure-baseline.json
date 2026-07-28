@@ -2674,6 +2674,11 @@
     },
     {
       "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/distribution/goal",
+      "target": "pkg/services/factory_definitions/internal/services/distribution"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/internal/services/distribution/packageassets",
       "target": "pkg/services/factory_definitions/internal/services/distribution"
     },
@@ -2694,7 +2699,22 @@
     },
     {
       "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/distribution/review",
+      "target": "pkg/services/factory_definitions/internal/services/distribution"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
+      "target": "pkg/services/factory_definitions/internal/services/distribution"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/distribution/subagent",
+      "target": "pkg/services/factory_definitions/internal/services/distribution"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/distribution/tts",
       "target": "pkg/services/factory_definitions/internal/services/distribution"
     },
     {
