@@ -1290,7 +1290,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/wire",
-      "minimum": 69.48
+      "minimum": 53.93
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings",
