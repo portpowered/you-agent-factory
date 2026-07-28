@@ -8,12 +8,6 @@
       ]
     },
     {
-      "test": "tests/functional/runtime_api/api_manual_work_recovery_test.go::TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress",
-      "stableIds": [
-        "rest/moveWorkBySessionId"
-      ]
-    },
-    {
       "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIDispatchListAndDetailExposePublicCorrelation",
       "stableIds": [
         "rest/getFactorySessionDispatch",
@@ -52,6 +46,12 @@
         "rest/getStatusBySessionId",
         "rest/listWorkBySessionId",
         "rest/submitWorkBySessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/work/recovery/manual_move_test.go::TestFailedCascadeCanBeRecoveredByPublicWorkMove",
+      "stableIds": [
+        "rest/moveWorkBySessionId"
       ]
     },
     {
