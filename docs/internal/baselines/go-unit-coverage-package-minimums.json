@@ -1241,6 +1241,10 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp",
+      "minimum": 75.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire",
       "minimum": 0.00
     },

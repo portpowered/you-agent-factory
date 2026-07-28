@@ -3938,6 +3938,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/operator_settings/transports/mcp",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/operator_settings/wire",
       "disposition": "retain",
       "destination": "operator_settings",
