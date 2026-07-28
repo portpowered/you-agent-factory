@@ -21,6 +21,9 @@ const (
 	pauseResumeDrainWaitTimeout       = 30 * time.Second
 	pauseResumeBusyLoopWorkflowName   = "busy-loop"
 	pauseResumeDurableStatusTimeout   = 15 * time.Second
+
+	interruptedInspectWorkTypeName     = "goal"
+	interruptedInspectReviewWorkstation = "review-goal"
 )
 
 func pauseResumeControlsFactoryDirWithBusyLoop(t *testing.T) string {
@@ -578,6 +581,148 @@ func assertPauseResumeLifecycleControlEvents(
 			"lifecycle-control event order = pause@%s resume@%s, want pause before resume",
 			pausePayload.OccurredAt.UTC(),
 			resumePayload.OccurredAt.UTC(),
+		)
+	}
+}
+
+func scaffoldInterruptedInspectFactory(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, interruptedInspectFactoryConfig())
+	support.WriteAgentConfig(t, dir, "mock-worker", `---
+type: SCRIPT_WORKER
+command: /bin/echo
+args:
+  - interrupted
+---
+Classify goal work.
+`)
+	support.WriteWorkstationConfig(t, dir, interruptedInspectReviewWorkstation, `---
+type: CLASSIFIER_WORKSTATION
+---
+Review goal work for interrupted routing.
+`)
+	return dir
+}
+
+func interruptedInspectFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "sessions-controls-interrupted-inspect",
+		"workTypes": []map[string]any{
+			{
+				"name": interruptedInspectWorkTypeName,
+				"states": []map[string]any{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "interrupted", "type": "FAILED"},
+					{"name": "complete", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]string{
+			{"name": "mock-worker"},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":   interruptedInspectReviewWorkstation,
+				"type":   "CLASSIFIER_WORKSTATION",
+				"worker": "mock-worker",
+				"inputs":    []map[string]string{{"workType": interruptedInspectWorkTypeName, "state": "init"}},
+				"classificationRoutes": []map[string]any{
+					{
+						"label": "accepted",
+						"outputs": []map[string]string{
+							{"workType": interruptedInspectWorkTypeName, "state": "complete"},
+						},
+					},
+					{
+						"label": "interrupted",
+						"outputs": []map[string]string{
+							{"workType": interruptedInspectWorkTypeName, "state": "interrupted"},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func writeInterruptedInspectMockWorkers(t *testing.T) string {
+	t.Helper()
+
+	cfg := workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{
+			{
+				WorkerName:      "mock-worker",
+				WorkstationName: interruptedInspectReviewWorkstation,
+				RunType:         workers.MockWorkerRunTypeScript,
+				ScriptConfig: &workers.MockWorkerScriptConfig{
+					Command: "/bin/echo",
+					Args:    []string{"interrupted"},
+				},
+			},
+		},
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal interrupted inspect mock-workers config: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "mock-workers-interrupted-inspect.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write interrupted inspect mock-workers config: %v", err)
+	}
+	return path
+}
+
+func startInterruptedInspectAPIServer(
+	t *testing.T,
+	factoryDir string,
+	mockWorkersPath string,
+) *support.FunctionalAPIServer {
+	t.Helper()
+
+	payload, err := os.ReadFile(mockWorkersPath)
+	if err != nil {
+		t.Fatalf("read customer mock-workers config: %v", err)
+	}
+	var mockWorkersConfig workers.MockWorkersConfig
+	if err := json.Unmarshal(payload, &mockWorkersConfig); err != nil {
+		t.Fatalf("decode customer mock-workers config: %v", err)
+	}
+	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+		MockWorkersConfig:         &mockWorkersConfig,
+	})
+}
+
+func assertInterruptedStopSummary(
+	t *testing.T,
+	summary *factoryapi.FactoryStopSummary,
+	context string,
+) {
+	t.Helper()
+
+	if summary == nil {
+		t.Fatalf("%s stopSummary = nil, want INTERRUPTED dispatch context", context)
+	}
+	if summary.StopKind != factoryapi.FactoryStopKind("INTERRUPTED") {
+		t.Fatalf("%s stopKind = %q, want INTERRUPTED", context, summary.StopKind)
+	}
+	if summary.LatestDispatch == nil ||
+		summary.LatestDispatch.Status != factoryapi.FactoryDispatchStatusINTERRUPTED {
+		t.Fatalf(
+			"%s latestDispatch = %#v, want INTERRUPTED dispatch context",
+			context,
+			summary.LatestDispatch,
+		)
+	}
+	if summary.LatestResultSummary == nil ||
+		strings.TrimSpace(*summary.LatestResultSummary) == "" {
+		t.Fatalf(
+			"%s latestResultSummary = %#v, want interrupted stop explanation",
+			context,
+			summary.LatestResultSummary,
 		)
 	}
 }

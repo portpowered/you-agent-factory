@@ -66,6 +66,61 @@ func TestPackagedReviewRejectionCarriesFeedback(t *testing.T) {
 	}
 }
 
+// TestPackagedReviewRejectionHonorsMaterializedAndFlaggedProviderSettings proves
+// packaged @you/review rejection-then-approval through the public CLI honors
+// materialized worker model configuration and default worker model provider
+// flags when routing work and review dispatches.
+func TestPackagedReviewRejectionHonorsMaterializedAndFlaggedProviderSettings(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		configure        func(t *testing.T, factoryDir string)
+		operatorArgs     []string
+		expectedProvider string
+		expectedModel    string
+	}{
+		{name: "defaults"},
+		{
+			name:             "materialized_configuration",
+			expectedProvider: "codex",
+			expectedModel:    "configured-codex-model",
+			configure: func(t *testing.T, factoryDir string) {
+				setPackagedReviewWorkerModel(t, factoryDir, "configured-codex-model")
+			},
+		},
+		{
+			name:             "model_provider_flags",
+			expectedProvider: "gemini",
+			expectedModel:    "flag-gemini-model",
+			operatorArgs: []string{
+				"--default-worker-model-provider", "GEMINI",
+				"--default-worker-model", "flag-gemini-model",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := support.NewShapedProviderCommandRunner(
+				platformprocess.CommandResult{Stdout: []byte("candidate work")},
+				platformprocess.CommandResult{Stdout: []byte(`{"decision":"REJECTED","feedback":"add the release date"}`)},
+				platformprocess.CommandResult{Stdout: []byte("revised candidate")},
+				platformprocess.CommandResult{Stdout: []byte(`{"decision":"ACCEPTED","output":"approved revised candidate"}`)},
+			)
+
+			response := runPackagedReviewCLIJSONInvocationWithFactorySetup(
+				t,
+				runner,
+				tc.configure,
+				"write the release notes",
+				tc.operatorArgs...,
+			)
+			assertPackagedReviewCompletedWithText(t, response, "approved revised candidate")
+			if got := runner.CallCount(); got != 4 {
+				t.Fatalf("provider invocation count = %d, want work/review followed by revised work/review", got)
+			}
+			assertPackagedReviewProviderInvocations(t, runner.Requests(), tc.expectedProvider, tc.expectedModel)
+		})
+	}
+}
+
 // TestPackagedReviewRetryExhaustionFails proves packaged @you/review invocation
 // returns a failed public terminal outcome with no completed success primary
 // result when the edge-mocked provider cannot satisfy the packaged approval gate,
