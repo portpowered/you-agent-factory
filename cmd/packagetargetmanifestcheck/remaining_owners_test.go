@@ -7,18 +7,17 @@ import (
 func TestServiceFacadeOwnersTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
 	t.Parallel()
 
-	for _, owner := range []string{"provider_sessions"} {
-		spec := productOwnerTopLevelSpecs[owner]
+	for _, spec := range productOwnerTopLevelSpecsList() {
 		for _, child := range spec.unexpected {
 			if child != "service" {
-				t.Fatalf("owner %q unexpected inventory child %q is not the legacy service facade", owner, child)
+				continue
 			}
-			got, ok := mapLegacyServiceImplementationPackage(owner, "pkg/services/"+owner+"/"+child, child)
+			got, ok := mapLegacyServiceImplementationPackage(spec.owner, "pkg/services/"+spec.owner+"/"+child, child)
 			if !ok {
-				t.Fatalf("mapLegacyServiceImplementationPackage(%q) ok = false", owner)
+				t.Fatalf("mapLegacyServiceImplementationPackage(%q) ok = false", spec.owner)
 			}
-			if got.Disposition != DispositionMove || got.Destination != owner+"/internal" {
-				t.Fatalf("service move mapping for %q = %#v, want move→%s/internal", owner, got, owner)
+			if got.Disposition != DispositionMove || got.Destination != spec.owner+"/internal" {
+				t.Fatalf("service move mapping for %q = %#v, want move→%s/internal", spec.owner, got, spec.owner)
 			}
 		}
 	}

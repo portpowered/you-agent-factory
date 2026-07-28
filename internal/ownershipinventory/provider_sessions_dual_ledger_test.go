@@ -27,19 +27,32 @@ func TestVerifyProviderSessionsDualLedgerAlignmentFailsWhenMoveSuccessorDrifts(t
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	for index := range inventory.Packages {
-		if inventory.Packages[index].PackagePath == ownershipinventory.ProviderSessionsOwnerPackagePath+"/service" {
-			inventory.Packages[index].Successor = "pkg/services/provider_sessions/wire"
-			break
-		}
+	const hypotheticalPackagePath = ownershipinventory.ProviderSessionsOwnerPackagePath + "/hypothetical"
+	inventory.Packages = append(inventory.Packages, ownershipinventory.PackageRow{
+		PackagePath:       hypotheticalPackagePath,
+		Disposition:       ownershipinventory.DispositionMove,
+		Destination:       "provider_sessions",
+		DestinationKind:   ownershipinventory.DestinationKindOwner,
+		Successor:         "pkg/services/provider_sessions/wire",
+		DeletionCondition: "test fixture drift",
+	})
+	manifest, err := ownershipinventory.LoadPackageTargetLedger(root)
+	if err != nil {
+		t.Fatalf("LoadPackageTargetLedger() error = %v", err)
 	}
+	manifest.Packages = append(manifest.Packages, ownershipinventory.PackageTargetLedgerRow{
+		PackagePath: hypotheticalPackagePath,
+		Disposition: ownershipinventory.DispositionMove,
+		Destination: "provider_sessions/internal",
+	})
 	writeOwnershipInventoryFixture(t, root, inventory)
+	writePackageTargetManifestFixture(t, root, manifest)
 
 	err = ownershipinventory.VerifyProviderSessionsDualLedgerAlignment(root)
 	if err == nil {
 		t.Fatal("VerifyProviderSessionsDualLedgerAlignment() error = nil, want successor drift failure")
 	}
-	if !strings.Contains(err.Error(), "dual-ledger move drift") || !strings.Contains(err.Error(), "service") {
+	if !strings.Contains(err.Error(), "dual-ledger move drift") || !strings.Contains(err.Error(), "hypothetical") {
 		t.Fatalf("VerifyProviderSessionsDualLedgerAlignment() error = %v, want successor drift failure", err)
 	}
 }

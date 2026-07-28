@@ -4494,14 +4494,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/provider_sessions/service",
-      "disposition": "move",
-      "destination": "provider_sessions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/provider_sessions/internal",
-      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
-    },
-    {
       "packagePath": "pkg/services/provider_sessions/transports/http",
       "disposition": "retain",
       "destination": "provider_sessions",

@@ -9,6 +9,11 @@
       "note": "Peer Service interface plus Inspect/Project/Details request, result, value, and typed-error contracts."
     },
     {
+      "file": "del_pses_baseline_gate_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "DEL-PSES story 003 gate proving structure, ownership, and package-target baselines no longer list the deleted transitional service/ package as retain or move debt."
+    },
+    {
       "file": "del_pses_deletion_gate_test.go",
       "classification": "thin_root_contract_test",
       "note": "DEL-PSES story 002 gate proving transitional service/ deletion, import clearance, and canonical root directory shape after leased deletion."

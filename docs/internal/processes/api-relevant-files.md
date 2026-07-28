@@ -357,7 +357,10 @@ Use this map when changing the public REST contract.
   zero-extra sibling lock and reader subservices, and CLN-PSES-CONTRACT-ROOTS thin
   root contract seal). DEL-PSES story 002 (`pss-del-pses-002`) deletes the
   emptied transitional `service/` compile shim and clears imports; proofs live in
-  `pkg/services/provider_sessions/del_pses_deletion_gate_test.go`. Fold behavioral
+  `pkg/services/provider_sessions/del_pses_deletion_gate_test.go`. DEL-PSES story
+  003 (`pss-del-pses-003`) lowers structure, ownership, and package-target
+  baseline rows for the deleted transitional `service/` package; proofs live in
+  `pkg/services/provider_sessions/del_pses_baseline_gate_test.go`. Fold behavioral
   proofs live in sibling boundary tests under `pkg/services/provider_sessions/`.
 - Provider Session HTTP decoding, generated-contract mapping, service
   invocation, typed root error mapping (`error_mapping.go`), cancel/timeout edge
