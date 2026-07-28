@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 )
 
 // ValidateUpsertNamedFactoryRequest rejects named-factory upsert payloads whose

@@ -86,6 +86,10 @@ func TestVisualizationActivatesThroughPublicRootAfterLifecycle(t *testing.T) {
 		factoryvisualization.LifecycleErrorAlreadyActivated,
 		"Activate after started lifecycle",
 	)
+
+	if _, err := visualizationRoot.StopDrain(context.Background(), factoryvisualization.StopDrainRequest{}); err != nil {
+		t.Fatalf("StopDrain() error = %v, want clean shutdown before server stop", err)
+	}
 }
 
 func requireLifecycleError(

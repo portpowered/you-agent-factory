@@ -74,7 +74,7 @@ func TestNewServiceBindsCodexAndClaudeFromCatalogWithoutEffects(t *testing.T) {
 }
 
 func TestNewRootRejectsMissingCatalog(t *testing.T) {
-	root, err := newRoot(nil, nil, nil)
+	root, err := newRoot(nil, nil, nil, CursorPlatformDependencies{})
 	if err == nil || root != nil {
 		t.Fatalf("newRoot(nil) = (%v, %v), want construction error", root, err)
 	}

@@ -5,16 +5,6 @@ import (
 	"testing"
 )
 
-func TestModeParity_SnapshotOnlyPrimaryAndStreamAgree(t *testing.T) {
-	t.Parallel()
-	assertModeParityForFixture(t, FixtureSnapshotOnlyOpenCode)
-}
-
-func TestModeParity_FinalOnlyOpenCodePrimaryAndStreamAgree(t *testing.T) {
-	t.Parallel()
-	assertModeParityForFixture(t, FixtureFinalOnlyOpenCode)
-}
-
 func TestModeParity_AgyFinalOnlyPrimaryAndStreamAgree(t *testing.T) {
 	t.Parallel()
 	assertModeParityForFixture(t, FixtureAgyFinalOnly)

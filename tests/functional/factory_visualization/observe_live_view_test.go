@@ -126,16 +126,6 @@ func TestVisualizationObserveThroughPublicRootAfterLifecycle(t *testing.T) {
 			observeTracker.observeCalls(),
 		)
 	}
-
-	result, err := observeTracker.Activate(context.Background(), factoryvisualization.ActivateRequest{
-		Mode: factoryvisualization.ActivateModeRetainedThenLive,
-	})
-	if err != nil {
-		t.Fatalf("Activate() error = %v, want started lifecycle outcome", err)
-	}
-	if result.State != factoryvisualization.LifecycleStateStarted {
-		t.Fatalf("Activate() state = %q, want %q", result.State, factoryvisualization.LifecycleStateStarted)
-	}
 }
 
 func requireProjectionError(

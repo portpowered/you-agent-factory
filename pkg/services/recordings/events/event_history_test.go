@@ -336,6 +336,36 @@ closed:
 	}
 }
 
+func TestFactoryEventHistory_CloseLiveSubscriptionsEndsActiveStreams(t *testing.T) {
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+
+	stream, err := history.Subscribe(context.Background(), nil, interfaces.FactoryEventReconnectScope{})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	history.RecordInitialStructure()
+
+	select {
+	case <-stream.Events:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for initial live event")
+	}
+
+	history.CloseLiveSubscriptions()
+
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case _, ok := <-stream.Events:
+			if !ok {
+				return
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for stream closure after CloseLiveSubscriptions")
+		}
+	}
+}
+
 func TestFactoryEventHistory_RecordInitialStructure_EmitsCanonicalPublicWorkstationKinds(t *testing.T) {
 	history := newTestFactoryEventHistory(
 		eventHistoryProjectionNet(),
