@@ -2008,25 +2008,43 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/artifacts",
-      "minimum": 0.83
+      "exception": {
+        "kind": "measurement",
+        "justification": "The transitional recordings/artifacts compile shim delegates to artifacts_export/artifacts and has no functional coverage profile statements until DEL-REC removes the path.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or the transitional path is deleted."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/events",
-      "minimum": 52.41
+      "exception": {
+        "kind": "measurement",
+        "justification": "The transitional recordings/events compile shim delegates to canonical_ledger/events and has no functional coverage profile statements until DEL-REC removes the path.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or the transitional path is deleted."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/events/kinds",
       "exception": {
         "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "justification": "The transitional recordings/events/kinds compile shim delegates to canonical_ledger/events/kinds and has no functional coverage profile statements until DEL-REC removes the path.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or the transitional path is deleted."
       }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/events/snapshot",
-      "minimum": 87.87
+      "exception": {
+        "kind": "measurement",
+        "justification": "The transitional recordings/events/snapshot compile shim delegates to canonical_ledger/events/snapshot and has no functional coverage profile statements until DEL-REC removes the path.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or the transitional path is deleted."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal",
@@ -2053,6 +2071,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/artifacts",
+      "minimum": 0.83
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/internal/service",
       "minimum": 1.47
     },
@@ -2069,6 +2091,24 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events",
+      "minimum": 52.41
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events/kinds",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events/snapshot",
+      "minimum": 87.87
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/internal/service",
@@ -2109,6 +2149,14 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections",
+      "minimum": 45.87
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections/dashboard",
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire",
@@ -2165,20 +2213,42 @@
       "minimum": 1.66
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay",
+      "minimum": 42.54
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire",
       "minimum": 100.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/projections",
-      "minimum": 45.87
+      "exception": {
+        "kind": "measurement",
+        "justification": "The transitional recordings/projections compile shim delegates to projection_query/projections and has no functional coverage profile statements until DEL-REC removes the path.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or the transitional path is deleted."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/projections/dashboard",
-      "minimum": 0.00
+      "exception": {
+        "kind": "measurement",
+        "justification": "The transitional recordings/projections/dashboard compile shim delegates to projection_query/projections/dashboard and has no functional coverage profile statements until DEL-REC removes the path.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or the transitional path is deleted."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/replay",
-      "minimum": 42.54
+      "exception": {
+        "kind": "measurement",
+        "justification": "The transitional recordings/replay compile shim delegates to replay/replay and has no functional coverage profile statements until DEL-REC removes the path.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or the transitional path is deleted."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/service",

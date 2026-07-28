@@ -386,19 +386,26 @@
     "pkg/services/recordings/internal",
     "pkg/services/recordings/internal/canonical",
     "pkg/services/recordings/internal/services/artifacts_export",
+    "pkg/services/recordings/internal/services/artifacts_export/artifacts",
     "pkg/services/recordings/internal/services/artifacts_export/internal/service",
     "pkg/services/recordings/internal/services/artifacts_export/wire",
     "pkg/services/recordings/internal/services/canonical_ledger",
+    "pkg/services/recordings/internal/services/canonical_ledger/events",
+    "pkg/services/recordings/internal/services/canonical_ledger/events/kinds",
+    "pkg/services/recordings/internal/services/canonical_ledger/events/snapshot",
     "pkg/services/recordings/internal/services/canonical_ledger/internal/service",
     "pkg/services/recordings/internal/services/canonical_ledger/wire",
     "pkg/services/recordings/internal/services/projection_query",
     "pkg/services/recordings/internal/services/projection_query/internal/service",
+    "pkg/services/recordings/internal/services/projection_query/projections",
+    "pkg/services/recordings/internal/services/projection_query/projections/dashboard",
     "pkg/services/recordings/internal/services/projection_query/wire",
     "pkg/services/recordings/internal/services/recording_lifecycle",
     "pkg/services/recordings/internal/services/recording_lifecycle/internal/service",
     "pkg/services/recordings/internal/services/recording_lifecycle/wire",
     "pkg/services/recordings/internal/services/replay",
     "pkg/services/recordings/internal/services/replay/internal/service",
+    "pkg/services/recordings/internal/services/replay/replay",
     "pkg/services/recordings/internal/services/replay/wire",
     "pkg/services/recordings/projections",
     "pkg/services/recordings/projections/dashboard",
@@ -2285,6 +2292,11 @@
       "destination": "recordings/internal/services/artifacts_export"
     },
     {
+      "packagePath": "pkg/services/recordings/internal/services/artifacts_export/artifacts",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/artifacts_export"
+    },
+    {
       "packagePath": "pkg/services/recordings/internal/services/artifacts_export/internal/service",
       "disposition": "retain",
       "destination": "recordings/internal/services/artifacts_export"
@@ -2296,6 +2308,21 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/canonical_ledger",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/events",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/events/kinds",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/events/snapshot",
       "disposition": "retain",
       "destination": "recordings/internal/services/canonical_ledger"
     },
@@ -2316,6 +2343,16 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/projection_query/internal/service",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/projection_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/projections",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/projection_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/projection_query/projections/dashboard",
       "disposition": "retain",
       "destination": "recordings/internal/services/projection_query"
     },
@@ -2346,6 +2383,11 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/replay/internal/service",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/replay"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/replay/replay",
       "disposition": "retain",
       "destination": "recordings/internal/services/replay"
     },

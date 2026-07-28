@@ -12,7 +12,7 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/recordings/replay"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay"
 )
 
 type runtimeRecorderTestClock struct{ now time.Time }
@@ -121,7 +121,7 @@ func TestReplayRecordingSnapshotWriterPreservesReplayCompatibility(t *testing.T)
 		t.Fatalf("Finalize: %v", err)
 	}
 
-	artifact, err := replay.Load(
+	artifact, err := replayimpl.Load(
 		storage,
 		path,
 		func(data []byte) (*factorydefinitions.FactorySnapshot, error) {

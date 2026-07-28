@@ -67,7 +67,7 @@ func TestMapCommittedOwnerPackageRecordingsClassifiesUnexpectedTopLevelAsMove(t 
 			destination: "recordings/internal/services/projection_query",
 		},
 		{
-			path:        "pkg/services/recordings/replay/clocktests",
+			path:        "pkg/services/recordings/replay",
 			destination: "recordings/internal/services/replay",
 		},
 		{

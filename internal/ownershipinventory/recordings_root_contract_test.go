@@ -38,6 +38,7 @@ func TestRecordingsThinRootContractFiles(t *testing.T) {
 		"service_root_contract_lifecycle_test.go",
 		"service_root_contract_replay_test.go",
 		"service_root_contract_seam_test.go",
+		"wire_peer_import_boundary_test.go",
 		"workers_root_boundary_test.go",
 	}
 	if !slices.Equal(ownershipinventory.RecordingsThinRootContractFiles, want) {
@@ -59,6 +60,7 @@ func TestRecordingsExcessRootContractFoldDestinations(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]string{
+		"artifacts":             "pkg/services/recordings/internal/services/artifacts_export",
 		"event":                 "pkg/services/recordings/internal/services/canonical_ledger",
 		"world_state":           "pkg/services/recordings/internal/services/projection_query",
 		"replay":                "pkg/services/recordings/internal/services/replay",
@@ -89,6 +91,7 @@ func TestRecordingsExcessRootContractFoldDestinations(t *testing.T) {
 	}
 	slices.Sort(gotClusters)
 	wantClusters := []string{
+		"artifacts",
 		"dispatch",
 		"event",
 		"live_recording_target",

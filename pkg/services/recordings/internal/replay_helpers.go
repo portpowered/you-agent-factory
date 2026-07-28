@@ -5,7 +5,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/recordings/replay"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -13,7 +13,7 @@ func NewReplayClock(artifact *recordings.ReplayArtifact) recordings.Clock {
 	if artifact == nil {
 		return nil
 	}
-	return replay.NewArtifactClock(artifact)
+	return replayimpl.NewArtifactClock(artifact)
 }
 
 func NewReplayExecution(
@@ -30,7 +30,7 @@ func NewReplayExecution(
 	if artifact == nil {
 		return nil, nil, nil, nil, nil
 	}
-	sideEffects, err := replay.NewSideEffects(
+	sideEffects, err := replayimpl.NewSideEffects(
 		decodeFactorySnapshot,
 		decodeRuntimeConfig,
 		artifact,
@@ -38,7 +38,7 @@ func NewReplayExecution(
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("build replay side effects: %w", err)
 	}
-	submissionHook, err := replay.NewSubmissionHook(
+	submissionHook, err := replayimpl.NewSubmissionHook(
 		decodeFactorySnapshot,
 		decodeRuntimeConfig,
 		artifact,
@@ -46,7 +46,7 @@ func NewReplayExecution(
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("build replay submission hook: %w", err)
 	}
-	workStateChangeHook, err := replay.NewWorkStateChangeHook(
+	workStateChangeHook, err := replayimpl.NewWorkStateChangeHook(
 		decodeFactorySnapshot,
 		decodeRuntimeConfig,
 		artifact,
@@ -54,7 +54,7 @@ func NewReplayExecution(
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("build replay work state change hook: %w", err)
 	}
-	deliveryPlan, err := replay.NewCompletionDeliveryPlan(
+	deliveryPlan, err := replayimpl.NewCompletionDeliveryPlan(
 		decodeFactorySnapshot,
 		decodeRuntimeConfig,
 		artifact,
