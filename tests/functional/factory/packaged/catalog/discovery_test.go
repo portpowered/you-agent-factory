@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/migrationledgercheck"
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -102,6 +105,45 @@ func TestPackagedFactoryCatalogHasUniqueStableNames(t *testing.T) {
 	}
 }
 
+// TestNewEmbeddedFactoryRequiresFunctionalMatrixEntry proves every embedded
+// packaged Factory slug is bound to a declared functional-matrix invocation
+// cell in the Wave 2 checklist so new embedded inventory cannot land without
+// packaged-factory coverage wiring.
+func TestNewEmbeddedFactoryRequiresFunctionalMatrixEntry(t *testing.T) {
+	embeddedSlugs, err := embeddedPackagedFactorySlugs()
+	if err != nil {
+		t.Fatalf("embedded packaged Factory inventory: %v", err)
+	}
+
+	repoRoot := testutil.MustRepoRoot(t)
+	matrixPaths, err := packagedFactoryInvocationMatrixPaths(repoRoot)
+	if err != nil {
+		t.Fatalf("functional-matrix checklist: %v", err)
+	}
+
+	wantMatrixPaths := make([]string, len(embeddedSlugs))
+	for index, slug := range embeddedSlugs {
+		wantMatrixPaths[index] = packagedFactoryInvocationMatrixPathForSlug(slug)
+	}
+	slices.Sort(wantMatrixPaths)
+
+	matrixPathList := make([]string, 0, len(matrixPaths))
+	for matrixPath := range matrixPaths {
+		matrixPathList = append(matrixPathList, matrixPath)
+	}
+	slices.Sort(matrixPathList)
+
+	if missing, extra := nameSetDiff(wantMatrixPaths, matrixPathList); len(missing) > 0 || len(extra) > 0 {
+		t.Fatalf(
+			"functional-matrix drift: missing matrix entries %v, orphan matrix entries %v; embedded slugs=%v matrix=%v",
+			missing,
+			extra,
+			embeddedSlugs,
+			matrixPathList,
+		)
+	}
+}
+
 func embeddedPackagedFactoryNames() ([]string, error) {
 	inventory, err := packagedfactorycatalog.Discover(
 		context.Background(),
@@ -119,6 +161,23 @@ func embeddedPackagedFactoryNames() ([]string, error) {
 	return names, nil
 }
 
+func embeddedPackagedFactorySlugs() ([]string, error) {
+	inventory, err := packagedfactorycatalog.Discover(
+		context.Background(),
+		packagedfactories.Source(),
+		"factories",
+	)
+	if err != nil {
+		return nil, err
+	}
+	slugs := make([]string, len(inventory.Entries))
+	for index, entry := range inventory.Entries {
+		slugs[index] = entry.Slug
+	}
+	slices.Sort(slugs)
+	return slugs, nil
+}
+
 func embeddedPackagedFactorySlugByName() (map[string]string, error) {
 	inventory, err := packagedfactorycatalog.Discover(
 		context.Background(),
@@ -133,6 +192,42 @@ func embeddedPackagedFactorySlugByName() (map[string]string, error) {
 		slugByName[entry.Factory.Name] = entry.Slug
 	}
 	return slugByName, nil
+}
+
+func packagedFactoryInvocationMatrixPaths(repoRoot string) (map[string]struct{}, error) {
+	checklistPath := filepath.Join(repoRoot, migrationledgercheck.DefaultChecklistPath)
+	paths, err := migrationledgercheck.LoadChecklistPaths(checklistPath)
+	if err != nil {
+		return nil, err
+	}
+	matrixPaths := make(map[string]struct{})
+	for checklistPath := range paths {
+		if slug, ok := packagedFactorySlugFromInvocationMatrixPath(checklistPath); ok {
+			matrixPaths[packagedFactoryInvocationMatrixPathForSlug(slug)] = struct{}{}
+		}
+	}
+	if len(matrixPaths) == 0 {
+		return nil, fmt.Errorf("checklist %s has no packaged Factory invocation matrix cells", migrationledgercheck.DefaultChecklistPath)
+	}
+	return matrixPaths, nil
+}
+
+const packagedFactoryInvocationMatrixPrefix = "tests/functional/factory/packaged/"
+
+func packagedFactoryInvocationMatrixPathForSlug(slug string) string {
+	return packagedFactoryInvocationMatrixPrefix + strings.ReplaceAll(slug, "-", "_") + "/invocation_test.go"
+}
+
+func packagedFactorySlugFromInvocationMatrixPath(checklistPath string) (string, bool) {
+	remainder, ok := strings.CutPrefix(checklistPath, packagedFactoryInvocationMatrixPrefix)
+	if !ok {
+		return "", false
+	}
+	subsection, suffix, ok := strings.Cut(remainder, "/")
+	if !ok || suffix != "invocation_test.go" || subsection == "" {
+		return "", false
+	}
+	return strings.ReplaceAll(subsection, "_", "-"), true
 }
 
 func discoveredPackagedFactoryNamesViaHTTP(t *testing.T) ([]string, error) {
