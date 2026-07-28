@@ -25,6 +25,8 @@ var WorkThinRootContractFiles = []string{
 	"del_work_baseline_gate_test.go",
 	"del_work_deletion_gate_test.go",
 	"del_work_prerequisite_gate_test.go",
+	"del_work_proof_gate_test.go",
+	"packaged_root_shape_test.go",
 	"input.go",
 	"input_test.go",
 	"invocation_return_policy_contract.go",
@@ -57,6 +59,20 @@ type WorkRootContractFoldTarget struct {
 // WorkExcessRootContractFolds inventories excess root contract/helper clusters
 // beyond the thin Work service root contract.
 var WorkExcessRootContractFolds = []WorkRootContractFoldTarget{}
+
+// VerifyWorkRootGoInventory proves the live filesystem matches the committed
+// Work root .go contract inventory rows.
+func VerifyWorkRootGoInventory(root string) error {
+	live, err := ListWorkRootGoFiles(root)
+	if err != nil {
+		return err
+	}
+	want := WorkRootContractInventory()
+	if !slices.Equal(live, want) {
+		return fmt.Errorf("work root .go files drift: live=%v committed=%v", live, want)
+	}
+	return nil
+}
 
 // ListWorkRootGoFiles returns every live root-level .go file name under
 // pkg/services/work/.

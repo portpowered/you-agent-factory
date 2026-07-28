@@ -122,6 +122,15 @@ Use this map when changing the public REST contract.
   `go-unit-coverage-package-minimums.json` and
   `go-functional-coverage-package-minimums.json` rows together without touching
   other Work package coverage floors.
+- DEL-WORK story 005 (`pss-del-work-005`) proves root shape, structure/ownership
+  debt reduction, and repository structure verification after transitional
+  public deletion; proofs live in
+  `pkg/services/work/packaged_root_shape_test.go` and
+  `pkg/services/work/del_work_proof_gate_test.go`. Work ownership verification
+  helpers live in `internal/ownershipinventory/work_top_level.go`,
+  `internal/ownershipinventory/work_dual_ledger.go`, and
+  `VerifyWorkRootGoInventory` in `work_root_contract.go`. Fold behavioral
+  proofs remain in sibling boundary tests under `pkg/services/work/`.
 - Factory Runtime HTTP decoding, generated-contract mapping, Runtime root
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_runtime/transports/http`. The adapter consumes the

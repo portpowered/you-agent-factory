@@ -24,6 +24,8 @@ var workThinRootContractFiles = []string{
 	"del_work_baseline_gate_test.go",
 	"del_work_deletion_gate_test.go",
 	"del_work_prerequisite_gate_test.go",
+	"del_work_proof_gate_test.go",
+	"packaged_root_shape_test.go",
 	"input.go",
 	"input_test.go",
 	"invocation_return_policy_contract.go",
