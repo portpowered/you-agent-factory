@@ -38,7 +38,6 @@ var snapshotsPortabilityForbiddenImportRoots = []string{
 
 var snapshotsPortabilityAllowedPublicTypeImportPrefixes = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts",
 }
 
 func TestPackageBoundary_PublicSurfaceDoesNotImportForbiddenOwnership(t *testing.T) {
@@ -150,7 +149,7 @@ func assertTypeExprUsesAllowedImports(t *testing.T, expr ast.Expr) {
 				return
 			}
 		}
-		t.Fatalf("snapshots_portability public surface type %s must use only factory_definitions root or contracts imports", exprString(expr))
+		t.Fatalf("snapshots_portability public surface type %s must use only factory_definitions root imports", exprString(expr))
 	default:
 		t.Fatalf("unexpected type expression %T on snapshots_portability public surface", expr)
 	}
@@ -162,8 +161,6 @@ func selectorImportPrefix(selector *ast.SelectorExpr) string {
 		switch typed.Name {
 		case "factorydefinitions":
 			return "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-		case "factorycontracts":
-			return "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 		case "context":
 			return "context"
 		default:
