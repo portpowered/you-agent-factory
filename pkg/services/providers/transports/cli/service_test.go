@@ -15,6 +15,9 @@ type recordingProvidersRoot struct {
 	listResult         providers.ListProvidersResult
 	listErr            error
 	listFn             func(context.Context) (providers.ListProvidersResult, error)
+	getResult          providers.GetProviderResult
+	getErr             error
+	getFn              func(context.Context, providers.GetProviderRequest) (providers.GetProviderResult, error)
 }
 
 func (fake *recordingProvidersRoot) ListProviders(
@@ -32,11 +35,17 @@ func (fake *recordingProvidersRoot) ListProviders(
 }
 
 func (fake *recordingProvidersRoot) GetProvider(
-	context.Context,
-	providers.GetProviderRequest,
+	ctx context.Context,
+	request providers.GetProviderRequest,
 ) (providers.GetProviderResult, error) {
 	fake.getProviderCalls++
-	return providers.GetProviderResult{}, nil
+	if fake.getFn != nil {
+		return fake.getFn(ctx, request)
+	}
+	if fake.getErr != nil {
+		return providers.GetProviderResult{}, fake.getErr
+	}
+	return fake.getResult, nil
 }
 
 func (fake *recordingProvidersRoot) Execute(
