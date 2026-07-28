@@ -2503,8 +2503,8 @@
     },
     {
       "packagePath": "pkg/services/workers/internal",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal"
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",

@@ -129,20 +129,20 @@ func TestServiceDeletionProof_PipelinePublicPackagesRemain(t *testing.T) {
 	}
 }
 
-func TestServiceDeletionProof_CheckpointPackagesRemainUndisturbed(t *testing.T) {
+func TestServiceDeletionProof_CheckpointRecoveryRemainsUndisturbed(t *testing.T) {
 	t.Parallel()
 
 	root := serviceDeletionRepoRoot(t)
-	runtimeRoot := filepath.Join(root, "pkg", "services", "factory_runtime")
-	for _, name := range []string{"checkpointstore", "checkpointsummary"} {
-		path := filepath.Join(runtimeRoot, name)
-		info, err := os.Stat(path)
-		if err != nil {
-			t.Fatalf("checkpoint public package %q missing (IMP-RUN-04 must remain undisturbed): %v", name, err)
-		}
-		if !info.IsDir() {
-			t.Fatalf("checkpoint public package %q is not a directory", name)
-		}
+	recoveryRoot := filepath.Join(
+		root,
+		"pkg", "services", "factory_runtime", "internal", "services", "checkpoint_recovery",
+	)
+	info, err := os.Stat(recoveryRoot)
+	if err != nil {
+		t.Fatalf("checkpoint_recovery nested service missing (IMP-RUN-04 must remain undisturbed): %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatal("checkpoint_recovery nested service is not a directory")
 	}
 }
 

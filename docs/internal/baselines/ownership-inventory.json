@@ -1493,6 +1493,12 @@
     },
     {
       "fromOwner": "root",
+      "toOwner": "automations",
+      "class": "construction",
+      "evidence": "pkg/root -\u003e pkg/services/automations"
+    },
+    {
+      "fromOwner": "root",
       "toOwner": "edges",
       "class": "construction",
       "architectureException": true,
