@@ -595,15 +595,15 @@
       "minimum": 75.76
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/build",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build",
       "minimum": 81.31
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointstore",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/checkpointstore",
       "minimum": 85.71
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointsummary",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/checkpointsummary",
       "minimum": 89.18
     },
     {

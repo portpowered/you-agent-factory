@@ -18,7 +18,7 @@ var approvedPeerServiceContractImports = map[string]struct{}{
 	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                                    {},
 	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/automations":                                         {},
 	"pkg/services/factory_runtime\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                          {},
-	"pkg/services/factory_runtime/build\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                    {},
+	"pkg/services/factory_runtime/internal/services/instance_host/build\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                    {},
 	"pkg/services/factory_runtime/service\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                  {},
 	"pkg/services/factory_sessions\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                         {},
 	"pkg/services/factory_sessions/internal/execution\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":      {},

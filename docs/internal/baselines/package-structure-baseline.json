@@ -2889,18 +2889,18 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/build",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/checkpointstore",
+      "target": "pkg/services/factory_runtime/internal/services/checkpoint_recovery"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/checkpointstore",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/checkpointsummary",
+      "target": "pkg/services/factory_runtime/internal/services/checkpoint_recovery"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/checkpointsummary",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/instance_host/build",
+      "target": "pkg/services/factory_runtime/internal/services/instance_host"
     },
     {
       "rule": "service-root-unexpected-directory",

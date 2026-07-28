@@ -78,20 +78,15 @@ func TestFactoryRuntimeCommittedBaselinesAlignMoveDestinations(t *testing.T) {
 	}
 }
 
-func TestFactoryRuntimeEnginePipelineMoveDestinationsLocked(t *testing.T) {
+func TestFactoryRuntimeEnginePipelinePackagesRetainUnderSubservices(t *testing.T) {
 	t.Parallel()
 
-	instanceHostSuccessor := "pkg/services/factory_runtime/internal/services/instance_host"
-	checkpointRecoverySuccessor := "pkg/services/factory_runtime/internal/services/checkpoint_recovery"
-
 	cases := []struct {
-		path            string
-		wantSuccessor   string
-		wantDestination string
+		path string
 	}{
-		{path: "pkg/services/factory_runtime/build", wantSuccessor: instanceHostSuccessor, wantDestination: "factory_runtime"},
-		{path: "pkg/services/factory_runtime/checkpointstore", wantSuccessor: checkpointRecoverySuccessor, wantDestination: "factory_runtime"},
-		{path: "pkg/services/factory_runtime/checkpointsummary", wantSuccessor: checkpointRecoverySuccessor, wantDestination: "factory_runtime"},
+		{path: "pkg/services/factory_runtime/internal/services/instance_host/build"},
+		{path: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/checkpointstore"},
+		{path: "pkg/services/factory_runtime/internal/services/checkpoint_recovery/checkpointsummary"},
 	}
 
 	for _, tc := range cases {
@@ -99,20 +94,8 @@ func TestFactoryRuntimeEnginePipelineMoveDestinationsLocked(t *testing.T) {
 		if err != nil {
 			t.Fatalf("MapPackage(%q) error = %v", tc.path, err)
 		}
-		if got.Disposition == ownershipinventory.DispositionRetain && got.Destination == "factory_runtime" {
-			t.Fatalf("MapPackage(%q) regressed to retain→factory_runtime", tc.path)
-		}
-		if got.Disposition != ownershipinventory.DispositionMove {
-			t.Fatalf("MapPackage(%q) disposition = %q, want move", tc.path, got.Disposition)
-		}
-		if got.Destination != tc.wantDestination {
-			t.Fatalf("MapPackage(%q) destination = %q, want %q", tc.path, got.Destination, tc.wantDestination)
-		}
-		if got.Successor != tc.wantSuccessor {
-			t.Fatalf("MapPackage(%q) successor = %q, want %q", tc.path, got.Successor, tc.wantSuccessor)
-		}
-		if got.DeletionCondition == "" {
-			t.Fatalf("MapPackage(%q) missing deletionCondition", tc.path)
+		if got.Disposition != ownershipinventory.DispositionRetain || got.Destination != "factory_runtime" {
+			t.Fatalf("MapPackage(%q) = %#v, want retain→factory_runtime", tc.path, got)
 		}
 	}
 }

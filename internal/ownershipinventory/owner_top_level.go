@@ -71,9 +71,6 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 		Owner:          "factory_runtime",
 		ExpectedRetain: []string{"internal", "transports", "wire"},
 		Unexpected: []string{
-			"build",
-			"checkpointstore",
-			"checkpointsummary",
 			"exhaustiontests",
 			"service",
 			"testdata",

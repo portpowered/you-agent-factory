@@ -48,15 +48,9 @@ func TestMapPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/build",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_runtime/build",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_runtime",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_runtime/internal/services/instance_host",
-				DeletionCondition: "delete public package after IMP-RUN-instance_host private subservice cutover proof",
-			},
+			path:        "pkg/services/factory_runtime/internal/services/instance_host/build",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
 		},
 		{
 			path:        "pkg/services/factory_runtime/internal/services/orchestration/engine",
@@ -64,15 +58,14 @@ func TestMapPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			retainOwner: "factory_runtime",
 		},
 		{
-			path: "pkg/services/factory_runtime/checkpointstore",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_runtime/checkpointstore",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_runtime",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
-				DeletionCondition: "delete public package after IMP-RUN-checkpoint_recovery private subservice cutover proof",
-			},
+			path:        "pkg/services/factory_runtime/internal/services/checkpoint_recovery/checkpointstore",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
+		},
+		{
+			path:        "pkg/services/factory_runtime/internal/services/checkpoint_recovery/checkpointsummary",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
 		},
 		{
 			path:        "pkg/services/factory_runtime/internal/services/orchestration/context",

@@ -1189,7 +1189,7 @@
       "fromOwner": "factory_runtime",
       "toOwner": "factory_definitions",
       "class": "query",
-      "evidence": "pkg/services/factory_runtime/build -\u003e pkg/services/factory_definitions"
+      "evidence": "pkg/services/factory_runtime -\u003e pkg/services/factory_definitions"
     },
     {
       "fromOwner": "factory_runtime",
@@ -1219,7 +1219,7 @@
       "fromOwner": "factory_runtime",
       "toOwner": "workers",
       "class": "command",
-      "evidence": "pkg/services/factory_runtime/build -\u003e pkg/services/workers"
+      "evidence": "pkg/services/factory_runtime -\u003e pkg/services/workers"
     },
     {
       "fromOwner": "factory_sessions",
@@ -3389,6 +3389,12 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/services/instance_host",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/instance_host/build",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"

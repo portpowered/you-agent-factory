@@ -166,9 +166,6 @@
     "pkg/services/factory_definitions/workpropagation",
     "pkg/services/factory_definitions/workstationexecution",
     "pkg/services/factory_runtime",
-    "pkg/services/factory_runtime/build",
-    "pkg/services/factory_runtime/checkpointstore",
-    "pkg/services/factory_runtime/checkpointsummary",
     "pkg/services/factory_runtime/internal",
     "pkg/services/factory_runtime/internal/factorystatus",
     "pkg/services/factory_runtime/internal/host",
@@ -190,6 +187,7 @@
     "pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
     "pkg/services/factory_runtime/internal/services/dispatch_planning/wire",
     "pkg/services/factory_runtime/internal/services/instance_host",
+    "pkg/services/factory_runtime/internal/services/instance_host/build",
     "pkg/services/factory_runtime/internal/services/instance_host/internal/service",
     "pkg/services/factory_runtime/internal/services/instance_host/wire",
     "pkg/services/factory_runtime/internal/services/orchestration",
@@ -1313,6 +1311,11 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/services/instance_host",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/instance_host"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/instance_host/build",
       "disposition": "retain",
       "destination": "factory_runtime/internal/services/instance_host"
     },
