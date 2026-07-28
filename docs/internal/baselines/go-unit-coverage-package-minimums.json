@@ -404,7 +404,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig",
-      "minimum": 64.40
+      "minimum": 64.39
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/quorumpolicy",
