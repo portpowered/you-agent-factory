@@ -3,12 +3,19 @@ package wire
 import (
 	"context"
 	"errors"
+	"io/fs"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 )
 
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
@@ -87,6 +94,97 @@ func TestNewServiceBuildsUsableRoot(t *testing.T) {
 	}
 }
 
+func TestNewServiceConstructsInertRoot(t *testing.T) {
+	t.Parallel()
+
+	probeCalls := 0
+	platformRunner := &inertPlatformCommandRunner{}
+	workersRunner := &inertWorkersCommandRunner{}
+	cursorTempFiles := &inertTemporaryFileSystem{}
+	agyAllocator := &inertPTYAllocator{}
+	agyLocator := &inertExecutableLocator{}
+	agyInspector := &inertPathInspector{}
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	baseline := runtime.NumGoroutine()
+
+	service, err := NewService(
+		CatalogOption(catalogwire.WithProbeQuery(func(
+			_ context.Context,
+			descriptor providers.Descriptor,
+		) (catalog.ProbeFacts, error) {
+			probeCalls++
+			return catalog.ProbeFacts{
+				Readiness:     descriptor.Readiness,
+				Prerequisites: descriptor.Prerequisites,
+			}, nil
+		})),
+		WithCommandRunner(platformRunner),
+		WithWorkersCommandRunner(workersRunner),
+		WithCursorPlatform(CursorPlatformDependencies{
+			OperatingSystem: "windows",
+			TemporaryDir:    t.TempDir(),
+			TemporaryFiles:  cursorTempFiles,
+		}),
+		WithAgyPTY(AgyPTYPlatformDependencies{
+			Allocator: agyAllocator,
+			Locator:   agyLocator,
+			Inspector: agyInspector,
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewService() returned nil service")
+	}
+	var root providers.Service = service
+	if root == nil {
+		t.Fatal("constructed root is not assignable to providers.Service")
+	}
+
+	if probeCalls != 0 {
+		t.Fatalf("construction probe calls = %d, want 0", probeCalls)
+	}
+	if platformRunner.calls != 0 {
+		t.Fatalf("platform command runner calls = %d, want inert construction", platformRunner.calls)
+	}
+	if workersRunner.calls != 0 {
+		t.Fatalf("workers command runner calls = %d, want inert construction", workersRunner.calls)
+	}
+	if cursorTempFiles.calls != 0 {
+		t.Fatalf("cursor temporary filesystem calls = %d, want inert construction", cursorTempFiles.calls)
+	}
+	if agyAllocator.calls != 0 || agyLocator.calls != 0 || agyInspector.calls != 0 {
+		t.Fatalf(
+			"construction invoked Agy PTY platform effects (allocate=%d lookpath=%d stat=%d), want inert construction",
+			agyAllocator.calls,
+			agyLocator.calls,
+			agyInspector.calls,
+		)
+	}
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	if leaked := runtime.NumGoroutine() - baseline; leaked > 4 {
+		t.Fatalf(
+			"goroutine leak after construction: baseline=%d current=%d delta=%d",
+			baseline,
+			runtime.NumGoroutine(),
+			leaked,
+		)
+	}
+
+	result, listErr := root.ListProviders(context.Background(), providers.ListProvidersRequest{})
+	if listErr != nil {
+		t.Fatalf("ListProviders() = %v", listErr)
+	}
+	if len(result.Providers) == 0 {
+		t.Fatalf("ListProviders() = %#v, want non-empty migrated catalog after inert construction", result)
+	}
+}
+
 func TestNewServiceBindsCodexAndClaudeFromCatalogWithoutEffects(t *testing.T) {
 	t.Parallel()
 
@@ -140,4 +238,73 @@ func TestNewRootRejectsMissingCatalog(t *testing.T) {
 	if err == nil || root != nil {
 		t.Fatalf("newRoot(nil) = (%v, %v), want construction error", root, err)
 	}
+}
+
+type inertPlatformCommandRunner struct {
+	calls int
+}
+
+func (r *inertPlatformCommandRunner) Run(
+	_ context.Context,
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	r.calls++
+	panic("platform command runner invoked during inert construction")
+}
+
+type inertWorkersCommandRunner struct {
+	calls int
+}
+
+func (r *inertWorkersCommandRunner) Run(
+	_ context.Context,
+	_ workers.CommandRequest,
+) (workers.CommandResult, error) {
+	r.calls++
+	panic("workers command runner invoked during inert construction")
+}
+
+type inertTemporaryFileSystem struct {
+	calls int
+}
+
+func (f *inertTemporaryFileSystem) CreateTemp(string, string) (platformfilesystem.TemporaryFile, error) {
+	f.calls++
+	panic("cursor temporary file creation during inert construction")
+}
+
+func (f *inertTemporaryFileSystem) Remove(string) error {
+	f.calls++
+	panic("cursor temporary file remove during inert construction")
+}
+
+type inertPTYAllocator struct {
+	calls int
+}
+
+func (a *inertPTYAllocator) Allocate(
+	_ context.Context,
+	_ agypty.ProcessLaunch,
+	_ agypty.SessionConfig,
+) (agypty.PTYSession, error) {
+	a.calls++
+	panic("agy PTY allocation during inert construction")
+}
+
+type inertExecutableLocator struct {
+	calls int
+}
+
+func (l *inertExecutableLocator) LookPath(string) (string, error) {
+	l.calls++
+	panic("agy executable lookup during inert construction")
+}
+
+type inertPathInspector struct {
+	calls int
+}
+
+func (i *inertPathInspector) Stat(string) (fs.FileInfo, error) {
+	i.calls++
+	panic("agy path inspect during inert construction")
 }
