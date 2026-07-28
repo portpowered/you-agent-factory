@@ -1,9 +1,12 @@
 package lifecycle_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -296,6 +299,76 @@ func TestFactorySessionMissingShowAndDeleteFail(t *testing.T) {
 	}
 }
 
+// TestAPIOpenListGetAndCloseFactorySession proves the public HTTP Factory Session
+// boundary supports a full open → list → get → close lifecycle: POST /factory-sessions
+// opens a live session with a public ID, GET /factory-sessions lists it, GET
+// /factory-sessions/{session_id} returns the matching inspection read model, and
+// DELETE /factory-sessions/{session_id} closes it so subsequent get/list no longer
+// treat it as an open live session.
+func TestAPIOpenListGetAndCloseFactorySession(t *testing.T) {
+	primaryFactoryDir := support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     primaryFactoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	baseURL := strings.TrimSuffix(server.URL(), "/")
+	newFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-api-factory")
+	if err := os.Mkdir(newFactoryDir, 0o755); err != nil {
+		t.Fatalf("create factory directory: %v", err)
+	}
+
+	initNewFactory := true
+	opened := postSessionLifecycleJSON[factoryapi.OpenFactorySessionResponse](
+		t,
+		baseURL+"/factory-sessions",
+		factoryapi.OpenFactorySessionRequest{
+			FolderPath:     newFactoryDir,
+			InitNewFactory: &initNewFactory,
+		},
+		"open Factory Session",
+	)
+	if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" {
+		t.Fatalf("open session response missing session id: %#v", opened)
+	}
+	if opened.Session.FolderPath != newFactoryDir {
+		t.Fatalf("open session folder path = %q, want %q", opened.Session.FolderPath, newFactoryDir)
+	}
+	sessionID := opened.Session.Id
+
+	listed := support.GetJSON[factoryapi.ListFactorySessionsResponse](t, baseURL+"/factory-sessions")
+	if !sessionListContains(listed.Sessions, sessionID, newFactoryDir) {
+		t.Fatalf("list sessions missing opened session %q at %q: %#v", sessionID, newFactoryDir, listed.Sessions)
+	}
+
+	selected := support.GetJSON[factoryapi.FactorySessionGetResponse](
+		t,
+		baseURL+"/factory-sessions/"+sessionID,
+	)
+	resolved, err := selected.AsFactorySession()
+	if err != nil {
+		t.Fatalf("decode opened session get response: %v", err)
+	}
+	if resolved.Id != sessionID {
+		t.Fatalf("get session id = %q, want %q", resolved.Id, sessionID)
+	}
+	if resolved.FolderPath != newFactoryDir {
+		t.Fatalf("get session folder path = %q, want %q", resolved.FolderPath, newFactoryDir)
+	}
+	if resolved.Runtime.Status == "" {
+		t.Fatalf("get session missing runtime status markers: %#v", resolved)
+	}
+
+	closeSessionViaAPI(t, baseURL, sessionID)
+	assertAPISessionNotFound(t, baseURL, sessionID)
+
+	afterClose := support.GetJSON[factoryapi.ListFactorySessionsResponse](t, baseURL+"/factory-sessions")
+	if sessionListContains(afterClose.Sessions, sessionID, newFactoryDir) {
+		t.Fatalf("list sessions after close still contains %q at %q: %#v", sessionID, newFactoryDir, afterClose.Sessions)
+	}
+}
+
 type cliCreatedSession struct {
 	id         string
 	folderPath string
@@ -457,6 +530,61 @@ func sessionListContains(
 
 func bytesTrimSpace(raw []byte) []byte {
 	return []byte(strings.TrimSpace(string(raw)))
+}
+
+func postSessionLifecycleJSON[T any](t *testing.T, endpoint string, request any, failurePrefix string) T {
+	t.Helper()
+
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("%s: marshal request: %v", failurePrefix, err)
+	}
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("%s: POST %s: %v", failurePrefix, endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("%s: POST %s status = %d, want success: %s", failurePrefix, endpoint, response.StatusCode, payload)
+	}
+	var decoded T
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		t.Fatalf("%s: decode %s response: %v", failurePrefix, endpoint, err)
+	}
+	return decoded
+}
+
+func closeSessionViaAPI(t *testing.T, baseURL, sessionID string) {
+	t.Helper()
+
+	request, err := http.NewRequest(http.MethodDelete, baseURL+"/factory-sessions/"+sessionID, nil)
+	if err != nil {
+		t.Fatalf("construct close session request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("DELETE Factory Session %q: %v", sessionID, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("DELETE Factory Session %q status = %d, want 204: %s", sessionID, response.StatusCode, payload)
+	}
+}
+
+func assertAPISessionNotFound(t *testing.T, baseURL, sessionID string) {
+	t.Helper()
+
+	response, err := http.Get(baseURL + "/factory-sessions/" + sessionID)
+	if err != nil {
+		t.Fatalf("GET closed Factory Session %q: %v", sessionID, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET closed Factory Session %q status = %d, want 404: %s", sessionID, response.StatusCode, payload)
+	}
 }
 
 func assertCLISessionNotFoundFailure(
