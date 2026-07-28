@@ -1003,6 +1003,12 @@ response-stream output.
   `VerifyOperatorSettingsDualLedgerAlignment` to prove ownership-inventory and
   package-target-manifest agree on unexpected-sibling move rows and that fold
   targets never regress to owner-root retain destinations.
+- CLN-SET-CONTRACT-ROOTS story-001 reconciliation locks live root `.go` files,
+  INV JSON inventory, Go root-contract mirror
+  (`internal/ownershipinventory/operator_settings_root_contract.go`),
+  top-level directory inventory, and dual ledgers through
+  `VerifyOperatorSettingsRootReconciliation`; package-target checks mirror the
+  Go inventory in `cmd/packagetargetmanifestcheck/operator_settings_root_contract.go`.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore
