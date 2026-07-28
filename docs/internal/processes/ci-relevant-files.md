@@ -293,6 +293,17 @@
   Catalog metadata infers domain `workstations` and subsection `poller` from
   the path; every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+  Factory_runtime Petri authored eligibility guard functional coverage belongs
+  in `tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go`:
+  prove VISIT_COUNT block-until-satisfied, SAME_NAME correlated release, and
+  VISIT_COUNT/MATCHES_FIELDS failure visibility through public Factory Event
+  dispatch ordering, Work listings, and API status observation via
+  `support.RunFactoryToCompletionWithEdgesAndObservations`,
+  `support.StartFunctionalAPIServer`, and `support.NewShapedProviderCommandRunner`
+  without service-internal Petri imports. Catalog metadata infers domain
+  `factory_runtime` and subsection `orchestrators/petri/guards` from the path;
+  every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
   Mock-worker replacement functional coverage belongs in
   `tests/functional/workers/mock/replacement_test.go`: prove named-only
   `--with-mock-workers` replacement through
