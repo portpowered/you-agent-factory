@@ -54,7 +54,13 @@ Use this map when changing the public REST contract.
   in `read_mapping.go` and `handlers_read.go`; map query params through
   `ListOptionsFromAPI` + `work.NormalizeList`, invoke `ListWork` / `GetWork` on
   the accepted root, and encode detached `work.ReadModel` values through
-  `WorkReadModelToAPI` / `ListWorkResponseToAPI`.
+  `WorkReadModelToAPI` / `ListWorkResponseToAPI`. Work stage/submit/upsert
+  decode and JSON encoding live in `admission_mapping.go` and
+  `handlers_admission.go`; decode bodies through adapter-owned validation,
+  invoke `StageContent` / `PrepareContent` / `SubmitWorkRequestForSession` on
+  the accepted root, and encode detached admission results through
+  `StageSubmitWorkFileResponseToAPI` / `SubmitWorkResponseToAPI` /
+  `UpsertWorkResponseToAPI`.
 - Factory Definitions HTTP decoding, generated-contract mapping, service
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_definitions/transports/http`. The top-level

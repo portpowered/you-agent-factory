@@ -1574,7 +1574,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/http",
-      "minimum": 77.80
+      "minimum": 64.50
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/wire",

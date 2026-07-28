@@ -57,3 +57,27 @@ func (a *Adapter) invokeGetWork(
 	}
 	return a.root.GetWork(ctx, sessionID, workID)
 }
+
+// invokeStageContent forwards staging requests through the accepted Work root.
+func (a *Adapter) invokeStageContent(
+	ctx context.Context,
+	request work.StageContentRequest,
+) (work.StageContentResult, error) {
+	if a == nil || a.root == nil {
+		return work.StageContentResult{}, errors.New("work service is required")
+	}
+	return a.root.StageContent(ctx, request)
+}
+
+// invokeSubmitWorkRequestForSession forwards admission requests through the
+// accepted Work root.
+func (a *Adapter) invokeSubmitWorkRequestForSession(
+	ctx context.Context,
+	sessionID string,
+	request work.WorkRequest,
+) (work.WorkRequestSubmitResult, error) {
+	if a == nil || a.root == nil {
+		return work.WorkRequestSubmitResult{}, errors.New("work service is required")
+	}
+	return a.root.SubmitWorkRequestForSession(ctx, sessionID, request)
+}
