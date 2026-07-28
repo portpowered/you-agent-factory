@@ -585,6 +585,16 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/work/relationships/parent_child_test.go`
   - `TestParentChildLineageSurvivesDispatchAndReplay`.
   - `TestChildFailureProjectsToDocumentedParentView`.
+  - `TestDispatchPreservesSubmittedWorkPayloadTagsAndType`.
+  - `TestRejectionFeedbackSurfacesOnExecutorRetry`.
+  - `TestParentAndDependsOnLineageSurviveOnChildDispatch`.
+
+- [x] `tests/functional/work/relationships/multi_output_propagation_test.go`
+  - `TestMultiOutputFanoutPreservesSourceNameOnDownstreamWork`.
+  - `TestMultiOutputNameAvailableOnDownstreamTask`.
+  - `TestReviewerFanoutPreservesSharedNameDownstream`.
+  - `TestDocReviewerPNGFanoutPreservesSharedNameDownstream`.
+  - `TestNtoNTypeMatchingCompletesEveryAuthoredBranch`.
 
 - [x] `tests/functional/work/routing/logical_move_test.go`
   - `TestLogicalMoveCompletesWithoutWorkerDispatch`.
@@ -595,6 +605,10 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestClassifierRoutesEveryKnownDecision`.
   - `TestClassifierUnknownAndMalformedDecisionFailDistinctly`.
   - `TestClassifierMultiOutputPreservesPayload`.
+  - `TestClassifierReworkFailureTerminatesWithoutCompletion`.
+  - `TestClassifierRejectionWithoutArcsRoutesToFailedTerminal`.
+  - `TestClassifierRejectionWithoutArcsRecordsDispatchFeedback`.
+  - `TestClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork`.
 
 - [x] `tests/functional/work/recovery/manual_move_test.go`
   - `TestFailedCascadeCanBeRecoveredByPublicWorkMove`.
@@ -772,6 +786,10 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedReviewRejectionCarriesFeedback` covers retry context.
   - `TestPackagedReviewRetryExhaustionFails` covers bounded failure.
 
+- [x] `tests/functional/factory/packaged/review/invocation_long_test.go`
+  - `TestCodeReviewLoop` covers reject-then-accept review loop with dispatch
+    input propagation and bounded retry counts.
+
 - [x] `tests/functional/factory/packaged/subagent/invocation_test.go`
   - `TestPackagedSubagentReturnsChildResult` covers basic dispatch.
   - `TestPackagedSubagentStreamsChildResponseEvents` covers observation.
@@ -813,11 +831,18 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIGetAndSaveCurrentFactoryWithinOneSession`.
   - `TestAPISaveCurrentFactoryValidatesBeforePersistence`.
   - `TestAPICurrentFactoriesRemainSessionScoped`.
+  - `TestProcessFactoryConfigVersionChangesObservableRouting`.
+  - `TestProcessRejectionLoopCompletesAfterRetry`.
+  - `TestProcessIndependentFactoryRootsRemainIsolated`.
 
 - [x] `tests/functional/factory/current/prompt_template_test.go`
   - `TestAPIPromptTemplateContractAndValidationRoundTrip`.
   - `TestAPIInvalidPromptTemplateNamesMissingVariables`.
   - `TestAPITemplateValidationDoesNotMutateCurrentFactory`.
+  - `TestProcessWorkNameMapsIntoPromptTemplate`.
+  - `TestProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate`.
+  - `TestProcessSubmissionTagsReachDispatchInputTokens`.
+  - `TestProcessParameterizedTemplateFailureRoutesWorkToFailed`.
 
 ## Wave 2 — provider sessions
 

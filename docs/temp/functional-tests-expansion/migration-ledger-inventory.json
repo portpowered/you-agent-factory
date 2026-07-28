@@ -1339,6 +1339,46 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/current/prompt_template_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/prompt_template_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/prompt_template_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestProcessParameterizedTemplateFailureRoutesWorkToFailed",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/prompt_template_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/prompt_template_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestProcessSubmissionTagsReachDispatchInputTokens",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/prompt_template_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/prompt_template_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestProcessWorkNameMapsIntoPromptTemplate",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/prompt_template_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/current/read_save_test.go",
       "package": "you-agent-factory/tests/functional/factory/current",
       "scenario": "TestAPICurrentFactoriesRemainSessionScoped",
@@ -1362,6 +1402,36 @@
       "source_path": "tests/functional/factory/current/read_save_test.go",
       "package": "you-agent-factory/tests/functional/factory/current",
       "scenario": "TestAPISaveCurrentFactoryValidatesBeforePersistence",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestProcessFactoryConfigVersionChangesObservableRouting",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestProcessIndependentFactoryRootsRemainIsolated",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestProcessRejectionLoopCompletesAfterRetry",
       "lane": "short",
       "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "none",
@@ -7549,9 +7619,79 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/work/relationships/multi_output_propagation_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestDocReviewerPNGFanoutPreservesSharedNameDownstream",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/multi_output_propagation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/multi_output_propagation_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestMultiOutputFanoutPreservesSourceNameOnDownstreamWork",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/multi_output_propagation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/multi_output_propagation_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestMultiOutputNameAvailableOnDownstreamTask",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/multi_output_propagation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/multi_output_propagation_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestNtoNTypeMatchingCompletesEveryAuthoredBranch",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/multi_output_propagation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/multi_output_propagation_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestReviewerFanoutPreservesSharedNameDownstream",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/multi_output_propagation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/work/relationships/parent_child_test.go",
       "package": "you-agent-factory/tests/functional/work/relationships",
       "scenario": "TestChildFailureProjectsToDocumentedParentView",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/parent_child_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/parent_child_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestDispatchPreservesSubmittedWorkPayloadTagsAndType",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/parent_child_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/parent_child_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestParentAndDependsOnLineageSurviveOnChildDispatch",
       "lane": "short",
       "destination": "tests/functional/work/relationships/parent_child_test.go",
       "catch_all": "none",
@@ -7569,9 +7709,59 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/work/relationships/parent_child_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestRejectionFeedbackSurfacesOnExecutorRetry",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/parent_child_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/work/routing/classifier_test.go",
       "package": "you-agent-factory/tests/functional/work/routing",
       "scenario": "TestClassifierMultiOutputPreservesPayload",
+      "lane": "short",
+      "destination": "tests/functional/work/routing/classifier_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/routing/classifier_test.go",
+      "package": "you-agent-factory/tests/functional/work/routing",
+      "scenario": "TestClassifierRejectionWithoutArcsRecordsDispatchFeedback",
+      "lane": "short",
+      "destination": "tests/functional/work/routing/classifier_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/routing/classifier_test.go",
+      "package": "you-agent-factory/tests/functional/work/routing",
+      "scenario": "TestClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork",
+      "lane": "short",
+      "destination": "tests/functional/work/routing/classifier_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/routing/classifier_test.go",
+      "package": "you-agent-factory/tests/functional/work/routing",
+      "scenario": "TestClassifierRejectionWithoutArcsRoutesToFailedTerminal",
+      "lane": "short",
+      "destination": "tests/functional/work/routing/classifier_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/routing/classifier_test.go",
+      "package": "you-agent-factory/tests/functional/work/routing",
+      "scenario": "TestClassifierReworkFailureTerminatesWithoutCompletion",
       "lane": "short",
       "destination": "tests/functional/work/routing/classifier_test.go",
       "catch_all": "none",
@@ -8932,14 +9122,14 @@
       "sessions": 40,
       "smoke": 62,
       "transport": 106,
-      "work": 29,
+      "work": 41,
       "workers": 77,
       "workflow": 5,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 870,
+    "customer_top_level_Test_scenarios": 889,
     "lane_functionallong": 83,
-    "lane_short": 787,
+    "lane_short": 806,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 14,
@@ -8953,7 +9143,7 @@
       "you-agent-factory/tests/functional/cli/root_discovery": 9,
       "you-agent-factory/tests/functional/cli/session_resume": 6,
       "you-agent-factory/tests/functional/events/factory_events": 5,
-      "you-agent-factory/tests/functional/factory/current": 6,
+      "you-agent-factory/tests/functional/factory/current": 13,
       "you-agent-factory/tests/functional/factory/definition_activation": 3,
       "you-agent-factory/tests/functional/factory/definitions": 6,
       "you-agent-factory/tests/functional/factory/packaged/catalog": 10,
@@ -9120,21 +9310,34 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-28T10:50:00Z",
-    "story": "ft-wave2-work-relationships-parent-child-003",
-    "live_customer_scenarios": 847,
-    "ledger_rows": 847,
+    "audited_at_utc": "2026-07-28T13:30:00Z",
+    "story": "mig-workflow-ready-deletion-batches-009",
+    "live_customer_scenarios": 889,
+    "ledger_rows": 889,
     "unmapped_scenarios": 0,
-    "checklist_destinations": 436,
+    "checklist_destinations": 438,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 752,
-    "lane_functionallong": 90,
+    "lane_short": 806,
+    "lane_functionallong": 83,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 50,
     "validator": "go run ./cmd/migrationledgercheck",
-    "row_count": 847,
-    "short_lane_rows": 752,
-    "functionallong_lane_rows": 90
+    "row_count": 889,
+    "short_lane_rows": 806,
+    "functionallong_lane_rows": 83,
+    "ready_workflow_catchall_drain": {
+      "released_batches": [
+        "workflow-delete-01-orchestration-dispatch",
+        "workflow-delete-02-work-routing",
+        "workflow-delete-03-work-relationships",
+        "workflow-delete-04-work-routing-logical",
+        "workflow-delete-05-workstations-repeater",
+        "workflow-delete-06-workstations-watcher",
+        "workflow-delete-07-factory-current"
+      ],
+      "remaining_workflow_customer_scenarios": 5,
+      "held_batch": "workflow-delete-08-guards"
+    }
   }
 }
