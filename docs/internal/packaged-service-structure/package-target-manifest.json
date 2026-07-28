@@ -438,16 +438,8 @@
     "pkg/services/workers",
     "pkg/services/workers/agypty",
     "pkg/services/workers/cliprovider",
-    "pkg/services/workers/construction",
-    "pkg/services/workers/diagnostics",
-    "pkg/services/workers/draftvalidation",
     "pkg/services/workers/envdiagnostics",
-    "pkg/services/workers/execution",
-    "pkg/services/workers/execution/recording",
-    "pkg/services/workers/executor",
     "pkg/services/workers/executor/agentrun",
-    "pkg/services/workers/inferencefailure",
-    "pkg/services/workers/interface",
     "pkg/services/workers/internal",
     "pkg/services/workers/internal/diagnostics",
     "pkg/services/workers/internal/interface",
@@ -507,12 +499,8 @@
     "pkg/services/workers/provider/structured",
     "pkg/services/workers/runner",
     "pkg/services/workers/service",
-    "pkg/services/workers/services/agents",
-    "pkg/services/workers/services/inference",
     "pkg/services/workers/services/testing",
-    "pkg/services/workers/skippermissions",
     "pkg/services/workers/wire",
-    "pkg/services/workers/workstationpool",
     "pkg/services/workers/worktree",
     "pkg/transports/cli",
     "pkg/transports/cli/acp",
@@ -2576,37 +2564,7 @@
       "destination": "providers/internal/services/execution"
     },
     {
-      "packagePath": "pkg/services/workers/construction",
-      "disposition": "move",
-      "destination": "workers/internal/services/runtime_assembly"
-    },
-    {
-      "packagePath": "pkg/services/workers/diagnostics",
-      "disposition": "move",
-      "destination": "workers/internal"
-    },
-    {
-      "packagePath": "pkg/services/workers/draftvalidation",
-      "disposition": "move",
-      "destination": "workers/internal/services/workstations"
-    },
-    {
       "packagePath": "pkg/services/workers/envdiagnostics",
-      "disposition": "move",
-      "destination": "workers/internal/services/workstations"
-    },
-    {
-      "packagePath": "pkg/services/workers/execution",
-      "disposition": "move",
-      "destination": "workers/internal/services/workstations"
-    },
-    {
-      "packagePath": "pkg/services/workers/execution/recording",
-      "disposition": "move",
-      "destination": "workers/internal/services/workstations"
-    },
-    {
-      "packagePath": "pkg/services/workers/executor",
       "disposition": "move",
       "destination": "workers/internal/services/workstations"
     },
@@ -2614,16 +2572,6 @@
       "packagePath": "pkg/services/workers/executor/agentrun",
       "disposition": "move",
       "destination": "workers/internal/services/workstations"
-    },
-    {
-      "packagePath": "pkg/services/workers/inferencefailure",
-      "disposition": "move",
-      "destination": "workers/internal/services/workstations"
-    },
-    {
-      "packagePath": "pkg/services/workers/interface",
-      "disposition": "move",
-      "destination": "workers/internal"
     },
     {
       "packagePath": "pkg/services/workers/internal",
@@ -2921,34 +2869,14 @@
       "destination": "workers/internal"
     },
     {
-      "packagePath": "pkg/services/workers/services/agents",
-      "disposition": "move",
-      "destination": "workers/internal/services/runners"
-    },
-    {
-      "packagePath": "pkg/services/workers/services/inference",
-      "disposition": "move",
-      "destination": "workers/internal/services/runners"
-    },
-    {
       "packagePath": "pkg/services/workers/services/testing",
       "disposition": "move",
       "destination": "workers/internal/services/runners"
     },
     {
-      "packagePath": "pkg/services/workers/skippermissions",
-      "disposition": "move",
-      "destination": "workers/internal/services/workstations"
-    },
-    {
       "packagePath": "pkg/services/workers/wire",
       "disposition": "retain",
       "destination": "workers"
-    },
-    {
-      "packagePath": "pkg/services/workers/workstationpool",
-      "disposition": "move",
-      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/worktree",

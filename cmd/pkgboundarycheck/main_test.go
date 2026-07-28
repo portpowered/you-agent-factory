@@ -892,7 +892,7 @@ func TestRunRejectsTransportImportsOfRetiredWorkerDiagnosticsFacade(t *testing.T
 	if err == nil {
 		t.Fatal("run() error = nil, want Worker diagnostics facade import rejected")
 	}
-	if want := "prohibited transport service implementation import: " + importPath; !strings.Contains(stderr.String(), want) {
+	if want := "prohibited external service subpackage import: " + importPath; !strings.Contains(stderr.String(), want) {
 		t.Fatalf("run() stderr = %q, want substring %q", stderr.String(), want)
 	}
 }

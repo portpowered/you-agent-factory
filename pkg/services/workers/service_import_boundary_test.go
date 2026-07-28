@@ -60,7 +60,13 @@ func listModulePackages(t *testing.T) []string {
 func listDirectImports(t *testing.T, packagePath string) []string {
 	t.Helper()
 
-	cmd := exec.Command("go", "list", "-f", "{{join .Imports \"\\n\"}}", packagePath)
+	cmd := exec.Command(
+		"go",
+		"list",
+		"-f",
+		"{{range $kind := .Imports}}{{$kind}}\n{{end}}{{range $kind := .TestImports}}{{$kind}}\n{{end}}{{range $kind := .XTestImports}}{{$kind}}\n{{end}}",
+		packagePath,
+	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("go list imports for %s: %v\n%s", packagePath, err, output)
@@ -69,5 +75,18 @@ func listDirectImports(t *testing.T, packagePath string) []string {
 	if trimmed == "" {
 		return nil
 	}
-	return strings.Split(trimmed, "\n")
+	seen := make(map[string]struct{})
+	var imports []string
+	for _, importPath := range strings.Split(trimmed, "\n") {
+		importPath = strings.TrimSpace(importPath)
+		if importPath == "" {
+			continue
+		}
+		if _, ok := seen[importPath]; ok {
+			continue
+		}
+		seen[importPath] = struct{}{}
+		imports = append(imports, importPath)
+	}
+	return imports
 }

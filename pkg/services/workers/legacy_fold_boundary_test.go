@@ -11,45 +11,25 @@ import (
 // foldedLegacyWorkersImportRoots are transitional public Workers packages folded
 // into private destinations by CLN-WRK-LEGACY-PACKAGES.
 var foldedLegacyWorkersImportRoots = []string{
-	workersOwnerPrefix + "/construction",
 	workersOwnerPrefix + "/process",
 	workersOwnerPrefix + "/runner",
-	workersOwnerPrefix + "/execution",
-	workersOwnerPrefix + "/execution/recording",
-	workersOwnerPrefix + "/executor",
 	workersOwnerPrefix + "/executor/agentrun",
 	workersOwnerPrefix + "/invocation",
 	workersOwnerPrefix + "/prompting",
-	workersOwnerPrefix + "/skippermissions",
 	workersOwnerPrefix + "/worktree",
-	workersOwnerPrefix + "/workstationpool",
-	workersOwnerPrefix + "/diagnostics",
-	workersOwnerPrefix + "/interface",
-	workersOwnerPrefix + "/services/inference",
 	workersOwnerPrefix + "/services/testing",
-	workersOwnerPrefix + "/services/agents",
 }
 
 // allowedFoldedLegacyImporterPrefixes lists package trees that may still import
 // folded legacy public Workers packages through documented delete-ready shims.
 var allowedFoldedLegacyImporterPrefixes = []string{
-	workersOwnerPrefix + "/construction",
 	workersOwnerPrefix + "/process",
 	workersOwnerPrefix + "/runner",
-	workersOwnerPrefix + "/execution",
-	workersOwnerPrefix + "/execution/recording",
-	workersOwnerPrefix + "/executor",
 	workersOwnerPrefix + "/executor/agentrun",
 	workersOwnerPrefix + "/invocation",
 	workersOwnerPrefix + "/prompting",
-	workersOwnerPrefix + "/skippermissions",
 	workersOwnerPrefix + "/worktree",
-	workersOwnerPrefix + "/workstationpool",
-	workersOwnerPrefix + "/diagnostics",
-	workersOwnerPrefix + "/interface",
-	workersOwnerPrefix + "/services/inference",
 	workersOwnerPrefix + "/services/testing",
-	workersOwnerPrefix + "/services/agents",
 	workersOwnerPrefix + "/internal",
 	workersOwnerPrefix + "/wire",
 	workersOwnerPrefix + "/provider",
@@ -58,26 +38,14 @@ var allowedFoldedLegacyImporterPrefixes = []string{
 }
 
 var foldedLegacyShimPackageDirs = []string{
-	"construction",
 	"process",
 	"runner",
-	"execution",
-	"execution/recording",
-	"executor",
 	"executor/agentrun",
 	"invocation",
 	"prompting",
-	"draftvalidation",
 	"envdiagnostics",
-	"inferencefailure",
-	"workstationpool",
-	"skippermissions",
 	"worktree",
-	"diagnostics",
-	"interface",
-	"services/inference",
 	"services/testing",
-	"services/agents",
 }
 
 var providersExtractionTopLevelDirs = []string{
