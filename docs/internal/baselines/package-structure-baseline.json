@@ -2674,12 +2674,22 @@
     },
     {
       "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/distribution/packageassets",
+      "target": "pkg/services/factory_definitions/internal/services/distribution"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
       "target": "pkg/services/factory_definitions/internal/services/distribution"
     },
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
+      "target": "pkg/services/factory_definitions/internal/services/distribution"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/distribution/promptassets",
       "target": "pkg/services/factory_definitions/internal/services/distribution"
     },
     {

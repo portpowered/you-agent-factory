@@ -2722,6 +2722,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packageassets",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -2729,6 +2735,12 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/promptassets",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"

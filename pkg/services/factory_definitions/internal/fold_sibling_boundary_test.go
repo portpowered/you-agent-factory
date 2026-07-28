@@ -18,6 +18,8 @@ var foldedPublicSiblingSuffixes = []string{
 	"/loadedsource",
 	"/snapshotcapture",
 	"/packagedinstallation",
+	"/packages/packageassets",
+	"/packages/promptassets",
 	"/namedfactories",
 }
 
