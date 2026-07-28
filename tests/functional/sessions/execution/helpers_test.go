@@ -670,6 +670,55 @@ func assertInvocationPrimaryResultText(
 	}
 }
 
+func assertAPIInvocationMatchesCLICompatibleFacts(
+	t *testing.T,
+	apiResponse factoryapi.InvocationResponse,
+	cliResponse factoryapi.InvocationResponse,
+	wantPrimaryResult string,
+) {
+	t.Helper()
+
+	assertInvocationPrimaryResultText(t, apiResponse, wantPrimaryResult)
+	assertInvocationPrimaryResultText(t, cliResponse, wantPrimaryResult)
+
+	if strings.TrimSpace(apiResponse.RequestId) == "" || strings.TrimSpace(apiResponse.TraceId) == "" {
+		t.Fatalf(
+			"API invocation identity = request %q trace %q, want non-empty run correlation",
+			apiResponse.RequestId,
+			apiResponse.TraceId,
+		)
+	}
+	if strings.TrimSpace(cliResponse.RequestId) == "" || strings.TrimSpace(cliResponse.TraceId) == "" {
+		t.Fatalf(
+			"CLI invocation identity = request %q trace %q, want non-empty run correlation",
+			cliResponse.RequestId,
+			cliResponse.TraceId,
+		)
+	}
+
+	apiText := invocationPrimaryResultText(t, apiResponse)
+	cliText := invocationPrimaryResultText(t, cliResponse)
+	if apiText != cliText {
+		t.Fatalf("primaryResult mismatch: API = %q, CLI-compatible = %q", apiText, cliText)
+	}
+	if apiResponse.Status != cliResponse.Status {
+		t.Fatalf("invocation status mismatch: API = %q, CLI-compatible = %q", apiResponse.Status, cliResponse.Status)
+	}
+}
+
+func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationResponse) string {
+	t.Helper()
+
+	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+		t.Fatalf("primaryResult = %#v, want one text part", response.PrimaryResult)
+	}
+	part, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("primaryResult[0] as text part: %v", err)
+	}
+	return part.Text
+}
+
 func assertFactorySessionResultPrimaryText(
 	t *testing.T,
 	result factoryapi.FactorySessionResult,
