@@ -38,6 +38,16 @@ Use this map when changing the public REST contract.
   `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
   `docs/internal/baselines/go-functional-coverage-package-minimums.json` when
   introducing new adapter packages.
+- The Sessions HTTP adapter package must stay registered in the allowed shared
+  manifests only: retain `pkg/services/factory_sessions/transports/http` under
+  destination `factory_sessions` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json` and
+  `docs/internal/baselines/ownership-inventory.json`, and keep measured floors in
+  both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`.
+  Prove registration with `manifest_registration_test.go`; do not edit
+  `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, or
+  other services' HTTP adapters when reconciling manifest churn.
 - Factory Session CLI request construction, rendering, diagnostics, and
   operation handlers live under
   `pkg/services/factory_sessions/transports/cli`; Factory Session MCP tool

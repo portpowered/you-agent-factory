@@ -3,16 +3,20 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
+	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -159,6 +163,152 @@ func TestSchedulerSourceObservationAttachesBeforeStartEffectInitialization(t *te
 	}
 	cancelSource()
 	sidecars.Wait()
+}
+
+func TestProductionRootUsesScriptPollersOwner(t *testing.T) {
+	t.Parallel()
+
+	service := NewService(
+		zap.NewNop(), clockwork.NewFakeClock(), nil, "workflow-script-pollers", "", nil, nil, nil,
+	)
+	if service.scriptPollers == nil {
+		t.Fatal("expected script pollers owner on production Automations root")
+	}
+}
+
+func TestProductionRootScriptPollerCursorThroughCompositionPath(t *testing.T) {
+	t.Parallel()
+
+	const workflowID = "workflow-script-poller-cursor"
+	factoryDir := t.TempDir()
+	stdout := []byte(`{
+		"requestId":"linear-issue-batch-cursor",
+		"type":"FACTORY_REQUEST_BATCH",
+		"works":[{"name":"issue-cursor","workTypeName":"task","payload":{"id":"ISSUE-CURSOR"}}],
+		"cursor":"opaque-cursor-root",
+		"checkpoint":"checkpoint-root"
+	}`)
+	runner := &internalScriptPollerRunner{
+		outcomes: []internalScriptPollerOutcome{{result: workers.CommandResult{Stdout: stdout}}},
+	}
+	submitted := &internalScriptPollerSubmitter{}
+	service := NewService(
+		zap.NewNop(),
+		clockwork.NewFakeClock(),
+		runner,
+		workflowID,
+		"",
+		nil,
+		nil,
+		factorydefinitioncomposition.WorkstationExecutionPolicy{},
+	)
+	poller := internalCanonicalScriptPollerWorkstation()
+	worker := internalCanonicalScriptPollerWorker()
+	runtimeCfg := internalScriptPollerLoadedRuntimeConfig(t, factoryDir, poller, worker)
+
+	err := service.RunScriptPoller(
+		context.Background(),
+		runner,
+		runtimeCfg,
+		poller,
+		worker,
+		submitted.submit,
+	)
+	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
+		t.Fatalf("RunScriptPoller error = %v, want unexpected exit after successful submit", err)
+	}
+	if submitted.calls != 1 {
+		t.Fatalf("submit calls = %d, want 1", submitted.calls)
+	}
+
+	supervision := scriptpollers.SupervisionFor(workflowID, poller.Name)
+	cursor, err := service.Root().GetCursor(
+		context.Background(),
+		automations.GetCursorRequest{InstanceID: supervision.InstanceID},
+	)
+	if err != nil {
+		t.Fatalf("Root.GetCursor: %v", err)
+	}
+	if cursor.AutomationID != workflowID ||
+		cursor.InstanceID != supervision.InstanceID ||
+		string(cursor.Cursor) != "opaque-cursor-root" ||
+		cursor.Checkpoint != "checkpoint-root" {
+		t.Fatalf("Root.GetCursor = %+v, want committed opaque recovery facts for %q", cursor, supervision.InstanceID)
+	}
+}
+
+type internalScriptPollerSubmitter struct {
+	calls int
+}
+
+func (s *internalScriptPollerSubmitter) submit(context.Context, work.WorkRequest) error {
+	s.calls++
+	return nil
+}
+
+type internalScriptPollerOutcome struct {
+	result workers.CommandResult
+	err    error
+}
+
+type internalScriptPollerRunner struct {
+	outcomes []internalScriptPollerOutcome
+}
+
+func (r *internalScriptPollerRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+	if len(r.outcomes) == 0 {
+		return workers.CommandResult{}, errors.New("no scripted outcomes")
+	}
+	outcome := r.outcomes[0]
+	r.outcomes = r.outcomes[1:]
+	return outcome.result, outcome.err
+}
+
+func internalCanonicalScriptPollerWorkstation() interfaces.FactoryWorkstationConfig {
+	return interfaces.FactoryWorkstationConfig{
+		Name:           "linear-ingress",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "poller-script",
+	}
+}
+
+func internalCanonicalScriptPollerWorker() *interfaces.FactoryWorkerConfig {
+	return &interfaces.FactoryWorkerConfig{
+		Name:    "poller-script",
+		Type:    interfaces.WorkerTypeScript,
+		Command: "factory/scripts/poller.sh",
+	}
+}
+
+func internalScriptPollerLoadedRuntimeConfig(
+	t *testing.T,
+	factoryDir string,
+	poller interfaces.FactoryWorkstationConfig,
+	worker *interfaces.FactoryWorkerConfig,
+) interfaces.MutableLoadedFactorySource {
+	t.Helper()
+
+	factoryCfg := &interfaces.FactoryConfig{
+		Workers:      []interfaces.FactoryWorkerConfig{{Name: worker.Name}},
+		Workstations: []interfaces.FactoryWorkstationConfig{poller},
+	}
+	loaded, err := factorydefinitioncomposition.NewLoadedSource(
+		factoryDir,
+		factoryCfg,
+		runtimefixtures.RuntimeDefinitionLookupFixture{
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				worker.Name: worker,
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				poller.Name: &poller,
+			},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewLoadedFactoryConfig: %v", err)
+	}
+	return loaded
 }
 
 func TestProductionRootUsesSchedulerReconciliationOwner(t *testing.T) {

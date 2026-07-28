@@ -9,7 +9,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/scopedlisting"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -117,18 +116,18 @@ func (s *Server) requireFactoryDefinitionAPI(w http.ResponseWriter) (apisurface.
 }
 
 func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, params factoryapi.ListFactorySessionsParams) {
-	raw, err := factorysession.ListSessionsRequestFromAPI(params)
-	if err == nil {
-		raw, err = s.sessionRequests.PrepareListSessions(raw)
-	}
+	raw, err := decodeListFactorySessionsRequest(params, s.sessionRequests)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+		return
+	}
+	if s.sessionsRoot != nil && s.guardSessionsRequestContext(w, r) {
 		return
 	}
 
 	response, err := s.mergeScopedFactorySessionList(r.Context(), raw)
 	if err != nil {
-		if errors.Is(err, scopedlisting.ErrDurableReaderRequired) {
+		if errors.Is(err, ErrDurableReaderRequired) {
 			s.writeError(w, http.StatusNotImplemented, "durable factory session listing is not implemented", "INTERNAL_ERROR")
 			return
 		}
@@ -154,6 +153,23 @@ func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessi
 			return
 		}
 		s.writeJSON(w, http.StatusOK, response)
+		return
+	}
+
+	if s.sessionsRoot != nil {
+		if s.guardSessionsRequestContext(w, r) {
+			return
+		}
+		projection, err := s.sessionsRoot.GetFactorySession(r.Context(), decodeGetFactorySessionRequest(sessionID))
+		if err != nil {
+			if s.writeSessionsRootError(w, string(sessionID), err) {
+				return
+			}
+			s.logger.Error("get factory session failed", zap.Error(err))
+			s.writeSessionsRootErrorOrInternal(w, string(sessionID), err, "failed to get factory session")
+			return
+		}
+		s.writeJSON(w, http.StatusOK, factorysession.SessionResponseToAPI(projection))
 		return
 	}
 
@@ -350,11 +366,11 @@ func (s *Server) InterruptFactorySessionDispatch(w http.ResponseWriter, r *http.
 }
 
 func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
-	sessionRuntime, ok := s.requireSessionRuntime(w)
-	if !ok {
+	if !requestAcceptsJSONContentType(r.Header.Get("Content-Type")) {
+		s.writeUnsupportedMediaTypeError(w)
 		return
 	}
-	req, err := decodeOpenFactorySessionBody(r.Body)
+	req, err := decodeOpenFactorySessionRequest(r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -369,45 +385,86 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	if s.sessionsRoot != nil {
+		if s.guardSessionsRequestContext(w, r) {
+			return
+		}
+		result, err := s.sessionsRoot.OpenFactorySession(r.Context(), factorysession.OpenRequestFromAPI(req))
+		if err != nil {
+			s.writeOpenFactorySessionRejected(w, err)
+			return
+		}
+		s.writeJSON(w, http.StatusOK, factorysession.OpenResultToAPI(result))
+		return
+	}
+
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
 	response, err := sessionRuntime.OpenFactorySession(r.Context(), req)
 	if err != nil {
-		s.logger.Debug("open factory session rejected", zap.Error(err))
-		var domainTargetedErr interface {
-			error
-			ErrorTargets() []interfaces.ValidationTarget
-		}
-		var targetedErr interface {
-			error
-			ErrorTargets() []factoryapi.FactoryValidationTarget
-		}
-		code := "BAD_REQUEST"
-		var codedErr interface {
-			ErrorCode() string
-		}
-		if errors.As(err, &codedErr) {
-			code = codedErr.ErrorCode()
-		}
-		if errors.As(err, &domainTargetedErr) {
-			s.writeErrorWithTargets(
-				w,
-				http.StatusBadRequest,
-				err.Error(),
-				code,
-				apisurface.FactoryValidationTargetsToAPI(domainTargetedErr.ErrorTargets()),
-			)
-			return
-		}
-		if errors.As(err, &targetedErr) {
-			s.writeErrorWithTargets(w, http.StatusBadRequest, err.Error(), code, targetedErr.ErrorTargets())
-			return
-		}
-		s.writeError(w, http.StatusBadRequest, err.Error(), code)
+		s.writeOpenFactorySessionRejected(w, err)
 		return
 	}
 	s.writeJSON(w, http.StatusOK, response)
 }
 
+func (s *Server) writeOpenFactorySessionRejected(w http.ResponseWriter, err error) {
+	if s.writeSessionsRequestContextOutcome(w, err) {
+		return
+	}
+	s.logger.Debug("open factory session rejected", zap.Error(err))
+	var domainTargetedErr interface {
+		error
+		ErrorTargets() []interfaces.ValidationTarget
+	}
+	var targetedErr interface {
+		error
+		ErrorTargets() []factoryapi.FactoryValidationTarget
+	}
+	code := "BAD_REQUEST"
+	var codedErr interface {
+		ErrorCode() string
+	}
+	if errors.As(err, &codedErr) {
+		code = codedErr.ErrorCode()
+	}
+	if errors.As(err, &domainTargetedErr) {
+		s.writeErrorWithTargets(
+			w,
+			http.StatusBadRequest,
+			err.Error(),
+			code,
+			apisurface.FactoryValidationTargetsToAPI(domainTargetedErr.ErrorTargets()),
+		)
+		return
+	}
+	if errors.As(err, &targetedErr) {
+		s.writeErrorWithTargets(w, http.StatusBadRequest, err.Error(), code, targetedErr.ErrorTargets())
+		return
+	}
+	s.writeError(w, http.StatusBadRequest, err.Error(), code)
+}
+
 func (s *Server) CloseFactorySession(w http.ResponseWriter, r *http.Request, sessionID string) {
+	if s.sessionsRoot != nil {
+		if s.guardSessionsRequestContext(w, r) {
+			return
+		}
+		if err := s.sessionsRoot.CloseFactorySession(r.Context(), sessionID); err != nil {
+			if s.writeSessionsRootError(w, sessionID, err) {
+				return
+			}
+			s.logger.Error("close factory session failed", zap.Error(err), zap.String("session_id", sessionID))
+			s.writeSessionsRootErrorOrInternal(w, sessionID, err, "failed to close factory session")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
 		return
@@ -779,30 +836,38 @@ func (s *Server) writeDurableExecutionError(w http.ResponseWriter, err error) bo
 }
 
 func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request) {
-	execution, ok := s.requireDurableExecutionAPI(w)
-	if !ok {
-		return
-	}
-
-	req, err := decodeStrictJSON[factoryapi.FactorySessionExecutionRequest](r.Body)
+	raw, err := decodeStartFactorySessionRequest(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
 			return
 		}
-		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
-		return
-	}
-
-	raw, err := factorysession.StartRequestFromAPI(req)
-	if err == nil {
-		raw, err = s.sessionRequests.PrepareStart(raw)
-	}
-	if err != nil {
 		if s.writeDurableExecutionError(w, err) {
 			return
 		}
 		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+		return
+	}
+
+	if s.sessionsRoot != nil {
+		if s.guardSessionsRequestContext(w, r) {
+			return
+		}
+		result, err := s.sessionsRoot.StartAsync(r.Context(), raw)
+		if err != nil {
+			if s.writeSessionsRootError(w, "", err) {
+				return
+			}
+			s.logger.Error("durable factory session async start failed", zap.Error(err))
+			s.writeSessionsRootErrorOrInternal(w, "", err, "durable factory session execution failed")
+			return
+		}
+		s.writeJSON(w, http.StatusOK, factorysession.AsyncStartResponseToAPI(result))
+		return
+	}
+
+	execution, ok := s.requireDurableExecutionAPI(w)
+	if !ok {
 		return
 	}
 	response, err := execution.StartDurableFactorySessionAsync(r.Context(), raw)
@@ -817,30 +882,38 @@ func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.
 }
 
 func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request) {
-	execution, ok := s.requireDurableExecutionAPI(w)
-	if !ok {
-		return
-	}
-
-	req, err := decodeStrictJSON[factoryapi.FactorySessionExecutionRequest](r.Body)
+	raw, err := decodeStartFactorySessionRequest(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
 			return
 		}
-		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
-		return
-	}
-
-	raw, err := factorysession.StartRequestFromAPI(req)
-	if err == nil {
-		raw, err = s.sessionRequests.PrepareStart(raw)
-	}
-	if err != nil {
 		if s.writeDurableExecutionError(w, err) {
 			return
 		}
 		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+		return
+	}
+
+	if s.sessionsRoot != nil {
+		if s.guardSessionsRequestContext(w, r) {
+			return
+		}
+		result, err := s.sessionsRoot.StartSync(r.Context(), raw)
+		if err != nil {
+			if s.writeSessionsRootError(w, "", err) {
+				return
+			}
+			s.logger.Error("durable factory session sync start failed", zap.Error(err))
+			s.writeSessionsRootErrorOrInternal(w, "", err, "durable factory session execution failed")
+			return
+		}
+		s.writeJSON(w, http.StatusOK, factorysession.SyncStartResponseToAPI(result))
+		return
+	}
+
+	execution, ok := s.requireDurableExecutionAPI(w)
+	if !ok {
 		return
 	}
 	response, err := execution.StartDurableFactorySessionSync(r.Context(), raw)
@@ -933,9 +1006,18 @@ func (s *Server) mergeScopedFactorySessionList(
 	ctx context.Context,
 	normalized factorysessionexecution.ListSessionsRequest,
 ) (factoryapi.ListFactorySessionsResponse, error) {
-	result, err := scopedlisting.List(
-		ctx, normalized, s.liveSessionLister, s.durableLister,
-	)
+	var live scopedLiveReader
+	var durable scopedDurableReader
+
+	if s.sessionsRoot != nil {
+		live = ReadProjectionSessionListReader{Reader: s.sessionsRoot}
+		durable = s.sessionsRoot
+	} else {
+		live = s.liveSessionLister
+		durable = s.durableLister
+	}
+
+	result, err := mergeScopedSessionList(ctx, normalized, live, durable)
 	if err != nil {
 		return factoryapi.ListFactorySessionsResponse{}, err
 	}
@@ -943,24 +1025,7 @@ func (s *Server) mergeScopedFactorySessionList(
 }
 
 func (s *Server) writeDurableSessionReadError(w http.ResponseWriter, err error) bool {
-	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) {
-		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
-		return true
-	}
-	if errors.Is(err, factorysessionexecution.ErrDispatchNotFound) {
-		s.writeError(w, http.StatusNotFound, "factory session dispatch not found", "NOT_FOUND")
-		return true
-	}
-	if errors.Is(err, factorysessionexecution.ErrArtifactNotFound) {
-		s.writeError(w, http.StatusNotFound, "factory session artifact not found", "NOT_FOUND")
-		return true
-	}
-	var validationErr *factorysessionexecution.ExecutionValidationError
-	if errors.As(err, &validationErr) {
-		s.writeError(w, http.StatusBadRequest, validationErr.Message, "BAD_REQUEST")
-		return true
-	}
-	return false
+	return s.writeSessionsRootError(w, "", err)
 }
 
 func (s *Server) writeDurableSessionListError(w http.ResponseWriter, err error) {

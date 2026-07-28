@@ -22,6 +22,7 @@ import (
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformcontentstaging "github.com/portpowered/infinite-you/pkg/platform/contentstaging"
+	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -45,6 +46,7 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
+	systeminitializationwire "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
@@ -333,7 +335,7 @@ func provideSystemInitializationService(
 	inspectPath systeminitialization.InspectPath,
 	migrationFiles systeminitialization.LegacyFactoryMigrationFileSystem,
 ) (systeminitialization.Service, error) {
-	return systeminitialization.New(
+	return systeminitializationwire.NewService(
 		systeminitialization.OperatorSettingsFunctions{
 			Load:   loadOperatorConfig,
 			Ensure: ensureOperatorBackendScope,
@@ -470,7 +472,7 @@ func provideWorkContentStagingService(
 	if clock == nil {
 		clock = platformclock.Real{}
 	}
-	return work.NewContentStagingService(filesystem, random, clock, 0)
+	return workwire.NewContentStagingService(filesystem, random, clock, 0)
 }
 
 type runtimeArtifactClock func() time.Time

@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"strings"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -62,6 +64,10 @@ func errorFamilyForStatus(status int) factoryapi.ErrorFamily {
 		return factoryapi.ErrorFamilyNotFound
 	case http.StatusGone:
 		return factoryapi.ErrorFamilyGone
+	case http.StatusMethodNotAllowed:
+		return factoryapi.ErrorFamilyBadRequest
+	case http.StatusUnsupportedMediaType:
+		return factoryapi.ErrorFamilyBadRequest
 	default:
 		return factoryapi.ErrorFamilyInternalServerError
 	}
@@ -87,6 +93,23 @@ func requestFieldValidationMessage(err error) (string, bool) {
 // request-field validation failure.
 func RequestFieldValidationMessage(err error) (string, bool) {
 	return requestFieldValidationMessage(err)
+}
+
+func requestAcceptsJSONContentType(contentTypeHeader string) bool {
+	contentTypeHeader = strings.TrimSpace(contentTypeHeader)
+	if contentTypeHeader == "" {
+		return true
+	}
+	mediaType, _, err := mime.ParseMediaType(contentTypeHeader)
+	if err != nil {
+		return false
+	}
+	mediaType = strings.ToLower(strings.TrimSpace(mediaType))
+	return mediaType == "application/json" || strings.HasSuffix(mediaType, "+json")
+}
+
+func (s *Server) writeUnsupportedMediaTypeError(w http.ResponseWriter) {
+	s.writeError(w, http.StatusUnsupportedMediaType, "unsupported media type", "UNSUPPORTED_MEDIA_TYPE")
 }
 
 func ensureSingleJSONObject(dec *json.Decoder) error {
@@ -375,12 +398,7 @@ func (s *Server) handleDurableLifecycleControl(
 		return
 	}
 
-	lifecycle, ok := s.requireDurableSessionLifecycleAPI(w)
-	if !ok {
-		return
-	}
-
-	req, err := decodeOptionalLifecycleControlRequest(r.Body)
+	control, err := decodeLifecycleControlRequest(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -389,12 +407,14 @@ func (s *Server) handleDurableLifecycleControl(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
-	control, err := factorysession.ControlRequestFromAPI(req)
-	if err == nil {
-		control, err = s.sessionRequests.PrepareControl(control)
+
+	if s.sessionsRoot != nil {
+		s.invokeRootDurableLifecycleControl(w, r.Context(), sessionID, operation, control)
+		return
 	}
-	if err != nil {
-		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+
+	lifecycle, ok := s.requireDurableSessionLifecycleAPI(w)
+	if !ok {
 		return
 	}
 
@@ -422,12 +442,7 @@ func (s *Server) handleLiveLifecycleControl(
 	operation string,
 	invoke func(apisurface.LiveSessionAPI, factorysessionexecution.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
 ) {
-	sessionRuntime, ok := s.requireSessionRuntime(w)
-	if !ok {
-		return
-	}
-
-	req, err := decodeOptionalLifecycleControlRequest(r.Body)
+	control, err := decodeLifecycleControlRequest(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -436,12 +451,14 @@ func (s *Server) handleLiveLifecycleControl(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
-	control, err := factorysession.ControlRequestFromAPI(req)
-	if err == nil {
-		control, err = s.sessionRequests.PrepareControl(control)
+
+	if s.sessionsRoot != nil {
+		s.invokeRootLiveLifecycleControl(w, r.Context(), sessionID, operation, control)
+		return
 	}
-	if err != nil {
-		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
 		return
 	}
 
@@ -518,12 +535,7 @@ func (s *Server) handleDurableApproveControl(
 		return
 	}
 
-	lifecycle, ok := s.requireDurableSessionLifecycleAPI(w)
-	if !ok {
-		return
-	}
-
-	req, err := decodeOptionalApproveRequest(r.Body)
+	approve, err := decodeApproveFactorySessionRequest(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -532,12 +544,15 @@ func (s *Server) handleDurableApproveControl(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
-	approve, err := factorysession.ApproveRequestFromAPI(req)
-	if err == nil {
-		approve, err = s.sessionRequests.PrepareApprove(approve)
+
+	if s.sessionsRoot != nil {
+		result, invokeErr := s.sessionsRoot.ApproveDurableFactorySession(r.Context(), string(sessionID), approve)
+		s.finishRootLifecycleControl(w, string(sessionID), "approve", result, invokeErr)
+		return
 	}
-	if err != nil {
-		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+
+	lifecycle, ok := s.requireDurableSessionLifecycleAPI(w)
+	if !ok {
 		return
 	}
 
@@ -568,12 +583,7 @@ func (s *Server) handleDurableRetryDispatchControl(
 		return
 	}
 
-	lifecycle, ok := s.requireDurableSessionLifecycleAPI(w)
-	if !ok {
-		return
-	}
-
-	req, err := decodeOptionalRetryDispatchRequest(r.Body)
+	retry, err := decodeRetryDispatchRequest(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -582,12 +592,15 @@ func (s *Server) handleDurableRetryDispatchControl(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
-	retry, err := factorysession.RetryDispatchRequestFromAPI(req)
-	if err == nil {
-		retry, err = s.sessionRequests.PrepareRetryDispatch(retry)
+
+	if s.sessionsRoot != nil {
+		result, invokeErr := s.sessionsRoot.RetryDurableFactorySessionDispatch(r.Context(), string(sessionID), retry)
+		s.finishRootLifecycleControl(w, string(sessionID), "retry-dispatch", result, invokeErr)
+		return
 	}
-	if err != nil {
-		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+
+	lifecycle, ok := s.requireDurableSessionLifecycleAPI(w)
+	if !ok {
 		return
 	}
 
@@ -690,12 +703,7 @@ func (s *Server) handleDurableInterruptDispatchControl(
 		return
 	}
 
-	lifecycle, ok := s.requireDurableSessionLifecycleAPI(w)
-	if !ok {
-		return
-	}
-
-	req, err := decodeOptionalInterruptDispatchRequest(r.Body)
+	interrupt, err := decodeInterruptDispatchRequest(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -704,12 +712,15 @@ func (s *Server) handleDurableInterruptDispatchControl(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
-	interrupt, err := factorysession.InterruptDispatchRequestFromAPI(req)
-	if err == nil {
-		interrupt, err = s.sessionRequests.PrepareInterruptDispatch(interrupt)
+
+	if s.sessionsRoot != nil {
+		result, invokeErr := s.sessionsRoot.InterruptDurableFactorySessionDispatch(r.Context(), string(sessionID), interrupt)
+		s.finishRootLifecycleControl(w, string(sessionID), "interrupt-dispatch", result, invokeErr)
+		return
 	}
-	if err != nil {
-		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+
+	lifecycle, ok := s.requireDurableSessionLifecycleAPI(w)
+	if !ok {
 		return
 	}
 

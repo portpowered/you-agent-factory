@@ -659,14 +659,6 @@
       "name": "TestRuntimeAPI_CompilesWithFunctionalLongTag"
     },
     {
-      "file": "runtime_api/api_generated_schema_deserialization_smoke_test.go",
-      "name": "TestGeneratedSchemaDeserializationSmoke_FileAndRecordedTransportRejectRetiredFieldsAtSameBoundaryStage"
-    },
-    {
-      "file": "runtime_api/api_generated_schema_deserialization_smoke_test.go",
-      "name": "TestGeneratedSchemaDeserializationSmoke_FileHTTPAndReplayTransportsStayAligned"
-    },
-    {
       "file": "runtime_api/api_generated_smoke_test.go",
       "name": "TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent"
     },
