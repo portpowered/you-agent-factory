@@ -649,9 +649,10 @@ response-stream output.
 - Packaged topic smoke markers:
   `tests/functional/smoke/cli_docs_smoke_test.go` (`run` topic)
 - Built-executable coverage for this lane is limited to operating-system exit
-  status in `tests/functional/acceptance/output_outcomes_test.go` and
-  `tests/functional/acceptance/invalid_quiet_outcomes_test.go`; stdout, stderr,
-  and event-presentation behavior belongs to the canonical raw packages above.
+  status in `tests/functional/acceptance/invalid_quiet_outcomes_test.go`;
+  stdout, stderr, and event-presentation behavior belongs to the canonical raw
+  packages above, with terminal failure stream contracts owned by
+  `tests/functional/transport/cli/process/stdout_stderr_test.go`.
 
 **Maintainer verification commands**
 
@@ -1605,8 +1606,9 @@ response-stream output.
   operator-default resolution and named `@you/goal` mock-worker runs; invalid-goal
   process exit status and unrelated invalid-topology guidance are asserted in
   `tests/functional/acceptance/invalid_quiet_outcomes_test.go`, while terminal
-  invocation failure exit status is asserted in
-  `tests/functional/acceptance/output_outcomes_test.go`. Presentation bytes and
+  invocation failure stderr diagnostics, non-zero exit status, and absence of a
+  false primary result on stdout are asserted in
+  `tests/functional/transport/cli/process/stdout_stderr_test.go`. Presentation bytes and
   event shapes are intentionally owned by the raw Factory-run suites. Local-model
   invoke and goal-repeat customer outcomes are asserted in
   `tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go` via

@@ -50,7 +50,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIEmptyRequiredStdinFailsWithoutDispatch` verifies EOF/empty input is
     rejected before any external worker effect.
 
-- [ ] `tests/functional/transport/cli/process/stdout_stderr_test.go`
+- [x] `tests/functional/transport/cli/process/stdout_stderr_test.go`
   - `TestCLISuccessWritesPrimaryResultOnlyToStdout` verifies success data is
     not mixed with diagnostics.
   - `TestCLIFailureWritesDiagnosticToStderr` verifies stdout does not contain a
