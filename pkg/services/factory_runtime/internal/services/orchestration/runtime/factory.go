@@ -31,7 +31,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/workstationpool"
 )
 
 const defaultRuntimeBufferSize = 64
@@ -56,7 +55,7 @@ type factoryImpl struct {
 	dispatchFlow *dispatchPlanningResultHook
 	dispatchPlan dispatchplanning.Service
 	checkpointRecovery checkpointrecovery.Service
-	workers      workstationpool.WorkstationPoolBoundary
+	workers      workers.WorkstationPoolBoundary
 	eventHistory recordings.RuntimeLedger
 	state        interfaces.FactoryState
 	startedAt    time.Time
@@ -80,7 +79,7 @@ type runtimeConfig struct {
 	net                       *state.Net
 	scheduler                 scheduler.Scheduler
 	workerExecutors           map[string]workers.WorkerExecutor
-	workerService             workstationpool.WorkstationExecutionService
+	workerService             workers.WorkstationExecutionService
 	runtimeConfig             interfaces.RuntimeDefinitionLookup
 	workflowContext           *factory_context.FactoryContext
 	runtimeMode               interfaces.RuntimeMode
@@ -115,7 +114,7 @@ func New(
 	net *state.Net,
 	runtimeScheduler scheduler.Scheduler,
 	workerExecutors map[string]workers.WorkerExecutor,
-	workerService workstationpool.WorkstationExecutionService,
+	workerService workers.WorkstationExecutionService,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	workflowContext *factory_context.FactoryContext,
 	runtimeMode interfaces.RuntimeMode,
@@ -414,9 +413,9 @@ func configureRuntimeDispatch(
 ) (
 	*dispatchPlanningResultHook,
 	dispatchplanning.Service,
-	workstationpool.WorkstationPoolBoundary,
+	workers.WorkstationPoolBoundary,
 ) {
-	workersBoundary := workstationpool.NewWorkstationPoolBoundary(workstationpool.WorkstationPoolBoundaryConfig{
+	workersBoundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
 		Service:    cfg.workerService,
 		Executors:  cfg.workerExecutors,
 		RouteNames: runtimeWorkstationRouteNames(cfg.net, cfg.workerExecutors),
@@ -447,7 +446,7 @@ func newFactoryImpl(
 	dispatchFlow *dispatchPlanningResultHook,
 	dispatchPlan dispatchplanning.Service,
 	checkpointRecovery checkpointrecovery.Service,
-	workersBoundary workstationpool.WorkstationPoolBoundary,
+	workersBoundary workers.WorkstationPoolBoundary,
 	eventHistory recordings.RuntimeLedger,
 ) *factoryImpl {
 	return &factoryImpl{

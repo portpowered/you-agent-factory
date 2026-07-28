@@ -85,9 +85,24 @@ fold or delete them.
 | `worker_vocabulary_boundary_test.go` | keep | Post-inventory boundary test proving peer consumers import Workers root vocabulary instead of Factory Definitions contracts. |
 | `worker_vocabulary_contract.go` | keep | Package-level documentation anchor for Workers-owned peer execution and diagnostics vocabulary. |
 | `workstation_contracts.go` | keep | Workstation pool lifecycle contracts, runtime-build vocabulary, and `Service` workstation methods at the thin root. |
-| `workstation_pool_boundary.go` | *(folded)* | Moved to `internal/services/workstations/poolboundary` during story 003; peers use `workstationpool` shim until story 005 retarget. |
+| `workstation_pool_boundary_contracts.go` | keep | Published pool-boundary contracts and adapters for Factory Runtime dispatch planning through the thin root. |
+| `workstation_pool_boundary_impl.go` | temporary documented keep | Pool-boundary implementation colocated at root to avoid workers↔poolboundary import cycles until DEL-WRK can relocate it behind a cycle-free bridge. |
+| `workstation_pool_boundary_impl_test.go` | keep | Root-contract characterization test for pool-boundary binding capacity defaults. |
+| `workstation_pool_boundary.go` | *(folded)* | Moved to `internal/services/workstations/poolboundary` during story 003; peers use published root contracts after story 005 retarget. |
 | `workstation_pool_boundary_test.go` | *(folded)* | Moved to internal poolboundary during story 003. |
 | `workstation_result_contract_test.go` | keep | Root-contract characterization test for `WorkstationResult` round-trip through published Workers root types. |
+
+## Keep vs move summary (after story 005)
+
+| Classification | Count | Target after CLN-WRK-CONTRACT-ROOTS |
+| --- | ---: | --- |
+| **keep** | 30 | Remain at `pkg/services/workers/` as thin root contracts |
+| **move-to-runners** | 0 | Folded under `pkg/services/workers/internal/services/runners/runner` (story 002) |
+| **move-to-workstations** | 0 | Folded under `pkg/services/workers/internal/services/workstations` (story 003) |
+| **move-to-runtime_assembly** | 0 | — |
+| **move-to-workers/internal** | 0 | Folded under `pkg/services/workers/internal` (story 004) |
+| **temporary documented keep** | 1 | `workstation_pool_boundary_impl.go` until DEL-WRK cycle-free relocation |
+| **Total** | **31** | 30 keep + 1 temporary documented keep |
 
 ## Keep vs move summary (after story 004)
 

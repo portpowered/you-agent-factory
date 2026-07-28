@@ -43,6 +43,9 @@ var WorkersThinRootContractFiles = []string{
 	"worker_vocabulary_boundary_test.go",
 	"worker_vocabulary_contract.go",
 	"workstation_contracts.go",
+	"workstation_pool_boundary_contracts.go",
+	"workstation_pool_boundary_impl.go",
+	"workstation_pool_boundary_impl_test.go",
 	"workstation_result_contract_test.go",
 }
 
@@ -126,4 +129,4 @@ func IsWorkersPrivateRootContractMoveDestination(destination string) bool {
 
 // WorkersRootContractBaselineFileCount is the inventoried root .go file count
 // before CLN-WRK-CONTRACT-ROOTS moves begin.
-const WorkersRootContractBaselineFileCount = 29
+const WorkersRootContractBaselineFileCount = 32

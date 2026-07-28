@@ -1,22 +1,21 @@
-package poolboundary
+package workers
 
 import (
 	"context"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type poolBoundaryTestExecutor struct{}
 
-func (poolBoundaryTestExecutor) Execute(context.Context, work.WorkDispatch) (workers.WorkResult, error) {
-	return workers.WorkResult{}, nil
+func (poolBoundaryTestExecutor) Execute(context.Context, work.WorkDispatch) (WorkResult, error) {
+	return WorkResult{}, nil
 }
 
 func TestWorkstationPoolBoundaryBindingsPreserveLegacyConcurrency(t *testing.T) {
 	boundary := NewWorkstationPoolBoundary(WorkstationPoolBoundaryConfig{
-		Executors:  map[string]workers.WorkerExecutor{"swe": poolBoundaryTestExecutor{}},
+		Executors:  map[string]WorkerExecutor{"swe": poolBoundaryTestExecutor{}},
 		RouteNames: []string{"swe"},
 		Async:      true,
 	})

@@ -16,7 +16,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/workstationpool"
 	"go.uber.org/zap"
 	"path/filepath"
 	"strings"
@@ -24,7 +23,7 @@ import (
 
 const defaultSessionID = "~default"
 
-type runtimeWorkstationService = workstationpool.WorkstationExecutionService
+type runtimeWorkstationService = workers.WorkstationExecutionService
 
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
 type RuntimeFactory struct {

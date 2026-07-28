@@ -10,7 +10,6 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/workstationpool"
 )
 
 // recordingRootBoundaryExecutor records Workers-root executor invocations so
@@ -34,14 +33,14 @@ func (executor *recordingRootBoundaryExecutor) Execute(
 	}, nil
 }
 
-func requireWorkersRootPoolBoundary(t *testing.T, impl *factoryImpl) workstationpool.WorkstationPoolBoundary {
+func requireWorkersRootPoolBoundary(t *testing.T, impl *factoryImpl) workers.WorkstationPoolBoundary {
 	t.Helper()
 	if impl.workers == nil {
 		t.Fatal("production runtime workers boundary is nil; pool execution regressed into Runtime")
 	}
-	boundary, ok := impl.workers.(workstationpool.WorkstationPoolBoundary)
+	boundary, ok := impl.workers.(workers.WorkstationPoolBoundary)
 	if !ok {
-		t.Fatalf("workers = %T, want workstationpool.WorkstationPoolBoundary", impl.workers)
+		t.Fatalf("workers = %T, want workers.WorkstationPoolBoundary", impl.workers)
 	}
 	return boundary
 }
@@ -179,7 +178,7 @@ func TestFactoryImpl_PlannedDispatchAcceptsWorkersResultThroughRuntimeRoot(t *te
 func TestWorkersRootPoolBoundaryAdmitsRuntimePlannedDispatchRequest(t *testing.T) {
 	executor := &recordingRootBoundaryExecutor{}
 	service := &testWorkstationBoundary{}
-	boundary := workstationpool.NewWorkstationPoolBoundary(workstationpool.WorkstationPoolBoundaryConfig{
+	boundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
 		Service:    service,
 		Executors:  map[string]workers.WorkerExecutor{"mock": executor},
 		RouteNames: []string{"Process", "mock", "t-process"},

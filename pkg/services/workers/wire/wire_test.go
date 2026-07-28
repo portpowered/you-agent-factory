@@ -15,7 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
-	"github.com/portpowered/infinite-you/pkg/services/workers/workstationpool"
 )
 
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
@@ -117,8 +116,8 @@ func TestWorkstationPoolAvailableThroughPublishedRootShim(t *testing.T) {
 		t.Fatalf("StartWorkstationPool() outcome = %q, want STARTED", started.Outcome)
 	}
 
-	boundary := workstationpool.NewWorkstationPoolBoundary(workstationpool.WorkstationPoolBoundaryConfig{
-		Service:    workstationpool.WorkstationExecutionServiceFromRoot(service),
+	boundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
+		Service:    workers.WorkstationExecutionServiceFromRoot(service),
 		RouteNames: []string{"review"},
 		Async:      true,
 	})

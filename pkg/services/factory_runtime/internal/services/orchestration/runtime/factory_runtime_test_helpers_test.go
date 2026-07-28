@@ -28,8 +28,7 @@ import (
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/workstationpool"
+	workerexecution 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type testFactoryOption func(*testFactoryConfig)
@@ -38,7 +37,7 @@ type testFactoryConfig struct {
 	net                       *state.Net
 	scheduler                 scheduler.Scheduler
 	workerExecutors           map[string]workers.WorkerExecutor
-	workerService             workstationpool.WorkstationExecutionService
+	workerService             workers.WorkstationExecutionService
 	runtimeConfig             interfaces.RuntimeDefinitionLookup
 	workflowContext           *factory_context.FactoryContext
 	runtimeMode               interfaces.RuntimeMode
@@ -111,7 +110,7 @@ func withWorkerExecutor(workerType string, executor workers.WorkerExecutor) test
 	}
 }
 
-func withWorkerService(service workstationpool.WorkstationExecutionService) testFactoryOption {
+func withWorkerService(service workers.WorkstationExecutionService) testFactoryOption {
 	return func(cfg *testFactoryConfig) { cfg.workerService = service }
 }
 

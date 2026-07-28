@@ -59,6 +59,9 @@ func TestWorkersThinRootContractFiles(t *testing.T) {
 		"worker_vocabulary_boundary_test.go",
 		"worker_vocabulary_contract.go",
 		"workstation_contracts.go",
+		"workstation_pool_boundary_contracts.go",
+		"workstation_pool_boundary_impl.go",
+		"workstation_pool_boundary_impl_test.go",
 		"workstation_result_contract_test.go",
 	}
 	if !slices.Equal(ownershipinventory.WorkersThinRootContractFiles, want) {
