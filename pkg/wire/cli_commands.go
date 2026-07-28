@@ -11,7 +11,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
@@ -146,7 +146,7 @@ func provideEffectiveFactoryCatalogDiscovery(
 	files factorydefinitions.AuthoredLayoutReaderFileSystem,
 	packaged []factorydefinitions.PackagedDefinition,
 ) (factorydefinitions.EffectiveFactoryCatalogDiscovery, error) {
-	return factorydefinitionsservice.NewEffectiveCatalogDiscovery(
+	return factorydefinitionswire.NewEffectiveCatalogDiscovery(
 		catalog.ListNamedFactories,
 		files.ReadFile,
 		packaged,
@@ -174,13 +174,13 @@ func provideEffectiveFactoryCatalogOperation(
 	discovery factorydefinitions.EffectiveFactoryCatalogDiscovery,
 	normalize factorydefinitions.EffectiveFactoryDefinitionNormalizer,
 ) (factorydefinitions.EffectiveFactoryCatalogOperation, error) {
-	return factorydefinitionsservice.NewEffectiveCatalog(discovery, normalize)
+	return factorydefinitionswire.NewEffectiveCatalog(discovery, normalize)
 }
 
 func provideEffectiveFactoryDefinitionsService(
 	catalog factorydefinitions.EffectiveFactoryCatalogOperation,
-) (*factorydefinitionsservice.EffectiveCatalogService, error) {
-	return factorydefinitionsservice.NewEffectiveCatalogService(catalog)
+) (*factorydefinitionswire.EffectiveCatalogService, error) {
+	return factorydefinitionswire.NewEffectiveCatalogService(catalog)
 }
 
 func provideCurrentFactoryPointerReader(
@@ -190,20 +190,20 @@ func provideCurrentFactoryPointerReader(
 }
 
 func provideListFactoriesOperation(
-	definitions *factorydefinitionsservice.EffectiveCatalogService,
+	definitions *factorydefinitionswire.EffectiveCatalogService,
 	readCurrent factorydefinitions.CurrentFactoryPointerReader,
 ) cli.ListFactoriesOperation {
 	return factorycli.NewList(definitions.ListEffectiveFactories, readCurrent)
 }
 
 func provideFactoryNameCompletionOperation(
-	definitions *factorydefinitionsservice.EffectiveCatalogService,
+	definitions *factorydefinitionswire.EffectiveCatalogService,
 ) cobracompletion.FactoryNamesOperation {
 	return cobracompletion.NewFactoryNames(definitions.ListEffectiveFactories)
 }
 
 func provideSelectedFactorySignatureCompletionOperation(
-	definitions *factorydefinitionsservice.EffectiveCatalogService,
+	definitions *factorydefinitionswire.EffectiveCatalogService,
 ) (cobracompletion.SelectedFactorySignatureOperation, error) {
 	manifest, err := generated.RunSubmitFamilyManifest()
 	if err != nil {

@@ -708,7 +708,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",
-      "minimum": 61.50
+      "exception": {
+        "kind": "measurement",
+        "justification": "Transitional compile shim; root composition now constructs through factory_definitions/wire and implementation coverage lives under factory_definitions/internal and factory_definitions/wire.",
+        "owner": "factory-definition-maintainers",
+        "deadline": "2027-07-15",
+        "removalGate": "DEL-DEF-RESIDUAL deletes this transitional public package path."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture",
