@@ -1015,38 +1015,6 @@
       "name": "TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree"
     },
     {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIAmbiguousPromptAndStdinFailsBeforeRuntimeStartup"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLICleanInvocationStdoutRemainsPipeableAcrossRuns"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIFailureWritesNoSuccessPayloadToStdout"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIRejectsConflictingPositionalAndStdinInput"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIStdinOnlyCleanInvocationStdoutRemainsPipeable"
-    },
-    {
-      "file": "smoke/cli_factory_prompt_run_smoke_test.go",
-      "name": "TestFactoryPromptRun_RealCLIWritesPrimaryResultFromStdin"
-    },
-    {
-      "file": "smoke/cli_named_deep_research_smoke_test.go",
-      "name": "TestNamedDeepResearchCLI_DefaultInvocationReturnsLeadSynthesis"
-    },
-    {
-      "file": "smoke/cli_named_deep_research_smoke_test.go",
-      "name": "TestNamedDeepResearchCLI_InvokesConfiguredBoundedResearchWithApprovedFlags"
-    },
-    {
       "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
       "name": "TestNamedGoalInvocationParity_EmptyInputRejectedWithStableCode"
     },
@@ -1071,62 +1039,6 @@
       "name": "TestNamedGoalInvocationParity_UnresolvedPrimaryResultReportsStableFailure"
     },
     {
-      "file": "smoke/cli_named_goal_operator_controls_smoke_test.go",
-      "name": "TestNamedGoalOperatorControls_ClIPauseResumeDrainsBufferedGoalsInOrder"
-    },
-    {
-      "file": "smoke/cli_named_goal_operator_controls_smoke_test.go",
-      "name": "TestNamedGoalOperatorControls_InterruptedGoalInspectSurfacesDispatchAndStopSummary"
-    },
-    {
-      "file": "smoke/cli_named_goal_operator_controls_smoke_test.go",
-      "name": "TestNamedGoalOperatorControls_PauseBuffersSubmitUntilResume"
-    },
-    {
-      "file": "smoke/cli_named_goal_operator_controls_smoke_test.go",
-      "name": "TestNamedGoalOperatorControls_PauseResumeRecordsLifecycleControlEventsForReplay"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_AcceptedCompletesWithPrimaryResult"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_ClassifierNonSuccessOutcomesSurfaceDistinctStates"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_InterruptedSuppressesSuccessPrimaryResult"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_ReworkLoopsBackThenCompletesWithGoalContext"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_StructuredUnknownDecisionRoutesToFailed"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_UnknownClassifierLabelRoutesToFailed"
-    },
-    {
-      "file": "smoke/cli_named_goal_run_smoke_test.go",
-      "name": "TestNamedGoalRun_RealCLICompletesBatchInvocationWithPrimaryResultOnStdout"
-    },
-    {
-      "file": "smoke/cli_named_goal_run_smoke_test.go",
-      "name": "TestNamedGoalRun_RealCLIExitsAfterBatchCompletionWithoutContinuousMode"
-    },
-    {
-      "file": "smoke/cli_named_quorum_invocation_smoke_test.go",
-      "name": "TestNamedQuorumRun_RealCLIAcceptsRoleFlagsAndReturnsOneMergeResult"
-    },
-    {
-      "file": "smoke/cli_named_review_invocation_smoke_test.go",
-      "name": "TestNamedReviewInvocationVariants_RealCLIRequireApprovalAfterRejection"
-    },
-    {
       "file": "smoke/config_driven_execution_test.go",
       "name": "TestConfigDrivenExecution_AddWorkType"
     },
@@ -1141,10 +1053,6 @@
     {
       "file": "smoke/guarded_loop_breaker_test.go",
       "name": "TestIntegrationSmoke_GuardedLoopBreakerExampleRejectsRetiredExhaustionRulesAtBoundary"
-    },
-    {
-      "file": "smoke/service_config_override_alignment_long_test.go",
-      "name": "TestServiceConfigOverrideAlignment_CustomerProcessScriptCommandRunner"
     },
     {
       "file": "smoke/service_lifecycle_smoke_long_test.go",
@@ -1173,82 +1081,6 @@
     {
       "file": "smoke/stateless_loaded_config_smoke_long_test.go",
       "name": "TestStatelessExecutionSmoke_LoadedConfigDrivesExecution"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestBackendCoverageAliasesSmoke_RedirectToIndependentLanes"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestBackendVerificationLaneScriptSmoke_PreservesFailureExitAndLog"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestBackendVerificationLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestConcurrentUIVerificationLanesScriptSmoke_DoesNotWaitForDetachedLogHandle"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestConcurrentUIVerificationLanesScriptSmoke_FailureReportsExactLaneRerun"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestConcurrentUIVerificationLanesScriptSmoke_RunsBothOwnedLanesConcurrently"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestLongTestsCommandSmoke_FailureReportsExactSpecialtyLaneRerun"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestUICoverageCommandSmoke_RunsPackageCoverageThenReplayCheck"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestUIPackageCoverageCommandSmoke_InvokesPackageOwnedCoverageScript"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyFastCommandSmoke_ContractFailureStopsLaterSuites"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyFastCommandSmoke_FailureReportsOwnedSuiteAndRerunCommand"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyPRCommandSmoke_UsesRequiredLanesOnce"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyPRInferenceCommandSmoke_FailureReportsOwnedRerunCommand"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyPRInferenceCommandSmoke_RunsSingleNamedRegressionOnly"
-    },
-    {
-      "file": "smoke/verify_fast_command_smoke_test.go",
-      "name": "TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers"
     },
     {
       "file": "work/recordings/recordings_read_test.go",

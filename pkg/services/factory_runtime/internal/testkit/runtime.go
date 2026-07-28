@@ -1,5 +1,5 @@
-// Package testkit exposes Factory Runtime fixture construction without placing
-// concrete implementation constructors at the service root.
+// Package testkit exposes Factory Runtime fixture construction under the owner
+// internal tree so tests do not depend on a public service-root test-support package.
 package testkit
 
 import (

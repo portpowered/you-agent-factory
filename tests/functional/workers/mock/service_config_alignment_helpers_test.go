@@ -1,55 +1,53 @@
-package smoke
+package mock
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// portos:func-length-exception owner=agent-factory reason=shared-command-runner-smoke review=2026-07-22 removal=split-script-request-and-provider-request-assertions-before-next-command-runner-alignment-change
-func TestServiceConfigOverrideAlignment_CustomerProcessSharesScriptAndProviderCommandRunner(t *testing.T) {
-	dir := scaffoldSharedCommandRunnerFactory(t)
-	runner := testutil.NewProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: []byte("script-output")},
-		platformprocess.CommandResult{
-			Stdout: []byte("provider-output COMPLETE"),
-			Stderr: []byte(`{"event":"session.created","session_id":"sess_mixed_command"}`),
+func twoStageServicePipelineConfig() map[string]any {
+	return map[string]any{
+		"workTypes": []map[string]any{
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "processing", "type": "PROCESSING"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
 		},
-	)
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "run", "--dir", dir, "--no-record",
-	})
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		ProviderCommandRunner: runner,
-		ScriptCommandRunner:   runner,
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
+		"workers": []map[string]string{
+			{"name": "worker-a"},
+			{"name": "worker-b"},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":      "step-one",
+				"worker":    "worker-a",
+				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+				"outputs":   []map[string]string{{"workType": "task", "state": "processing"}},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+			},
+			{
+				"name":      "step-two",
+				"worker":    "worker-b",
+				"inputs":    []map[string]string{{"workType": "task", "state": "processing"}},
+				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+			},
+		},
 	}
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf(
-			"Process.Execute() error = %v; stdout=%q stderr=%q",
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
-	}
-
-	requests := runner.Requests()
-	if len(requests) != 2 {
-		t.Fatalf("shared command runner request count = %d, want 2", len(requests))
-	}
-
-	assertSharedCommandRunnerScriptRequest(t, dir, requests[0])
-	assertSharedCommandRunnerProviderRequest(t, dir, requests[1])
 }
 
 func scaffoldSharedCommandRunnerFactory(t *testing.T) string {
@@ -96,7 +94,7 @@ func assertSharedCommandRunnerScriptRequest(t *testing.T, dir string, scriptReq 
 	if !reflect.DeepEqual(scriptReq.Args, []string{"mixed-command-smoke-work", "script-input"}) {
 		t.Fatalf("script args = %v, want rendered work ID and payload args", scriptReq.Args)
 	}
-	if scriptReq.WorkDir != support.ResolvedRuntimePath(dir, "/tmp/script-command-smoke") {
+	if canonicalRuntimePath(scriptReq.WorkDir) != canonicalRuntimePath(support.ResolvedRuntimePath(dir, "/tmp/script-command-smoke")) {
 		t.Fatalf("script work dir = %q, want %q", scriptReq.WorkDir, support.ResolvedRuntimePath(dir, "/tmp/script-command-smoke"))
 	}
 	if !containsEnv(scriptReq.Env, "SCRIPT_ENV=script-value") {
@@ -121,7 +119,7 @@ func assertSharedCommandRunnerProviderRequest(t *testing.T, dir string, provider
 	if !strings.Contains(string(providerReq.Stdin), "script-output") {
 		t.Fatalf("provider stdin = %q, want it to include script output", string(providerReq.Stdin))
 	}
-	if providerReq.WorkDir != support.ResolvedRuntimePath(dir, "/tmp/provider-command-smoke") {
+	if canonicalRuntimePath(providerReq.WorkDir) != canonicalRuntimePath(support.ResolvedRuntimePath(dir, "/tmp/provider-command-smoke")) {
 		t.Fatalf("provider work dir = %q, want %q", providerReq.WorkDir, support.ResolvedRuntimePath(dir, "/tmp/provider-command-smoke"))
 	}
 	if !containsEnv(providerReq.Env, "PROVIDER_ENV=provider-value") {
@@ -136,4 +134,30 @@ func containsEnv(env []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func canonicalRuntimePath(value string) string {
+	if value == "" {
+		return ""
+	}
+
+	cleaned := filepath.Clean(value)
+	current := cleaned
+	var suffix []string
+	for {
+		if _, err := os.Stat(current); err == nil {
+			if resolved, err := filepath.EvalSymlinks(current); err == nil && resolved != "" {
+				parts := append([]string{resolved}, suffix...)
+				return filepath.Join(parts...)
+			}
+			break
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+		suffix = append([]string{filepath.Base(current)}, suffix...)
+		current = parent
+	}
+	return cleaned
 }

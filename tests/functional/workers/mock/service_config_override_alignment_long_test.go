@@ -1,6 +1,6 @@
 //go:build functionallong
 
-package smoke
+package mock
 
 import (
 	"testing"
@@ -11,6 +11,9 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestServiceConfigOverrideAlignment_CustomerProcessScriptCommandRunner proves
+// customer-process script execution routes through the replaced ScriptCommandRunner
+// edge for legacy fixture script workers.
 func TestServiceConfigOverrideAlignment_CustomerProcessScriptCommandRunner(t *testing.T) {
 	support.SkipLongFunctional(t, "slow service-harness script command-runner alignment sweep")
 

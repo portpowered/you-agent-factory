@@ -875,7 +875,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_runtime/testkit/runtime.go",
+      "filePath": "pkg/services/factory_runtime/internal/testkit/runtime.go",
       "symbol": "PetriMarking",
       "shape": "raw marking",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",

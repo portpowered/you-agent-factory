@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryruntimetestkit "github.com/portpowered/infinite-you/pkg/services/factory_runtime/testkit"
+	factoryruntimetestkit "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/testkit"
 )
 
 //go:embed testdata/deep_research.workflow.js
