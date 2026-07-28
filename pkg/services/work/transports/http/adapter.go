@@ -45,3 +45,15 @@ func (a *Adapter) invokeListWork(
 	}
 	return a.root.ListWork(ctx, sessionID, options)
 }
+
+// invokeGetWork forwards get requests through the accepted Work root.
+func (a *Adapter) invokeGetWork(
+	ctx context.Context,
+	sessionID string,
+	workID string,
+) (work.ReadModel, error) {
+	if a == nil || a.root == nil {
+		return work.ReadModel{}, errors.New("work service is required")
+	}
+	return a.root.GetWork(ctx, sessionID, workID)
+}

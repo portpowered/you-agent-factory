@@ -12,6 +12,7 @@ type rootFake struct {
 	work.Service
 
 	listWork func(context.Context, string, work.ListOptions) (work.ListResult, error)
+	getWork  func(context.Context, string, string) (work.ReadModel, error)
 }
 
 func (fake *rootFake) ListWork(
@@ -23,4 +24,15 @@ func (fake *rootFake) ListWork(
 		return fake.listWork(ctx, sessionID, options)
 	}
 	return work.ListResult{}, work.ErrWorkNotFound
+}
+
+func (fake *rootFake) GetWork(
+	ctx context.Context,
+	sessionID string,
+	workID string,
+) (work.ReadModel, error) {
+	if fake.getWork != nil {
+		return fake.getWork(ctx, sessionID, workID)
+	}
+	return work.ReadModel{}, work.ErrWorkNotFound
 }

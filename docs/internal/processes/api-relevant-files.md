@@ -50,7 +50,11 @@ Use this map when changing the public REST contract.
   `go run ./cmd/ownershipinventoryfreeze`, and add coverage floors in
   `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
   `docs/internal/baselines/go-functional-coverage-package-minimums.json` when
-  introducing new adapter packages.
+  introducing new adapter packages. Work list/get decode and JSON encoding live
+  in `read_mapping.go` and `handlers_read.go`; map query params through
+  `ListOptionsFromAPI` + `work.NormalizeList`, invoke `ListWork` / `GetWork` on
+  the accepted root, and encode detached `work.ReadModel` values through
+  `WorkReadModelToAPI` / `ListWorkResponseToAPI`.
 - Factory Definitions HTTP decoding, generated-contract mapping, service
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_definitions/transports/http`. The top-level
