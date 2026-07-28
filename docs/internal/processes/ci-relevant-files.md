@@ -352,6 +352,17 @@
   `transport` and subsection `cli/output` from the path. Every top-level `Test*`
   needs a customer-readable Go doc so `functionaltestmetadata` stays
   viz-compatible.
+  Work-owned unary `you submit` contract functional coverage belongs in
+  `tests/functional/work/transports/cli/submit/unary_contract/unary_contract_test.go`:
+  drive `support.BuildProcess` + `Process.Execute` with public `you submit --json`,
+  prove file-backed and stdin (`--payload -`) payloads reach Work with public
+  acknowledgment and session-scoped list observations, prove omitted `--session`
+  targets `~default` while explicit `--session <id>` scopes correctly, and prove
+  structured backend rejection preserves only public typed failure markers through
+  a controlled `httptest` edge. Catalog metadata infers domain `work` and
+  subsection `transports/cli/submit/unary_contract` from the path. Every top-level
+  `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
   CLI positional parameter values functional coverage belongs in
   `tests/functional/transport/cli/parameters/positional_values_test.go`: prove
   one `you run --factory` positional prompt with spaces and Unicode survives on

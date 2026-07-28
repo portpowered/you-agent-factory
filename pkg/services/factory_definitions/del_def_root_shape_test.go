@@ -42,6 +42,7 @@ var definitionsInternalSubservices = []string{
 	"validation",
 	"snapshots_portability",
 	"distribution",
+	"invocation_policy",
 }
 
 func TestDelDefRootShape_CompletionInvariants(t *testing.T) {

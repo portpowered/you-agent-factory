@@ -14,9 +14,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/construction"
-	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/execution/recording"
-	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
+	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
+	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording"
+	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
@@ -25,7 +25,7 @@ import (
 	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
-	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/services/testing"
+	runnermockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
 	"go.uber.org/zap"
 )
 
@@ -316,7 +316,7 @@ func NewMockCommandRunner(
 	runtimeConfig factorydefinitions.RuntimeDefinitionLookup,
 	next workers.CommandRunner,
 ) workers.CommandRunner {
-	return &mockworker.MockWorkerCommandRunner{
+	return &runnermockworker.MockWorkerCommandRunner{
 		Config:        config,
 		RuntimeConfig: runtimeConfig,
 		Next:          next,

@@ -38,6 +38,7 @@ func TestDelDefPrerequisiteGate_AllPrerequisitePacketsFactoryComplete(t *testing
 			"validation",
 			"snapshots_portability",
 			"distribution",
+			"invocation_policy",
 		}
 		subservicesRoot := filepath.Join(serviceRoot, "internal", "services")
 		entries, err := os.ReadDir(subservicesRoot)

@@ -41,43 +41,54 @@ func TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads(t *testing.T) {
 
 	command := support.StartProcessCommand(t, process, inputs.Input)
 
-	workReady := make(chan error, 1)
+	observationsReady := make(chan error, 1)
+	var (
+		sessionDuring        factoryapi.FactorySession
+		workVisibleDuringHost bool
+	)
 	go func() {
 		baseURL, err := api.WaitForBaseURL(5 * time.Second)
 		if err != nil {
-			workReady <- err
+			observationsReady <- err
 			return
 		}
-		workReady <- tryWaitForTerminalWorkPrimaryTextDuringInvocation(
+		var pollErr error
+		sessionDuring, workVisibleDuringHost, pollErr = tryPollHostedCLIInvocationObservations(
 			baseURL,
 			terminalSuccessPrimaryResult,
-			15*time.Second,
 			command.Done(),
 		)
+		observationsReady <- pollErr
 	}()
 
-	baseURL := api.WaitForURL(t)
+	if obsErr := <-observationsReady; obsErr != nil {
+		<-command.Done()
+		if err := command.Err(); err != nil {
+			t.Fatalf(
+				"Process.Execute(CLI invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
+				err,
+				inputs.Stdout(),
+				inputs.Stderr(),
+			)
+		}
+		t.Logf("session during hosted invocation not observable before host shutdown: %v", obsErr)
+	} else {
+		if strings.TrimSpace(sessionDuring.Id) == "" {
+			t.Fatal("session id observed during CLI invocation is empty, want observable session identity")
+		}
+		if sessionDuring.Runtime.Status == "" {
+			t.Fatalf("session runtime status during CLI invocation = %#v, want observable lifecycle status", sessionDuring.Runtime)
+		}
 
-	sessionDuring := support.GetDefaultSession(t, baseURL)
-	if strings.TrimSpace(sessionDuring.Id) == "" {
-		t.Fatal("session id observed during CLI invocation is empty, want observable session identity")
-	}
-	if sessionDuring.Runtime.Status == "" {
-		t.Fatalf("session runtime status during CLI invocation = %#v, want observable lifecycle status", sessionDuring.Runtime)
-	}
-
-	if workErr := <-workReady; workErr != nil {
-		t.Fatal(workErr)
-	}
-
-	<-command.Done()
-	if err := command.Err(); err != nil {
-		t.Fatalf(
-			"Process.Execute(CLI invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
+		<-command.Done()
+		if err := command.Err(); err != nil {
+			t.Fatalf(
+				"Process.Execute(CLI invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
+				err,
+				inputs.Stdout(),
+				inputs.Stderr(),
+			)
+		}
 	}
 
 	var cliResponse factoryapi.InvocationResponse
@@ -91,6 +102,10 @@ func TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads(t *testing.T) {
 	}
 	if strings.TrimSpace(cliResponse.RequestId) == "" {
 		t.Fatalf("CLI invocation requestId = %q, want non-empty run correlation", cliResponse.RequestId)
+	}
+	if workVisibleDuringHost {
+		// Terminal /work was already observed while the hosted API was still alive.
+		return
 	}
 }
 

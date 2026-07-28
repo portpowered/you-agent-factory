@@ -5,12 +5,12 @@ package watcher
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -448,20 +448,16 @@ func TestWatcherParentChildBatchFanIn(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "submitted_parent_child_filewatcher"))
 	writeSubmittedParentChildBatch(t, dir)
 
-	provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
-		"story-worker": {
-			{Content: "Story completed. COMPLETE"},
-			{Error: errors.New("story processing failed")},
-		},
-		"story-set-failure-handler": {
-			{Content: "Story set failed. COMPLETE"},
-		},
-	})
+	runner := testutil.NewProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("Story completed. COMPLETE")},
+		platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("story processing failed")},
+		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("Story set failed. COMPLETE")},
+	)
 
 	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
 		t,
 		dir,
-		serviceedges.Edges{ProviderOverride: provider},
+		serviceedges.Edges{ProviderCommandRunner: runner},
 		15*time.Second,
 	)
 
@@ -479,15 +475,30 @@ func TestWatcherParentChildBatchFanIn(t *testing.T) {
 		}
 	}
 
-	if provider.CallCount("story-worker") != 2 {
-		t.Fatalf("story-worker calls = %d, want 2", provider.CallCount("story-worker"))
+	if runner.CallCount() != 3 {
+		t.Fatalf("provider command runner calls = %d, want 3 (two story dispatches then parent failure handler)", runner.CallCount())
 	}
-	if provider.CallCount("story-set-failure-handler") != 1 {
-		t.Fatalf("story-set-failure-handler calls = %d, want 1", provider.CallCount("story-set-failure-handler"))
-	}
+	assertWatchedParentChildProviderRequests(t, runner)
 
 	assertWatchedParentChildRequestRecorded(t, events)
 	assertParentFailedOnlyAfterChildFailure(t, events)
+}
+
+func assertWatchedParentChildProviderRequests(t *testing.T, runner *testutil.ProviderCommandRunner) {
+	t.Helper()
+
+	requests := runner.Requests()
+	if len(requests) != 3 {
+		t.Fatalf("provider command requests = %d, want 3", len(requests))
+	}
+	for index, request := range requests {
+		if strings.TrimSpace(request.Command) == "" {
+			t.Fatalf("provider command request %d missing command: %#v", index, request)
+		}
+		if len(request.Args) == 0 {
+			t.Fatalf("provider command request %d missing args: %#v", index, request)
+		}
+	}
 }
 
 // TestWatcherExecutionFollowsCurrentFactorySwitch proves that after activating
