@@ -437,10 +437,55 @@ func TestNewServiceBindsCodexAndClaudeFromCatalogWithoutEffects(t *testing.T) {
 	}
 }
 
-func TestNewRootRejectsMissingCatalog(t *testing.T) {
-	root, err := newRoot(nil, nil, nil, CursorPlatformDependencies{}, AgyPTYPlatformDependencies{})
-	if err == nil || root != nil {
-		t.Fatalf("newRoot(nil) = (%v, %v), want construction error", root, err)
+func TestNewServiceRejectsMissingRequiredConstructionPorts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		call func() (providers.Service, error)
+		want string
+	}{
+		{
+			name: "catalog",
+			call: func() (providers.Service, error) {
+				return newRoot(
+					nil,
+					nil,
+					nil,
+					CursorPlatformDependencies{},
+					AgyPTYPlatformDependencies{},
+				)
+			},
+			want: "construct Providers: catalog is required",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			service, err := test.call()
+			if err == nil {
+				t.Fatalf("NewService() error = nil, want missing %s construction port", test.name)
+			}
+			if service != nil {
+				t.Fatalf("NewService() = %#v, want nil service", service)
+			}
+			if !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("NewService() error = %q, want %q", err.Error(), test.want)
+			}
+		})
+	}
+
+	service, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v, want successful construction with required ports", err)
+	}
+	if service == nil {
+		t.Fatal("NewService() returned nil service, want non-nil providers.Service")
+	}
+	var root providers.Service = service
+	if root == nil {
+		t.Fatal("constructed root is not assignable to providers.Service")
 	}
 }
 

@@ -3,10 +3,13 @@
 // Wire performs construction only, returns the singular providers.Service root
 // interface, and starts no lifecycle components. Parent-private Catalog and
 // Execution owner wiring stays inside the owner service assembly path; peers
-// depend on Service rather than owner internals or construction ports.
+// depend on Service rather than owner internals or construction ports. Missing
+// required construction ports fail with a deterministic construction error and
+// a nil service.
 package wire
 
 import (
+	"fmt"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -120,6 +123,8 @@ func WithAgyPTY(platform AgyPTYPlatformDependencies) Option {
 
 // NewService constructs one inert Providers root over sibling Catalog and
 // Execution capabilities sharing the same private catalog identity authority.
+// Missing required composition inputs fail with a deterministic construction
+// error and a nil service.
 func NewService(options ...Option) (providers.Service, error) {
 	var config wireOptions
 	for _, option := range options {
@@ -147,6 +152,9 @@ func newRoot(
 	cursorPlatform CursorPlatformDependencies,
 	agyPTYPlatform AgyPTYPlatformDependencies,
 ) (providers.Service, error) {
+	if catalogService == nil {
+		return nil, fmt.Errorf("construct Providers: catalog is required")
+	}
 	if workersCommandRunner == nil && commandRunner != nil {
 		workersCommandRunner = workerprocess.AdaptCommandRunner(commandRunner)
 	}
