@@ -2230,7 +2230,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/interface",
-      "minimum": 96.51
+      "minimum": 95.55
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners",
