@@ -1419,6 +1419,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/quorum",
+      "scenario": "TestPackagedQuorumRequiredInputCompletes",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/quorum",
+      "scenario": "TestPackagedQuorumOptionalMemberSettingsReachWorkers",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/quorum",
+      "scenario": "TestPackagedQuorumInsufficientSuccessfulMembersFails",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/packaged/subagent/invocation_test.go",
       "package": "you-agent-factory/tests/functional/factory/packaged/subagent",
       "scenario": "TestPackagedSubagentChildFailureReturnsStableFailure",
