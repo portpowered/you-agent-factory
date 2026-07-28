@@ -47,7 +47,9 @@ type Service interface {
 type Dependencies struct {
 	Validator            factorydefinitions.Validator
 	MapInput             factorydefinitions.FactoryLayoutPayloadMapper
-	Prepare              factorydefinitions.FactoryLayoutPayloadPreparer
+	DecodeFactory        factorydefinitions.FactoryConfigJSONDecoder
+	NormalizeAuthored    func(*factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error)
+	EncodeFactory        func(*factorydefinitions.FactoryConfig) ([]byte, error)
 	Write                func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error
 	Validate             func(string) error
 	Flatten              factorydefinitions.FactoryLayoutFlattener

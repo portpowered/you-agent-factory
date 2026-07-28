@@ -20,8 +20,14 @@ func NewService(deps authoringlayout.Dependencies) (authoringlayout.Service, err
 	if deps.MapInput == nil {
 		return nil, fmt.Errorf("construct Factory Definitions authoring_layout: payload mapper is required")
 	}
-	if deps.Prepare == nil {
-		return nil, fmt.Errorf("construct Factory Definitions authoring_layout: layout preparer is required")
+	if deps.DecodeFactory == nil {
+		return nil, fmt.Errorf("construct Factory Definitions authoring_layout: factory decoder is required")
+	}
+	if deps.NormalizeAuthored == nil {
+		return nil, fmt.Errorf("construct Factory Definitions authoring_layout: authored normalizer is required")
+	}
+	if deps.EncodeFactory == nil {
+		return nil, fmt.Errorf("construct Factory Definitions authoring_layout: factory encoder is required")
 	}
 	if deps.Write == nil {
 		return nil, fmt.Errorf("construct Factory Definitions authoring_layout: layout writer is required")

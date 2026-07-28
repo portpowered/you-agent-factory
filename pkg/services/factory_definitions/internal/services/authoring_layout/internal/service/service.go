@@ -2,18 +2,23 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
 )
 
 // Service is the private nested authoring_layout implementation behind the
 // CTR-DEF root authoring slice.
 type Service struct {
 	validator            factorydefinitions.Validator
+	validateDefinition   factorydefinitions.DefinitionValidationOperation
 	mapInput             factorydefinitions.FactoryLayoutPayloadMapper
-	prepare              factorydefinitions.FactoryLayoutPayloadPreparer
+	decodeFactory        factorydefinitions.FactoryConfigJSONDecoder
+	normalizeAuthored    func(*factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error)
+	encodeFactory        func(*factorydefinitions.FactoryConfig) ([]byte, error)
 	write                func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error
 	validate             func(string) error
 	flatten              factorydefinitions.FactoryLayoutFlattener
@@ -32,7 +37,9 @@ func New(deps authoringlayout.Dependencies) *Service {
 	}
 	if deps.Validator == nil ||
 		deps.MapInput == nil ||
-		deps.Prepare == nil ||
+		deps.DecodeFactory == nil ||
+		deps.NormalizeAuthored == nil ||
+		deps.EncodeFactory == nil ||
 		deps.Write == nil ||
 		deps.Validate == nil ||
 		deps.Flatten == nil ||
@@ -40,10 +47,14 @@ func New(deps authoringlayout.Dependencies) *Service {
 		deps.Directories == nil {
 		return nil
 	}
+	validateDefinition, _ := any(deps.Validator).(factorydefinitions.DefinitionValidationOperation)
 	return &Service{
 		validator:            deps.Validator,
+		validateDefinition:   validateDefinition,
 		mapInput:             deps.MapInput,
-		prepare:              deps.Prepare,
+		decodeFactory:        deps.DecodeFactory,
+		normalizeAuthored:    deps.NormalizeAuthored,
+		encodeFactory:        deps.EncodeFactory,
 		write:                deps.Write,
 		validate:             deps.Validate,
 		flatten:              deps.Flatten,
@@ -55,14 +66,53 @@ func New(deps authoringlayout.Dependencies) *Service {
 }
 
 func (s *Service) PrepareFactoryLayout(
-	_ context.Context,
-	_ factorydefinitions.PrepareFactoryLayoutRequest,
+	ctx context.Context,
+	request factorydefinitions.PrepareFactoryLayoutRequest,
 ) (factorydefinitions.PrepareFactoryLayoutResult, error) {
 	if err := s.requirePorts(); err != nil {
 		return factorydefinitions.PrepareFactoryLayoutResult{}, err
 	}
-	return factorydefinitions.PrepareFactoryLayoutResult{},
-		factorydefinitions.ErrMalformedFactoryLayoutPayload
+	if err := ctx.Err(); err != nil {
+		return factorydefinitions.PrepareFactoryLayoutResult{}, err
+	}
+	if s.validateDefinition == nil {
+		return factorydefinitions.PrepareFactoryLayoutResult{},
+			fmt.Errorf("Factory Definitions validation operation is required")
+	}
+
+	validationRequest, err := s.mapInput(request.Payload)
+	if err != nil {
+		return factorydefinitions.PrepareFactoryLayoutResult{}, err
+	}
+	validationRequest.Profile = factorydefinitions.ValidationProfilePrePersist
+	result, err := s.validateDefinition.ValidateDefinition(ctx, validationRequest)
+	if err != nil {
+		if errors.Is(err, factorydefinitions.ErrInvalidNamedFactory) {
+			return factorydefinitions.PrepareFactoryLayoutResult{}, err
+		}
+		return factorydefinitions.PrepareFactoryLayoutResult{},
+			fmt.Errorf("%w: %v", factorydefinitions.ErrInvalidNamedFactory, err)
+	}
+	if targets := result.BlockingTargets(); len(targets) != 0 {
+		return factorydefinitions.PrepareFactoryLayoutResult{},
+			factorydefinitions.NewBlockingFactoryLoadError(
+				factorydefinitions.ValidationResult{Targets: targets},
+			)
+	}
+
+	prepared, err := prepare.FactoryLayout(
+		ctx,
+		request.Name,
+		request.Payload,
+		s.validator,
+		s.decodeFactory,
+		s.normalizeAuthored,
+		s.encodeFactory,
+	)
+	if err != nil {
+		return factorydefinitions.PrepareFactoryLayoutResult{}, err
+	}
+	return factorydefinitions.PrepareFactoryLayoutResult{Prepared: *prepared}, nil
 }
 
 func (s *Service) FlattenFactoryLayout(
@@ -126,8 +176,14 @@ func (s *Service) requirePorts() error {
 	if s.mapInput == nil {
 		return fmt.Errorf("Factory Definitions payload mapper is required")
 	}
-	if s.prepare == nil {
-		return fmt.Errorf("Factory Definitions layout preparer is required")
+	if s.decodeFactory == nil {
+		return fmt.Errorf("Factory Definitions decoder is required")
+	}
+	if s.normalizeAuthored == nil {
+		return fmt.Errorf("Factory Definitions authored normalizer is required")
+	}
+	if s.encodeFactory == nil {
+		return fmt.Errorf("Factory Definitions encoder is required")
 	}
 	if s.write == nil {
 		return fmt.Errorf("Factory Definitions layout writer is required")

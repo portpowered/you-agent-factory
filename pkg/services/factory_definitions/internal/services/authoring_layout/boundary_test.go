@@ -131,6 +131,8 @@ func assertTypeExprUsesAllowedImports(t *testing.T, expr ast.Expr) {
 	switch typed := expr.(type) {
 	case *ast.StarExpr:
 		assertTypeExprUsesAllowedImports(t, typed.X)
+	case *ast.ArrayType:
+		assertTypeExprUsesAllowedImports(t, typed.Elt)
 	case *ast.Ident:
 		switch typed.Name {
 		case "context", "Context", "error", "string", "bool", "byte", "int", "int64":

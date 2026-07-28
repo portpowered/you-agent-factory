@@ -1,7 +1,6 @@
 package wire_test
 
 import (
-	"context"
 	"io/fs"
 	"strings"
 	"testing"
@@ -10,13 +9,18 @@ import (
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	authoringlayoutwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
 
 func completeDependencies() authoringlayout.Dependencies {
+	mapper := factorymapping.NewFactoryConfigMapper()
 	return authoringlayout.Dependencies{
 		Validator:            factoryvalidation.New(nil),
 		MapInput:             func([]byte) (factorydefinitions.DefinitionValidationRequest, error) { return factorydefinitions.DefinitionValidationRequest{}, nil },
-		Prepare:              func(context.Context, string, []byte, factorydefinitions.Validator) (*factorydefinitions.PreparedFactoryLayoutPayload, error) { return nil, nil },
+		DecodeFactory:        mapper.Expand,
+		NormalizeAuthored:    authoredmapping.AuthoredFactoryConfigForExpandedLayout,
+		EncodeFactory:        mapper.Flatten,
 		Write:                func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error { return nil },
 		Validate:             func(string) error { return nil },
 		Flatten:              func(string) ([]byte, error) { return nil, nil },
@@ -62,9 +66,19 @@ func TestNewService_RequiresExactInjectedPorts(t *testing.T) {
 			want:   "payload mapper is required",
 		},
 		{
-			name:   "layout preparer",
-			mutate: func(deps *authoringlayout.Dependencies) { deps.Prepare = nil },
-			want:   "layout preparer is required",
+			name:   "factory decoder",
+			mutate: func(deps *authoringlayout.Dependencies) { deps.DecodeFactory = nil },
+			want:   "factory decoder is required",
+		},
+		{
+			name:   "authored normalizer",
+			mutate: func(deps *authoringlayout.Dependencies) { deps.NormalizeAuthored = nil },
+			want:   "authored normalizer is required",
+		},
+		{
+			name:   "factory encoder",
+			mutate: func(deps *authoringlayout.Dependencies) { deps.EncodeFactory = nil },
+			want:   "factory encoder is required",
 		},
 		{
 			name:   "layout writer",
