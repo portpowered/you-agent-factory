@@ -91,6 +91,41 @@ func TestLogicalMovePreservesWorkPayloadAndLineage(t *testing.T) {
 	}
 }
 
+// TestLogicalMoveMultipleOutputsCreatesEveryExpectedWork proves that a
+// LOGICAL_MOVE workstation with multiple authored outputs creates Work in every
+// expected downstream workType:state pair without dropping any fan-out branch.
+func TestLogicalMoveMultipleOutputsCreatesEveryExpectedWork(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "logical_move_multi_output_dir"))
+	configureLogicalMoveWorkstation(t, dir, logicalMoveRouterWorkstation)
+	testutil.WriteSeedFile(t, dir, "task", []byte("fan-out-payload"))
+
+	provider := testutil.NewMockProvider()
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		10*time.Second,
+	)
+
+	if provider.CallCount() != 0 {
+		t.Fatalf("provider call count = %d, want 0 for workerless logical move fan-out", provider.CallCount())
+	}
+	assertWorkCustomerStates(t, listed, map[string]int{
+		support.WorkCustomerLocation("task", "init"):      0,
+		support.WorkCustomerLocation("task", "done"):      1,
+		support.WorkCustomerLocation("branch-a", "done"):  1,
+		support.WorkCustomerLocation("branch-b", "done"):  1,
+		support.WorkCustomerLocation("branch-a", "init"):  0,
+		support.WorkCustomerLocation("branch-b", "init"):  0,
+	})
+	assertNoInferenceResponses(t, events)
+	assertLogicalMoveDispatchesCompleteWithoutProviderFailure(
+		t,
+		support.ObserveDispatchEvents(t, events),
+		logicalMoveRouterWorkstation,
+	)
+}
+
 func configureLogicalMoveWorkstation(t *testing.T, dir, workstationName string) {
 	t.Helper()
 
