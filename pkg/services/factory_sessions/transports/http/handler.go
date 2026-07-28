@@ -36,8 +36,7 @@ type Adapter struct {
 	durableLister      DurableExecutionSessionLister
 	liveSessionLister  LiveSessionListReader
 	workerPrompts      workers.PromptTemplates
-	contentStaging     work.ContentStagingService
-	requestPreparation work.RequestPreparationService
+	workService        work.Service
 	sessionRequests    RequestPreparation
 	logger             *zap.Logger
 }
@@ -62,8 +61,7 @@ type Dependencies struct {
 	DurableLister      DurableExecutionSessionLister
 	LiveSessionLister  LiveSessionListReader
 	WorkerPrompts      workers.PromptTemplates
-	ContentStaging     work.ContentStagingService
-	RequestPreparation work.RequestPreparationService
+	WorkService        work.Service
 	SessionRequests    RequestPreparation
 }
 
@@ -93,31 +91,20 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 		durableExecution: deps.DurableExecution, durableLifecycle: deps.DurableLifecycle,
 		durableListing: deps.DurableListing, durableProjection: deps.DurableProjection,
 		durableLister: deps.DurableLister, liveSessionLister: deps.LiveSessionLister,
-		workerPrompts: deps.WorkerPrompts, contentStaging: deps.ContentStaging,
-		requestPreparation: deps.RequestPreparation, sessionRequests: deps.SessionRequests,
+		workerPrompts: deps.WorkerPrompts, workService: deps.WorkService,
+		sessionRequests: deps.SessionRequests,
 		logger: logger,
 	}
 }
 
-// WithRequestPreparation returns a copy bound to the supplied Work request
-// preparation role. It is useful when composing a specialized protocol
-// binding without mutating a shared handler.
-func (h *Adapter) WithRequestPreparation(preparation work.RequestPreparationService) *Adapter {
+// WithWorkService returns a copy bound to the supplied Work root for admission
+// and content staging/materialization operations.
+func (h *Adapter) WithWorkService(service work.Service) *Adapter {
 	if h == nil {
 		return nil
 	}
 	bound := *h
-	bound.requestPreparation = preparation
-	return &bound
-}
-
-// WithContentStaging returns a copy bound to the supplied content staging role.
-func (h *Adapter) WithContentStaging(staging work.ContentStagingService) *Adapter {
-	if h == nil {
-		return nil
-	}
-	bound := *h
-	bound.contentStaging = staging
+	bound.workService = service
 	return &bound
 }
 

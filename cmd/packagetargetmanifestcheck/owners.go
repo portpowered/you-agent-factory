@@ -247,7 +247,8 @@ func nestedOwnerMoveDestination(owner, rest string) (destination string, ok bool
 }
 
 // nestedOwnerMoveRules encodes plan-tree move destinations for packages that
-// are not yet under <owner>/internal/services/<subservice>.
+// are not yet under <owner>/internal/services/<subservice>. Work unexpected
+// siblings are confirmed in work-top-level-inventory.md (INV-WORK-TOPLEVEL).
 var nestedOwnerMoveRules = map[string][]nestedPathRule{
 	"factory_sessions": {
 		{exact: "internal/runtimeopening", prefix: "internal/runtimeopening/", dest: "factory_sessions/internal/services/runtime_opening"},

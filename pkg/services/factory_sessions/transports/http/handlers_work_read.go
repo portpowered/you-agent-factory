@@ -182,10 +182,10 @@ func (s *Server) stageSubmitWorkFileRequest(
 		}
 	}
 
-	if s.contentStaging == nil {
-		return factoryapi.StageSubmitWorkFileResponse{}, errors.New("Work content staging service is unavailable")
+	if s.workService == nil {
+		return factoryapi.StageSubmitWorkFileResponse{}, errors.New("Work service is unavailable")
 	}
-	result, err := s.contentStaging.StageContent(ctx, work.StageContentRequest{
+	result, err := s.workService.StageContent(ctx, work.StageContentRequest{
 		ItemType:  string(req.ItemType),
 		FileName:  req.FileName,
 		MediaType: req.MediaType,

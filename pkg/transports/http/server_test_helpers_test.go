@@ -85,28 +85,34 @@ func (f *workRequestPreparationFake) PrepareWorkRequest(
 }
 
 func setWorkRequestPreparationError(srv *Server, message string) {
-	srv.Adapter = srv.Adapter.WithRequestPreparation(&workRequestPreparationFake{
-		prepare: func(
-			context.Context,
-			work.WorkRequestPreparation,
-		) (work.WorkRequest, error) {
-			return work.WorkRequest{}, &work.RequestPreparationError{Message: message}
+	srv.Adapter = srv.Adapter.WithWorkService(work.AdmissionContentService(
+		newContentStagingFake(),
+		&workRequestPreparationFake{
+			prepare: func(
+				context.Context,
+				work.WorkRequestPreparation,
+			) (work.WorkRequest, error) {
+				return work.WorkRequest{}, &work.RequestPreparationError{Message: message}
+			},
 		},
-	})
+	))
 }
 
 func setWorkRequestPreparationResult(
 	srv *Server,
 	prepare func(work.WorkRequestPreparation) work.WorkRequest,
 ) {
-	srv.Adapter = srv.Adapter.WithRequestPreparation(&workRequestPreparationFake{
-		prepare: func(
-			_ context.Context,
-			input work.WorkRequestPreparation,
-		) (work.WorkRequest, error) {
-			return prepare(input), nil
+	srv.Adapter = srv.Adapter.WithWorkService(work.AdmissionContentService(
+		newContentStagingFake(),
+		&workRequestPreparationFake{
+			prepare: func(
+				_ context.Context,
+				input work.WorkRequestPreparation,
+			) (work.WorkRequest, error) {
+				return prepare(input), nil
+			},
 		},
-	})
+	))
 }
 
 type contentStagingFake struct {

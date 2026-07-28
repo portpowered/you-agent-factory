@@ -32,4 +32,5 @@ type Dependencies struct {
 	Interpolation factorydefinitions.InvocationInterpolationService
 	WorkTypes     factorydefinitions.InvocationWorkTypeService
 	InputFiles    fileeffects.InvocationInputReader
+	Work          work.Service
 }

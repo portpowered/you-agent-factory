@@ -18,7 +18,7 @@
       "file": "details_providers_boundary_test.go",
       "classification": "fold_target_implementation_test",
       "foldDestination": "pkg/services/provider_sessions/internal",
-      "note": "Implementation integration test exercising Details through transitional service/ assembly; folds with private implementation, not thin root contract seal."
+      "note": "Implementation integration test exercising Details through provider_sessions/wire construction; folds with private implementation, not thin root contract seal."
     },
     {
       "file": "doc.go",
@@ -29,13 +29,13 @@
       "file": "inspect_providers_boundary_test.go",
       "classification": "fold_target_implementation_test",
       "foldDestination": "pkg/services/provider_sessions/internal",
-      "note": "Implementation integration test exercising Inspect through transitional service/ assembly."
+      "note": "Implementation integration test exercising Inspect through provider_sessions/wire construction."
     },
     {
       "file": "project_providers_boundary_test.go",
       "classification": "fold_target_implementation_test",
       "foldDestination": "pkg/services/provider_sessions/internal",
-      "note": "Implementation integration test exercising Project through transitional service/ assembly."
+      "note": "Implementation integration test exercising Project through provider_sessions/wire construction."
     },
     {
       "file": "providers_import_boundary_test.go",
@@ -54,6 +54,11 @@
       "note": "Compile-time and reflection proofs that root identity contracts alias Providers-owned SessionRef vocabulary."
     },
     {
+      "file": "service_import_boundary_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "Import-closure guard proving no production package outside the Provider Sessions owner depends on the DEL-PSES transitional service/ compile shim."
+    },
+    {
       "file": "service_root_contract_test.go",
       "classification": "thin_root_contract_test",
       "note": "Peer-shaped Service characterization and seal tests using only published root contracts."
@@ -62,7 +67,13 @@
       "file": "service_test.go",
       "classification": "fold_target_implementation_test",
       "foldDestination": "pkg/services/provider_sessions/internal",
-      "note": "Root-level implementation integration tests assembling production Service through transitional service/; fold target for CLN-PSES-CONTRACT-ROOTS."
+      "note": "Root-level implementation integration tests assembling production Service through provider_sessions/wire; fold target for CLN-PSES-CONTRACT-ROOTS."
+    },
+    {
+      "file": "wire_behavioral_proof_test.go",
+      "classification": "fold_target_implementation_test",
+      "foldDestination": "pkg/services/provider_sessions/internal",
+      "note": "Focused wire-constructed behavioral proof for Details, Inspect, and Project across Codex and Cursor reader fixtures on the published Service surface."
     }
   ]
 }
