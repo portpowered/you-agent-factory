@@ -1324,6 +1324,12 @@
       "evidence": "pkg/services/factory_visualization/internal/services/activation_lifecycle -\u003e pkg/services/recordings"
     },
     {
+      "fromOwner": "factory_visualization",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/factory_visualization/transports/http -\u003e pkg/transports/http/generated"
+    },
+    {
       "fromOwner": "initializer",
       "toOwner": "platform",
       "class": "lifecycle",
