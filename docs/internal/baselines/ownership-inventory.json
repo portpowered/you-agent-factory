@@ -2566,28 +2566,12 @@
       "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
-      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
-    },
-    {
       "packagePath": "pkg/services/factory_definitions/definition",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
       "successor": "pkg/services/factory_definitions/internal",
       "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/snapshots_portability",
-      "deletionCondition": "delete public package after IMP-DEF-snapshots_portability private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal",
@@ -2705,6 +2689,12 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog/persistence",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -2986,6 +2976,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/validation/impl",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -3036,164 +3032,12 @@
       "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
-      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
-      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
-      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/loadedsource",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/compilation",
-      "deletionCondition": "delete public package after IMP-DEF-compilation private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/namedpaths",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/catalog",
-      "deletionCondition": "delete public package after IMP-DEF-catalog private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/validation",
-      "deletionCondition": "delete public package after IMP-DEF-validation private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/distribution",
-      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/goal",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
-      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packageassets",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/distribution",
-      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/promptassets",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/distribution",
-      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/review",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/distribution",
-      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/subagent",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/distribution",
-      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/tts",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/distribution",
-      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/persistence",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/catalog",
-      "deletionCondition": "delete public package after IMP-DEF-catalog private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/catalog",
-      "deletionCondition": "delete public package after IMP-DEF-catalog private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
-      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/snapshots_portability",
-      "deletionCondition": "delete public package after IMP-DEF-snapshots_portability private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/resource",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/validation",
-      "deletionCondition": "delete public package after IMP-DEF-validation private subservice cutover proof"
-    },
-    {
       "packagePath": "pkg/services/factory_definitions/service",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
       "successor": "pkg/services/factory_definitions/internal",
       "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/snapshots_portability",
-      "deletionCondition": "delete public package after IMP-DEF-snapshots_portability private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/systeminitializationtests",
@@ -3222,78 +3066,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
-      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/impl",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/validation",
-      "deletionCondition": "delete public package after IMP-DEF-validation private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/impl/blockingloadtests",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/validation",
-      "deletionCondition": "delete public package after IMP-DEF-validation private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/impl/compatibilitytests",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/validation",
-      "deletionCondition": "delete public package after IMP-DEF-validation private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/impl/layouttests",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/validation",
-      "deletionCondition": "delete public package after IMP-DEF-validation private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/impl/managedruntimetests",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/validation",
-      "deletionCondition": "delete public package after IMP-DEF-validation private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/impl/profiletests",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/validation",
-      "deletionCondition": "delete public package after IMP-DEF-validation private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/impl/taxonomycompattests",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/validation",
-      "deletionCondition": "delete public package after IMP-DEF-validation private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/impl/topologytests",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/validation",
-      "deletionCondition": "delete public package after IMP-DEF-validation private subservice cutover proof"
-    },
-    {
       "packagePath": "pkg/services/factory_definitions/wire",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -3310,38 +3082,6 @@
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/validation",
-      "deletionCondition": "delete public package after IMP-DEF-validation private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/validation",
-      "deletionCondition": "delete public package after IMP-DEF-validation private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
-      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
-      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime",

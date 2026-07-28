@@ -77,19 +77,13 @@ func TestMapCommittedOwnerPackageFactoryDefinitionsMoveDestinations(t *testing.T
 		},
 		{
 			path: "pkg/services/factory_definitions/internal/services/validation/impl",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/validation/impl",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/validation",
-			},
+			wantRetain: true,
+			retainOwner: "factory_definitions/internal/services/validation",
 		},
 		{
 			path: "pkg/services/factory_definitions/internal/services/distribution/goal",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/distribution/goal",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/invocation_policy",
-			},
+			wantRetain: true,
+			retainOwner: "factory_definitions/internal/services/distribution",
 		},
 		{
 			path: "pkg/services/factory_definitions/internal/contracts",
@@ -103,107 +97,68 @@ func TestMapCommittedOwnerPackageFactoryDefinitionsMoveDestinations(t *testing.T
 		},
 		{
 			path: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/validation",
-			},
+			wantRetain: true,
+			retainOwner: "factory_definitions/internal/services/validation",
 		},
 		{
 			path: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/validation",
-			},
+			wantRetain: true,
+			retainOwner: "factory_definitions/internal/services/validation",
 		},
 		{
 			path: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/validation",
-			},
+			wantRetain: true,
+			retainOwner: "factory_definitions/internal/services/validation",
 		},
 		{
-			path: "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/snapshots_portability",
-			},
+			path:        "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
+			wantRetain:  true,
+			retainOwner: "factory_definitions/internal/services/snapshots_portability",
 		},
 		{
-			path: "pkg/services/factory_definitions/internal/services/catalog/resource",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/catalog/resource",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/validation",
-			},
+			path:        "pkg/services/factory_definitions/internal/services/catalog/resource",
+			wantRetain:  true,
+			retainOwner: "factory_definitions/internal/services/catalog",
 		},
 		{
-			path: "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/invocation_policy",
-			},
+			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
+			wantRetain:  true,
+			retainOwner: "factory_definitions/internal/services/invocation_policy",
 		},
 		{
-			path: "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/invocation_policy",
-			},
+			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
+			wantRetain:  true,
+			retainOwner: "factory_definitions/internal/services/invocation_policy",
 		},
 		{
-			path: "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/invocation_policy",
-			},
+			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
+			wantRetain:  true,
+			retainOwner: "factory_definitions/internal/services/invocation_policy",
 		},
 		{
-			path: "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/invocation_policy",
-			},
+			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
+			wantRetain:  true,
+			retainOwner: "factory_definitions/internal/services/invocation_policy",
 		},
 		{
-			path: "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/invocation_policy",
-			},
+			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
+			wantRetain:  true,
+			retainOwner: "factory_definitions/internal/services/invocation_policy",
 		},
 		{
-			path: "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/invocation_policy",
-			},
+			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
+			wantRetain:  true,
+			retainOwner: "factory_definitions/internal/services/invocation_policy",
 		},
 		{
-			path: "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/invocation_policy",
-			},
+			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
+			wantRetain:  true,
+			retainOwner: "factory_definitions/internal/services/invocation_policy",
 		},
 		{
-			path: "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/invocation_policy",
-			},
+			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
+			wantRetain:  true,
+			retainOwner: "factory_definitions/internal/services/invocation_policy",
 		},
 		{
 			path: "pkg/services/factory_definitions/internal/testcomposition",
@@ -358,30 +313,30 @@ func TestCommittedManifestResidualInvocationPolicyPackagesLocked(t *testing.T) {
 	}
 
 	for _, rest := range []string{
-		"decisionenvelope",
-		"invocationinterpolation",
-		"invocationoutput",
-		"invocationworktype",
-		"quorumpolicy",
-		"workpropagation",
-		"workstationexecution",
-		"ttsobservability",
-		"packages/goal",
+		"internal/services/invocation_policy/decisionenvelope",
+		"internal/services/invocation_policy/invocationinterpolation",
+		"internal/services/invocation_policy/invocationoutput",
+		"internal/services/invocation_policy/invocationworktype",
+		"internal/services/invocation_policy/quorumpolicy",
+		"internal/services/invocation_policy/workpropagation",
+		"internal/services/invocation_policy/workstationexecution",
+		"internal/services/invocation_policy/ttsobservability",
+		"internal/services/distribution/goal",
 	} {
 		packagePath := "pkg/services/factory_definitions/" + rest
 		got, ok := byPath[packagePath]
 		if !ok {
 			t.Fatalf("committed manifest missing row for %q", packagePath)
 		}
-		if got.Disposition != DispositionMove {
-			t.Fatalf("committed manifest %q disposition = %q, want move", packagePath, got.Disposition)
+		if got.Disposition != DispositionRetain {
+			t.Fatalf("committed manifest %q disposition = %q, want retain", packagePath, got.Disposition)
 		}
-		if got.Destination != "factory_definitions/internal/services/invocation_policy" {
-			t.Fatalf("committed manifest %q destination = %q, want factory_definitions/internal/services/invocation_policy",
-				packagePath, got.Destination)
+		wantDestination := "factory_definitions/internal/services/invocation_policy"
+		if strings.HasPrefix(rest, "internal/services/distribution/") {
+			wantDestination = "factory_definitions/internal/services/distribution"
 		}
-		if got.Disposition == DispositionRetain && got.Destination == "factory_definitions" {
-			t.Fatalf("committed manifest %q must not retain→factory_definitions", packagePath)
+		if got.Destination != wantDestination {
+			t.Fatalf("committed manifest %q destination = %q, want %q", packagePath, got.Destination, wantDestination)
 		}
 	}
 }

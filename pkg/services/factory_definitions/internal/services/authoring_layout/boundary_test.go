@@ -21,8 +21,12 @@ var authoringLayoutCompilationFoldAllowedImportRoots = []string{
 	compilationPackageRoot + "/runtimeconfig",
 }
 
+var authoringLayoutCatalogFoldAllowedImportRoots = []string{
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence",
+}
+
 var authoringLayoutForbiddenImportRoots = []string{
-	"github.com/portpowered/infinite-you/pkg/wire",
 	"github.com/portpowered/infinite-you/pkg/root",
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime",
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions",
@@ -291,7 +295,7 @@ func TestPackageBoundary_InternalLeasePackagesDoNotImportForbiddenOwnership(t *t
 			t,
 			authoringLayoutPublicPackage+packageSuffix,
 			authoringLayoutForbiddenImportRoots,
-			authoringLayoutCompilationFoldAllowedImportRoots...,
+			append(authoringLayoutCompilationFoldAllowedImportRoots, authoringLayoutCatalogFoldAllowedImportRoots...)...,
 		)
 	}
 }

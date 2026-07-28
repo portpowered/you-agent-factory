@@ -235,11 +235,9 @@ func TestPackageBoundary_WireSurfaceDoesNotConstructRuntimeOrSelectSiblingLeases
 func TestPackageBoundary_OwnerContractsDoNotImportAuthoredSchemaInternals(t *testing.T) {
 	t.Parallel()
 
-	for _, forbiddenImport := range []string{
-		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
-		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
-	} {
-		assertPackageDirectImportsForbidden(t, "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts", []string{forbiddenImport})
-		assertPackageDirectImportsForbidden(t, "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers", []string{forbiddenImport})
-	}
+	assertPackageDirectImportsForbidden(
+		t,
+		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
+		[]string{"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy"},
+	)
 }

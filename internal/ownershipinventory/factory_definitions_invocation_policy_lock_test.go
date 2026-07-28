@@ -17,15 +17,15 @@ const (
 )
 
 var factoryDefinitionsInvocationPolicyResidualRests = []string{
-	"decisionenvelope",
-	"invocationinterpolation",
-	"invocationoutput",
-	"invocationworktype",
-	"quorumpolicy",
-	"workpropagation",
-	"workstationexecution",
-	"ttsobservability",
-	"packages/goal",
+	"internal/services/invocation_policy/decisionenvelope",
+	"internal/services/invocation_policy/invocationinterpolation",
+	"internal/services/invocation_policy/invocationoutput",
+	"internal/services/invocation_policy/invocationworktype",
+	"internal/services/invocation_policy/quorumpolicy",
+	"internal/services/invocation_policy/workpropagation",
+	"internal/services/invocation_policy/workstationexecution",
+	"internal/services/invocation_policy/ttsobservability",
+	"internal/services/distribution/goal",
 }
 
 func TestFrozenInventoryRegistersInvocationPolicyNestedService(t *testing.T) {
@@ -94,30 +94,31 @@ func TestFactoryDefinitionsResidualInvocationPolicyPackagesLocked(t *testing.T) 
 		if err != nil {
 			t.Fatalf("MapPackage(%q) error = %v", packagePath, err)
 		}
-		if got.Disposition != ownershipinventory.DispositionMove {
-			t.Fatalf("MapPackage(%q) disposition = %q, want move", packagePath, got.Disposition)
-		}
-		if got.Successor != factoryDefinitionsInvocationPolicyTargetPath {
-			t.Fatalf("MapPackage(%q) successor = %q, want %q", packagePath, got.Successor, factoryDefinitionsInvocationPolicyTargetPath)
+		if got.Disposition != ownershipinventory.DispositionRetain {
+			t.Fatalf("MapPackage(%q) disposition = %q, want retain", packagePath, got.Disposition)
 		}
 
 		ownershipRow, ok := ownershipByPath[packagePath]
 		if !ok {
 			t.Fatalf("frozen inventory missing row for %q", packagePath)
 		}
-		if ownershipRow.Successor != factoryDefinitionsInvocationPolicyTargetPath {
-			t.Fatalf("frozen inventory %q successor = %q, want %q", packagePath, ownershipRow.Successor, factoryDefinitionsInvocationPolicyTargetPath)
+		if ownershipRow.Disposition != ownershipinventory.DispositionRetain {
+			t.Fatalf("frozen inventory %q disposition = %q, want retain", packagePath, ownershipRow.Disposition)
 		}
 
 		manifestRow, ok := manifestByPath[packagePath]
 		if !ok {
 			t.Fatalf("package-target-manifest missing row for %q", packagePath)
 		}
-		if manifestRow.Disposition != ownershipinventory.DispositionMove {
-			t.Fatalf("manifest %q disposition = %q, want move", packagePath, manifestRow.Disposition)
+		if manifestRow.Disposition != ownershipinventory.DispositionRetain {
+			t.Fatalf("manifest %q disposition = %q, want retain", packagePath, manifestRow.Disposition)
 		}
-		if manifestRow.Destination != factoryDefinitionsInvocationPolicyManifestDestination {
-			t.Fatalf("manifest %q destination = %q, want %q", packagePath, manifestRow.Destination, factoryDefinitionsInvocationPolicyManifestDestination)
+		wantDestination := factoryDefinitionsInvocationPolicyManifestDestination
+		if strings.HasPrefix(rest, "internal/services/distribution/") {
+			wantDestination = "factory_definitions/internal/services/distribution"
+		}
+		if manifestRow.Destination != wantDestination {
+			t.Fatalf("manifest %q destination = %q, want %q", packagePath, manifestRow.Destination, wantDestination)
 		}
 	}
 }
@@ -131,11 +132,8 @@ func TestFactoryDefinitionsResidualInvocationPolicyPackagesRejectRetainToOwnerRo
 		if err != nil {
 			t.Fatalf("MapPackage(%q) error = %v", packagePath, err)
 		}
-		if got.Disposition == ownershipinventory.DispositionRetain && got.Destination == "factory_definitions" {
-			t.Fatalf("remapped residual policy package %q must not retain→factory_definitions", packagePath)
-		}
-		if got.Disposition != ownershipinventory.DispositionMove {
-			t.Fatalf("remapped residual policy package %q disposition = %q, want move", packagePath, got.Disposition)
+		if got.Disposition != ownershipinventory.DispositionRetain {
+			t.Fatalf("remapped residual policy package %q disposition = %q, want retain", packagePath, got.Disposition)
 		}
 	}
 }
@@ -209,17 +207,24 @@ func TestFactoryDefinitionsInventoryPacketHasNoPackageDeletes(t *testing.T) {
 		}
 	}
 
-	packages, err := ownershipinventory.ListProductionPackages(root)
-	if err != nil {
-		t.Fatalf("ListProductionPackages() error = %v", err)
+	deletedTransitionalRests := []string{
+		"decisionenvelope",
+		"invocationinterpolation",
+		"invocationoutput",
+		"invocationworktype",
+		"quorumpolicy",
+		"workpropagation",
+		"workstationexecution",
+		"ttsobservability",
+		"namedpaths",
+		"persistence",
+		"validation",
+		"workers",
 	}
-	for _, rest := range factoryDefinitionsInvocationPolicyResidualRests {
+	for _, rest := range deletedTransitionalRests {
 		packagePath := ownerPrefix + "/" + rest
-		if !slices.Contains(packages, packagePath) {
-			t.Fatalf("production inventory missing live package %q", packagePath)
-		}
-		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(packagePath))); err != nil {
-			t.Fatalf("live package path %q missing on disk: %v", packagePath, err)
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(packagePath))); !os.IsNotExist(err) {
+			t.Fatalf("deleted transitional package %q must not exist on disk; stat err = %v", packagePath, err)
 		}
 	}
 }

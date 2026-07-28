@@ -12,9 +12,8 @@ import (
 )
 
 const (
-	decisionEnvelopeImportPath  = factoryDefinitionsModule + "/decisionenvelope"
-	distributionServiceRoot     = "services/distribution"
-	transitionalGoalEnvelopeRel = "../packages/goal/decision_envelope.go"
+	decisionEnvelopeImportPath = factoryDefinitionsModule + "/internal/services/invocation_policy/decisionenvelope"
+	distributionServiceRoot    = "services/distribution"
 )
 
 var distributionDecisionEnvelopeForbiddenImports = []string{
@@ -94,32 +93,9 @@ func TestDecisionEnvelopeOwnershipBoundary_DistributionDoesNotHostDecisionEnvelo
 func TestDecisionEnvelopeOwnershipBoundary_TransitionalGoalShimDelegatesToDecisionEnvelope(t *testing.T) {
 	t.Parallel()
 
-	fileSet := token.NewFileSet()
-	file, err := parser.ParseFile(fileSet, transitionalGoalEnvelopeRel, nil, parser.ImportsOnly)
-	if err != nil {
-		t.Fatalf("parse %s: %v", transitionalGoalEnvelopeRel, err)
-	}
-
-	foundDecisionEnvelopeImport := false
-	for _, importSpec := range file.Imports {
-		importPath := strings.Trim(importSpec.Path.Value, `"`)
-		if importPath == decisionEnvelopeImportPath {
-			foundDecisionEnvelopeImport = true
-		}
-		if strings.HasPrefix(importPath, factoryDefinitionsModule+"/internal/services/distribution/") {
-			t.Fatalf(
-				"%s must not import distribution internals for envelope interpretation; found %s",
-				transitionalGoalEnvelopeRel,
-				importPath,
-			)
-		}
-	}
-	if !foundDecisionEnvelopeImport {
-		t.Fatalf(
-			"%s must keep the transitional dual path through %s until invocation_policy cutover",
-			transitionalGoalEnvelopeRel,
-			decisionEnvelopeImportPath,
-		)
+	envelopePath := filepath.Join("services", "invocation_policy", "decisionenvelope", "service.go")
+	if _, err := os.Stat(envelopePath); err != nil {
+		t.Fatalf("invocation_policy decisionenvelope owner path must exist after residual deletion: %v", err)
 	}
 }
 
