@@ -104,6 +104,7 @@
     "pkg/services/factory_definitions/internal/services/catalog/internal/service",
     "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
     "pkg/services/factory_definitions/internal/services/catalog/namedpaths",
+    "pkg/services/factory_definitions/internal/services/catalog/persistence",
     "pkg/services/factory_definitions/internal/services/catalog/wire",
     "pkg/services/factory_definitions/internal/services/compilation",
     "pkg/services/factory_definitions/internal/services/compilation/canonical",
@@ -895,6 +896,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog/namedpaths",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/persistence",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/catalog"
     },

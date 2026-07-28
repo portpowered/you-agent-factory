@@ -9,7 +9,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence"
+	catalogpersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence"
 )
 
 type recordingDirectoryStore struct {
@@ -42,7 +42,7 @@ func TestReplaceFactoryLayoutRequiresInjectedDirectoryReplacementStore(t *testin
 func TestNewRejectsMissingPersistenceFileSystem(t *testing.T) {
 	t.Parallel()
 
-	if _, err := factorypersistence.New(
+	if _, err := catalogpersistence.New(
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	); err == nil || err.Error() != "Factory Definitions persistence filesystem is required" {
 		t.Fatalf("New() error = %v, want required persistence filesystem", err)
@@ -66,7 +66,7 @@ func TestReplaceFactoryLayoutDelegatesMechanicsAndRetainsFactoryDiagnostics(t *t
 }
 
 func replacementService(store factorydefinitions.DirectoryReplacementStore) factorydefinitions.Persistence {
-	persistence, err := factorypersistence.New(
+	persistence, err := catalogpersistence.New(
 		nil,
 		nil,
 		nil,

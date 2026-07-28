@@ -7,6 +7,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
+	catalogpersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence"
 	catalognamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories"
 	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 	catalogservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/internal/service"
@@ -45,4 +46,35 @@ func NewNamedFactoryCatalog(
 	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
 ) (factorydefinitions.NamedFactoryCatalog, error) {
 	return catalognamedfactories.New(paths, fileSystem)
+}
+
+// NewPersistence constructs the catalog-owned Factory Definitions persistence
+// implementation from the exact serialization and filesystem ports used by owner
+// composition.
+func NewPersistence(
+	validator factorydefinitions.Validator,
+	mapInput factorydefinitions.FactoryLayoutPayloadMapper,
+	prepare factorydefinitions.FactoryLayoutPayloadPreparer,
+	write func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error,
+	validate func(string) error,
+	flatten factorydefinitions.FactoryLayoutFlattener,
+	expand factorydefinitions.FactoryLayoutExpander,
+	writeCurrent factorydefinitions.CurrentFactoryPointerWriter,
+	fileSystem factorydefinitions.PersistenceFileSystem,
+	requireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer,
+	directories factorydefinitions.DirectoryReplacementStore,
+) (factorydefinitions.Persistence, error) {
+	return catalogpersistence.New(
+		validator,
+		mapInput,
+		prepare,
+		write,
+		validate,
+		flatten,
+		expand,
+		writeCurrent,
+		fileSystem,
+		requireDefinitionDir,
+		directories,
+	)
 }

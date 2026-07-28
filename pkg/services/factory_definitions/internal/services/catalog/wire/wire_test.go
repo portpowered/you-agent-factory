@@ -10,10 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 )
 
 type recordingPathResolver struct {
@@ -386,5 +388,78 @@ func TestNewService_ListGetResolveDeleteNamedFactory(t *testing.T) {
 	})
 	if err == nil || !errors.Is(err, factorydefinitions.ErrNamedFactoryNotFound) {
 		t.Fatalf("GetNamedFactory(alpha) after delete = %v, want %v", err, factorydefinitions.ErrNamedFactoryNotFound)
+	}
+}
+
+func TestNewPersistencePrepareAndCreateAndReplaceNamedFactoryLayout(t *testing.T) {
+	t.Parallel()
+
+	fileSystem := platformfilesystem.Local{}
+	paths, err := catalogwire.NewPathResolver(fileSystem)
+	if err != nil {
+		t.Fatalf("NewPathResolver: %v", err)
+	}
+	validator := factoryvalidation.New(nil)
+	prepared := &factorydefinitions.PreparedFactoryLayoutPayload{}
+	persistence, err := catalogwire.NewPersistence(
+		validator,
+		func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {
+			return factorydefinitions.DefinitionValidationRequest{
+				Config:           &factorydefinitions.FactoryConfig{},
+				CanonicalPayload: []byte(`{}`),
+				CanonicalFactoryLoader: func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+					return nil, nil
+				},
+			}, nil
+		},
+		func(
+			_ context.Context,
+			segment string,
+			payload []byte,
+			_ factorydefinitions.Validator,
+		) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
+			if segment != "alpha" || string(payload) != "payload" {
+				t.Fatalf("prepare values = %q, %q", segment, payload)
+			}
+			return prepared, nil
+		},
+		func(stagingDir string, _ *factorydefinitions.PreparedFactoryLayoutPayload, _ string) error {
+			return os.WriteFile(
+				filepath.Join(stagingDir, factorydefinitions.FactoryConfigFile),
+				[]byte(`{}`),
+				0o644,
+			)
+		},
+		func(string) error { return nil },
+		nil,
+		nil,
+		nil,
+		fileSystem,
+		paths.RequireDefinitionDir,
+		directoryreplace.Local{},
+	)
+	if err != nil {
+		t.Fatalf("NewPersistence: %v", err)
+	}
+
+	ctx := context.Background()
+	gotPrepared, err := persistence.PrepareFactoryLayout(ctx, "alpha", []byte("payload"))
+	if err != nil || gotPrepared != prepared {
+		t.Fatalf("PrepareFactoryLayout() = %p, %v", gotPrepared, err)
+	}
+
+	rootDir := t.TempDir()
+	targetDir := filepath.Join(rootDir, "alpha")
+	createdDir, err := persistence.CreateNamedFactory(rootDir, "alpha", prepared)
+	if err != nil || createdDir != targetDir {
+		t.Fatalf("CreateNamedFactory() = %q, %v", createdDir, err)
+	}
+	if _, err := os.Stat(filepath.Join(targetDir, factorydefinitions.FactoryConfigFile)); err != nil {
+		t.Fatalf("created factory.json: %v", err)
+	}
+
+	replacedDir, err := persistence.ReplaceNamedFactory(rootDir, "alpha", prepared)
+	if err != nil || replacedDir != targetDir {
+		t.Fatalf("ReplaceNamedFactory() = %q, %v", replacedDir, err)
 	}
 }

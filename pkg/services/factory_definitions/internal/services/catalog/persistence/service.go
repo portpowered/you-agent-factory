@@ -1,4 +1,4 @@
-// Package persistence implements Factory Definition layout persistence.
+// Package persistence implements catalog-owned Factory Definition layout persistence.
 package persistence
 
 import (
@@ -10,7 +10,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	authoringlayoutpersist "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist"
-	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
+	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 )
 
 type service struct {
@@ -79,10 +79,10 @@ func (s *service) PersistNamedFactory(
 	if rootDir == "" {
 		return result, fmt.Errorf("factory root is required")
 	}
-	if err := namedfactorypath.ValidateName(name); err != nil {
+	if err := catalognamedpaths.ValidateName(name); err != nil {
 		return result, err
 	}
-	factoryDir, err := namedfactorypath.MapDir(rootDir, name)
+	factoryDir, err := catalognamedpaths.MapDir(rootDir, name)
 	if err != nil {
 		return result, err
 	}
