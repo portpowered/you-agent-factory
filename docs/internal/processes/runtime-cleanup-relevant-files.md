@@ -1310,3 +1310,24 @@ imports, or (for `service/`) remain multi-file owner-local compile shims.
 Providers extraction sources (`provider/`, `provider_test/`, `agypty/`,
 `cliprovider/`) and all `internal/services/*` subservices stay excluded from
 deletion until later IMP-PROV absorption or separate packets.
+
+## DEL-WRK root shape gates
+
+Story 004 proves the Workers root matches canonical shape plus thin contracts
+after transitional shim deletion. Lock the proof in
+`pkg/services/workers/del_wrk_root_shape_test.go`:
+
+| Proof | Test |
+| --- | --- |
+| Deleted transitional packages absent | `TestDelWrkRootShape_CompletionInvariants/deleted_transitional_packages_absent` |
+| Canonical `internal/` + `wire/` present | `TestDelWrkRootShape_CompletionInvariants/canonical_root_directories_present` |
+| Providers extraction sources retained | `TestDelWrkRootShape_CompletionInvariants/providers_extraction_sources_remain` |
+| `internal/services/*` subservices retained | `TestDelWrkRootShape_CompletionInvariants/internal_services_subservices_remain` |
+| Thin root contract inventory sealed | `TestDelWrkRootShape_CompletionInvariants/thin_root_contract_inventory_sealed` |
+| Top-level children are canonical or committed move debt only | `TestDelWrkRootShape_UnexpectedChildrenRemainMoveDebtOnly` |
+| `workers/wire` avoids deleted transitional imports | `TestDelWrkRootShape_WireDoesNotImportDeletedTransitionalPackages` |
+| Wire constructs published Workers root | `TestDelWrkRootShape_WireConstructsPublishedRoot` |
+| Runtime-assembly, workstation, and runner paths reachable | `TestDelWrkRootShape_RuntimeAssemblyWorkstationAndRunnerPathsRemainReachable` |
+
+Deeper wire construction characterization remains in `wire/wire_test.go` and
+`wire/construction_boundary_test.go`.
