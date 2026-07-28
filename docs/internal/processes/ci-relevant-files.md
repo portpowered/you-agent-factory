@@ -654,6 +654,10 @@ Wave 0 functional-tests-expansion planning authority lives under
   `providers/agy/process_harness_test.go`), reconcile them into the ledger
   companion and checklist in the same closeout pass so
   `go run ./cmd/migrationledgercheck` stays aligned with the live tree.
+  After rebasing a migration branch onto `main`, also deduplicate ledger rows
+  introduced by parallel closeout work (duplicate provider harness entries) and
+  add inventory/checklist cells for any new live scenarios landing from `main`
+  before pushing.
   `tests/functional/factory/definitions/init_test.go` owns public Factory-init
   functional coverage through `session create --init-new-factory` against
   `support.StartFunctionalAPIServer`, with seeded Work run via
