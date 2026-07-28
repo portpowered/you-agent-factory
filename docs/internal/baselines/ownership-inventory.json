@@ -1106,7 +1106,7 @@
       "toOwner": "provider_sessions",
       "class": "external_effect",
       "architectureException": true,
-      "evidence": "pkg/services/edges -\u003e pkg/services/provider_sessions"
+      "evidence": "pkg/services/edges -\u003e pkg/services/provider_sessions/wire"
     },
     {
       "fromOwner": "edges",
@@ -1183,7 +1183,7 @@
       "fromOwner": "factory_runtime",
       "toOwner": "automations",
       "class": "command",
-      "evidence": "pkg/services/factory_runtime/service -\u003e pkg/services/automations"
+      "evidence": "pkg/services/factory_runtime/internal -\u003e pkg/services/automations"
     },
     {
       "fromOwner": "factory_runtime",
@@ -1490,6 +1490,12 @@
       "toOwner": "workers",
       "class": "command",
       "evidence": "pkg/services/recordings -\u003e pkg/services/workers"
+    },
+    {
+      "fromOwner": "root",
+      "toOwner": "automations",
+      "class": "construction",
+      "evidence": "pkg/root -\u003e pkg/services/automations"
     },
     {
       "fromOwner": "root",
@@ -3249,9 +3255,11 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
@@ -3263,9 +3271,11 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/host",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
@@ -4425,6 +4435,12 @@
     },
     {
       "packagePath": "pkg/services/provider_sessions",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal",
       "disposition": "retain",
       "destination": "provider_sessions",
       "destinationKind": "owner"

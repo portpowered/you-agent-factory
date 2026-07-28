@@ -23,7 +23,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionswire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
@@ -109,14 +109,14 @@ type Edges struct {
 	FactoryDefinitionAuthoredWriterFileSystem       factorydefinitions.AuthoredLayoutWriterFileSystem
 	FactoryDefinitionScaffoldFileSystem             factorydefinitions.ScaffoldFileSystem
 	FactoryDefinitionScaffoldOutput                 factorydefinitions.ScaffoldOutput
-	ProviderSessionFileSystem                       providersessions.FileSystem
-	ProviderSessionResolveHomeDirectory             providersessions.ResolveHomeDirectory
-	ProviderSessionCodexWalkDirectory               providersessions.CodexWalkDirectory
-	ProviderSessionCodexResolveSymlinks             providersessions.CodexResolveSymlinks
-	ProviderSessionCursorWalkDirectory              providersessions.CursorWalkDirectory
-	ProviderSessionCursorResolveSymlinks            providersessions.CursorResolveSymlinks
-	ProviderSessionCursorOpenDatabase               providersessions.CursorOpenSQLDatabase
-	ProviderSessionOperatingSystem                  providersessions.OperatingSystem
+	ProviderSessionFileSystem                       providersessionswire.FileSystem
+	ProviderSessionResolveHomeDirectory             providersessionswire.ResolveHomeDirectory
+	ProviderSessionCodexWalkDirectory               providersessionswire.CodexWalkDirectory
+	ProviderSessionCodexResolveSymlinks             providersessionswire.CodexResolveSymlinks
+	ProviderSessionCursorWalkDirectory              providersessionswire.CursorWalkDirectory
+	ProviderSessionCursorResolveSymlinks            providersessionswire.CursorResolveSymlinks
+	ProviderSessionCursorOpenDatabase               providersessionswire.CursorOpenSQLDatabase
+	ProviderSessionOperatingSystem                  providersessionswire.OperatingSystem
 	OperatorSettingsFileSystem                      operatorsettings.FileSystem
 	OperatorSettingsCreateTemporaryFile             operatorsettings.CreateTemporaryFile
 	OperatorSettingsIDGenerator                     operatorsettings.IDGenerator

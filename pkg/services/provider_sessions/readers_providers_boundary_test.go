@@ -10,6 +10,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 	codexreader "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader"
 	codexreaderwire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader/wire"
 	cursorreaderwire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/wire"
@@ -35,8 +36,8 @@ func newCodexReaderForRoot(t *testing.T, root string) codexreader.Service {
 	t.Helper()
 	reader, err := codexreaderwire.NewService(codexreader.Dependencies{
 		Files:           platformfilesystem.Local{},
-		WalkDirectory:   providersessions.CodexWalkDirectory(filepath.WalkDir),
-		ResolveSymlinks: providersessions.CodexResolveSymlinks(filepath.EvalSymlinks),
+		WalkDirectory:   providersessionsinternal.CodexWalkDirectory(filepath.WalkDir),
+		ResolveSymlinks: providersessionsinternal.CodexResolveSymlinks(filepath.EvalSymlinks),
 		SessionsRoot:    root,
 	})
 	if err != nil {
@@ -51,9 +52,9 @@ func newCursorReaderForRoot(t *testing.T, root string) interface {
 	t.Helper()
 	reader, err := cursorreaderwire.NewService(
 		platformfilesystem.Local{},
-		providersessions.CursorWalkDirectory(filepath.WalkDir),
-		providersessions.CursorResolveSymlinks(filepath.EvalSymlinks),
-		providersessions.CursorOpenSQLDatabase(sql.Open),
+		providersessionsinternal.CursorWalkDirectory(filepath.WalkDir),
+		providersessionsinternal.CursorResolveSymlinks(filepath.EvalSymlinks),
+		providersessionsinternal.CursorOpenSQLDatabase(sql.Open),
 		root,
 	)
 	if err != nil {

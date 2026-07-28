@@ -4,12 +4,6 @@
   "sortKey": "file name ascending byte order",
   "files": [
     {
-      "file": "construction_ports.go",
-      "classification": "fold_target_construction_port",
-      "foldDestination": "pkg/services/provider_sessions/internal",
-      "note": "Wire/owner construction and process-edge ports (FileSystem, home/OS resolution, Codex/Cursor walk/symlink/SQL helpers) fold into private implementation; not peer-facing Service contract."
-    },
-    {
       "file": "contracts.go",
       "classification": "thin_root_contract",
       "note": "Peer Service interface plus Inspect/Project/Details request, result, value, and typed-error contracts."

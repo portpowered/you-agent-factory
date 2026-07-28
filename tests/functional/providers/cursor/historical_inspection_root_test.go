@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -252,7 +253,7 @@ func startCursorInspectionRootServer(
 		edges.ProviderSessionResolveHomeDirectory = func() (string, error) { return homeDir, nil }
 	}
 	if edges.ProviderSessionOperatingSystem == "" {
-		edges.ProviderSessionOperatingSystem = providersessions.OperatingSystem(runtime.GOOS)
+		edges.ProviderSessionOperatingSystem = providersessionsinternal.OperatingSystem(runtime.GOOS)
 	}
 
 	dir := support.ScaffoldFactory(t, map[string]any{

@@ -112,31 +112,23 @@ func TestProviderSessionsRootGoInventoryClassifiesThinRootContractSurfaces(t *te
 	}
 }
 
-func TestProviderSessionsRootGoInventoryNamesConstructionPortsFoldTarget(t *testing.T) {
+func TestProviderSessionsConstructionPortsFoldedToInternal(t *testing.T) {
 	t.Parallel()
 
 	root := repositoryRoot(t)
-	inventory, err := ownershipinventory.LoadProviderSessionsRootGoInventory(root)
+	live, err := ownershipinventory.ListProviderSessionsRootGoFiles(root)
 	if err != nil {
-		t.Fatalf("LoadProviderSessionsRootGoInventory() error = %v", err)
+		t.Fatalf("ListProviderSessionsRootGoFiles() error = %v", err)
 	}
-
-	targets := ownershipinventory.ProviderSessionsRootGoFoldTargets(inventory)
-	var construction *ownershipinventory.ProviderSessionsRootGoFile
-	for index := range targets {
-		if targets[index].File == "construction_ports.go" {
-			construction = &targets[index]
-			break
+	for _, name := range live {
+		if name == "construction_ports.go" {
+			t.Fatal("construction_ports.go still present at public provider_sessions root")
 		}
 	}
-	if construction == nil {
-		t.Fatal("fold targets missing construction_ports.go")
-	}
-	if construction.Classification != ownershipinventory.ProviderSessionsRootGoFoldTargetConstruction {
-		t.Fatalf("construction_ports.go classification = %q, want %q", construction.Classification, ownershipinventory.ProviderSessionsRootGoFoldTargetConstruction)
-	}
-	if construction.FoldDestination != "pkg/services/provider_sessions/internal" {
-		t.Fatalf("construction_ports.go foldDestination = %q, want pkg/services/provider_sessions/internal", construction.FoldDestination)
+
+	internalPath := filepath.Join(root, "pkg/services/provider_sessions/internal/construction_ports.go")
+	if _, err := os.Stat(internalPath); err != nil {
+		t.Fatalf("internal construction_ports.go missing: %v", err)
 	}
 }
 

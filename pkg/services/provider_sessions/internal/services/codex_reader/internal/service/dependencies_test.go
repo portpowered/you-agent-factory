@@ -4,11 +4,11 @@ import (
 	"path/filepath"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 )
 
 var (
 	testFiles           platformfilesystem.Local
-	testWalkDirectory   = providersessions.CodexWalkDirectory(filepath.WalkDir)
-	testResolveSymlinks = providersessions.CodexResolveSymlinks(filepath.EvalSymlinks)
+	testWalkDirectory   = providersessionsinternal.CodexWalkDirectory(filepath.WalkDir)
+	testResolveSymlinks = providersessionsinternal.CodexResolveSymlinks(filepath.EvalSymlinks)
 )

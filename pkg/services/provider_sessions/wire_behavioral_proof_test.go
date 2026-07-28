@@ -9,6 +9,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 	providersessionswire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
@@ -169,11 +170,11 @@ func wireServiceForRoots(t *testing.T, codexRoot, cursorRoot string) providerses
 	t.Helper()
 	service, err := providersessionswire.NewForRoots(
 		platformfilesystem.Local{},
-		providersessions.CodexWalkDirectory(filepath.WalkDir),
-		providersessions.CodexResolveSymlinks(filepath.EvalSymlinks),
-		providersessions.CursorWalkDirectory(filepath.WalkDir),
-		providersessions.CursorResolveSymlinks(filepath.EvalSymlinks),
-		providersessions.CursorOpenSQLDatabase(sql.Open),
+		providersessionsinternal.CodexWalkDirectory(filepath.WalkDir),
+		providersessionsinternal.CodexResolveSymlinks(filepath.EvalSymlinks),
+		providersessionsinternal.CursorWalkDirectory(filepath.WalkDir),
+		providersessionsinternal.CursorResolveSymlinks(filepath.EvalSymlinks),
+		providersessionsinternal.CursorOpenSQLDatabase(sql.Open),
 		codexRoot,
 		cursorRoot,
 	)
