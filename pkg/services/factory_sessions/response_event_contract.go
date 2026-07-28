@@ -2,6 +2,8 @@ package factorysessions
 
 import (
 	"errors"
+	"time"
+
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 )
 
@@ -103,6 +105,18 @@ var (
 	// ErrInvalidResponseEventFilter reports an unsupported response-event kind.
 	ErrInvalidResponseEventFilter = errors.New("invalid factory response-event filter")
 )
+
+// ResponseEventRetentionLimits configures hard session-wide bounds for retained
+// FactoryResponseEvent history. Process-edge replacements may supply tighter
+// limits for functional proofs without changing production defaults.
+type ResponseEventRetentionLimits struct {
+	MaxEvents int
+	MaxBytes  int
+	// CompletedRetentionWindow overrides the late-subscription window for
+	// completed response-event stores when positive. Functional proofs use this
+	// to advance a controllable clock without waiting on wall-clock retention.
+	CompletedRetentionWindow time.Duration
+}
 
 // --- merged from response_stream_contract.go ---
 

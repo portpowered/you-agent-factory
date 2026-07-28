@@ -1,4 +1,4 @@
-package runtime_api
+package apisurface
 
 import (
 	"encoding/json"
@@ -6,11 +6,10 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
-func TestFactoryEventTransportMappingRejectsMalformedCanonicalPayload(t *testing.T) {
-	_, err := apisurface.FactoryEventsToAPI([]interfaces.FactoryEvent{{
+func TestFactoryEventsToAPIRejectsMalformedCanonicalPayload(t *testing.T) {
+	_, err := FactoryEventsToAPI([]interfaces.FactoryEvent{{
 		Id:            "factory-event/run-finished",
 		Payload:       json.RawMessage(`{"state":`),
 		SchemaVersion: interfaces.FactoryEventSchemaVersionV1,

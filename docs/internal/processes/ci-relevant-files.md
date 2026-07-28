@@ -668,6 +668,12 @@ Wave 0 functional-tests-expansion planning authority lives under
   stories 001–003 migrate/delete: add destination-owned rows (including
   `defaults_loaded_config_long_test.go` checklist cell), remove stale smoke source
   rows, and mark both batches `released`.
+  `tests/functional/events/response_events/stream_test.go` owns public Response
+  Event SSE stream contracts (`GET /factory-sessions/{session_id}/response-events`)
+  through `support.OpenFactoryResponseEventStreamAt` and related helpers; Wave 2
+  consumption released `replay_contracts-delete-03-events-response-events` after
+  retiring `replay_script_boundary_events_test.go` and the two stream-mapped
+  `runtime_api` inference-event scenarios.
   `tests/functional/factory/definitions/init_test.go` owns public Factory-init
   functional coverage through `session create --init-new-factory` against
   `support.StartFunctionalAPIServer`, with seeded Work run via

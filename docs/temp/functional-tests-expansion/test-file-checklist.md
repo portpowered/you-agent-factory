@@ -590,6 +590,22 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestWorkBatchAcceptsInlineFileAndStdinShapes`.
   - `TestWorkBatchSelectsDefaultAndExplicitWorkTypes`.
   - `TestWorkBatchRejectsUnknownTypeWithoutPartialMutation`.
+  - `TestWorkBatchDependencyOrderingNormalizesRuntimeWork`.
+
+- [x] `tests/functional/work/submission/batch_boundary_test.go`
+  - `TestWorkBatchPublicShapeStaysAlignedAcrossWatchedFileAndHTTP`.
+
+- [x] `tests/functional/work/submission/structured_submission_test.go`
+  - `TestAPISubmitWorkAcceptsHeaderOnlyStructuredSubmission`.
+  - `TestAPISubmitWorkRejectsEmptyStructuredSubmission`.
+  - `TestAPISubmitWorkAcceptsOrderedTextSubmission`.
+  - `TestAPISubmitWorkAcceptsCanonicalContentParts`.
+  - `TestAPISubmitWorkAcceptsMixedTextAndImageOnSupportedRunner`.
+  - `TestAPISubmitWorkRejectsMixedTextAndImageOnUnsupportedRunner`.
+  - `TestAPISubmitWorkRejectsForgedStructuredFileReference`.
+
+- [x] `tests/functional/work/submission/legacy_unary_test.go`
+  - `TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly`.
 
 - [x] `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
 - [x] `tests/functional/work/transports/cli/submit/unary_contract/unary_contract_test.go`
@@ -603,12 +619,36 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     the Work-owned CLI batch contract cell uses root.BuildProcess + edges.Edges.
 
 - [x] `tests/functional/work/transports/cli/submit/unary_contract/unary_contract_test.go`
-  - `TestCLISubmitUnaryFileAndStdinReachWork` verifies unary submit from file and
-    stdin reaches Work on a running Factory Session.
+  - `TestCLISubmitUnaryFileAndStdinReachWork` verifies file-backed and stdin
+    unary submit reaches session-scoped Work through Process.Execute.
   - `TestCLISubmitUnaryDefaultAndExplicitSessionTargeting` verifies default and
-  explicit session targeting for unary submit.
-  - `TestCLISubmitUnaryStructuredFailurePreservesPublicMessage` verifies
-    structured failure surfaces a public CLI message.
+    explicit `--session` targeting through public CLI contracts.
+  - `TestCLISubmitUnaryStructuredFailurePreservesPublicMessage` verifies typed
+    failure preservation against a controlled public HTTP edge.
+  - `TestCLISubmitUnaryContractHarnessExecutesThroughRootBuildProcess` verifies
+    the Work-owned CLI unary contract cell uses root.BuildProcess + edges.Edges.
+
+- [x] `tests/functional/work/peer_import_boundary_test.go`
+  - `TestFunctionalWorkPackageUsesPublicProcessImportsOnly`.
+  - `TestWorkProductionPeersReachWorkThroughPublishedSurfacesOnly`.
+
+- [x] `tests/functional/work/root_composition/build_process_inert_test.go`
+  - `TestWorkEffectsRemainInertThroughRootBuildProcessConstruction`.
+
+- [x] `tests/functional/work/root_composition/packaged_root_shape_test.go`
+  - `TestWorkPackagedRootShapeMatchesCanonicalServiceLayout`.
+
+- [x] `tests/functional/work/root_composition/recovery_recordings_visualization_activation_test.go`
+  - `TestWorkRecordingsReadActivatesThroughRootBuildProcessAfterLifecycle`.
+  - `TestWorkRecoveryActivatesThroughRootBuildProcessAfterLifecycle`.
+  - `TestWorkVisualizationActivatesThroughRootBuildProcessAfterLifecycle`.
+
+- [x] `tests/functional/work/root_composition/routing_relationship_activation_test.go`
+  - `TestWorkRelationshipsActivateThroughRootBuildProcessAfterLifecycle`.
+  - `TestWorkRoutingActivatesThroughRootBuildProcessAfterLifecycle`.
+
+- [x] `tests/functional/work/root_composition/submission_activation_test.go`
+  - `TestWorkSubmissionAndCLISubmitActivateThroughRootBuildProcessAfterLifecycle`.
 
 - [x] `tests/functional/work/recordings/recordings_read_test.go`
   - `TestRecordingsBackedWorkReadsUseRecordingsRootContract`.
@@ -617,6 +657,9 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures`.
 
 - [x] `tests/functional/work/submission/http_test.go`
+  - `TestAPIPOSTSubmitAndQueryWork`.
+  - `TestAPIBatchUpsertAcceptsWorksContent`.
+  - `TestCLIWorkTypeNameReachesLiveAPIHandler`.
   - `TestAPISubmitBatchThenListAndGetWork`.
   - `TestAPIUpsertWorkRequestUsesCanonicalIdentity`.
   - `TestAPIUnknownWorkReturnsTypedNotFound`.
@@ -645,6 +688,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 - [x] `tests/functional/work/root_composition/submission_activation_test.go`
   - `TestWorkSubmissionAndCLISubmitActivateThroughRootBuildProcessAfterLifecycle`.
+
+- [x] `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
+  - `TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation`.
+  - `TestCLISubmitBatchSuccessHumanAndJSONShapes`.
+  - `TestCLISubmitBatchInvalidJSONFailsBeforeUpsert`.
+  - `TestCLISubmitBatchContractHarnessExecutesThroughRootBuildProcess`.
 
 - [x] `tests/functional/work/relationships/dependencies_test.go`
   - `TestDependentWorkWaitsForPrerequisiteTargetState`.
@@ -722,6 +771,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 - [x] `tests/functional/sessions/controls/pause_resume_test.go`
   - `TestPausedFactorySessionBuffersSubmittedWork`.
+  - `TestPausedFactorySessionReturnsInvocationPausedStatus`.
   - `TestResumedFactorySessionDrainsBufferedWorkInOrder`.
   - `TestPauseResumeEmitsDurableLifecycleEvents`.
   - `TestAPIPauseResumeCancelAndTerminateFactorySession`.
@@ -827,12 +877,6 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestImportExportPreservesNestedDocsScriptsAndMetadata`.
   - `TestInvalidImportDoesNotReplaceCurrentFactory`.
 
-
-- [x] `tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go`
-  - `TestCLIFactoryValidateRejectsInvalidDefinitionActionably`.
-  - `TestCLIFactoryValidateDoesNotMutateOnFailure`.
-  - `TestCLIFactoryPersistFromFileThenRunSucceeds`.
-
 - [x] `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
   - `TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation`.
   - `TestCLISubmitBatchSuccessHumanAndJSONShapes`.
@@ -879,16 +923,6 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Factory runtime (service-mirrored Petri depth)
 
-- [x] `tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go`
-  - `TestPetriMultiStagePipelineCompletesAtPublicTerminals`.
-  - `TestPetriFailureRoutesToDocumentedFailedPlace`.
-  - `TestPetriMultiTransitionPreservesWorkCorrelation`.
-
-- [x] `tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go`
-  - `TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied`.
-  - `TestPetriParentOrSameNameGuardReleasesExpectedWork`.
-  - `TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState`.
-
 - [x] `tests/functional/factory_runtime/peer_import_boundary_test.go`
   - `TestFunctionalFactoryRuntimePackageUsesPublicProcessImportsOnly`.
   - `TestProductionPeersReachFactoryRuntimeThroughPublishedSurfacesOnly`.
@@ -905,6 +939,21 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/factory_runtime/root_composition/workflow_orchestration_activation_test.go`
   - `TestFactoryRuntimeJavaScriptWorkflowActivatesThroughRootBuildProcessAfterLifecycle`.
   - `TestFactoryRuntimePetriOrchestrationActivatesThroughRootBuildProcessAfterLifecycle`.
+
+- [x] `tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go`
+  - `TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied`.
+  - `TestPetriParentOrSameNameGuardReleasesExpectedWork`.
+  - `TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState`.
+
+- [x] `tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go`
+  - `TestPetriMultiStagePipelineCompletesAtPublicTerminals`.
+  - `TestPetriFailureRoutesToDocumentedFailedPlace`.
+  - `TestPetriMultiTransitionPreservesWorkCorrelation`.
+
+- [x] `tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go`
+  - `TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied`.
+  - `TestPetriParentOrSameNameGuardReleasesExpectedWork`.
+  - `TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState`.
 
 ### Packaged factories
 
@@ -936,6 +985,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 - [x] `tests/functional/factory/packaged/goal/invocation_test.go`
   - `TestPackagedGoalAcceptCompletesWithSummary` covers accepted routing.
+  - `TestPackagedGoalContinueRepeatsThenCompletes` covers continue repeats.
   - `TestPackagedGoalRejectRepeatsThenCompletes` covers feedback propagation.
   - `TestPackagedGoalUnknownDecisionFails` covers classifier failure.
   - `TestPackagedGoalPausedSubmissionResumes` covers session control locally.
@@ -944,6 +994,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedQuorumRequiredInputCompletes` covers member dispatch and final
     result.
   - `TestPackagedQuorumOptionalMemberSettingsReachWorkers` covers overrides.
+  - `TestPackagedQuorumGatesMergeUntilBothBranchesComplete` covers merge gating.
   - `TestPackagedQuorumInsufficientSuccessfulMembersFails` covers failure.
 
 - [x] `tests/functional/factory/packaged/review/invocation_test.go`
@@ -1119,10 +1170,11 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIGetFactoryEventsReturnsOrderedDurableHistory`.
   - `TestAPIEventCursorReturnsOnlyNewerEvents`.
   - `TestAPIInvalidEventCursorReturnsTypedError`.
+  - `TestAPISubmitWorkEmitsCanonicalTraceAwareBatchEvent`.
   - `TestFactoryEventStreamIsOrderedAndClosesAtSessionTermination`.
   - `TestFactoryEventStreamReconnectHasNoGapOrDuplicate`.
 
-- [ ] `tests/functional/events/response_events/stream_test.go`
+- [x] `tests/functional/events/response_events/stream_test.go`
   - `TestAPIResponseEventSSEStreamsRetainedThenLiveEvents`.
   - `TestAPIResponseEventCursorGapEmitsStreamGap`.
   - `TestAPIResponseEventSessionExpiryReturnsTypedGone`.
@@ -1267,3 +1319,19 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/providers/gemini/process_harness_test.go`
 - [x] `tests/functional/providers/kiro/process_harness_test.go`
 - [x] `tests/functional/providers/pi/process_harness_test.go`
+
+- [x] `tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go`
+
+- [x] `tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go`
+
+- [x] `tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go`
+
+- [x] `tests/functional/provider_sessions/build_process_inert_test.go`
+
+- [x] `tests/functional/provider_sessions/peer_import_boundary_test.go`
+
+- [x] `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
+
+- [x] `tests/functional/workers/transports/cli/run/help/invocation_help_test.go`
+
+- [x] `tests/functional/workers/transports/cli/run/modes/output_modes_test.go`

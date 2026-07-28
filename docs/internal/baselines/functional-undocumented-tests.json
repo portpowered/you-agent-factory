@@ -551,18 +551,6 @@
       "name": "TestReplayRuntimeConfigSmoke_CanonicalWorkstationsDriveDispatchAndReplay"
     },
     {
-      "file": "replay_contracts/replay_script_boundary_events_test.go",
-      "name": "TestReplayScriptBoundaryEvents_CanonicalHistoryAndArtifactIncludeScriptResponseBoundary"
-    },
-    {
-      "file": "replay_contracts/replay_script_boundary_events_test.go",
-      "name": "TestReplayScriptBoundaryEvents_CanonicalHistoryIncludesScriptRequestBoundary"
-    },
-    {
-      "file": "replay_contracts/replay_script_boundary_events_test.go",
-      "name": "TestReplayScriptBoundaryEvents_ProcessFailureBoundaryPersistsInCanonicalHistoryAndArtifact"
-    },
-    {
       "file": "replay_contracts/replay_thin_event_dual_dispatch_smoke_long_test.go",
       "name": "TestReplayThinEventDualDispatchSmoke_ReplayAndReadersReuseSharedArtifact"
     },
@@ -587,76 +575,16 @@
       "name": "TestReplayWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelation"
     },
     {
-      "file": "runtime_api/api_batch_submission_boundary_smoke_long_test.go",
-      "name": "TestFactoryRequestBatch_PublicBatchShapeStaysAlignedAcrossWatchedFileAndHTTP"
-    },
-    {
       "file": "runtime_api/api_cleanup_smoke_test.go",
       "name": "TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces"
-    },
-    {
-      "file": "runtime_api/api_config_driven_submit_query_smoke_test.go",
-      "name": "TestConfigDriven_RESTAPISubmitAndQuery"
-    },
-    {
-      "file": "runtime_api/api_factory_event_mapping_test.go",
-      "name": "TestFactoryEventTransportMappingRejectsMalformedCanonicalPayload"
     },
     {
       "file": "runtime_api/api_functional_server_override_regression_test.go",
       "name": "TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride"
     },
     {
-      "file": "runtime_api/api_functionallong_compile_smoke_test.go",
-      "name": "TestRuntimeAPI_CompilesWithFunctionalLongTag"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_SubmitWorkContentAcceptsCanonicalParts"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredSubmission"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubmissionOnSupportedRunner"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptOrderedTextSubmission"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectForgedStructuredFileReference"
-    },
-    {
-      "file": "runtime_api/api_generated_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubmissionOnUnsupportedRunner"
-    },
-    {
-      "file": "runtime_api/api_inference_events_test.go",
-      "name": "TestInferenceEvents_HTTPStreamAndPublicWorkCorrelateRetryAttempts"
-    },
-    {
       "file": "runtime_api/api_inference_events_test.go",
       "name": "TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact"
-    },
-    {
-      "file": "runtime_api/api_inference_events_test.go",
-      "name": "TestInferenceEvents_ThinEventSmoke_CapturesThinnedDispatchInferenceSequenceAndReconstructsViews"
-    },
-    {
-      "file": "runtime_api/api_manual_work_recovery_test.go",
-      "name": "TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress"
     },
     {
       "file": "runtime_api/api_model_local_inference_long_test.go",
@@ -665,54 +593,6 @@
     {
       "file": "runtime_api/api_model_transport_smoke_test.go",
       "name": "TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned"
-    },
-    {
-      "file": "runtime_api/api_packaged_deep_research_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedDeepResearchUsesMaterializedFactorySource"
-    },
-    {
-      "file": "runtime_api/api_packaged_goal_invocation_test.go",
-      "name": "TestPackagedGoalBuiltInTopology_SubmitWhilePausedResumesThroughSessionControl"
-    },
-    {
-      "file": "runtime_api/api_packaged_goal_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedGoalContinueRepeatsBeforeCompletion"
-    },
-    {
-      "file": "runtime_api/api_packaged_goal_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedGoalRejectRepeatsBeforeCompletion"
-    },
-    {
-      "file": "runtime_api/api_packaged_goal_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedGoalReturnsExplicitSummaryPrimaryResult"
-    },
-    {
-      "file": "runtime_api/api_packaged_goal_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedGoalWorkerFailureReturnsFailedStatusDetails"
-    },
-    {
-      "file": "runtime_api/api_packaged_quorum_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedQuorumAppliesRoleArguments"
-    },
-    {
-      "file": "runtime_api/api_packaged_quorum_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedQuorumGatesMergeUntilBothBranchesComplete"
-    },
-    {
-      "file": "runtime_api/api_packaged_review_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedReviewRejectsThenApprovesRevision"
-    },
-    {
-      "file": "runtime_api/api_packaged_review_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedReviewReturnsApprovedCandidate"
-    },
-    {
-      "file": "runtime_api/api_packaged_review_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedReviewWorkerFailureReturnsFailedStatus"
-    },
-    {
-      "file": "runtime_api/api_request_batch_boundary_smoke_test.go",
-      "name": "TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork"
     },
     {
       "file": "runtime_api/api_runtime_config_alignment_smoke_test.go",
@@ -737,42 +617,6 @@
     {
       "file": "runtime_api/api_service_mode_observability_smoke_test.go",
       "name": "TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayReachableUntilCanceled"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_CanceledRequestContextStopsRequest"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PausedSessionReturnsPausedStatus"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_RejectsArgsWithoutActiveSignature"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_RejectsInvalidStructuredArgValueShape"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_RejectsWhitespaceOnlyText"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_ReturnsPrimaryResult"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_TimeoutReturnsTimedOutStatus"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_UnresolvedPrimaryResultReturnsFailedStatus"
-    },
-    {
-      "file": "runtime_api/api_submit_runtime_work_trace_shaping_smoke_test.go",
-      "name": "TestSubmitRuntimeWork_EmitsCanonicalTraceAwareBatchEvent"
     },
     {
       "file": "runtime_api/dashboard_engine_state_test.go",

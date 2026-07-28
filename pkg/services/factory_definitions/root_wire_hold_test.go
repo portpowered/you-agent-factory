@@ -11,11 +11,7 @@ const (
 	factoryDefinitionsInternalImport = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	factoryDefinitionsPeerImport       = "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	rootPkgWireImport                  = "github.com/portpowered/infinite-you/pkg/wire"
-
-	// PostAutoDELDefinitionsWireRetargetFollowUp names the Automations-leased
-	// follow-up that must retarget root pkg/wire construction to
-	// factory_definitions/wire after AUTO-DEL completes.
-	PostAutoDELDefinitionsWireRetargetFollowUp = "post-AUTO-DEL: retarget root pkg/wire Factory Definitions construction from factory_definitions/service to factory_definitions/wire only (factory_definition_service_provider.go, cli_commands.go, profiles.go, session_runtime_providers.go)"
+	factoryDefinitionsWireImport       = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 )
 
 var transitionalServiceForbiddenImports = []string{
@@ -61,16 +57,16 @@ func TestTransitionalServiceShim_ForwardsFromInternalOnly(t *testing.T) {
 	}
 }
 
-func TestRootPkgWire_StillImportsTransitionalServiceResidual(t *testing.T) {
+func TestRootPkgWire_DoesNotImportTransitionalServiceResidual(t *testing.T) {
 	t.Parallel()
 
 	imports := packageImports(t, rootPkgWireImport)
-	if !importsContain(imports, transitionalServiceImport) {
+	if importsContain(imports, transitionalServiceImport) {
 		t.Fatalf(
-			"%s still imports %s under the Automations-leased root wire hold; follow-up %q",
+			"%s must construct Factory Definitions through %s, not transitional service shim %s",
 			rootPkgWireImport,
+			factoryDefinitionsWireImport,
 			transitionalServiceImport,
-			PostAutoDELDefinitionsWireRetargetFollowUp,
 		)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
 	snapshotsportabilityeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/editable"
@@ -36,6 +37,20 @@ func LoadedFactorySnapshotCapturer() contracts.LoadedFactorySnapshotCapturer {
 func FactorySnapshotCapturer() contracts.FactorySnapshotCapturer {
 	return snapshotsportabilitycapture.NewExplicit(
 		factorysnapshot.ObjectFromFactoryConfig,
+	)
+}
+
+// CaptureInitialSnapshot captures the portable Factory Definition stored with
+// a newly created runtime recording.
+func CaptureInitialSnapshot(
+	loaded contracts.LoadedFactorySource,
+	preparePortableFactoryConfig contracts.PortableFactoryConfigPreparer,
+	captureFactorySnapshot contracts.FactorySnapshotCapturer,
+) (*contracts.FactorySnapshot, error) {
+	return factorydefinitionsinternal.CaptureInitialSnapshot(
+		loaded,
+		preparePortableFactoryConfig,
+		captureFactorySnapshot,
 	)
 }
 

@@ -29,6 +29,7 @@ const (
 	packagedGoalReviewWorkstationName         = "review-goal"
 	packagedGoalMockWorkerAcceptedSummary     = "mock worker accepted"
 	packagedGoalRejectThenCompleteSummary     = "finished after rejection"
+	packagedGoalContinueThenCompleteSummary   = "finished after continue"
 )
 
 func scaffoldPackagedGoalBuiltInFactory(t *testing.T) string {

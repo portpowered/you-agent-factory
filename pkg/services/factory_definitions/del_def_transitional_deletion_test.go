@@ -20,8 +20,8 @@ var allowedDeletedTransitionalImporterPrefixes = []string{
 
 // TestDelDefTransitionalDeletion_NoImportsOfDeletedPackages proves DEL-DEF
 // story 002 cleared production and test imports of deleted transitional
-// packages, except the documented Automations-leased root pkg/wire residual
-// that still compiles against factory_definitions/service.
+// packages, except the documented root pkg/wire residual for deleted
+// transitional import paths retargeted in later DEF fold work.
 func TestDelDefTransitionalDeletion_NoImportsOfDeletedPackages(t *testing.T) {
 	t.Parallel()
 

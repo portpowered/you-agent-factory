@@ -1,4 +1,4 @@
-package runtime_api
+package submission_test
 
 import (
 	"context"
@@ -9,14 +9,19 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// portos:func-length-exception owner=agent-factory reason=legacy-unary-runtime-submit-smoke review=2026-07-22 removal=split-http-upsert-workfile-watcher-and-cron-submit-assertions-before-next-unary-retirement-change
+// TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly proves every
+// legacy runtime submit ingress path records canonical FACTORY_REQUEST_BATCH work
+// requests in the public Factory Event history.
 func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T) {
-	support.SkipLongFunctional(t, "slow legacy unary retirement boundary smoke")
+	if testing.Short() {
+		t.Skip("slow legacy unary retirement boundary smoke")
+	}
 
 	t.Run("direct_POST_and_idempotent_PUT", func(t *testing.T) {
 		assertLegacyUnaryDirectSubmitAndPut(t)
@@ -38,17 +43,22 @@ func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T
 func assertLegacyUnaryDirectSubmitAndPut(t *testing.T) {
 	t.Helper()
 
-	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	server := startFunctionalServer(t, dir, true)
+	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
 
-	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	submitted := support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		Name:         stringPtr("direct-post-canonical-submit"),
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "direct post canonical submit"},
 	})
-	if traceID == "" {
+	if submitted.TraceId == "" {
 		t.Fatal("POST /work returned an empty trace ID")
 	}
-	waitForGeneratedWorkComplete(t, server.URL(), traceID, 10*time.Second)
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
 
 	workTypeName := "task"
 	workID := "work-retired-unary-put"
@@ -57,25 +67,25 @@ func assertLegacyUnaryDirectSubmitAndPut(t *testing.T) {
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
 		Works: &[]factoryapi.Work{{
 			Name:         "idempotent-put",
-			WorkId:       &workID,
+			WorkId:       stringPtr(workID),
 			WorkTypeName: &workTypeName,
 			Payload:      map[string]string{"title": "idempotent put canonical submit"},
 		}},
 	}
-	first := putGeneratedWorkRequest(t, server.URL(), request.RequestId, request)
-	retry := putGeneratedWorkRequest(t, server.URL(), request.RequestId, request)
+	first := support.UpsertDefaultSessionWorkRequest(t, server.URL(), request)
+	retry := support.UpsertDefaultSessionWorkRequest(t, server.URL(), request)
 	if retry.TraceId != first.TraceId {
 		t.Fatalf("idempotent PUT trace_id changed: first=%q retry=%q", first.TraceId, retry.TraceId)
 	}
-	waitForGeneratedWorkIDsComplete(t, server.URL(), []string{workID}, 10*time.Second)
+	waitForWorkIDsComplete(t, server.URL(), []string{workID}, 10*time.Second)
 	support.AssertSingleWorkRequestEvent(t, server.GetFactoryEvents(t), request.RequestId, workID, "task")
 }
 
 func assertLegacyUnaryStartupWorkFileBatch(t *testing.T) {
 	t.Helper()
 
-	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	workFile := filepath.Join(dir, "startup-work.json")
+	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
+	workFile := filepath.Join(factoryDir, "startup-work.json")
 	support.WriteWorkRequestFile(t, workFile, work.SubmitRequest{
 		RequestID:  "request-retired-unary-work-file",
 		Name:       "startup-file",
@@ -84,8 +94,15 @@ func assertLegacyUnaryStartupWorkFileBatch(t *testing.T) {
 		Payload:    []byte(`{"title":"startup file canonical submit"}`),
 	})
 
-	server := startFunctionalServerWithArgs(t, dir, true, []string{"--work", workFile})
-	waitForGeneratedWorkIDsComplete(t, server.URL(), []string{"work-retired-unary-work-file"}, 10*time.Second)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+		Args:                      []string{"--work", workFile},
+	})
+	defer server.Stop(t)
+
+	waitForWorkIDsComplete(t, server.URL(), []string{"work-retired-unary-work-file"}, 10*time.Second)
 	support.AssertSingleWorkRequestEvent(
 		t,
 		server.GetFactoryEvents(t),
@@ -98,17 +115,26 @@ func assertLegacyUnaryStartupWorkFileBatch(t *testing.T) {
 func assertLegacyUnaryFileWatcherBatchConversion(t *testing.T) {
 	t.Helper()
 
-	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	inputDir := filepath.Join(dir, interfaces.InputsDir, "task", interfaces.DefaultChannelName)
+	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
+	inputDir := filepath.Join(factoryDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName)
 	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatalf("create input dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(inputDir, "non-batch.json"), []byte(`{"title":"raw JSON file input"}`), 0o644); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(inputDir, "non-batch.json"),
+		[]byte(`{"title":"raw JSON file input"}`),
+		0o644,
+	); err != nil {
 		t.Fatalf("write non-batch seed: %v", err)
 	}
 
-	server := startFunctionalServer(t, dir, true)
-	waitForGeneratedWorkTypeComplete(t, server.URL(), "task", 10*time.Second)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	waitForWorkTypeComplete(t, server.URL(), "task", 10*time.Second)
 	support.AssertSingleWorkRequestEventByWorkName(t, server.GetFactoryEvents(t), "non-batch", "task")
 }
 
@@ -117,11 +143,20 @@ func assertLegacyUnaryCronSubmitPath(t *testing.T) {
 
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
-	dir := support.ScaffoldFactory(t, retiredUnaryCronFactoryConfig("* * * * *"))
+	factoryDir := support.ScaffoldFactory(t, retiredUnaryCronFactoryConfig("* * * * *"))
 	observedSubmissions := make(chan work.FactorySubmissionRecord, 16)
-	server := startFunctionalServerWithArgs(t, dir, true, nil, withSubmissionRecorder(func(record work.FactorySubmissionRecord) {
-		observedSubmissions <- record
-	}), withClock(fakeClock))
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			Clock: fakeClock,
+			SubmissionRecorder: func(record work.FactorySubmissionRecord) {
+				observedSubmissions <- record
+			},
+		},
+	})
+	defer server.Stop(t)
 
 	waitForFakeClockWaiters(t, fakeClock, 1)
 	nominalAt := start.Add(time.Minute)
@@ -198,7 +233,11 @@ func waitForCronSubmissionRecord(
 	}
 }
 
-func assertWorkRequestEventIncludesWorkID(t *testing.T, events []factoryapi.FactoryEvent, workID, workstation string) {
+func assertWorkRequestEventIncludesWorkID(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	workID, workstation string,
+) {
 	t.Helper()
 
 	for _, event := range events {
@@ -209,8 +248,8 @@ func assertWorkRequestEventIncludesWorkID(t *testing.T, events []factoryapi.Fact
 		if err != nil {
 			t.Fatalf("decode WORK_REQUEST event %q: %v", event.Id, err)
 		}
-		for _, work := range support.FactoryWorksValue(payload.Works) {
-			if support.StringPointerValue(work.WorkId) != workID {
+		for _, workItem := range support.FactoryWorksValue(payload.Works) {
+			if support.StringPointerValue(workItem.WorkId) != workID {
 				continue
 			}
 			if payload.Type != factoryapi.WorkRequestTypeFactoryRequestBatch {

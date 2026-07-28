@@ -89,15 +89,11 @@ var RequiredSpecialtyTargets = []string{
 // ExpectedDeletionOnlyBatches is the ordered catch-all retirement batch index.
 var ExpectedDeletionOnlyBatches = []string{
 	"runtime_api-delete-01-transport-http",
-	"runtime_api-delete-02-work-submission",
-	"runtime_api-delete-04-sessions",
-	"runtime_api-delete-05-factory-packaged",
 	"runtime_api-delete-06-factory-current",
 	"runtime_api-delete-07-events-replay",
 	"runtime_api-delete-08-models",
 	"runtime_api-delete-09-workers-resilience",
 	"runtime_api-delete-10-observability-product",
-	"runtime_api-delete-11-wrong-layer",
 	"smoke-delete-09-guards",
 	"smoke-delete-11-resilience-process",
 	"smoke-delete-12-product-docs",
@@ -111,7 +107,6 @@ var ExpectedDeletionOnlyBatches = []string{
 	"bootstrap_portability-delete-03-factory-definitions-import-export",
 	"bootstrap_portability-delete-04-portable-config",
 	"replay_contracts-delete-01-events-replay",
-	"replay_contracts-delete-03-events-response-events",
 }
 
 // Check validates ledger completeness against the live functional tree.

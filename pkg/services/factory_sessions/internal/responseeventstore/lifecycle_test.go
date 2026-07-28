@@ -129,6 +129,41 @@ func TestSessionResponseEventStore_CompletedSubscriptionExpiresAfterRetentionWin
 	}
 }
 
+func TestSessionResponseEventStore_CompletedSubscriptionUsesConfiguredRetentionWindow(t *testing.T) {
+	t.Parallel()
+
+	const customWindow = time.Millisecond
+	start := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	clock := &fixedClock{now: start}
+	limits := responseeventstore.DefaultRetentionLimits()
+	limits.CompletedRetentionWindow = customWindow
+	store, err := responseeventstore.NewSessionResponseEventStoreWithClockAndLimits(
+		"session-abc",
+		clock,
+		limits,
+		testResponseEventID,
+	)
+	if err != nil {
+		t.Fatalf("NewSessionResponseEventStoreWithClockAndLimits: %v", err)
+	}
+	if _, err := store.Publish(samplePublishInput()); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	store.Complete()
+
+	clock.Set(start.Add(customWindow - time.Nanosecond))
+	subscription, err := store.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe before configured retention expiry: %v", err)
+	}
+	subscription.Detach()
+
+	clock.Set(start.Add(customWindow))
+	if _, err := store.Subscribe(0); !errors.Is(err, responseeventstore.ErrStoreExpired) {
+		t.Fatalf("Subscribe at configured retention expiry error = %v, want ErrStoreExpired", err)
+	}
+}
+
 func TestSessionResponseEventStore_CompleteLateSubscribeAtLatestDoesNotRegister(t *testing.T) {
 	t.Parallel()
 

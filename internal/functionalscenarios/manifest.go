@@ -126,7 +126,7 @@ func applyReviewedEvidence(scenario *Scenario) {
 	case "rest/submitWorkBySessionId", "rest/listWorkBySessionId", "rest/getStatusBySessionId":
 		markCovered(scenario, LaneLong, "tests/functional/transport/http/server/generated_client_test.go::TestGeneratedClientAndServerSchemaStayAligned", InterfaceREST)
 	case "rest/upsertWorkRequestBySessionId":
-		markCovered(scenario, LaneLong, "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent", InterfaceREST)
+		markCovered(scenario, LaneLong, "tests/functional/work/submission/http_test.go::TestAPIBatchUpsertAcceptsWorksContent", InterfaceREST)
 	case "rest/moveWorkBySessionId":
 		markCovered(scenario, LaneLong, "tests/functional/work/recovery/manual_move_test.go::TestFailedCascadeCanBeRecoveredByPublicWorkMove", InterfaceREST)
 	case "rest/getFactorySessionDispatch", "rest/listFactorySessionDispatches":

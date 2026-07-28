@@ -28,7 +28,9 @@ fold or delete them.
 | --- | --- | --- |
 | `contracts.go` | Thin committed root contract (keep) | Canonical `Service` interface, append/subscribe, projection/query, lifecycle, replay, and artifact-export slice vocabulary plus typed failure sentinels peers branch on via `errors.Is`. |
 | `contracts_test.go` | Thin committed root contract (keep) | Co-located characterization tests for published `Service` slice contracts. |
+| `del_rec_proof_gate_test.go` | Thin committed root contract (keep) | DEL-REC story 005 proof gate for deleted transitional paths and reduced ownership debt. |
 | `metadata.go` | Thin committed root contract (keep) | Factory metadata mismatch warnings for replay-safe inspection at the public boundary. |
+| `packaged_root_shape_test.go` | Thin committed root contract (keep) | DEL-REC story 005 packaged-service root shape seal for wire/internal/transports only. |
 | `portable_recording.go` | Thin committed root contract (keep) | Peer-needed portable JavaScript Factory Session recording vocabulary and writer seams. |
 | `portable_recording_build.go` | Thin committed root contract (keep) | `BuildPortableRecording` maps canonical facts into the portable recording contract. |
 | `portable_recording_validate.go` | Thin committed root contract (keep) | `ValidatePortableRecording` and `DecodePortableRecording` validate detached portable recordings. |
@@ -43,7 +45,7 @@ fold or delete them.
 | `wire_peer_import_boundary_test.go` | Thin committed root contract (keep) | Wire import-boundary test proving `recordings/wire` peers stay on the published root seam. |
 | `workers_root_boundary_test.go` | Thin committed root contract (keep) | Workers import-boundary test proving worker execution stays on the published Recordings root seam. |
 
-**Totals:** 16 root-level `.go` files — all thin committed root contract (keep);
+**Totals:** 18 root-level `.go` files — all thin committed root contract (keep);
 no excess fold/consolidation debt remains at the public root after CLN-REC-CONTRACT-ROOTS seal.
 
 ## Folded clusters (CLN-REC-CONTRACT-ROOTS)

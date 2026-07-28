@@ -32,7 +32,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
-	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution"
@@ -345,7 +344,7 @@ func provideSystemInitializationService(
 			Ensure: ensureOperatorBackendScope,
 		},
 		packagedCatalog,
-		factorydefinitionsservice.NewPackagedFactoryInstaller(persistence, packagedInstallationFileSystem),
+		factorydefinitionswire.NewPackagedFactoryInstaller(persistence, packagedInstallationFileSystem),
 		inspectPath,
 		migrationFiles,
 	)
@@ -371,14 +370,14 @@ func providePackagedFactoryDefinitions() ([]factorydefinitions.PackagedDefinitio
 func providePackagedFactoryCatalog(
 	definitions []factorydefinitions.PackagedDefinition,
 ) (factorydefinitions.PackagedFactoryCatalogOperations, error) {
-	return factorydefinitionsservice.NewPackagedFactoryCatalog(definitions)
+	return factorydefinitionswire.NewPackagedFactoryCatalog(definitions)
 }
 
 func providePackagedFactoryInstallation(
 	persistence factorydefinitions.Persistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
 ) factorydefinitions.PackagedFactoryInstallationOperations {
-	installer := factorydefinitionsservice.NewPackagedFactoryInstallationService(persistence, fileSystem)
+	installer := factorydefinitionswire.NewPackagedFactoryInstallationService(persistence, fileSystem)
 	return factorydefinitions.PackagedFactoryInstallationOperations{
 		Install: installer.InstallPackagedFactory,
 	}

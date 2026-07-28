@@ -20,7 +20,7 @@ func newDurableResponseEventsService(t *testing.T) *JavaScriptRuntimeService {
 	var next atomic.Uint64
 	streams, err := responsestreamwire.NewService(func() string {
 		return fmt.Sprintf("response-event-%d", next.Add(1))
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}

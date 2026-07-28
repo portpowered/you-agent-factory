@@ -1,12 +1,70 @@
 package sessioncontrols_test
 
 import (
+	"strings"
 	"testing"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// TestPausedFactorySessionReturnsInvocationPausedStatus proves invocation against
+// a paused live Factory Session returns a typed INVOCATION_PAUSED failure through
+// the public session invocation API without fabricating a completed primary result.
+func TestPausedFactorySessionReturnsInvocationPausedStatus(t *testing.T) {
+	factoryDir := scaffoldInvocationFactory(t, nil)
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(
+		t,
+		&edges,
+		support.NewStaticSuccessCommandRunner("primary result COMPLETE"),
+		nil,
+	)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     edges,
+	})
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	sessionID := factorysessions.DefaultSessionID
+	pause := postSessionLifecycleControl(
+		t,
+		baseURL,
+		sessionID,
+		factoryapi.FactorySessionLifecycleControlKindPause,
+	)
+	if pause.Operation != factoryapi.FactorySessionLifecycleControlKindPause ||
+		pause.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("pause response = %#v, want accepted pause", pause)
+	}
+
+	response := postInvocation(t, baseURL, textInvocationRequest(t, "invoke this", nil))
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED", response.Status)
+	}
+	if response.ErrorCode == nil ||
+		*response.ErrorCode != factoryapi.InvocationResponseErrorCode("INVOCATION_PAUSED") {
+		t.Fatalf("invocation errorCode = %#v, want INVOCATION_PAUSED", response.ErrorCode)
+	}
+	if response.Message == nil ||
+		!strings.Contains(*response.Message, `session "`+sessionID+`" is paused`) {
+		gotMessage := "<nil>"
+		if response.Message != nil {
+			gotMessage = *response.Message
+		}
+		t.Fatalf("invocation message = %q, want paused session detail", gotMessage)
+	}
+	if response.SessionId == nil || *response.SessionId != sessionID {
+		t.Fatalf("invocation sessionId = %#v, want %q", response.SessionId, sessionID)
+	}
+	if response.PrimaryResult != nil {
+		t.Fatalf("invocation primaryResult = %#v, want nil on paused output", response.PrimaryResult)
+	}
+}
 
 // TestPausedFactorySessionBuffersSubmittedWork proves a paused Factory Session
 // accepts submitted work through the public session-control boundary while

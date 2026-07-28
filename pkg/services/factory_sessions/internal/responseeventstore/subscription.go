@@ -107,7 +107,7 @@ func (s *SessionResponseEventStore) Subscribe(afterSequence int64, opts ...Subsc
 	if s.closed {
 		return nil, ErrStoreClosed
 	}
-	if s.completed && !s.storeNowLocked().Before(s.completedAt.Add(CompletedStreamRetentionWindow)) {
+	if s.completed && !s.storeNowLocked().Before(s.completedAt.Add(s.completedRetentionWindowLocked())) {
 		return nil, ErrStoreExpired
 	}
 	if s.completed {
@@ -190,6 +190,16 @@ func (s *SessionResponseEventStore) Close() {
 
 func (s *SessionResponseEventStore) storeNowLocked() time.Time {
 	return s.clock.Now().UTC()
+}
+
+func (s *SessionResponseEventStore) completedRetentionWindowLocked() time.Duration {
+	if s == nil {
+		return CompletedStreamRetentionWindow
+	}
+	if s.limits.CompletedRetentionWindow > 0 {
+		return s.limits.CompletedRetentionWindow
+	}
+	return CompletedStreamRetentionWindow
 }
 
 // Detach releases the store-owned subscriber registration.

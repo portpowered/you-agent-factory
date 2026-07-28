@@ -60,6 +60,24 @@ func TestPackagedGoalAcceptCompletesWithSummary(t *testing.T) {
 	}
 }
 
+// TestPackagedGoalContinueRepeatsThenCompletes proves a packaged @you/goal
+// continue decision feeds back through the public session invocation API,
+// triggers another executor dispatch on the built-in repeater workstation, and
+// then completes with the post-continue primary result.
+func TestPackagedGoalContinueRepeatsThenCompletes(t *testing.T) {
+	dir := scaffoldPackagedGoalBuiltInFactory(t)
+	runner := support.NewShapedProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte("ordinary partial progress\n<CONTINUE>")},
+		platformprocess.CommandResult{Stdout: []byte(packagedGoalContinueThenCompleteSummary + "\n<COMPLETE>")},
+	)
+
+	_, response := invokePackagedGoalWithProviderRunner(t, dir, runner, "invoke packaged goal after continue")
+	assertPackagedGoalCompletedWithSummary(t, response, packagedGoalContinueThenCompleteSummary)
+	if got := runner.CallCount(); got != 2 {
+		t.Fatalf("provider invocation count = %d, want 2 after continue", got)
+	}
+}
+
 // TestPackagedGoalRejectRepeatsThenCompletes proves a packaged @you/goal reject
 // decision feeds back through the public session invocation API, triggers another
 // executor dispatch on the built-in repeater workstation, and then completes with

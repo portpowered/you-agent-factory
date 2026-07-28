@@ -1,15 +1,59 @@
 package support
 
 import (
+	"context"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+// MockInferenceProvider returns a typed provider override for functional tests
+// without requiring destination packages to import service implementation paths.
+func MockInferenceProvider(contents ...string) workerprovider.Provider {
+	responses := make([]workerexecution.InferenceResponse, len(contents))
+	for index, content := range contents {
+		responses[index] = workerexecution.InferenceResponse{Content: content}
+	}
+	return testutil.NewMockProvider(responses...)
+}
+
+// BlockingInferenceProvider blocks the first inference call until release is
+// closed or the context is canceled, then completes subsequent calls immediately.
+func BlockingInferenceProvider(release <-chan struct{}) workerprovider.Provider {
+	return &blockingInferenceProvider{release: release}
+}
+
+type blockingInferenceProvider struct {
+	release <-chan struct{}
+	mu      sync.Mutex
+	calls   int
+}
+
+func (p *blockingInferenceProvider) Infer(
+	ctx context.Context,
+	_ workerexecution.ProviderInferenceRequest,
+) (workerexecution.InferenceResponse, error) {
+	p.mu.Lock()
+	p.calls++
+	call := p.calls
+	p.mu.Unlock()
+	if call == 1 {
+		select {
+		case <-p.release:
+		case <-ctx.Done():
+			return workerexecution.InferenceResponse{}, ctx.Err()
+		}
+	}
+	return workerexecution.InferenceResponse{Content: "completed"}, nil
+}
 
 // RunFactoryToCompletion executes the customer daemon command through the
 // canonical root-built process and returns its public default-session
