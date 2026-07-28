@@ -15,7 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboard"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/runconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay"
@@ -230,7 +229,7 @@ func openHostedRuntime(
 	if cfg.Port <= 0 {
 		emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
 	}
-	visualizationSink := runVisualizationSink(cfg)
+	visualizationSink := runVisualizationSink(cfg, presentation)
 	factorySvc, err = buildRunner(ctx, openingRequest, logger, visualizationSink)
 	if err != nil {
 		return nil, err
@@ -295,15 +294,6 @@ func newRuntimeHostObserver(
 			openDashboardAtBoundEndpoint(ctx, resolved, cfg.BrowserOpener)
 		}
 	}
-}
-
-func runVisualizationSink(cfg RunConfig) factoryvisualization.Sink {
-	if cfg.SuppressDashboardRendering || cfg.Output == nil {
-		return nil
-	}
-	return factoryvisualization.SinkFunc(func(input factoryvisualization.View) {
-		renderSimpleDashboard(cfg.Output, input)
-	})
 }
 
 func hostedInvocationCompletion(operation *Operation) func(context.Context) error {
@@ -576,25 +566,6 @@ func autoPortDiagnostics(autoPort bool, requestedPort, resolvedPort int) string 
 		return "preferred-available"
 	default:
 		return "fallback"
-	}
-}
-
-func renderSimpleDashboard(output io.Writer, input factoryvisualization.View) {
-	fmt.Fprint(output, dashboard.FormatSimpleDashboardWithRenderData(
-		dashboardEngineSnapshotHeader(input.Runtime),
-		input.RenderData,
-		input.ObservedAt,
-	))
-}
-
-func dashboardEngineSnapshotHeader(
-	runtime factoryvisualization.RuntimeObservation,
-) interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net] {
-	return interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net]{
-		TickCount:     runtime.TickCount,
-		FactoryState:  runtime.FactoryState,
-		RuntimeStatus: runtime.RuntimeStatus,
-		Uptime:        runtime.Uptime,
 	}
 }
 

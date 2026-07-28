@@ -235,13 +235,25 @@ func provideInvocationOperation(
 // projectRuntimeOpeningExternalEffects is the sole selection from the process
 // edge aggregate into the effects consumed by Factory Session runtime opening.
 func projectRuntimeOpeningExternalEffects(edges serviceedges.Edges) factorysessionwire.RuntimeOpeningExternalEffects {
+	providerRunner := edges.ProviderCommandRunner
+	scriptRunner := edges.ScriptCommandRunner
+	if providerRunner == nil || scriptRunner == nil {
+		if defaultRunner, err := providePlatformProcessCommandRunner(edges); err == nil && defaultRunner != nil {
+			if providerRunner == nil {
+				providerRunner = defaultRunner
+			}
+			if scriptRunner == nil {
+				scriptRunner = defaultRunner
+			}
+		}
+	}
 	return factorysessionwire.RuntimeOpeningExternalEffects{
 		Clock:                     edges.Clock,
 		ProviderOverride:          edges.ProviderOverride,
 		ModelPullMetricsRecorder:  edges.ModelPullMetricsRecorder,
 		InvocationMetricsRecorder: edges.InvocationMetricsRecorder,
-		ProviderCommandRunner:     edges.ProviderCommandRunner,
-		ScriptCommandRunner:       edges.ScriptCommandRunner,
+		ProviderCommandRunner:     providerRunner,
+		ScriptCommandRunner:       scriptRunner,
 		SubmissionRecorder:        edges.SubmissionRecorder,
 		DispatchRecorder:          edges.DispatchRecorder,
 		RuntimeHostObserver:       edges.RuntimeHostObserver,

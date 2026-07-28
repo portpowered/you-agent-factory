@@ -70,7 +70,11 @@ func (r conductorInvocationRunner) Execute(
 	ctx context.Context,
 	request workers.RunnerExecutionRequest,
 ) (workers.RunnerExecutionResult, error) {
-	if r.conductor == nil || r.providers == nil || r.providers.UsesNativeRunner(request.RunnerID) {
+	identity, err := r.resolveConductorIdentity(request)
+	if err != nil {
+		return workers.RunnerExecutionResult{}, mapConductorInvocationError(err)
+	}
+	if r.conductor == nil || r.providers == nil || r.providers.UsesNativeRunner(identity) {
 		if r.next == nil {
 			return workers.RunnerExecutionResult{}, workerprovider.NewProviderError(
 				workers.WorkFailureTypeMisconfigured,
@@ -84,11 +88,28 @@ func (r conductorInvocationRunner) Execute(
 		dispatchID: request.Dispatch.DispatchID,
 		publish:    r.publish,
 	}
-	err := r.conductor.Invoke(ctx, request.RunnerID, invocationRequestFromRunner(request), destination)
+	err = r.conductor.Invoke(ctx, identity, invocationRequestFromRunner(request), destination)
 	if err != nil {
 		return workers.RunnerExecutionResult{}, mapConductorInvocationError(err)
 	}
 	return destination.result()
+}
+
+func (r conductorInvocationRunner) resolveConductorIdentity(
+	request workers.RunnerExecutionRequest,
+) (string, error) {
+	identity := strings.TrimSpace(request.RunnerID)
+	if identity != "" {
+		return identity, nil
+	}
+	if r.providers == nil {
+		return "", nil
+	}
+	selection, err := r.providers.ResolveRunnerSelection("", "", request.ModelProvider)
+	if err != nil {
+		return "", err
+	}
+	return selection.RunnerID, nil
 }
 
 func invocationRequestFromRunner(request workers.RunnerExecutionRequest) inference.InvocationRequest {

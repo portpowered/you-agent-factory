@@ -44,6 +44,8 @@ type gatewayLifecycleFactory struct {
 	pauseCalls         int
 	resumeCalls        int
 	terminateCalls     int
+	observeCalls       int
+	lastObserveRequest factory.ObserveRequest
 }
 
 func (f *gatewayLifecycleFactory) Run(context.Context) error { return nil }
@@ -86,12 +88,15 @@ func (f *gatewayLifecycleFactory) ControlMoveWork(
 	}, err
 }
 
-func (f *gatewayLifecycleFactory) Observe(_ context.Context, _ factory.ObserveRequest) (factory.ObserveResult, error) {
+func (f *gatewayLifecycleFactory) Observe(_ context.Context, req factory.ObserveRequest) (factory.ObserveResult, error) {
+	f.observeCalls++
+	f.lastObserveRequest = req
 	if f.useObserveResult {
 		return factory.ObserveResult{Observation: f.observeResult}, nil
 	}
 	return factory.ObserveResult{
 		Observation: factory.Observation{
+			Status: factory.ObservationStatusActive,
 			Health: factory.ObservationHealth{FactoryState: f.factoryState},
 		},
 	}, nil
@@ -206,6 +211,7 @@ func TestService_PauseLiveFactorySession_DelegatesToDataplane(t *testing.T) {
 		factory: &gatewayLifecycleFactory{factoryState: string(interfaces.FactoryStateRunning)},
 	}
 	gateway := newServiceTestGateway(host)
+	runtimeFactory := host.factory.(*gatewayLifecycleFactory)
 
 	response, err := gateway.PauseLiveFactorySession(
 		context.Background(),
@@ -217,6 +223,35 @@ func TestService_PauseLiveFactorySession_DelegatesToDataplane(t *testing.T) {
 	}
 	if response.Outcome != factorysessionexecution.LifecycleControlOutcomeAccepted {
 		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if runtimeFactory.pauseCalls != 1 {
+		t.Fatalf("ControlPause calls = %d, want 1 through Runtime root Service", runtimeFactory.pauseCalls)
+	}
+}
+
+func TestService_ObserveForSession_ForwardsRootObserveRequest(t *testing.T) {
+	t.Parallel()
+
+	runtimeFactory := &gatewayLifecycleFactory{factoryState: string(interfaces.FactoryStateRunning)}
+	host := &lifecycleGatewayHost{factory: runtimeFactory}
+	gateway := newServiceTestGateway(host)
+
+	result, err := gateway.ObserveForSession(
+		context.Background(),
+		"sess-observe",
+		factory.ObserveRequest{Scope: factory.ObservationScopeStatus},
+	)
+	if err != nil {
+		t.Fatalf("ObserveForSession: %v", err)
+	}
+	if runtimeFactory.observeCalls != 1 {
+		t.Fatalf("Observe calls = %d, want 1 through Runtime root Service", runtimeFactory.observeCalls)
+	}
+	if runtimeFactory.lastObserveRequest.Scope != factory.ObservationScopeStatus {
+		t.Fatalf("observe scope = %q, want STATUS", runtimeFactory.lastObserveRequest.Scope)
+	}
+	if result.Observation.Status != factory.ObservationStatusActive {
+		t.Fatalf("observation status = %q, want ACTIVE", result.Observation.Status)
 	}
 }
 

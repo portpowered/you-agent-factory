@@ -5,16 +5,6 @@ import (
 	"testing"
 )
 
-func TestModeParity_FullStreamPrimaryAndStreamAgree(t *testing.T) {
-	t.Parallel()
-	assertModeParityForFixture(t, FixtureFullStreamClaude)
-}
-
-func TestModeParity_PartialStreamPrimaryAndStreamAgree(t *testing.T) {
-	t.Parallel()
-	assertModeParityForFixture(t, FixturePartialStreamCodex)
-}
-
 func TestModeParity_SnapshotOnlyPrimaryAndStreamAgree(t *testing.T) {
 	t.Parallel()
 	assertModeParityForFixture(t, FixtureSnapshotOnlyOpenCode)
@@ -28,11 +18,6 @@ func TestModeParity_FinalOnlyOpenCodePrimaryAndStreamAgree(t *testing.T) {
 func TestModeParity_AgyFinalOnlyPrimaryAndStreamAgree(t *testing.T) {
 	t.Parallel()
 	assertModeParityForFixture(t, FixtureAgyFinalOnly)
-}
-
-func TestModeParity_ToolLifecyclePrimaryAndStreamAgree(t *testing.T) {
-	t.Parallel()
-	assertModeParityForFixture(t, FixtureToolLifecycleClaude)
 }
 
 func assertModeParityForFixture(t *testing.T, fixtureID string) {

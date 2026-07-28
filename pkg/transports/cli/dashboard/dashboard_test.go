@@ -41,7 +41,7 @@ func TestFormatSimpleDashboardWithRenderData_RendersSessionMetricsAndActiveRows(
 	topology := buildTestTopology()
 
 	output := FormatSimpleDashboardWithRenderData(
-		activeRawEngineSnapshotForDashboardTest(now, topology),
+		dashboardHeaderFromEngineSnapshot(activeRawEngineSnapshotForDashboardTest(now, topology)),
 		activeDashboardRenderDataForDashboardTest(now),
 		now,
 	)
@@ -96,6 +96,17 @@ func activeRawEngineSnapshotForDashboardTest(now time.Time, topology *factoryrun
 	}
 }
 
+func dashboardHeaderFromEngineSnapshot(
+	es interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net],
+) factoryruntime.RuntimeEngineStateSnapshot {
+	return factoryruntime.RuntimeEngineStateSnapshot{
+		FactoryState:  es.FactoryState,
+		RuntimeStatus: es.RuntimeStatus,
+		TickCount:     es.TickCount,
+		Uptime:        es.Uptime,
+	}
+}
+
 func activeDashboardRenderDataForDashboardTest(now time.Time) recordings.SimpleDashboardRenderData {
 	return recordings.SimpleDashboardRenderData{
 		InFlightDispatchCount: 1,
@@ -147,17 +158,13 @@ func TestFormatSimpleDashboardWithRenderData_RendersTerminalProviderAndDispatchD
 
 func TestFormatSimpleDashboardWithRenderData_MapsSystemTimeCompatibilityAtCliBoundary(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.Local)
-	topology := buildTestTopology()
 
 	output := FormatSimpleDashboardWithRenderData(
-		interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net]{
-			Marking:         factoryruntime.PetriMarkingSnapshot{Tokens: map[string]*factoryruntime.RuntimeToken{}},
-			FactoryState:    "RUNNING",
-			RuntimeStatus:   interfaces.RuntimeStatusIdle,
-			Uptime:          2 * time.Minute,
-			Topology:        topology,
-			TickCount:       4,
-			DispatchHistory: nil,
+		factoryruntime.RuntimeEngineStateSnapshot{
+			FactoryState:  "RUNNING",
+			RuntimeStatus: interfaces.RuntimeStatusIdle,
+			Uptime:        2 * time.Minute,
+			TickCount:     4,
 		},
 		recordings.SimpleDashboardRenderData{
 			Session: recordings.SimpleDashboardSessionData{
@@ -206,11 +213,9 @@ func TestFormatSimpleDashboardWithRenderData_RendersUnavailableTimes(t *testing.
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 
 	output := FormatSimpleDashboardWithRenderData(
-		interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net]{
-			Marking:       factoryruntime.PetriMarkingSnapshot{Tokens: map[string]*factoryruntime.RuntimeToken{}},
+		factoryruntime.RuntimeEngineStateSnapshot{
 			FactoryState:  "RUNNING",
 			RuntimeStatus: interfaces.RuntimeStatusActive,
-			Topology:      buildTestTopology(),
 		},
 		recordings.SimpleDashboardRenderData{
 			InFlightDispatchCount: 1,
@@ -258,11 +263,9 @@ func TestDashboardSessionViewFromRenderData_FallsBackToDispatchHistoryWorkItems(
 	assertDispatchHistoryFallbackView(t, view)
 
 	output := FormatSimpleDashboardWithRenderData(
-		interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net]{
-			Marking:       factoryruntime.PetriMarkingSnapshot{Tokens: map[string]*factoryruntime.RuntimeToken{}},
+		factoryruntime.RuntimeEngineStateSnapshot{
 			FactoryState:  "RUNNING",
 			RuntimeStatus: interfaces.RuntimeStatusIdle,
-			Topology:      buildTestTopology(),
 			Uptime:        5 * time.Minute,
 		},
 		renderData,
@@ -273,21 +276,12 @@ func TestDashboardSessionViewFromRenderData_FallsBackToDispatchHistoryWorkItems(
 }
 
 func buildTerminalProviderRenderFixture(now time.Time) (
-	interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net],
+	factoryruntime.RuntimeEngineStateSnapshot,
 	recordings.SimpleDashboardRenderData,
 ) {
-	return interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net]{
-			Marking: factoryruntime.PetriMarkingSnapshot{Tokens: map[string]*factoryruntime.RuntimeToken{}},
-			DispatchHistory: []interfaces.CompletedDispatch{{
-				DispatchID:      "raw-dispatch",
-				TransitionID:    "raw-transition",
-				WorkstationName: "raw-workstation",
-				Outcome:         workerexecution.OutcomeAccepted,
-				ConsumedTokens:  []factoryruntime.RuntimeToken{{ID: "raw-token", Color: factoryruntime.RuntimeTokenColor{Name: "raw-input", WorkID: "raw-work", WorkTypeID: "task"}}},
-			}},
+	return factoryruntime.RuntimeEngineStateSnapshot{
 			FactoryState:  "RUNNING",
 			RuntimeStatus: interfaces.RuntimeStatusIdle,
-			Topology:      buildTestTopology(),
 			Uptime:        20 * time.Minute,
 		}, recordings.SimpleDashboardRenderData{
 			InFlightDispatchCount: 1,

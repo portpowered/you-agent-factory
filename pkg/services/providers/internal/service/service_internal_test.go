@@ -43,6 +43,15 @@ func (internalCatalogStub) ResolveProviderID(id providers.ID) (providers.ID, err
 	return id, nil
 }
 
+func (internalCatalogStub) RegistrationProvider(
+	id providers.ID,
+) (providers.Descriptor, error) {
+	return providers.Descriptor{
+		ID:           id,
+		Availability: providers.AvailabilitySelectable,
+	}, nil
+}
+
 func (internalCatalogStub) ListProviders(
 	context.Context,
 	providers.ListProvidersRequest,
