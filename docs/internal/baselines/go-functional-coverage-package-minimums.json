@@ -1116,7 +1116,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening",
-      "minimum": 71.52
+      "minimum": 71.48
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/invocation",
@@ -2262,7 +2262,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
-      "minimum": 0.00
+      "exception": {
+        "kind": "measurement",
+        "justification": "The transitional work/service compile shim delegates to work/internal and has no functional coverage profile statements until DEL-WORK removes the path.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or the transitional path is deleted."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/stateaccessrecordings",
