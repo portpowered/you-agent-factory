@@ -35,6 +35,7 @@ func TestOperatorSettingsThinRootContractFiles(t *testing.T) {
 		"document_contract.go",
 		"input_inventory_contract.go",
 		"resolution_contract.go",
+		"root_wire_behavioral_boundary_test.go",
 		"service_contract.go",
 		"root_contract_legacy_preservation_test.go",
 		"service_root_contract_invariants_test.go",

@@ -1042,6 +1042,13 @@ response-stream output.
   process-edge bags; register Providers-root construction from
   `operator_settings/wire/register.go` (not `pkg/wire`) so owner wire can import
   `operator_settings/internal` without widening peer import boundaries.
+- CLN-SET-CONTRACT-ROOTS story-006 seals the thin Operator Settings root with
+  `root_wire_behavioral_boundary_test.go`: wire-constructed behavioral proof at
+  the peer root exercises published `operatorsettings.Service` LoadDocument,
+  ApplyDocumentUpdate, and ResolveEffective success and typed-failure outcomes
+  exclusively through `operator_settings/wire`; inventory mirrors list the file
+  as a thin_root_contract_test keeper alongside
+  `service_root_contract_invariants_test.go`.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore

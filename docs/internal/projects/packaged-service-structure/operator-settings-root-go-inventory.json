@@ -55,6 +55,11 @@
       "note": "Legacy root-contract preservation proofs for transitional Settings vocabulary."
     },
     {
+      "file": "root_wire_behavioral_boundary_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "Wire-constructed behavioral proof that published Service LoadDocument, ApplyDocumentUpdate, and ResolveEffective preserve observables and typed failures at the peer root boundary."
+    },
+    {
       "file": "service_contract.go",
       "classification": "thin_root_contract",
       "note": "Peer Service interface for document operations and effective resolution."

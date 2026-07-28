@@ -1703,7 +1703,7 @@
       "fromOwner": "wire",
       "toOwner": "providers",
       "class": "construction",
-      "evidence": "pkg/wire -\u003e pkg/services/providers"
+      "evidence": "pkg/wire -\u003e pkg/services/workers/provider/inferencecontract"
     },
     {
       "fromOwner": "wire",
