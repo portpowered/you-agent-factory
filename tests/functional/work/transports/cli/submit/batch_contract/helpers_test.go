@@ -1,8 +1,11 @@
 package batch_contract_test
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -13,6 +16,10 @@ const (
 	harnessSubmitBatchRequestID = "work-cli-submit-batch-contract-harness"
 	harnessSubmitBatchWorkName  = "harness-review"
 	harnessSubmitBatchWorkType  = "task"
+
+	dryRunSubmitBatchRequestID = "work-cli-submit-batch-dry-run"
+	dryRunSubmitBatchWorkName  = "dry-run-review"
+	dryRunSubmitBatchWorkType  = "task"
 )
 
 func buildBatchContractProcess(t *testing.T, edges serviceedges.Edges) support.Process {
@@ -49,13 +56,33 @@ func executeSubmitBatchCLIExpectError(t *testing.T, process support.Process, arg
 }
 
 func harnessInlineBatchJSON(requestID string) string {
+	return inlineBatchJSON(requestID, harnessSubmitBatchWorkName, harnessSubmitBatchWorkType, "Harness")
+}
+
+func dryRunInlineBatchJSON() string {
+	return inlineBatchJSON(dryRunSubmitBatchRequestID, dryRunSubmitBatchWorkName, dryRunSubmitBatchWorkType, "Dry run")
+}
+
+func inlineBatchJSON(requestID, workName, workType, title string) string {
 	return `{
 		"requestId": "` + requestID + `",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
-			{"name": "` + harnessSubmitBatchWorkName + `", "workTypeName": "` + harnessSubmitBatchWorkType + `", "payload": {"title": "Harness"}}
+			{"name": "` + workName + `", "workTypeName": "` + workType + `", "payload": {"title": "` + title + `"}}
 		]
 	}`
+}
+
+func newInstrumentedSubmitBatchServer(t *testing.T) (serverURL string, requests *atomic.Int32) {
+	t.Helper()
+	var count atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count.Add(1)
+		t.Errorf("submit batch dry-run must not send HTTP requests; got %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+	return server.URL, &count
 }
 
 func batchContractHomeEnvironment(home string) []string {
