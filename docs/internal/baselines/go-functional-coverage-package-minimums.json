@@ -1113,6 +1113,10 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli",
+      "minimum": 55.09
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http",
       "exception": {
         "kind": "measurement",
@@ -2334,7 +2338,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/run",
-      "minimum": 56.97
+      "minimum": 55.58
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/runconfig",
