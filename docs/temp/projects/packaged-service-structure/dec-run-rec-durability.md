@@ -138,8 +138,8 @@ This decision packet **does not**:
 
 | Document | Role |
 | --- | --- |
-| PSS plan (`plan.md`) | Runtime sequence step 7 / Checkpoint/Recovery row |
-| PSS checklist (`checklist.md`) | IMP-RUN-04 admission status |
+| PSS plan ([`plan.md`](plan.md)) | Runtime sequence step 7 / Checkpoint/Recovery row |
+| PSS checklist ([`checklist.md`](checklist.md)) | IMP-RUN-04 admission status |
 | Planner meta (`docs/temp/meta.md`) | IMP-RUN-04 hold/admission text |
 | Ownership inventory | `docs/internal/baselines/ownership-inventory.json` (`factory_runtime/checkpoint_recovery`) |
 | PSS program README | `docs/internal/projects/packaged-service-structure/README.md` |

@@ -10,8 +10,8 @@ documents; the committed program-metadata ledger lives under
 | Document | Role |
 | --- | --- |
 | [`dec-run-rec-durability.md`](dec-run-rec-durability.md) | **DEC-RUN-REC-DURABILITY** — Runtime opaque checkpoint recovery vs Recordings durable history ownership |
-| `plan.md` | Source plan prose and Changed-Path Lease Matrix (when present) |
-| `checklist.md` | Granular implementation checklist (when present) |
+| [`plan.md`](plan.md) | Source plan prose; Runtime sequence step 7 cites DEC-RUN-REC-DURABILITY |
+| [`checklist.md`](checklist.md) | Granular checklist; IMP-RUN-04 dependency-ready after DEC Factory-complete |
 
 ## Cross-links
 

@@ -26,6 +26,8 @@ docs/temp/**
 !docs/temp/projects/
 !docs/temp/projects/packaged-service-structure/
 !docs/temp/projects/packaged-service-structure/**
+## Planner meta hold text (IMP-RUN-04 admission guidance tracked with DEC packet)
+!docs/temp/meta.md
 ## Do not include temporary files in general for worktree progress
 prd.json
 prd.md
