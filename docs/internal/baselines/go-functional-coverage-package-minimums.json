@@ -3119,6 +3119,10 @@
       "minimum": 72.98
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/acp",
+      "minimum": 82.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/batchload",
       "minimum": 0.00
     },
