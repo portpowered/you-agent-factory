@@ -30,6 +30,9 @@ func TestWorkflowDoesNotDependOnInitializerOrTransports(t *testing.T) {
 			"pkg/transports/http",
 			"pkg/transports/mcp",
 			"pkg/services/edges",
+			"pkg/services/operator_settings/servicewire",
+			"pkg/services/operator_settings/identityinventory",
+			"pkg/services/operator_settings/internal/",
 		} {
 			if strings.Contains(string(source), forbidden) {
 				t.Errorf("%s imports forbidden lifecycle, transport, or composition package %q", entry.Name(), forbidden)
@@ -90,12 +93,51 @@ func TestWorkflowPackageBoundary_DoesNotImportInitializerOrStoreOwnershipPackage
 		"github.com/portpowered/infinite-you/pkg/wire",
 		"github.com/portpowered/infinite-you/pkg/transports",
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation",
+		"github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire",
+		"github.com/portpowered/infinite-you/pkg/services/operator_settings/identityinventory",
+		"github.com/portpowered/infinite-you/pkg/services/operator_settings/internal",
 	}
 	for _, dep := range strings.Fields(string(output)) {
 		for _, forbidden := range forbiddenRoots {
 			if dep == forbidden || strings.HasPrefix(dep, forbidden+"/") {
 				t.Fatalf("workflow must not import %s; found dependency %s", forbidden, dep)
 			}
+		}
+	}
+}
+
+func TestInitializeProductionUsesSettingsRootConfigPathAndCollaboratorPorts(t *testing.T) {
+	t.Parallel()
+
+	source, err := os.ReadFile("workflow.go")
+	if err != nil {
+		t.Fatalf("read workflow.go: %v", err)
+	}
+	text := string(source)
+
+	for _, required := range []string{
+		"operatorsettings.DefaultConfigPath(",
+		"settings.LoadFileConfig(",
+		"settings.EnsureLocalBackendScope(",
+	} {
+		if !strings.Contains(text, required) {
+			t.Errorf(
+				"workflow.go must route Initialize Settings commands through %q via the injected collaborator",
+				required,
+			)
+		}
+	}
+
+	for _, forbidden := range []string{
+		".you-agent-factory",
+		"operatorsettings.LoadFileConfig(",
+		"operatorsettings.EnsureLocalBackendScope(",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Errorf(
+				"workflow.go must not own Settings path formulas or package-level store APIs via %q",
+				forbidden,
+			)
 		}
 	}
 }
