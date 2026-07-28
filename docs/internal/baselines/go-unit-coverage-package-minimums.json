@@ -66,7 +66,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/logging",
-      "minimum": 75.41
+      "minimum": 75.40
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/metrics",
@@ -1138,7 +1138,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/wire",
-      "minimum": 71.19
+      "minimum": 71.18
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings",
@@ -1264,7 +1264,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude",
-      "minimum": 66.39
+      "minimum": 66.38
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex",

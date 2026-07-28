@@ -332,8 +332,10 @@ primary-result behavior.
   `result` records by subtype and bounded result text before declaring failure,
   mirroring Codex declared-record precedence over native effect errors. Inject the
   native effect into the adapter registration and keep system/control records
-  out of customer-visible content; reconcile lifecycle failures with the same
-  precedence rules as other Providers-owned adapters.
+  out of customer-visible content; preserve native `text_delta` whitespace with
+  `boundedStreamDetail` (do not `TrimSpace` stream fragments) so full-stream
+  fidelity concatenation matches completed snapshots; reconcile lifecycle failures
+  with the same precedence rules as other Providers-owned adapters.
 - Keep reusable one-attempt conformance under the Providers-private Execution
   testkit. Build the singular Providers root around a fresh
   controllable adapter for each scenario, observe only Providers-owned

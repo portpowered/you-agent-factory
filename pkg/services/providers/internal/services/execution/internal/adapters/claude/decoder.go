@@ -324,7 +324,7 @@ func (decoder *decoder) updateBlock(event nativeEvent) {
 			return
 		}
 		block.text.WriteString(event.Delta.Text)
-		decoder.addMessageProgress("delta", boundedDetail(event.Delta.Text), event.Index)
+		decoder.addMessageProgress("delta", boundedStreamDetail(event.Delta.Text), event.Index)
 	case "input_json_delta":
 		if block.kind != "tool_use" || event.Delta.PartialJSON == "" {
 			return
@@ -658,6 +658,14 @@ func boundedDetail(value string) string {
 		return value
 	}
 	return strings.TrimSpace(value[:maxDetailBytes])
+}
+
+func boundedStreamDetail(value string) string {
+	value = strings.ToValidUTF8(value, "")
+	if len(value) <= maxDetailBytes {
+		return value
+	}
+	return value[:maxDetailBytes]
 }
 
 func safeJSONSummary(raw []byte) (string, bool) {

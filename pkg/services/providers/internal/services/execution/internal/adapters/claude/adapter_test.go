@@ -65,6 +65,84 @@ func TestClaudeRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 	assertRepeatedClaudeResultDetached(t, second)
 }
 
+func TestClaudeStreamDeltaPreservesWhitespace(t *testing.T) {
+	t.Parallel()
+
+	stream := encodeRecords([]any{
+		map[string]any{"type": "system", "subtype": "init", "session_id": "claude-session-delta"},
+		map[string]any{
+			"type": "stream_event", "session_id": "claude-session-delta",
+			"event": map[string]any{
+				"type": "message_start",
+				"message": map[string]any{"id": "msg_delta", "role": "assistant", "content": []any{}},
+			},
+		},
+		map[string]any{
+			"type": "stream_event", "session_id": "claude-session-delta",
+			"event": map[string]any{
+				"type": "content_block_start", "index": 0,
+				"content_block": map[string]any{"type": "text", "text": ""},
+			},
+		},
+		map[string]any{
+			"type": "stream_event", "session_id": "claude-session-delta",
+			"event": map[string]any{
+				"type": "content_block_delta", "index": 0,
+				"delta": map[string]any{"type": "text_delta", "text": "Parity "},
+			},
+		},
+		map[string]any{
+			"type": "stream_event", "session_id": "claude-session-delta",
+			"event": map[string]any{
+				"type": "content_block_delta", "index": 0,
+				"delta": map[string]any{"type": "text_delta", "text": "hello "},
+			},
+		},
+		map[string]any{
+			"type": "stream_event", "session_id": "claude-session-delta",
+			"event": map[string]any{
+				"type": "content_block_delta", "index": 0,
+				"delta": map[string]any{"type": "text_delta", "text": "world COMPLETE"},
+			},
+		},
+		map[string]any{
+			"type": "stream_event", "session_id": "claude-session-delta",
+			"event": map[string]any{"type": "message_stop"},
+		},
+		map[string]any{
+			"type": "result", "subtype": "success", "is_error": false,
+			"result": "Parity hello world COMPLETE", "session_id": "claude-session-delta",
+		},
+	})
+	effect := claude.EffectFunc(func(
+		_ context.Context,
+		_ providers.ExecuteRequest,
+		observe func([]byte) error,
+	) (claude.EffectResult, error) {
+		return claude.EffectResult{}, observe(stream)
+	})
+	root := newClaudeRoot(t, effect)
+
+	result, err := root.Execute(t.Context(), providers.ExecuteRequest{
+		Provider:    providers.IDClaude,
+		AttemptID:   "attempt-claude-delta-whitespace",
+		UserMessage: "perform the accepted work",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	var deltaText string
+	for _, fact := range result.Diagnostics.Progress {
+		if fact.Phase != "message.delta" {
+			continue
+		}
+		deltaText += fact.Detail
+	}
+	if deltaText != "Parity hello world COMPLETE" {
+		t.Fatalf("concatenated delta detail = %q, want %q", deltaText, "Parity hello world COMPLETE")
+	}
+}
+
 func assertClaudeSuccessResult(
 	t *testing.T,
 	result providers.ExecuteResult,
