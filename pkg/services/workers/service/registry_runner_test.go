@@ -16,7 +16,6 @@ import (
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )
@@ -720,19 +719,17 @@ func cursorConductorRegistryWithRunner(
 
 func geminiConductorRegistry(t *testing.T, runner workers.CommandRunner) *providerregistry.Registry {
 	t.Helper()
-	builtIns, err := providerregistry.BuiltInRegistrations()
+	providersService, err := providerswire.NewService(providerswire.WithWorkersCommandRunner(runner))
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
+	builtIns, err := providerregistry.BuiltInRegistrations(providerregistry.BuiltInDependencies{
+		ProvidersService: providersService,
+	})
 	if err != nil {
 		t.Fatalf("BuiltInRegistrations() error = %v", err)
 	}
-	replaced, err := providerregistry.ReplaceCatalogIntegration(
-		builtIns,
-		"gemini",
-		gemini.NewIntegration(gemini.IntegrationDependencies{CommandRunner: runner}),
-	)
-	if err != nil {
-		t.Fatalf("ReplaceCatalogIntegration(gemini) error = %v", err)
-	}
-	providers, err := providerregistry.New(replaced...)
+	providers, err := providerregistry.New(builtIns...)
 	if err != nil {
 		t.Fatalf("registry.New() error = %v", err)
 	}

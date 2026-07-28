@@ -618,7 +618,6 @@ func TestNormalizeProviderExitFailure_CompatibilityShimUsesMigratedProviderParse
 	t.Parallel()
 
 	for _, name := range []string{
-		"gemini_structured_invalid_request_precedence",
 		"kiro_structured_invalid_request_stdout",
 	} {
 		entry := providerErrorCorpusEntryForTest(t, name)

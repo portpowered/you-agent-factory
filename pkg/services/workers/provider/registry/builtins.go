@@ -137,11 +137,11 @@ func migratedBuiltInIntegration(
 			ProvidersService: dependencies.ProvidersService,
 		})
 	case "gemini":
-		if dependencies.CommandRunner == nil {
+		if dependencies.ProvidersService == nil {
 			return gemini.NewIntegration()
 		}
 		return gemini.NewIntegration(gemini.IntegrationDependencies{
-			CommandRunner: dependencies.CommandRunner,
+			ProvidersService: dependencies.ProvidersService,
 		})
 	case "kiro":
 		if dependencies.CommandRunner == nil {

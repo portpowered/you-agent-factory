@@ -25,7 +25,9 @@ func TestInvocationErrorCompatibility_SupportedCorpusEntriesPreserveStableWorkFa
 		if !entry.Supported {
 			continue
 		}
-		if entry.Provider == modelprovider.ProviderCodex || entry.Provider == modelprovider.ProviderClaude {
+		if entry.Provider == modelprovider.ProviderCodex ||
+			entry.Provider == modelprovider.ProviderClaude ||
+			entry.Provider == modelprovider.ProviderGemini {
 			continue
 		}
 		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
