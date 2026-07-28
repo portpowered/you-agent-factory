@@ -1,4 +1,0 @@
-{"type":"system","subtype":"init","session_id":"cursor-terminal-session"}
-{"type":"assistant","timestamp_ms":1,"message":{"role":"assistant","content":[{"type":"text","text":"Plan "}]},"session_id":"cursor-terminal-session"}
-{"type":"assistant","timestamp_ms":2,"message":{"role":"assistant","content":[{"type":"text","text":"draft"}]},"session_id":"cursor-terminal-session"}
-{"type":"result","subtype":"success","is_error":false,"result":"Plan done","session_id":"cursor-terminal-session"}

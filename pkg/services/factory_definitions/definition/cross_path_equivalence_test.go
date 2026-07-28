@@ -102,7 +102,7 @@ func newRootCatalogServiceForPeer(t *testing.T) factoryroot.Service {
 	if err != nil {
 		t.Fatalf("catalogwire.NewService: %v", err)
 	}
-	return factorydefinition.NewWithCatalog(nil, catalogService)
+	return factorydefinition.NewWithCatalog(nil, factorydefinition.StubActivationGateway(), catalogService)
 }
 
 func writeEquivalenceNamedFactory(t *testing.T, rootDir, name string) string {

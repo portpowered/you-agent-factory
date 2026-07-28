@@ -34,7 +34,7 @@ func TestClaudeRootNormalizesFailureStagesAndSuppressesResults(t *testing.T) {
 		{
 			name:      "malformed stream-json",
 			stream:    `{"type":"system","subtype":"init","secret":"` + claudeFailureSecret,
-			wantKind:  providers.ExecuteFailureKindUnknown,
+			wantKind:  providers.ExecuteFailureKindInvalidRequest,
 			wantStage: "decode",
 		},
 		{

@@ -1,6 +1,8 @@
 package support
 
 import (
+	"net/url"
+	"strconv"
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -33,5 +35,27 @@ func DefaultSessionWorkURL(baseURL, path string) string {
 
 // DefaultSessionEventsURL joins baseURL with the canonical default-session event stream.
 func DefaultSessionEventsURL(baseURL string) string {
-	return strings.TrimSuffix(baseURL, "/") + DefaultSessionEventsAPIPath
+	return SessionEventsURL(baseURL, factorysessions.DefaultSessionID)
+}
+
+// SessionEventsURL joins baseURL with the canonical event stream for one Factory Session.
+func SessionEventsURL(baseURL, sessionID string) string {
+	return strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/events"
+}
+
+// SessionEventsURLWithCursor joins baseURL with one session-scoped Factory Event
+// stream endpoint that resumes after an acknowledged reconnect cursor.
+func SessionEventsURLWithCursor(baseURL, sessionID string, cursor FactoryEventReadCursor) string {
+	endpoint := SessionEventsURL(baseURL, sessionID)
+	params := url.Values{}
+	if cursor.AfterEventID != "" {
+		params.Set("after_event_id", cursor.AfterEventID)
+	}
+	if cursor.AfterSequence != nil {
+		params.Set("after_sequence", strconv.Itoa(*cursor.AfterSequence))
+	}
+	if encoded := params.Encode(); encoded != "" {
+		endpoint += "?" + encoded
+	}
+	return endpoint
 }
