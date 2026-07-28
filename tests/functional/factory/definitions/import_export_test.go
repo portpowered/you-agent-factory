@@ -1,8 +1,10 @@
 package definitions
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +21,7 @@ const (
 	importExportSourceName      = "export-source"
 	importExportImportedName    = "imported-roundtrip"
 	importExportPortableName    = "imported-portable"
+	importExportCurrentName     = "current-safe"
 	importExportWorkerName      = "worker-a"
 	importExportWorkstationName = "process"
 
@@ -195,6 +198,261 @@ func TestImportExportPreservesNestedDocsScriptsAndMetadata(t *testing.T) {
 	assertImportExportPortableLayoutNote(t, importedFactory, "imported factory")
 }
 
+// TestInvalidImportDoesNotReplaceCurrentFactory proves an invalid import through
+// the public update path is rejected with a customer-visible failure and leaves
+// the prior Current Factory definition unchanged on public readback.
+func TestInvalidImportDoesNotReplaceCurrentFactory(t *testing.T) {
+	runner := support.NewRecordingCommandRunner("runtime must not execute during invalid import")
+	edges := serviceedges.Edges{ProviderCommandRunner: runner}
+
+	homeDir := t.TempDir()
+	workingDir := t.TempDir()
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	namedFactoriesRoot := initializeImportExportCustomerHome(t, env, workingDir)
+
+	sourceDir := support.ScaffoldFactory(t, importExportCurrentFactoryConfig())
+	support.WriteAgentConfig(
+		t,
+		sourceDir,
+		importExportWorkerName,
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
+	)
+	sourcePath := filepath.Join(sourceDir, "factory.json")
+
+	factoryDir := createImportExportActivatedNamedFactory(
+		t,
+		env,
+		workingDir,
+		namedFactoriesRoot,
+		importExportCurrentName,
+		sourcePath,
+	)
+
+	baselineFactory, err := support.LoadedFactory(t, filepath.Join(factoryDir, "factory.json"))
+	if err != nil {
+		t.Fatalf("load baseline current factory: %v", err)
+	}
+	if baselineFactory.Name != factoryapi.FactoryName(importExportCurrentName) {
+		t.Fatalf(
+			"baseline factory name = %q, want %q",
+			baselineFactory.Name,
+			importExportCurrentName,
+		)
+	}
+
+	invalidDir := support.ScaffoldFactory(t, importExportInvalidImportFactoryConfig())
+	invalidPath := filepath.Join(invalidDir, "factory.json")
+
+	updateInputs := support.FakeInputs(t.Context(), []string{
+		"you",
+		"factory",
+		"update",
+		importExportCurrentName,
+		"--from",
+		invalidPath,
+		"--dir",
+		namedFactoriesRoot,
+	})
+	updateInputs.Input.Env = env
+	updateInputs.Input.WorkingDirectory = workingDir
+	updateErr := support.BuildProcess(t, edges).Execute(updateInputs.Input)
+	if updateErr == nil {
+		t.Fatalf(
+			"Process.Execute(factory update invalid import) error = nil, want customer-visible failure; stdout=%q stderr=%q",
+			updateInputs.Stdout(),
+			updateInputs.Stderr(),
+		)
+	}
+	diagnostic := updateErr.Error() + "\n" + updateInputs.Stdout() + "\n" + updateInputs.Stderr()
+	if !strings.Contains(diagnostic, "invalid factory config") {
+		t.Fatalf("diagnostic missing invalid import marker:\n%s", diagnostic)
+	}
+	if !strings.Contains(diagnostic, validationCodeDanglingWorkerReference) {
+		t.Fatalf(
+			"diagnostic missing validation code %q:\n%s",
+			validationCodeDanglingWorkerReference,
+			diagnostic,
+		)
+	}
+
+	reloadedFactory, err := support.LoadedFactory(t, filepath.Join(factoryDir, "factory.json"))
+	if err != nil {
+		t.Fatalf("reload current factory after rejected import: %v", err)
+	}
+	assertImportExportCurrentFactoryUnchanged(t, baselineFactory, reloadedFactory)
+
+	listInputs := support.FakeInputs(t.Context(), []string{"you", "--json", "factory", "list"})
+	listInputs.Input.Env = env
+	listInputs.Input.WorkingDirectory = workingDir
+	if err := support.BuildProcess(t, edges).Execute(listInputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(factory list) error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			listInputs.Stdout(),
+			listInputs.Stderr(),
+		)
+	}
+	var listEntries []importExportFactoryListEntry
+	if err := json.Unmarshal([]byte(listInputs.Stdout()), &listEntries); err != nil {
+		t.Fatalf("decode factory list: %v\n%s", err, listInputs.Stdout())
+	}
+	foundCurrent := false
+	for _, entry := range listEntries {
+		if entry.Name != importExportCurrentName {
+			continue
+		}
+		foundCurrent = true
+		if entry.FactoryDirectory != factoryDir {
+			t.Fatalf(
+				"current factory directory = %q, want %q",
+				entry.FactoryDirectory,
+				factoryDir,
+			)
+		}
+		if !entry.Current {
+			t.Fatalf("factory list current flag = false, want true for %q", importExportCurrentName)
+		}
+	}
+	if !foundCurrent {
+		t.Fatalf("factory list missing current factory %q; entries=%#v", importExportCurrentName, listEntries)
+	}
+
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want 0 during rejected import", runner.CallCount())
+	}
+}
+
+type importExportFactoryListEntry struct {
+	Name             string `json:"name"`
+	FactoryDirectory string `json:"factoryDirectory"`
+	Current          bool   `json:"current"`
+}
+
+func initializeImportExportCustomerHome(t *testing.T, env []string, workingDirectory string) string {
+	t.Helper()
+
+	homeDir := importExportEnvironmentHome(env)
+	namedFactoriesRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
+	missingFactory := filepath.Join(workingDirectory, "missing-initialization-factory.json")
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--factory", missingFactory,
+	})
+	inputs.Input.Env = env
+	inputs.Input.WorkingDirectory = workingDirectory
+	err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+	if err == nil || !strings.Contains(err.Error(), filepath.Base(missingFactory)) {
+		t.Fatalf(
+			"Process.Execute(run missing Factory) error = %v, want missing Factory diagnostic\nstdout:\n%s\nstderr:\n%s",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	return namedFactoriesRoot
+}
+
+func createImportExportActivatedNamedFactory(
+	t *testing.T,
+	env []string,
+	workingDirectory string,
+	namedFactoriesRoot string,
+	name string,
+	factoryConfigPath string,
+) string {
+	t.Helper()
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you",
+		"--json",
+		"factory",
+		"create",
+		name,
+		"--from",
+		factoryConfigPath,
+		"--dir",
+		namedFactoriesRoot,
+		"--set-current",
+	})
+	inputs.Input.Env = env
+	inputs.Input.WorkingDirectory = workingDirectory
+	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(factory create %q --set-current) error = %v\nstdout:\n%s\nstderr:\n%s",
+			name,
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+
+	var result struct {
+		FactoryDir string `json:"factoryDir"`
+	}
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &result); err != nil {
+		t.Fatalf("decode factory create result: %v\nstdout:\n%s", err, inputs.Stdout())
+	}
+	if _, err := os.Stat(filepath.Join(result.FactoryDir, "factory.json")); err != nil {
+		t.Fatalf(
+			"activated named Factory %q missing factory.json at %s: %v",
+			name,
+			result.FactoryDir,
+			err,
+		)
+	}
+	return result.FactoryDir
+}
+
+func importExportEnvironmentHome(env []string) string {
+	for index := len(env) - 1; index >= 0; index-- {
+		item := env[index]
+		if strings.HasPrefix(item, "HOME=") {
+			return strings.TrimPrefix(item, "HOME=")
+		}
+		if strings.HasPrefix(item, "USERPROFILE=") {
+			return strings.TrimPrefix(item, "USERPROFILE=")
+		}
+	}
+	return ""
+}
+
+func assertImportExportCurrentFactoryUnchanged(
+	t *testing.T,
+	baseline factoryapi.Factory,
+	reloaded factoryapi.Factory,
+) {
+	t.Helper()
+
+	if reloaded.Name != baseline.Name {
+		t.Fatalf("reloaded factory name = %q, want unchanged %q", reloaded.Name, baseline.Name)
+	}
+	if reloaded.Id == nil || baseline.Id == nil || *reloaded.Id != *baseline.Id {
+		t.Fatalf("reloaded factory id = %#v, want unchanged %#v", reloaded.Id, baseline.Id)
+	}
+	if baseline.Version != nil && reloaded.Version != nil && *reloaded.Version != *baseline.Version {
+		t.Fatalf("reloaded factory version = %#v, want unchanged %#v", reloaded.Version, baseline.Version)
+	}
+	assertImportExportWorkTypePresent(t, reloaded, importExportWorkType, "reloaded current factory")
+}
+
+func assertImportExportWorkTypePresent(
+	t *testing.T,
+	factory factoryapi.Factory,
+	workType string,
+	contextLabel string,
+) {
+	t.Helper()
+
+	if factory.WorkTypes == nil {
+		t.Fatalf("%s workTypes = nil, want %q", contextLabel, workType)
+	}
+	for _, candidate := range *factory.WorkTypes {
+		if candidate.Name == workType {
+			return
+		}
+	}
+	t.Fatalf("%s missing work type %q in %#v", contextLabel, workType, factory.WorkTypes)
+}
+
 func seedImportExportPortableFilesOnDisk(t *testing.T, factoryDir string) {
 	t.Helper()
 
@@ -308,6 +566,42 @@ func findImportExportBundledFileByTargetPath(
 		}
 	}
 	return factoryapi.BundledFile{}, false
+}
+
+func importExportCurrentFactoryConfig() map[string]any {
+	cfg := importExportFactoryConfig()
+	cfg["name"] = importExportCurrentName
+	cfg["id"] = importExportCurrentName
+	return cfg
+}
+
+func importExportInvalidImportFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "invalid-import-payload",
+		"id":   "invalid-import-payload",
+		"workTypes": []map[string]any{
+			{
+				"name": importExportWorkType,
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]string{
+			{"name": importExportWorkerName},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":      importExportWorkstationName,
+				"worker":    "missing-worker",
+				"inputs":    []map[string]string{{"workType": importExportWorkType, "state": "init"}},
+				"outputs":   []map[string]string{{"workType": importExportWorkType, "state": "complete"}},
+				"onFailure": []map[string]string{{"workType": importExportWorkType, "state": "failed"}},
+			},
+		},
+	}
 }
 
 func importExportFactoryConfig() map[string]any {
