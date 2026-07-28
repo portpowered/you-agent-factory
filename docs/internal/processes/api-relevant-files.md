@@ -13,6 +13,26 @@ Use this map when changing the public REST contract.
   `pkg/services/recordings/transports/http`. The adapter consumes the accepted
   `recordings.Service` root only; fake-root tests inject a focused root fake
   without constructing ledger, lifecycle, replay, or artifact-export graphs.
+  CUT-REC-RUN seals Recordings production imports of Factory Runtime to the
+  service root only (`pkg/services/factory_runtime`); the lease-wide guard is
+  `pkg/services/recordings/runtime_import_boundary_test.go` and fails closed on
+  nested `factory_runtime/**`, legacy `pkg/factory/**`, and
+  `pkg/transports/mapping/factory*` production imports. Lifecycle recorder
+  Runtime-facing event vocabulary is published through
+  `pkg/services/factory_runtime/recording_event_contracts.go` and proven by
+  `pkg/services/recordings/service/lifecycle_runtime_recorder_boundary_test.go`.
+  Replay-execution hook/plan handoff vocabulary is published through
+  `pkg/services/factory_runtime/replay_execution_contracts.go` and proven by
+  `pkg/services/recordings/service/replay_execution_boundary_test.go`.
+  Projection/observation Runtime-owned marking, result, and observation
+  vocabulary is published through
+  `pkg/services/factory_runtime/observation_projection_contracts.go` and proven
+  by
+  `pkg/services/recordings/projections/projection_observation_boundary_test.go`.
+  Runtime root request construction for control, observation, and dispatch-plan
+  handoff is published through
+  `pkg/services/factory_runtime/runtime_request_contracts.go` and proven by
+  `pkg/services/recordings/runtime_request_boundary_test.go`.
   Event subscribe/history decode and SSE encoding live in
   `event_subscribe_mapping.go` and `handlers_events.go`; map reconnect query
   params into `recordings.SubscribeRequest` before `SubscribeFrom`, and encode
