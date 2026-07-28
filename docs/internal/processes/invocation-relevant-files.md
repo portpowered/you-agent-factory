@@ -640,6 +640,13 @@ response-stream output.
   Petri, and legacy helper paths are forbidden. Inventory proof:
   `pkg/services/factory_visualization/runtime_import_boundary_test.go`
   (`TestProductionPackagesImportFactoryRuntimeRootOnly`).
+- Session-bound Visualization observation flows through
+  `pkg/services/factory_visualization/runtime_source.go`, which constructs
+  root `factory_runtime.ObserveRequest` values and calls `Service.Observe`
+  for snapshot facts while retaining migration-only `APIFactory` casts for
+  event subscription. Behavioral proof:
+  `pkg/services/factory_visualization/runtime_observation_boundary_test.go`
+  (`TestRuntimeObservationUsesRootServiceObserve`).
 - Shared ordered output serialization and final-once terminal write helpers
   (transport-shaped, non-authority):
   `pkg/services/factory_visualization/factory_event_stream.go`,
