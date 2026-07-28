@@ -872,6 +872,19 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestUnixProviderTimeoutTerminatesProcessGroup`.
   - `TestUnixSignalsMapToInterruptedPublicOutcome`.
 
+## Wave 3 — operator settings
+
+- [x] `tests/functional/operator_settings/servicewire/servicewire_composition_test.go`
+  - `TestServiceWireCompositionRootServesDocumentAndResolutionOperations`.
+  - `TestServiceFromHomePortsConstructsSettingsRoot`.
+  - `TestServiceFromHomePortsRejectsMissingPorts`.
+  - `TestServiceFromConfigDocumentConstructsFromDocumentPorts`.
+  - `TestServiceFromConfigDocumentRejectsMissingDocumentPorts`.
+  - `TestResolveFromHomeUsesSettingsAdapterOwnershipPath`.
+  - `TestResolveFromHomeRejectsMissingFilesystemPorts`.
+  - `TestResolveFromHomeFallbackPreservesAcceptedSemantics`.
+  - `TestRegisterDefaultsResolutionFromHomeRestoresAdapterOwnership`.
+
 ## Completion audit
 
 - [ ] Every checkbox is implemented, linked to an existing equivalent test, or

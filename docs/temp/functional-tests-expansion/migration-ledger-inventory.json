@@ -7597,6 +7597,96 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestRegisterDefaultsResolutionFromHomeRestoresAdapterOwnership",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestResolveFromHomeFallbackPreservesAcceptedSemantics",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestResolveFromHomeRejectsMissingFilesystemPorts",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestResolveFromHomeUsesSettingsAdapterOwnershipPath",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestServiceFromConfigDocumentConstructsFromDocumentPorts",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestServiceFromConfigDocumentRejectsMissingDocumentPorts",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestServiceFromHomePortsConstructsSettingsRoot",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestServiceFromHomePortsRejectsMissingPorts",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestServiceWireCompositionRootServesDocumentAndResolutionOperations",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
   "scanned_at_utc": "2026-07-28T05:00:00Z",
@@ -7604,7 +7694,7 @@
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 466,
+      "none": 475,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -7619,7 +7709,7 @@
       "guards_batch": 23,
       "models": 5,
       "observability": 9,
-      "operator_settings": 1,
+      "operator_settings": 10,
       "orchestration": 48,
       "product": 13,
       "providers": 55,
@@ -7635,9 +7725,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 740,
+    "customer_top_level_Test_scenarios": 749,
     "lane_functionallong": 95,
-    "lane_short": 645,
+    "lane_short": 654,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -7663,6 +7753,7 @@
       "you-agent-factory/tests/functional/models/model_list": 2,
       "you-agent-factory/tests/functional/observability/coverage": 9,
       "you-agent-factory/tests/functional/operator_settings/configcore": 1,
+      "you-agent-factory/tests/functional/operator_settings/servicewire": 9,
       "you-agent-factory/tests/functional/orchestration/javascript/composition": 14,
       "you-agent-factory/tests/functional/orchestration/javascript/contracts": 8,
       "you-agent-factory/tests/functional/orchestration/javascript/durability": 3,
@@ -7723,7 +7814,7 @@
       "you-agent-factory/tests/functional/workstations/watcher": 9,
       "you-agent-factory/tests/functional/sessions/mcp": 7
     },
-    "files_with_customer_Test": 238,
+    "files_with_customer_Test": 239,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
