@@ -504,46 +504,6 @@
     },
     {
       "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
-      "target": "TestSessionInvocationAPI_CanceledRequestContextStopsRequest"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
-      "target": "TestSessionInvocationAPI_PausedSessionReturnsPausedStatus"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
-      "target": "TestSessionInvocationAPI_RejectsArgsWithoutActiveSignature"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
-      "target": "TestSessionInvocationAPI_RejectsInvalidStructuredArgValueShape"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
-      "target": "TestSessionInvocationAPI_RejectsWhitespaceOnlyText"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
-      "target": "TestSessionInvocationAPI_ReturnsPrimaryResult"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
-      "target": "TestSessionInvocationAPI_TimeoutReturnsTimedOutStatus"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
-      "target": "TestSessionInvocationAPI_UnresolvedPrimaryResultReturnsFailedStatus"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_submit_runtime_work_trace_shaping_smoke_test.go",
       "target": "TestSubmitRuntimeWork_EmitsCanonicalTraceAwareBatchEvent"
     },

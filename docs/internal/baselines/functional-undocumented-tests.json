@@ -796,35 +796,7 @@
     },
     {
       "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_CanceledRequestContextStopsRequest"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PausedSessionReturnsPausedStatus"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_RejectsArgsWithoutActiveSignature"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_RejectsInvalidStructuredArgValueShape"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_RejectsWhitespaceOnlyText"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_ReturnsPrimaryResult"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_TimeoutReturnsTimedOutStatus"
-    },
-    {
-      "file": "runtime_api/api_session_invocation_test.go",
-      "name": "TestSessionInvocationAPI_UnresolvedPrimaryResultReturnsFailedStatus"
+      "name": "TestSessionInvocationAPI_AcceptsStructuredArgsWithActiveSignature"
     },
     {
       "file": "runtime_api/api_submit_runtime_work_trace_shaping_smoke_test.go",

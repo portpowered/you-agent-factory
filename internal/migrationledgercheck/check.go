@@ -90,7 +90,6 @@ var RequiredSpecialtyTargets = []string{
 var ExpectedDeletionOnlyBatches = []string{
 	"runtime_api-delete-01-transport-http",
 	"runtime_api-delete-02-work-submission",
-	"runtime_api-delete-04-sessions",
 	"runtime_api-delete-05-factory-packaged",
 	"runtime_api-delete-06-factory-current",
 	"runtime_api-delete-07-events-replay",

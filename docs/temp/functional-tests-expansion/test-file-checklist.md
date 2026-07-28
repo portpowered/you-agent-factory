@@ -632,6 +632,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 - [x] `tests/functional/sessions/controls/pause_resume_test.go`
   - `TestPausedFactorySessionBuffersSubmittedWork`.
+  - `TestPausedFactorySessionReturnsInvocationPausedStatus`.
   - `TestResumedFactorySessionDrainsBufferedWorkInOrder`.
   - `TestPauseResumeEmitsDurableLifecycleEvents`.
   - `TestAPIPauseResumeCancelAndTerminateFactorySession`.

@@ -515,14 +515,7 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/runtime_api/api_service_config_override_alignment_test.go | you-agent-factory/tests/functional/runtime_api | TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner | short | tests/functional/workers/script/execution_test.go | runtime_api | none | runtime_api-delete-09-workers-resilience |
 | tests/functional/runtime_api/api_service_mode_observability_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestObservabilitySmoke_PublicStatusSessionWorkAndEventsAlignAcrossRuntimeTransitions | short | tests/functional/observability/metrics/lifecycle_test.go | runtime_api | none | runtime_api-delete-10-observability-product |
 | tests/functional/runtime_api/api_service_mode_observability_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayReachableUntilCanceled | short | tests/functional/transport/http/server/startup_shutdown_test.go | runtime_api | none | runtime_api-delete-01-transport-http |
-| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_CanceledRequestContextStopsRequest | short | tests/functional/sessions/execution/results_dispatches_test.go | runtime_api | none | runtime_api-delete-04-sessions |
-| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_PausedSessionReturnsPausedStatus | short | tests/functional/sessions/controls/pause_resume_test.go | runtime_api | none | runtime_api-delete-04-sessions |
-| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_RejectsArgsWithoutActiveSignature | short | tests/functional/sessions/execution/results_dispatches_test.go | runtime_api | none | runtime_api-delete-04-sessions |
-| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_RejectsInvalidStructuredArgValueShape | short | tests/functional/sessions/execution/results_dispatches_test.go | runtime_api | none | runtime_api-delete-04-sessions |
-| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_RejectsWhitespaceOnlyText | short | tests/functional/sessions/execution/results_dispatches_test.go | runtime_api | none | runtime_api-delete-04-sessions |
-| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_ReturnsPrimaryResult | short | tests/functional/sessions/execution/results_dispatches_test.go | runtime_api | none | runtime_api-delete-04-sessions |
-| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_TimeoutReturnsTimedOutStatus | short | tests/functional/sessions/execution/results_dispatches_test.go | runtime_api | none | runtime_api-delete-04-sessions |
-| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_UnresolvedPrimaryResultReturnsFailedStatus | short | tests/functional/sessions/execution/results_dispatches_test.go | runtime_api | none | runtime_api-delete-04-sessions |
+| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_AcceptsStructuredArgsWithActiveSignature | short | wrong-layer: runtime API session invocation coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/runtime_api/api_session_invocation_test.go. | none | none | n/a |
 | tests/functional/runtime_api/api_submit_runtime_work_trace_shaping_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestSubmitRuntimeWork_EmitsCanonicalTraceAwareBatchEvent | short | tests/functional/events/factory_events/order_and_cursor_test.go | runtime_api | none | runtime_api-delete-02-work-submission |
 | tests/functional/workers/inference/failure_normalization_test.go | you-agent-factory/tests/functional/workers/inference | TestProviderNonZeroExitMapsToPublicFailure | short | tests/functional/workers/inference/failure_normalization_test.go | none | none | n/a |
 | tests/functional/workers/inference/failure_normalization_test.go | you-agent-factory/tests/functional/workers/inference | TestProviderAuthRateLimitAndTimeoutRemainDistinct | short | tests/functional/workers/inference/failure_normalization_test.go | none | none | n/a |
@@ -842,7 +835,7 @@ execute independently until package ownership reaches zero.
 | --- | ---: | --- | --- |
 | `runtime_api-delete-01-transport-http` | 9 | transport/http, observability/logging | `api-smoke`, `artifact-contract-closeout` |
 | `runtime_api-delete-02-work-submission` | 15 | work/submission, work/recovery, events/factory_events | `artifact-contract-closeout` |
-| `runtime_api-delete-04-sessions` | 8 | sessions/execution, sessions/controls | none |
+| `runtime_api-delete-04-sessions` | 8 | sessions/execution, sessions/controls | released |
 | `runtime_api-delete-05-factory-packaged` | 11 | factory/packaged/{deep_research,goal,quorum,review} | none |
 | `runtime_api-delete-06-factory-current` | 39 | factory/current, factory/definitions | none |
 | `runtime_api-delete-07-events-replay` | 8 | events/{factory_events,response_events,replay}, workers/script, factory/definitions | none |
@@ -915,14 +908,7 @@ Batch execution guidance for later move work:
 | tests/functional/runtime_api/api_service_config_override_alignment_test.go | you-agent-factory/tests/functional/runtime_api | TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner | short | tests/functional/workers/script/execution_test.go | runtime_api | none | runtime_api-delete-09-workers-resilience |
 | tests/functional/runtime_api/api_service_mode_observability_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestObservabilitySmoke_PublicStatusSessionWorkAndEventsAlignAcrossRuntimeTransitions | short | tests/functional/observability/metrics/lifecycle_test.go | runtime_api | none | runtime_api-delete-10-observability-product |
 | tests/functional/runtime_api/api_service_mode_observability_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayReachableUntilCanceled | short | tests/functional/transport/http/server/startup_shutdown_test.go | runtime_api | none | runtime_api-delete-01-transport-http |
-| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_CanceledRequestContextStopsRequest | short | tests/functional/sessions/execution/results_dispatches_test.go | runtime_api | none | runtime_api-delete-04-sessions |
-| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_PausedSessionReturnsPausedStatus | short | tests/functional/sessions/controls/pause_resume_test.go | runtime_api | none | runtime_api-delete-04-sessions |
-| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_RejectsArgsWithoutActiveSignature | short | tests/functional/sessions/execution/results_dispatches_test.go | runtime_api | none | runtime_api-delete-04-sessions |
-| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_RejectsInvalidStructuredArgValueShape | short | tests/functional/sessions/execution/results_dispatches_test.go | runtime_api | none | runtime_api-delete-04-sessions |
-| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_RejectsWhitespaceOnlyText | short | tests/functional/sessions/execution/results_dispatches_test.go | runtime_api | none | runtime_api-delete-04-sessions |
-| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_ReturnsPrimaryResult | short | tests/functional/sessions/execution/results_dispatches_test.go | runtime_api | none | runtime_api-delete-04-sessions |
-| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_TimeoutReturnsTimedOutStatus | short | tests/functional/sessions/execution/results_dispatches_test.go | runtime_api | none | runtime_api-delete-04-sessions |
-| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_UnresolvedPrimaryResultReturnsFailedStatus | short | tests/functional/sessions/execution/results_dispatches_test.go | runtime_api | none | runtime_api-delete-04-sessions |
+| tests/functional/runtime_api/api_session_invocation_test.go | you-agent-factory/tests/functional/runtime_api | TestSessionInvocationAPI_AcceptsStructuredArgsWithActiveSignature | short | wrong-layer: runtime API session invocation coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/runtime_api/api_session_invocation_test.go. | none | none | n/a |
 | tests/functional/runtime_api/api_submit_runtime_work_trace_shaping_smoke_test.go | you-agent-factory/tests/functional/runtime_api | TestSubmitRuntimeWork_EmitsCanonicalTraceAwareBatchEvent | short | tests/functional/events/factory_events/order_and_cursor_test.go | runtime_api | none | runtime_api-delete-02-work-submission |
 | tests/functional/workers/inference/failure_normalization_test.go | you-agent-factory/tests/functional/workers/inference | TestProviderNonZeroExitMapsToPublicFailure | short | tests/functional/workers/inference/failure_normalization_test.go | none | none | n/a |
 | tests/functional/workers/inference/failure_normalization_test.go | you-agent-factory/tests/functional/workers/inference | TestProviderAuthRateLimitAndTimeoutRemainDistinct | short | tests/functional/workers/inference/failure_normalization_test.go | none | none | n/a |
@@ -978,6 +964,13 @@ Batch execution guidance for later move work:
 | tests/functional/runtime_api/topology_projection_smoke_long_test.go | you-agent-factory/tests/functional/runtime_api | TestEndToEndTopologyProjectionSmoke_LiveEventsAndReplayConfigMatch | functionallong | tests/functional/events/replay/record_replay_test.go | runtime_api | none | runtime_api-delete-07-events-replay |
 
 ### Workstations cron (runtime_api)
+
+Released batch `runtime_api-delete-04-sessions` consumed session invocation
+scenarios after destination coverage landed in
+`tests/functional/sessions/execution/results_dispatches_test.go`
+(`TestAPIResultAndResultsExposeTerminalInvocationData` subtests) and
+`tests/functional/sessions/controls/pause_resume_test.go`
+(`TestPausedFactorySessionReturnsInvocationPausedStatus`).
 
 Released batch `runtime_api-delete-03-workstations-cron` consumed cron workstation
 scenarios after destination coverage landed in `tests/functional/workstations/cron/clock_test.go`
@@ -1745,7 +1738,7 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `runtime_api-delete-01-transport-http` | runtime_api | 9 | transport/http, observability/logging | planned |
 | `runtime_api-delete-02-work-submission` | runtime_api | 15 | work/submission, work/recovery, events/factory_events | planned |
 | `runtime_api-delete-03-workstations-cron` | runtime_api | 3 | workstations/cron | released |
-| `runtime_api-delete-04-sessions` | runtime_api | 8 | sessions/execution, sessions/controls | planned |
+| `runtime_api-delete-04-sessions` | runtime_api | 8 | sessions/execution, sessions/controls | released |
 | `runtime_api-delete-05-factory-packaged` | runtime_api | 11 | factory/packaged/{deep_research,goal,quorum,review} | planned |
 | `runtime_api-delete-06-factory-current` | runtime_api | 39 | factory/current, factory/definitions | planned |
 | `runtime_api-delete-07-events-replay` | runtime_api | 8 | events/{factory_events,response_events,replay}, workers/script, factory/definitions | planned |
