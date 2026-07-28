@@ -714,6 +714,13 @@ Wave 0 functional-tests-expansion planning authority lives under
   safety through `support.BuildProcess` + `support.FlattenFactoryConfig` /
   `support.CreateNamedFactory` CLI round-trips with `support.RunFactoryToCompletionWithEdgesAndWork`
   for terminal run proofs; catalog metadata infers domain `factory/definitions`.
+  `tests/functional/factory/definitions/validation_test.go` and sibling
+  `metadata_contract_test.go` own Factory definition validation rejection,
+  metadata contract round-trip/canonicalization, and invocation-help rendering
+  through `support.BuildProcess` + `support.FakeInputs` with
+  `ProviderCommandRunner` zero-call assertions; pass absolute `--factory` paths
+  (or `support.SetWorkingDirectory`) because `filepath.Abs` resolves relative
+  factory selectors against the OS cwd, not `root.Input.WorkingDirectory`.
   `make pkg-structure` enforces the domain-mirrored functional layout
   `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
   unclassified scenario packages are blocking, while existing nonconforming

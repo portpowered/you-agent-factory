@@ -96,6 +96,51 @@ func TestFactoryValidationAcceptsMultiWorkTypeExecutableTopology(t *testing.T) {
 	}
 }
 
+// TestFactoryValidationRejectsWorkstationWithNonexistentWorker proves public
+// Factory run rejects workstation wiring that references an undeclared worker
+// before runtime bootstrap succeeds, surfacing actionable dangling-reference
+// diagnostics without dispatching external provider command execution.
+func TestFactoryValidationRejectsWorkstationWithNonexistentWorker(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "invalid_worker_reference"))
+	runner := support.NewRecordingCommandRunner("runtime must not execute")
+	edges := serviceedges.Edges{ProviderCommandRunner: runner}
+
+	factoryPath := filepath.Join(dir, "factory.json")
+	homeDir := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--factory", factoryPath})
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = dir
+
+	err := support.BuildProcess(t, edges).Execute(inputs.Input)
+	if err == nil {
+		t.Fatalf(
+			"Process.Execute(run --factory) error = nil, want load-boundary validation failure; stdout=%q stderr=%q",
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+
+	diagnostic := err.Error() + "\n" + inputs.Stdout() + "\n" + inputs.Stderr()
+	for _, want := range []string{
+		"invalid named factory",
+		"invalid graph references",
+		"factory.worker.danglingReference",
+	} {
+		if !strings.Contains(diagnostic, want) {
+			t.Fatalf("diagnostic missing %q:\n%s", want, diagnostic)
+		}
+	}
+	if inputs.Stdout() != "" {
+		t.Fatalf("stdout = %q, want empty before validation failed", inputs.Stdout())
+	}
+	if !strings.Contains(inputs.Stderr(), "factory.worker.danglingReference") {
+		t.Fatalf("stderr missing dangling worker diagnostic: %q", inputs.Stderr())
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want 0 before validation fails", runner.CallCount())
+	}
+}
+
 // TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute proves public
 // Factory validation rejects authored definitions that reference missing workers,
 // workstations, or routes before runtime execution and reports customer-visible
