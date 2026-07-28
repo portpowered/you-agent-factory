@@ -182,6 +182,7 @@ func TestProviderSessionsRootGoInventoryDistinguishesThinContractTestsFromImplem
 		"legacy_packages_disposition_test.go",
 		"providers_import_boundary_test.go",
 		"root_contracts_providers_boundary_test.go",
+		"root_wire_behavioral_boundary_test.go",
 		"service_import_boundary_test.go",
 		"service_root_contract_test.go",
 	}
