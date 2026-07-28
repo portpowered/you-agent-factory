@@ -3,7 +3,7 @@ package construct
 import (
 	"fmt"
 
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	settingsinternal "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal"
 	resolution "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution"
 	resolutionwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -18,7 +18,7 @@ func ConstructResolutionService() (resolution.Service, error) {
 var constructResolutionService = defaultResolutionService
 
 var (
-	constructProvidersRoot  = operatorsettings.ConstructProvidersRoot
+	constructProvidersRoot  = settingsinternal.ConstructProvidersRoot
 	constructResolutionWire = resolutionwire.NewService
 )
 

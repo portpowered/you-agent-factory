@@ -7,7 +7,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	recordingartifacts "github.com/portpowered/infinite-you/pkg/services/recordings/artifacts"
+	recordingworkstation "github.com/portpowered/infinite-you/pkg/services/recordings/projections/workstation"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -210,6 +210,344 @@ func (subscription EventSubscription) Next(ctx context.Context) SubscriptionOutc
 	return subscription(ctx)
 }
 
+// Factory Event envelope vocabulary is owned by canonical_ledger; peers import
+// these aliases from the Recordings root package.
+type (
+	ArtifactCreatedEventPayload           = interfaces.ArtifactCreatedEventPayload
+	DispatchInterruptedEventPayload       = interfaces.DispatchInterruptedEventPayload
+	DispatchQueuedEventPayload            = interfaces.DispatchQueuedEventPayload
+	DispatchReconciledEventPayload        = interfaces.DispatchReconciledEventPayload
+	DispatchRequestEventPayload           = interfaces.DispatchRequestEventPayload
+	FactoryChangeEventPayload             = interfaces.FactoryChangeEventPayload
+	FactoryEvent                          = interfaces.FactoryEvent
+	FactoryEventContext                   = interfaces.FactoryEventContext
+	FactoryEventReconnectCursor           = interfaces.FactoryEventReconnectCursor
+	FactoryEventReconnectScope            = interfaces.FactoryEventReconnectScope
+	FactoryEventStream                    = interfaces.FactoryEventStream
+	FactoryEventType                      = interfaces.FactoryEventType
+	FactorySessionCompletedEventPayload   = interfaces.FactorySessionCompletedEventPayload
+	FactorySessionLifecycleControlEventPayload = interfaces.FactorySessionLifecycleControlEventPayload
+	FactorySessionLogicalResolveHint      = interfaces.FactorySessionLogicalResolveHint
+	FactorySessionPausedEventPayload      = interfaces.FactorySessionPausedEventPayload
+	FactorySessionResultUpdatedEventPayload = interfaces.FactorySessionResultUpdatedEventPayload
+	FactorySessionResumedEventPayload     = interfaces.FactorySessionResumedEventPayload
+	FactorySessionStartedEventPayload     = interfaces.FactorySessionStartedEventPayload
+	FactorySessionSyncPreflightOptions    = interfaces.FactorySessionSyncPreflightOptions
+	FactoryStateResponseEventPayload      = interfaces.FactoryStateResponseEventPayload
+	InitialStructureRequestEventPayload   = interfaces.InitialStructureRequestEventPayload
+	JavaScriptCheckpointRefEventPayload   = interfaces.JavaScriptCheckpointRefEventPayload
+	JavaScriptPhaseChangeEventPayload     = interfaces.JavaScriptPhaseChangeEventPayload
+	OrchestratorCheckpointWrittenEventPayload = interfaces.OrchestratorCheckpointWrittenEventPayload
+	OrchestratorPhaseChangedEventPayload  = interfaces.OrchestratorPhaseChangedEventPayload
+	RunEventWallClock                     = interfaces.RunEventWallClock
+	RunRequestEventPayload                = interfaces.RunRequestEventPayload
+	RunResponseEventPayload               = interfaces.RunResponseEventPayload
+	WorkStateChangeEventPayload           = interfaces.WorkStateChangeEventPayload
+)
+
+const (
+	FactoryEventSchemaVersionV1 = interfaces.FactoryEventSchemaVersionV1
+
+	FactoryEventTypeAgentRunResponse              = interfaces.FactoryEventTypeAgentRunResponse
+	FactoryEventTypeArtifactCreated               = interfaces.FactoryEventTypeArtifactCreated
+	FactoryEventTypeDispatchInterrupted           = interfaces.FactoryEventTypeDispatchInterrupted
+	FactoryEventTypeDispatchQueued                = interfaces.FactoryEventTypeDispatchQueued
+	FactoryEventTypeDispatchReconciled            = interfaces.FactoryEventTypeDispatchReconciled
+	FactoryEventTypeDispatchRequest               = interfaces.FactoryEventTypeDispatchRequest
+	FactoryEventTypeDispatchResponse              = interfaces.FactoryEventTypeDispatchResponse
+	FactoryEventTypeFactoryChange                 = interfaces.FactoryEventTypeFactoryChange
+	FactoryEventTypeFactoryStateResponse          = interfaces.FactoryEventTypeFactoryStateResponse
+	FactoryEventTypeInferenceRequest              = interfaces.FactoryEventTypeInferenceRequest
+	FactoryEventTypeInferenceResponse             = interfaces.FactoryEventTypeInferenceResponse
+	FactoryEventTypeInitialStructureRequest       = interfaces.FactoryEventTypeInitialStructureRequest
+	FactoryEventTypeJavaScriptCheckpointRef       = interfaces.FactoryEventTypeJavaScriptCheckpointRef
+	FactoryEventTypeJavaScriptPhaseChange         = interfaces.FactoryEventTypeJavaScriptPhaseChange
+	FactoryEventTypeModelRequest                  = interfaces.FactoryEventTypeModelRequest
+	FactoryEventTypeModelResponse                 = interfaces.FactoryEventTypeModelResponse
+	FactoryEventTypeOrchestratorCheckpointWritten = interfaces.FactoryEventTypeOrchestratorCheckpointWritten
+	FactoryEventTypeOrchestratorPhaseChanged      = interfaces.FactoryEventTypeOrchestratorPhaseChanged
+	FactoryEventTypeRelationshipChangeRequest     = interfaces.FactoryEventTypeRelationshipChangeRequest
+	FactoryEventTypeRunRequest                    = interfaces.FactoryEventTypeRunRequest
+	FactoryEventTypeRunResponse                   = interfaces.FactoryEventTypeRunResponse
+	FactoryEventTypeScriptRequest                 = interfaces.FactoryEventTypeScriptRequest
+	FactoryEventTypeScriptResponse                = interfaces.FactoryEventTypeScriptResponse
+	FactoryEventTypeSessionCompleted              = interfaces.FactoryEventTypeSessionCompleted
+	FactoryEventTypeSessionLifecycleControl       = interfaces.FactoryEventTypeSessionLifecycleControl
+	FactoryEventTypeSessionPaused                 = interfaces.FactoryEventTypeSessionPaused
+	FactoryEventTypeSessionResultUpdated          = interfaces.FactoryEventTypeSessionResultUpdated
+	FactoryEventTypeSessionResumed                = interfaces.FactoryEventTypeSessionResumed
+	FactoryEventTypeSessionStarted                = interfaces.FactoryEventTypeSessionStarted
+	FactoryEventTypeWorkRequest                   = interfaces.FactoryEventTypeWorkRequest
+	FactoryEventTypeWorkStateChange               = interfaces.FactoryEventTypeWorkStateChange
+)
+
+var NewFactoryEvent = interfaces.NewFactoryEvent
+
+// Factory world-state projection vocabulary is owned by projection_query; peers
+// import these aliases from the Recordings root package.
+type (
+	ActiveThrottlePause                         = interfaces.ActiveThrottlePause
+	FactoryPlace                                = interfaces.FactoryPlace
+	FactoryPlaceOccupancy                       = interfaces.FactoryPlaceOccupancy
+	FactoryState                                = interfaces.FactoryState
+	FactoryStateDefinition                      = interfaces.FactoryStateDefinition
+	FactoryTerminalWork                         = interfaces.FactoryTerminalWork
+	FactoryWorkType                             = interfaces.FactoryWorkType
+	FactoryWorker                               = interfaces.FactoryWorker
+	FactoryWorkstation                          = interfaces.FactoryWorkstation
+	FactoryWorkstationRef                       = interfaces.FactoryWorkstationRef
+	FactoryWorldActiveExecution                 = interfaces.FactoryWorldActiveExecution
+	FactoryWorldActivity                        = interfaces.FactoryWorldActivity
+	FactoryWorldAgentRunResponse                = interfaces.FactoryWorldAgentRunResponse
+	FactoryWorldDispatch                        = interfaces.FactoryWorldDispatch
+	FactoryWorldDispatchCompletion              = interfaces.FactoryWorldDispatchCompletion
+	FactoryWorldFailureDetail                   = interfaces.FactoryWorldFailureDetail
+	FactoryWorldInferenceAttempt                = interfaces.FactoryWorldInferenceAttempt
+	FactoryWorldJavaScriptChildDispatchCounts   = interfaces.FactoryWorldJavaScriptChildDispatchCounts
+	FactoryWorldJavaScriptProjection            = interfaces.FactoryWorldJavaScriptProjection
+	FactoryWorldPlaceRef                        = interfaces.FactoryWorldPlaceRef
+	FactoryWorldProviderSessionRecord           = interfaces.FactoryWorldProviderSessionRecord
+	FactoryWorldRuntimeView                     = interfaces.FactoryWorldRuntimeView
+	FactoryWorldScriptRequest                   = interfaces.FactoryWorldScriptRequest
+	FactoryWorldScriptResponse                  = interfaces.FactoryWorldScriptResponse
+	FactoryWorldSessionBracketProjection        = interfaces.FactoryWorldSessionBracketProjection
+	FactoryWorldSessionBracketState             = interfaces.FactoryWorldSessionBracketState
+	FactoryWorldSessionRuntime                  = interfaces.FactoryWorldSessionRuntime
+	FactoryWorldState                           = interfaces.FactoryWorldState
+	FactoryWorldSubmitWorkType                  = interfaces.FactoryWorldSubmitWorkType
+	FactoryWorldThrottlePause                   = interfaces.FactoryWorldThrottlePause
+	FactoryWorldTopologyView                    = interfaces.FactoryWorldTopologyView
+	FactoryWorldTrace                           = interfaces.FactoryWorldTrace
+	FactoryWorldView                            = interfaces.FactoryWorldView
+	FactoryWorldWorkItemRef                     = interfaces.FactoryWorldWorkItemRef
+	FactoryWorldWorkStateChangeRecord           = interfaces.FactoryWorldWorkStateChangeRecord
+	FactoryWorldWorkstationEdge                 = interfaces.FactoryWorldWorkstationEdge
+	FactoryWorldWorkstationNode                 = interfaces.FactoryWorldWorkstationNode
+	InitialStructurePayload                     = interfaces.InitialStructurePayload
+)
+
+const (
+	FactoryStateCompleted = interfaces.FactoryStateCompleted
+	FactoryStateFailed    = interfaces.FactoryStateFailed
+	FactoryStateIdle      = interfaces.FactoryStateIdle
+	FactoryStatePaused    = interfaces.FactoryStatePaused
+	FactoryStateRunning   = interfaces.FactoryStateRunning
+	StateTypeFailed       = interfaces.StateTypeFailed
+	StateTypeInitial      = interfaces.StateTypeInitial
+	StateTypeProcessing   = interfaces.StateTypeProcessing
+	StateTypeTerminal     = interfaces.StateTypeTerminal
+)
+
+var (
+	CloneFactoryWorldDispatchCompletion              = interfaces.CloneFactoryWorldDispatchCompletion
+	CloneFactoryWorldInferenceAttemptsByDispatchID   = interfaces.CloneFactoryWorldInferenceAttemptsByDispatchID
+	CloneFactoryWorldProviderSessionRecord           = interfaces.CloneFactoryWorldProviderSessionRecord
+	IsSystemTimePlace                                = interfaces.IsSystemTimePlace
+	IsSystemTimeWorkType                             = interfaces.IsSystemTimeWorkType
+)
+
+// Recordings-owned dispatch vocabulary is owned by projection_query; peers
+// import these aliases from the Recordings root package.
+type (
+	CompletedDispatch                     = interfaces.CompletedDispatch
+	DispatchConsumedWorkRef               = interfaces.DispatchConsumedWorkRef
+	DispatchEntry                         = interfaces.DispatchEntry
+	DispatchReconciliationSource          = interfaces.DispatchReconciliationSource
+	DispatchRecord                        = interfaces.DispatchRecord
+	DispatchRequestEventMetadata          = interfaces.DispatchRequestEventMetadata
+	DispatchResourceRef                   = interfaces.DispatchResourceRef
+	FactoryDispatchKind                   = interfaces.FactoryDispatchKind
+	FactoryDispatchRecord                 = interfaces.FactoryDispatchRecord
+	FactoryDispatchStatus                 = interfaces.FactoryDispatchStatus
+	FactoryDispatchUsage                  = interfaces.FactoryDispatchUsage
+	FactoryDispatchWarning                = interfaces.FactoryDispatchWarning
+	FactorySessionChildDispatchCounts     = interfaces.FactorySessionChildDispatchCounts
+	FactorySessionDispatchFailureDetail   = interfaces.FactorySessionDispatchFailureDetail
+	FactorySessionDispatchJavaScriptState = interfaces.FactorySessionDispatchJavaScriptState
+	FactorySessionDispatchPetriState      = interfaces.FactorySessionDispatchPetriState
+	FactorySessionDispatchState           = interfaces.FactorySessionDispatchState
+	FactorySessionDispatchUsage           = interfaces.FactorySessionDispatchUsage
+	FactorySessionDispatchWarning         = interfaces.FactorySessionDispatchWarning
+)
+
+const (
+	DispatchReconciliationSourceProviderSession = interfaces.DispatchReconciliationSourceProviderSession
+	DispatchReconciliationSourceStreamReplay    = interfaces.DispatchReconciliationSourceStreamReplay
+	FactoryDispatchKindJavaScriptAgent          = interfaces.FactoryDispatchKindJavaScriptAgent
+	FactoryDispatchKindJavaScriptScript         = interfaces.FactoryDispatchKindJavaScriptScript
+	FactoryDispatchKindJavaScriptSynthesize     = interfaces.FactoryDispatchKindJavaScriptSynthesize
+	FactoryDispatchKindJavaScriptSystem         = interfaces.FactoryDispatchKindJavaScriptSystem
+	FactoryDispatchKindJavaScriptTool           = interfaces.FactoryDispatchKindJavaScriptTool
+	FactoryDispatchKindJavaScriptVerify         = interfaces.FactoryDispatchKindJavaScriptVerify
+	FactoryDispatchKindPetriTransition          = interfaces.FactoryDispatchKindPetriTransition
+	FactoryDispatchStatusCompleted              = interfaces.FactoryDispatchStatusCompleted
+	FactoryDispatchStatusFailed                 = interfaces.FactoryDispatchStatusFailed
+	FactoryDispatchStatusInterrupted            = interfaces.FactoryDispatchStatusInterrupted
+	FactoryDispatchStatusQueued                 = interfaces.FactoryDispatchStatusQueued
+	FactoryDispatchStatusRunning                = interfaces.FactoryDispatchStatusRunning
+)
+
+// Workstation-request projection vocabulary is owned by projection_query;
+// peers import these aliases from the Recordings root package.
+type (
+	WorkstationFactoryWorldMutationView                         = recordingworkstation.WorkstationFactoryWorldMutationView
+	WorkstationFactoryWorldRunnerBaselineCapability             = recordingworkstation.WorkstationFactoryWorldRunnerBaselineCapability
+	WorkstationFactoryWorldRunnerCapabilitiesView               = recordingworkstation.WorkstationFactoryWorldRunnerCapabilitiesView
+	WorkstationFactoryWorldRunnerOptionalCapability             = recordingworkstation.WorkstationFactoryWorldRunnerOptionalCapability
+	WorkstationFactoryWorldRunnerOptionalCapabilityStatus       = recordingworkstation.WorkstationFactoryWorldRunnerOptionalCapabilityStatus
+	WorkstationFactoryWorldRunnerOptionalCapabilitySupportView  = recordingworkstation.WorkstationFactoryWorldRunnerOptionalCapabilitySupportView
+	WorkstationFactoryWorldScriptRequestView                    = recordingworkstation.WorkstationFactoryWorldScriptRequestView
+	WorkstationFactoryWorldScriptResponseView                   = recordingworkstation.WorkstationFactoryWorldScriptResponseView
+	WorkstationFactoryWorldSelectedRunnerView                   = recordingworkstation.WorkstationFactoryWorldSelectedRunnerView
+	WorkstationFactoryWorldTokenView                            = recordingworkstation.WorkstationFactoryWorldTokenView
+	WorkstationFactoryWorldWorkItemRef                          = recordingworkstation.WorkstationFactoryWorldWorkItemRef
+	WorkstationFactoryWorldWorkItemRefLineageContinuity         = recordingworkstation.WorkstationFactoryWorldWorkItemRefLineageContinuity
+	WorkstationFactoryWorldWorkItemRefLineageSourceKind         = recordingworkstation.WorkstationFactoryWorldWorkItemRefLineageSourceKind
+	WorkstationFactoryWorldWorkItemRefPayloadStatus             = recordingworkstation.WorkstationFactoryWorldWorkItemRefPayloadStatus
+	WorkstationFactoryWorldWorkstationRequestCountView          = recordingworkstation.WorkstationFactoryWorldWorkstationRequestCountView
+	WorkstationFactoryWorldWorkstationRequestProjectionSlice    = recordingworkstation.WorkstationFactoryWorldWorkstationRequestProjectionSlice
+	WorkstationFactoryWorldWorkstationRequestRequestView        = recordingworkstation.WorkstationFactoryWorldWorkstationRequestRequestView
+	WorkstationFactoryWorldWorkstationRequestResponseView       = recordingworkstation.WorkstationFactoryWorldWorkstationRequestResponseView
+	WorkstationFactoryWorldWorkstationRequestView               = recordingworkstation.WorkstationFactoryWorldWorkstationRequestView
+	WorkstationRunnerID                                         = recordingworkstation.WorkstationRunnerID
+	WorkstationRunnerSelectionSource                            = recordingworkstation.WorkstationRunnerSelectionSource
+	WorkstationStringMap                                        = recordingworkstation.WorkstationStringMap
+)
+
+// BuildFactoryWorldWorkstationRequestProjectionSlice keeps the additive
+// workstation-request contract at the API boundary while deriving it from the
+// canonical selected-tick FactoryWorldState model.
+func BuildFactoryWorldWorkstationRequestProjectionSlice(state FactoryWorldState) WorkstationFactoryWorldWorkstationRequestProjectionSlice {
+	return recordingworkstation.BuildFactoryWorldWorkstationRequestProjectionSlice(state)
+}
+
+var (
+	// ErrReplayRecordingNotFound reports that a replay load could not select a
+	// recording through its Recordings-owned identity.
+	ErrReplayRecordingNotFound = errors.New("replay recording not found")
+	// ErrReplayRecordingNotFinalized reports that a selected recording is not
+	// yet stable enough to replay.
+	ErrReplayRecordingNotFinalized = errors.New("replay recording is not finalized")
+	// ErrCorruptReplayInput reports malformed scope, identity, or canonical
+	// ordering in detached replay facts.
+	ErrCorruptReplayInput = errors.New("corrupt replay input")
+	// ErrUnsupportedReplayPlan reports an unknown plan schema, timing mode, or
+	// other unsupported neutral replay option.
+	ErrUnsupportedReplayPlan = errors.New("unsupported replay plan")
+	// ErrReplayPlanNotFound reports an unknown opaque replay handle.
+	ErrReplayPlanNotFound = errors.New("replay plan not found")
+)
+
+// ReplayPlanSchemaVersion identifies the neutral replay-plan vocabulary.
+type ReplayPlanSchemaVersion string
+
+const ReplayPlanSchemaV1 ReplayPlanSchemaVersion = "recordings.replay-plan.v1"
+
+// ReplayTimingMode selects implementation-neutral timing behavior. Order-only
+// replay preserves canonical ordering without exposing clocks or timers.
+type ReplayTimingMode string
+
+const ReplayTimingOrderOnly ReplayTimingMode = "ORDER_ONLY"
+
+// ReplayRecordingFacts is a detached selection of one recording's canonical
+// facts. Events is an independent slice and contains no decoder, store, or
+// runtime handles.
+type ReplayRecordingFacts struct {
+	RecordingID RecordingID
+	Scope       CanonicalEventScope
+	Events      []CanonicalEvent
+}
+
+// LoadReplayRecordingRequest selects one recording by its opaque identity.
+type LoadReplayRecordingRequest struct {
+	RecordingID RecordingID
+}
+
+// LoadReplayRecordingResult returns detached canonical facts for replay.
+type LoadReplayRecordingResult struct {
+	Recording ReplayRecordingFacts
+}
+
+// ReplayPlanHandle is an opaque Recordings-owned replay identity.
+type ReplayPlanHandle string
+
+// CreateReplayPlanRequest asks Recordings to validate and retain a neutral
+// replay plan. ExpectedThrough, when present, makes divergence observable
+// without exposing a runtime engine.
+type CreateReplayPlanRequest struct {
+	SchemaVersion   ReplayPlanSchemaVersion
+	Timing          ReplayTimingMode
+	Recording       ReplayRecordingFacts
+	ExpectedThrough *CanonicalEventCursor
+	SelectedTick    int
+}
+
+// ReplayPlanFacts is the detached public description of an opaque plan.
+type ReplayPlanFacts struct {
+	Handle        ReplayPlanHandle
+	RecordingID   RecordingID
+	Scope         CanonicalEventScope
+	TotalEvents   int
+	SchemaVersion ReplayPlanSchemaVersion
+	Timing        ReplayTimingMode
+}
+
+// CreateReplayPlanResult reports the accepted neutral plan.
+type CreateReplayPlanResult struct {
+	Plan ReplayPlanFacts
+}
+
+// ReplayObservationKind identifies one deterministic replay observation.
+type ReplayObservationKind string
+
+const (
+	ReplayProgress  ReplayObservationKind = "PROGRESS"
+	ReplayCompleted ReplayObservationKind = "COMPLETED"
+	ReplayDiverged  ReplayObservationKind = "DIVERGED"
+)
+
+// ReplayDivergenceFacts contains safe expected and observed ordering facts.
+type ReplayDivergenceFacts struct {
+	Expected CanonicalEventCursor
+	Observed CanonicalEventCursor
+}
+
+// ReplayObservation is one detached progress, completion, or divergence fact.
+// WorldState is reduced from the canonical prefix reported by ProcessedEvents.
+type ReplayObservation struct {
+	Kind            ReplayObservationKind
+	Plan            ReplayPlanHandle
+	ProcessedEvents int
+	TotalEvents     int
+	Through         *CanonicalEventCursor
+	WorldState      WorldStateView
+	Divergence      *ReplayDivergenceFacts
+}
+
+// ObserveReplayRequest advances and observes one opaque replay plan.
+type ObserveReplayRequest struct {
+	Plan ReplayPlanHandle
+}
+
+// ObserveReplayResult returns one deterministic detached observation.
+type ObserveReplayResult struct {
+	Observation ReplayObservation
+}
+
+// Recordings-owned legacy replay artifact vocabulary. Peers import these
+// aliases from pkg/services/recordings rather than treating the vocabulary as
+// Factory Definitions-owned peer contract surface.
+type (
+	CheckpointResumabilityStatus = interfaces.CheckpointResumabilityStatus
+	ReplayArtifact               = interfaces.ReplayArtifact
+	ReplayDiagnostics            = interfaces.ReplayDiagnostics
+	ReplayWallClockMetadata      = interfaces.ReplayWallClockMetadata
+)
+
+const (
+	CheckpointResumabilityStatusResumable = interfaces.CheckpointResumabilityStatusResumable
+)
+
 // EventReconnectCursor retains the legacy projection-validation cursor shape.
 // New subscriptions use CanonicalEventCursor.
 type EventReconnectCursor = FactoryEventReconnectCursor
@@ -372,6 +710,50 @@ type RecordingTargetRequest struct {
 	Artifact          RecordingArtifactReference
 	HomeDir           string
 	ReportedSessionID string
+}
+
+// Live recording target vocabulary is owned by recording_lifecycle; peers
+// import these types from the Recordings root package.
+
+// RecordingClock is the exact time source consumed by live recording target
+// planning. Wire supplies the production clock.
+type RecordingClock interface {
+	Now() time.Time
+}
+
+// RecordingIdentityGenerator supplies an opaque uniqueness token for a live
+// recording filename.
+type RecordingIdentityGenerator func() string
+
+// RecordingPathJoiner supplies platform-specific path joining mechanics.
+type RecordingPathJoiner func(...string) string
+
+// LiveRecordingTargetRequest identifies the customer edge used to place and
+// report one automatically generated live recording.
+type LiveRecordingTargetRequest struct {
+	HomeDir           string
+	ReportedSessionID string
+}
+
+// LiveRecordingTarget carries the runtime template path and the customer path
+// reported for the selected Factory Session.
+type LiveRecordingTarget struct {
+	ServicePath  string
+	ReportedPath string
+}
+
+// LiveRecordingTargetPlanner owns default live-recording layout, naming, and
+// session-token interpretation.
+type LiveRecordingTargetPlanner interface {
+	PlanLiveRecordingTarget(LiveRecordingTargetRequest) (LiveRecordingTarget, error)
+}
+
+// LiveRecordingTargetPlannerFunc adapts a programmable exact operation.
+type LiveRecordingTargetPlannerFunc func(LiveRecordingTargetRequest) (LiveRecordingTarget, error)
+
+// PlanLiveRecordingTarget implements LiveRecordingTargetPlanner.
+func (fn LiveRecordingTargetPlannerFunc) PlanLiveRecordingTarget(request LiveRecordingTargetRequest) (LiveRecordingTarget, error) {
+	return fn(request)
 }
 
 // StartRecordingRequest selects and binds one recording lifecycle. Disabled
@@ -1003,40 +1385,4 @@ type SimpleDashboardSessionData struct {
 	ProviderSessions     []FactoryWorldProviderSessionRecord
 }
 
-// Portable recording aliases remain only for compatibility with existing
-// Factory Session callers. They are not part of the Recordings Service portable
-// artifact seam, whose detached values are defined above.
-type PortableRecording = recordingartifacts.Recording
-type PortableRecordingArtifactSummary = recordingartifacts.ArtifactSummary
-type PortableRecordingAvailability = recordingartifacts.AvailabilityDetail
-type PortableRecordingCanonicalArtifact = recordingartifacts.CanonicalArtifact
-type PortableRecordingCanonicalCheckpoint = recordingartifacts.CanonicalCheckpoint
-type PortableRecordingCanonicalFacts = recordingartifacts.CanonicalFacts
-type PortableRecordingCanonicalResult = recordingartifacts.CanonicalResult
-type PortableRecordingCheckpointSummary = recordingartifacts.CheckpointSummary
-type PortableRecordingDiagnostic = recordingartifacts.Diagnostic
-type PortableRecordingEventSummary = recordingartifacts.EventSummary
-type PortableRecordingFailureSummary = recordingartifacts.FailureSummary
-type PortableRecordingResult = recordingartifacts.ResultProjection
-type PortableRecordingWriter = recordingartifacts.Writer
-type RecordingTemporaryFile = recordingartifacts.TemporaryFile
-type RecordingMakeDirectories = recordingartifacts.MakeDirectories
-type RecordingCreateTemporaryFile = recordingartifacts.CreateTemporaryFile
-type RecordingRemovePath = recordingartifacts.RemovePath
-type RecordingRenamePath = recordingartifacts.RenamePath
-
-const (
-	KindJavaScriptFactorySession        = recordingartifacts.KindJavaScriptFactorySession
-	DivergenceCategoryConfigMismatch    = "config_mismatch"
-	PortableRecordingCodeInvalidDigest  = recordingartifacts.CodeInvalidDigest
-	PortableRecordingCodeInvalidSummary = recordingartifacts.CodeInvalidSummary
-)
-
-// Legacy package-level helpers remain for existing callers. Peers should prefer
-// the plain artifact-export methods on Service as the cross-service source of
-// truth for build/validate/decode outcomes.
-var (
-	BuildPortableRecording    = recordingartifacts.Build
-	DecodePortableRecording   = recordingartifacts.DecodeAndValidate
-	ValidatePortableRecording = recordingartifacts.Validate
-)
+const DivergenceCategoryConfigMismatch = "config_mismatch"

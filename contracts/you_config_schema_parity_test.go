@@ -13,6 +13,8 @@ import (
 	operator_settings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+
+	_ "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
 type schemaParityKind string
