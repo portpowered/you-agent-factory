@@ -37,6 +37,9 @@ func (a *Adapter) invokePlanDispatch(
 	ctx context.Context,
 	req factoryruntime.PlanDispatchRequest,
 ) {
+	if a.writeRuntimeRequestContextOutcome(w, ctx.Err()) {
+		return
+	}
 	root, err := a.runtimeRoot()
 	if err != nil {
 		a.writeError(w, http.StatusInternalServerError, "factory runtime service is required", "INTERNAL_ERROR")
@@ -44,7 +47,7 @@ func (a *Adapter) invokePlanDispatch(
 	}
 	result, err := root.PlanDispatch(ctx, req)
 	if err != nil {
-		a.writeRootOrInternalError(w, runtimeHTTPOperationDispatchPlan, "failed to plan dispatch", err)
+		a.writeRootOrInternalError(w, ctx, runtimeHTTPOperationDispatchPlan, "failed to plan dispatch", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, dispatchPlanResponseFromPlanResult(result))
@@ -55,6 +58,9 @@ func (a *Adapter) invokeAcceptDispatchResult(
 	ctx context.Context,
 	req factoryruntime.AcceptDispatchResultRequest,
 ) {
+	if a.writeRuntimeRequestContextOutcome(w, ctx.Err()) {
+		return
+	}
 	root, err := a.runtimeRoot()
 	if err != nil {
 		a.writeError(w, http.StatusInternalServerError, "factory runtime service is required", "INTERNAL_ERROR")
@@ -62,7 +68,7 @@ func (a *Adapter) invokeAcceptDispatchResult(
 	}
 	result, err := root.AcceptDispatchResult(ctx, req)
 	if err != nil {
-		a.writeRootOrInternalError(w, runtimeHTTPOperationDispatchPlan, "failed to accept dispatch result", err)
+		a.writeRootOrInternalError(w, ctx, runtimeHTTPOperationDispatchPlan, "failed to accept dispatch result", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, dispatchPlanResponseFromAcceptResult(result))

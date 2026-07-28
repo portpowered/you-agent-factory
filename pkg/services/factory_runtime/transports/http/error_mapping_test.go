@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -358,7 +359,7 @@ func TestWriteRootOrInternalError_SanitizesUnmappedFailures(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	err := errors.New("pkg/services/factory_runtime/internal/service: boom")
 
-	adapter.writeRootOrInternalError(recorder, runtimeHTTPOperationObserve, "failed to observe factory runtime status", err)
+	adapter.writeRootOrInternalError(recorder, context.Background(), runtimeHTTPOperationObserve, "failed to observe factory runtime status", err)
 
 	body := recorder.Body.String()
 	if recorder.Code != http.StatusInternalServerError ||

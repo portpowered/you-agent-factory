@@ -65,7 +65,11 @@ Use this map when changing the public REST contract.
   `dispatch_plan_mapping.go`. Checkpoint adaptation (`handlers_checkpoint.go`)
   maps capture/load/restore through `CaptureCheckpoint`, `LoadCheckpoint`, and
   `RestoreCheckpoint` with published `CheckpointOutcome` success vocabulary in
-  `checkpoint_mapping.go`.
+  `checkpoint_mapping.go`. Request-context cancellation and deadline exhaustion
+  end without mapping to ordinary business `INTERNAL_ERROR` outcomes: canceled
+  requests terminate without an error body and deadline failures return 504 via
+  `request_context.go`, with guards before root invocation and centralized
+  handling in `writeRootOrInternalError`.
 - Factory Definitions HTTP decoding, generated-contract mapping, service
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_definitions/transports/http`. The top-level

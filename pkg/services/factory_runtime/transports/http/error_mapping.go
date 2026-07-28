@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -108,10 +109,18 @@ func (a *Adapter) writeRootError(w http.ResponseWriter, operation runtimeHTTPOpe
 
 func (a *Adapter) writeRootOrInternalError(
 	w http.ResponseWriter,
+	ctx context.Context,
 	operation runtimeHTTPOperation,
 	internalMessage string,
 	err error,
 ) {
+	if requestContextEnded(ctx) {
+		a.writeRuntimeRequestContextOutcome(w, ctx.Err())
+		return
+	}
+	if a.writeRuntimeRequestContextOutcome(w, err) {
+		return
+	}
 	if a.writeRootError(w, operation, err) {
 		return
 	}

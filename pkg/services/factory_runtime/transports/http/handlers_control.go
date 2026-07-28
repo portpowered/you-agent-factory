@@ -32,6 +32,9 @@ func (a *Adapter) ControlTerminate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *Adapter) invokeControlPause(w http.ResponseWriter, ctx context.Context) {
+	if a.writeRuntimeRequestContextOutcome(w, ctx.Err()) {
+		return
+	}
 	root, err := a.runtimeRoot()
 	if err != nil {
 		a.writeError(w, http.StatusInternalServerError, "factory runtime service is required", "INTERNAL_ERROR")
@@ -39,13 +42,16 @@ func (a *Adapter) invokeControlPause(w http.ResponseWriter, ctx context.Context)
 	}
 	result, err := root.ControlPause(ctx, factoryruntime.PauseRequest{})
 	if err != nil {
-		a.writeRootOrInternalError(w, runtimeHTTPOperationControl, "failed to pause factory runtime", err)
+		a.writeRootOrInternalError(w, ctx, runtimeHTTPOperationControl, "failed to pause factory runtime", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, controlResponseFromPauseResult(result))
 }
 
 func (a *Adapter) invokeControlResume(w http.ResponseWriter, ctx context.Context) {
+	if a.writeRuntimeRequestContextOutcome(w, ctx.Err()) {
+		return
+	}
 	root, err := a.runtimeRoot()
 	if err != nil {
 		a.writeError(w, http.StatusInternalServerError, "factory runtime service is required", "INTERNAL_ERROR")
@@ -53,7 +59,7 @@ func (a *Adapter) invokeControlResume(w http.ResponseWriter, ctx context.Context
 	}
 	result, err := root.ControlResume(ctx, factoryruntime.ResumeRequest{})
 	if err != nil {
-		a.writeRootOrInternalError(w, runtimeHTTPOperationControl, "failed to resume factory runtime", err)
+		a.writeRootOrInternalError(w, ctx, runtimeHTTPOperationControl, "failed to resume factory runtime", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, controlResponseFromResumeResult(result))
@@ -64,6 +70,9 @@ func (a *Adapter) invokeControlTerminate(
 	ctx context.Context,
 	req factoryruntime.TerminateRequest,
 ) {
+	if a.writeRuntimeRequestContextOutcome(w, ctx.Err()) {
+		return
+	}
 	root, err := a.runtimeRoot()
 	if err != nil {
 		a.writeError(w, http.StatusInternalServerError, "factory runtime service is required", "INTERNAL_ERROR")
@@ -71,7 +80,7 @@ func (a *Adapter) invokeControlTerminate(
 	}
 	result, err := root.ControlTerminate(ctx, req)
 	if err != nil {
-		a.writeRootOrInternalError(w, runtimeHTTPOperationControl, "failed to terminate factory runtime", err)
+		a.writeRootOrInternalError(w, ctx, runtimeHTTPOperationControl, "failed to terminate factory runtime", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, controlResponseFromTerminateResult(result))
@@ -126,6 +135,9 @@ func (a *Adapter) MoveWorkBySessionId(
 		a.writeError(w, http.StatusBadRequest, "stateName is required", "BAD_REQUEST")
 		return
 	}
+	if a.guardRuntimeRequestContext(w, r) {
+		return
+	}
 
 	root, err := a.runtimeRoot()
 	if err != nil {
@@ -134,7 +146,7 @@ func (a *Adapter) MoveWorkBySessionId(
 	}
 	result, err := root.ControlMoveWork(r.Context(), moveReq)
 	if err != nil {
-		a.writeRootOrInternalError(w, runtimeHTTPOperationMoveWork, "failed to move work", err)
+		a.writeRootOrInternalError(w, r.Context(), runtimeHTTPOperationMoveWork, "failed to move work", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, workResponseFromMoveResult(result))

@@ -45,6 +45,9 @@ func (a *Adapter) invokeCaptureCheckpoint(
 	ctx context.Context,
 	req factoryruntime.CaptureCheckpointRequest,
 ) {
+	if a.writeRuntimeRequestContextOutcome(w, ctx.Err()) {
+		return
+	}
 	root, err := a.runtimeRoot()
 	if err != nil {
 		a.writeError(w, http.StatusInternalServerError, "factory runtime service is required", "INTERNAL_ERROR")
@@ -52,7 +55,7 @@ func (a *Adapter) invokeCaptureCheckpoint(
 	}
 	result, err := root.CaptureCheckpoint(ctx, req)
 	if err != nil {
-		a.writeRootOrInternalError(w, runtimeHTTPOperationCheckpoint, "failed to capture checkpoint", err)
+		a.writeRootOrInternalError(w, ctx, runtimeHTTPOperationCheckpoint, "failed to capture checkpoint", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, captureCheckpointResponseFromResult(result))
@@ -63,6 +66,9 @@ func (a *Adapter) invokeLoadCheckpoint(
 	ctx context.Context,
 	req factoryruntime.LoadCheckpointRequest,
 ) {
+	if a.writeRuntimeRequestContextOutcome(w, ctx.Err()) {
+		return
+	}
 	root, err := a.runtimeRoot()
 	if err != nil {
 		a.writeError(w, http.StatusInternalServerError, "factory runtime service is required", "INTERNAL_ERROR")
@@ -70,7 +76,7 @@ func (a *Adapter) invokeLoadCheckpoint(
 	}
 	result, err := root.LoadCheckpoint(ctx, req)
 	if err != nil {
-		a.writeRootOrInternalError(w, runtimeHTTPOperationCheckpoint, "failed to load checkpoint", err)
+		a.writeRootOrInternalError(w, ctx, runtimeHTTPOperationCheckpoint, "failed to load checkpoint", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, loadCheckpointResponseFromResult(result))
@@ -81,6 +87,9 @@ func (a *Adapter) invokeRestoreCheckpoint(
 	ctx context.Context,
 	req factoryruntime.RestoreCheckpointRequest,
 ) {
+	if a.writeRuntimeRequestContextOutcome(w, ctx.Err()) {
+		return
+	}
 	root, err := a.runtimeRoot()
 	if err != nil {
 		a.writeError(w, http.StatusInternalServerError, "factory runtime service is required", "INTERNAL_ERROR")
@@ -88,7 +97,7 @@ func (a *Adapter) invokeRestoreCheckpoint(
 	}
 	result, err := root.RestoreCheckpoint(ctx, req)
 	if err != nil {
-		a.writeRootOrInternalError(w, runtimeHTTPOperationCheckpoint, "failed to restore checkpoint", err)
+		a.writeRootOrInternalError(w, ctx, runtimeHTTPOperationCheckpoint, "failed to restore checkpoint", err)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, restoreCheckpointResponseFromResult(result))
