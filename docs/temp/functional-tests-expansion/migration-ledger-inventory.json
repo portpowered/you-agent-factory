@@ -7217,6 +7217,36 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/deep_research/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/deep_research",
+      "scenario": "TestPackagedDeepResearchRequiredInputCompletes",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/deep_research/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/deep_research/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/deep_research",
+      "scenario": "TestPackagedDeepResearchOptionalInputsReachWorkers",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/deep_research/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/deep_research/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/deep_research",
+      "scenario": "TestPackagedDeepResearchWorkerFailureReturnsFailedOutcome",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/deep_research/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
   "scanned_at_utc": "2026-07-28T03:45:00Z",
@@ -7235,7 +7265,7 @@
       "automations": 7,
       "bootstrap_portability": 21,
       "cli": 62,
-      "factory": 4,
+      "factory": 7,
       "guards_batch": 23,
       "models": 5,
       "observability": 9,
@@ -7270,6 +7300,7 @@
       "you-agent-factory/tests/functional/cli/root_discovery": 9,
       "you-agent-factory/tests/functional/cli/session_resume": 6,
       "you-agent-factory/tests/functional/factory/catalog": 3,
+      "you-agent-factory/tests/functional/factory/packaged/deep_research": 3,
       "you-agent-factory/tests/functional/factory/runtime_lifecycle": 1,
       "you-agent-factory/tests/functional/guards_batch": 23,
       "you-agent-factory/tests/functional/models/model_invoke": 3,
