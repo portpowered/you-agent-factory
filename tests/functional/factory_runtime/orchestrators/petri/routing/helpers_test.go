@@ -95,6 +95,61 @@ func assertQuiescentSession(t *testing.T, session factoryapi.FactorySession, wan
 	}
 }
 
+func assertListedWorkStateTrace(
+	t *testing.T,
+	response factoryapi.ListWorkResponse,
+	workType, state, traceID string,
+) {
+	t.Helper()
+	for _, item := range response.Results {
+		if item.WorkTypeName == nil || *item.WorkTypeName != workType || item.State == nil || item.State.Name != state {
+			continue
+		}
+		if item.TraceId == nil || *item.TraceId != traceID {
+			t.Errorf("%s:%s trace ID = %#v, want %q", workType, state, item.TraceId, traceID)
+		}
+		return
+	}
+	t.Errorf("listed Work missing %s:%s", workType, state)
+}
+
+func assertDispatchEventsReferenceTerminalWork(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	listed factoryapi.ListWorkResponse,
+	terminalLocation string,
+	traceIDs []string,
+) {
+	t.Helper()
+	terminalWorkIDs := map[string]string{}
+	for _, item := range listed.Results {
+		if support.WorkItemCustomerLocation(item) != terminalLocation {
+			continue
+		}
+		if item.TraceId == nil || item.WorkId == nil {
+			continue
+		}
+		terminalWorkIDs[*item.TraceId] = *item.WorkId
+	}
+	for _, traceID := range traceIDs {
+		workID, ok := terminalWorkIDs[traceID]
+		if !ok {
+			t.Errorf("missing terminal Work ID for trace %q", traceID)
+			continue
+		}
+		referenced := false
+		for _, dispatch := range support.ObserveDispatchEvents(t, events) {
+			if support.DispatchObservationIncludesWork(dispatch, workID) {
+				referenced = true
+				break
+			}
+		}
+		if !referenced {
+			t.Errorf("dispatch events missing public Work ID %q for trace %q", workID, traceID)
+		}
+	}
+}
+
 func assertTerminalWorkCorrelatesToTraceIDs(
 	t *testing.T,
 	listed factoryapi.ListWorkResponse,

@@ -288,3 +288,106 @@ func TestPetriFailureRoutesToDocumentedFailedPlace(t *testing.T) {
 		}
 	})
 }
+
+// TestPetriMultiTransitionPreservesWorkCorrelation proves a known public Work
+// identity submitted through multi-transition Petri Factory routing remains
+// attributable on public Work listings and Factory Event projections after
+// routing completes or lands at the documented failed place, without
+// inspecting internal Petri markings.
+func TestPetriMultiTransitionPreservesWorkCorrelation(t *testing.T) {
+	t.Run("cross_work_type_dispatcher_preserves_origin_trace_through_stages", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
+		originTraceID := "trace-correlation-dispatcher"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "idea",
+			TraceID:    originTraceID,
+			Payload:    []byte(`{"title":"correlation across dispatcher stages"}`),
+		})
+
+		runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(3)...)
+		_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderCommandRunner: runner},
+			10*time.Second,
+		)
+
+		terminal := support.WorkCustomerLocation("prd", "complete")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			terminal: 1,
+			support.WorkCustomerLocation("idea", "init"): 0,
+			support.WorkCustomerLocation("prd", "init"):  0,
+		})
+		assertListedWorkStateTrace(t, listed, "prd", "complete", originTraceID)
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{originTraceID})
+		assertDispatchEventsReferenceTerminalWork(t, events, listed, terminal, []string{originTraceID})
+	})
+
+	t.Run("three_stage_ideation_correlates_trace_on_terminal_and_events", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "full_ideation_pipeline"))
+		originTraceID := "trace-correlation-ideation"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "idea",
+			TraceID:    originTraceID,
+			Payload:    []byte(`{"title":"correlation across ideation stages"}`),
+		})
+
+		provider := testutil.NewMockProvider(
+			workerexecution.InferenceResponse{Content: "PRD created. COMPLETE"},
+			workerexecution.InferenceResponse{Content: "Code written. COMPLETE"},
+			workerexecution.InferenceResponse{Content: "Looks good. ACCEPTED"},
+		)
+		_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderOverride: provider},
+			15*time.Second,
+		)
+
+		terminal := support.WorkCustomerLocation("story", "complete")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			terminal: 1,
+			support.WorkCustomerLocation("idea", "init"):       0,
+			support.WorkCustomerLocation("prd", "init"):        0,
+			support.WorkCustomerLocation("story", "init"):      0,
+			support.WorkCustomerLocation("story", "in-review"): 0,
+			support.WorkCustomerLocation("story", "executing"): 0,
+		})
+		assertListedWorkStateTrace(t, listed, "story", "complete", originTraceID)
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{originTraceID})
+		assertDispatchEventsReferenceTerminalWork(t, events, listed, terminal, []string{originTraceID})
+	})
+
+	t.Run("failure_routing_preserves_origin_trace_at_failed_place", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
+		originTraceID := "trace-correlation-failure"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "task",
+			TraceID:    originTraceID,
+			Payload:    []byte(`{"title":"correlation on failure routing"}`),
+		})
+
+		runner := testutil.NewProviderCommandRunner(
+			platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("Done. COMPLETE")},
+			platformprocess.CommandResult{
+				Stderr:   []byte("stage-two provider unavailable"),
+				ExitCode: 1,
+			},
+		)
+		_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderCommandRunner: runner},
+			10*time.Second,
+		)
+
+		failedTerminal := support.WorkCustomerLocation("task", "failed")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			failedTerminal: 1,
+			support.WorkCustomerLocation("task", "complete"): 0,
+		})
+		assertListedWorkStateTrace(t, listed, "task", "failed", originTraceID)
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{originTraceID})
+		assertDispatchEventsReferenceTerminalWork(t, events, listed, failedTerminal, []string{originTraceID})
+	})
+}
