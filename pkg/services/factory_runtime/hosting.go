@@ -2,12 +2,9 @@ package factory
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"go.uber.org/zap"
 )
@@ -84,16 +81,3 @@ func RuntimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
 	return mode
 }
 
-// RequireIdleRuntime validates the shared definition-activation precondition.
-func RequireIdleRuntime(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) error {
-	if snapshot == nil {
-		return fmt.Errorf("%w: runtime snapshot is unavailable", interfaces.ErrFactoryActivationRequiresIdle)
-	}
-	if snapshot.RuntimeStatus != interfaces.RuntimeStatusIdle {
-		return fmt.Errorf("%w: current runtime status is %s", interfaces.ErrFactoryActivationRequiresIdle, snapshot.RuntimeStatus)
-	}
-	if state.SnapshotHasActiveWork(snapshot) {
-		return fmt.Errorf("%w: current runtime has active work", interfaces.ErrFactoryActivationRequiresIdle)
-	}
-	return nil
-}

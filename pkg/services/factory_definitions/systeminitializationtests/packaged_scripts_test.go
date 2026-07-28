@@ -15,7 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/packageassets"
@@ -33,7 +33,7 @@ type directoryEntrySnapshot struct {
 	IsDir    bool
 }
 
-func packagedScriptsTestPersistence() interfaces.Persistence {
+func packagedScriptsTestPersistence() factorydefinitions.Persistence {
 	validator := factoryvalidation.New(nil)
 	mapper := factorymapping.NewFactoryConfigMapper()
 	fileSystem := platformfilesystem.Local{}
@@ -49,15 +49,15 @@ func packagedScriptsTestPersistence() interfaces.Persistence {
 	)
 	persistence, err := factorypersistence.New(
 		validator,
-		func(payload []byte) (interfaces.DefinitionValidationRequest, error) {
+		func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			return validationentry.MapFactoryJSONForPersistence(payload, factorydefinitioncomposition.LoadCanonicalJSON)
 		},
 		func(
 			ctx context.Context,
 			segment string,
 			payload []byte,
-			validator interfaces.Validator,
-		) (*interfaces.PreparedFactoryLayoutPayload, error) {
+			validator factorydefinitions.Validator,
+		) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
 			return factoryauthoredlayout.Prepare(
 				ctx,
 				segment,
@@ -70,7 +70,7 @@ func packagedScriptsTestPersistence() interfaces.Persistence {
 		},
 		func(
 			targetDir string,
-			prepared *interfaces.PreparedFactoryLayoutPayload,
+			prepared *factorydefinitions.PreparedFactoryLayoutPayload,
 			sourcePath string,
 		) error {
 			return writer.WritePrepared(
@@ -159,13 +159,13 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 	created, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}).
 		EnsurePackagedFactories(
 			t.Context(),
-			interfaces.NamedFactoriesRoot(homeDir),
-			[]interfaces.PackagedDefinition{definition},
+			factorydefinitions.NamedFactoriesRoot(homeDir),
+			[]factorydefinitions.PackagedDefinition{definition},
 		)
 	if err != nil {
 		t.Fatalf("Initialize(create): %v", err)
 	}
-	if len(created) != 1 || created[0].Outcome != interfaces.PackagedFactoryInstallCreated {
+	if len(created) != 1 || created[0].Outcome != factorydefinitions.PackagedFactoryInstallCreated {
 		t.Fatalf("create results = %#v, want one created package", created)
 	}
 
@@ -187,19 +187,19 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 	skipped, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}).
 		EnsurePackagedFactories(
 			t.Context(),
-			interfaces.NamedFactoriesRoot(homeDir),
-			[]interfaces.PackagedDefinition{definition},
+			factorydefinitions.NamedFactoriesRoot(homeDir),
+			[]factorydefinitions.PackagedDefinition{definition},
 		)
 	if err != nil {
 		t.Fatalf("Initialize(rerun): %v", err)
 	}
-	if len(skipped) != 1 || skipped[0].Outcome != interfaces.PackagedFactoryInstallSkipped {
+	if len(skipped) != 1 || skipped[0].Outcome != factorydefinitions.PackagedFactoryInstallSkipped {
 		t.Fatalf("rerun results = %#v, want one skipped package", skipped)
 	}
 	assertDirectorySnapshotUnchanged(t, factoryDir, beforeRerun)
 }
 
-func assembledScriptPackageDefinition(t *testing.T) interfaces.PackagedDefinition {
+func assembledScriptPackageDefinition(t *testing.T) factorydefinitions.PackagedDefinition {
 	t.Helper()
 
 	payload, err := packageassets.Assemble(packageassets.Definition{
@@ -218,7 +218,7 @@ func assembledScriptPackageDefinition(t *testing.T) interfaces.PackagedDefinitio
 	if err != nil {
 		t.Fatalf("packageassets.Assemble: %v", err)
 	}
-	return interfaces.PackagedDefinition{Name: "@test/scripts", Project: "packaged-script-fixture", JSON: payload}
+	return factorydefinitions.PackagedDefinition{Name: "@test/scripts", Project: "packaged-script-fixture", JSON: payload}
 }
 
 func assertInstalledPackagedScript(t *testing.T, factoryDir, relativePath, wantContent string) {
@@ -244,7 +244,7 @@ func assertInstalledPackagedScript(t *testing.T, factoryDir, relativePath, wantC
 func assertThinPackagedScriptManifest(t *testing.T, factoryDir string) {
 	t.Helper()
 
-	payload, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	payload, err := os.ReadFile(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile))
 	if err != nil {
 		t.Fatalf("ReadFile(persisted factory.json): %v", err)
 	}
@@ -273,11 +273,11 @@ func assertThinPackagedScriptEntry(t *testing.T, value any) {
 		t.Fatalf("persisted bundled file = %#v, want object", value)
 	}
 	target, _ := entry["targetPath"].(string)
-	if entry["type"] != interfaces.BundledFileTypeScript || !strings.HasPrefix(target, "factory/scripts/") {
+	if entry["type"] != factorydefinitions.BundledFileTypeScript || !strings.HasPrefix(target, "factory/scripts/") {
 		t.Fatalf("persisted bundled file = %#v, want canonical SCRIPT target", entry)
 	}
 	content, ok := entry["content"].(map[string]any)
-	if !ok || content["encoding"] != interfaces.BundledFileEncodingUTF8 {
+	if !ok || content["encoding"] != factorydefinitions.BundledFileEncodingUTF8 {
 		t.Fatalf("persisted bundled content = %#v, want UTF-8 metadata", entry["content"])
 	}
 	if _, exists := content["inline"]; exists {
@@ -296,7 +296,7 @@ func assertInstalledPackagedScriptRuntimeConfig(t *testing.T, factoryDir string)
 	if !ok {
 		t.Fatal("installed package runtime config missing script worker")
 	}
-	if worker.Type != interfaces.WorkerTypeScript || worker.Command != "scripts/setup.sh" {
+	if worker.Type != factorydefinitions.WorkerTypeScript || worker.Command != "scripts/setup.sh" {
 		t.Fatalf("installed script worker = %#v, want relative SCRIPT_WORKER command", worker)
 	}
 	manifest := loaded.FactoryConfig().ResourceManifest

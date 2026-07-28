@@ -4,38 +4,38 @@ import (
 	"errors"
 	"testing"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-type stubRequiredToolChecker map[string]factorycontracts.RequiredToolCheckResult
+type stubRequiredToolChecker map[string]factorydefinitions.RequiredToolCheckResult
 
-func (s stubRequiredToolChecker) Check(tool factorycontracts.RequiredToolConfig) factorycontracts.RequiredToolCheckResult {
+func (s stubRequiredToolChecker) Check(tool factorydefinitions.RequiredToolConfig) factorydefinitions.RequiredToolCheckResult {
 	if result, ok := s[tool.Command]; ok {
 		return result
 	}
-	return factorycontracts.RequiredToolCheckResult{}
+	return factorydefinitions.RequiredToolCheckResult{}
 }
 
-func validPetriFactoryConfig() *factorycontracts.FactoryConfig {
-	return &factorycontracts.FactoryConfig{
+func validPetriFactoryConfig() *factorydefinitions.FactoryConfig {
+	return &factorydefinitions.FactoryConfig{
 		Name: "transitional-export-validation",
-		WorkTypes: []factorycontracts.WorkTypeConfig{{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
-			States: []factorycontracts.StateConfig{
-				{Name: "init", Type: factorycontracts.StateTypeInitial},
-				{Name: "done", Type: factorycontracts.StateTypeTerminal},
-				{Name: "failed", Type: factorycontracts.StateTypeFailed},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "done", Type: factorydefinitions.StateTypeTerminal},
+				{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 			},
 		}},
 		Workers: []workerconfig.Config{{Name: "worker-a"}},
-		Workstations: []factorycontracts.FactoryWorkstationConfig{{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name:           "process",
 			WorkerTypeName: "worker-a",
-			Inputs:         []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "done"}},
-			OnFailure:      []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+			Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			OnFailure:      []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 		}},
 	}
 }
@@ -46,7 +46,7 @@ func TestValidateGraphTopology_NilOrNonPetriConfigReturnsEmptyResult(t *testing.
 	if result := factoryvalidation.ValidateGraphTopology(nil); result.HasBlockingTargets() {
 		t.Fatalf("nil config targets = %#v, want none", result.Targets)
 	}
-	if result := factoryvalidation.ValidateGraphTopology(&factorycontracts.FactoryConfig{Name: "alpha"}); result.HasBlockingTargets() {
+	if result := factoryvalidation.ValidateGraphTopology(&factorydefinitions.FactoryConfig{Name: "alpha"}); result.HasBlockingTargets() {
 		t.Fatalf("non-petri config targets = %#v, want none", result.Targets)
 	}
 }
@@ -54,10 +54,10 @@ func TestValidateGraphTopology_NilOrNonPetriConfigReturnsEmptyResult(t *testing.
 func TestValidateDeclarativeRequiredTools_ExportedHelperMapsManifestShapeDefects(t *testing.T) {
 	t.Parallel()
 
-	cfg := &factorycontracts.FactoryConfig{
+	cfg := &factorydefinitions.FactoryConfig{
 		Name: "required-tool-shape",
-		ResourceManifest: &factorycontracts.PortableResourceManifestConfig{
-			RequiredTools: []factorycontracts.RequiredToolConfig{{}},
+		ResourceManifest: &factorydefinitions.PortableResourceManifestConfig{
+			RequiredTools: []factorydefinitions.RequiredToolConfig{{}},
 		},
 	}
 
@@ -82,10 +82,10 @@ func TestValidateDeclarativeRequiredTools_ExportedHelperMapsManifestShapeDefects
 func TestValidateDeclarativeRequiredTools_ExportedHelperMapsVersionProbeFailure(t *testing.T) {
 	t.Parallel()
 
-	cfg := &factorycontracts.FactoryConfig{
+	cfg := &factorydefinitions.FactoryConfig{
 		Name: "required-tool-probe",
-		ResourceManifest: &factorycontracts.PortableResourceManifestConfig{
-			RequiredTools: []factorycontracts.RequiredToolConfig{{
+		ResourceManifest: &factorydefinitions.PortableResourceManifestConfig{
+			RequiredTools: []factorydefinitions.RequiredToolConfig{{
 				Name:        "Versioned helper",
 				Command:     "versioned-tool",
 				VersionArgs: []string{"--version"},
@@ -94,7 +94,7 @@ func TestValidateDeclarativeRequiredTools_ExportedHelperMapsVersionProbeFailure(
 	}
 	checker := stubRequiredToolChecker{
 		"versioned-tool": {
-			FailureKind: factorycontracts.RequiredToolFailureKindVersionProbe,
+			FailureKind: factorydefinitions.RequiredToolFailureKindVersionProbe,
 			Err:         errors.New(`required tool "Versioned helper" version probe failed`),
 		},
 	}
@@ -117,10 +117,10 @@ func TestValidateDeclarativeRequiredTools_ExportedHelperMapsVersionProbeFailure(
 func TestValidateDeclarativeRequiredTools_ExportedHelperReturnsEmptyWhenCheckerSucceeds(t *testing.T) {
 	t.Parallel()
 
-	cfg := &factorycontracts.FactoryConfig{
+	cfg := &factorydefinitions.FactoryConfig{
 		Name: "required-tool-success",
-		ResourceManifest: &factorycontracts.PortableResourceManifestConfig{
-			RequiredTools: []factorycontracts.RequiredToolConfig{{
+		ResourceManifest: &factorydefinitions.PortableResourceManifestConfig{
+			RequiredTools: []factorydefinitions.RequiredToolConfig{{
 				Name:    "Present helper",
 				Command: "present-tool",
 			}},
@@ -138,7 +138,7 @@ func TestValidateGraphTopology_ExportedHelperReturnsTypedDanglingPlaceTarget(t *
 	t.Parallel()
 
 	cfg := validPetriFactoryConfig()
-	cfg.Workstations[0].Outputs = []factorycontracts.IOConfig{{
+	cfg.Workstations[0].Outputs = []factorydefinitions.IOConfig{{
 		WorkTypeName: "task",
 		StateName:    "bogus",
 	}}
@@ -161,10 +161,10 @@ func TestValidateGraphTopology_ExportedHelperReturnsTypedDanglingPlaceTarget(t *
 func TestValidateDeclarativeRequiredTools_ExportedHelperMapsVersionArgsDefect(t *testing.T) {
 	t.Parallel()
 
-	cfg := &factorycontracts.FactoryConfig{
+	cfg := &factorydefinitions.FactoryConfig{
 		Name: "required-tool-version-args",
-		ResourceManifest: &factorycontracts.PortableResourceManifestConfig{
-			RequiredTools: []factorycontracts.RequiredToolConfig{{
+		ResourceManifest: &factorydefinitions.PortableResourceManifestConfig{
+			RequiredTools: []factorydefinitions.RequiredToolConfig{{
 				Name:        "Python",
 				Command:     "python",
 				VersionArgs: []string{"--version", ""},
@@ -190,10 +190,10 @@ func TestValidateDeclarativeRequiredTools_ExportedHelperMapsVersionArgsDefect(t 
 func TestValidateDeclarativeRequiredTools_ExportedHelperUsesNamedSubjectID(t *testing.T) {
 	t.Parallel()
 
-	cfg := &factorycontracts.FactoryConfig{
+	cfg := &factorydefinitions.FactoryConfig{
 		Name: "required-tool-named-subject",
-		ResourceManifest: &factorycontracts.PortableResourceManifestConfig{
-			RequiredTools: []factorycontracts.RequiredToolConfig{{
+		ResourceManifest: &factorydefinitions.PortableResourceManifestConfig{
+			RequiredTools: []factorydefinitions.RequiredToolConfig{{
 				Name:    "Named helper",
 				Command: "missing-tool",
 			}},
@@ -201,7 +201,7 @@ func TestValidateDeclarativeRequiredTools_ExportedHelperUsesNamedSubjectID(t *te
 	}
 	checker := stubRequiredToolChecker{
 		"missing-tool": {
-			FailureKind: factorycontracts.RequiredToolFailureKindMissing,
+			FailureKind: factorydefinitions.RequiredToolFailureKindMissing,
 			Err:         errors.New(`required tool "Named helper" command "missing-tool" was not found on PATH`),
 		},
 	}
@@ -221,10 +221,10 @@ func TestValidateDeclarativeRequiredTools_ExportedHelperUsesNamedSubjectID(t *te
 func TestValidateDeclarativeRequiredTools_ExportedHelperReturnsTypedMissingTarget(t *testing.T) {
 	t.Parallel()
 
-	cfg := &factorycontracts.FactoryConfig{
+	cfg := &factorydefinitions.FactoryConfig{
 		Name: "required-tool-export",
-		ResourceManifest: &factorycontracts.PortableResourceManifestConfig{
-			RequiredTools: []factorycontracts.RequiredToolConfig{{
+		ResourceManifest: &factorydefinitions.PortableResourceManifestConfig{
+			RequiredTools: []factorydefinitions.RequiredToolConfig{{
 				Name:    "Missing helper",
 				Command: "missing-tool",
 			}},
@@ -232,7 +232,7 @@ func TestValidateDeclarativeRequiredTools_ExportedHelperReturnsTypedMissingTarge
 	}
 	checker := stubRequiredToolChecker{
 		"missing-tool": {
-			FailureKind: factorycontracts.RequiredToolFailureKindMissing,
+			FailureKind: factorydefinitions.RequiredToolFailureKindMissing,
 			Err:         errors.New(`required tool "Missing helper" command "missing-tool" was not found on PATH`),
 		},
 	}
@@ -255,9 +255,9 @@ func TestValidateDeclarativeRequiredTools_ExportedHelperReturnsTypedMissingTarge
 func TestValidateOrchestratorTargets_ExportedHelperReturnsUnsupportedKindTarget(t *testing.T) {
 	t.Parallel()
 
-	cfg := &factorycontracts.FactoryConfig{
+	cfg := &factorydefinitions.FactoryConfig{
 		Name: "orchestrator-export",
-		Orchestrator: &factorycontracts.FactoryOrchestratorConfig{
+		Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
 			Kind: "LEGACY",
 		},
 	}

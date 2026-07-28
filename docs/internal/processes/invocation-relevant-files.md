@@ -675,6 +675,31 @@ response-stream output.
   `io.Writer`, queue capacity, backpressure, or final-write ordering as their
   policy source of truth on that seam. Characterization proof:
   `TestRootContractInvariants_AllSlicesThroughSingularRoot`.
+- Factory Visualization production packages may import Factory Runtime only
+  through `pkg/services/factory_runtime`; nested Runtime implementation,
+  Petri, and legacy helper paths are forbidden. Inventory proof:
+  `pkg/services/factory_visualization/runtime_import_boundary_test.go`
+  (`TestProductionPackagesImportFactoryRuntimeRootOnly`).
+- Session-bound Visualization observation flows through
+  `pkg/services/factory_visualization/runtime_source.go`, which constructs
+  root `factory_runtime.ObserveRequest` values and calls `Service.Observe`
+  for snapshot facts while retaining migration-only `APIFactory` casts for
+  event subscription. Behavioral proof:
+  `pkg/services/factory_visualization/runtime_observation_boundary_test.go`
+  (`TestRuntimeObservationUsesRootServiceObserve`).
+- CLI visualization presentation maps dashboard header facts from
+  Visualization-owned `RuntimeObservation` fields through
+  `dashboard.SimpleDashboardHeader` instead of Petri-shaped
+  `RuntimeEngineStateSnapshot` aliases. The leased CLI transport package does
+  not import Factory Runtime. Proof:
+  `pkg/services/factory_visualization/transports/cli/presentation_runtime_snapshot_boundary_test.go`
+  (`TestPresentationSinkUsesVisualizationOwnedRuntimeFacts`).
+- CUT-VIS-RUN story 004 consumer-edge proofs exercise session-bound
+  activation, detached `Observe`, and snapshot-fact reads only through root
+  `Service.Observe`, fail closed without Petri snapshot helpers, and propagate
+  typed observe failures. Behavioral proof:
+  `pkg/services/factory_visualization/runtime_consumer_boundary_test.go`
+  (`TestVisualizationConsumerObservationExercisesRuntimeRoot`).
 - Shared ordered output serialization and final-once terminal write helpers
   (transport-shaped, non-authority):
   `pkg/services/factory_visualization/factory_event_stream.go`,
@@ -930,6 +955,14 @@ response-stream output.
   current semantic defaults, maps EOF to an explicit cancellation outcome, and
   delegates successful input to the same context-aware load/merge/persist
   operation used by pre-supplied values.
+- The Operator Settings CLI adapter at
+  `pkg/services/operator_settings/transports/cli` must stay registered under
+  destination `operator_settings` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and both
+  `go-*-coverage-package-minimums.json` baselines; prove registration with
+  `transports/cli/manifest_registration_test.go` rather than re-editing manifests
+  when CLI-SET already landed the rows.
 - Public provider/model setup enters through the manifest-derived `you init`
   handler in `pkg/transports/cli/commandregistry`, which translates stable
   `you.init.flag.provider` and `you.init.flag.model` inputs into the narrow
@@ -1807,7 +1840,14 @@ response-stream output.
 - `pkg/services/factory_definitions/packages/subagent/` retains only packaged
   subagent metadata and response-shaping behavior; shared catalog validation,
   installation tests, and public functional outcomes own definition evidence.
-- Hermetic no-server named `@you/subagent` package proof lives in
+- Packaged `@you/subagent` invocation functional coverage lives in
+  `tests/functional/factory/packaged/subagent/invocation_test.go` for child
+  primary-result return, child Factory Response Event streaming, and stable child
+  failure through public CLI/API boundaries with mock workers. The mapped
+  `test-built-cli-acceptance` specialty binding for
+  `TestSubagentInvocation_SuccessfulNamedRun_ReturnsAuthoritativePrimaryResultJSON`
+  remains in `tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go`.
+- Hermetic no-server named `@you/subagent` package proof also lives in
   `pkg/transports/cli/run/run_invocation_test.go`
   (`TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer`,
   `TestRun_NamedSubagentNoServerBootstrap_TextPrimaryResultIsAgentResponse`,
@@ -2056,6 +2096,15 @@ response-stream output.
   source together with its source identity, args schema, agents, and default
   policy; resolving its scoped name again from the session directory loses the
   materialized named-factory context.
+- Functional coverage for packaged `@you/fusion` Petri invocation belongs in
+  `tests/functional/factory/packaged/fusion/invocation_test.go`. Exercise
+  `POST /factory-sessions/~default/invocations` with `InvocationRequest.Args`,
+  observe multi-worker merge order through public factory dispatch events
+  (`draft-fusion` then `refine-fusion`), and correlate optional overrides from
+  `MODEL_REQUEST`, `INFERENCE_RESPONSE`, and `AGENT_RUN_RESPONSE` on the
+  factory event stream. Durable-session `GET /factory-sessions/{id}/dispatches`
+  is for JavaScript workflow sessions such as deep-research, not Petri
+  invocation-only runs.
 - Functional coverage for `@you/deep-research` belongs in
   `tests/functional/smoke/cli_named_deep_research_smoke_test.go` and
   `tests/functional/runtime_api/api_packaged_deep_research_invocation_test.go`.

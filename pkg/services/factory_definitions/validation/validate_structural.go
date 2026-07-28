@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-func duplicateIdentifierTargets(cfg *interfaces.FactoryConfig) []Target {
+func duplicateIdentifierTargets(cfg *factorydefinitions.FactoryConfig) []Target {
 	var targets []Target
 	targets = append(targets, duplicateNameTargets("workTypes", workTypeSubjectRecords(cfg), SubjectTypeWorkType)...)
 	targets = append(targets, duplicateNameTargets("workers", workerSubjectRecords(cfg), SubjectTypeWorker)...)
@@ -117,7 +117,7 @@ func duplicateIdentifierTarget(subjectType SubjectType, id, path, message string
 	}
 }
 
-func duplicateWorkStateTargets(cfg *interfaces.FactoryConfig) []Target {
+func duplicateWorkStateTargets(cfg *factorydefinitions.FactoryConfig) []Target {
 	var targets []Target
 	for workTypeIndex, workType := range cfg.WorkTypes {
 		seen := make(map[string]int, len(workType.States))
@@ -128,7 +128,7 @@ func duplicateWorkStateTargets(cfg *interfaces.FactoryConfig) []Target {
 			if stateID != "" {
 				idPath := fmt.Sprintf("%s.workTypes[%d].states[%d].id", validationRoot, workTypeIndex, stateIndex)
 				if firstIndex, ok := seenIDs[stateID]; ok {
-					subjectID := interfaces.CanonicalFactoryGraphEntityID(workType.ID, workType.Name) + ":" + stateID
+					subjectID := factorydefinitions.CanonicalFactoryGraphEntityID(workType.ID, workType.Name) + ":" + stateID
 					message := fmt.Sprintf("duplicate work state id %q on work type %q.", stateID, workType.Name)
 					targets = append(targets,
 						duplicateWorkStateTarget(subjectID, fmt.Sprintf("%s.workTypes[%d].states[%d].id", validationRoot, workTypeIndex, firstIndex), message),
@@ -145,7 +145,7 @@ func duplicateWorkStateTargets(cfg *interfaces.FactoryConfig) []Target {
 					Message:  fmt.Sprintf("work type %q state name must be non-empty.", workType.Name),
 					Subject: Subject{
 						Type:     SubjectTypeWorkType,
-						ID:       interfaces.CanonicalFactoryGraphWorkTypeID(workType),
+						ID:       factorydefinitions.CanonicalFactoryGraphWorkTypeID(workType),
 						Location: SubjectLocationStates,
 					},
 					Path: path,
@@ -153,7 +153,7 @@ func duplicateWorkStateTargets(cfg *interfaces.FactoryConfig) []Target {
 				continue
 			}
 			if firstIndex, ok := seen[state.Name]; ok {
-				stateID := interfaces.CanonicalFactoryGraphWorkStateID(workType, state)
+				stateID := factorydefinitions.CanonicalFactoryGraphWorkStateID(workType, state)
 				message := fmt.Sprintf("duplicate work state name %q on work type %q.", state.Name, workType.Name)
 				targets = append(targets,
 					duplicateWorkStateTarget(stateID, fmt.Sprintf("%s.workTypes[%d].states[%d].name", validationRoot, workTypeIndex, firstIndex), message),
@@ -181,7 +181,7 @@ func duplicateWorkStateTarget(stateID, path, message string) Target {
 	}
 }
 
-func danglingReferenceTargets(cfg *interfaces.FactoryConfig) []Target {
+func danglingReferenceTargets(cfg *factorydefinitions.FactoryConfig) []Target {
 	workers := stringSet(workerNames(cfg))
 	resources := stringSet(resourceNames(cfg))
 	var targets []Target
@@ -193,7 +193,7 @@ func danglingReferenceTargets(cfg *interfaces.FactoryConfig) []Target {
 				Message:  fmt.Sprintf("workstation %q references non-existent worker %q.", workstation.Name, workstation.WorkerTypeName),
 				Subject: Subject{
 					Type:     SubjectTypeWorkstation,
-					ID:       interfaces.CanonicalFactoryGraphWorkstationID(workstation),
+					ID:       factorydefinitions.CanonicalFactoryGraphWorkstationID(workstation),
 					Location: SubjectLocationReference,
 				},
 				Path: fmt.Sprintf("%s.workstations[%d].worker", validationRoot, workstationIndex),
@@ -218,7 +218,7 @@ func danglingReferenceTargets(cfg *interfaces.FactoryConfig) []Target {
 	return targets
 }
 
-func invalidPlaceReferenceTargets(cfg *interfaces.FactoryConfig) []Target {
+func invalidPlaceReferenceTargets(cfg *factorydefinitions.FactoryConfig) []Target {
 	validPlaces := buildValidPlaces(cfg)
 	var targets []Target
 	for workstationIndex, workstation := range cfg.Workstations {
@@ -242,8 +242,8 @@ func invalidPlaceReferenceTargets(cfg *interfaces.FactoryConfig) []Target {
 }
 
 func invalidPlaceIOTargets(
-	workstation interfaces.FactoryWorkstationConfig,
-	ios []interfaces.IOConfig,
+	workstation factorydefinitions.FactoryWorkstationConfig,
+	ios []factorydefinitions.IOConfig,
 	validPlaces map[string]bool,
 	workstationIndex int,
 	routeField string,
@@ -273,7 +273,7 @@ func invalidPlaceIOTargets(
 	return targets
 }
 
-func conflictingWorkstationOutputTargets(cfg *interfaces.FactoryConfig) []Target {
+func conflictingWorkstationOutputTargets(cfg *factorydefinitions.FactoryConfig) []Target {
 	var targets []Target
 	for workstationIndex, workstation := range cfg.Workstations {
 		inputCounts := ioWorkTypeCounts(workstation.Inputs)
@@ -288,7 +288,7 @@ func conflictingWorkstationOutputTargets(cfg *interfaces.FactoryConfig) []Target
 	return targets
 }
 
-func conflictingRouteTargets(workstation interfaces.FactoryWorkstationConfig, inputCounts map[string]int, routes []interfaces.IOConfig, fieldPrefix string) []Target {
+func conflictingRouteTargets(workstation factorydefinitions.FactoryWorkstationConfig, inputCounts map[string]int, routes []factorydefinitions.IOConfig, fieldPrefix string) []Target {
 	routeCounts := ioWorkTypeCounts(routes)
 	var targets []Target
 	for workType, inputCount := range inputCounts {
@@ -306,7 +306,7 @@ func conflictingRouteTargets(workstation interfaces.FactoryWorkstationConfig, in
 				Message:  fmt.Sprintf("workstation %q routes work type %q to conflicting output states.", workstation.Name, workType),
 				Subject: Subject{
 					Type:     SubjectTypeWorkstation,
-					ID:       interfaces.CanonicalFactoryGraphWorkstationID(workstation),
+					ID:       factorydefinitions.CanonicalFactoryGraphWorkstationID(workstation),
 					Location: SubjectLocationOutputs,
 				},
 				Path: fmt.Sprintf("%s[%d]", fieldPrefix, routeIndex),
@@ -316,11 +316,11 @@ func conflictingRouteTargets(workstation interfaces.FactoryWorkstationConfig, in
 	return targets
 }
 
-func workstationSkipsOutcomeRouteRequirements(workstation interfaces.FactoryWorkstationConfig) bool {
-	return strings.TrimSpace(workstation.Type) == interfaces.WorkstationTypeLogical
+func workstationSkipsOutcomeRouteRequirements(workstation factorydefinitions.FactoryWorkstationConfig) bool {
+	return strings.TrimSpace(workstation.Type) == factorydefinitions.WorkstationTypeLogical
 }
 
-func workstationHasEffectiveOutputs(workstation interfaces.FactoryWorkstationConfig) bool {
+func workstationHasEffectiveOutputs(workstation factorydefinitions.FactoryWorkstationConfig) bool {
 	if len(workstation.Outputs) > 0 {
 		return true
 	}
@@ -332,7 +332,7 @@ func workstationHasEffectiveOutputs(workstation interfaces.FactoryWorkstationCon
 	return false
 }
 
-func missingOutcomeRouteTargets(cfg *interfaces.FactoryConfig) []Target {
+func missingOutcomeRouteTargets(cfg *factorydefinitions.FactoryConfig) []Target {
 	failedWorkTypes := failedWorkTypeSet(cfg)
 	var targets []Target
 	for workstationIndex, workstation := range cfg.Workstations {
@@ -343,7 +343,7 @@ func missingOutcomeRouteTargets(cfg *interfaces.FactoryConfig) []Target {
 				Message:  fmt.Sprintf("workstation %q must define output routes.", workstation.Name),
 				Subject: Subject{
 					Type:     SubjectTypeWorkstation,
-					ID:       interfaces.CanonicalFactoryGraphWorkstationID(workstation),
+					ID:       factorydefinitions.CanonicalFactoryGraphWorkstationID(workstation),
 					Location: SubjectLocationOutputs,
 				},
 				Path: fmt.Sprintf("%s.workstations[%d].outputs", validationRoot, workstationIndex),
@@ -358,7 +358,7 @@ func missingOutcomeRouteTargets(cfg *interfaces.FactoryConfig) []Target {
 					Message:  fmt.Sprintf("workstation %q must define a failure route.", workstation.Name),
 					Subject: Subject{
 						Type:     SubjectTypeWorkstation,
-						ID:       interfaces.CanonicalFactoryGraphWorkstationID(workstation),
+						ID:       factorydefinitions.CanonicalFactoryGraphWorkstationID(workstation),
 						Location: SubjectLocationOnFailure,
 					},
 					Path: fmt.Sprintf("%s.workstations[%d].onFailure", validationRoot, workstationIndex),
@@ -377,7 +377,7 @@ func missingOutcomeRouteTargets(cfg *interfaces.FactoryConfig) []Target {
 			Message:  fmt.Sprintf("workstation %q must define a reject route.", workstation.Name),
 			Subject: Subject{
 				Type:     SubjectTypeWorkstation,
-				ID:       interfaces.CanonicalFactoryGraphWorkstationID(workstation),
+				ID:       factorydefinitions.CanonicalFactoryGraphWorkstationID(workstation),
 				Location: SubjectLocationOnRejection,
 			},
 			Path: fmt.Sprintf("%s.workstations[%d].onRejection", validationRoot, workstationIndex),
@@ -386,7 +386,7 @@ func missingOutcomeRouteTargets(cfg *interfaces.FactoryConfig) []Target {
 	return targets
 }
 
-func missingWorkTypeOutcomeStateTargets(cfg *interfaces.FactoryConfig) []Target {
+func missingWorkTypeOutcomeStateTargets(cfg *factorydefinitions.FactoryConfig) []Target {
 	referencedWorkTypes := referencedWorkTypeSet(cfg)
 	var targets []Target
 	for _, workType := range cfg.WorkTypes {
@@ -397,9 +397,9 @@ func missingWorkTypeOutcomeStateTargets(cfg *interfaces.FactoryConfig) []Target 
 		hasFailure := false
 		for _, state := range workType.States {
 			switch state.Type {
-			case interfaces.StateTypeTerminal:
+			case factorydefinitions.StateTypeTerminal:
 				hasCompletion = true
-			case interfaces.StateTypeFailed:
+			case factorydefinitions.StateTypeFailed:
 				hasFailure = true
 			}
 		}
@@ -410,7 +410,7 @@ func missingWorkTypeOutcomeStateTargets(cfg *interfaces.FactoryConfig) []Target 
 				Message:  fmt.Sprintf("work type %q must declare a completion state.", workType.Name),
 				Subject: Subject{
 					Type:     SubjectTypeWorkType,
-					ID:       interfaces.CanonicalFactoryGraphWorkTypeID(workType),
+					ID:       factorydefinitions.CanonicalFactoryGraphWorkTypeID(workType),
 					Location: SubjectLocationStates,
 				},
 			})
@@ -422,7 +422,7 @@ func missingWorkTypeOutcomeStateTargets(cfg *interfaces.FactoryConfig) []Target 
 				Message:  fmt.Sprintf("work type %q must declare a failure state.", workType.Name),
 				Subject: Subject{
 					Type:     SubjectTypeWorkType,
-					ID:       interfaces.CanonicalFactoryGraphWorkTypeID(workType),
+					ID:       factorydefinitions.CanonicalFactoryGraphWorkTypeID(workType),
 					Location: SubjectLocationStates,
 				},
 			})
@@ -431,14 +431,14 @@ func missingWorkTypeOutcomeStateTargets(cfg *interfaces.FactoryConfig) []Target 
 	return targets
 }
 
-func missingTerminalCompletionPathTargets(cfg *interfaces.FactoryConfig) []Target {
+func missingTerminalCompletionPathTargets(cfg *factorydefinitions.FactoryConfig) []Target {
 	adj := buildWorkStateAdjacency(cfg)
 	terminalStates := terminalStateSet(cfg)
 	referencedStates := referencedWorkStateSet(cfg)
 	stateTypes := workStateTypesForConfig(cfg)
 	var targets []Target
 	for stateID := range referencedStates {
-		if stateTypes[stateID] == interfaces.StateTypeFailed || stateTypes[stateID] == interfaces.StateTypeTerminal {
+		if stateTypes[stateID] == factorydefinitions.StateTypeFailed || stateTypes[stateID] == factorydefinitions.StateTypeTerminal {
 			continue
 		}
 		if terminalStates[stateID] {
@@ -461,51 +461,51 @@ func missingTerminalCompletionPathTargets(cfg *interfaces.FactoryConfig) []Targe
 	return targets
 }
 
-func resourceSubjectRecords(cfg *interfaces.FactoryConfig) []namedSubjectRecord {
+func resourceSubjectRecords(cfg *factorydefinitions.FactoryConfig) []namedSubjectRecord {
 	subjects := make([]namedSubjectRecord, 0, len(cfg.Resources))
 	for _, resource := range cfg.Resources {
 		subjects = append(subjects, namedSubjectRecord{
 			name:      resource.Name,
-			subjectID: interfaces.CanonicalFactoryGraphResourceID(resource),
+			subjectID: factorydefinitions.CanonicalFactoryGraphResourceID(resource),
 		})
 	}
 	return subjects
 }
 
-func workerSubjectRecords(cfg *interfaces.FactoryConfig) []namedSubjectRecord {
+func workerSubjectRecords(cfg *factorydefinitions.FactoryConfig) []namedSubjectRecord {
 	subjects := make([]namedSubjectRecord, 0, len(cfg.Workers))
 	for _, worker := range cfg.Workers {
 		subjects = append(subjects, namedSubjectRecord{
 			name:      worker.Name,
-			subjectID: interfaces.CanonicalFactoryGraphWorkerID(worker),
+			subjectID: factorydefinitions.CanonicalFactoryGraphWorkerID(worker),
 		})
 	}
 	return subjects
 }
 
-func workTypeSubjectRecords(cfg *interfaces.FactoryConfig) []namedSubjectRecord {
+func workTypeSubjectRecords(cfg *factorydefinitions.FactoryConfig) []namedSubjectRecord {
 	subjects := make([]namedSubjectRecord, 0, len(cfg.WorkTypes))
 	for _, workType := range cfg.WorkTypes {
 		subjects = append(subjects, namedSubjectRecord{
 			name:      workType.Name,
-			subjectID: interfaces.CanonicalFactoryGraphWorkTypeID(workType),
+			subjectID: factorydefinitions.CanonicalFactoryGraphWorkTypeID(workType),
 		})
 	}
 	return subjects
 }
 
-func workstationSubjectRecords(cfg *interfaces.FactoryConfig) []namedSubjectRecord {
+func workstationSubjectRecords(cfg *factorydefinitions.FactoryConfig) []namedSubjectRecord {
 	subjects := make([]namedSubjectRecord, 0, len(cfg.Workstations))
 	for _, workstation := range cfg.Workstations {
 		subjects = append(subjects, namedSubjectRecord{
 			name:      workstation.Name,
-			subjectID: interfaces.CanonicalFactoryGraphWorkstationID(workstation),
+			subjectID: factorydefinitions.CanonicalFactoryGraphWorkstationID(workstation),
 		})
 	}
 	return subjects
 }
 
-func canonicalWorkStateSubjectID(cfg *interfaces.FactoryConfig, legacyStateID string) string {
+func canonicalWorkStateSubjectID(cfg *factorydefinitions.FactoryConfig, legacyStateID string) string {
 	workTypeName, stateName, ok := strings.Cut(legacyStateID, ":")
 	if !ok {
 		return legacyStateID
@@ -516,16 +516,16 @@ func canonicalWorkStateSubjectID(cfg *interfaces.FactoryConfig, legacyStateID st
 		}
 		for _, state := range workType.States {
 			if state.Name == stateName {
-				return interfaces.CanonicalFactoryGraphWorkStateID(workType, state)
+				return factorydefinitions.CanonicalFactoryGraphWorkStateID(workType, state)
 			}
 		}
 	}
 	return legacyStateID
 }
 
-func referencedWorkTypeSet(cfg *interfaces.FactoryConfig) map[string]bool {
+func referencedWorkTypeSet(cfg *factorydefinitions.FactoryConfig) map[string]bool {
 	referenced := map[string]bool{}
-	addRoutes := func(routes []interfaces.IOConfig) {
+	addRoutes := func(routes []factorydefinitions.IOConfig) {
 		for _, route := range routes {
 			if strings.TrimSpace(route.WorkTypeName) != "" {
 				referenced[route.WorkTypeName] = true
@@ -545,7 +545,7 @@ func referencedWorkTypeSet(cfg *interfaces.FactoryConfig) map[string]bool {
 	return referenced
 }
 
-func referencedWorkStateSet(cfg *interfaces.FactoryConfig) map[string]bool {
+func referencedWorkStateSet(cfg *factorydefinitions.FactoryConfig) map[string]bool {
 	referenced := map[string]bool{}
 	for _, workstation := range cfg.Workstations {
 		for _, input := range workstation.Inputs {
@@ -555,7 +555,7 @@ func referencedWorkStateSet(cfg *interfaces.FactoryConfig) map[string]bool {
 	return referenced
 }
 
-func buildWorkStateAdjacency(cfg *interfaces.FactoryConfig) map[string]map[string]bool {
+func buildWorkStateAdjacency(cfg *factorydefinitions.FactoryConfig) map[string]map[string]bool {
 	adj := map[string]map[string]bool{}
 	addEdge := func(from, to string) {
 		if from == "" || to == "" {
@@ -566,7 +566,7 @@ func buildWorkStateAdjacency(cfg *interfaces.FactoryConfig) map[string]map[strin
 		}
 		adj[from][to] = true
 	}
-	connectRoutes := func(inputs, routes []interfaces.IOConfig) {
+	connectRoutes := func(inputs, routes []factorydefinitions.IOConfig) {
 		inputPlaces := make([]string, 0, len(inputs))
 		for _, input := range inputs {
 			inputPlaces = append(inputPlaces, placeKey(input.WorkTypeName, input.StateName))
@@ -612,8 +612,8 @@ func canReachTerminalState(start string, terminalStates map[string]bool, adj map
 	return false
 }
 
-func workStateTypesForConfig(cfg *interfaces.FactoryConfig) map[string]interfaces.StateType {
-	types := map[string]interfaces.StateType{}
+func workStateTypesForConfig(cfg *factorydefinitions.FactoryConfig) map[string]factorydefinitions.StateType {
+	types := map[string]factorydefinitions.StateType{}
 	for _, workType := range cfg.WorkTypes {
 		for _, state := range workType.States {
 			types[placeKey(workType.Name, state.Name)] = state.Type
@@ -622,11 +622,11 @@ func workStateTypesForConfig(cfg *interfaces.FactoryConfig) map[string]interface
 	return types
 }
 
-func terminalStateSet(cfg *interfaces.FactoryConfig) map[string]bool {
+func terminalStateSet(cfg *factorydefinitions.FactoryConfig) map[string]bool {
 	terminal := map[string]bool{}
 	for _, workType := range cfg.WorkTypes {
 		for _, state := range workType.States {
-			if state.Type == interfaces.StateTypeTerminal {
+			if state.Type == factorydefinitions.StateTypeTerminal {
 				terminal[placeKey(workType.Name, state.Name)] = true
 			}
 		}
@@ -634,15 +634,15 @@ func terminalStateSet(cfg *interfaces.FactoryConfig) map[string]bool {
 	return terminal
 }
 
-func workstationNeedsExplicitRejectionRoute(workstation interfaces.FactoryWorkstationConfig) bool {
+func workstationNeedsExplicitRejectionRoute(workstation factorydefinitions.FactoryWorkstationConfig) bool {
 	if len(workstation.OnRejection) > 0 {
 		return false
 	}
-	return workstation.Kind == interfaces.WorkstationKindRepeater && len(workstation.Inputs) == 0
+	return workstation.Kind == factorydefinitions.WorkstationKindRepeater && len(workstation.Inputs) == 0
 }
 
 func workstationCanDefaultFailureRoute(
-	workstation interfaces.FactoryWorkstationConfig,
+	workstation factorydefinitions.FactoryWorkstationConfig,
 	failedWorkTypes map[string]bool,
 ) bool {
 	for _, input := range workstation.Inputs {
@@ -661,7 +661,7 @@ func workstationCanDefaultFailureRoute(
 	return false
 }
 
-func workstationIOsContainFailedWorkType(ios []interfaces.IOConfig, failedWorkTypes map[string]bool) bool {
+func workstationIOsContainFailedWorkType(ios []factorydefinitions.IOConfig, failedWorkTypes map[string]bool) bool {
 	for _, io := range ios {
 		if failedWorkTypes[io.WorkTypeName] {
 			return true
@@ -670,11 +670,11 @@ func workstationIOsContainFailedWorkType(ios []interfaces.IOConfig, failedWorkTy
 	return false
 }
 
-func failedWorkTypeSet(cfg *interfaces.FactoryConfig) map[string]bool {
+func failedWorkTypeSet(cfg *factorydefinitions.FactoryConfig) map[string]bool {
 	failed := make(map[string]bool)
 	for _, workType := range cfg.WorkTypes {
 		for _, state := range workType.States {
-			if state.Type == interfaces.StateTypeFailed {
+			if state.Type == factorydefinitions.StateTypeFailed {
 				failed[workType.Name] = true
 				break
 			}
@@ -683,7 +683,7 @@ func failedWorkTypeSet(cfg *interfaces.FactoryConfig) map[string]bool {
 	return failed
 }
 
-func buildValidPlaces(cfg *interfaces.FactoryConfig) map[string]bool {
+func buildValidPlaces(cfg *factorydefinitions.FactoryConfig) map[string]bool {
 	places := make(map[string]bool)
 	for _, workType := range cfg.WorkTypes {
 		for _, state := range workType.States {
@@ -711,7 +711,7 @@ func apiRouteField(routeField string) string {
 	return field
 }
 
-func ioWorkTypeCounts(ios []interfaces.IOConfig) map[string]int {
+func ioWorkTypeCounts(ios []factorydefinitions.IOConfig) map[string]int {
 	counts := make(map[string]int)
 	for _, io := range ios {
 		if strings.TrimSpace(io.WorkTypeName) == "" {
@@ -722,7 +722,7 @@ func ioWorkTypeCounts(ios []interfaces.IOConfig) map[string]int {
 	return counts
 }
 
-func workTypeIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
+func workTypeIDs(cfg *factorydefinitions.FactoryConfig) []explicitIDValue {
 	ids := make([]explicitIDValue, 0, len(cfg.WorkTypes))
 	for index, workType := range cfg.WorkTypes {
 		ids = append(ids, explicitIDValue{value: workType.ID, index: index})
@@ -730,7 +730,7 @@ func workTypeIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
 	return ids
 }
 
-func workerNames(cfg *interfaces.FactoryConfig) []string {
+func workerNames(cfg *factorydefinitions.FactoryConfig) []string {
 	names := make([]string, 0, len(cfg.Workers))
 	for _, worker := range cfg.Workers {
 		names = append(names, worker.Name)
@@ -738,7 +738,7 @@ func workerNames(cfg *interfaces.FactoryConfig) []string {
 	return names
 }
 
-func workerIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
+func workerIDs(cfg *factorydefinitions.FactoryConfig) []explicitIDValue {
 	ids := make([]explicitIDValue, 0, len(cfg.Workers))
 	for index, worker := range cfg.Workers {
 		ids = append(ids, explicitIDValue{value: worker.ID, index: index})
@@ -746,7 +746,7 @@ func workerIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
 	return ids
 }
 
-func resourceNames(cfg *interfaces.FactoryConfig) []string {
+func resourceNames(cfg *factorydefinitions.FactoryConfig) []string {
 	names := make([]string, 0, len(cfg.Resources))
 	for _, resource := range cfg.Resources {
 		names = append(names, resource.Name)
@@ -754,7 +754,7 @@ func resourceNames(cfg *interfaces.FactoryConfig) []string {
 	return names
 }
 
-func resourceIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
+func resourceIDs(cfg *factorydefinitions.FactoryConfig) []explicitIDValue {
 	ids := make([]explicitIDValue, 0, len(cfg.Resources))
 	for index, resource := range cfg.Resources {
 		ids = append(ids, explicitIDValue{value: resource.ID, index: index})
@@ -762,7 +762,7 @@ func resourceIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
 	return ids
 }
 
-func workstationIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
+func workstationIDs(cfg *factorydefinitions.FactoryConfig) []explicitIDValue {
 	ids := make([]explicitIDValue, 0, len(cfg.Workstations))
 	for index, workstation := range cfg.Workstations {
 		ids = append(ids, explicitIDValue{value: workstation.ID, index: index})
@@ -814,7 +814,7 @@ func requiredBackendForManagedRuntime(model string) (string, bool) {
 
 // ManagedRuntimeDependencyTargets validates managed-runtime dependency declarations
 // shared by packaged and authored factories.
-func ManagedRuntimeDependencyTargets(cfg *interfaces.FactoryConfig) []Target {
+func ManagedRuntimeDependencyTargets(cfg *factorydefinitions.FactoryConfig) []Target {
 	if cfg == nil {
 		return nil
 	}
@@ -884,7 +884,7 @@ func managedRuntimeWorkerTargets(
 	worker workerconfig.Config,
 	resourceByName map[string]factoryresource.Config,
 ) []Target {
-	if !interfaces.IsInferenceWorkerType(worker.Type) {
+	if !factorydefinitions.IsInferenceWorkerType(worker.Type) {
 		return nil
 	}
 	if strings.TrimSpace(worker.ModelLocality) != workerconfig.ModelLocalityLocal {

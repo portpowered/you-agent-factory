@@ -4,26 +4,26 @@ import (
 	"errors"
 	"testing"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/requiredtools"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-type stubRequiredToolChecker map[string]factorycontracts.RequiredToolCheckResult
+type stubRequiredToolChecker map[string]factorydefinitions.RequiredToolCheckResult
 
-func (s stubRequiredToolChecker) Check(tool factorycontracts.RequiredToolConfig) factorycontracts.RequiredToolCheckResult {
+func (s stubRequiredToolChecker) Check(tool factorydefinitions.RequiredToolConfig) factorydefinitions.RequiredToolCheckResult {
 	if result, ok := s[tool.Command]; ok {
 		return result
 	}
-	return factorycontracts.RequiredToolCheckResult{}
+	return factorydefinitions.RequiredToolCheckResult{}
 }
 
 func factoryWithRequiredTools(
-	tools ...factorycontracts.RequiredToolConfig,
-) *factorycontracts.FactoryConfig {
-	return &factorycontracts.FactoryConfig{
+	tools ...factorydefinitions.RequiredToolConfig,
+) *factorydefinitions.FactoryConfig {
+	return &factorydefinitions.FactoryConfig{
 		Name: "required-tool-validation",
-		ResourceManifest: &factorycontracts.PortableResourceManifestConfig{
+		ResourceManifest: &factorydefinitions.PortableResourceManifestConfig{
 			RequiredTools: tools,
 		},
 	}
@@ -32,7 +32,7 @@ func factoryWithRequiredTools(
 func TestValidate_ValidRequiredToolHasNoBlockingTargets(t *testing.T) {
 	t.Parallel()
 
-	cfg := factoryWithRequiredTools(factorycontracts.RequiredToolConfig{
+	cfg := factoryWithRequiredTools(factorydefinitions.RequiredToolConfig{
 		Name:    "Portable helper",
 		Command: "present-tool",
 	})
@@ -47,13 +47,13 @@ func TestValidate_ValidRequiredToolHasNoBlockingTargets(t *testing.T) {
 func TestValidate_MissingRequiredToolReturnsTypedTarget(t *testing.T) {
 	t.Parallel()
 
-	cfg := factoryWithRequiredTools(factorycontracts.RequiredToolConfig{
+	cfg := factoryWithRequiredTools(factorydefinitions.RequiredToolConfig{
 		Name:    "Missing helper",
 		Command: "missing-tool",
 	})
 	checker := stubRequiredToolChecker{
 		"missing-tool": {
-			FailureKind: factorycontracts.RequiredToolFailureKindMissing,
+			FailureKind: factorydefinitions.RequiredToolFailureKindMissing,
 			Err:         errors.New(`required tool "Missing helper" command "missing-tool" was not found on PATH`),
 		},
 	}
@@ -65,8 +65,8 @@ func TestValidate_MissingRequiredToolReturnsTypedTarget(t *testing.T) {
 	found := false
 	for _, target := range result.Targets {
 		if target.Code == factoryvalidation.CodeRequiredToolMissing &&
-			target.Severity == factorycontracts.ValidationSeverityError &&
-			target.Subject.Type == factorycontracts.ValidationSubjectTypeFactory &&
+			target.Severity == factorydefinitions.ValidationSeverityError &&
+			target.Subject.Type == factorydefinitions.ValidationSubjectTypeFactory &&
 			target.Subject.ID == "Missing helper" {
 			found = true
 		}

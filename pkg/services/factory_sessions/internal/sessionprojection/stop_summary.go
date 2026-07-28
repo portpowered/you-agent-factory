@@ -7,6 +7,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -28,7 +29,7 @@ type stopSummaryDispatch struct {
 // summary for one live Factory Session. Stop precedence is owner policy:
 // paused, JavaScript interruption, interrupted Work, blocked Work, then Work
 // awaiting human input.
-func ProjectFactorySessionStopSummary(sessionID string, snapshot *factory.StateSnapshot, javascript *interfaces.FactorySessionJavaScriptRuntimeState) *StopSummary {
+func ProjectFactorySessionStopSummary(sessionID string, snapshot *legacysnapshot.Snapshot, javascript *interfaces.FactorySessionJavaScriptRuntimeState) *StopSummary {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil
@@ -51,7 +52,7 @@ func ProjectFactorySessionStopSummary(sessionID string, snapshot *factory.StateS
 
 // ProjectWorkStopSummary derives the canonical stopped-state inspect summary
 // for one Work read when that Work explains the current stop condition.
-func ProjectWorkStopSummary(sessionID string, snapshot *factory.StateSnapshot, token *factorytoken.Token, sessionStopSummary *StopSummary) *StopSummary {
+func ProjectWorkStopSummary(sessionID string, snapshot *legacysnapshot.Snapshot, token *factorytoken.Token, sessionStopSummary *StopSummary) *StopSummary {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" || token == nil {
 		return nil
@@ -84,7 +85,7 @@ func interruptedWorkStopSummary(workID string, summary *StopSummary) *StopSummar
 	return &copy
 }
 
-func stopSummaryForWorkState(sessionID string, work stopSummaryWork, snapshot *factory.StateSnapshot, interrupted *StopSummary) *StopSummary {
+func stopSummaryForWorkState(sessionID string, work stopSummaryWork, snapshot *legacysnapshot.Snapshot, interrupted *StopSummary) *StopSummary {
 	switch work.state {
 	case "interrupted":
 		if interrupted != nil {
@@ -100,7 +101,7 @@ func stopSummaryForWorkState(sessionID string, work stopSummaryWork, snapshot *f
 	}
 }
 
-func buildPausedStopSummary(sessionID string, snapshot *factory.StateSnapshot, materialized factory.PublicWorkTokens) *StopSummary {
+func buildPausedStopSummary(sessionID string, snapshot *legacysnapshot.Snapshot, materialized factory.PublicWorkTokens) *StopSummary {
 	if lifecycleControlStatus(snapshot) != "PAUSED" {
 		return nil
 	}
@@ -113,7 +114,7 @@ func buildPausedStopSummary(sessionID string, snapshot *factory.StateSnapshot, m
 	return buildStopSummary(sessionID, StopKindPaused, &status, *work, latestRelevantDispatch(work.id, snapshot), recovery)
 }
 
-func buildInterruptedStopSummary(sessionID string, snapshot *factory.StateSnapshot, javascript *interfaces.FactorySessionJavaScriptRuntimeState, materialized factory.PublicWorkTokens) *StopSummary {
+func buildInterruptedStopSummary(sessionID string, snapshot *legacysnapshot.Snapshot, javascript *interfaces.FactorySessionJavaScriptRuntimeState, materialized factory.PublicWorkTokens) *StopSummary {
 	if javascript == nil {
 		return nil
 	}
@@ -143,7 +144,7 @@ func buildInterruptedStopSummary(sessionID string, snapshot *factory.StateSnapsh
 	return buildStopSummary(sessionID, StopKindInterrupted, nil, *stoppedWork, stoppedDispatch, interruptedRecoverySummary(sessionID))
 }
 
-func buildInterruptedWorkStateSummary(sessionID string, snapshot *factory.StateSnapshot, materialized factory.PublicWorkTokens) *StopSummary {
+func buildInterruptedWorkStateSummary(sessionID string, snapshot *legacysnapshot.Snapshot, materialized factory.PublicWorkTokens) *StopSummary {
 	work := latestWorkInState(materialized, snapshotTopology(snapshot), "interrupted")
 	if work == nil {
 		return nil
@@ -151,7 +152,7 @@ func buildInterruptedWorkStateSummary(sessionID string, snapshot *factory.StateS
 	return buildStopSummary(sessionID, StopKindInterrupted, nil, *work, interruptedDispatchFromWork(*work, snapshot), interruptedWorkRecoverySummary(sessionID, *work))
 }
 
-func buildStoppedWorkStateSummary(sessionID string, snapshot *factory.StateSnapshot, materialized factory.PublicWorkTokens, stateName string, stopKind StopKind) *StopSummary {
+func buildStoppedWorkStateSummary(sessionID string, snapshot *legacysnapshot.Snapshot, materialized factory.PublicWorkTokens, stateName string, stopKind StopKind) *StopSummary {
 	work := latestWorkInState(materialized, snapshotTopology(snapshot), stateName)
 	if work == nil {
 		return nil
@@ -179,7 +180,7 @@ func interruptDispatchSummary(dispatch interfaces.FactorySessionDispatchState) s
 	return stopSummaryDispatch{id: strings.TrimSpace(dispatch.ID), status: StopDispatchStatusInterrupted, dispatchKind: StopDispatchKind(strings.TrimSpace(dispatch.DispatchKind)), workstationName: strings.TrimSpace(dispatch.Label), failureReason: strings.TrimSpace(failureReasonFromDispatchState(dispatch)), failureMessage: strings.TrimSpace(failureMessageFromDispatchState(dispatch))}
 }
 
-func latestRelevantDispatch(workID string, snapshot *factory.StateSnapshot) *stopSummaryDispatch {
+func latestRelevantDispatch(workID string, snapshot *legacysnapshot.Snapshot) *stopSummaryDispatch {
 	workID = strings.TrimSpace(workID)
 	if workID == "" || snapshot == nil {
 		return nil
@@ -213,7 +214,7 @@ func latestRelevantDispatch(workID string, snapshot *factory.StateSnapshot) *sto
 	return &dispatch
 }
 
-func interruptedDispatchFromWork(work stopSummaryWork, snapshot *factory.StateSnapshot) *stopSummaryDispatch {
+func interruptedDispatchFromWork(work stopSummaryWork, snapshot *legacysnapshot.Snapshot) *stopSummaryDispatch {
 	dispatch := latestRelevantDispatch(work.id, snapshot)
 	if dispatch == nil {
 		return nil
@@ -316,21 +317,21 @@ func workFromToken(token *factorytoken.Token, topology *factory.Net) stopSummary
 	return stopSummaryWork{id: strings.TrimSpace(token.Color.WorkID), name: strings.TrimSpace(firstNonEmpty(token.Color.Name, token.Color.WorkID, token.ID)), workType: strings.TrimSpace(workType), state: strings.TrimSpace(stateName), token: token}
 }
 
-func lifecycleControlStatus(snapshot *factory.StateSnapshot) string {
+func lifecycleControlStatus(snapshot *legacysnapshot.Snapshot) string {
 	if snapshot == nil {
 		return ""
 	}
 	return strings.TrimSpace(snapshot.LifecycleControlStatus)
 }
 
-func materializedPublicWork(snapshot *factory.StateSnapshot) factory.PublicWorkTokens {
+func materializedPublicWork(snapshot *legacysnapshot.Snapshot) factory.PublicWorkTokens {
 	if snapshot == nil {
 		return factory.PublicWorkTokens{}
 	}
 	return factory.CollectPublicWorkTokens(snapshot.Marking.Tokens, snapshot.Dispatches)
 }
 
-func snapshotTopology(snapshot *factory.StateSnapshot) *factory.Net {
+func snapshotTopology(snapshot *legacysnapshot.Snapshot) *factory.Net {
 	if snapshot == nil {
 		return nil
 	}

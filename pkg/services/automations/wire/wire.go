@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
-	automationservice "github.com/portpowered/infinite-you/pkg/services/automations/service"
+	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -25,7 +25,7 @@ import (
 // deterministic construction error and a nil service.
 func NewService(
 	logger *zap.Logger,
-	clock automationservice.Clock,
+	clock automations.Clock,
 	commandRunner workers.CommandRunner,
 	workflowID string,
 	defaultFactoryDir string,
@@ -65,7 +65,7 @@ func NewService(
 		return nil, fmt.Errorf("construct Automations: hosted-sources factory returned nil HostedPollers")
 	}
 
-	service := automationservice.NewService(
+	service := automationinternal.NewService(
 		logger,
 		clock,
 		commandRunner,
@@ -83,7 +83,7 @@ func NewService(
 
 func validateDependencies(
 	logger *zap.Logger,
-	clock automationservice.Clock,
+	clock automations.Clock,
 	commandRunner workers.CommandRunner,
 	hostedSources automations.HostedSourcesFactory,
 	hostedClock workers.HostedPollerClock,

@@ -4,29 +4,29 @@ import (
 	"context"
 	"testing"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/orchestrator"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 type stubOrchestratorValidator struct {
-	targets []factorycontracts.ValidationTarget
+	targets []factorydefinitions.ValidationTarget
 }
 
 func (s stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
 	_ context.Context,
-	_ *factorycontracts.FactoryOrchestratorJavaScriptConfig,
-	_ factorycontracts.WorkflowSourceReader,
-) []factorycontracts.ValidationTarget {
-	return append([]factorycontracts.ValidationTarget(nil), s.targets...)
+	_ *factorydefinitions.FactoryOrchestratorJavaScriptConfig,
+	_ factorydefinitions.WorkflowSourceReader,
+) []factorydefinitions.ValidationTarget {
+	return append([]factorydefinitions.ValidationTarget(nil), s.targets...)
 }
 
 func TestValidate_UnsupportedOrchestratorKindReturnsTypedTarget(t *testing.T) {
 	t.Parallel()
 
-	cfg := &factorycontracts.FactoryConfig{
+	cfg := &factorydefinitions.FactoryConfig{
 		Name: "orchestrator-validation",
-		Orchestrator: &factorycontracts.FactoryOrchestratorConfig{
+		Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
 			Kind: "LEGACY",
 		},
 	}
@@ -38,8 +38,8 @@ func TestValidate_UnsupportedOrchestratorKindReturnsTypedTarget(t *testing.T) {
 	found := false
 	for _, target := range result.Targets {
 		if target.Code == factoryvalidation.CodeOrchestratorUnsupportedKind &&
-			target.Severity == factorycontracts.ValidationSeverityError &&
-			target.Subject.Type == factorycontracts.ValidationSubjectTypeFactory {
+			target.Severity == factorydefinitions.ValidationSeverityError &&
+			target.Subject.Type == factorydefinitions.ValidationSubjectTypeFactory {
 			found = true
 		}
 	}
@@ -51,11 +51,11 @@ func TestValidate_UnsupportedOrchestratorKindReturnsTypedTarget(t *testing.T) {
 func TestValidate_JavaScriptMissingSourceReturnsTypedTarget(t *testing.T) {
 	t.Parallel()
 
-	cfg := &factorycontracts.FactoryConfig{
+	cfg := &factorydefinitions.FactoryConfig{
 		Name: "javascript-orchestrator",
-		Orchestrator: &factorycontracts.FactoryOrchestratorConfig{
-			Kind:       factorycontracts.OrchestratorKindJavaScript,
-			JavaScript: &factorycontracts.FactoryOrchestratorJavaScriptConfig{},
+		Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
+			Kind:       factorydefinitions.OrchestratorKindJavaScript,
+			JavaScript: &factorydefinitions.FactoryOrchestratorJavaScriptConfig{},
 		},
 	}
 
@@ -66,8 +66,8 @@ func TestValidate_JavaScriptMissingSourceReturnsTypedTarget(t *testing.T) {
 	found := false
 	for _, target := range result.Targets {
 		if target.Code == factoryvalidation.CodeOrchestratorJavaScriptMissingSource &&
-			target.Severity == factorycontracts.ValidationSeverityError &&
-			target.Subject.Type == factorycontracts.ValidationSubjectTypeFactory {
+			target.Severity == factorydefinitions.ValidationSeverityError &&
+			target.Subject.Type == factorydefinitions.ValidationSubjectTypeFactory {
 			found = true
 		}
 	}
@@ -79,24 +79,24 @@ func TestValidate_JavaScriptMissingSourceReturnsTypedTarget(t *testing.T) {
 func TestValidate_RuntimeValidatorTargetsAreMerged(t *testing.T) {
 	t.Parallel()
 
-	cfg := &factorycontracts.FactoryConfig{
+	cfg := &factorydefinitions.FactoryConfig{
 		Name: "javascript-orchestrator",
-		Orchestrator: &factorycontracts.FactoryOrchestratorConfig{
-			Kind: factorycontracts.OrchestratorKindJavaScript,
-			JavaScript: &factorycontracts.FactoryOrchestratorJavaScriptConfig{
+		Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
+			Kind: factorydefinitions.OrchestratorKindJavaScript,
+			JavaScript: &factorydefinitions.FactoryOrchestratorJavaScriptConfig{
 				SourceRef:  "factory/workflows/review.js",
 				Entrypoint: "main",
 			},
 		},
 	}
-	validator := stubOrchestratorValidator{targets: []factorycontracts.ValidationTarget{{
+	validator := stubOrchestratorValidator{targets: []factorydefinitions.ValidationTarget{{
 		Code:     "factory.orchestrator.javascript.invalidPolicy",
-		Severity: factorycontracts.ValidationSeverityError,
+		Severity: factorydefinitions.ValidationSeverityError,
 		Message:  "invalid default policy",
-		Subject: factorycontracts.ValidationSubject{
-			Type:     factorycontracts.ValidationSubjectTypeFactory,
+		Subject: factorydefinitions.ValidationSubject{
+			Type:     factorydefinitions.ValidationSubjectTypeFactory,
 			ID:       "factory",
-			Location: factorycontracts.ValidationSubjectLocationDefinition,
+			Location: factorydefinitions.ValidationSubjectLocationDefinition,
 		},
 		Path: "factory.orchestrator.javascript.defaultPolicy",
 	}}}

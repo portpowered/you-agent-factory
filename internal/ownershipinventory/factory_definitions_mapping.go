@@ -41,7 +41,6 @@ var factoryDefinitionsMoveRules = []factoryDefinitionsMoveRule{
 	{exact: "ttsobservability", prefix: "ttsobservability/"},
 	{exact: "runtimeconfig", prefix: "runtimeconfig/"},
 	{exact: "replayconfig", prefix: "replayconfig/"},
-	{exact: "contracts", prefix: "contracts/"},
 	{exact: "workers", prefix: "workers/"},
 	{prefix: "internal/testcomposition"},
 }
@@ -58,7 +57,21 @@ func factoryDefinitionsMapping(packagePath string) (PackageRow, bool) {
 	if isFactoryDefinitionsCanonicalRetain(rest) {
 		return retainRow(packagePath, factoryDefinitionsOwner, DestinationKindOwner), true
 	}
+	if factoryDefinitionsTransitionalMoveNestedSubservice(rest) {
+		return moveRow(
+			packagePath,
+			factoryDefinitionsOwner,
+			factoryDefinitionsPackagePrefix+"/internal",
+			factoryDefinitionsDeletionCondition("snapshots_portability", rest),
+		), true
+	}
 	subservice, ok := factoryDefinitionsMoveSubservice(rest)
+	if !ok {
+		if nestedSubservice, nestedOK := factoryDefinitionsNestedMoveSubservice(rest); nestedOK {
+			subservice = nestedSubservice
+			ok = true
+		}
+	}
 	if !ok {
 		subservice = ""
 	}
@@ -80,6 +93,10 @@ func isFactoryDefinitionsCanonicalRetain(rest string) bool {
 		return true
 	case strings.HasPrefix(rest, "internal/services/validation"):
 		return true
+	case strings.HasPrefix(rest, "internal/contracts"):
+		return true
+	case rest == "namevalue" || strings.HasPrefix(rest, "namevalue/"):
+		return true
 	default:
 		return false
 	}
@@ -94,6 +111,28 @@ func factoryDefinitionsMoveSubservice(rest string) (subservice string, ok bool) 
 	return "", false
 }
 
+func factoryDefinitionsTransitionalMoveNestedSubservice(rest string) bool {
+	return rest == "internal/services/snapshots_portability" ||
+		strings.HasPrefix(rest, "internal/services/snapshots_portability/")
+}
+
+func factoryDefinitionsNestedMoveSubservice(rest string) (subservice string, ok bool) {
+	if !strings.HasPrefix(rest, "internal/services/") {
+		return "", false
+	}
+	sub := strings.TrimPrefix(rest, "internal/services/")
+	subservice, _, _ = strings.Cut(sub, "/")
+	if subservice == "" || subservice == "catalog" || subservice == "validation" {
+		return "", false
+	}
+	switch subservice {
+	case "authoring_layout", "compilation", "distribution":
+		return subservice, true
+	default:
+		return "", false
+	}
+}
+
 func factoryDefinitionsSuccessor(subservice string) string {
 	if subservice == "" {
 		return factoryDefinitionsPackagePrefix + "/internal"
@@ -102,8 +141,11 @@ func factoryDefinitionsSuccessor(subservice string) string {
 }
 
 func factoryDefinitionsDeletionCondition(subservice, rest string) string {
-	if strings.HasPrefix(rest, "contracts") {
-		return "delete contracts mega-barrel after CLN-DEF-CONTRACTS cutover proof"
+	if strings.HasPrefix(rest, "internal/contracts") {
+		return "CLN-DEF-CONTRACTS cutover: owner-internal contracts implementation retained after public mega-barrel deletion"
+	}
+	if rest == "namevalue" || strings.HasPrefix(rest, "namevalue/") {
+		return "CLN-DEF-CONTRACTS cutover: shared namevalue contract retained at owner root until workers/root cycle is inverted"
 	}
 	if subservice == "" {
 		return "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"

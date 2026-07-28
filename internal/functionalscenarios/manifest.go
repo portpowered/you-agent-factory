@@ -122,9 +122,13 @@ func applyReviewedEvidence(scenario *Scenario) {
 	case "rest/upsertWorkRequestBySessionId":
 		markCovered(scenario, LaneLong, "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent", InterfaceREST)
 	case "rest/moveWorkBySessionId":
-		markCovered(scenario, LaneLong, "tests/functional/runtime_api/api_manual_work_recovery_test.go::TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress", InterfaceREST)
+		markCovered(scenario, LaneLong, "tests/functional/work/recovery/manual_move_test.go::TestFailedCascadeCanBeRecoveredByPublicWorkMove", InterfaceREST)
+	case "rest/getFactorySessionDispatch", "rest/listFactorySessionDispatches":
+		markCovered(scenario, LaneLong, "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIDispatchListAndDetailExposePublicCorrelation", InterfaceREST)
+	case "rest/getFactorySessionResults":
+		markCovered(scenario, LaneLong, "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData", InterfaceREST)
 	case "rest/invokeFactorySessionBySessionId":
-		markCovered(scenario, LaneLong, "tests/functional/runtime_api/api_session_invocation_test.go::TestSessionInvocationAPI_ReturnsPrimaryResult", InterfaceREST)
+		markCovered(scenario, LaneLong, "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData", InterfaceREST)
 	case "rest/getEventsBySessionId":
 		scenario.Status = StatusPartial
 		scenario.Lane = LaneLong

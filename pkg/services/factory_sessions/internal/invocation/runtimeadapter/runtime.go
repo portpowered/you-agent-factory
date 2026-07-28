@@ -6,11 +6,13 @@ package runtimeadapter
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
 
@@ -27,14 +29,17 @@ func Observe(
 	if err != nil {
 		return sessioninvocation.SessionInvocationObservation{}, err
 	}
-	legacyObservation, eventSource, err := runtimebinding.LegacyInvocationSourcesForService(activeFactory)
+	eventSource, err := runtimebinding.LegacyEventSourceForService(activeFactory)
 	if err != nil {
 		return sessioninvocation.SessionInvocationObservation{}, err
 	}
-	snapshot, err := legacyObservation.GetEngineStateSnapshot(ctx)
+	observeResult, err := activeFactory.Observe(ctx, factory.ObserveRequest{
+		Scope: factory.ObservationScopeFull,
+	})
 	if err != nil {
 		return sessioninvocation.SessionInvocationObservation{}, err
 	}
+	observation := observeResult.Observation
 	events, err := eventSource.GetFactoryEvents(ctx)
 	if err != nil {
 		return sessioninvocation.SessionInvocationObservation{}, err
@@ -42,14 +47,29 @@ func Observe(
 	if worldStateProjector == nil {
 		return sessioninvocation.SessionInvocationObservation{}, fmt.Errorf("Recordings world-state projector is required")
 	}
-	worldState, err := worldStateProjector(events, snapshot.TickCount)
+	worldState, err := worldStateProjector(events, observation.Progress.TickCount)
 	if err != nil {
 		return sessioninvocation.SessionInvocationObservation{}, err
 	}
+
+	var missingPrimary *work.PrimaryResultError
+	if strings.TrimSpace(input.RequestID) != "" {
+		legacyObservation, legacyErr := runtimebinding.LegacyObservationForService(activeFactory)
+		if legacyErr != nil {
+			return sessioninvocation.SessionInvocationObservation{}, legacyErr
+		}
+		snapshot, snapshotErr := legacyObservation.GetEngineStateSnapshot(ctx)
+		if snapshotErr != nil {
+			return sessioninvocation.SessionInvocationObservation{}, snapshotErr
+		}
+		missingPrimary = sessioninvocation.ClassifyMissingPrimaryResultFromSnapshot(sessionID, snapshot, input)
+	}
+
 	return sessioninvocation.SessionInvocationObservation{
-		WorldState: worldState, FactoryState: snapshot.FactoryState,
-		ActiveWork:           factory.SnapshotHasActiveWork(snapshot),
-		MissingPrimaryResult: sessioninvocation.ClassifyMissingPrimaryResultFromSnapshot(sessionID, snapshot, input),
+		WorldState:           worldState,
+		FactoryState:         observation.Health.FactoryState,
+		ActiveWork:           factory.ObservationHasActiveWork(observation),
+		MissingPrimaryResult: missingPrimary,
 	}, nil
 }
 

@@ -743,7 +743,13 @@ helpers that accept only `factoryroot.Service`, shared cross-path fixtures
 (`CrossPathValidAlphaFactoryJSON` / `CrossPathInvalidFactoryJSON`), distinct
 `ErrInvalidFactoryDefinitionPayload` vs `FactoryDefinitionValidationFailure`
 with CTR-DEF characterization codes, and effective success via alpha fixture
-plus required DEFAULT handling work type. Authoring slices similarly stay on the
+plus required DEFAULT handling work type. `definition/compile_equivalence_test.go`:
+owner-local `newRootCompileServiceForPeer` construction,
+`peerExerciseRootCompileSuccess` / `peerExerciseRootCompileTypedFailures`
+helpers that accept only `factoryroot.Service`, authored-directory vs canonical
+equivalence with merged worker/workstation facts, and distinct
+`ErrInvalidAuthoredFactorySource` vs `ErrUnresolvedDefinitionReference`.
+Authoring slices similarly stay on the
 singular `Service` with prepare/flatten/expand/create/replace request
 shapes that omit filesystem effects and mapping codecs; publish
 `ErrMalformedFactoryLayoutPayload` and `AtomicFactoryWriteFailure`
@@ -758,14 +764,86 @@ peer-facing loader); publish distinct `ErrInvalidAuthoredFactorySource` vs
 `ValidationResult` success shapes (not a peer-facing nested `Validator`
 interface); publish distinct `ErrInvalidFactoryDefinitionPayload` vs
 `FactoryDefinitionValidationFailure` (`ErrFactoryDefinitionValidationFailed`
-with blocking `ValidationTarget` findings and no Petri vocabulary). The
+with blocking `ValidationTarget` findings and no Petri vocabulary). CLN-DEF-CONTRACTS
+story 001 seals owned catalog and validate peer exercise in
+`service_root_contract_invariants_test.go` (`peerOwnedDefinitionsConsumer` uses
+only `pkg/services/factory_definitions` imports) and documents the owned vs
+foreign split in `owned_contract.go` plus the foreign-vocabulary marker in
+`contracts_root.go`. Story 002 retargets owner-local Definition consumers
+(`definition`, `validation`, `editable`, `service`, owner transports) off
+`factory_definitions/contracts` onto the service root; `workers` keeps
+`contracts/namevalue` only because the root already imports `workers` and a
+service-root import would cycle. `owned_consumer_import_retarget_test.go` and
+`definition/cross_path_equivalence_test.go` prove the retarget with import
+boundary checks plus catalog/validate behavioral equivalence. CLN-DEF-CONTRACTS
+story 003 publishes Factory Event envelope and type vocabulary at
+`pkg/services/recordings/event_contract.go`; `events/kinds` and
+`event_vocabulary_boundary_test.go` prove event inventory consumers import
+Recordings root instead of `factory_definitions/contracts`. Temporary
+deletion-only event aliases remain in
+`factory_definitions/event_recording_deletion_aliases.go` until downstream
+peers finish cutover. CLN-DEF-CONTRACTS story 004 publishes world-state and
+replay vocabulary at `pkg/services/recordings/world_state_contract.go` and
+`replay_contract.go`, dispatch vocabulary at
+`pkg/services/factory_runtime/dispatch_contract.go`, and
+`recordings/internal/services/projection_query/internal/service` plus
+`recordings/service` import Recordings root contracts instead of
+`factory_definitions/contracts` for those surfaces. Temporary deletion-only
+aliases remain in `world_state_recording_deletion_aliases.go`,
+`dispatch_runtime_deletion_aliases.go`, and `replay_recording_deletion_aliases.go`.
+CLN-DEF-CONTRACTS story 005 publishes worker execution vocabulary at
+`pkg/services/workers` (`worker_vocabulary_contract.go`, `WorkstationResult` in
+`execution_contracts.go`); provider-session identity remains on
+`pkg/services/providers` (`SessionRef` in `identity_contract.go`) and
+`pkg/services/workers` (`ProviderSessionMetadata`). `worker_vocabulary_boundary_test.go`
+and `recordings/workers_root_boundary_test.go` prove replay and diagnostics
+consumers import Workers root ports instead of `factory_definitions/contracts`.
+Temporary worker execution deletion-only aliases remain in
+`worker_provider_deletion_aliases.go`. CLN-DEF-CONTRACTS story 006 demotes
+`NamedFactoryCatalog` and `CurrentFactoryDirectoryResolver` to deletion-only
+aliases in `parallel_operation_deletion_aliases.go`; peers use root
+`Service.ListNamedFactories`, `ResolveNamedFactory`, `DeleteNamedFactory`,
+`GetCurrentFactoryPointer`, and `ResolveCurrentFactoryDirectory` instead.
+`parallel_operation_equivalence_test.go` and
+`definition/cross_path_equivalence_test.go` prove list/delete/resolve/current
+outcomes through root Service match the legacy catalog operations for unchanged
+fixtures. Owner HTTP/MCP transports and `definition` remain on the singular
+`Service` binding; `pkg/wire` and process-edge CLI/Factory Sessions construction
+retain temporary deletion-only aliases until a later cutover packet. CLN-DEF-CONTRACTS
+story 007 deletes the public `factory_definitions/contracts` mega-barrel: implementation
+types move to `internal/contracts`, shared `namevalue` moves to
+`pkg/services/factory_definitions/namevalue`, Recordings and Factory Runtime alias
+from the service root, `cmd/pkgboundarycheck` treats the retired public path as
+prohibited, and `contracts_mega_barrel_boundary_test.go` seals peer cutover.
 parent-private nested validation subservice locks its public surface in
 `internal/services/validation/boundary_test.go`: `service.go` exports only
 `Service` and `Dependencies` with factory_definitions root request/result
-vocabulary and contracts injected ports, direct imports avoid Wire/Runtime/
+vocabulary and root-injected ports, direct imports avoid Wire/Runtime/
 Petri/peer/sibling-lease paths, and `wire/wire.go` constructs from injected
 ports without selecting Runtime/Petri implementations or sibling catalog/
 authoring_layout/compilation/snapshots_portability/distribution leases.
+The parent-private nested compilation subservice locks its public surface in
+`internal/services/compilation/boundary_test.go`: `service.go` exports only
+`Service` and `Dependencies` with factory_definitions root compile
+request/result vocabulary and contracts injected load/encode ports, direct
+imports avoid Wire/Runtime/Petri/peer/sibling-lease paths and public
+loading/loadedsource/runtimeconfig packages, and `wire/wire.go` constructs from
+injected ports without selecting Runtime/Petri implementations or sibling
+catalog/authoring_layout/validation/snapshots_portability/distribution leases.
+Compilation-owned loading/loadedsource/runtimeconfig implementation lives under
+`internal/services/compilation/{loading,loadedsource,runtimeconfig}`; public
+`loading/`, `loadedsource/`, and `runtimeconfig/` remain transitional re-exports
+for `pkg/wire` and in-owner callers until peer imports retire in later stories.
+Factory Definitions `wire/wire.go` composes the compilation subservice from the
+nested loader ports and delegates `CompileEffectiveFactorySource` on the returned
+root `Service`. Bind compilation canonical encode through
+`internal/services/compilation/canonical` so owner wire does not import
+transport-mapping `factoryconfig` for content identity; authored/canonical decode
+and normalize remain on injected loader ports composed from process wire.
+Register new compilation production packages with
+`go run ./cmd/packagetargetmanifestcheck -write-inventory -write-owner-packages`,
+matching retain rows in `docs/internal/baselines/ownership-inventory.json`, and
+unit/functional coverage minimums for each nested package path.
 Snapshot
 slices stay on the singular `Service` via `CaptureFactorySnapshot`,
 `PrepareFactorySnapshotImport`, and `MaterializeFactorySnapshot` returning

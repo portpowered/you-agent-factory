@@ -9,7 +9,7 @@ import (
 
 	. "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestResolveNamedFactoryAcrossRoots_ReturnsLocalFactory(t *testing.T) {
@@ -22,9 +22,9 @@ func TestResolveNamedFactoryAcrossRoots_ReturnsLocalFactory(t *testing.T) {
 		t.Fatalf("ResolveNamedFactoryAcrossRoots(local): %v", err)
 	}
 
-	assertNamedFactoryResolution(t, resolution, "alpha", projectFactoryDir, interfaces.NamedFactoryResolutionSourceProjectLocal, projectRoot, globalRoot)
-	if resolution.PrecedenceDecision != interfaces.NamedFactoryPrecedenceDecisionNone {
-		t.Fatalf("resolution precedence = %q, want %q", resolution.PrecedenceDecision, interfaces.NamedFactoryPrecedenceDecisionNone)
+	assertNamedFactoryResolution(t, resolution, "alpha", projectFactoryDir, factorydefinitions.NamedFactoryResolutionSourceProjectLocal, projectRoot, globalRoot)
+	if resolution.PrecedenceDecision != factorydefinitions.NamedFactoryPrecedenceDecisionNone {
+		t.Fatalf("resolution precedence = %q, want %q", resolution.PrecedenceDecision, factorydefinitions.NamedFactoryPrecedenceDecisionNone)
 	}
 }
 
@@ -39,9 +39,9 @@ func TestResolveNamedFactoryAcrossRoots_PrefersLocalFactoryOverGlobal(t *testing
 		t.Fatalf("ResolveNamedFactoryAcrossRoots(conflict): %v", err)
 	}
 
-	assertNamedFactoryResolution(t, resolution, "alpha", projectFactoryDir, interfaces.NamedFactoryResolutionSourceProjectLocal, projectRoot, globalRoot)
-	if resolution.PrecedenceDecision != interfaces.NamedFactoryPrecedenceDecisionProjectOverGlobal {
-		t.Fatalf("resolution precedence = %q, want %q", resolution.PrecedenceDecision, interfaces.NamedFactoryPrecedenceDecisionProjectOverGlobal)
+	assertNamedFactoryResolution(t, resolution, "alpha", projectFactoryDir, factorydefinitions.NamedFactoryResolutionSourceProjectLocal, projectRoot, globalRoot)
+	if resolution.PrecedenceDecision != factorydefinitions.NamedFactoryPrecedenceDecisionProjectOverGlobal {
+		t.Fatalf("resolution precedence = %q, want %q", resolution.PrecedenceDecision, factorydefinitions.NamedFactoryPrecedenceDecisionProjectOverGlobal)
 	}
 	loaded, err := LoadRuntimeConfigFromFactoryDir(resolution.FactoryDir, nil)
 	if err != nil {
@@ -85,7 +85,7 @@ func TestResolveNamedFactoryAcrossRoots_SelectsOneFactoryFromMultipleNamedEntrie
 	if err != nil {
 		t.Fatalf("ResolveNamedFactoryAcrossRoots(multiple): %v", err)
 	}
-	assertNamedFactoryResolution(t, resolution, "beta", wantFactoryDir, interfaces.NamedFactoryResolutionSourceProjectLocal, projectRoot, globalRoot)
+	assertNamedFactoryResolution(t, resolution, "beta", wantFactoryDir, factorydefinitions.NamedFactoryResolutionSourceProjectLocal, projectRoot, globalRoot)
 }
 
 func TestResolveNamedFactoryAcrossRoots_ReturnsNotFoundWhenBothRootsMiss(t *testing.T) {
@@ -139,7 +139,7 @@ func TestResolveNamedFactoryAcrossRoots_PreservesLegacyPromptAndCustomerEdits(t 
 	globalRoot := t.TempDir()
 	factoryDir := persistRuntimeNamedFactory(t, globalRoot, "@you/goal", "customer-goal")
 
-	workstationPath := filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-customer-goal", interfaces.FactoryAgentsFileName)
+	workstationPath := filepath.Join(factoryDir, factorydefinitions.WorkstationsDir, "execute-customer-goal", factorydefinitions.FactoryAgentsFileName)
 	legacyEditedBody := "Customer prompt for {{ .WorkID }}.\n"
 	if err := os.WriteFile(workstationPath, []byte(legacyEditedBody), 0o640); err != nil {
 		t.Fatalf("WriteFile(customer prompt): %v", err)
@@ -154,7 +154,7 @@ func TestResolveNamedFactoryAcrossRoots_PreservesLegacyPromptAndCustomerEdits(t 
 	if err != nil {
 		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
 	}
-	assertNamedFactoryResolution(t, resolution, "@you/goal", factoryDir, interfaces.NamedFactoryResolutionSourceGlobal, projectRoot, globalRoot)
+	assertNamedFactoryResolution(t, resolution, "@you/goal", factoryDir, factorydefinitions.NamedFactoryResolutionSourceGlobal, projectRoot, globalRoot)
 	assertDirectorySnapshotUnchanged(t, factoryDir, before)
 	afterInfo, err := os.Stat(workstationPath)
 	if err != nil {
@@ -196,7 +196,7 @@ func assertNamedFactoryResolution(
 	resolution *NamedFactoryResolution,
 	name string,
 	factoryDir string,
-	source interfaces.NamedFactoryResolutionSource,
+	source factorydefinitions.NamedFactoryResolutionSource,
 	projectRoot string,
 	globalRoot string,
 ) {
@@ -222,7 +222,7 @@ func assertNamedFactoryResolution(
 	}
 }
 
-func namedFactoryEntryNames(entries []interfaces.NamedFactoryListEntry) []string {
+func namedFactoryEntryNames(entries []factorydefinitions.NamedFactoryListEntry) []string {
 	names := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		names = append(names, entry.Name)
@@ -282,7 +282,7 @@ func assertFactoriesRootHasNoPercentEncodedLeaves(t *testing.T, factoriesRoot st
 func assertCurrentFactoryPointerWritesCanonicalName(t *testing.T, factoriesRoot, wantName string) {
 	t.Helper()
 
-	path := filepath.Join(factoriesRoot, interfaces.CurrentFactoryPointerFile)
+	path := filepath.Join(factoriesRoot, factorydefinitions.CurrentFactoryPointerFile)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("ReadFile(%s): %v", path, err)

@@ -5,8 +5,8 @@ package orchestrator
 import (
 	"context"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // Validate runs orchestrator configuration validation and returns Definition-owned
@@ -14,13 +14,13 @@ import (
 // injected orchestrator validator port.
 func Validate(
 	ctx context.Context,
-	cfg *factorycontracts.FactoryConfig,
-	validator factorycontracts.OrchestratorDefinitionValidator,
-	workflowSourceReader factorycontracts.WorkflowSourceReader,
-) factorycontracts.ValidationResult {
+	cfg *factorydefinitions.FactoryConfig,
+	validator factorydefinitions.OrchestratorDefinitionValidator,
+	workflowSourceReader factorydefinitions.WorkflowSourceReader,
+) factorydefinitions.ValidationResult {
 	result := factoryvalidation.ValidateOrchestratorTargets(cfg)
 	if validator == nil || cfg == nil || cfg.Orchestrator == nil || cfg.Orchestrator.JavaScript == nil {
-		return factorycontracts.ValidationResult{Targets: append([]factorycontracts.ValidationTarget(nil), result.Targets...)}
+		return factorydefinitions.ValidationResult{Targets: append([]factorydefinitions.ValidationTarget(nil), result.Targets...)}
 	}
 	result.Targets = append(
 		result.Targets,
@@ -30,5 +30,5 @@ func Validate(
 			workflowSourceReader,
 		)...,
 	)
-	return factorycontracts.ValidationResult{Targets: append([]factorycontracts.ValidationTarget(nil), result.Targets...)}
+	return factorydefinitions.ValidationResult{Targets: append([]factorydefinitions.ValidationTarget(nil), result.Targets...)}
 }

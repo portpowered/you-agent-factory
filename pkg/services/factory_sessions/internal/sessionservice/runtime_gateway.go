@@ -97,17 +97,6 @@ func (s *Service) ProbeDurableFactorySessionEvents(
 	return err
 }
 
-// GetEngineStateSnapshotForSession returns one live session's runtime snapshot.
-func (s *Service) GetEngineStateSnapshotForSession(
-	ctx context.Context,
-	sessionID string,
-) (*factoryruntime.StateSnapshot, error) {
-	if s == nil || s.host == nil {
-		return nil, fmt.Errorf("Factory Sessions gateway is required")
-	}
-	return s.liveRuntime.Snapshot(ctx, sessionID)
-}
-
 // ObserveForSession returns one live session's orchestration-neutral observation.
 func (s *Service) ObserveForSession(
 	ctx context.Context,

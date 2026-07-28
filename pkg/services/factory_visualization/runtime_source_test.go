@@ -24,7 +24,9 @@ func TestCurrentRuntimeSourceBindsThroughSessionRuntimeReader(t *testing.T) {
 					stream: &factorydefinitions.FactoryEventStream{
 						Events: make(chan factorydefinitions.FactoryEvent),
 					},
-					snapshot: &factoryruntime.StateSnapshot{TickCount: 5},
+					observation: factoryruntime.Observation{
+						Progress: factoryruntime.ObservationProgress{TickCount: 5},
+					},
 				},
 			})
 		},
@@ -90,7 +92,9 @@ func TestActivateThroughSessionBoundSourceReachesStarted(t *testing.T) {
 					stream: &factorydefinitions.FactoryEventStream{
 						Events: make(chan factorydefinitions.FactoryEvent),
 					},
-					snapshot: &factoryruntime.StateSnapshot{TickCount: 2},
+					observation: factoryruntime.Observation{
+						Progress: factoryruntime.ObservationProgress{TickCount: 2},
+					},
 				},
 			})
 		},
@@ -172,9 +176,11 @@ func (s sessionRuntimeReaderStub) WithRuntimeRead(
 
 type sessionBoundRuntimeFactory struct {
 	factoryruntime.Service
-	subscribeHook func()
-	stream        *factorydefinitions.FactoryEventStream
-	snapshot      *factoryruntime.StateSnapshot
+	subscribeHook   func()
+	stream          *factorydefinitions.FactoryEventStream
+	observation     factoryruntime.Observation
+	observeRequests []factoryruntime.ObserveRequest
+	observeErr      error
 }
 
 func (f *sessionBoundRuntimeFactory) SubmitWorkRequest(
@@ -195,8 +201,13 @@ func (f *sessionBoundRuntimeFactory) SubscribeFactoryEvents(
 	return f.stream, nil
 }
 
-func (f *sessionBoundRuntimeFactory) GetEngineStateSnapshot(
-	context.Context,
-) (*factoryruntime.StateSnapshot, error) {
-	return f.snapshot, nil
+func (f *sessionBoundRuntimeFactory) Observe(
+	_ context.Context,
+	req factoryruntime.ObserveRequest,
+) (factoryruntime.ObserveResult, error) {
+	f.observeRequests = append(f.observeRequests, req)
+	if f.observeErr != nil {
+		return factoryruntime.ObserveResult{}, f.observeErr
+	}
+	return factoryruntime.ObserveResult{Observation: f.observation}, nil
 }

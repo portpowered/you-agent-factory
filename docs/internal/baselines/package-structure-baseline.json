@@ -759,6 +759,11 @@
     },
     {
       "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/automations/hosted_sources_root_composition_test.go",
+      "target": "automations"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/automations/doc.go",
       "target": "automations"
     },
@@ -1319,11 +1324,6 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/cli/mcp_resume/resume_non_regression_test.go",
-      "target": "cli"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/cli/mcp_resume/serve_runtime_resume_smoke_test.go",
       "target": "cli"
     },
@@ -1391,6 +1391,61 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/automations/internal/services/hosted_sources/service.go",
       "target": "NewSecretResolver"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/automations/internal/services/script_pollers/cursor.go",
+      "target": "CursorConflictError"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/automations/internal/services/script_pollers/cursor.go",
+      "target": "CursorPersistError"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/automations/internal/services/script_pollers/cursor.go",
+      "target": "NewMemoryCursorRecorder"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/automations/internal/services/script_pollers/errors.go",
+      "target": "SubmitFailedError"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/automations/internal/services/script_pollers/identity.go",
+      "target": "IsScriptPollerInstanceID"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/automations/internal/services/script_pollers/identity.go",
+      "target": "SourceIDForWorkstation"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/automations/internal/services/script_pollers/identity.go",
+      "target": "StableInstanceID"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/automations/internal/services/script_pollers/identity.go",
+      "target": "SupervisionFor"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/automations/internal/services/script_pollers/service.go",
+      "target": "ParseScriptPollerOutput"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/automations/internal/services/script_pollers/service.go",
+      "target": "ParseScriptPollerStdout"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/automations/internal/services/script_pollers/service.go",
+      "target": "ScriptPollerCommandRequest"
     },
     {
       "rule": "service-root-exported-function",
@@ -2240,12 +2295,17 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/automations",
-      "target": "pkg/services/automations/contracts.go:FilesystemInputReader,pkg/services/automations/contracts.go:FilesystemWatcher,pkg/services/automations/contracts.go:FilesystemWatcherFactory,pkg/services/automations/contracts.go:HostedPollers,pkg/services/automations/contracts.go:Service"
+      "target": "pkg/services/automations/contracts.go:Clock,pkg/services/automations/contracts.go:FilesystemInputReader,pkg/services/automations/contracts.go:FilesystemWatcher,pkg/services/automations/contracts.go:FilesystemWatcherFactory,pkg/services/automations/contracts.go:HostedPollers,pkg/services/automations/contracts.go:Service"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/automations/internal/services/filesystem_watchers",
       "target": "pkg/services/automations/internal/services/filesystem_watchers/service.go:HandledIdentities,pkg/services/automations/internal/services/filesystem_watchers/service.go:InputFileSystem,pkg/services/automations/internal/services/filesystem_watchers/service.go:Service,pkg/services/automations/internal/services/filesystem_watchers/service.go:Watcher"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/automations/internal/services/script_pollers",
+      "target": "pkg/services/automations/internal/services/script_pollers/cursor.go:CursorRecorder,pkg/services/automations/internal/services/script_pollers/service.go:Service"
     },
     {
       "rule": "service-root-interface-count",
@@ -2346,11 +2406,6 @@
       "rule": "service-root-missing-internal",
       "filePath": "pkg/services/workers/services/testing/internal",
       "target": "pkg/services/workers/services/testing"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/automations/service",
-      "target": "pkg/services/automations"
     },
     {
       "rule": "service-root-unexpected-directory",

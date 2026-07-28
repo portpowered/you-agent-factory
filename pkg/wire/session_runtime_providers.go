@@ -14,8 +14,9 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
+	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
-	automationservice "github.com/portpowered/infinite-you/pkg/services/automations/service"
+	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable"
@@ -444,7 +445,7 @@ func provideInitialFactorySnapshotFactory(
 	}
 }
 
-func provideAutomationFactory() factorysessionwire.AutomationFactory {
+func provideAutomationFactory(edges serviceedges.Edges) factorysessionwire.AutomationFactory {
 	return func(
 		logger *zap.Logger,
 		clock factoryruntime.Clock,
@@ -453,16 +454,38 @@ func provideAutomationFactory() factorysessionwire.AutomationFactory {
 		defaultFactoryDir string,
 		hostedPollers automations.HostedPollers,
 	) automations.Service {
-		return automationservice.NewService(
+		hostedSources := func(
+			*zap.Logger,
+			workers.HostedPollerClock,
+			workers.HostedPollerHTTPDoer,
+			workers.HostedPollerSecretResolver,
+			string,
+		) automations.HostedPollers {
+			return hostedPollers
+		}
+		hostedClock := edges.HostedClock
+		if hostedClock == nil {
+			hostedClock = clockwork.NewRealClock()
+		}
+		service, err := automationswire.NewService(
 			logger,
 			clock,
 			commandRunner,
 			workflowID,
 			defaultFactoryDir,
-			hostedPollers,
+			hostedSources,
+			nil,
+			hostedClock,
+			nil,
+			nil,
+			"",
 			workersservice.ResolveTemplateFields,
 			factoryworkstationexecution.NewService(),
 		)
+		if err != nil {
+			return nil
+		}
+		return service
 	}
 }
 
@@ -968,13 +991,21 @@ func provideConductorInvocationWithProgressFactory(edges serviceedges.Edges) fac
 	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
 	return func(
-		registry *providerregistry.Registry,
+		registry workers.ProviderRegistry,
 		runner workers.CommandRunner,
-		allocator agypty.PTYAllocator,
+		allocator workers.PTYAllocator,
 		publisher workers.ProgressPublisher,
 	) (workers.InvocationExecutor, error) {
+		var concreteRegistry *providerregistry.Registry
+		if registry != nil {
+			typed, ok := registry.(*providerregistry.Registry)
+			if !ok {
+				return nil, fmt.Errorf("conductor invocation requires concrete provider registry")
+			}
+			concreteRegistry = typed
+		}
 		return workersservice.NewConductorInvocationWithProgress(
-			registry,
+			concreteRegistry,
 			runner,
 			commandClock,
 			allocator,

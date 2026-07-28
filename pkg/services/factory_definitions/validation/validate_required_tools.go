@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"strings"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // ValidateDeclarativeRequiredTools runs declarative required-tool validation and
 // returns Definition-owned targets for manifest shape defects and checker
 // failures without requiring live host tool installation when checker is nil.
 func ValidateDeclarativeRequiredTools(
-	cfg *interfaces.FactoryConfig,
+	cfg *factorydefinitions.FactoryConfig,
 	checker RequiredToolChecker,
 ) Result {
 	topologyResult := ValidateRequiredTools(cfg, checker)
@@ -22,7 +22,7 @@ func ValidateDeclarativeRequiredTools(
 }
 
 func requiredToolTargetsFromFindings(
-	cfg *interfaces.FactoryConfig,
+	cfg *factorydefinitions.FactoryConfig,
 	findings []Finding,
 ) []Target {
 	targets := make([]Target, 0, len(findings))
@@ -32,7 +32,7 @@ func requiredToolTargetsFromFindings(
 	return targets
 }
 
-func requiredToolTargetFromFinding(cfg *interfaces.FactoryConfig, finding Finding) Target {
+func requiredToolTargetFromFinding(cfg *factorydefinitions.FactoryConfig, finding Finding) Target {
 	path := finding.Path
 	if path != "" && !strings.HasPrefix(path, validationRoot+".") {
 		path = validationRoot + "." + path
@@ -67,7 +67,7 @@ func requiredToolCodeForRule(rule string) string {
 	}
 }
 
-func requiredToolSubjectID(cfg *interfaces.FactoryConfig, path string) string {
+func requiredToolSubjectID(cfg *factorydefinitions.FactoryConfig, path string) string {
 	const prefix = "resourceManifest.requiredTools["
 	if !strings.HasPrefix(path, prefix) {
 		return "resourceManifest"

@@ -4,14 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // FactoryEventSerializationError names the FactoryEvent kind under test when
 // envelope serialization or payload discrimination fails.
 type FactoryEventSerializationError struct {
-	Kind  factorycontracts.FactoryEventType
+	Kind  recordings.FactoryEventType
 	Phase string
 	Cause error
 }
@@ -33,7 +33,7 @@ func (e FactoryEventSerializationError) Unwrap() error {
 // envelope and verifies the event type selects the expected generated payload
 // shape through the discriminator-backed union decoder.
 func RoundTripFactoryEventEnvelope(event factoryapi.FactoryEvent) error {
-	kind := factorycontracts.FactoryEventType(event.Type)
+	kind := recordings.FactoryEventType(event.Type)
 	if err := decodeFactoryEventPayloadForKind(kind, event.Payload); err != nil {
 		return FactoryEventSerializationError{
 			Kind:  kind,
@@ -67,7 +67,7 @@ func RoundTripFactoryEventEnvelope(event factoryapi.FactoryEvent) error {
 		}
 	}
 
-	if err := decodeFactoryEventPayloadForKind(factorycontracts.FactoryEventType(roundTripped.Type), roundTripped.Payload); err != nil {
+	if err := decodeFactoryEventPayloadForKind(recordings.FactoryEventType(roundTripped.Type), roundTripped.Payload); err != nil {
 		return FactoryEventSerializationError{
 			Kind:  kind,
 			Phase: "round-trip-decode-payload",
@@ -79,7 +79,7 @@ func RoundTripFactoryEventEnvelope(event factoryapi.FactoryEvent) error {
 }
 
 func decodeFactoryEventPayloadForKind(
-	kind factorycontracts.FactoryEventType,
+	kind recordings.FactoryEventType,
 	payload factoryapi.FactoryEvent_Payload,
 ) error {
 	decode, ok := publicFactoryEventPayloadDecoders[kind]
@@ -89,120 +89,120 @@ func decodeFactoryEventPayloadForKind(
 	return decode(payload)
 }
 
-var publicFactoryEventPayloadDecoders = map[factorycontracts.FactoryEventType]func(factoryapi.FactoryEvent_Payload) error{
-	factorycontracts.FactoryEventTypeRunRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+var publicFactoryEventPayloadDecoders = map[recordings.FactoryEventType]func(factoryapi.FactoryEvent_Payload) error{
+	recordings.FactoryEventTypeRunRequest: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsRunRequestEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeInitialStructureRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeInitialStructureRequest: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsInitialStructureRequestEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeFactoryChange: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeFactoryChange: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsFactoryChangeEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeWorkRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeWorkRequest: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsWorkRequestEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeRelationshipChangeRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeRelationshipChangeRequest: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsRelationshipChangeRequestEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeDispatchRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeDispatchRequest: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsDispatchRequestEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeDispatchResponse: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeDispatchResponse: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsDispatchResponseEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeFactoryStateResponse: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeFactoryStateResponse: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsFactoryStateResponseEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeRunResponse: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeRunResponse: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsRunResponseEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeWorkStateChange: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeWorkStateChange: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsWorkStateChangeEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeInferenceRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeInferenceRequest: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsInferenceRequestEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeInferenceResponse: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeInferenceResponse: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsInferenceResponseEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeModelRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeModelRequest: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsModelRequestEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeModelResponse: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeModelResponse: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsModelResponseEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeScriptRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeScriptRequest: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsScriptRequestEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeScriptResponse: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeScriptResponse: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsScriptResponseEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeAgentRunResponse: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeAgentRunResponse: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsAgentRunResponseEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeSessionStarted: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeSessionStarted: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsSessionStartedEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeSessionPaused: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeSessionPaused: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsSessionPausedEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeSessionResumed: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeSessionResumed: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsSessionResumedEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeSessionResultUpdated: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeSessionResultUpdated: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsSessionResultUpdatedEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeSessionCompleted: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeSessionCompleted: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsSessionCompletedEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeSessionLifecycleControl: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeSessionLifecycleControl: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsSessionLifecycleControlEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeOrchestratorPhaseChanged: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeOrchestratorPhaseChanged: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsOrchestratorPhaseChangedEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeOrchestratorCheckpointWritten: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeOrchestratorCheckpointWritten: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsOrchestratorCheckpointWrittenEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeDispatchQueued: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeDispatchQueued: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsDispatchQueuedEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeDispatchInterrupted: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeDispatchInterrupted: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsDispatchInterruptedEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeDispatchReconciled: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeDispatchReconciled: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsDispatchReconciledEventPayload()
 		return err
 	},
-	factorycontracts.FactoryEventTypeArtifactCreated: func(payload factoryapi.FactoryEvent_Payload) error {
+	recordings.FactoryEventTypeArtifactCreated: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsArtifactCreatedEventPayload()
 		return err
 	},

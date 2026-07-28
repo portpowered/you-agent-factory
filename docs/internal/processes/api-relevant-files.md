@@ -63,6 +63,12 @@ Use this map when changing the public REST contract.
   `pkg/services/work/transports/http`. The adapter consumes the accepted
   `work.Service` root only; fake-root tests inject a focused root fake without
   constructing state-access, content-staging, or materialization graphs.
+  CUT-WORK-REC seals Work production imports of Recordings to the service root
+  only; the lease-wide guard is
+  `pkg/services/work/recordings_import_boundary_test.go`, and behavioral
+  request-construction proofs live in
+  `pkg/services/work/recordings_request_boundary_test.go` plus
+  `state_access/wire/recordings_adapter_test.go`.
   Package-boundary tests must prove the adapter does not import
   `pkg/services/work/internal/**`. Register the package in
   `docs/internal/packaged-service-structure/package-target-manifest.json`,
@@ -138,6 +144,31 @@ Use this map when changing the public REST contract.
   `pkg/transports/http` server composes injected service-owned adapters; HTTP-DEF
   proves fake-root parity at the adapter edge without importing Definitions
   internals.
+  CUT-DEF-RUN seals Factory Definitions production imports of Factory Runtime to
+  the service root only (`pkg/services/factory_runtime`) for orchestration
+  semantic-validation edges; the lease-wide guard is
+  `pkg/services/factory_definitions/runtime_import_boundary_test.go` and fails
+  closed on nested `factory_runtime/**`, legacy `pkg/factory/**`, and Petri
+  orchestrator implementation paths. Orchestration-specific semantic validation stays on the
+  injected `OrchestratorDefinitionValidator` port; the nested validation
+  subservice additionally forbids direct Runtime imports in
+  `internal/services/validation/boundary_test.go`. Prove the sealed semantic
+  validation edge with
+  `pkg/services/factory_definitions/orchestration_semantic_validation_boundary_test.go`:
+  Definitions-owned strategy checks without a Runtime port, orchestration-invalid
+  targets through the injected port, and import guards on the validation and
+  orchestrator packages. Keep Petri engine types off the Definitions validation
+  peer surface with
+  `pkg/services/factory_definitions/validation_peer_surface_boundary_test.go`:
+  import guards on the public `validation` package, AST checks on
+  `validation_contract.go` and `contracts/validation.go`, and behavioral proofs
+  that validation targets use Definitions-owned code/severity/subject vocabulary.
+  Prove typed invalid-topology, required-tool, and orchestrator/strategy cases on
+  the sealed public validation path with
+  `pkg/services/factory_definitions/sealed_validation_path_boundary_test.go`:
+  `validation.Service.ValidateTopology` and `Validate` behavioral proofs with
+  code/severity/subject or rule/path assertions, plus import guards on the
+  validation package for the Runtime semantic-validation edge.
 - Factory Visualization HTTP decoding, root contract mapping, typed error
   translation, and cancel/timeout handling live in
   `pkg/services/factory_visualization/transports/http`. HTTP-VIS proves
@@ -397,10 +428,12 @@ Use this map when changing the public REST contract.
 - Work-list filtering, ordering, and validation policy belongs in `pkg/work/query`; `pkg/api/handlers_work_read.go` maps generated `ListWorkBySessionIdParams` and `Work` values into that domain projection, while `pkg/cli/work/list.go` maps normalized query options into URL parameters. Keep generated OpenAPI types and URL encoding at those transport boundaries, and prove policy with pure query tests plus route-level API and CLI request tests.
 - Functional-scenario public component projection lives in `internal/functionalscenarios` with the maintenance entrypoint in `cmd/functionalscenarioproject`. Treat `contracts/cli/commands.json`, `contracts/mcp/tools.json`, and bundled `api/openapi.yaml` as its canonical inputs; derive SSE components from OpenAPI operations whose response media types include `text/event-stream` so the SSE inventory cannot drift into a handwritten route list.
 - Test-only durable Factory Session cross-interface captures live in `tests/functional/sessionparity`. Keep REST event observations as the actual `text/event-stream` body (`data:` frames containing Factory Event JSON), CLI event observations as the direct `--json` array, and live MCP observations as complete JSON-RPC `tools/call` responses whose serialized `ToolResponse` is in `result.content[0].text`; do not substitute pre-extracted typed results for the live MCP boundary.
-- Request-batch functional lifecycle coverage belongs in `tests/functional/runtime_api/api_request_batch_boundary_smoke_test.go`: use generated REST writes/reads and the Factory Event SSE stream, with `support.StartFunctionalAPIServiceModeServer` as the approved test seam. `make functional-boundary-check` accepts only repository `tests/functional/*_test.go` sources, scans the customer scenario, and rejects direct Factory runtime, projection, service, or Petri imports; owner-level package tests remain the place for those internals.
+- Work-owned CLI batch ingress shape, work-type selection, and unknown-type rejection proofs belong in `tests/functional/work/submission/batch_inputs_test.go` through `you submit batch` with inline, file path, and stdin (`-`) payloads plus public default-session work list observations. HTTP batch submit/list/get depth remains in held `work/submission/http_test.go`; stage-and-submit remains in held `stage_and_submit_test.go`.
+- Request-batch functional lifecycle coverage for generated REST writes/reads and the Factory Event SSE stream remains in `tests/functional/runtime_api/api_request_batch_boundary_smoke_test.go`, with `support.StartFunctionalAPIServiceModeServer` as the approved test seam. `make functional-boundary-check` accepts only repository `tests/functional/*_test.go` sources, scans the work-owned batch ingress scenario in `batch_inputs_test.go`, and rejects direct Factory runtime, projection, service, or Petri imports; owner-level package tests remain the place for those internals.
 - Functional API replay setup belongs in `tests/functional/internal/support`: pass replay artifact and execution-root inputs through `FunctionalAPIServerConfig` so scenario files can observe only the public Factory Session event stream and terminal API payloads, rather than capturing `FactoryService`, engine snapshots, or reconstructed projections.
 - `WaitForTerminalStatus` in `tests/functional/internal/support/http_observation.go` must require IDLE/FINISHED `runtimeStatus` plus a stable category window long enough to survive repeater CONTINUE handoffs under coverage-shard load; a short Initial=0/Processing=0 gap while Work is consumed but not yet marked in-flight must not count as completion (Ralph init smoke flakes under Backend Functional Coverage).
 - Functional work-location observations belong on public Work listings through `support.CountWorkAtCustomerState` / `support.HasWorkAtCustomerState` (`workType:state` keys such as `task:complete`). Do not add support helpers that read `FactorySession.Runtime.Petri` markings for place occupancy; resource availability stays on `session.Runtime.Usage.Resources` or `GET /status` resource usage.
+- Work recovery functional coverage belongs in `tests/functional/work/recovery/manual_move_test.go`: drive failed DEPENDS_ON cascades through `support.UpsertDefaultSessionWorkRequest`, repair with session-scoped `POST /work/{id}/move`, and assert resumed terminal states via `support.ListDefaultSessionWork` / `support.HasWorkAtCustomerState` without Petri or runtime internals. Prove illegal redispatch refusal by moving terminal failed work back toward processing while a recovery dispatch is in flight and asserting the public move returns `400` (active dispatch) or `404` (consumed work) with unchanged customer-visible state. Prove duplicate `MoveWorkRequest.requestId` idempotency by applying a successful move with a client request-id, re-posting the same request-id, and asserting HTTP `409 Conflict` with unchanged public work state.
 - Shared functional support must not return `workers.Token` (or other private engine snapshots). Use `support.FirstInputWorkID` / `FirstInputPayload` / `FirstInputTags` for dispatch input fields. Public HTTP upsert helpers such as `support.UpsertDefaultSessionWorkRequest` accept generated `factoryapi.WorkRequest`, not `work.WorkRequest`.
 - Prove the support construction and observation boundary with focused behavioral tests in `tests/functional/internal/support` (`public_process_observation_test.go`): build through `support.BuildProcess` / `RunFactoryToCompletionWithEdges*`, replace only external effects via `edges.Edges`, assert Work/session progress helpers, and keep Petri/token exposure regressions covered by Work-listing vs contradictory Petri fixtures plus public field-type extractors—not source-layout inventory scans.
 - Replay-contract functional scenarios must create recordings through the supported HTTP work-request route and observe replay through CLI or Factory Session SSE. When the scenario claims CLI process behavior, compile and invoke `cmd/factory`; a direct `pkg/transports/cli/run.Run` call omits the production composition root's dependency injection. Keep replay execution, service harnesses, projections, and runtime calls out of functional assertions; owner-package tests remain responsible for detailed replay and provider diagnostics.

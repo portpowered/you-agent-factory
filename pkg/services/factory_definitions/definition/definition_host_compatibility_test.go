@@ -11,7 +11,6 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	factorysnapshotcapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture"
@@ -114,20 +113,20 @@ func (stubDefinitionHost) CurrentRuntimeConfig() loadedFactorySource {
 	return nil
 }
 func (stubDefinitionHost) WorkflowID() string { return "" }
-func (stubDefinitionHost) RequireSession(string) (*interfaces.DefinitionSession, error) {
+func (stubDefinitionHost) RequireSession(string) (*factorydefinitions.DefinitionSession, error) {
 	return nil, nil
 }
 func (stubDefinitionHost) SessionRuntimeConfig(string) (loadedFactorySource, error) {
 	return nil, nil
 }
-func (stubDefinitionHost) SessionFactoryPersistRoot(*interfaces.DefinitionSession) string {
+func (stubDefinitionHost) SessionFactoryPersistRoot(*factorydefinitions.DefinitionSession) string {
 	return ""
 }
-func (h stubDefinitionHost) ValidateEditableFactorySnapshot(ctx context.Context, snapshot *interfaces.FactorySnapshot) error {
+func (h stubDefinitionHost) ValidateEditableFactorySnapshot(ctx context.Context, snapshot *factorydefinitions.FactorySnapshot) error {
 	return validateEditableFactorySnapshotForTest(ctx, snapshot, h.WorkstationLoader())
 }
 
-func (stubDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
+func (stubDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*factorydefinitions.FactorySnapshot, error) {
 	return mustFactorySnapshot(factoryapi.Factory{}), nil
 }
 
@@ -139,14 +138,14 @@ func (stubDefinitionHost) RequireIdleRuntimeForSession(context.Context, string) 
 	return nil
 }
 
-func (stubDefinitionHost) ActivateSessionEditableFactory(context.Context, *interfaces.DefinitionSession, string, string, string, string, string) error {
+func (stubDefinitionHost) ActivateSessionEditableFactory(context.Context, *factorydefinitions.DefinitionSession, string, string, string, string, string) error {
 	return nil
 }
 
 func (stubDefinitionHost) ReplaceFactoryLayoutAtDir(
 	string,
 	*factorydefinitions.PreparedFactoryLayoutPayload,
-) (*interfaces.FactorySplitLayoutReplaceResult, error) {
+) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
 	return nil, nil
 }
 
@@ -156,24 +155,24 @@ func (stubDefinitionHost) SaveNow() time.Time {
 
 func (stubDefinitionHost) RunSessionID() string { return "" }
 
-func (stubDefinitionHost) SessionForActivation(string) *interfaces.DefinitionSession {
+func (stubDefinitionHost) SessionForActivation(string) *factorydefinitions.DefinitionSession {
 	return nil
 }
 
-func (stubDefinitionHost) NamedFactoryActivationPaths(*interfaces.DefinitionSession) (string, string) {
+func (stubDefinitionHost) NamedFactoryActivationPaths(*factorydefinitions.DefinitionSession) (string, string) {
 	return "", ""
 }
 
-func (stubDefinitionHost) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *interfaces.DefinitionSession) error {
+func (stubDefinitionHost) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *factorydefinitions.DefinitionSession) error {
 	return nil
 }
 
-func (stubDefinitionHost) SwapPersistedNamedFactoryRuntime(context.Context, string, *interfaces.DefinitionSession, string, string, string, string) error {
+func (stubDefinitionHost) SwapPersistedNamedFactoryRuntime(context.Context, string, *factorydefinitions.DefinitionSession, string, string, string, string) error {
 	return nil
 }
 
-func mustFactorySnapshot(factory factoryapi.Factory) *interfaces.FactorySnapshot {
-	snapshot, err := interfaces.NewFactorySnapshot(factory)
+func mustFactorySnapshot(factory factoryapi.Factory) *factorydefinitions.FactorySnapshot {
+	snapshot, err := factorydefinitions.NewFactorySnapshot(factory)
 	if err != nil {
 		panic(err)
 	}
@@ -200,7 +199,7 @@ func preparePersistedFactoryPayload(
 	factory factoryapi.Factory,
 	version factoryapi.HybridLogicalTimestamp,
 ) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
-	snapshot, err := interfaces.NewFactorySnapshot(factory)
+	snapshot, err := factorydefinitions.NewFactorySnapshot(factory)
 	if err != nil {
 		return nil, err
 	}
@@ -211,18 +210,18 @@ func prepareEditableFactoryPersistView(
 	segment string,
 	factory factoryapi.Factory,
 ) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
-	snapshot, err := interfaces.NewFactorySnapshot(factory)
+	snapshot, err := factorydefinitions.NewFactorySnapshot(factory)
 	if err != nil {
 		return nil, err
 	}
 	return testDefinitionService.PrepareEditableFactoryPersistView(segment, snapshot)
 }
 
-func testFactoryVersionFromAPI(version *factoryapi.HybridLogicalTimestamp) *interfaces.FactoryVersion {
+func testFactoryVersionFromAPI(version *factoryapi.HybridLogicalTimestamp) *factorydefinitions.FactoryVersion {
 	if version == nil {
 		return nil
 	}
-	return &interfaces.FactoryVersion{Logical: version.Logical.Int64(), Physical: version.Physical.UTC()}
+	return &factorydefinitions.FactoryVersion{Logical: version.Logical.Int64(), Physical: version.Physical.UTC()}
 }
 
 type saveDefinitionHostAdapter struct {
@@ -231,14 +230,14 @@ type saveDefinitionHostAdapter struct {
 }
 
 type definitionSaveHost interface {
-	RequireSession(sessionID string) (*interfaces.DefinitionSession, error)
+	RequireSession(sessionID string) (*factorydefinitions.DefinitionSession, error)
 	SessionRuntimeConfig(sessionID string) (loadedFactorySource, error)
 	GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error)
 	WithActivationLock(fn func() error) error
 	RequireIdleRuntimeForSession(ctx context.Context, sessionID string) error
 	ActivateSessionEditableFactory(
 		ctx context.Context,
-		session *interfaces.DefinitionSession,
+		session *factorydefinitions.DefinitionSession,
 		sessionID string,
 		sessionRootDir string,
 		factoryDir string,
@@ -248,7 +247,7 @@ type definitionSaveHost interface {
 	ReplaceFactoryLayoutAtDir(
 		targetDir string,
 		prepared *factorydefinitions.PreparedFactoryLayoutPayload,
-	) (*interfaces.FactorySplitLayoutReplaceResult, error)
+	) (*factorydefinitions.FactorySplitLayoutReplaceResult, error)
 }
 
 func saveFactoryThroughDefinition(
@@ -348,7 +347,7 @@ func (h saveDefinitionHostAdapter) CurrentRuntimeConfig() loadedFactorySource {
 
 func (h saveDefinitionHostAdapter) WorkflowID() string { return "" }
 
-func (h saveDefinitionHostAdapter) RequireSession(sessionID string) (*interfaces.DefinitionSession, error) {
+func (h saveDefinitionHostAdapter) RequireSession(sessionID string) (*factorydefinitions.DefinitionSession, error) {
 	return h.saveHost.RequireSession(sessionID)
 }
 
@@ -356,15 +355,15 @@ func (h saveDefinitionHostAdapter) SessionRuntimeConfig(sessionID string) (loade
 	return h.saveHost.SessionRuntimeConfig(sessionID)
 }
 
-func (h saveDefinitionHostAdapter) SessionFactoryPersistRoot(session *interfaces.DefinitionSession) string {
+func (h saveDefinitionHostAdapter) SessionFactoryPersistRoot(session *factorydefinitions.DefinitionSession) string {
 	return factorydefinition.SessionFactoryPersistRoot(h.rootDir, session)
 }
 
-func (h saveDefinitionHostAdapter) ValidateEditableFactorySnapshot(ctx context.Context, snapshot *interfaces.FactorySnapshot) error {
+func (h saveDefinitionHostAdapter) ValidateEditableFactorySnapshot(ctx context.Context, snapshot *factorydefinitions.FactorySnapshot) error {
 	return validateEditableFactorySnapshotForTest(ctx, snapshot, h.WorkstationLoader())
 }
 
-func (h saveDefinitionHostAdapter) GetCurrentFactorySnapshotForSession(ctx context.Context, sessionID string) (*interfaces.FactorySnapshot, error) {
+func (h saveDefinitionHostAdapter) GetCurrentFactorySnapshotForSession(ctx context.Context, sessionID string) (*factorydefinitions.FactorySnapshot, error) {
 	current, err := h.saveHost.GetCurrentFactoryForSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
@@ -382,7 +381,7 @@ func (h saveDefinitionHostAdapter) RequireIdleRuntimeForSession(ctx context.Cont
 
 func (h saveDefinitionHostAdapter) ActivateSessionEditableFactory(
 	ctx context.Context,
-	session *interfaces.DefinitionSession,
+	session *factorydefinitions.DefinitionSession,
 	sessionID string,
 	sessionRootDir string,
 	factoryDir string,
@@ -395,7 +394,7 @@ func (h saveDefinitionHostAdapter) ActivateSessionEditableFactory(
 func (h saveDefinitionHostAdapter) ReplaceFactoryLayoutAtDir(
 	targetDir string,
 	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
-) (*interfaces.FactorySplitLayoutReplaceResult, error) {
+) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
 	return h.saveHost.ReplaceFactoryLayoutAtDir(targetDir, prepared)
 }
 
@@ -405,18 +404,18 @@ func (h saveDefinitionHostAdapter) SaveNow() time.Time {
 
 func (h saveDefinitionHostAdapter) RunSessionID() string { return "" }
 
-func (h saveDefinitionHostAdapter) SessionForActivation(string) *interfaces.DefinitionSession {
+func (h saveDefinitionHostAdapter) SessionForActivation(string) *factorydefinitions.DefinitionSession {
 	return nil
 }
 
-func (h saveDefinitionHostAdapter) NamedFactoryActivationPaths(*interfaces.DefinitionSession) (string, string) {
+func (h saveDefinitionHostAdapter) NamedFactoryActivationPaths(*factorydefinitions.DefinitionSession) (string, string) {
 	return h.rootDir, h.rootDir
 }
 
-func (h saveDefinitionHostAdapter) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *interfaces.DefinitionSession) error {
+func (h saveDefinitionHostAdapter) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *factorydefinitions.DefinitionSession) error {
 	return nil
 }
 
-func (h saveDefinitionHostAdapter) SwapPersistedNamedFactoryRuntime(context.Context, string, *interfaces.DefinitionSession, string, string, string, string) error {
+func (h saveDefinitionHostAdapter) SwapPersistedNamedFactoryRuntime(context.Context, string, *factorydefinitions.DefinitionSession, string, string, string, string) error {
 	return nil
 }

@@ -5,6 +5,7 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 )
 
@@ -15,7 +16,7 @@ type Service interface {
 	List(context.Context) ([]factorysessions.ReadProjection, error)
 	Get(context.Context, string) (factorysessions.SessionProjection, error)
 	Resolve(string) *livesession.LiveSession
-	Snapshot(context.Context, string) (*factoryruntime.StateSnapshot, error)
+	Snapshot(context.Context, string) (*legacysnapshot.Snapshot, error)
 	Observe(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
 	ApplyControl(context.Context, string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 	Close(context.Context, string) error

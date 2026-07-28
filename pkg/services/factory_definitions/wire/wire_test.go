@@ -1,7 +1,9 @@
 package wire_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"reflect"
@@ -11,11 +13,13 @@ import (
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
+	distributionscaffoldfacts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
+	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
 )
 
 func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
@@ -113,6 +117,16 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			mutate: func(ports *constructionPorts) { ports.orchestratorValidator = nil },
 			want:   "orchestrator definition validator is required",
 		},
+		{
+			name:   "portable filesystem",
+			mutate: func(ports *constructionPorts) { ports.portableFileSystem = nil },
+			want:   "portable filesystem is required",
+		},
+		{
+			name:   "directory replacement store",
+			mutate: func(ports *constructionPorts) { ports.directoryReplacementStore = nil },
+			want:   "directory replacement store is required",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -134,6 +148,8 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 				ports.packagedInstaller,
 				ports.requiredToolChecker,
 				ports.orchestratorValidator,
+				ports.portableFileSystem,
+				ports.directoryReplacementStore,
 			)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("NewService() error = %v, want %q", err, test.want)
@@ -195,6 +211,8 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		},
 		stubRequiredToolChecker{},
 		stubOrchestratorValidator{},
+		platformfilesystem.Local{},
+		stubDirectoryReplacementStore{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -282,6 +300,8 @@ func TestNewServiceServesPublishedPackagedCatalogPeerBehavior(t *testing.T) {
 		ports.packagedInstaller,
 		ports.requiredToolChecker,
 		ports.orchestratorValidator,
+		ports.portableFileSystem,
+		ports.directoryReplacementStore,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -317,6 +337,64 @@ func TestNewServiceServesPublishedPackagedCatalogPeerBehavior(t *testing.T) {
 	)
 	if !errors.Is(err, factorydefinitions.ErrUnknownPackagedFactoryIdentity) {
 		t.Fatalf("ResolveBuiltInPackagedFactory(missing) error = %v, want ErrUnknownPackagedFactoryIdentity", err)
+	}
+}
+
+func TestNewServiceServesPublishedCompilePeerBehavior(t *testing.T) {
+	t.Parallel()
+
+	ports := validConstructionPorts(t)
+	service, err := factorydefinitionswire.NewService(
+		ports.sessionHost,
+		ports.validator,
+		ports.persistence,
+		ports.loader,
+		ports.applySupportedFiles,
+		ports.applyStarterWork,
+		ports.namedPaths,
+		ports.namedFactoryCatalogFileSystem,
+		ports.clock,
+		ports.versionFileSystem,
+		ports.listEffective,
+		ports.packagedCatalog,
+		ports.packagedInstaller,
+		ports.requiredToolChecker,
+		ports.orchestratorValidator,
+		ports.portableFileSystem,
+		ports.directoryReplacementStore,
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	var root factorydefinitions.Service = service
+
+	_, invalidErr := root.CompileEffectiveFactorySource(
+		context.Background(),
+		factorydefinitions.CompileEffectiveFactorySourceRequest{Canonical: []byte("{")},
+	)
+	if !errors.Is(invalidErr, factorydefinitions.ErrInvalidAuthoredFactorySource) {
+		t.Fatalf(
+			"CompileEffectiveFactorySource invalid-source error = %v, want %v",
+			invalidErr,
+			factorydefinitions.ErrInvalidAuthoredFactorySource,
+		)
+	}
+
+	_, unresolvedErr := root.CompileEffectiveFactorySource(
+		context.Background(),
+		factorydefinitions.CompileEffectiveFactorySourceRequest{
+			Canonical: []byte(`{"worker":"$unresolved"}`),
+		},
+	)
+	if !errors.Is(unresolvedErr, factorydefinitions.ErrUnresolvedDefinitionReference) {
+		t.Fatalf(
+			"CompileEffectiveFactorySource unresolved error = %v, want %v",
+			unresolvedErr,
+			factorydefinitions.ErrUnresolvedDefinitionReference,
+		)
+	}
+	if errors.Is(unresolvedErr, factorydefinitions.ErrInvalidAuthoredFactorySource) {
+		t.Fatal("unresolved definition reference must not also match ErrInvalidAuthoredFactorySource")
 	}
 }
 
@@ -363,6 +441,8 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 		ports.packagedInstaller,
 		ports.requiredToolChecker,
 		ports.orchestratorValidator,
+		ports.portableFileSystem,
+		ports.directoryReplacementStore,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -376,21 +456,71 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	}
 }
 
+func TestNewServiceDelegatesSnapshotPortabilityThroughRoot(t *testing.T) {
+	t.Parallel()
+
+	ports := validConstructionPorts(t)
+	service, err := factorydefinitionswire.NewService(
+		ports.sessionHost,
+		ports.validator,
+		ports.persistence,
+		ports.loader,
+		ports.applySupportedFiles,
+		ports.applyStarterWork,
+		ports.namedPaths,
+		ports.namedFactoryCatalogFileSystem,
+		ports.clock,
+		ports.versionFileSystem,
+		ports.listEffective,
+		ports.packagedCatalog,
+		ports.packagedInstaller,
+		ports.requiredToolChecker,
+		ports.orchestratorValidator,
+		ports.portableFileSystem,
+		ports.directoryReplacementStore,
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = service.CaptureFactorySnapshot(
+		t.Context(),
+		factorydefinitions.CaptureFactorySnapshotRequest{Canonical: []byte(`"not-object"`)},
+	)
+	if !errors.Is(err, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
+		t.Fatalf("CaptureFactorySnapshot() error = %v, want ErrInvalidFactorySnapshotPayload", err)
+	}
+	_, err = service.PrepareFactorySnapshotImport(
+		t.Context(),
+		factorydefinitions.PrepareFactorySnapshotImportRequest{Payload: []byte(`["not-object"]`)},
+	)
+	if !errors.Is(err, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
+		t.Fatalf("PrepareFactorySnapshotImport() error = %v, want ErrInvalidFactorySnapshotPayload", err)
+	}
+	_, err = service.MaterializeFactorySnapshot(
+		t.Context(),
+		factorydefinitions.MaterializeFactorySnapshotRequest{},
+	)
+	if !errors.Is(err, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize) {
+		t.Fatalf("MaterializeFactorySnapshot() error = %v, want ErrUnsafeFactorySnapshotMaterialize", err)
+	}
+}
+
 type stubRequiredToolChecker struct{}
 
 func (stubRequiredToolChecker) Check(
-	factorycontracts.RequiredToolConfig,
-) factorycontracts.RequiredToolCheckResult {
-	return factorycontracts.RequiredToolCheckResult{}
+	factorydefinitions.RequiredToolConfig,
+) factorydefinitions.RequiredToolCheckResult {
+	return factorydefinitions.RequiredToolCheckResult{}
 }
 
 type stubOrchestratorValidator struct{}
 
 func (stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
 	context.Context,
-	*factorycontracts.FactoryOrchestratorJavaScriptConfig,
-	factorycontracts.WorkflowSourceReader,
-) []factorycontracts.ValidationTarget {
+	*factorydefinitions.FactoryOrchestratorJavaScriptConfig,
+	factorydefinitions.WorkflowSourceReader,
+) []factorydefinitions.ValidationTarget {
 	return nil
 }
 
@@ -410,6 +540,8 @@ type constructionPorts struct {
 	packagedInstaller             factorydefinitions.PackagedFactoryInstallationOperations
 	requiredToolChecker           factorydefinitions.RequiredToolChecker
 	orchestratorValidator         factorydefinitions.OrchestratorDefinitionValidator
+	portableFileSystem            portablefiles.FileSystem
+	directoryReplacementStore     factorydefinitions.DirectoryReplacementStore
 }
 
 func validConstructionPorts(t *testing.T) constructionPorts {
@@ -455,8 +587,17 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 		},
 		requiredToolChecker:   stubRequiredToolChecker{},
 		orchestratorValidator: stubOrchestratorValidator{},
+		portableFileSystem:    platformfilesystem.Local{},
+		directoryReplacementStore: stubDirectoryReplacementStore{},
 	}
 }
+
+type stubDirectoryReplacementStore struct{}
+
+func (stubDirectoryReplacementStore) Commit(string, string, string) (string, error) {
+	return "", nil
+}
+func (stubDirectoryReplacementStore) Restore(string, string) {}
 
 type stubSessionHost struct{}
 
@@ -531,40 +672,40 @@ type stubValidator struct{}
 
 func (stubValidator) Validate(
 	context.Context,
-	*factorycontracts.FactoryConfig,
-	factorycontracts.WorkflowSourceReader,
-) factorycontracts.ValidationResult {
-	return factorycontracts.ValidationResult{}
+	*factorydefinitions.FactoryConfig,
+	factorydefinitions.WorkflowSourceReader,
+) factorydefinitions.ValidationResult {
+	return factorydefinitions.ValidationResult{}
 }
-func (stubValidator) ValidateBlockingLoad(context.Context, *factorycontracts.FactoryConfig) factorycontracts.ValidationResult {
-	return factorycontracts.ValidationResult{}
+func (stubValidator) ValidateBlockingLoad(context.Context, *factorydefinitions.FactoryConfig) factorydefinitions.ValidationResult {
+	return factorydefinitions.ValidationResult{}
 }
 func (stubValidator) ValidateTopology(
 	context.Context,
-	*factorycontracts.FactoryConfig,
-	factorycontracts.RequiredToolChecker,
-) factorycontracts.TopologyValidationResult {
-	return factorycontracts.TopologyValidationResult{}
+	*factorydefinitions.FactoryConfig,
+	factorydefinitions.RequiredToolChecker,
+) factorydefinitions.TopologyValidationResult {
+	return factorydefinitions.TopologyValidationResult{}
 }
 func (stubValidator) WorkerWorkstationBehaviorCompatibility(
 	context.Context,
-	*factorycontracts.FactoryConfig,
-) []factorycontracts.ValidationTarget {
+	*factorydefinitions.FactoryConfig,
+) []factorydefinitions.ValidationTarget {
 	return nil
 }
 func (stubValidator) WorkTypeHandlingBehavior(
 	context.Context,
-	*factorycontracts.FactoryConfig,
+	*factorydefinitions.FactoryConfig,
 	bool,
-) []factorycontracts.ValidationTarget {
+) []factorydefinitions.ValidationTarget {
 	return nil
 }
 func (stubValidator) PruneLayout(
 	context.Context,
-	*factorycontracts.FactoryConfig,
-	factorycontracts.PendingFactoryGraphTopology,
-) factorycontracts.ValidationResult {
-	return factorycontracts.ValidationResult{}
+	*factorydefinitions.FactoryConfig,
+	factorydefinitions.PendingFactoryGraphTopology,
+) factorydefinitions.ValidationResult {
+	return factorydefinitions.ValidationResult{}
 }
 
 type stubPersistence struct{}
@@ -806,4 +947,107 @@ func (h *recordingSessionHost) AttachFactoryDefinitions(
 ) factorydefinitions.Service {
 	h.attachCalls++
 	return definitions
+}
+
+func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T) {
+	t.Parallel()
+
+	goalJSON, err := json.Marshal(map[string]string{"name": "goal", "project": "builtin-goal"})
+	if err != nil {
+		t.Fatalf("marshal goal factory: %v", err)
+	}
+	packagedCatalog, err := factorydefinitionsservice.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{{
+		Name:    "@you/goal",
+		Project: "builtin-goal",
+		JSON:    goalJSON,
+		Formats: []factorydefinitions.PackagedFactoryFormat{
+			factorydefinitions.PackagedFactoryFormatJSON,
+		},
+	}})
+	if err != nil {
+		t.Fatalf("NewPackagedFactoryCatalog() error = %v", err)
+	}
+
+	fileSystem := platformfilesystem.Local{}
+	output := &bytes.Buffer{}
+	scaffoldInitializer, err := factorydefaultscaffold.NewScaffoldInitializer(fileSystem, output)
+	if err != nil {
+		t.Fatalf("NewScaffoldInitializer() error = %v", err)
+	}
+
+	ports := validConstructionPorts(t)
+	ports.packagedCatalog = packagedCatalog
+	ports.packagedInstaller = factorydefinitions.PackagedFactoryInstallationOperations{
+		Install: func(
+			_ context.Context,
+			params factorydefinitions.PackagedFactoryInstallParams,
+		) (factorydefinitions.PackagedFactoryInstallResult, error) {
+			return factorydefinitions.PackagedFactoryInstallResult{
+				Name:       params.Definition.Name,
+				FactoryDir: "/customer/factories/@you/goal",
+				Outcome:    factorydefinitions.PackagedFactoryInstallCreated,
+				Format:     params.Format,
+			}, nil
+		},
+	}
+
+	service, err := factorydefinitionswire.NewService(
+		ports.sessionHost,
+		ports.validator,
+		ports.persistence,
+		ports.loader,
+		ports.applySupportedFiles,
+		ports.applyStarterWork,
+		ports.namedPaths,
+		ports.namedFactoryCatalogFileSystem,
+		ports.clock,
+		ports.versionFileSystem,
+		ports.listEffective,
+		ports.packagedCatalog,
+		ports.packagedInstaller,
+		ports.requiredToolChecker,
+		ports.orchestratorValidator,
+		ports.portableFileSystem,
+		ports.directoryReplacementStore,
+		factorydefinitionsservice.WithDistributionScaffold(
+			scaffoldInitializer,
+			distributionscaffoldfacts.LocalFactoryNameResolver(),
+		),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	installed, err := service.InstallPackagedFactory(
+		t.Context(),
+		factorydefinitions.InstallPackagedFactoryRequest{
+			RootDir: "/customer/factories",
+			Name:    "@you/goal",
+		},
+	)
+	if err != nil {
+		t.Fatalf("InstallPackagedFactory() error = %v", err)
+	}
+	if installed.Definition.Name == "" || installed.Definition.FactoryDir == "" {
+		t.Fatalf("InstallPackagedFactory() facts = %#v, want populated Name and FactoryDir", installed.Definition)
+	}
+
+	scaffoldDir := t.TempDir()
+	scaffolded, err := service.CreateFactoryScaffold(
+		t.Context(),
+		factorydefinitions.CreateFactoryScaffoldRequest{TargetDir: scaffoldDir},
+	)
+	if err != nil {
+		t.Fatalf("CreateFactoryScaffold() error = %v", err)
+	}
+	if scaffolded.Definition.Name == "" || scaffolded.Definition.FactoryDir == "" {
+		t.Fatalf("CreateFactoryScaffold() facts = %#v, want populated Name and FactoryDir", scaffolded.Definition)
+	}
+	if reflect.TypeOf(installed.Definition) != reflect.TypeOf(scaffolded.Definition) {
+		t.Fatalf(
+			"distributed facts types = %T vs %T, want matching DistributedFactoryDefinitionFacts",
+			installed.Definition,
+			scaffolded.Definition,
+		)
+	}
 }

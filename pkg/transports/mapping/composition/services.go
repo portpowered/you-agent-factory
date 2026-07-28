@@ -65,10 +65,6 @@ func (a workAPI) ProbeFactoryEventsForSession(ctx context.Context, sessionID str
 	return a.sessions.ProbeFactoryEventsForSession(ctx, sessionID, reconnect)
 }
 
-func (a workAPI) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*factoryruntime.StateSnapshot, error) {
-	return a.sessions.GetEngineStateSnapshotForSession(ctx, sessionID)
-}
-
 func NewFactoryDefinitionAPI(service factorydefinitions.Service) apisurface.FactorySaveAPI {
 	definitions := factorydefinitionmapping.New(service)
 	return factorydefinitionmapping.NewAPI(definitions, definitions)

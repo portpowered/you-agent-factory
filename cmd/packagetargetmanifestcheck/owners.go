@@ -101,6 +101,13 @@ func isCommittedNestedSubservice(owner, subservice string) bool {
 	return slices.Contains(allowed, subservice)
 }
 
+// isTransitionalMoveNestedSubservice marks committed nested subservices that
+// still live under transitional public paths and must stay move→owner/internal
+// until their IMP cutover proof lands (ownership inventory uses the same rule).
+func isTransitionalMoveNestedSubservice(owner, subservice string) bool {
+	return owner == "factory_definitions" && subservice == "snapshots_portability"
+}
+
 // mapCommittedOwnerPackage maps one inventory path that belongs to a committed
 // product owner (including Providers extraction sources under workers) to its
 // plan-tree destination. Returns ok=false for non-owner residuals (edges,
@@ -156,7 +163,9 @@ func mapProvidersExtraction(packagePath string) (PackageMapping, bool) {
 	case packagePath == "pkg/services/workers/agypty",
 		packagePath == "pkg/services/workers/cliprovider",
 		packagePath == "pkg/services/workers/provider",
-		strings.HasPrefix(packagePath, "pkg/services/workers/provider/"):
+		packagePath == "pkg/services/workers/provider_test",
+		strings.HasPrefix(packagePath, "pkg/services/workers/provider/"),
+		strings.HasPrefix(packagePath, "pkg/services/workers/provider_test/"):
 		destination := "providers/internal/services/execution"
 		if packagePath == "pkg/services/workers/provider/registry" {
 			destination = "providers/internal/services/catalog"
@@ -180,13 +189,24 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 		return mapping, true
 	}
 
-	// Packages already under the committed private subservice container retain
-	// that nested destination.
+	// Packages already under the committed private subservice container map to
+	// that nested destination. Workers retain at the nested plan path; factory
+	// definitions keeps catalog/validation canonical retain, marks transitional
+	// IMP subservices move→owner/internal, and marks other committed subservices
+	// move until CLN cutover.
 	if strings.HasPrefix(rest, "internal/services/") {
 		sub := strings.TrimPrefix(rest, "internal/services/")
 		subservice, _, _ := strings.Cut(sub, "/")
 		if subservice != "" && isCommittedNestedSubservice(owner, subservice) {
-			return moveOrRetainMapping(packagePath, owner+"/internal/services/"+subservice, DispositionRetain), true
+			if isTransitionalMoveNestedSubservice(owner, subservice) {
+				return moveOrRetainMapping(packagePath, owner+"/internal", DispositionMove), true
+			}
+			destination := owner + "/internal/services/" + subservice
+			disposition := DispositionRetain
+			if owner == "factory_definitions" && subservice != "catalog" && subservice != "validation" {
+				disposition = DispositionMove
+			}
+			return moveOrRetainMapping(packagePath, destination, disposition), true
 		}
 	}
 
@@ -249,9 +269,21 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "materialize", prefix: "materialize/", dest: "work/internal/services/content_materialization"},
 	},
 	"workers": {
+		{exact: "construction", prefix: "construction/", dest: "workers/internal/services/runtime_assembly"},
+		{exact: "diagnostics", prefix: "diagnostics/", dest: "workers/internal"},
+		{exact: "interface", prefix: "interface/", dest: "workers/internal"},
+		{exact: "execution", prefix: "execution/", dest: "workers/internal/services/workstations"},
+		{exact: "executor", prefix: "executor/", dest: "workers/internal/services/workstations"},
+		{exact: "invocation", prefix: "invocation/", dest: "workers/internal/services/workstations"},
+		{exact: "prompting", prefix: "prompting/", dest: "workers/internal/services/workstations"},
+		{exact: "skippermissions", prefix: "skippermissions/", dest: "workers/internal/services/workstations"},
+		{exact: "worktree", prefix: "worktree/", dest: "workers/internal/services/workstations"},
+		{exact: "process", prefix: "process/", dest: "workers/internal/services/runners"},
+		{exact: "runner", prefix: "runner/", dest: "workers/internal/services/runners"},
 		{exact: "services/hosted_logic", prefix: "services/hosted_logic/", dest: "workers/internal/services/runners"},
 		{exact: "services/inference", prefix: "services/inference/", dest: "workers/internal/services/runners"},
 		{exact: "services/testing", prefix: "services/testing/", dest: "workers/internal/services/runners"},
+		{exact: "services", prefix: "services/", dest: "workers/internal/services/runners"},
 	},
 	"provider_sessions": {
 		{exact: "codex", prefix: "codex/", dest: "provider_sessions/internal/services/codex_reader"},
@@ -298,7 +330,6 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "ttsobservability", prefix: "ttsobservability/", dest: "factory_definitions/internal"},
 		{exact: "runtimeconfig", prefix: "runtimeconfig/", dest: "factory_definitions/internal"},
 		{exact: "replayconfig", prefix: "replayconfig/", dest: "factory_definitions/internal"},
-		{exact: "contracts", prefix: "contracts/", dest: "factory_definitions/internal"},
 		{exact: "workers", prefix: "workers/", dest: "factory_definitions/internal"},
 		{prefix: "internal/testcomposition", dest: "factory_definitions/internal"},
 	},

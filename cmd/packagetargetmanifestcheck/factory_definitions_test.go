@@ -111,12 +111,14 @@ func TestMapCommittedOwnerPackageFactoryDefinitionsMoveDestinations(t *testing.T
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/contracts",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/contracts",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal",
-			},
+			path: "pkg/services/factory_definitions/internal/contracts",
+			wantRetain: true,
+			retainOwner: "factory_definitions",
+		},
+		{
+			path: "pkg/services/factory_definitions/namevalue",
+			wantRetain: true,
+			retainOwner: "factory_definitions",
 		},
 		{
 			path: "pkg/services/factory_definitions/workers/taxonomy",
@@ -238,6 +240,10 @@ func factoryDefinitionsCanonicalRetainRest(rest string) bool {
 	case strings.HasPrefix(rest, "internal/services/catalog"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/validation"):
+		return true
+	case strings.HasPrefix(rest, "internal/contracts"):
+		return true
+	case rest == "namevalue" || strings.HasPrefix(rest, "namevalue/"):
 		return true
 	default:
 		return false
