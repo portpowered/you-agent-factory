@@ -4386,6 +4386,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/work/transports/mcp",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/work/wire",
       "disposition": "retain",
       "destination": "work",

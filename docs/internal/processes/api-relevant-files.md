@@ -213,6 +213,18 @@ Use this map when changing the public REST contract.
   `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, shared
   MCP host/composition fan-in, HTTP-REC, CLI-REC, or other services' MCP
   adapters when reconciling manifest churn.
+- Work MCP tool decoding, invocation, result/error mapping, and catalog parity
+  live under `pkg/services/work/transports/mcp`. The Work MCP adapter package
+  must stay registered in the allowed shared manifests only: retain
+  `pkg/services/work/transports/mcp` under destination `work` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json` and
+  `docs/internal/baselines/ownership-inventory.json`, and keep measured floors in
+  both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`.
+  Prove registration with `manifest_registration_test.go`; do not edit
+  `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, shared
+  MCP host/composition fan-in, HTTP-WORK, CLI-WORK, or other services' MCP
+  adapters when reconciling manifest churn.
 - Provider Session HTTP decoding, generated-contract mapping, service
   invocation, typed root error mapping (`error_mapping.go`), cancel/timeout edge
   mapping, and response encoding for owned Provider Sessions operations live in
