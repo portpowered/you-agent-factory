@@ -72,6 +72,29 @@ func TestListProvidersOrderIsDeterministic(t *testing.T) {
 	}
 }
 
+func TestNewAddsAndReplacesContributedDescriptors(t *testing.T) {
+	t.Parallel()
+
+	service, err := internalservice.New(internalservice.WithDescriptors(
+		providers.Descriptor{ID: providers.IDCodex, DisplayName: "Configured Codex", Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady},
+		providers.Descriptor{ID: "cursor-acp", DisplayName: "cursor-acp", Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady},
+	))
+	if err != nil {
+		t.Fatalf("New(WithDescriptors) = %v", err)
+	}
+	list, err := service.ListProviders(context.Background(), providers.ListProvidersRequest{})
+	if err != nil {
+		t.Fatalf("ListProviders() = %v", err)
+	}
+	indexed := indexProviders(list.Providers)
+	if indexed[providers.IDCodex].DisplayName != "Configured Codex" {
+		t.Fatalf("replacement = %#v", indexed[providers.IDCodex])
+	}
+	if indexed["cursor-acp"].ID != "cursor-acp" {
+		t.Fatalf("contributed descriptor missing: %#v", indexed)
+	}
+}
+
 func TestListProvidersIncludesExperimentalSelectableEntries(t *testing.T) {
 	t.Parallel()
 

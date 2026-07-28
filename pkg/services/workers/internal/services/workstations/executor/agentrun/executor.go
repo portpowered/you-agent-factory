@@ -198,6 +198,7 @@ func agentRunInferenceRequest(
 		WorkerType:        request.WorkerType,
 		WorkstationType:   request.WorkstationType,
 		RunnerID:          request.RunnerID,
+		ExecutorProvider:  request.ExecutorProvider,
 		ProjectID:         request.ProjectID,
 		InputTokens:       cloneRawInputTokens(request.InputTokens),
 		ModelOperation:    request.ModelOperation,
@@ -215,6 +216,9 @@ func agentRunInferenceRequest(
 		req.ModelProvider = workerDef.ModelProvider
 		req.ModelLocality = workerDef.ModelLocality
 		req.SessionID = workerDef.SessionID
+	}
+	if executorProvider := strings.TrimSpace(req.ExecutorProvider); executorProvider != "" && !strings.EqualFold(executorProvider, "SCRIPT_WRAP") {
+		req.RunnerID = executorProvider
 	}
 	return req
 }

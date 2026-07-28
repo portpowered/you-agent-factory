@@ -399,7 +399,7 @@ func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *test
 		}
 	}
 
-	executorProvider := generated.WorkerProviderScriptWrap
+	executorProvider := generated.WorkerProvider("SCRIPT_WRAP")
 	modelProvider := generated.WorkerModelProviderClaude
 	modelLocality := generated.WorkerModelLocalityLocal
 	payloadBytes, err := json.Marshal(generated.Worker{

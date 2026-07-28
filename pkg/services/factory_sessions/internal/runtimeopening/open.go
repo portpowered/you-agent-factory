@@ -165,7 +165,7 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	factorysessionexecutionService, err := durableExecutionFactory(
+	durableExecution, err := durableExecutionFactory(
 		configured.Definition,
 		configured.Session,
 		root,
@@ -178,6 +178,7 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+	factorysessionexecutionService := durableExecution.Service
 	if factorySessionsService == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions service is required")
 	}
@@ -236,6 +237,7 @@ func openRuntime(
 		runtimeService,
 		selectedModels, modelsBind.Scope, workService,
 		workersRuntimeFactory,
+		durableExecution.ACPIntegrations,
 	)
 	if err != nil {
 		return runtimeProducts{}, err

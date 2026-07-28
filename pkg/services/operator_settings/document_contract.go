@@ -82,6 +82,7 @@ type Document struct {
 	Defaults       DocumentDefaults
 	Runtime        DocumentRuntimeSettings
 	WorkerPresets  []DocumentWorkerPreset
+	Workers        DocumentWorkerSettings
 }
 
 // Clone returns a detached document copy.
@@ -92,7 +93,24 @@ func (document Document) Clone() Document {
 	if document.WorkerPresets != nil {
 		cloned.WorkerPresets = cloneDocumentWorkerPresets(document.WorkerPresets)
 	}
+	cloned.Workers = document.Workers.Clone()
 	return cloned
+}
+
+type DocumentWorkerSettings struct {
+	ACP DocumentACPSettings
+}
+
+func (settings DocumentWorkerSettings) Clone() DocumentWorkerSettings {
+	return DocumentWorkerSettings{ACP: settings.ACP.Clone()}
+}
+
+type DocumentACPSettings struct {
+	Integrations []ACPIntegration
+}
+
+func (settings DocumentACPSettings) Clone() DocumentACPSettings {
+	return DocumentACPSettings{Integrations: append([]ACPIntegration(nil), settings.Integrations...)}
 }
 
 // DocumentDefaults holds operator default values as a detached peer value.

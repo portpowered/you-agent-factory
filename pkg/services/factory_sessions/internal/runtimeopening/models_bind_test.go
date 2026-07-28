@@ -14,6 +14,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -328,26 +329,26 @@ func TestOpenRuntimeClosesModelsScopeExactlyOnceAfterLaterStepFails(t *testing.T
 	laterErr := errors.New("worker runtime opening failed")
 	failure := &openingCoordinatorFailure{events: &events, err: laterErr}
 	factory := &Factory{
-		durableExecutionFactory:     openingCoordinatorDurableExecution,
-		workerExecutionFactory:      failure.openWorkerExecution,
-		modelService:                modelRoot,
-		factorySessionsService:      openingCoordinatorSessionsRoot{},
-		recordingsProjectionFactory: openingCoordinatorProjections,
-		runtimeLedgerFactory:        openingCoordinatorLedgerFactory,
-		runtimeRecorderFactory:      openingCoordinatorRecorder,
-		automationHostedSourcesFactory:  openingCoordinatorHostedPollers,
-		factoryScaffoldInitializer:  openingCoordinatorInitializeScaffold,
-		editableFactoryValidator:    openingCoordinatorValidateEditable,
-		workService: work.MaterializationService(openingCoordinatorContentMaterializer{}),
-		factoryDefinitionValidator:  openingCoordinatorValidator{},
-		namedPaths:                  openingCoordinatorNamedPaths{},
-		loadFactory:                 openingCoordinatorLoadFactory,
-		resolveClock:                openingCoordinatorResolveClock,
-		newSessionLogger:            openingCoordinatorSessionLogger,
-		adaptWorkerCommandRunner:    openingCoordinatorAdaptCommandRunner,
-		generateRuntimeInstanceID:   func() string { return "runtime-opening-cleanup-test" },
-		resolveHome:                 func() (string, error) { return t.TempDir(), nil },
-		providerIdentities:          func(identity string) (string, error) { return identity, nil },
+		durableExecutionFactory:        openingCoordinatorDurableExecution,
+		workerExecutionFactory:         failure.openWorkerExecution,
+		modelService:                   modelRoot,
+		factorySessionsService:         openingCoordinatorSessionsRoot{},
+		recordingsProjectionFactory:    openingCoordinatorProjections,
+		runtimeLedgerFactory:           openingCoordinatorLedgerFactory,
+		runtimeRecorderFactory:         openingCoordinatorRecorder,
+		automationHostedSourcesFactory: openingCoordinatorHostedPollers,
+		factoryScaffoldInitializer:     openingCoordinatorInitializeScaffold,
+		editableFactoryValidator:       openingCoordinatorValidateEditable,
+		workService:                    work.MaterializationService(openingCoordinatorContentMaterializer{}),
+		factoryDefinitionValidator:     openingCoordinatorValidator{},
+		namedPaths:                     openingCoordinatorNamedPaths{},
+		loadFactory:                    openingCoordinatorLoadFactory,
+		resolveClock:                   openingCoordinatorResolveClock,
+		newSessionLogger:               openingCoordinatorSessionLogger,
+		adaptWorkerCommandRunner:       openingCoordinatorAdaptCommandRunner,
+		generateRuntimeInstanceID:      func() string { return "runtime-opening-cleanup-test" },
+		resolveHome:                    func() (string, error) { return t.TempDir(), nil },
+		providerIdentities:             func(identity string) (string, error) { return identity, nil },
 	}
 	_, err := factory.openRuntime(
 		context.Background(),
@@ -388,6 +389,7 @@ func (failure *openingCoordinatorFailure) openWorkerExecution(
 	models.RuntimeScopeRef,
 	work.Service,
 	WorkersRuntimeFactory,
+	[]operatorconfig.ACPIntegration,
 ) (workers.RuntimeService, error) {
 	*failure.events = append(*failure.events, "later-step-failed")
 	return nil, failure.err
@@ -402,8 +404,8 @@ func openingCoordinatorDurableExecution(
 	_ *workers.MockWorkersConfig,
 	_ FactorySessionExecutionFactory,
 	_ factorysessions.ProviderIdentityResolver,
-) (factorysessions.ExecutionService, error) {
-	return nil, nil
+) (DurableExecution, error) {
+	return DurableExecution{}, nil
 }
 
 func openingCoordinatorProjections() recordings.ProjectionService {

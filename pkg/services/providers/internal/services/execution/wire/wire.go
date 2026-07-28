@@ -4,8 +4,10 @@ package wire
 import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
+	acpadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/acp"
 	agyadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
 	claudeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	codexadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
@@ -29,6 +31,11 @@ func NewService(
 	return executionservice.New(catalogService, registrations...)
 }
 
+// NewACPRegistration binds one configured ACP command at the execution boundary.
+func NewACPRegistration(id providers.ID, name string, args []string, factory platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) execution.Registration {
+	return acpadapter.NewRegistration(id, acpadapter.Command{Name: name, Args: append([]string(nil), args...)}, factory, locator)
+}
+
 // NewBuiltInService constructs an inert execution service with the native
 // adapters owned by Providers Execution.
 func NewBuiltInService(
@@ -36,6 +43,12 @@ func NewBuiltInService(
 	dependencies ...executionservice.BuiltInDependencies,
 ) (execution.Service, error) {
 	return NewService(catalogService, executionservice.BuiltInRegistrations(dependencies...)...)
+}
+
+// BuiltInRegistrations exposes the complete native registration set to the
+// Providers root so configured ACP registrations can be appended.
+func BuiltInRegistrations(dependencies ...executionservice.BuiltInDependencies) []execution.Registration {
+	return executionservice.BuiltInRegistrations(dependencies...)
 }
 
 // BuiltInDependenciesFromRunner constructs built-in adapter effects from the
@@ -57,9 +70,9 @@ type CursorPlatformDependencies struct {
 // AgyPTYPlatformDependencies are platform facts required for the built-in Agy
 // PTY execution adapter.
 type AgyPTYPlatformDependencies struct {
-	Allocator   agypty.PTYAllocator
-	Locator     platformprocess.ExecutableLocator
-	Inspector   platformfilesystem.PathInspector
+	Allocator agypty.PTYAllocator
+	Locator   platformprocess.ExecutableLocator
+	Inspector platformfilesystem.PathInspector
 }
 
 // BuiltInRunnerPlatformDependencies carries optional platform facts for

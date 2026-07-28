@@ -49,9 +49,9 @@ type DocumentOwnerConstructor func(
 // the published ConfigDocumentService surface without importing the document
 // subservice from the peer root package.
 type ConfigDocumentOperations struct {
-	ConfigureOwnerConstructor func(DocumentOwnerConstructor)
-	Load                      func(ConfigDocumentService, string) (ConfigDocument, error)
-	Parse                     func(ConfigDocumentService, []byte) (ConfigDocument, error)
+	ConfigureOwnerConstructor  func(DocumentOwnerConstructor)
+	Load                       func(ConfigDocumentService, string) (ConfigDocument, error)
+	Parse                      func(ConfigDocumentService, []byte) (ConfigDocument, error)
 	MergeProviderModelDefaults func(
 		ConfigDocumentService,
 		ConfigDocument,
@@ -123,6 +123,9 @@ func (document ConfigDocument) FileConfig() Config {
 	config := document.config
 	if document.config.WorkerPresets != nil {
 		config.WorkerPresets = append([]WorkerPreset{}, document.config.WorkerPresets...)
+	}
+	if document.config.Workers.ACP.Integrations != nil {
+		config.Workers.ACP.Integrations = append([]ACPIntegration{}, document.config.Workers.ACP.Integrations...)
 	}
 	return config
 }

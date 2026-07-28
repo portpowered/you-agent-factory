@@ -209,15 +209,25 @@ func (d *conductorCollectingDestination) result() (workers.RunnerExecutionResult
 }
 
 func providerErrorFromConductorFailure(failure inference.Failure) error {
-	return workerprovider.NewProviderErrorWithSession(
+	providerErr := workerprovider.NewProviderErrorWithSession(
 		workFailureTypeFromConductorFailure(failure),
 		failure.Message(),
 		fmt.Errorf("conductor failure: %s", failure.Kind()),
 		providerSessionFromConductor(failure.ProviderSession()),
 	)
+	if diagnostics := failure.Diagnostics(); len(diagnostics) > 0 {
+		providerErr.Diagnostics = &workers.WorkDiagnostics{Metadata: diagnostics}
+	}
+	return providerErr
 }
 
 func workFailureTypeFromConductorFailure(failure inference.Failure) workers.WorkFailureType {
+	switch failure.Diagnostics()["work-failure-type"] {
+	case string(workers.WorkFailureTypeMissingExecutable):
+		return workers.WorkFailureTypeMissingExecutable
+	case string(workers.WorkFailureTypeMisconfigured):
+		return workers.WorkFailureTypeMisconfigured
+	}
 	switch failure.Kind() {
 	case inference.FailureTimeout:
 		return workers.WorkFailureTypeTimeout

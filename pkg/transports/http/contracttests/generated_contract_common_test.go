@@ -457,7 +457,7 @@ func generatedNamedFactoryFixture() factoryapi.Factory {
 			Name:             "planner",
 			Type:             workerTypePtr(factoryapi.WorkerTypeModelWorker),
 			ModelProvider:    workerModelProviderPtr(factoryapi.WorkerModelProviderClaude),
-			ExecutorProvider: workerProviderPtr(factoryapi.WorkerProviderScriptWrap),
+			ExecutorProvider: workerProviderPtr(factoryapi.WorkerProvider("SCRIPT_WRAP")),
 			Model:            stringPtr("claude-sonnet-4-20250514"),
 		}},
 		Workstations: &[]factoryapi.Workstation{{

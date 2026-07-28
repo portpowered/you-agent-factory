@@ -26,6 +26,8 @@ func TestOperatorSettingsThinRootContractFiles(t *testing.T) {
 	t.Parallel()
 
 	want := []string{
+		"acp_integrations.go",
+		"acp_integrations_test.go",
 		"backend_scope.go",
 		"config_document.go",
 		"construction_ports_contract.go",

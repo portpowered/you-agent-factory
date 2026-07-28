@@ -573,6 +573,7 @@ func TestExecuteSuppliesSafeDefaultForEveryDeclaredFailureKind(t *testing.T) {
 		providers.ExecuteFailureKindTimeout,
 		providers.ExecuteFailureKindAuthentication,
 		providers.ExecuteFailureKindInvalidRequest,
+		providers.ExecuteFailureKindMisconfigured,
 		providers.ExecuteFailureKindThrottled,
 		providers.ExecuteFailureKindDependency,
 		providers.ExecuteFailureKindUnknown,

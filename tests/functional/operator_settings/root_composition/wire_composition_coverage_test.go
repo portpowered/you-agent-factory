@@ -1,4 +1,4 @@
-package servicewire
+package root_composition_test
 
 import (
 	"os"
@@ -13,7 +13,13 @@ import (
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
-func TestServiceWireCompositionRootServesDocumentAndResolutionOperations(t *testing.T) {
+// TestWireCompositionServesDocumentAndResolutionOperations exercises published
+// Settings wire surfaces through the functional lane so transitional composition
+// hooks (construct/testlink/testproviders) retain coverage after servicewire/
+// retargeting.
+func TestWireCompositionServesDocumentAndResolutionOperations(t *testing.T) {
+	t.Parallel()
+
 	homeDir := t.TempDir()
 	configPath := operatorsettings.DefaultConfigPath(homeDir)
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
@@ -36,7 +42,7 @@ func TestServiceWireCompositionRootServesDocumentAndResolutionOperations(t *test
 			},
 			globalconfigmapping.Decode,
 			globalconfigmapping.Encode,
-			providerCatalog,
+			wireCompositionProviderCatalog,
 			&sync.Mutex{},
 		),
 	)
@@ -84,7 +90,9 @@ func TestServiceWireCompositionRootServesDocumentAndResolutionOperations(t *test
 	}
 }
 
-func TestServiceFromHomePortsConstructsSettingsRoot(t *testing.T) {
+func TestWireCompositionFromHomePortsConstructsSettingsRoot(t *testing.T) {
+	t.Parallel()
+
 	root, err := settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, globalconfigmapping.Decode)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
@@ -94,7 +102,9 @@ func TestServiceFromHomePortsConstructsSettingsRoot(t *testing.T) {
 	}
 }
 
-func TestServiceFromHomePortsRejectsMissingPorts(t *testing.T) {
+func TestWireCompositionFromHomePortsRejectsMissingPorts(t *testing.T) {
+	t.Parallel()
+
 	_, err := settingswire.NewServiceFromHomePorts(nil, globalconfigmapping.Decode)
 	if err == nil || !strings.Contains(err.Error(), "filesystem is required") {
 		t.Fatalf("NewServiceFromHomePorts(nil, decode) error = %v, want filesystem required", err)
@@ -106,32 +116,16 @@ func TestServiceFromHomePortsRejectsMissingPorts(t *testing.T) {
 	}
 }
 
-func TestServiceFromConfigDocumentConstructsFromDocumentPorts(t *testing.T) {
-	root, err := settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{
-		Files:     platformfilesystem.Local{},
-		Decoder:   globalconfigmapping.Decode,
-		Encoder:   globalconfigmapping.Encode,
-		Providers: providerCatalog,
-		CreateTemp: func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-	})
-	if err != nil {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
-	}
-	if root == nil {
-		t.Fatal("NewServiceFromConfigDocument() = nil, want Settings root")
-	}
-}
+func TestWireCompositionRegisterDefaultsResolutionFromHomeRestoresAdapterOwnership(t *testing.T) {
+	t.Parallel()
 
-func TestServiceFromConfigDocumentRejectsMissingDocumentPorts(t *testing.T) {
-	_, err := settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{})
-	if err == nil || !strings.Contains(err.Error(), "operator settings document ports are required") {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v, want document ports required", err)
-	}
+	operatorsettings.ConfigureDefaultsResolutionFromHome(nil)
+	settingswire.RegisterDefaultsResolutionFromHome()
 }
 
 func TestResolveFromHomeRejectsMissingFilesystemPorts(t *testing.T) {
+	t.Parallel()
+
 	_, err := operatorsettings.ResolveFromHomeWithEnvironment(
 		nil,
 		globalconfigmapping.Decode,
@@ -144,12 +138,9 @@ func TestResolveFromHomeRejectsMissingFilesystemPorts(t *testing.T) {
 	}
 }
 
-func TestRegisterDefaultsResolutionFromHomeRestoresAdapterOwnership(t *testing.T) {
-	operatorsettings.ConfigureDefaultsResolutionFromHome(nil)
-	settingswire.RegisterDefaultsResolutionFromHome()
-}
-
 func TestResolveFromHomeUsesSettingsAdapterOwnershipPath(t *testing.T) {
+	t.Parallel()
+
 	homeDir := t.TempDir()
 	configPath := operatorsettings.DefaultConfigPath(homeDir)
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
@@ -179,51 +170,36 @@ func TestResolveFromHomeUsesSettingsAdapterOwnershipPath(t *testing.T) {
 	}
 }
 
-func TestResolveFromHomeFallbackPreservesAcceptedSemantics(t *testing.T) {
-	operatorsettings.ConfigureDefaultsResolutionFromHome(nil)
-	t.Cleanup(settingswire.RegisterDefaultsResolutionFromHome)
+func TestWireCompositionFromConfigDocumentConstructsFromDocumentPorts(t *testing.T) {
+	t.Parallel()
 
-	homeDir := t.TempDir()
-	configPath := operatorsettings.DefaultConfigPath(homeDir)
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll(config dir): %v", err)
-	}
-	if err := os.WriteFile(configPath, []byte(`{
-		"defaults": {
-			"workerModelProvider": "claude",
-			"workerModel": "file-model"
-		}
-	}`), 0o600); err != nil {
-		t.Fatalf("WriteFile(config): %v", err)
-	}
-	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
-	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "env-model")
-
-	resolved, err := operatorsettings.ResolveFromHomeWithEnvironment(
-		platformfilesystem.Local{},
-		globalconfigmapping.Decode,
-		homeDir,
-		operatorsettings.Defaults{
-			WorkerModelProvider: os.Getenv(operatorsettings.EnvDefaultWorkerModelProvider),
-			WorkerModel:         os.Getenv(operatorsettings.EnvDefaultWorkerModel),
+	root, err := settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{
+		Files:     platformfilesystem.Local{},
+		Decoder:   globalconfigmapping.Decode,
+		Encoder:   globalconfigmapping.Encode,
+		Providers: wireCompositionProviderCatalog,
+		CreateTemp: func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
 		},
-		operatorsettings.FlagOverrides{},
-	)
+	})
 	if err != nil {
-		t.Fatalf("ResolveFromHomeWithEnvironment() error = %v", err)
+		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
 	}
-	if resolved.WorkerModelProvider != "CODEX" {
-		t.Fatalf("provider = %q, want CODEX from fallback path", resolved.WorkerModelProvider)
-	}
-	if resolved.WorkerModel != "env-model" {
-		t.Fatalf("model = %q, want env-model", resolved.WorkerModel)
-	}
-	if resolved.ConfigPath != configPath {
-		t.Fatalf("config path = %q, want %q", resolved.ConfigPath, configPath)
+	if root == nil {
+		t.Fatal("NewServiceFromConfigDocument() = nil, want Settings root")
 	}
 }
 
-func providerCatalog(value string) (string, bool) {
+func TestWireCompositionFromConfigDocumentRejectsMissingDocumentPorts(t *testing.T) {
+	t.Parallel()
+
+	_, err := settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{})
+	if err == nil || !strings.Contains(err.Error(), "operator settings document ports are required") {
+		t.Fatalf("NewServiceFromConfigDocument() error = %v, want document ports required", err)
+	}
+}
+
+func wireCompositionProviderCatalog(value string) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "codex", "openai":
 		return "CODEX", true

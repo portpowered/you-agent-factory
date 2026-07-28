@@ -596,6 +596,11 @@ const (
 	FactoryWorldWorkItemRefPayloadStatusUNAVAILABLE FactoryWorldWorkItemRefPayloadStatus = "UNAVAILABLE"
 )
 
+// Defines values for GlobalConfigACPIntegrationTransport.
+const (
+	Stdio GlobalConfigACPIntegrationTransport = "stdio"
+)
+
 // Defines values for GuardType.
 const (
 	GuardTypeAllChildrenComplete GuardType = "ALL_CHILDREN_COMPLETE"
@@ -973,11 +978,6 @@ const (
 	WorkerModelProviderKiro     WorkerModelProvider = "KIRO"
 	WorkerModelProviderOpenCode WorkerModelProvider = "OPENCODE"
 	WorkerModelProviderPi       WorkerModelProvider = "PI"
-)
-
-// Defines values for WorkerProvider.
-const (
-	WorkerProviderScriptWrap WorkerProvider = "SCRIPT_WRAP"
 )
 
 // Defines values for WorkerType.
@@ -4100,6 +4100,31 @@ type GlobalConfig struct {
 
 	// WorkerPresets Named worker model presets loaded from the shared configuration file.
 	WorkerPresets *[]GlobalConfigWorkerPreset `json:"workerPresets,omitempty"`
+	Workers       *GlobalConfigWorkers        `json:"workers,omitempty"`
+}
+
+// GlobalConfigACPIntegration defines model for GlobalConfigACPIntegration.
+type GlobalConfigACPIntegration struct {
+	// Command Operator-authored ACP launch command preserved as one settings value. It contains no permission or timeout policy.
+	Command string `json:"command"`
+
+	// Id Stable settings-entry identity. This is distinct from the provider name selected by a Worker.
+	Id string `json:"id"`
+
+	// Name Canonical Providers catalog identity, such as cursor-acp.
+	Name string `json:"name"`
+
+	// Transport ACP transport. P0 supports stdio only.
+	Transport GlobalConfigACPIntegrationTransport `json:"transport"`
+}
+
+// GlobalConfigACPIntegrationTransport ACP transport. P0 supports stdio only.
+type GlobalConfigACPIntegrationTransport string
+
+// GlobalConfigACPSettings defines model for GlobalConfigACPSettings.
+type GlobalConfigACPSettings struct {
+	// Integrations Operator-selected ACP provider integrations. Availability is derived by the Providers catalog and is never persisted here.
+	Integrations *[]GlobalConfigACPIntegration `json:"integrations,omitempty"`
 }
 
 // GlobalConfigDefaults Operator defaults that participate independently in file, environment, and flag precedence.
@@ -4158,6 +4183,11 @@ type GlobalConfigWorkerPresetModelProvider = string
 
 // GlobalConfigWorkerPresetReasoningEffort Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.
 type GlobalConfigWorkerPresetReasoningEffort = string
+
+// GlobalConfigWorkers defines model for GlobalConfigWorkers.
+type GlobalConfigWorkers struct {
+	Acp *GlobalConfigACPSettings `json:"acp,omitempty"`
+}
 
 // Guard Shared guard attached either to a workstation as a whole or to one specific workstation input.
 type Guard struct {
@@ -6479,7 +6509,7 @@ type Worker struct {
 	// Description Optional localized customer-facing explanation of this worker.
 	Description *NameValue `json:"description,omitempty"`
 
-	// ExecutorProvider Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`.
+	// ExecutorProvider Canonical Providers catalog identity used to select worker execution, an exact invocation-parameter placeholder, or the retained `SCRIPT_WRAP` compatibility value. ACP-backed identities use names such as `cursor-acp`; the Providers catalog determines their private execution kind.
 	ExecutorProvider *WorkerProvider `json:"executorProvider,omitempty"`
 
 	// Id Optional durable public identifier for this worker. When present, graph and layout references should use this id instead of the mutable name.
@@ -6531,8 +6561,8 @@ type WorkerModelLocality string
 // WorkerModelProvider Built-in model-provider constants retained as generated-client conveniences. Authored modelProvider fields use the open ProviderIdentity contract, so this list is not an exhaustive provider inventory.
 type WorkerModelProvider string
 
-// WorkerProvider Concrete worker-provider wrappers supported by the public factory-config contract.
-type WorkerProvider string
+// WorkerProvider Built-in worker-provider compatibility values. Authored executorProvider fields also accept extensible lowercase Providers catalog identities.
+type WorkerProvider = string
 
 // WorkerType Worker implementation families supported by the public factory-config contract.
 type WorkerType string

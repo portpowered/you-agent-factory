@@ -131,8 +131,8 @@ func assertWorkerPublicContractPublicFactory(t *testing.T, generated factoryapi.
 	t.Helper()
 
 	worker := requireWorkerPublicContractWorker(t, generated, workerName)
-	if stringPointerValue(worker.ExecutorProvider) != string(factoryapi.WorkerProviderScriptWrap) {
-		t.Fatalf("public worker executorProvider = %q, want %q", stringPointerValue(worker.ExecutorProvider), factoryapi.WorkerProviderScriptWrap)
+	if stringPointerValue(worker.ExecutorProvider) != "SCRIPT_WRAP" {
+		t.Fatalf("public worker executorProvider = %q, want %q", stringPointerValue(worker.ExecutorProvider), "SCRIPT_WRAP")
 	}
 	if stringPointerValue(worker.ModelProvider) != string(factoryapi.WorkerModelProviderClaude) {
 		t.Fatalf("public worker modelProvider = %q, want %q", stringPointerValue(worker.ModelProvider), factoryapi.WorkerModelProviderClaude)

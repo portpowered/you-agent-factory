@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	"github.com/portpowered/infinite-you/internal/testpath"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
-	operatorconfig 	"github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"github.com/portpowered/infinite-you/internal/testpath"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -175,6 +175,7 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 		_ map[string]struct{},
 		settings factoryruntime.JavaScriptWorkerSettings,
 		_ *workers.MockWorkersConfig,
+		_ []operatorconfig.ACPIntegration,
 	) (factorysessions.ExecutionService, error) {
 		got = settings
 		return nil, nil

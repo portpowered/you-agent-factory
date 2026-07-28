@@ -109,6 +109,7 @@ type WorkstationExecutionRequest struct {
 	WorkstationType          string                          `json:"workstation_type,omitempty"`
 	RunnerID                 string                          `json:"runner_id,omitempty"`
 	RunnerSelectionSource    RunnerSelectionSource           `json:"runner_selection_source,omitempty"`
+	ExecutorProvider         string                          `json:"executor_provider,omitempty"`
 	ProjectID                string                          `json:"project_id,omitempty"`
 	FactorySessionID         string                          `json:"factory_session_id,omitempty"`
 	InputTokens              []any                           `json:"input_tokens,omitempty"`
@@ -131,6 +132,7 @@ type ProviderInferenceRequest struct {
 	WorkerType                   string                          `json:"worker_type,omitempty"`
 	WorkstationType              string                          `json:"workstation_type,omitempty"`
 	RunnerID                     string                          `json:"runner_id,omitempty"`
+	ExecutorProvider             string                          `json:"executor_provider,omitempty"`
 	ProjectID                    string                          `json:"project_id,omitempty"`
 	InputTokens                  []any                           `json:"input_tokens,omitempty"`
 	ModelOperation               string                          `json:"model_operation,omitempty"`

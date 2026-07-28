@@ -8819,7 +8819,7 @@ components:
         executorProvider:
           allOf:
             - $ref: '#/components/schemas/WorkerProvider'
-          description: Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`.
+          description: Canonical Providers catalog identity used to select worker execution, an exact invocation-parameter placeholder, or the retained `SCRIPT_WRAP` compatibility value. ACP-backed identities use names such as `cursor-acp`; the Providers catalog determines their private execution kind.
         operations:
           type: array
           description: Provider-agnostic model operations that this worker can execute, including named input and output slots.
@@ -9203,9 +9203,10 @@ components:
         - CLOUD
     WorkerProvider:
       type: string
-      description: Concrete worker-provider wrappers supported by the public factory-config contract.
-      enum:
-        - SCRIPT_WRAP
+      description: Built-in worker-provider compatibility values. Authored executorProvider fields also accept extensible lowercase Providers catalog identities.
+      minLength: 1
+      maxLength: 128
+      pattern: ^(?:SCRIPT_WRAP|\$\{[A-Za-z0-9_.-]+\}|[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*)$
     ModelOperation:
       type: object
       additionalProperties: false
@@ -10073,6 +10074,8 @@ components:
           $ref: '#/components/schemas/GlobalConfigDefaults'
         runtime:
           $ref: '#/components/schemas/GlobalConfigRuntime'
+        workers:
+          $ref: '#/components/schemas/GlobalConfigWorkers'
         workerPresets:
           type: array
           description: Named worker model presets loaded from the shared configuration file.
@@ -11029,3 +11032,48 @@ components:
         spawnedBy:
           type: string
           description: For dynamic fanout input guards, the workstation that spawns the children for count tracking.
+    GlobalConfigACPIntegration:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - transport
+        - command
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Stable settings-entry identity. This is distinct from the provider name selected by a Worker.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$
+          description: Canonical Providers catalog identity, such as cursor-acp.
+        transport:
+          type: string
+          enum:
+            - stdio
+          description: ACP transport. P0 supports stdio only.
+        command:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          description: Operator-authored ACP launch command preserved as one settings value. It contains no permission or timeout policy.
+    GlobalConfigACPSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        integrations:
+          type: array
+          description: Operator-selected ACP provider integrations. Availability is derived by the Providers catalog and is never persisted here.
+          items:
+            $ref: '#/components/schemas/GlobalConfigACPIntegration'
+    GlobalConfigWorkers:
+      type: object
+      additionalProperties: false
+      properties:
+        acp:
+          $ref: '#/components/schemas/GlobalConfigACPSettings'

@@ -64,6 +64,39 @@ func TestWorkstationExecutorUsesInjectedProviderSelectionAuthority(t *testing.T)
 	}
 }
 
+func TestWorkstationExecutorPreservesExecutorProviderInDetachedRequest(t *testing.T) {
+	t.Parallel()
+	runtimeConfig := staticRuntimeConfig{
+		Workers: map[string]*interfaces.FactoryWorkerConfig{
+			"worker-a": {
+				Type:             interfaces.WorkerTypeModel,
+				ExecutorProvider: "cursor-acp",
+			},
+		},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"standard": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "run"},
+		},
+	}
+	capture := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}}
+	executor := newTestWorkstationExecutor(runtimeConfig, capture)
+
+	_, err := executor.Execute(context.Background(), work.WorkDispatch{
+		DispatchID:      "dispatch-acp",
+		TransitionID:    "transition-acp",
+		WorkerType:      "worker-a",
+		WorkstationName: "standard",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !capture.called {
+		t.Fatal("detached workstation executor was not called")
+	}
+	if got := capture.dispatch.ExecutorProvider; got != "cursor-acp" {
+		t.Fatalf("ExecutorProvider = %q, want cursor-acp", got)
+	}
+}
+
 func TestWorkstationExecutorCarriesCanonicalLegacyProviderThroughInference(t *testing.T) {
 	t.Parallel()
 

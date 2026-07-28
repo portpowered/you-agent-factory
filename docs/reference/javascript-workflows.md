@@ -118,7 +118,7 @@ to the facts that remain inspectable.
 | `phase` | `phase(name: string): void` | Appends an ordered phase observation for the `FactorySession` and its `FactoryEvent` stream. |
 | `log` | `log(message: string, fields?: object): void` | Appends a structured log observation. Fields must be JSON-compatible. |
 | `workflow.log` | `workflow.log(message: string, fields?: object): void` | Same observable log contract as `log`. |
-| `agent.run` | `await agent.run({prompt, label?, preset?, modelProvider?, model?, reasoningEffort?})` | Requests one child execution and resolves to its structured result. Its resolved worker selection and lifecycle are inspectable as a `Dispatch` and related `FactoryEvent` records. Explicit settings remain subject to policy. |
+| `agent.run` | `await agent.run({prompt, label?, preset?, executorProvider?, modelProvider?, model?, reasoningEffort?})` | Requests one child execution and resolves to its structured result. Its resolved worker selection and lifecycle are inspectable as a `Dispatch` and related `FactoryEvent` records. `executorProvider` explicitly selects a Providers catalog identity such as `cursor-acp`; omission preserves the compatibility route. Explicit settings remain subject to policy. |
 | `parallel` | `await parallel(items)` where each item is an `agent.run` request object or async function | Runs bounded child work and returns results in input order. Child work remains individually inspectable as `Dispatch` records. |
 | `pipeline` | `await pipeline(items, worker, next?)` | Runs `worker(item, index)` and optional `next(workerResult, item, index)` for each item. Returns ordered per-item status and stage results. |
 | `workflow.checkpoint` | `workflow.checkpoint({label: string, state?: object}): void` | Persists JSON-compatible application state as a checkpoint artifact/reference and appends a checkpoint observation. It does not snapshot the JavaScript VM. |
@@ -135,7 +135,8 @@ otherwise resolved before the workflow completes.
 Workflow source is validated before execution and runs with only the globals
 listed above plus ordinary JavaScript language facilities. Direct filesystem,
 shell, process, module `import`/`require`, and network access is unavailable.
-Child requests may select a preset, model provider, model, and reasoning effort;
+Child requests may select a preset, executor provider, model provider, model,
+and reasoning effort;
 the host permits them only when effective policy allows them. Command, sandbox,
 writable-root, network, concurrency, and output-schema fields are not supported
 `agent.run` arguments. Use `agent.run` for host-mediated child work and

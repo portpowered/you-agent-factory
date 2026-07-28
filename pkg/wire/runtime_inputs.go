@@ -248,21 +248,21 @@ func projectRuntimeOpeningExternalEffects(edges serviceedges.Edges) factorysessi
 		}
 	}
 	return factorysessionwire.RuntimeOpeningExternalEffects{
-		Clock:                     edges.Clock,
-		ProviderOverride:          edges.ProviderOverride,
-		ModelPullMetricsRecorder:  edges.ModelPullMetricsRecorder,
-		InvocationMetricsRecorder: edges.InvocationMetricsRecorder,
-		ProviderCommandRunner:     providerRunner,
-		ScriptCommandRunner:       scriptRunner,
-		SubmissionRecorder:        edges.SubmissionRecorder,
-		DispatchRecorder:          edges.DispatchRecorder,
+		Clock:                            edges.Clock,
+		ProviderOverride:                 edges.ProviderOverride,
+		ModelPullMetricsRecorder:         edges.ModelPullMetricsRecorder,
+		InvocationMetricsRecorder:        edges.InvocationMetricsRecorder,
+		ProviderCommandRunner:            providerRunner,
+		ScriptCommandRunner:              scriptRunner,
+		SubmissionRecorder:               edges.SubmissionRecorder,
+		DispatchRecorder:                 edges.DispatchRecorder,
 		RuntimeHostObserver:              edges.RuntimeHostObserver,
 		FactoryVisualizationSink:         edges.FactoryVisualizationSink,
 		FactoryVisualizationRootObserver: edges.FactoryVisualizationRootObserver,
-		HostedClock:               edges.HostedClock,
-		HostedHTTPClient:          edges.HostedHTTPClient,
-		HostedSecretResolver:      edges.HostedSecretResolver,
-		HostedLinearEndpoint:      edges.HostedLinearEndpoint,
+		HostedClock:                      edges.HostedClock,
+		HostedHTTPClient:                 edges.HostedHTTPClient,
+		HostedSecretResolver:             edges.HostedSecretResolver,
+		HostedLinearEndpoint:             edges.HostedLinearEndpoint,
 	}
 }
 

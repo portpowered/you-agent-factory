@@ -10,6 +10,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -116,6 +117,7 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 		provider workers.Provider,
 		_ func() time.Time,
 		_ work.ContentMaterializer,
+		_ []operatorconfig.ACPIntegration,
 	) (workers.RuntimeService, error) {
 		gotRunnerID = runner
 		gotPTY = pty
@@ -137,6 +139,7 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 		models.RuntimeScopeRef{},
 		work.MaterializationService(materializerStub{}),
 		workersRuntimeFactory,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewWorkerExecution() error = %v, want nil", err)

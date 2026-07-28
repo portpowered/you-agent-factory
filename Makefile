@@ -736,6 +736,7 @@ ui-storybook-integration-test:
 	$(MAKE) ui-test-storybook-browser-checks
 
 ui-durable-session-real-backend-integration-test:
+	$(GO) test ./tests/functional/internal/support/cmd/browser_api_harness
 ifeq ($(BUN_BIN),)
 	cd ui && $(NPM) run test:integration:durable-session-real-backend
 else

@@ -2173,6 +2173,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/acp",
+      "minimum": 80.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy",
       "minimum": 60.00
     },
@@ -3179,6 +3183,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli",
       "minimum": 72.98
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/acp",
+      "minimum": 82.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/batchload",

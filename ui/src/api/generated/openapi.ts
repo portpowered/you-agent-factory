@@ -4378,7 +4378,7 @@ export interface components {
       modelProvider?: components["schemas"]["ProviderIdentity"] | string;
       /** @description Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution. */
       modelLocality?: components["schemas"]["WorkerModelLocality"];
-      /** @description Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`. */
+      /** @description Canonical Providers catalog identity used to select worker execution, an exact invocation-parameter placeholder, or the retained `SCRIPT_WRAP` compatibility value. ACP-backed identities use names such as `cursor-acp`; the Providers catalog determines their private execution kind. */
       executorProvider?: components["schemas"]["WorkerProvider"];
       /** @description Provider-agnostic model operations that this worker can execute, including named input and output slots. */
       operations?: components["schemas"]["ModelOperation"][];
@@ -4569,11 +4569,8 @@ export interface components {
      * @enum {string}
      */
     WorkerModelLocality: WorkerModelLocality;
-    /**
-     * @description Concrete worker-provider wrappers supported by the public factory-config contract.
-     * @enum {string}
-     */
-    WorkerProvider: WorkerProvider;
+    /** @description Built-in worker-provider compatibility values. Authored executorProvider fields also accept extensible lowercase Providers catalog identities. */
+    WorkerProvider: string;
     /** @description One provider-agnostic operation exposed by a model worker, such as `TTS`. */
     ModelOperation: {
       name: components["schemas"]["ModelOperationName"];
@@ -5033,6 +5030,7 @@ export interface components {
       backendScopeID?: string;
       defaults?: components["schemas"]["GlobalConfigDefaults"];
       runtime?: components["schemas"]["GlobalConfigRuntime"];
+      workers?: components["schemas"]["GlobalConfigWorkers"];
       /** @description Named worker model presets loaded from the shared configuration file. */
       workerPresets?: components["schemas"]["GlobalConfigWorkerPreset"][];
     };
@@ -5527,6 +5525,26 @@ export interface components {
       matchInput?: string;
       /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
       spawnedBy?: string;
+    };
+    GlobalConfigACPIntegration: {
+      /** @description Stable settings-entry identity. This is distinct from the provider name selected by a Worker. */
+      id: string;
+      /** @description Canonical Providers catalog identity, such as cursor-acp. */
+      name: string;
+      /**
+       * @description ACP transport. P0 supports stdio only.
+       * @enum {string}
+       */
+      transport: GlobalConfigACPIntegrationTransport;
+      /** @description Operator-authored ACP launch command preserved as one settings value. It contains no permission or timeout policy. */
+      command: string;
+    };
+    GlobalConfigACPSettings: {
+      /** @description Operator-selected ACP provider integrations. Availability is derived by the Providers catalog and is never persisted here. */
+      integrations?: components["schemas"]["GlobalConfigACPIntegration"][];
+    };
+    GlobalConfigWorkers: {
+      acp?: components["schemas"]["GlobalConfigACPSettings"];
     };
   };
   responses: {
@@ -8097,11 +8115,6 @@ export const WorkerModelLocality = {
 } as const;
 export type WorkerModelLocality =
   (typeof WorkerModelLocality)[keyof typeof WorkerModelLocality];
-export const WorkerProvider = {
-  SCRIPT_WRAP: "SCRIPT_WRAP",
-} as const;
-export type WorkerProvider =
-  (typeof WorkerProvider)[keyof typeof WorkerProvider];
 export const ModelOperationContentType = {
   TEXT: "TEXT",
   IMAGE: "IMAGE",
@@ -8357,6 +8370,11 @@ export const WorkstationGuardType = {
 } as const;
 export type WorkstationGuardType =
   (typeof WorkstationGuardType)[keyof typeof WorkstationGuardType];
+export const GlobalConfigACPIntegrationTransport = {
+  stdio: "stdio",
+} as const;
+export type GlobalConfigACPIntegrationTransport =
+  (typeof GlobalConfigACPIntegrationTransport)[keyof typeof GlobalConfigACPIntegrationTransport];
 export const ComponentsParametersSortBy = {
   state_type: "state.type",
 } as const;

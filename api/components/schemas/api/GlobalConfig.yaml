@@ -9,6 +9,8 @@ properties:
     $ref: './GlobalConfigDefaults.yaml'
   runtime:
     $ref: './GlobalConfigRuntime.yaml'
+  workers:
+    $ref: './GlobalConfigWorkers.yaml'
   workerPresets:
     type: array
     description: Named worker model presets loaded from the shared configuration file.

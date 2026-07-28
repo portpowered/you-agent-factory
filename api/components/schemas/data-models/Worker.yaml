@@ -40,7 +40,7 @@ properties:
   executorProvider:
     allOf:
       - $ref: './WorkerProvider.yaml'
-    description: Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`.
+    description: Canonical Providers catalog identity used to select worker execution, an exact invocation-parameter placeholder, or the retained `SCRIPT_WRAP` compatibility value. ACP-backed identities use names such as `cursor-acp`; the Providers catalog determines their private execution kind.
   operations:
     type: array
     description: Provider-agnostic model operations that this worker can execute, including named input and output slots.

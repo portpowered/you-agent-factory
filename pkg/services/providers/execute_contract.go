@@ -28,6 +28,7 @@ const (
 	ExecuteFailureKindTimeout        ExecuteFailureKind = "timeout"
 	ExecuteFailureKindAuthentication ExecuteFailureKind = "authentication"
 	ExecuteFailureKindInvalidRequest ExecuteFailureKind = "invalid_request"
+	ExecuteFailureKindMisconfigured  ExecuteFailureKind = "misconfigured"
 	ExecuteFailureKindThrottled      ExecuteFailureKind = "throttled"
 	ExecuteFailureKindDependency     ExecuteFailureKind = "dependency"
 	ExecuteFailureKindUnknown        ExecuteFailureKind = "unknown"

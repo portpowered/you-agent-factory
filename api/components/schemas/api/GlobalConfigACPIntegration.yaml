@@ -1,0 +1,28 @@
+type: object
+additionalProperties: false
+required:
+  - id
+  - name
+  - transport
+  - command
+properties:
+  id:
+    type: string
+    minLength: 1
+    maxLength: 128
+    description: Stable settings-entry identity. This is distinct from the provider name selected by a Worker.
+  name:
+    type: string
+    minLength: 1
+    maxLength: 128
+    pattern: '^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$'
+    description: Canonical Providers catalog identity, such as cursor-acp.
+  transport:
+    type: string
+    enum: [stdio]
+    description: ACP transport. P0 supports stdio only.
+  command:
+    type: string
+    minLength: 1
+    maxLength: 4096
+    description: Operator-authored ACP launch command preserved as one settings value. It contains no permission or timeout policy.
